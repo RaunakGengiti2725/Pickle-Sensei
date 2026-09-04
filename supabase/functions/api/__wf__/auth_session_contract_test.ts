@@ -1,12 +1,16 @@
-// Durable-session contract of the edge function, end to end through the real
-// handler against a stateful fake GoTrue (xc_sessionHarness.ts). Written on
-// the mutation-testing attack branch for the survivors ED-03..ED-14, ED-16..19,
-// ED-21, ED-22: before this file no test exercised getUser() verification,
-// the refresh_token grant, logout, or cache lifetime — so a handler that
-// skipped verification, never revoked, cached forever, or returned no session
-// passed the suite.
+// Durable-session contract of the edge function (AGENTS.md → "Auth
+// sessions"), end to end through the real handler against a stateful fake
+// GoTrue (sessionHarness.ts): bootstrap mints and returns the session
+// verbatim, authenticate() verifies a session bearer with getUser() and only
+// for Google/Apple identities, the auth cache never outlives the bearer or the
+// 10-minute cap, refresh rotates / maps 4xx→401 and 5xx→503 under its own
+// per-IP budget, and logout revokes scope=local and evicts the bearer.
 //
-//   cd supabase/functions/api/__wf__ && deno task test xc_session_contract_test.ts
+// Pins tools/mutation-auth mutants ED-03..ED-14, ED-16..ED-19, ED-21, ED-22:
+// a handler that skips verification, never revokes, caches forever or returns
+// no session must fail here.
+//
+//   cd supabase/functions/api/__wf__ && deno task test auth_session_contract_test.ts
 
 import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
 import { FakeTime } from "jsr:@std/testing@1/time";
@@ -25,7 +29,7 @@ import {
   loadSessionHarness,
   withClockOffset,
   withFrozenClock,
-} from "./xc_sessionHarness.ts";
+} from "./sessionHarness.ts";
 
 interface SessionView {
   accessToken: string;

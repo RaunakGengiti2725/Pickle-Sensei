@@ -1,4 +1,4 @@
-// Session-contract harness for the edge function (attack-branch companion to
+// Session-contract harness for the edge function (companion to
 // routesHarness.ts): boots the REAL ../index.ts with Deno.serve captured and
 // a stateful fake GoTrue behind fetch — sessions are minted by the id_token
 // grant, rotated by the refresh_token grant, verified by GET /auth/v1/user

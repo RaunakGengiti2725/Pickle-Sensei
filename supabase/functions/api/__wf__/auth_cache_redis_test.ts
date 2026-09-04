@@ -1,15 +1,15 @@
 // The auth cache's shared (L2, Upstash Redis) tier, driven through the real
-// handler with a fake Upstash REST endpoint (xc_sessionHarness.ts, redis: true).
+// handler with a fake Upstash REST endpoint (sessionHarness.ts, redis: true).
 // Own module on purpose: cache.ts reads UPSTASH_* at import time, so the
 // Redis-enabled function has to boot in its own isolate.
 //
-// Written for mutation survivor ED-02 (readAuthCache serving entries past
+// Pins tools/mutation-auth mutant ED-02 (readAuthCache serving entries past
 // their own expiresAtMs): with only the per-isolate L1 that guard is
 // unobservable because L1 evicts 30s earlier; it only bites when the SHARED
 // store still holds a record whose embedded expiry has passed (clock skew
 // between instances, or a Redis TTL that outlived the bearer).
 //
-//   cd supabase/functions/api/__wf__ && deno task test xc_auth_cache_redis_test.ts
+//   cd supabase/functions/api/__wf__ && deno task test auth_cache_redis_test.ts
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
@@ -19,7 +19,7 @@ import {
   loadSessionHarness,
   withClockOffset,
   withFrozenClock,
-} from "./xc_sessionHarness.ts";
+} from "./sessionHarness.ts";
 
 function authCacheKeys(redis: Map<string, { value: string }>): string[] {
   return [...redis.entries()]
