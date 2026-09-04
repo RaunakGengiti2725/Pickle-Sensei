@@ -114,11 +114,16 @@ public final class PoseReadinessEvaluator {
       return ingestMissing(timestampMs: pose.timestampMs)
     }
 
-    let visible = Dictionary(
-      uniqueKeysWithValues: pose.landmarks
-        .filter { $0.visibility >= config.minimumJointVisibility }
-        .map { ($0.name, $0) }
-    )
+    // Landmarks arrive from an external provider; a repeated joint name keeps
+    // its most visible observation rather than trapping (matches
+    // CaptureEvidenceAccumulator).
+    var visible: [String: PoseLandmark] = [:]
+    for landmark in pose.landmarks where landmark.visibility >= config.minimumJointVisibility {
+      if let existing = visible[landmark.name], existing.visibility >= landmark.visibility {
+        continue
+      }
+      visible[landmark.name] = landmark
+    }
     let missing = Self.requiredJoints.filter { visible[$0] == nil }
     let coverage = Double(Self.requiredJoints.count - missing.count) / Double(Self.requiredJoints.count)
 
@@ -170,8 +175,19 @@ public final class PoseReadinessEvaluator {
       height: height
     )
     stableSamples.append(sample)
+    // Trim to the stillness window but keep the newest sample that predates it:
+    // camera timestamps are integer milliseconds at arbitrary cadence, so the
+    // oldest in-window sample alone can never span the full window unless the
+    // frame interval divides it exactly. That anchor is what proves the body
+    // has been still for at least `stableDurationMs`.
     let cutoff = pose.timestampMs - config.stableDurationMs
+    let anchor = stableSamples
+      .filter { $0.timestampMs < cutoff }
+      .max { $0.timestampMs < $1.timestampMs }
     stableSamples.removeAll { $0.timestampMs < cutoff }
+    if let anchor = anchor {
+      stableSamples.insert(anchor, at: 0)
+    }
 
     let stableForMs = max(0, pose.timestampMs - (stableSamples.first?.timestampMs ?? pose.timestampMs))
     let centerTravel = maximumPairwiseTravel(in: stableSamples)
