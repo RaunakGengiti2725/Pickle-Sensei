@@ -1,0 +1,2875 @@
+{
+  "generatedFrom": "supabase/functions/api/index.ts via __wf__/routesHarness.ts",
+  "testUserId": "11111111-1111-4111-8111-111111111111",
+  "catalogSize": 41,
+  "cases": [
+    {
+      "name": "catalog.list.all",
+      "method": "GET",
+      "path": "/v1/catalog/drills",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [
+          {
+            "id": "0440b4d1-2ffc-5619-b7dc-639a0dd122e0",
+            "slug": "wall-dink-rally",
+            "title": "Wall dink rally",
+            "description": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.\n\n1. Stand 7–8 ft from a wall marked with a net-height line (34 in).\n2. Rally soft dinks continuously above the line, contacting every ball out in front of the body.\n3. Keep the paddle up between contacts; reset to ready after each dink.\n\nDose: 3 × 2 min continuous rally.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line (34 in)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": true
+          },
+          {
+            "id": "3684a825-b777-5ae6-9b19-cb6469f20f5a",
+            "slug": "dink-target-boxes",
+            "title": "Dink target boxes",
+            "description": "Flatten the dink arc by demanding depth control into kitchen target zones.\n\n1. Place two flat targets in the opponent kitchen: one near the sideline, one center.\n2. Cooperative crosscourt dink rally; score a point only when the ball lands in a target.\n3. Emphasize lifting from the legs with a quiet wrist, not scooping upward.\n\nDose: first to 10 target hits, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "2 flat targets (towels or tape boxes)"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "87405b6a-9600-56f6-9897-cb2932a8ec5a",
+            "slug": "volley-wall-ready",
+            "title": "Volley wall with ready reset",
+            "description": "Keep the paddle up and the volley compact: block volleys off a wall with a forced ready reset between contacts.\n\n1. Stand 6–7 ft from the wall, paddle at chest height in ready position.\n2. Volley continuously without letting the ball bounce, returning the paddle to ready between every contact.\n3. Keep the swing a compact block — hands finish in front of the shoulders.\n\nDose: 4 × 45 s continuous.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "4474e01c-0aa5-5b56-a24a-28ad5bf4583d",
+            "slug": "shadow-unit-turn",
+            "title": "Shadow swing: unit turn ladder",
+            "description": "Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.\n\n1. Without a ball, rehearse the drive: turn shoulders and hips together as the split-step lands.\n2. Check in a mirror or phone video that the chest faces the sideline before the forward swing.\n3. Progress to dropped-ball feeds, calling 'turn' at the feeder's release.\n\nDose: 3 × 10 shadow swings + 2 × 10 fed balls.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "mirror or phone camera",
+              "balls (for the fed stage)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "drive"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "22b47102-6b49-515b-bd1b-77dddd8e5e4b",
+            "slug": "serve-drop-consistency",
+            "title": "Serve drop consistency blocks",
+            "description": "Stabilize the drop/toss so the serve contact point stops wandering: blocked repetitions with an explicit drop checkpoint.\n\n1. Serve in blocks of 10, pausing before each serve to set the same drop height and release point.\n2. Let the ball drop from the same hand position every time; contact below the waist per rules.\n3. Track how many of 10 drops you would rate identical before adding targets.\n\nDose: 5 × 10 serves.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "serve"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "086ebe2a-9792-50ad-968b-928e0ad424c3",
+            "slug": "third-shot-drop-ladder",
+            "title": "Third-shot drop ladder",
+            "description": "Take pace off the third shot: progressive distance ladder that rewards arc and kitchen landings over power.\n\n1. Start at the kitchen line dropping balls into the opposite kitchen; step back 3 ft after 5 makes.\n2. Continue the ladder until serving-position drops; restart the rung after 3 consecutive longs.\n3. Focus on lifting with the legs and finishing the paddle toward the target, not across the body.\n\nDose: ladder to baseline, 2 full climbs.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "c51589b8-934b-586a-b77f-93fccac05032",
+            "slug": "skinny-singles",
+            "title": "Skinny singles",
+            "description": "Pressure-test whole-point habits (recovery, shot selection) on half the court with full-point consequences.\n\n1. Play singles on half the court (straight or crosscourt halves).\n2. Play full points: serve, return, third shot, kitchen play.\n3. Between shots, recover to ready position before the opponent's contact.\n\nDose: games to 7, switch halves.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global",
+              "serve",
+              "return",
+              "drive",
+              "dink",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "03e9ee02-0ed1-5049-accf-b6973990491a",
+            "slug": "crosscourt-dink-battle",
+            "title": "Crosscourt dink battle",
+            "description": "Turn cooperative dinking competitive: win kitchen exchanges without popping the ball up.\n\n1. Both players at the kitchen line, dinking crosscourt only; the ball must land in the kitchen or within 1 ft behind it.\n2. Play rally-scoring points: a pop-up above net height that gets attacked, a net, or a long ball loses the point.\n3. Recover to ready between every dink; move the opponent with angle changes, not pace.\n\nDose: games to 11, switch diagonals.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "83662209-7862-558a-95b5-a4ecf7ee358e",
+            "slug": "figure-eight-dinks",
+            "title": "Figure-eight dinks",
+            "description": "Alternate straight and crosscourt dinks in a fixed pattern to train direction change with a stable face.\n\n1. Player A dinks straight ahead every time; player B dinks crosscourt every time, tracing a figure eight.\n2. Keep every ball unattackable — apex below net height on the opponent's side.\n3. Swap roles each round; add lateral shuffle steps so contact stays out front.\n\nDose: 4 × 2 min, swapping roles each round.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "bef0281b-9948-5f20-8c1e-6ff78fa63b8b",
+            "slug": "dink-speedup-reset-cycle",
+            "title": "Dink–speedup–reset cycle",
+            "description": "Chain the three kitchen touches that decide hands battles: soft dink, controlled speedup, absorbing reset.\n\n1. Rally two cooperative dinks, then the designated attacker hits one controlled speedup at the partner's paddle side.\n2. The defender blocks a soft reset into the kitchen and the cycle restarts as a dink rally.\n3. Swap the attacker role each cycle; the speedup must stay in — wild misses restart the count.\n\nDose: 10 clean cycles per attacker, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink",
+              "volley",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "16789c44-6598-53e4-9b51-2cfc92782eb3",
+            "slug": "attackable-ball-recognition",
+            "title": "Attackable-ball recognition",
+            "description": "Train the attack/neutral decision: attack only balls that sit above net height, stay patient on everything else.\n\n1. Cooperative dink rally; either player may attack ONLY when the ball would bounce above net height.\n2. Call 'attack' out loud at the moment of the decision, then play the point out.\n3. Log wrong calls (attacking a low ball, letting a sitter go) between rallies.\n\nDose: 3 × 5 min with decision log.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink",
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "f689f561-1d0f-5f2e-923b-407b53409a3f",
+            "slug": "triangle-dink-movement",
+            "title": "Triangle dink movement",
+            "description": "Move the feet — not the arm — to three kitchen targets so every dink is struck out front.\n\n1. Mark three targets in the opponent kitchen: wide forehand, middle, wide backhand.\n2. Feeder dinks anywhere along your kitchen line; you answer to the called target in triangle order.\n3. Shuffle-step so the body arrives before the paddle; no reaching across the body.\n\nDose: 3 × 12 target hits per direction.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "3 flat targets"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "025bd5f6-cc14-5e24-a301-49663098c236",
+            "slug": "two-touch-soft-hands",
+            "title": "Two-touch soft hands",
+            "description": "Exaggerate absorption: catch the dink on the paddle with a self-bump before returning it, building genuinely soft hands.\n\n1. During a cooperative dink rally, bump every incoming ball softly to yourself first, then dink it back (two touches).\n2. Keep both touches below eye level and in front of the body.\n3. Progress to one-touch dinks while keeping the same absorbing feel.\n\nDose: 3 × 2 min two-touch, 2 min one-touch.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court or wall"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "4c959554-92b1-5a95-93d5-1b784c5b6dbc",
+            "slug": "fast-hands-battle",
+            "title": "Fast hands battle",
+            "description": "Sharpen kitchen-line reflex exchanges: compact counters under real speedup pressure.\n\n1. Both players at the kitchen line. One initiates a controlled speedup at the other's paddle-side shoulder.\n2. Play the exchange out at full speed until a miss or an unreturnable ball; keep volleys compact, elbow in front.\n3. Alternate who initiates; balls aimed at the body must still be legal, controlled speedups.\n\nDose: games to 11 by initiation turns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "advanced",
+            "difficulty_max": "advanced",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "a04ba6d3-daaa-5478-a2ab-ebd602712afe",
+            "slug": "volley-dink-out-of-air",
+            "title": "Volley-dink out of the air",
+            "description": "Take the dink early out of the air to steal time, without adding pace or popping it up.\n\n1. Partner dinks normally; you answer every ball as a volley-dink out of the air — no bounces on your side.\n2. Contact out front with a nearly still paddle; the ball must still land unattackable in the kitchen.\n3. Swap roles each round; if the volley-dink pops up, the feeder attacks to keep honesty.\n\nDose: 4 × 2 min per role.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "advanced",
+            "difficulty_max": "advanced",
+            "families": [
+              "volley",
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "80f2f4d8-c490-5460-b197-69189a02597f",
+            "slug": "block-volley-defense",
+            "title": "Block volley defense",
+            "description": "Turn incoming drives into dead resets: block volleys that die in the kitchen instead of rebounding pace.\n\n1. Defender at the kitchen line, feeder at midcourt driving balls at the defender's chest and hips.\n2. Block every drive with a loose grip and no swing — the ball should drop into the kitchen.\n3. Score 1 point per kitchen-landing block; a rebound past midcourt scores for the feeder.\n\nDose: first to 10 blocks, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "volley",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "e4a2551c-3b21-5196-b307-fc706aff7028",
+            "slug": "reflex-volley-wall",
+            "title": "Reflex volley wall",
+            "description": "Shrink reaction time: continuous wall volleys stepping progressively closer to the wall.\n\n1. Start 8 ft from the wall volleying continuously above the net line.\n2. Every 30 s, take a half-step closer; keep the swing a compact block as time shrinks.\n3. When control breaks down, step back one position and rebuild the rally.\n\nDose: 3 × 3 min ladders.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "fca54268-e11a-53e6-b872-e26d643fbf3d",
+            "slug": "punch-volley-targets",
+            "title": "Punch volley to deep targets",
+            "description": "Put away high balls with direction: punch volleys from the kitchen line to deep court targets.\n\n1. Place two targets deep in the opponent court (backhand corner and middle-deep).\n2. Feeder tosses or dinks balls that sit above net height; punch-volley each to the called target.\n3. Short compact punch from the shoulder — no backswing behind the body.\n\nDose: 4 × 10 punches, alternating targets.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "2 targets"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "29c4a103-fa2b-5ad7-9cd2-724a6646f9ba",
+            "slug": "baseline-drive-rally",
+            "title": "Baseline drive rally",
+            "description": "Build repeatable drive mechanics: cooperative deep rally keeping every ball past the midline.\n\n1. Both players at the baseline rallying drives; every ball must land beyond the transition zone.\n2. Prepare with the unit turn before the bounce; contact out front at waist height.\n3. Count consecutive deep balls; restart the count when one lands short.\n\nDose: 3 rallies of 20+ deep balls.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "drive"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "b0f263fa-666f-5366-aed1-2c031f0f5060",
+            "slug": "drive-drop-decision",
+            "title": "Drive or drop decision feed",
+            "description": "Choose the right third shot under time pressure: drive the high ball, drop the low ball.\n\n1. Feeder at the kitchen hits varied-height feeds to the baseline player.\n2. Call 'drive' or 'drop' out loud before the bounce, then execute the called shot.\n3. Score 2 points for a correct call executed in, 0 for a wrong call even if the ball lands.\n\nDose: 4 × 10 feeds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drive",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "90361ea6-8174-52bf-a59e-df6c91238b31",
+            "slug": "shake-and-bake-pattern",
+            "title": "Shake and bake pattern",
+            "description": "Rehearse the drive-then-crash doubles pattern: third-shot drive, partner crashes for the putaway fifth.\n\n1. Serve team plays a third-shot drive; the non-hitting partner immediately crashes toward the kitchen.\n2. Returner blocks the drive back; the crashing partner finishes the fifth ball out of the air.\n3. Rotate all four roles; drives must stay below head height to keep the pattern honest.\n\nDose: 10 patterns per rotation.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddles",
+              "balls",
+              "court with net",
+              "3–4 players"
+            ],
+            "difficulty_min": "advanced",
+            "difficulty_max": "advanced",
+            "families": [
+              "drive",
+              "volley",
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "a20ddd7a-a716-58a6-9ad8-9dd9cf4ac873",
+            "slug": "topspin-drive-window",
+            "title": "Topspin drive window",
+            "description": "Add net clearance AND depth control: drive through a low window with topspin so the ball still drops in.\n\n1. Stretch a string (or imagine a band) 1–2 ft above the net; drives must pass under it and land inside the baseline.\n2. Brush low-to-high through contact to generate topspin; finish over the opposite shoulder.\n3. Count makes out of 10 from the baseline, then from midcourt.\n\nDose: 4 × 10 drives per position.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net",
+              "string or visual target band"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drive"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "559782a6-54a4-52ab-a25b-d17abee79316",
+            "slug": "serve-corner-targets",
+            "title": "Serve corner targets",
+            "description": "Serve with intention: alternate wide and T targets deep in the service box.\n\n1. Place towels in the deep-wide and deep-middle corners of the diagonal service box.\n2. Alternate serving to each target; a hit scores 3, landing in the deep third scores 1.\n3. Keep the same drop and contact routine every serve — targets change, mechanics don't.\n\nDose: 4 × 10 serves, alternating targets.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "2 towels"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "serve"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "4dc4f3c1-392f-58c0-bf19-666e4a8d0077",
+            "slug": "deep-serve-ladder",
+            "title": "Deep serve point ladder",
+            "description": "Reward depth over pace: a scoring game where only the back third of the box counts big.\n\n1. Mark the back third of the diagonal service box.\n2. Serve 10 balls: back-third landings score 5, middle third scores 1, short serves score 0.\n3. Track the 10-serve total across sessions; depth beats speed on this scoreboard.\n\nDose: 3 × 10 scored serves.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "line markers"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "serve"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "ab9e9242-d8b7-5666-b1b0-19718ab87690",
+            "slug": "serve-under-pressure",
+            "title": "Serve under pressure",
+            "description": "Make the serve hold up when it counts: consequence scoring on blocked serve reps.\n\n1. Serve sets of 10 with a target of 8 makes; two consecutive misses restart the set.\n2. Before each serve, run the full match routine — breath, drop checkpoint, target look.\n3. Finish with 'championship point': one serve that must land deep, twice in a row.\n\nDose: 3 completed sets of 10.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "serve"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "1447dead-65a9-5a15-ab4b-3638c0d9ce7b",
+            "slug": "spin-contrast-serves",
+            "title": "Flat vs topspin serve contrast",
+            "description": "Feel the difference deliberately: alternate flat and topspin serves to learn what the brush changes.\n\n1. Alternate one flat serve and one topspin serve (low-to-high brush at contact) to the same deep target.\n2. Watch the bounce: log which serve lands deeper and which kicks higher.\n3. Keep the legal drop serve motion — contact below the waist, paddle head below the wrist.\n\nDose: 4 × 10 alternating serves.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "serve"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "cff16a4a-0a17-536e-9a55-a7435912e1c7",
+            "slug": "deep-return-recover",
+            "title": "Deep return and recover",
+            "description": "Return deep, then win the footrace: every return is followed by a full sprint to the kitchen line.\n\n1. Partner serves; return every ball past the transition zone, favoring the middle-deep target.\n2. Immediately follow the return in — arrive at the kitchen line and split-step before their third shot.\n3. Score the rep only if the return was deep AND you were set at the line in time.\n\nDose: 4 × 8 returns per side.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "return"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "2a9e2239-9093-5002-bca2-679c16e8b431",
+            "slug": "return-target-halves",
+            "title": "Return target halves",
+            "description": "Direct the return on purpose: call the target half before the serve and hit it deep.\n\n1. Before each serve, call 'forehand side' or 'backhand side' of the server's court.\n2. Return deep into the called half; a called deep landing scores 2, any other in-ball scores 0.\n3. Bias reps toward the opponent-backhand call — the highest-value return in doubles.\n\nDose: 3 × 10 called returns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "return"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "1aa8b11a-e941-5cda-b7cd-d9836d49bc3f",
+            "slug": "backhand-slice-return-blocks",
+            "title": "Backhand slice return blocks",
+            "description": "Own the backhand return: blocked repetitions of the deep slice return that buys time to get in.\n\n1. Feeder serves (or hand-feeds) to the backhand corner repeatedly.\n2. Slice each return high and deep with a long follow-through toward the target.\n3. Hold the finish for a beat — the float time is what lets you reach the kitchen line.\n\nDose: 5 × 8 backhand returns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "return"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "e34d04c1-9140-58ba-95f2-6bb0d9d9c8b3",
+            "slug": "split-step-timing-returns",
+            "title": "Split-step timing on returns",
+            "description": "Land the split-step exactly at server contact so the first move is explosive, not late.\n\n1. Partner serves at random intervals; hop into the split-step timed to their contact.\n2. A helper (or slow-motion phone video) checks: feet landing as the ball leaves the paddle.\n3. Play the return out normally after each correctly-timed split.\n\nDose: 4 × 10 timed returns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "phone camera (optional)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "return",
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "173fc6c3-766f-5b2c-8c23-87012c973079",
+            "slug": "reset-game-of-death",
+            "title": "Reset game of death",
+            "description": "Survive the worst spot on the court: midcourt defender may ONLY reset while the kitchen player attacks.\n\n1. Defender stands in the transition zone and may only hit soft resets into the kitchen; attacker at the line hits at their feet.\n2. Defender may take at most one step forward per reset that lands; swap roles when the defender misses.\n3. Defender scores only via resets that force an attacker error or land dead in the kitchen.\n\nDose: games to 7 per role.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "advanced",
+            "difficulty_max": "advanced",
+            "families": [
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "2ad43924-cbde-5b1e-ad39-8c8241cafe49",
+            "slug": "midcourt-reset-blocks",
+            "title": "Midcourt reset blocks",
+            "description": "Absorb pace from no-man's-land: soft-hand resets off attacks aimed at the feet.\n\n1. Stand at midcourt; partner at the kitchen line attacks balls at your feet and hips.\n2. Reset with the paddle tip down, lifting gently with legs and shoulder — the ball should die in the kitchen.\n3. After each landed reset, advance one step until you reach the line, then restart deep.\n\nDose: 4 × 8 reset sequences.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "3e37a0f5-d4a9-55dc-931e-b325697120a8",
+            "slug": "transition-zone-crawl",
+            "title": "Transition zone crawl",
+            "description": "Earn the kitchen line the real way: advance only behind drops that actually land.\n\n1. Start at the baseline; kitchen-line partner feeds every ball back at you.\n2. Hit a drop; if it lands in the kitchen, take two steps in and split-step. If not, hold position.\n3. Reaching the line wins the rep; three consecutive non-kitchen drops resets you to the baseline.\n\nDose: 6 full crawls.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "f65d853c-c4b1-50c6-a5a6-68ba57647ed3",
+            "slug": "drop-and-charge",
+            "title": "Drop and charge",
+            "description": "Attach the footwork to the shot: every third-shot drop is followed by an immediate advance.\n\n1. Play serve, return, then a third-shot drop from the baseline.\n2. Charge forward behind every drop that lands, split-stepping before the opponent's contact.\n3. Play the point out from wherever the drop let you get to — honest feedback on drop quality.\n\nDose: 3 × 8 points.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset",
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "2c1b9ca8-558d-5cc8-84f4-c70d15a8c34a",
+            "slug": "wall-reset-softening",
+            "title": "Wall reset softening",
+            "description": "Solo version of pace absorption: hit firm into the wall, then kill the rebound into a soft reset.\n\n1. Hit a firm ball into the wall from 8–10 ft, then absorb the fast rebound into a soft touch that would die in a kitchen.\n2. Alternate one firm feed, one absorbing reset, keeping the reset contact out front with a loose grip.\n3. Progress by hitting the feed harder while the reset stays just as soft.\n\nDose: 4 × 90 s cycles.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset",
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "3f70b370-bca2-559a-aefa-dd00c7c6fc82",
+            "slug": "seven-eleven",
+            "title": "7–11 kitchen vs baseline",
+            "description": "Classic asymmetric pressure game: the baseline player must reach 7 before the kitchen player reaches 11.\n\n1. One player starts every rally at the kitchen line, the other at the baseline; feeder is the kitchen player.\n2. Play rally scoring: baseline player wins at 7 points, kitchen player at 11.\n3. The baseline player works drops and resets to neutralize before attacking; swap roles each game.\n\nDose: best of 3 games per role.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "8c64e107-e39e-565c-852d-58552dee2dfd",
+            "slug": "dead-ball-scenario-points",
+            "title": "Dead-ball scenario points",
+            "description": "Rehearse one game situation on repeat: restart every rally from the same scripted moment.\n\n1. Pick one scenario (e.g. all four at the kitchen, or serve team stuck at the baseline after a deep return).\n2. Start every point from that frozen position with a cooperative feed, then play it out for real.\n3. Rotate positions every 5 points; log which side wins each scenario over time.\n\nDose: 4 scenarios × 10 points.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddles",
+              "balls",
+              "court with net",
+              "2–4 players"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "68e7c87e-3f17-5757-b9e6-4fce9da3dfe6",
+            "slug": "king-of-the-court",
+            "title": "King of the court",
+            "description": "Compete under rotation pressure: winners hold the champion side, challengers rotate in every rally.\n\n1. Champions defend one end; challenger teams rotate in from the other end each rally (or mini-game to 3).\n2. Challengers must win the rally to take the champion side; champions score a point per successful defense.\n3. Play all rallies from a standard serve start so every game skill appears.\n\nDose: 20–30 min session.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddles",
+              "balls",
+              "court with net",
+              "5+ players"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "bea3a808-23dd-56c1-a329-0756d6fa9508",
+            "slug": "serve-return-plus-two",
+            "title": "Serve, return, plus two",
+            "description": "Isolate the first four shots — where most amateur points are decided — and score only those.\n\n1. Play points that END after shot four: serve, return, third shot, fourth shot.\n2. Score shot quality: deep return 1, third shot landing in the kitchen 2, fourth-shot putaway 2.\n3. Rotate server every 5 points; track which of the four shots leaks the most errors.\n\nDose: 4 × 10 four-shot points.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddles",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global",
+              "serve",
+              "return",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "6ae0901d-711b-5876-a8fa-b8a80596deda",
+            "slug": "kitchen-footwork-shadow",
+            "title": "Kitchen line footwork shadow",
+            "description": "Groove the lateral shuffle and split-step at the line without a ball — pure movement quality.\n\n1. At the kitchen line, shadow the pattern: split-step, shuffle two steps left, dink shadow swing, recover; mirror right.\n2. Stay low with the paddle up the entire set; never cross the feet.\n3. Add a partner calling random directions to make the pattern reactive.\n\nDose: 4 × 45 s patterns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "court or any flat space"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "global",
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "a563dbb0-f0ec-5282-a4b7-6de14b7b193f",
+            "slug": "lob-overhead-rotation",
+            "title": "Lob and overhead rotation",
+            "description": "Handle the ball over your head: controlled lob feeds into overhead putaways with partner-switch footwork.\n\n1. Feeder lobs from the baseline over the kitchen-line player, who turns, drops step, and takes the overhead.\n2. Aim overheads at a deep middle target — placement over power.\n3. If the lob is too deep to smash, practice the switch: let it bounce, reset, and rebuild the point.\n\nDose: 4 × 8 lob feeds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "volley",
+              "global"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          }
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "catalog.list.family",
+      "method": "GET",
+      "path": "/v1/catalog/drills?family=dink",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [
+          {
+            "id": "0440b4d1-2ffc-5619-b7dc-639a0dd122e0",
+            "slug": "wall-dink-rally",
+            "title": "Wall dink rally",
+            "description": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.\n\n1. Stand 7–8 ft from a wall marked with a net-height line (34 in).\n2. Rally soft dinks continuously above the line, contacting every ball out in front of the body.\n3. Keep the paddle up between contacts; reset to ready after each dink.\n\nDose: 3 × 2 min continuous rally.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line (34 in)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "3684a825-b777-5ae6-9b19-cb6469f20f5a",
+            "slug": "dink-target-boxes",
+            "title": "Dink target boxes",
+            "description": "Flatten the dink arc by demanding depth control into kitchen target zones.\n\n1. Place two flat targets in the opponent kitchen: one near the sideline, one center.\n2. Cooperative crosscourt dink rally; score a point only when the ball lands in a target.\n3. Emphasize lifting from the legs with a quiet wrist, not scooping upward.\n\nDose: first to 10 target hits, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "2 flat targets (towels or tape boxes)"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "c51589b8-934b-586a-b77f-93fccac05032",
+            "slug": "skinny-singles",
+            "title": "Skinny singles",
+            "description": "Pressure-test whole-point habits (recovery, shot selection) on half the court with full-point consequences.\n\n1. Play singles on half the court (straight or crosscourt halves).\n2. Play full points: serve, return, third shot, kitchen play.\n3. Between shots, recover to ready position before the opponent's contact.\n\nDose: games to 7, switch halves.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "global",
+              "serve",
+              "return",
+              "drive",
+              "dink",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "03e9ee02-0ed1-5049-accf-b6973990491a",
+            "slug": "crosscourt-dink-battle",
+            "title": "Crosscourt dink battle",
+            "description": "Turn cooperative dinking competitive: win kitchen exchanges without popping the ball up.\n\n1. Both players at the kitchen line, dinking crosscourt only; the ball must land in the kitchen or within 1 ft behind it.\n2. Play rally-scoring points: a pop-up above net height that gets attacked, a net, or a long ball loses the point.\n3. Recover to ready between every dink; move the opponent with angle changes, not pace.\n\nDose: games to 11, switch diagonals.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "83662209-7862-558a-95b5-a4ecf7ee358e",
+            "slug": "figure-eight-dinks",
+            "title": "Figure-eight dinks",
+            "description": "Alternate straight and crosscourt dinks in a fixed pattern to train direction change with a stable face.\n\n1. Player A dinks straight ahead every time; player B dinks crosscourt every time, tracing a figure eight.\n2. Keep every ball unattackable — apex below net height on the opponent's side.\n3. Swap roles each round; add lateral shuffle steps so contact stays out front.\n\nDose: 4 × 2 min, swapping roles each round.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "bef0281b-9948-5f20-8c1e-6ff78fa63b8b",
+            "slug": "dink-speedup-reset-cycle",
+            "title": "Dink–speedup–reset cycle",
+            "description": "Chain the three kitchen touches that decide hands battles: soft dink, controlled speedup, absorbing reset.\n\n1. Rally two cooperative dinks, then the designated attacker hits one controlled speedup at the partner's paddle side.\n2. The defender blocks a soft reset into the kitchen and the cycle restarts as a dink rally.\n3. Swap the attacker role each cycle; the speedup must stay in — wild misses restart the count.\n\nDose: 10 clean cycles per attacker, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink",
+              "volley",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "16789c44-6598-53e4-9b51-2cfc92782eb3",
+            "slug": "attackable-ball-recognition",
+            "title": "Attackable-ball recognition",
+            "description": "Train the attack/neutral decision: attack only balls that sit above net height, stay patient on everything else.\n\n1. Cooperative dink rally; either player may attack ONLY when the ball would bounce above net height.\n2. Call 'attack' out loud at the moment of the decision, then play the point out.\n3. Log wrong calls (attacking a low ball, letting a sitter go) between rallies.\n\nDose: 3 × 5 min with decision log.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink",
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "f689f561-1d0f-5f2e-923b-407b53409a3f",
+            "slug": "triangle-dink-movement",
+            "title": "Triangle dink movement",
+            "description": "Move the feet — not the arm — to three kitchen targets so every dink is struck out front.\n\n1. Mark three targets in the opponent kitchen: wide forehand, middle, wide backhand.\n2. Feeder dinks anywhere along your kitchen line; you answer to the called target in triangle order.\n3. Shuffle-step so the body arrives before the paddle; no reaching across the body.\n\nDose: 3 × 12 target hits per direction.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "3 flat targets"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "025bd5f6-cc14-5e24-a301-49663098c236",
+            "slug": "two-touch-soft-hands",
+            "title": "Two-touch soft hands",
+            "description": "Exaggerate absorption: catch the dink on the paddle with a self-bump before returning it, building genuinely soft hands.\n\n1. During a cooperative dink rally, bump every incoming ball softly to yourself first, then dink it back (two touches).\n2. Keep both touches below eye level and in front of the body.\n3. Progress to one-touch dinks while keeping the same absorbing feel.\n\nDose: 3 × 2 min two-touch, 2 min one-touch.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court or wall"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "a04ba6d3-daaa-5478-a2ab-ebd602712afe",
+            "slug": "volley-dink-out-of-air",
+            "title": "Volley-dink out of the air",
+            "description": "Take the dink early out of the air to steal time, without adding pace or popping it up.\n\n1. Partner dinks normally; you answer every ball as a volley-dink out of the air — no bounces on your side.\n2. Contact out front with a nearly still paddle; the ball must still land unattackable in the kitchen.\n3. Swap roles each round; if the volley-dink pops up, the feeder attacks to keep honesty.\n\nDose: 4 × 2 min per role.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court with net"
+            ],
+            "difficulty_min": "advanced",
+            "difficulty_max": "advanced",
+            "families": [
+              "volley",
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "6ae0901d-711b-5876-a8fa-b8a80596deda",
+            "slug": "kitchen-footwork-shadow",
+            "title": "Kitchen line footwork shadow",
+            "description": "Groove the lateral shuffle and split-step at the line without a ball — pure movement quality.\n\n1. At the kitchen line, shadow the pattern: split-step, shuffle two steps left, dink shadow swing, recover; mirror right.\n2. Stay low with the paddle up the entire set; never cross the feet.\n3. Add a partner calling random directions to make the pattern reactive.\n\nDose: 4 × 45 s patterns.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "court or any flat space"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "global",
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          }
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "catalog.list.q",
+      "method": "GET",
+      "path": "/v1/catalog/drills?q=Wall",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [
+          {
+            "id": "0440b4d1-2ffc-5619-b7dc-639a0dd122e0",
+            "slug": "wall-dink-rally",
+            "title": "Wall dink rally",
+            "description": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.\n\n1. Stand 7–8 ft from a wall marked with a net-height line (34 in).\n2. Rally soft dinks continuously above the line, contacting every ball out in front of the body.\n3. Keep the paddle up between contacts; reset to ready after each dink.\n\nDose: 3 × 2 min continuous rally.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line (34 in)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "87405b6a-9600-56f6-9897-cb2932a8ec5a",
+            "slug": "volley-wall-ready",
+            "title": "Volley wall with ready reset",
+            "description": "Keep the paddle up and the volley compact: block volleys off a wall with a forced ready reset between contacts.\n\n1. Stand 6–7 ft from the wall, paddle at chest height in ready position.\n2. Volley continuously without letting the ball bounce, returning the paddle to ready between every contact.\n3. Keep the swing a compact block — hands finish in front of the shoulders.\n\nDose: 4 × 45 s continuous.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "025bd5f6-cc14-5e24-a301-49663098c236",
+            "slug": "two-touch-soft-hands",
+            "title": "Two-touch soft hands",
+            "description": "Exaggerate absorption: catch the dink on the paddle with a self-bump before returning it, building genuinely soft hands.\n\n1. During a cooperative dink rally, bump every incoming ball softly to yourself first, then dink it back (two touches).\n2. Keep both touches below eye level and in front of the body.\n3. Progress to one-touch dinks while keeping the same absorbing feel.\n\nDose: 3 × 2 min two-touch, 2 min one-touch.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "court or wall"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "families": [
+              "dink",
+              "drop_reset"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "e4a2551c-3b21-5196-b307-fc706aff7028",
+            "slug": "reflex-volley-wall",
+            "title": "Reflex volley wall",
+            "description": "Shrink reaction time: continuous wall volleys stepping progressively closer to the wall.\n\n1. Start 8 ft from the wall volleying continuously above the net line.\n2. Every 30 s, take a half-step closer; keep the swing a compact block as time shrinks.\n3. When control breaks down, step back one position and rebuild the rally.\n\nDose: 3 × 3 min ladders.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          },
+          {
+            "id": "2c1b9ca8-558d-5cc8-84f4-c70d15a8c34a",
+            "slug": "wall-reset-softening",
+            "title": "Wall reset softening",
+            "description": "Solo version of pace absorption: hit firm into the wall, then kill the rebound into a soft reset.\n\n1. Hit a firm ball into the wall from 8–10 ft, then absorb the fast rebound into a soft touch that would die in a kitchen.\n2. Alternate one firm feed, one absorbing reset, keeping the reset contact out front with a loose grip.\n3. Progress by hitting the feed harder while the reset stays just as soft.\n\nDose: 4 × 90 s cycles.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "families": [
+              "drop_reset",
+              "volley"
+            ],
+            "validation_state": "PUBLISHED",
+            "saved": false
+          }
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "catalog.list.unknownFamily",
+      "method": "GET",
+      "path": "/v1/catalog/drills?family=no-such-family",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [],
+        "cursor": null
+      }
+    },
+    {
+      "name": "catalog.list.emptyQuery",
+      "method": "GET",
+      "path": "/v1/catalog/drills?q=zzzzzzzzzz",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [],
+        "cursor": null
+      }
+    },
+    {
+      "name": "catalog.detail.wall-dink-rally",
+      "method": "GET",
+      "path": "/v1/catalog/drills/wall-dink-rally",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "0440b4d1-2ffc-5619-b7dc-639a0dd122e0",
+          "slug": "wall-dink-rally",
+          "title": "Wall dink rally",
+          "description": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.\n\n1. Stand 7–8 ft from a wall marked with a net-height line (34 in).\n2. Rally soft dinks continuously above the line, contacting every ball out in front of the body.\n3. Keep the paddle up between contacts; reset to ready after each dink.\n\nDose: 3 × 2 min continuous rally.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "wall with net-height line (34 in)"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "8076a3ae-0c0e-5c87-bd76-0b740eb7e986",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          },
+          {
+            "id": "d55e7e13-7029-52b0-9e3e-7596a92f98e9",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "sHq2oQR5hf4",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/sHq2oQR5hf4",
+            "sourceUrl": "https://www.youtube.com/watch?v=sHq2oQR5hf4",
+            "creatorName": "Calvin Keeney",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball Wall Drills for You to Practice\" by Calvin Keeney on YouTube"
+          },
+          {
+            "id": "857c733a-5ace-565f-bd41-7708eed46bd4",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "lPPNJKvFBYI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/lPPNJKvFBYI",
+            "sourceUrl": "https://www.youtube.com/watch?v=lPPNJKvFBYI",
+            "creatorName": "John Cincola Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Mastering the art of dinking, one solo drill at a time\" by John Cincola Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.dink-target-boxes",
+      "method": "GET",
+      "path": "/v1/catalog/drills/dink-target-boxes",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "3684a825-b777-5ae6-9b19-cb6469f20f5a",
+          "slug": "dink-target-boxes",
+          "title": "Dink target boxes",
+          "description": "Flatten the dink arc by demanding depth control into kitchen target zones.\n\n1. Place two flat targets in the opponent kitchen: one near the sideline, one center.\n2. Cooperative crosscourt dink rally; score a point only when the ball lands in a target.\n3. Emphasize lifting from the legs with a quiet wrist, not scooping upward.\n\nDose: first to 10 target hits, 3 rounds.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "2 flat targets (towels or tape boxes)"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "3ab01a7c-d665-59a8-ad24-e48f5f68ac10",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "3SdM98A_7Mg",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/3SdM98A_7Mg",
+            "sourceUrl": "https://www.youtube.com/watch?v=3SdM98A_7Mg",
+            "creatorName": "Sarah Ansboury",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball Dinking Technique - Lesson & Drill\" by Sarah Ansboury on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.volley-wall-ready",
+      "method": "GET",
+      "path": "/v1/catalog/drills/volley-wall-ready",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "87405b6a-9600-56f6-9897-cb2932a8ec5a",
+          "slug": "volley-wall-ready",
+          "title": "Volley wall with ready reset",
+          "description": "Keep the paddle up and the volley compact: block volleys off a wall with a forced ready reset between contacts.\n\n1. Stand 6–7 ft from the wall, paddle at chest height in ready position.\n2. Volley continuously without letting the ball bounce, returning the paddle to ready between every contact.\n3. Keep the swing a compact block — hands finish in front of the shoulders.\n\nDose: 4 × 45 s continuous.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "wall"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "63a835f3-3804-58bb-97d3-0d4f6995c809",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "sHq2oQR5hf4",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/sHq2oQR5hf4",
+            "sourceUrl": "https://www.youtube.com/watch?v=sHq2oQR5hf4",
+            "creatorName": "Calvin Keeney",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball Wall Drills for You to Practice\" by Calvin Keeney on YouTube"
+          },
+          {
+            "id": "b80f5d93-3ea8-5276-a9c9-40a9be9ddd00",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.shadow-unit-turn",
+      "method": "GET",
+      "path": "/v1/catalog/drills/shadow-unit-turn",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "4474e01c-0aa5-5b56-a24a-28ad5bf4583d",
+          "slug": "shadow-unit-turn",
+          "title": "Shadow swing: unit turn ladder",
+          "description": "Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.\n\n1. Without a ball, rehearse the drive: turn shoulders and hips together as the split-step lands.\n2. Check in a mirror or phone video that the chest faces the sideline before the forward swing.\n3. Progress to dropped-ball feeds, calling 'turn' at the feeder's release.\n\nDose: 3 × 10 shadow swings + 2 × 10 fed balls.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "mirror or phone camera",
+            "balls (for the fed stage)"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.serve-drop-consistency",
+      "method": "GET",
+      "path": "/v1/catalog/drills/serve-drop-consistency",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "22b47102-6b49-515b-bd1b-77dddd8e5e4b",
+          "slug": "serve-drop-consistency",
+          "title": "Serve drop consistency blocks",
+          "description": "Stabilize the drop/toss so the serve contact point stops wandering: blocked repetitions with an explicit drop checkpoint.\n\n1. Serve in blocks of 10, pausing before each serve to set the same drop height and release point.\n2. Let the ball drop from the same hand position every time; contact below the waist per rules.\n3. Track how many of 10 drops you would rate identical before adding targets.\n\nDose: 5 × 10 serves.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "e688c084-81d6-5f8a-beee-2028a103622c",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "thUZGW9nB5w",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/thUZGW9nB5w",
+            "sourceUrl": "https://www.youtube.com/watch?v=thUZGW9nB5w",
+            "creatorName": "Better Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Hit Deeper Serves and Returns Every Time\" by Better Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.third-shot-drop-ladder",
+      "method": "GET",
+      "path": "/v1/catalog/drills/third-shot-drop-ladder",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "086ebe2a-9792-50ad-968b-928e0ad424c3",
+          "slug": "third-shot-drop-ladder",
+          "title": "Third-shot drop ladder",
+          "description": "Take pace off the third shot: progressive distance ladder that rewards arc and kitchen landings over power.\n\n1. Start at the kitchen line dropping balls into the opposite kitchen; step back 3 ft after 5 makes.\n2. Continue the ladder until serving-position drops; restart the rung after 3 consecutive longs.\n3. Focus on lifting with the legs and finishing the paddle toward the target, not across the body.\n\nDose: ladder to baseline, 2 full climbs.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "5241cf28-9382-562b-8eb4-1a48ffed4af5",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "Y3QNj6qjZCY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/Y3QNj6qjZCY",
+            "sourceUrl": "https://www.youtube.com/watch?v=Y3QNj6qjZCY",
+            "creatorName": "Pickleball Channel",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball 411: Improve Your Third Shot Drop with Wes Gabrielsen\" by Pickleball Channel on YouTube"
+          },
+          {
+            "id": "2e368735-2cd3-5d66-bff2-c4e18874c243",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "uA1bWnj4Y6M",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/uA1bWnj4Y6M",
+            "sourceUrl": "https://www.youtube.com/watch?v=uA1bWnj4Y6M",
+            "creatorName": "Z Sisters Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Elevate Your 3rd Shot Drop Practice Like Magic!\" by Z Sisters Pickleball on YouTube"
+          },
+          {
+            "id": "30790d13-f810-56c9-953c-21768122677f",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "sVW_QkCrLhc",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/sVW_QkCrLhc",
+            "sourceUrl": "https://www.youtube.com/watch?v=sVW_QkCrLhc",
+            "creatorName": "tanner.pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Hit an Aggressive 3rd Shot Drop in Pickleball\" by tanner.pickleball on YouTube"
+          },
+          {
+            "id": "ef0e06a0-ad40-562d-9105-50433122fb25",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "NByF0i33cJE",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/NByF0i33cJE",
+            "sourceUrl": "https://www.youtube.com/watch?v=NByF0i33cJE",
+            "creatorName": "The Flying Pickle Academy",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"3 Smart Drills to Level Up Your 3rd Shot Drops Like a Pro!\" by The Flying Pickle Academy on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.skinny-singles",
+      "method": "GET",
+      "path": "/v1/catalog/drills/skinny-singles",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "c51589b8-934b-586a-b77f-93fccac05032",
+          "slug": "skinny-singles",
+          "title": "Skinny singles",
+          "description": "Pressure-test whole-point habits (recovery, shot selection) on half the court with full-point consequences.\n\n1. Play singles on half the court (straight or crosscourt halves).\n2. Play full points: serve, return, third shot, kitchen play.\n3. Between shots, recover to ready position before the opponent's contact.\n\nDose: games to 7, switch halves.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "108246e5-cdcb-503a-b653-367d181ea7f4",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "Wbi_B_Y1_qw",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/Wbi_B_Y1_qw",
+            "sourceUrl": "https://www.youtube.com/watch?v=Wbi_B_Y1_qw",
+            "creatorName": "Sarah Ansboury",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How To Play Skinny Singles - Lesson & Drill\" by Sarah Ansboury on YouTube"
+          },
+          {
+            "id": "579916a0-e600-57ab-86c9-b6ccb809281f",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "LvCnX0AytaI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/LvCnX0AytaI",
+            "sourceUrl": "https://www.youtube.com/watch?v=LvCnX0AytaI",
+            "creatorName": "Nspired Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"The Greatest PICKLEBALL Drill You Can Do With Two People!\" by Nspired Pickleball on YouTube"
+          },
+          {
+            "id": "3718812f-25b8-5eae-ad89-1a15fdabed24",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "TV5C7gbJFnI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/TV5C7gbJFnI",
+            "sourceUrl": "https://www.youtube.com/watch?v=TV5C7gbJFnI",
+            "creatorName": "Simone Jardim Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Coach Simone | Skinny Singles\" by Simone Jardim Pickleball on YouTube"
+          },
+          {
+            "id": "6b3f0a2d-df8c-5f2b-884a-5e65e249b289",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "uXHm8ImY2VU",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/uXHm8ImY2VU",
+            "sourceUrl": "https://www.youtube.com/watch?v=uXHm8ImY2VU",
+            "creatorName": "Pickleball Daily",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Skinny Singles Pickleball Drill: Beginner Guide\" by Pickleball Daily on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.crosscourt-dink-battle",
+      "method": "GET",
+      "path": "/v1/catalog/drills/crosscourt-dink-battle",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "03e9ee02-0ed1-5049-accf-b6973990491a",
+          "slug": "crosscourt-dink-battle",
+          "title": "Crosscourt dink battle",
+          "description": "Turn cooperative dinking competitive: win kitchen exchanges without popping the ball up.\n\n1. Both players at the kitchen line, dinking crosscourt only; the ball must land in the kitchen or within 1 ft behind it.\n2. Play rally-scoring points: a pop-up above net height that gets attacked, a net, or a long ball loses the point.\n3. Recover to ready between every dink; move the opponent with angle changes, not pace.\n\nDose: games to 11, switch diagonals.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "5f46a0a4-1b53-5f5f-a7b5-fe73b3a54c1b",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "3SdM98A_7Mg",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/3SdM98A_7Mg",
+            "sourceUrl": "https://www.youtube.com/watch?v=3SdM98A_7Mg",
+            "creatorName": "Sarah Ansboury",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball Dinking Technique - Lesson & Drill\" by Sarah Ansboury on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.figure-eight-dinks",
+      "method": "GET",
+      "path": "/v1/catalog/drills/figure-eight-dinks",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "83662209-7862-558a-95b5-a4ecf7ee358e",
+          "slug": "figure-eight-dinks",
+          "title": "Figure-eight dinks",
+          "description": "Alternate straight and crosscourt dinks in a fixed pattern to train direction change with a stable face.\n\n1. Player A dinks straight ahead every time; player B dinks crosscourt every time, tracing a figure eight.\n2. Keep every ball unattackable — apex below net height on the opponent's side.\n3. Swap roles each round; add lateral shuffle steps so contact stays out front.\n\nDose: 4 × 2 min, swapping roles each round.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "af94790a-fdb7-52c5-a4ec-321dc4f99ae6",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.dink-speedup-reset-cycle",
+      "method": "GET",
+      "path": "/v1/catalog/drills/dink-speedup-reset-cycle",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "bef0281b-9948-5f20-8c1e-6ff78fa63b8b",
+          "slug": "dink-speedup-reset-cycle",
+          "title": "Dink–speedup–reset cycle",
+          "description": "Chain the three kitchen touches that decide hands battles: soft dink, controlled speedup, absorbing reset.\n\n1. Rally two cooperative dinks, then the designated attacker hits one controlled speedup at the partner's paddle side.\n2. The defender blocks a soft reset into the kitchen and the cycle restarts as a dink rally.\n3. Swap the attacker role each cycle; the speedup must stay in — wild misses restart the count.\n\nDose: 10 clean cycles per attacker, 3 rounds.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "dbc6b0e7-002d-5fb2-91b6-32b3fe5a816f",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.attackable-ball-recognition",
+      "method": "GET",
+      "path": "/v1/catalog/drills/attackable-ball-recognition",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "16789c44-6598-53e4-9b51-2cfc92782eb3",
+          "slug": "attackable-ball-recognition",
+          "title": "Attackable-ball recognition",
+          "description": "Train the attack/neutral decision: attack only balls that sit above net height, stay patient on everything else.\n\n1. Cooperative dink rally; either player may attack ONLY when the ball would bounce above net height.\n2. Call 'attack' out loud at the moment of the decision, then play the point out.\n3. Log wrong calls (attacking a low ball, letting a sitter go) between rallies.\n\nDose: 3 × 5 min with decision log.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.triangle-dink-movement",
+      "method": "GET",
+      "path": "/v1/catalog/drills/triangle-dink-movement",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "f689f561-1d0f-5f2e-923b-407b53409a3f",
+          "slug": "triangle-dink-movement",
+          "title": "Triangle dink movement",
+          "description": "Move the feet — not the arm — to three kitchen targets so every dink is struck out front.\n\n1. Mark three targets in the opponent kitchen: wide forehand, middle, wide backhand.\n2. Feeder dinks anywhere along your kitchen line; you answer to the called target in triangle order.\n3. Shuffle-step so the body arrives before the paddle; no reaching across the body.\n\nDose: 3 × 12 target hits per direction.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "3 flat targets"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.two-touch-soft-hands",
+      "method": "GET",
+      "path": "/v1/catalog/drills/two-touch-soft-hands",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "025bd5f6-cc14-5e24-a301-49663098c236",
+          "slug": "two-touch-soft-hands",
+          "title": "Two-touch soft hands",
+          "description": "Exaggerate absorption: catch the dink on the paddle with a self-bump before returning it, building genuinely soft hands.\n\n1. During a cooperative dink rally, bump every incoming ball softly to yourself first, then dink it back (two touches).\n2. Keep both touches below eye level and in front of the body.\n3. Progress to one-touch dinks while keeping the same absorbing feel.\n\nDose: 3 × 2 min two-touch, 2 min one-touch.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court or wall"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.fast-hands-battle",
+      "method": "GET",
+      "path": "/v1/catalog/drills/fast-hands-battle",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "4c959554-92b1-5a95-93d5-1b784c5b6dbc",
+          "slug": "fast-hands-battle",
+          "title": "Fast hands battle",
+          "description": "Sharpen kitchen-line reflex exchanges: compact counters under real speedup pressure.\n\n1. Both players at the kitchen line. One initiates a controlled speedup at the other's paddle-side shoulder.\n2. Play the exchange out at full speed until a miss or an unreturnable ball; keep volleys compact, elbow in front.\n3. Alternate who initiates; balls aimed at the body must still be legal, controlled speedups.\n\nDose: games to 11 by initiation turns.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "advanced",
+          "difficulty_max": "advanced",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.volley-dink-out-of-air",
+      "method": "GET",
+      "path": "/v1/catalog/drills/volley-dink-out-of-air",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "a04ba6d3-daaa-5478-a2ab-ebd602712afe",
+          "slug": "volley-dink-out-of-air",
+          "title": "Volley-dink out of the air",
+          "description": "Take the dink early out of the air to steal time, without adding pace or popping it up.\n\n1. Partner dinks normally; you answer every ball as a volley-dink out of the air — no bounces on your side.\n2. Contact out front with a nearly still paddle; the ball must still land unattackable in the kitchen.\n3. Swap roles each round; if the volley-dink pops up, the feeder attacks to keep honesty.\n\nDose: 4 × 2 min per role.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "court with net"
+          ],
+          "difficulty_min": "advanced",
+          "difficulty_max": "advanced",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.block-volley-defense",
+      "method": "GET",
+      "path": "/v1/catalog/drills/block-volley-defense",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "80f2f4d8-c490-5460-b197-69189a02597f",
+          "slug": "block-volley-defense",
+          "title": "Block volley defense",
+          "description": "Turn incoming drives into dead resets: block volleys that die in the kitchen instead of rebounding pace.\n\n1. Defender at the kitchen line, feeder at midcourt driving balls at the defender's chest and hips.\n2. Block every drive with a loose grip and no swing — the ball should drop into the kitchen.\n3. Score 1 point per kitchen-landing block; a rebound past midcourt scores for the feeder.\n\nDose: first to 10 blocks, 3 rounds.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.reflex-volley-wall",
+      "method": "GET",
+      "path": "/v1/catalog/drills/reflex-volley-wall",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "e4a2551c-3b21-5196-b307-fc706aff7028",
+          "slug": "reflex-volley-wall",
+          "title": "Reflex volley wall",
+          "description": "Shrink reaction time: continuous wall volleys stepping progressively closer to the wall.\n\n1. Start 8 ft from the wall volleying continuously above the net line.\n2. Every 30 s, take a half-step closer; keep the swing a compact block as time shrinks.\n3. When control breaks down, step back one position and rebuild the rally.\n\nDose: 3 × 3 min ladders.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "wall with net-height line"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "8c4ee364-1781-5289-b1de-daa7f7230654",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "sHq2oQR5hf4",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/sHq2oQR5hf4",
+            "sourceUrl": "https://www.youtube.com/watch?v=sHq2oQR5hf4",
+            "creatorName": "Calvin Keeney",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball Wall Drills for You to Practice\" by Calvin Keeney on YouTube"
+          },
+          {
+            "id": "ede3c932-3c75-5e8b-b06d-438bd39ae9bd",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.punch-volley-targets",
+      "method": "GET",
+      "path": "/v1/catalog/drills/punch-volley-targets",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "fca54268-e11a-53e6-b872-e26d643fbf3d",
+          "slug": "punch-volley-targets",
+          "title": "Punch volley to deep targets",
+          "description": "Put away high balls with direction: punch volleys from the kitchen line to deep court targets.\n\n1. Place two targets deep in the opponent court (backhand corner and middle-deep).\n2. Feeder tosses or dinks balls that sit above net height; punch-volley each to the called target.\n3. Short compact punch from the shoulder — no backswing behind the body.\n\nDose: 4 × 10 punches, alternating targets.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "2 targets"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.baseline-drive-rally",
+      "method": "GET",
+      "path": "/v1/catalog/drills/baseline-drive-rally",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "29c4a103-fa2b-5ad7-9cd2-724a6646f9ba",
+          "slug": "baseline-drive-rally",
+          "title": "Baseline drive rally",
+          "description": "Build repeatable drive mechanics: cooperative deep rally keeping every ball past the midline.\n\n1. Both players at the baseline rallying drives; every ball must land beyond the transition zone.\n2. Prepare with the unit turn before the bounce; contact out front at waist height.\n3. Count consecutive deep balls; restart the count when one lands short.\n\nDose: 3 rallies of 20+ deep balls.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.drive-drop-decision",
+      "method": "GET",
+      "path": "/v1/catalog/drills/drive-drop-decision",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "b0f263fa-666f-5366-aed1-2c031f0f5060",
+          "slug": "drive-drop-decision",
+          "title": "Drive or drop decision feed",
+          "description": "Choose the right third shot under time pressure: drive the high ball, drop the low ball.\n\n1. Feeder at the kitchen hits varied-height feeds to the baseline player.\n2. Call 'drive' or 'drop' out loud before the bounce, then execute the called shot.\n3. Score 2 points for a correct call executed in, 0 for a wrong call even if the ball lands.\n\nDose: 4 × 10 feeds.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.shake-and-bake-pattern",
+      "method": "GET",
+      "path": "/v1/catalog/drills/shake-and-bake-pattern",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "90361ea6-8174-52bf-a59e-df6c91238b31",
+          "slug": "shake-and-bake-pattern",
+          "title": "Shake and bake pattern",
+          "description": "Rehearse the drive-then-crash doubles pattern: third-shot drive, partner crashes for the putaway fifth.\n\n1. Serve team plays a third-shot drive; the non-hitting partner immediately crashes toward the kitchen.\n2. Returner blocks the drive back; the crashing partner finishes the fifth ball out of the air.\n3. Rotate all four roles; drives must stay below head height to keep the pattern honest.\n\nDose: 10 patterns per rotation.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddles",
+            "balls",
+            "court with net",
+            "3–4 players"
+          ],
+          "difficulty_min": "advanced",
+          "difficulty_max": "advanced",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.topspin-drive-window",
+      "method": "GET",
+      "path": "/v1/catalog/drills/topspin-drive-window",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "a20ddd7a-a716-58a6-9ad8-9dd9cf4ac873",
+          "slug": "topspin-drive-window",
+          "title": "Topspin drive window",
+          "description": "Add net clearance AND depth control: drive through a low window with topspin so the ball still drops in.\n\n1. Stretch a string (or imagine a band) 1–2 ft above the net; drives must pass under it and land inside the baseline.\n2. Brush low-to-high through contact to generate topspin; finish over the opposite shoulder.\n3. Count makes out of 10 from the baseline, then from midcourt.\n\nDose: 4 × 10 drives per position.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net",
+            "string or visual target band"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.serve-corner-targets",
+      "method": "GET",
+      "path": "/v1/catalog/drills/serve-corner-targets",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "559782a6-54a4-52ab-a25b-d17abee79316",
+          "slug": "serve-corner-targets",
+          "title": "Serve corner targets",
+          "description": "Serve with intention: alternate wide and T targets deep in the service box.\n\n1. Place towels in the deep-wide and deep-middle corners of the diagonal service box.\n2. Alternate serving to each target; a hit scores 3, landing in the deep third scores 1.\n3. Keep the same drop and contact routine every serve — targets change, mechanics don't.\n\nDose: 4 × 10 serves, alternating targets.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "2 towels"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "e9f52aef-5f69-5c15-b761-ade49a892128",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "g0OUxk1q_NI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/g0OUxk1q_NI",
+            "sourceUrl": "https://www.youtube.com/watch?v=g0OUxk1q_NI",
+            "creatorName": "Indianapolis Pickleball Club",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Drills & Skills #6 Perfect Your Serves - Deep Serve Drill\" by Indianapolis Pickleball Club on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.deep-serve-ladder",
+      "method": "GET",
+      "path": "/v1/catalog/drills/deep-serve-ladder",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "4dc4f3c1-392f-58c0-bf19-666e4a8d0077",
+          "slug": "deep-serve-ladder",
+          "title": "Deep serve point ladder",
+          "description": "Reward depth over pace: a scoring game where only the back third of the box counts big.\n\n1. Mark the back third of the diagonal service box.\n2. Serve 10 balls: back-third landings score 5, middle third scores 1, short serves score 0.\n3. Track the 10-serve total across sessions; depth beats speed on this scoreboard.\n\nDose: 3 × 10 scored serves.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "line markers"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "59360cef-ca3a-5889-86d0-15b9de4941a2",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "g0OUxk1q_NI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/g0OUxk1q_NI",
+            "sourceUrl": "https://www.youtube.com/watch?v=g0OUxk1q_NI",
+            "creatorName": "Indianapolis Pickleball Club",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Drills & Skills #6 Perfect Your Serves - Deep Serve Drill\" by Indianapolis Pickleball Club on YouTube"
+          },
+          {
+            "id": "bd76cbd1-995e-5016-a0fd-23a332769943",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "thUZGW9nB5w",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/thUZGW9nB5w",
+            "sourceUrl": "https://www.youtube.com/watch?v=thUZGW9nB5w",
+            "creatorName": "Better Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Hit Deeper Serves and Returns Every Time\" by Better Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.serve-under-pressure",
+      "method": "GET",
+      "path": "/v1/catalog/drills/serve-under-pressure",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "ab9e9242-d8b7-5666-b1b0-19718ab87690",
+          "slug": "serve-under-pressure",
+          "title": "Serve under pressure",
+          "description": "Make the serve hold up when it counts: consequence scoring on blocked serve reps.\n\n1. Serve sets of 10 with a target of 8 makes; two consecutive misses restart the set.\n2. Before each serve, run the full match routine — breath, drop checkpoint, target look.\n3. Finish with 'championship point': one serve that must land deep, twice in a row.\n\nDose: 3 completed sets of 10.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.spin-contrast-serves",
+      "method": "GET",
+      "path": "/v1/catalog/drills/spin-contrast-serves",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "1447dead-65a9-5a15-ab4b-3638c0d9ce7b",
+          "slug": "spin-contrast-serves",
+          "title": "Flat vs topspin serve contrast",
+          "description": "Feel the difference deliberately: alternate flat and topspin serves to learn what the brush changes.\n\n1. Alternate one flat serve and one topspin serve (low-to-high brush at contact) to the same deep target.\n2. Watch the bounce: log which serve lands deeper and which kicks higher.\n3. Keep the legal drop serve motion — contact below the waist, paddle head below the wrist.\n\nDose: 4 × 10 alternating serves.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.deep-return-recover",
+      "method": "GET",
+      "path": "/v1/catalog/drills/deep-return-recover",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "cff16a4a-0a17-536e-9a55-a7435912e1c7",
+          "slug": "deep-return-recover",
+          "title": "Deep return and recover",
+          "description": "Return deep, then win the footrace: every return is followed by a full sprint to the kitchen line.\n\n1. Partner serves; return every ball past the transition zone, favoring the middle-deep target.\n2. Immediately follow the return in — arrive at the kitchen line and split-step before their third shot.\n3. Score the rep only if the return was deep AND you were set at the line in time.\n\nDose: 4 × 8 returns per side.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "c36e6459-5289-5eb4-8a88-91aa2ddcf6ad",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "thUZGW9nB5w",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/thUZGW9nB5w",
+            "sourceUrl": "https://www.youtube.com/watch?v=thUZGW9nB5w",
+            "creatorName": "Better Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Hit Deeper Serves and Returns Every Time\" by Better Pickleball on YouTube"
+          },
+          {
+            "id": "a498a8ee-fed9-5e81-b92d-6809454379ee",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "g0OUxk1q_NI",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/g0OUxk1q_NI",
+            "sourceUrl": "https://www.youtube.com/watch?v=g0OUxk1q_NI",
+            "creatorName": "Indianapolis Pickleball Club",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Drills & Skills #6 Perfect Your Serves - Deep Serve Drill\" by Indianapolis Pickleball Club on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.return-target-halves",
+      "method": "GET",
+      "path": "/v1/catalog/drills/return-target-halves",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "2a9e2239-9093-5002-bca2-679c16e8b431",
+          "slug": "return-target-halves",
+          "title": "Return target halves",
+          "description": "Direct the return on purpose: call the target half before the serve and hit it deep.\n\n1. Before each serve, call 'forehand side' or 'backhand side' of the server's court.\n2. Return deep into the called half; a called deep landing scores 2, any other in-ball scores 0.\n3. Bias reps toward the opponent-backhand call — the highest-value return in doubles.\n\nDose: 3 × 10 called returns.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.backhand-slice-return-blocks",
+      "method": "GET",
+      "path": "/v1/catalog/drills/backhand-slice-return-blocks",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "1aa8b11a-e941-5cda-b7cd-d9836d49bc3f",
+          "slug": "backhand-slice-return-blocks",
+          "title": "Backhand slice return blocks",
+          "description": "Own the backhand return: blocked repetitions of the deep slice return that buys time to get in.\n\n1. Feeder serves (or hand-feeds) to the backhand corner repeatedly.\n2. Slice each return high and deep with a long follow-through toward the target.\n3. Hold the finish for a beat — the float time is what lets you reach the kitchen line.\n\nDose: 5 × 8 backhand returns.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.split-step-timing-returns",
+      "method": "GET",
+      "path": "/v1/catalog/drills/split-step-timing-returns",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "e34d04c1-9140-58ba-95f2-6bb0d9d9c8b3",
+          "slug": "split-step-timing-returns",
+          "title": "Split-step timing on returns",
+          "description": "Land the split-step exactly at server contact so the first move is explosive, not late.\n\n1. Partner serves at random intervals; hop into the split-step timed to their contact.\n2. A helper (or slow-motion phone video) checks: feet landing as the ball leaves the paddle.\n3. Play the return out normally after each correctly-timed split.\n\nDose: 4 × 10 timed returns.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court",
+            "phone camera (optional)"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.reset-game-of-death",
+      "method": "GET",
+      "path": "/v1/catalog/drills/reset-game-of-death",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "173fc6c3-766f-5b2c-8c23-87012c973079",
+          "slug": "reset-game-of-death",
+          "title": "Reset game of death",
+          "description": "Survive the worst spot on the court: midcourt defender may ONLY reset while the kitchen player attacks.\n\n1. Defender stands in the transition zone and may only hit soft resets into the kitchen; attacker at the line hits at their feet.\n2. Defender may take at most one step forward per reset that lands; swap roles when the defender misses.\n3. Defender scores only via resets that force an attacker error or land dead in the kitchen.\n\nDose: games to 7 per role.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "advanced",
+          "difficulty_max": "advanced",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "7b784335-8140-5984-b966-eeaf1b98aef1",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "SJoRLqssCFU",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/SJoRLqssCFU",
+            "sourceUrl": "https://www.youtube.com/watch?v=SJoRLqssCFU",
+            "creatorName": "Cori Elliott",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Reset Game of Death [BEST PICKLEBALL DRILLS]\" by Cori Elliott on YouTube"
+          },
+          {
+            "id": "3097170a-2b68-5722-b19c-c445ad840fff",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "jwHsMD8kdEw",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/jwHsMD8kdEw",
+            "sourceUrl": "https://www.youtube.com/watch?v=jwHsMD8kdEw",
+            "creatorName": "Caden Cox",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball reset drill!\" by Caden Cox on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.midcourt-reset-blocks",
+      "method": "GET",
+      "path": "/v1/catalog/drills/midcourt-reset-blocks",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "2ad43924-cbde-5b1e-ad39-8c8241cafe49",
+          "slug": "midcourt-reset-blocks",
+          "title": "Midcourt reset blocks",
+          "description": "Absorb pace from no-man's-land: soft-hand resets off attacks aimed at the feet.\n\n1. Stand at midcourt; partner at the kitchen line attacks balls at your feet and hips.\n2. Reset with the paddle tip down, lifting gently with legs and shoulder — the ball should die in the kitchen.\n3. After each landed reset, advance one step until you reach the line, then restart deep.\n\nDose: 4 × 8 reset sequences.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "5c26a9be-3b51-5dce-8117-d742d225aa86",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "iP1_CqHT_6Q",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/iP1_CqHT_6Q",
+            "sourceUrl": "https://www.youtube.com/watch?v=iP1_CqHT_6Q",
+            "creatorName": "Selkirk TV",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Reset From Mid-Court and Still Win the Point\" by Selkirk TV on YouTube"
+          },
+          {
+            "id": "9e98f72c-3bff-5736-98ce-961ba080d6d4",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "lfjB5FgTrRE",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/lfjB5FgTrRE",
+            "sourceUrl": "https://www.youtube.com/watch?v=lfjB5FgTrRE",
+            "creatorName": "Limitless Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to reset from the transition zone\" by Limitless Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.transition-zone-crawl",
+      "method": "GET",
+      "path": "/v1/catalog/drills/transition-zone-crawl",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "3e37a0f5-d4a9-55dc-931e-b325697120a8",
+          "slug": "transition-zone-crawl",
+          "title": "Transition zone crawl",
+          "description": "Earn the kitchen line the real way: advance only behind drops that actually land.\n\n1. Start at the baseline; kitchen-line partner feeds every ball back at you.\n2. Hit a drop; if it lands in the kitchen, take two steps in and split-step. If not, hold position.\n3. Reaching the line wins the rep; three consecutive non-kitchen drops resets you to the baseline.\n\nDose: 6 full crawls.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "bcec38c1-06b3-566d-8be9-9fd52bee00be",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "lfjB5FgTrRE",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/lfjB5FgTrRE",
+            "sourceUrl": "https://www.youtube.com/watch?v=lfjB5FgTrRE",
+            "creatorName": "Limitless Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to reset from the transition zone\" by Limitless Pickleball on YouTube"
+          },
+          {
+            "id": "43c9fd41-3f61-5df3-9f5d-cb37083ab54b",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "iP1_CqHT_6Q",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/iP1_CqHT_6Q",
+            "sourceUrl": "https://www.youtube.com/watch?v=iP1_CqHT_6Q",
+            "creatorName": "Selkirk TV",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Reset From Mid-Court and Still Win the Point\" by Selkirk TV on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.drop-and-charge",
+      "method": "GET",
+      "path": "/v1/catalog/drills/drop-and-charge",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "f65d853c-c4b1-50c6-a5a6-68ba57647ed3",
+          "slug": "drop-and-charge",
+          "title": "Drop and charge",
+          "description": "Attach the footwork to the shot: every third-shot drop is followed by an immediate advance.\n\n1. Play serve, return, then a third-shot drop from the baseline.\n2. Charge forward behind every drop that lands, split-stepping before the opponent's contact.\n3. Play the point out from wherever the drop let you get to — honest feedback on drop quality.\n\nDose: 3 × 8 points.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "d3764f8d-1306-5eea-94e8-39abea8e4dd9",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "Y3QNj6qjZCY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/Y3QNj6qjZCY",
+            "sourceUrl": "https://www.youtube.com/watch?v=Y3QNj6qjZCY",
+            "creatorName": "Pickleball Channel",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"Pickleball 411: Improve Your Third Shot Drop with Wes Gabrielsen\" by Pickleball Channel on YouTube"
+          },
+          {
+            "id": "85a3010b-26c0-5cc1-a9c5-30db848850f4",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "sVW_QkCrLhc",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/sVW_QkCrLhc",
+            "sourceUrl": "https://www.youtube.com/watch?v=sVW_QkCrLhc",
+            "creatorName": "tanner.pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"How to Hit an Aggressive 3rd Shot Drop in Pickleball\" by tanner.pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.wall-reset-softening",
+      "method": "GET",
+      "path": "/v1/catalog/drills/wall-reset-softening",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "2c1b9ca8-558d-5cc8-84f4-c70d15a8c34a",
+          "slug": "wall-reset-softening",
+          "title": "Wall reset softening",
+          "description": "Solo version of pace absorption: hit firm into the wall, then kill the rebound into a soft reset.\n\n1. Hit a firm ball into the wall from 8–10 ft, then absorb the fast rebound into a soft touch that would die in a kitchen.\n2. Alternate one firm feed, one absorbing reset, keeping the reset contact out front with a loose grip.\n3. Progress by hitting the feed harder while the reset stays just as soft.\n\nDose: 4 × 90 s cycles.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "ball",
+            "wall"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": [
+          {
+            "id": "dddcffd0-2f6f-5a12-98c4-784cd0a34c9e",
+            "kind": "embed",
+            "provider": "youtube",
+            "videoId": "xDlzQZVXxKY",
+            "embedUrl": "https://www.youtube-nocookie.com/embed/xDlzQZVXxKY",
+            "sourceUrl": "https://www.youtube.com/watch?v=xDlzQZVXxKY",
+            "creatorName": "High Five Pickleball",
+            "licenseName": "YouTube Standard License",
+            "licenseUrl": "https://www.youtube.com/t/terms",
+            "attribution": "\"4 Pickleball Wall Drills That Will BOOST Your Game FAST\" by High Five Pickleball on YouTube"
+          }
+        ]
+      }
+    },
+    {
+      "name": "catalog.detail.seven-eleven",
+      "method": "GET",
+      "path": "/v1/catalog/drills/seven-eleven",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "3f70b370-bca2-559a-aefa-dd00c7c6fc82",
+          "slug": "seven-eleven",
+          "title": "7–11 kitchen vs baseline",
+          "description": "Classic asymmetric pressure game: the baseline player must reach 7 before the kitchen player reaches 11.\n\n1. One player starts every rally at the kitchen line, the other at the baseline; feeder is the kitchen player.\n2. Play rally scoring: baseline player wins at 7 points, kitchen player at 11.\n3. The baseline player works drops and resets to neutralize before attacking; swap roles each game.\n\nDose: best of 3 games per role.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.dead-ball-scenario-points",
+      "method": "GET",
+      "path": "/v1/catalog/drills/dead-ball-scenario-points",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "8c64e107-e39e-565c-852d-58552dee2dfd",
+          "slug": "dead-ball-scenario-points",
+          "title": "Dead-ball scenario points",
+          "description": "Rehearse one game situation on repeat: restart every rally from the same scripted moment.\n\n1. Pick one scenario (e.g. all four at the kitchen, or serve team stuck at the baseline after a deep return).\n2. Start every point from that frozen position with a cooperative feed, then play it out for real.\n3. Rotate positions every 5 points; log which side wins each scenario over time.\n\nDose: 4 scenarios × 10 points.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddles",
+            "balls",
+            "court with net",
+            "2–4 players"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.king-of-the-court",
+      "method": "GET",
+      "path": "/v1/catalog/drills/king-of-the-court",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "68e7c87e-3f17-5757-b9e6-4fce9da3dfe6",
+          "slug": "king-of-the-court",
+          "title": "King of the court",
+          "description": "Compete under rotation pressure: winners hold the champion side, challengers rotate in every rally.\n\n1. Champions defend one end; challenger teams rotate in from the other end each rally (or mini-game to 3).\n2. Challengers must win the rally to take the champion side; champions score a point per successful defense.\n3. Play all rallies from a standard serve start so every game skill appears.\n\nDose: 20–30 min session.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddles",
+            "balls",
+            "court with net",
+            "5+ players"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.serve-return-plus-two",
+      "method": "GET",
+      "path": "/v1/catalog/drills/serve-return-plus-two",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "bea3a808-23dd-56c1-a329-0756d6fa9508",
+          "slug": "serve-return-plus-two",
+          "title": "Serve, return, plus two",
+          "description": "Isolate the first four shots — where most amateur points are decided — and score only those.\n\n1. Play points that END after shot four: serve, return, third shot, fourth shot.\n2. Score shot quality: deep return 1, third shot landing in the kitchen 2, fourth-shot putaway 2.\n3. Rotate server every 5 points; track which of the four shots leaks the most errors.\n\nDose: 4 × 10 four-shot points.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddles",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.kitchen-footwork-shadow",
+      "method": "GET",
+      "path": "/v1/catalog/drills/kitchen-footwork-shadow",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "6ae0901d-711b-5876-a8fa-b8a80596deda",
+          "slug": "kitchen-footwork-shadow",
+          "title": "Kitchen line footwork shadow",
+          "description": "Groove the lateral shuffle and split-step at the line without a ball — pure movement quality.\n\n1. At the kitchen line, shadow the pattern: split-step, shuffle two steps left, dink shadow swing, recover; mirror right.\n2. Stay low with the paddle up the entire set; never cross the feet.\n3. Add a partner calling random directions to make the pattern reactive.\n\nDose: 4 × 45 s patterns.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "court or any flat space"
+          ],
+          "difficulty_min": "beginner",
+          "difficulty_max": "beginner",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.lob-overhead-rotation",
+      "method": "GET",
+      "path": "/v1/catalog/drills/lob-overhead-rotation",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "drill": {
+          "id": "a563dbb0-f0ec-5282-a4b7-6de14b7b193f",
+          "slug": "lob-overhead-rotation",
+          "title": "Lob and overhead rotation",
+          "description": "Handle the ball over your head: controlled lob feeds into overhead putaways with partner-switch footwork.\n\n1. Feeder lobs from the baseline over the kitchen-line player, who turns, drops step, and takes the overhead.\n2. Aim overheads at a deep middle target — placement over power.\n3. If the lob is too deep to smash, practice the switch: let it bounce, reset, and rebuild the point.\n\nDose: 4 × 8 lob feeds.",
+          "coach_name": "Pickle Sensei Training Library",
+          "equipment": [
+            "paddle",
+            "balls",
+            "court with net"
+          ],
+          "difficulty_min": "intermediate",
+          "difficulty_max": "intermediate",
+          "saved": false
+        },
+        "mappings": [],
+        "instructionalMedia": []
+      }
+    },
+    {
+      "name": "catalog.detail.notFound",
+      "method": "GET",
+      "path": "/v1/catalog/drills/not-a-real-drill",
+      "status": 404,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "code": "drill.not_found",
+          "message": "This drill is not in the catalog."
+        }
+      }
+    },
+    {
+      "name": "catalog.detail.encodedSlug",
+      "method": "GET",
+      "path": "/v1/catalog/drills/weird%20slug%2Fwith%3Fchars",
+      "status": 404,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "code": "drill.not_found",
+          "message": "This drill is not in the catalog."
+        }
+      }
+    },
+    {
+      "name": "saved.list",
+      "method": "GET",
+      "path": "/v1/me/saved-drills",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [
+          {
+            "id": "0440b4d1-2ffc-5619-b7dc-639a0dd122e0",
+            "slug": "wall-dink-rally",
+            "title": "Wall dink rally",
+            "description": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.\n\n1. Stand 7–8 ft from a wall marked with a net-height line (34 in).\n2. Rally soft dinks continuously above the line, contacting every ball out in front of the body.\n3. Keep the paddle up between contacts; reset to ready after each dink.\n\nDose: 3 × 2 min continuous rally.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "ball",
+              "wall with net-height line (34 in)"
+            ],
+            "difficulty_min": "beginner",
+            "difficulty_max": "beginner",
+            "saved_at": "2026-09-04T10:00:00.000Z"
+          },
+          {
+            "id": "3684a825-b777-5ae6-9b19-cb6469f20f5a",
+            "slug": "dink-target-boxes",
+            "title": "Dink target boxes",
+            "description": "Flatten the dink arc by demanding depth control into kitchen target zones.\n\n1. Place two flat targets in the opponent kitchen: one near the sideline, one center.\n2. Cooperative crosscourt dink rally; score a point only when the ball lands in a target.\n3. Emphasize lifting from the legs with a quiet wrist, not scooping upward.\n\nDose: first to 10 target hits, 3 rounds.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [
+              "paddle",
+              "balls",
+              "court",
+              "2 flat targets (towels or tape boxes)"
+            ],
+            "difficulty_min": "intermediate",
+            "difficulty_max": "intermediate",
+            "saved_at": "2026-09-03T10:00:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "saved.list.empty",
+      "method": "GET",
+      "path": "/v1/me/saved-drills",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": []
+      }
+    },
+    {
+      "name": "saved.list.unknownSlug",
+      "method": "GET",
+      "path": "/v1/me/saved-drills",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "items": [
+          {
+            "id": "47604fe5-c35d-45cb-957b-41d94856dc6a",
+            "slug": "removed-from-catalog",
+            "title": "removed-from-catalog",
+            "description": "This drill is no longer in the published catalog. Its full instructions are unavailable.",
+            "coach_name": "Pickle Sensei Training Library",
+            "equipment": [],
+            "difficulty_min": null,
+            "difficulty_max": null,
+            "saved_at": "2026-09-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "saved.put",
+      "method": "PUT",
+      "path": "/v1/me/saved-drills/wall-dink-rally",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "slug": "wall-dink-rally",
+        "saved": true,
+        "savedAt": "2026-09-04T10:00:00.000Z"
+      }
+    },
+    {
+      "name": "saved.put.invalidSlug",
+      "method": "PUT",
+      "path": "/v1/me/saved-drills/Bad%20Slug!",
+      "status": 400,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "code": "validation.saved_drill",
+          "message": "Invalid drill slug."
+        }
+      }
+    },
+    {
+      "name": "saved.delete",
+      "method": "DELETE",
+      "path": "/v1/me/saved-drills/wall-dink-rally",
+      "status": 204,
+      "contentType": null,
+      "body": null
+    },
+    {
+      "name": "plans.current",
+      "method": "GET",
+      "path": "/v1/training-plans/current",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "plan": null
+      }
+    },
+    {
+      "name": "plans.create",
+      "method": "POST",
+      "path": "/v1/training-plans",
+      "status": 409,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "code": "training.plan_unavailable",
+          "message": "Training plans require coach-validated drill content, which has not been published yet."
+        }
+      }
+    },
+    {
+      "name": "plans.reassess",
+      "method": "POST",
+      "path": "/v1/training-plans/78a7815a-176a-4487-a736-66eb2cc04455/reassessment",
+      "status": 404,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "message": "Unknown endpoint: POST /v1/training-plans/78a7815a-176a-4487-a736-66eb2cc04455/reassessment."
+        }
+      }
+    },
+    {
+      "name": "completions.create",
+      "method": "POST",
+      "path": "/v1/drill-completions",
+      "status": 404,
+      "contentType": "application/json",
+      "body": {
+        "error": {
+          "message": "Unknown endpoint: POST /v1/drill-completions."
+        }
+      }
+    }
+  ]
+}
