@@ -65,7 +65,9 @@ jobs:
           if [ "$ON_DEMAND" = "true" ]; then
             echo "on-demand run"; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          echo "run=$(tools/macos-ci/apple-paths-changed.sh "$BEFORE" "$AFTER")" >> "$GITHUB_OUTPUT"
+          # Never let a helper failure become `run=` (job green, Mac silently skipped).
+          run="$(tools/macos-ci/apple-paths-changed.sh "$BEFORE" "$AFTER")" || exit 1
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
   mac-full-verify:
     name: scripts/mac-full-verify.sh

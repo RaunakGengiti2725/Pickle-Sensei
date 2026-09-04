@@ -6,9 +6,14 @@
 # Usage: tools/macos-ci/apple-paths-changed.sh <before-sha> <after-sha>
 # Prints "true" or "false" on stdout (always exit 0 unless misused):
 #   true   Apple-relevant paths changed, or <before-sha> is unknown to this
-#          clone (force-push / first push) — when in doubt, run.
+#          clone (force-push / first push), or git could not compute the diff
+#          — when in doubt, run.
 #   false  nothing Apple-relevant changed.
 # The list of changed paths goes to stderr for the job log.
+#
+# Paths are compared NUL-separated (-z) so git never quotes/escapes them (a
+# non-ASCII Swift file name must still match ^native/), and with --no-renames
+# so a rename out of an Apple path is seen as the deletion it is.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
@@ -26,9 +31,17 @@ if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
   exit 0
 fi
 
-changed="$(git diff --name-only "$before" "$after")"
-printf '%s\n' "$changed" >&2
-if printf '%s\n' "$changed" | grep -Eq "$APPLE_PATHS"; then
+# NUL-separated output cannot live in a shell variable (bash drops NUL bytes).
+changed="$(mktemp)"
+trap 'rm -f "$changed"' EXIT
+if ! git diff --name-only --no-renames -z "$before" "$after" >"$changed"; then
+  echo "git diff $before $after failed; running" >&2
+  echo true
+  exit 0
+fi
+
+tr '\0' '\n' <"$changed" >&2
+if grep -Ezq "$APPLE_PATHS" "$changed"; then
   echo true
 else
   echo "no Apple-relevant paths changed; skipping the Mac" >&2
