@@ -208,7 +208,11 @@ describe("ModelRegistry", () => {
     // is always a version bump, never a rewrite.
     expect(() => registry.withEntry(scorerEntry({}))).toThrow(/immutable/);
     // Appending a NEW version returns a new registry; the original is untouched.
-    const next = registry.withEntry(scorerEntry({ version: "sm-v2" }));
+    // (Registered as a candidate: a second production entry for the same
+    // task/platform would be ambiguous and is rejected — see ADJ-04 below.)
+    const next = registry.withEntry(
+      scorerEntry({ version: "sm-v2", deploymentStatus: "candidate" }),
+    );
     expect(next.byId("scorer.sm-v1", "sm-v2")).not.toBeNull();
     expect(registry.byId("scorer.sm-v1", "sm-v2")).toBeNull();
   });
