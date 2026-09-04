@@ -80,6 +80,11 @@ function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; 
       for (const key of args) if (store.delete(key)) n += 1;
       return { result: n };
     }
+    case "EXISTS": {
+      let n = 0;
+      for (const key of args) if (live(store, key)) n += 1;
+      return { result: n };
+    }
     case "INCR": {
       const entry = live(store, args[0]);
       const next = (entry ? Number(entry.value) : 0) + 1;
