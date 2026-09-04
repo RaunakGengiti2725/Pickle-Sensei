@@ -140,9 +140,10 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
 
 const mounted: TestRenderer.ReactTestRenderer[] = [];
 
-function renderApp() {
+/** Mounts the app and lets the Gate's own auth hydrate settle. */
+async function renderApp() {
   let renderer!: TestRenderer.ReactTestRenderer;
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<App />);
   });
   mounted.push(renderer);
@@ -170,8 +171,8 @@ beforeEach(() => {
 });
 
 describe('Gate loading affordance after the splash', () => {
-  it('paints a loading state (never a bare surface) while a signed-in owner re-hydrates', () => {
-    const renderer = renderApp();
+  it('paints a loading state (never a bare surface) while a signed-in owner re-hydrates', async () => {
+    const renderer = await renderApp();
     expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
 
     act(() => {
@@ -195,8 +196,8 @@ describe('Gate loading affordance after the splash', () => {
     expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
   });
 
-  it('paints a loading state while the signed-out owner re-hydrates after sign-out', () => {
-    const renderer = renderApp();
+  it('paints a loading state while the signed-out owner re-hydrates after sign-out', async () => {
+    const renderer = await renderApp();
     act(() => {
       mockUseAuthStore.setState({ session: null });
       mockUseAppStore.setState({
@@ -215,8 +216,8 @@ describe('Gate loading affordance after the splash', () => {
 });
 
 describe('Gate hydrate failure', () => {
-  it('shows a retry state instead of the account questionnaire, and retry re-runs hydrate', () => {
-    const renderer = renderApp();
+  it('shows a retry state instead of the account questionnaire, and retry re-runs hydrate', async () => {
+    const renderer = await renderApp();
     act(() => {
       mockUseAppStore.setState({
         hydrated: true,
@@ -236,8 +237,8 @@ describe('Gate hydrate failure', () => {
     expect(mockHydrateApp).toHaveBeenCalledTimes(callsBeforeRetry + 1);
   });
 
-  it('still offers the in-account questionnaire when there is no profile and no error', () => {
-    const renderer = renderApp();
+  it('still offers the in-account questionnaire when there is no profile and no error', async () => {
+    const renderer = await renderApp();
     act(() => {
       mockUseAppStore.setState({ hydrated: true, profile: null });
     });
@@ -287,11 +288,11 @@ describe('RootErrorBoundary', () => {
     consoleError.mockRestore();
   });
 
-  it('wraps the Gate so a throwing screen degrades to the error state', () => {
+  it('wraps the Gate so a throwing screen degrades to the error state', async () => {
     const consoleError = jest
       .spyOn(console, 'error')
       .mockImplementation(() => {});
-    const renderer = renderApp();
+    const renderer = await renderApp();
     const rootNavigator = jest.requireMock<{
       RootNavigator: () => React.ReactElement;
     }>('../../src/navigation/RootNavigator');

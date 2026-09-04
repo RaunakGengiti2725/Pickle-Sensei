@@ -127,17 +127,31 @@ function Gate() {
   const [splashDone, setSplashDone] = useState(false);
   const handleSplashFinished = useCallback(() => setSplashDone(true), []);
 
+  // The data owner is only known once the auth hydrate THIS mount started
+  // has settled. A remount (RootErrorBoundary retry) re-enters
+  // authStore.hydrate(), which parks the active owner on signed-out while it
+  // re-reads the vault; the store's `hydrated` flag still says true from the
+  // previous mount, so keying on it alone would hydrate the app store from
+  // that stale owner, hit its owner-mismatch guard, and never be re-driven.
+  const [authSettled, setAuthSettled] = useState(false);
   useEffect(() => {
-    void hydrateAuth();
+    let live = true;
+    void hydrateAuth().finally(() => {
+      if (live) setAuthSettled(true);
+    });
+    return () => {
+      live = false;
+    };
   }, [hydrateAuth]);
 
-  const desiredOwner = !authHydrated
-    ? null
-    : session?.provider === 'guest'
-      ? GUEST_DATA_OWNER
-      : session?.canonicalAppUserId
-        ? canonicalDataOwner(session.canonicalAppUserId)
-        : SIGNED_OUT_DATA_OWNER;
+  const desiredOwner =
+    !authHydrated || !authSettled
+      ? null
+      : session?.provider === 'guest'
+        ? GUEST_DATA_OWNER
+        : session?.canonicalAppUserId
+          ? canonicalDataOwner(session.canonicalAppUserId)
+          : SIGNED_OUT_DATA_OWNER;
 
   useEffect(() => {
     if (!desiredOwner) return;
