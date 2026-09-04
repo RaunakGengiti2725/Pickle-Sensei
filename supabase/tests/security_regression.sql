@@ -451,21 +451,117 @@ set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 insert into public.sessions (id, user_id, started_at)
 values ('00000000-0000-4000-8000-0000000000d2',
         '00000000-0000-4000-8000-00000000000a', now());
-insert into public.shots (
-  id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
-  overall_score, analysis_confidence, result_kind,
-  app_version, model_bundle_version, pose_model_version,
-  paddle_model_version, stroke_detector_version, phase_model_version,
-  scoring_model_version, shot_config_version
-) values (
-  '00000000-0000-4000-8000-0000000000e2',
-  '00000000-0000-4000-8000-00000000000a',
-  '00000000-0000-4000-8000-0000000000d2',
-  'drive', now(), 0, 1000,
-  5.5, 0.9, 'scored',
-  '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
-  'scoring-1', 'config-1'
-);
+
+-- E0: shots are INSERT-only THROUGH apply_synced_shot(). A client session
+-- holds no INSERT privilege on shots or the detail tables, so a PostgREST
+-- `POST /rest/v1/shots` with the user's own token (no permit, client-chosen
+-- score and version columns) is refused at the grant layer…
+do $$
+declare t text;
+begin
+  begin
+    insert into public.shots (
+      id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000e2',
+      '00000000-0000-4000-8000-00000000000a',
+      '00000000-0000-4000-8000-0000000000d2',
+      'drive', now(), 0, 1000,
+      9.9, 0.99, 'scored',
+      'forged', 'forged', 'forged', 'forged', 'forged', 'forged',
+      'forged', 'forged'
+    );
+    raise exception 'E0a: direct client INSERT into shots must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  foreach t in array array['shots', 'shot_phases', 'shot_measurements', 'shot_checkpoints'] loop
+    if has_table_privilege('authenticated', 'public.' || t, 'INSERT') then
+      raise exception 'E0b: authenticated must hold no INSERT grant on %', t;
+    end if;
+  end loop;
+end $$;
+
+-- …while the SAME session syncs the same shot through the RPC (the shot the
+-- rest of this section works on). Alice's identity already carries the A5
+-- rating, so this is her second and last free one.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000a0',
+        '00000000-0000-4000-8000-00000000000a', 'permit-e2');
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e2',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000a0',
+    'sessionId', '00000000-0000-4000-8000-0000000000d2',
+    'resultKind', 'scored',
+    'shotType', 'drive',
+    'cameraView', 'side',
+    'capturedAt', '2026-08-31T11:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 5.5, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'),
+    'phases', jsonb_build_array(jsonb_build_object(
+      'key', 'prepare', 'startMs', 0, 'representativeMs', 100,
+      'endMs', 200, 'confidence', 0.9)),
+    'checkpoints', '[]'::jsonb
+  ));
+  if v <> 'accepted' then
+    raise exception 'E0c: apply_synced_shot must still accept the owner sync (got %)', v;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-0000000000e2'
+                   and user_id = '00000000-0000-4000-8000-00000000000a'
+                   and overall_score = 5.5 and result_kind = 'scored') then
+    raise exception 'E0c: the RPC must have written the shot under the caller';
+  end if;
+  if not exists (select 1 from public.shot_phases
+                 where shot_id = '00000000-0000-4000-8000-0000000000e2'
+                   and phase_key = 'prepare') then
+    raise exception 'E0c: the RPC must have written the phase evidence';
+  end if;
+  -- The refused direct INSERT above left no trace in either quota view.
+  if public.lifetime_scored_count() <> 2
+     or (select scored_count from public.access_state()) <> 2 then
+    raise exception 'E0d: scored count must be exactly the two synced ratings (got % / %)',
+      public.lifetime_scored_count(), (select scored_count from public.access_state());
+  end if;
+end $$;
+
+-- E0e: at the limit, the direct INSERT is still refused and still moves
+-- nothing — the free limit cannot be exceeded by any client path.
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000e4',
+      '00000000-0000-4000-8000-00000000000a',
+      'drive', now(), 0, 1000, 10.0, 0.99, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'E0e: a third scored shot must not be insertable directly';
+  exception when insufficient_privilege then null;
+  end;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'E0e: the refused INSERT must not move lifetime_scored_count() (got %)',
+      public.lifetime_scored_count();
+  end if;
+end $$;
 
 -- E1: synced shots are fully immutable from a client session
 do $$
@@ -505,13 +601,26 @@ begin
   end loop;
 end $$;
 
--- E3: shot detail evidence is write-once (no UPDATE/DELETE grant)
-insert into public.shot_phases
-  (shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence)
-values ('00000000-0000-4000-8000-0000000000e2',
-        '00000000-0000-4000-8000-00000000000a', 'prepare', 0, 100, 200, 0.9);
+-- E3: shot detail evidence is write-once and written only by the RPC (no
+-- client INSERT/UPDATE/DELETE grant; the E0c sync wrote the 'prepare' phase)
 do $$
 begin
+  begin
+    insert into public.shot_phases
+      (shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence)
+    values ('00000000-0000-4000-8000-0000000000e2',
+            '00000000-0000-4000-8000-00000000000a', 'forged', 0, 100, 200, 0.9);
+    raise exception 'E3c: shot_phases must not be client-insertable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.shot_checkpoints
+      (shot_id, user_id, checkpoint_key, score, confidence, band, direction, severity, applicable)
+    values ('00000000-0000-4000-8000-0000000000e2',
+            '00000000-0000-4000-8000-00000000000a', 'forged', 100, 1, 'green', 'ok', 0, true);
+    raise exception 'E3d: shot_checkpoints must not be client-insertable';
+  exception when insufficient_privilege then null;
+  end;
   begin
     update public.shot_phases set confidence = 1
       where shot_id = '00000000-0000-4000-8000-0000000000e2';
@@ -556,23 +665,154 @@ begin
   end loop;
 end $$;
 
--- E6: permits — lifecycle columns only; the idempotency identity is fixed
+-- E6: permits — lifecycle columns only; the idempotency identity is fixed.
+-- The client transition is the finalize route's: reserved -> terminal with
+-- one of the releasable outcomes it accepts.
 insert into public.analysis_permits (id, user_id, idempotency_key)
 values ('00000000-0000-4000-8000-0000000000a2',
         '00000000-0000-4000-8000-00000000000a', 'permit-2');
-update public.analysis_permits set status = 'finalized', outcome = 'scored'
-  where id = '00000000-0000-4000-8000-0000000000a2';
+update public.analysis_permits set status = 'finalized', outcome = 'cancelled'
+  where id = '00000000-0000-4000-8000-0000000000a2' and status = 'reserved';
 do $$
 begin
   if not exists (select 1 from public.analysis_permits
                  where id = '00000000-0000-4000-8000-0000000000a2'
-                   and status = 'finalized') then
+                   and status = 'finalized' and outcome = 'cancelled') then
     raise exception 'E6a: permit finalize (status/outcome) must stay client-writable';
   end if;
   begin
     update public.analysis_permits set idempotency_key = 'forged'
       where id = '00000000-0000-4000-8000-0000000000a2';
     raise exception 'E6b: permit idempotency_key must not be client-writable';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- E6c: the lifecycle is ONE-WAY. A terminal permit (a2 above, and a1 that
+-- the A5 sync finalized as scored) can never go back to reserved — which is
+-- what would let one permit be consumed twice — and the attempt leaves
+-- access_state().reserved_count exactly where it was.
+do $$
+declare before_reserved int; after_reserved int; st text; v text;
+begin
+  select reserved_count into before_reserved from public.access_state();
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+      where id = '00000000-0000-4000-8000-0000000000a2';
+    raise exception 'E6c: finalized -> reserved must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set status = 'released', outcome = 'cancelled'
+      where id = '00000000-0000-4000-8000-0000000000a2';
+    raise exception 'E6c: finalized -> released must be rejected (terminal is terminal)';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set outcome = 'failed'
+      where id = '00000000-0000-4000-8000-0000000000a2';
+    raise exception 'E6c: a terminal outcome must not be rewritable';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  select status into st from public.analysis_permits
+    where id = '00000000-0000-4000-8000-0000000000a2';
+  if st <> 'finalized' then
+    raise exception 'E6c: the permit must still be finalized (got %)', st;
+  end if;
+  select reserved_count into after_reserved from public.access_state();
+  if after_reserved <> before_reserved then
+    raise exception 'E6c: reserved_count must be unchanged by the attempt (% -> %)',
+      before_reserved, after_reserved;
+  end if;
+  -- And the sync RPC keeps refusing the consumed permit.
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e7',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000a1',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'E6c: a consumed permit must not be reusable by the RPC (got %)', v;
+  end if;
+end $$;
+
+-- E6d: outcomes are the documented vocabulary, and a client session records
+-- only the ones the finalize route accepts — 'scored' / 'expired' /
+-- 'free_limit_exceeded' are written by the sync RPC and the sweep. A permit
+-- also cannot pick up an outcome while it is still reserved.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000a3',
+        '00000000-0000-4000-8000-00000000000a', 'permit-3');
+do $$
+declare bad text;
+begin
+  foreach bad in array array[
+    'status = ''finalized'', outcome = ''totally_made_up''',
+    'status = ''finalized'', outcome = ''scored''',
+    'status = ''released'', outcome = ''free_limit_exceeded''',
+    'status = ''released'', outcome = null',
+    'outcome = ''cancelled'''
+  ] loop
+    begin
+      execute format(
+        'update public.analysis_permits set %s where id = ''00000000-0000-4000-8000-0000000000a3''',
+        bad);
+      raise exception 'E6d: permit update "%" must be rejected', bad;
+    exception when insufficient_privilege or check_violation then null;
+    end;
+  end loop;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000a3'
+                   and status = 'reserved' and outcome is null) then
+    raise exception 'E6d: the rejected updates must leave the permit reserved';
+  end if;
+  -- The finalize route's release shape still works on a reserved permit.
+  update public.analysis_permits set status = 'released', outcome = 'low_confidence'
+    where id = '00000000-0000-4000-8000-0000000000a3' and status = 'reserved';
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000a3'
+                   and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'E6d: reserved -> released with low_confidence must succeed';
+  end if;
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+      where id = '00000000-0000-4000-8000-0000000000a3';
+    raise exception 'E6d: released -> reserved must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+end $$;
+
+-- E6e: a client cannot mint a permit that is already terminal, back-dated,
+-- or carries an outcome (INSERT is sized to the reserve RPC's columns), and
+-- cannot delete permits either — the ledger of attempts is append-once.
+do $$
+begin
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+    values ('00000000-0000-4000-8000-0000000000a4',
+            '00000000-0000-4000-8000-00000000000a', 'permit-4', 'finalized', 'scored');
+    raise exception 'E6e: inserting a pre-finalized permit must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+    values ('00000000-0000-4000-8000-0000000000a4',
+            '00000000-0000-4000-8000-00000000000a', 'permit-4', now() - interval '2 days');
+    raise exception 'E6e: inserting a back-dated permit must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.analysis_permits
+      where id = '00000000-0000-4000-8000-0000000000a3';
+    raise exception 'E6e: permits must not be client-deletable';
   exception when insufficient_privilege then null;
   end;
 end $$;
@@ -1319,6 +1559,118 @@ begin
         public.free_rating_identity_hash('apple', 'apple-sub-finn'))
         and scored_count = 1) <> 2 then
     raise exception 'J9: every identity of the account must carry the scored count';
+  end if;
+end $$;
+
+-- ────────── K: RLS-blind privileges are gone from the client roles ──────────
+-- TRUNCATE, TRIGGER and REFERENCES bypass row-level security and the
+-- row-level append-only triggers entirely. The hosted default privileges hand
+-- them to anon/authenticated on every new table; the chain must have revoked
+-- them everywhere AND narrowed the defaults so a table added later is not
+-- born with them. Iterates every table so a new one is caught automatically.
+
+reset role;
+
+-- K1: no table in schema public grants any of the three to either client role
+do $$
+declare rel record; r text; p text;
+begin
+  for rel in
+    select c.oid::regclass as name
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
+  loop
+    foreach r in array array['anon', 'authenticated'] loop
+      foreach p in array array['TRUNCATE', 'TRIGGER', 'REFERENCES'] loop
+        if has_table_privilege(r, rel.name, p) then
+          raise exception 'K1: % must not hold % on %', r, p, rel.name;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+  if (select count(*) from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee in ('anon', 'authenticated')
+        and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')) <> 0 then
+    raise exception 'K1: information_schema still lists RLS-blind grants for a client role';
+  end if;
+end $$;
+
+-- K2: the default privileges for schema public no longer hand them out
+do $$
+begin
+  if exists (
+    select 1
+    from pg_default_acl d
+    join pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral aclexplode(d.defaclacl) a
+    where n.nspname = 'public'
+      and d.defaclobjtype = 'r'
+      and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated'))
+      and a.privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')) then
+    raise exception 'K2: default privileges in schema public still grant TRUNCATE/TRIGGER/REFERENCES to a client role';
+  end if;
+end $$;
+
+-- K3: a table created AFTER the chain (as the migration role) is born without
+-- them — this is what protects the next migration's tables.
+create table public.k3_probe (id int primary key);
+do $$
+begin
+  if has_table_privilege('authenticated', 'public.k3_probe', 'TRUNCATE')
+     or has_table_privilege('authenticated', 'public.k3_probe', 'TRIGGER')
+     or has_table_privilege('authenticated', 'public.k3_probe', 'REFERENCES')
+     or has_table_privilege('anon', 'public.k3_probe', 'TRUNCATE')
+     or has_table_privilege('anon', 'public.k3_probe', 'TRIGGER')
+     or has_table_privilege('anon', 'public.k3_probe', 'REFERENCES') then
+    raise exception 'K3: a newly created table must not inherit TRUNCATE/TRIGGER/REFERENCES for client roles';
+  end if;
+end $$;
+drop table public.k3_probe;
+
+-- K4: as authenticated, the DDL/bulk paths those privileges unlock are refused
+-- with 42501 (TRUNCATE ignores RLS and does not fire row triggers; a client
+-- trigger could rewrite every row it touches).
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'shots', 'consent_records', 'analysis_permits', 'billing_entitlements',
+    'evaluation_trials', 'free_rating_ledger'
+  ] loop
+    begin
+      execute format('truncate public.%I cascade', t);
+      raise exception 'K4: authenticated TRUNCATE of % must be refused', t;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  begin
+    execute 'create function pg_temp.k4_fn() returns trigger language plpgsql as $f$ begin return new; end $f$';
+    execute 'create trigger k4_trg before insert on public.shots for each row execute function pg_temp.k4_fn()';
+    raise exception 'K4: authenticated CREATE TRIGGER on shots must be refused';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- K5: captures hygiene — no client path updates or deletes captures, so the
+-- grants (and the dead policies behind them) are gone; the read/insert side
+-- the practice evidence relies on is untouched.
+do $$
+begin
+  if has_table_privilege('authenticated', 'public.captures', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.captures', 'DELETE') then
+    raise exception 'K5: authenticated must not hold UPDATE/DELETE on captures';
+  end if;
+  if not has_table_privilege('authenticated', 'public.captures', 'SELECT')
+     or not has_table_privilege('authenticated', 'public.captures', 'INSERT') then
+    raise exception 'K5: captures SELECT/INSERT must stay client-usable';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'captures'
+             and cmd in ('UPDATE', 'DELETE')) then
+    raise exception 'K5: captures must carry no UPDATE/DELETE policy';
   end if;
 end $$;
 

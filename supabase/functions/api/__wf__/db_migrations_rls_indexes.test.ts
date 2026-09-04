@@ -18,6 +18,36 @@ const CASCADE_USER_INDEXES = "20260902130100_cascade_user_indexes.sql";
 const PERMITS_SWEEP_INDEX = "20260902130200_permits_reserved_sweep_index.sql";
 const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
+const SHOTS_INSERT_VIA_RPC = "20260905000000_shots_insert_only_via_rpc.sql";
+const RLS_BLIND_REVOKE = "20260905000001_revoke_rls_blind_privileges.sql";
+const PERMIT_LIFECYCLE = "20260905000002_permit_lifecycle_one_way.sql";
+
+/** The tables apply_synced_shot() writes. A client session must hold no
+ * INSERT on any of them: the RPC is the only writer. */
+const SYNC_WRITTEN_TABLES = [
+  "shots",
+  "shot_phases",
+  "shot_checkpoints",
+  "shot_measurements",
+] as const;
+
+/** Privileges RLS does not govern. No client role may hold them on any
+ * public table, and the schema defaults must stop handing them out. */
+const RLS_BLIND_PRIVILEGES = ["truncate", "trigger", "references"] as const;
+
+/** The full analysis_permits.outcome vocabulary: what the sync RPC and the
+ * sweep write, plus the releasable outcomes POST /v1/permits/:id/finalize
+ * accepts (index.ts RELEASABLE_OUTCOMES). */
+const PERMIT_OUTCOMES = [
+  "scored",
+  "low_confidence",
+  "expired",
+  "free_limit_exceeded",
+  "cancelled",
+  "failed",
+  "unsupported",
+  "incorrect_recognition",
+] as const;
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -122,6 +152,71 @@ function grantsDeleteOnShots(statement: string): boolean {
   return /\bpublic\.shots\b/.test(objects);
 }
 
+/** `grant <privileges> on <objects> to <grantees>` split into its three
+ * parts, or null when the statement is not a GRANT. Column-level grants
+ * (`grant update (status, outcome) on …`) keep their column list inside
+ * `privileges`. */
+function parseGrant(
+  statement: string,
+): { privileges: string; objects: string; grantees: string } | null {
+  if (!statement.startsWith("grant ")) return null;
+  const onIndex = statement.indexOf(" on ");
+  const toIndex = statement.lastIndexOf(" to ");
+  if (onIndex < 0 || toIndex < onIndex) return null;
+  return {
+    privileges: statement.slice("grant ".length, onIndex),
+    objects: statement.slice(onIndex + " on ".length, toIndex),
+    grantees: statement.slice(toIndex + " to ".length),
+  };
+}
+
+function grantsToClientRole(grantees: string): boolean {
+  return /\b(anon|authenticated|public)\b/.test(grantees);
+}
+
+/** A GRANT that hands INSERT (or ALL) on one of the sync-written tables to a
+ * client role, whether named directly or via `all tables in schema public`. */
+function grantsClientInsertOnSyncTables(statement: string): boolean {
+  const grant = parseGrant(statement);
+  if (!grant) return false;
+  if (!/\binsert\b/.test(grant.privileges) && !/\ball\b/.test(grant.privileges)) {
+    return false;
+  }
+  if (!grantsToClientRole(grant.grantees)) return false;
+  if (/\ball tables in schema public\b/.test(grant.objects)) return true;
+  return SYNC_WRITTEN_TABLES.some((table) =>
+    new RegExp(`\\bpublic\\.${table}\\b`).test(grant.objects),
+  );
+}
+
+/** A GRANT that hands TRUNCATE / TRIGGER / REFERENCES (or ALL) on anything
+ * in schema public to a client role. */
+function grantsRlsBlindPrivilegeToClient(statement: string): boolean {
+  const grant = parseGrant(statement);
+  if (!grant) return false;
+  if (!/\bpublic\./.test(grant.objects) && !/\bschema public\b/.test(grant.objects)) {
+    return false;
+  }
+  if (!grantsToClientRole(grant.grantees)) return false;
+  if (/\ball\b/.test(grant.privileges) && !/\(/.test(grant.privileges)) return true;
+  return RLS_BLIND_PRIVILEGES.some((p) => new RegExp(`\\b${p}\\b`).test(grant.privileges));
+}
+
+function createsInsertPolicyOnSyncTables(statement: string): boolean {
+  return (
+    statement.startsWith("create policy") &&
+    /\bfor insert\b/.test(statement) &&
+    SYNC_WRITTEN_TABLES.some((table) => new RegExp(`\\bon public\\.${table}\\b`).test(statement))
+  );
+}
+
+/** The `security definer` / `security invoker` mode of a function body. */
+function securityModeOf(body: string): "definer" | "invoker" | null {
+  if (/\bsecurity definer\b/.test(body)) return "definer";
+  if (/\bsecurity invoker\b/.test(body)) return "invoker";
+  return null;
+}
+
 function createsDeletePolicyOnShots(statement: string): boolean {
   return (
     statement.startsWith("create policy") &&
@@ -155,6 +250,207 @@ Deno.test("shots: the client DELETE path is closed and never reopened", async ()
     }
   }
 });
+
+Deno.test(
+  "shots: INSERT is revoked from the client role and only apply_synced_shot() (definer, pinned) writes the sync tables",
+  async () => {
+    const chain = await loadChain();
+    const fix = chain.find((m) => m.file === SHOTS_INSERT_VIA_RPC);
+    ok(fix, `${SHOTS_INSERT_VIA_RPC} must exist in the migration chain`);
+
+    for (const table of SYNC_WRITTEN_TABLES) {
+      ok(
+        fix.statements.some(
+          (s) =>
+            s.startsWith("revoke ") &&
+            /\binsert\b/.test(s.split(" on ", 2)[0]) &&
+            new RegExp(`\\bpublic\\.${table}\\b`).test(s.split(" on ", 2)[1] ?? "") &&
+            /\bfrom\b.*\bauthenticated\b/.test(s),
+        ),
+        `${SHOTS_INSERT_VIA_RPC} must revoke INSERT on public.${table} from authenticated`,
+      );
+      ok(
+        fix.statements.includes(`drop policy if exists "${table}_insert_own" on public.${table}`),
+        `${SHOTS_INSERT_VIA_RPC} must drop the ${table}_insert_own policy`,
+      );
+    }
+
+    // The RPC is recreated as SECURITY DEFINER with an empty search_path — the
+    // ONLY INSERT authority on the sync tables — and stays client-executable.
+    const bodies = functionBodies(fix.raw, "apply_synced_shot");
+    ok(bodies.length === 1, `${SHOTS_INSERT_VIA_RPC} must recreate public.apply_synced_shot`);
+    ok(securityModeOf(bodies[0]) === "definer", "apply_synced_shot must be SECURITY DEFINER");
+    ok(bodies[0].includes("set search_path = ''"), "apply_synced_shot must pin search_path");
+    ok(
+      bodies[0].includes("public.lifetime_scored_count()"),
+      "apply_synced_shot must still count through the identity ledger",
+    );
+    ok(
+      fix.statements.some((s) =>
+        /^revoke all on function public\.apply_synced_shot\(jsonb\) from public, anon\b/.test(s),
+      ) &&
+        fix.statements.includes(
+          "grant execute on function public.apply_synced_shot(jsonb) to authenticated",
+        ),
+      "apply_synced_shot execute must be authenticated-only",
+    );
+
+    // From here on: no client INSERT grant on the sync tables, no INSERT
+    // policy, and every later redefinition of the RPC stays definer + pinned.
+    for (const migration of after(chain, SHOTS_INSERT_VIA_RPC)) {
+      for (const statement of migration.statements) {
+        ok(
+          !grantsClientInsertOnSyncTables(statement),
+          `${migration.file} re-grants client INSERT on a sync-written table: ${statement}`,
+        );
+        ok(
+          !createsInsertPolicyOnSyncTables(statement),
+          `${migration.file} recreates a client INSERT policy on a sync-written table: ${statement}`,
+        );
+      }
+      for (const body of functionBodies(migration.raw, "apply_synced_shot")) {
+        ok(
+          securityModeOf(body) === "definer" && body.includes("set search_path = ''"),
+          `${migration.file}: apply_synced_shot must stay SECURITY DEFINER with search_path = ''`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
+  "grants: TRUNCATE/TRIGGER/REFERENCES are revoked from the client roles everywhere, defaults included, and never re-granted",
+  async () => {
+    const chain = await loadChain();
+    const fix = chain.find((m) => m.file === RLS_BLIND_REVOKE);
+    ok(fix, `${RLS_BLIND_REVOKE} must exist in the migration chain`);
+
+    // Every existing table: a loop over pg_class (so views and tables added
+    // by any earlier migration are covered), revoking the three privileges
+    // from both client roles.
+    ok(
+      /revoke truncate, trigger, references on %s from anon, authenticated/.test(fix.raw) &&
+        /from pg_class/.test(fix.raw),
+      `${RLS_BLIND_REVOKE} must revoke truncate, trigger, references from anon, authenticated on every public relation`,
+    );
+    // Future tables: the schema default privileges no longer carry them.
+    ok(
+      fix.statements.includes(
+        "alter default privileges in schema public revoke truncate, trigger, references on tables from anon, authenticated",
+      ),
+      `${RLS_BLIND_REVOKE} must revoke the three privileges from the schema default privileges`,
+    );
+    // Captures hygiene: no client path updates or deletes captures.
+    ok(
+      fix.statements.includes("revoke update, delete on public.captures from authenticated"),
+      `${RLS_BLIND_REVOKE} must revoke UPDATE/DELETE on captures from authenticated`,
+    );
+
+    for (const migration of after(chain, RLS_BLIND_REVOKE)) {
+      for (const statement of migration.statements) {
+        ok(
+          !grantsRlsBlindPrivilegeToClient(statement),
+          `${migration.file} grants TRUNCATE/TRIGGER/REFERENCES (or ALL) to a client role: ${statement}`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter default privileges") &&
+            /\bgrant\b/.test(statement) &&
+            grantsToClientRole(statement.split(" to ").pop() ?? "") &&
+            (/\ball\b/.test(statement) ||
+              RLS_BLIND_PRIVILEGES.some((p) => new RegExp(`\\b${p}\\b`).test(statement)))
+          ),
+          `${migration.file} reopens the default privileges for a client role: ${statement}`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
+  "permits: the lifecycle guard trigger and the outcome vocabulary are installed and never removed",
+  async () => {
+    const chain = await loadChain();
+    const fix = chain.find((m) => m.file === PERMIT_LIFECYCLE);
+    ok(fix, `${PERMIT_LIFECYCLE} must exist in the migration chain`);
+
+    const trigger = fix.statements.find((s) =>
+      s.startsWith("create trigger analysis_permits_lifecycle_guard "),
+    );
+    ok(trigger, `${PERMIT_LIFECYCLE} must create analysis_permits_lifecycle_guard`);
+    ok(
+      /\bbefore update on public\.analysis_permits for each row\b/.test(trigger),
+      `the guard must be a BEFORE UPDATE row trigger on analysis_permits: ${trigger}`,
+    );
+    ok(
+      functionBodies(fix.raw, "guard_analysis_permit_lifecycle").length === 1,
+      `${PERMIT_LIFECYCLE} must define public.guard_analysis_permit_lifecycle()`,
+    );
+    ok(
+      fix.statements.some((s) =>
+        /^revoke all on function public\.guard_analysis_permit_lifecycle\(\) from public, anon, authenticated\b/.test(
+          s,
+        ),
+      ),
+      "the guard function must not be client-executable",
+    );
+
+    const outcomeCheck = fix.statements.find(
+      (s) =>
+        s.startsWith(
+          "alter table public.analysis_permits add constraint analysis_permits_outcome_check",
+        ) && /\bcheck\b/.test(s),
+    );
+    ok(outcomeCheck, `${PERMIT_LIFECYCLE} must add analysis_permits_outcome_check`);
+    for (const outcome of PERMIT_OUTCOMES) {
+      ok(
+        outcomeCheck.includes(`'${outcome}'`),
+        `outcome check must list '${outcome}': ${outcomeCheck}`,
+      );
+    }
+    // Exactly the documented vocabulary — nothing extra may slip in.
+    const listed = outcomeCheck.match(/'[a-z_]+'/g) ?? [];
+    const extras = listed
+      .map((v) => v.slice(1, -1))
+      .filter((v) => v !== "reserved" && !(PERMIT_OUTCOMES as readonly string[]).includes(v));
+    ok(extras.length === 0, `outcome check lists undocumented values: ${extras.join(", ")}`);
+
+    for (const migration of after(chain, PERMIT_LIFECYCLE)) {
+      for (const statement of migration.statements) {
+        ok(
+          !(
+            statement.startsWith("drop trigger") &&
+            statement.includes("analysis_permits_lifecycle_guard") &&
+            !migration.statements.some((s) =>
+              s.startsWith("create trigger analysis_permits_lifecycle_guard "),
+            )
+          ),
+          `${migration.file} drops the permit lifecycle guard without recreating it`,
+        );
+        ok(
+          !(
+            /^alter table public\.analysis_permits drop constraint (if exists )?analysis_permits_outcome_check\b/.test(
+              statement,
+            ) &&
+            !migration.statements.some((s) =>
+              s.startsWith(
+                "alter table public.analysis_permits add constraint analysis_permits_outcome_check",
+              ),
+            )
+          ),
+          `${migration.file} drops the outcome vocabulary without replacing it`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter table public.analysis_permits disable trigger") &&
+            /\b(all|user|analysis_permits_lifecycle_guard)\b/.test(statement)
+          ),
+          `${migration.file} disables the permit lifecycle guard: ${statement}`,
+        );
+      }
+    }
+  },
+);
 
 Deno.test("shots: the pre-fix chain is the one the revoke was written against", async () => {
   const chain = await loadChain();
