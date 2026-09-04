@@ -34,6 +34,19 @@ export interface AccessStoreState {
 
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
+/**
+ * Ordering for `canonicalAccess` writes. Every backend access request takes
+ * the next sequence number when it is issued; a plain read (initialize,
+ * refreshAccess) may land only while no later request has committed. Reads
+ * overlap freely with the mutually exclusive store operations, so a
+ * Settings-focus refresh issued before a purchase can answer after the server
+ * has verified the membership — its snapshot predates the verification and
+ * is dropped instead of displacing the verified result. Verifications
+ * (syncBilling, purchase, restore) always land: they carry the server's
+ * post-mutation truth.
+ */
+let operationSequence = 0;
+let committedOperationSequence = 0;
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -76,6 +89,29 @@ function isCurrentConfiguration(
   return dependencies === clients && configurationVersion === version;
 }
 
+function beginOperation(): number {
+  operationSequence += 1;
+  return operationSequence;
+}
+
+/** False once an operation that started after `sequence` has committed. */
+function mayCommit(sequence: number): boolean {
+  return sequence > committedOperationSequence;
+}
+
+type AccessCommit = Partial<AccessStoreState> & {
+  canonicalAccess: CanonicalAccessState | null;
+};
+
+function commitAccess(
+  set: (patch: Partial<AccessStoreState>) => void,
+  sequence: number,
+  patch: AccessCommit,
+): void {
+  committedOperationSequence = Math.max(committedOperationSequence, sequence);
+  set(patch);
+}
+
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
   if (!plans) return null;
   switch (period) {
@@ -113,6 +149,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return;
     }
     const version = configurationVersion;
+    const sequence = beginOperation();
     set({ status: 'loading', error: null });
     let storeConfigurationError: BillingError | null = null;
     try {
@@ -145,6 +182,21 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     ]);
     if (!isCurrentConfiguration(clients, version)) return;
 
+    const plans = plansResult.value;
+    const selectedPeriod: BillingPeriod = plans?.annual
+      ? 'annual'
+      : plans?.lifetime
+        ? 'lifetime'
+        : plans?.monthly
+          ? 'monthly'
+          : 'annual';
+    // A newer operation verified access while this read was in flight: its
+    // status, error and snapshot stand; only the offerings loaded here land.
+    if (!mayCommit(sequence)) {
+      set({ plans, selectedPeriod });
+      return;
+    }
+
     const accessError = accessResult.error
       ? billingError(
           accessResult.error,
@@ -163,18 +215,11 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     // when the store SDK or offerings are not configured. Store failure blocks
     // purchase presentation; it never erases a verified free allowance.
     const error = accessError ?? plansError;
-    const plans = plansResult.value;
-    set({
+    commitAccess(set, sequence, {
       status: error ? statusFor(error) : 'ready',
       operation: 'idle',
       plans,
-      selectedPeriod: plans?.annual
-        ? 'annual'
-        : plans?.lifetime
-          ? 'lifetime'
-          : plans?.monthly
-            ? 'monthly'
-            : 'annual',
+      selectedPeriod,
       canonicalAccess: accessResult.value,
       error: error?.toState() ?? null,
     });
@@ -192,20 +237,27 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const sequence = beginOperation();
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
       if (!isCurrentConfiguration(clients, version)) return false;
-      set({ status: 'ready', canonicalAccess, error: null });
+      if (!mayCommit(sequence)) return false;
+      commitAccess(set, sequence, {
+        status: 'ready',
+        canonicalAccess,
+        error: null,
+      });
       return true;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!mayCommit(sequence)) return false;
       const error = billingError(
         cause,
         'billing.backend_unavailable',
         'Membership verification is temporarily unavailable.',
       );
-      set({
+      commitAccess(set, sequence, {
         status: statusFor(error),
         canonicalAccess: null,
         error: error.toState(),
@@ -227,11 +279,12 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const sequence = beginOperation();
     set({ operation: 'syncing', error: null });
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
-      set({
+      commitAccess(set, sequence, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -251,7 +304,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         true,
         source.unconfiguredReason,
       );
-      set({
+      commitAccess(set, sequence, {
         status: statusFor(source),
         operation: 'idle',
         canonicalAccess: null,
@@ -309,6 +362,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     if (!isCurrentConfiguration(clients, version)) return false;
+    const sequence = beginOperation();
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
@@ -318,7 +372,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
           'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
           true,
         );
-        set({
+        commitAccess(set, sequence, {
           status: 'error',
           operation: 'idle',
           canonicalAccess: synced.access,
@@ -326,7 +380,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         });
         return false;
       }
-      set({
+      commitAccess(set, sequence, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -340,7 +394,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
         true,
       );
-      set({
+      commitAccess(set, sequence, {
         status: 'error',
         operation: 'idle',
         canonicalAccess: null,
@@ -374,6 +428,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     if (!isCurrentConfiguration(clients, version)) return false;
+    const sequence = beginOperation();
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
@@ -383,7 +438,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
           'No active Pickle Sensei membership was found for this store account.',
           false,
         );
-        set({
+        commitAccess(set, sequence, {
           status: 'ready',
           operation: 'idle',
           canonicalAccess: synced.access,
@@ -391,7 +446,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         });
         return false;
       }
-      set({
+      commitAccess(set, sequence, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -405,7 +460,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         'Restored purchases could not be verified yet. Please try again.',
         true,
       );
-      set({
+      commitAccess(set, sequence, {
         status: 'error',
         operation: 'idle',
         canonicalAccess: null,
