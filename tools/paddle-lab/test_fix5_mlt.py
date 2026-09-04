@@ -7,7 +7,10 @@ replaces an existing test).
   still refuses an empty decode.
 * MLT-1: the legacy relative clock is decided per CLIP and applied to every
   label of that clip (0.0 -> frame 0, 33.37 -> frame 1); a lone tolerated
-  pre-start label still maps to frame 0; earlier labels still raise.
+  pre-start label still maps to frame 0; earlier labels still raise. Detection
+  is provenance-first (the release `teacher.clockCaveat`, read by
+  student_lib.clip_labels_are_legacy and passed as `legacy_clock=True`) and
+  heuristic-second (any label within one period before the stream start).
 * MLT-3: window_frame_range raises ValueError (never OverflowError) and the
   argparse validators bound --start-ms/--end-ms/--scale before ffmpeg spawns.
 
@@ -184,6 +187,65 @@ class LegacyClockIsDecidedPerClip(unittest.TestCase):
         self.assertIn("1 label timestamp(s)", str(legacy[0].message))
         digests = {frames[t].tobytes() for t in self.afn_t_ms[:4]}
         self.assertEqual(len(digests), 4)
+
+    def test_release_provenance_marks_every_training_clip_legacy(self) -> None:
+        rows = [json.loads(line) for line in RELEASE_EXAMPLES.read_text().splitlines() if line.strip()]
+        by_clip: dict[str, list[dict]] = {}
+        for row in rows:
+            if row["media"].get("bundleClip") and row["teacher"] is not None:
+                by_clip.setdefault(row["media"]["bundleClip"], []).append(row)
+        afn = by_clip["datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4"]
+        wm_volley = by_clip["datasets/paddle-bench/bundles/wm-volley-02/clip.mp4"]
+        self.assertEqual((len(afn), len(wm_volley)), (124, 93))
+        self.assertTrue(all(row["teacher"]["clockCaveat"] for row in afn + wm_volley))
+        self.assertTrue(student_lib.clip_labels_are_legacy(afn))
+        self.assertTrue(student_lib.clip_labels_are_legacy(wm_volley))
+        self.assertFalse(student_lib.clip_labels_are_legacy([{"teacher": None}, {"teacher": {"detections": []}}]))
+        self.assertFalse(student_lib.clip_labels_are_legacy([]))
+
+    def test_provenance_forces_the_legacy_clock_without_a_pre_start_label(self) -> None:
+        fps, start = self.meta.fps, self.meta.start_time_ms
+        period = 1000.0 / fps
+        stamps = [start + 3 * period, start + 10 * period]  # absolute frames 3 and 10
+        index_for_t, pre_start = frame_clock.frame_indices_for_labelled_clip(stamps, fps, start)
+        self.assertEqual((pre_start, [index_for_t[t] for t in stamps]), ([], [3, 10]))
+        index_for_t, pre_start = frame_clock.frame_indices_for_labelled_clip(stamps, fps, start, legacy_clock=True)
+        self.assertEqual((pre_start, [index_for_t[t] for t in stamps]), ([], [4, 11]))
+        # Provenance does not widen the tolerance: too-early labels still raise on the legacy clock.
+        with self.assertRaises(ValueError):
+            frame_clock.frame_indices_for_labelled_clip([start - 1.01 * period], fps, start, legacy_clock=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            forced = student_lib.extract_frames(AFN_CLIP, stamps, legacy_clock=True)
+            plain = student_lib.extract_frames(AFN_CLIP, stamps)
+        legacy = [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
+        self.assertEqual(len(legacy), 1, [str(w.message) for w in caught])
+        self.assertIn("clockCaveat", str(legacy[0].message))
+        self.assertNotIn("label timestamp(s)", str(legacy[0].message))
+        for t in stamps:
+            self.assertFalse((forced[t] == plain[t]).all(), f"legacy_clock=True returned the absolute frame for {t}")
+
+    def test_provenance_and_heuristic_agree_on_the_release_clip(self) -> None:
+        fps, start = self.meta.fps, self.meta.start_time_ms
+        heuristic, _ = frame_clock.frame_indices_for_labelled_clip(self.afn_t_ms, fps, start)
+        forced, pre_start = frame_clock.frame_indices_for_labelled_clip(self.afn_t_ms, fps, start, legacy_clock=True)
+        self.assertEqual(heuristic, forced)
+        self.assertEqual(pre_start, [0.0])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            student_lib.extract_frames(AFN_CLIP, self.afn_t_ms[:3], legacy_clock=True)
+        legacy = [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
+        self.assertEqual(len(legacy), 1)
+        self.assertIn("clockCaveat", str(legacy[0].message))
+        self.assertIn("1 label timestamp(s)", str(legacy[0].message))
+        # On a start_time 0 clip the two clocks coincide: provenance changes nothing but the warning.
+        wm = frame_clock.probe_stream(str(WM_CLIP))
+        self.assertEqual(wm.start_time_ms, 0.0)
+        wm_stamps = [0.0, 40.0, 1000.0]
+        self.assertEqual(
+            frame_clock.frame_indices_for_labelled_clip(wm_stamps, wm.fps, wm.start_time_ms, legacy_clock=True)[0],
+            frame_clock.frame_indices_for_labelled_clip(wm_stamps, wm.fps, wm.start_time_ms)[0],
+        )
 
 
 class WindowBoundsAreTypedErrors(unittest.TestCase):

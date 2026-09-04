@@ -167,26 +167,60 @@ class FrameClockAgreement(unittest.TestCase):
                     self.assertAlmostEqual(frame["tMs"], self.t_ms_of(k), delta=TOLERANCE_MS)
                     self.assertEqual(detect_paddle.frame_index_for_t_ms(frame["tMs"], self.fps, self.start_time_ms), k)
 
+    def legacy_frames_of(self, t_ms_list: list[float]) -> tuple[dict[float, np.ndarray], list[warnings.WarningMessage]]:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            frames = student_lib.extract_frames(AFN_CLIP, t_ms_list)
+        return frames, [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
+
+    def decoded_index_of(self, frame: np.ndarray) -> int:
+        return self.rgb_index[sha(np.ascontiguousarray(frame).tobytes())]
+
     def test_extract_frames_legacy_clock_tolerance_is_one_frame_period(self) -> None:
         # paddle-distill-v0.1 labels afn-sasebo-rally1 at tMs=0.0 (relative clock); the
-        # stream starts at 33.367 ms so the strict inversion names frame -1. Within one
-        # frame period before start_time -> frame 0 with ONE warning per clip; earlier raises.
+        # stream starts at 33.367 ms so the strict inversion names frame -1. A label within
+        # one frame period before start_time marks the CLIP legacy-relative: ONE warning per
+        # clip and EVERY label of the clip maps as round(tMs * fps / 1000) from the first
+        # decoded frame — the stamp of absolute frame 3 (133.467 ms) is relative frame 4.
         legacy = [0.0, self.start_time_ms - 0.999 * self.frame_ms]
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            frames = student_lib.extract_frames(AFN_CLIP, legacy + [self.t_ms_of(3)])
-        legacy_warnings = [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
-        self.assertEqual(len(legacy_warnings), 1, [str(w.message) for w in caught])
+        frames, legacy_warnings = self.legacy_frames_of(legacy + [self.t_ms_of(3)])
+        self.assertEqual(len(legacy_warnings), 1, [str(w.message) for w in legacy_warnings])
         self.assertIn("2 label timestamp(s)", str(legacy_warnings[0].message))
+        self.assertIn("3 label(s)", str(legacy_warnings[0].message))
         for t in legacy:
-            self.assertEqual(self.rgb_index[sha(np.ascontiguousarray(frames[t]).tobytes())], 0)
-        self.assertEqual(self.rgb_index[sha(np.ascontiguousarray(frames[self.t_ms_of(3)]).tobytes())], 3)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            student_lib.extract_frames(AFN_CLIP, [self.t_ms_of(3)])
-        self.assertFalse([w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)])
-        with self.assertRaises(ValueError):
-            student_lib.extract_frames(AFN_CLIP, [self.start_time_ms - 1.01 * self.frame_ms])
+            self.assertEqual(self.decoded_index_of(frames[t]), 0)
+        self.assertEqual(self.decoded_index_of(frames[self.t_ms_of(3)]), round(self.t_ms_of(3) * self.fps / 1000.0))
+        self.assertEqual(self.decoded_index_of(frames[self.t_ms_of(3)]), 4)
+        # A lone tolerated label is the same clip-level decision: frame 0, one warning.
+        frames, legacy_warnings = self.legacy_frames_of([self.start_time_ms - self.frame_ms])
+        self.assertEqual(len(legacy_warnings), 1)
+        self.assertEqual(self.decoded_index_of(frames[self.start_time_ms - self.frame_ms]), 0)
+
+    def test_extract_frames_absolute_clip_keeps_absolute_indexing_without_warning(self) -> None:
+        # No label before the stream start -> the clip is on the absolute clock: frame k is
+        # named by start_time + k/fps exactly as detect_paddle.frame_iter emits it, no warning.
+        wanted = [0, 3, 4, 77]
+        t_list = [self.t_ms_of(k) for k in wanted]
+        frames, legacy_warnings = self.legacy_frames_of(t_list)
+        self.assertEqual(legacy_warnings, [])
+        self.assertEqual([self.decoded_index_of(frames[t]) for t in t_list], wanted)
+        # start_time itself (0.000 periods early) is frame 0 on the absolute clock, not legacy.
+        frames, legacy_warnings = self.legacy_frames_of([self.start_time_ms, self.t_ms_of(3)])
+        self.assertEqual(legacy_warnings, [])
+        self.assertEqual(self.decoded_index_of(frames[self.start_time_ms]), 0)
+        self.assertEqual(self.decoded_index_of(frames[self.t_ms_of(3)]), 3)
+
+    def test_extract_frames_rejects_labels_more_than_one_period_before_start(self) -> None:
+        # Earlier than the legacy tolerance names no real frame: raise, never map silently —
+        # alone, beside a tolerated legacy label, and beside absolute labels alike.
+        too_early = self.start_time_ms - 1.01 * self.frame_ms
+        for t_ms_list in ([too_early], [0.0, too_early], [too_early, self.t_ms_of(3)], [-self.frame_ms]):
+            with self.assertRaises(ValueError, msg=t_ms_list) as ctx:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", frame_clock.LegacyClockWarning)
+                    student_lib.extract_frames(AFN_CLIP, t_ms_list)
+            self.assertIn("frame periods before the stream start", str(ctx.exception))
+            self.assertIn(str(AFN_CLIP), str(ctx.exception))
 
     def test_miner_frame_pack_grabs_named_frame(self) -> None:
         candidates = [
