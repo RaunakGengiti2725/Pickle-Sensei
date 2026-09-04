@@ -7,7 +7,7 @@ unit: `public.account_deletion_requests`, `public.account_deletion_feedback`,
 
 New files only; nothing here modifies production code, migrations, or the
 existing `supabase/tests/security_regression.sql` matrix (which stays the
-functional source of truth — this harness attacks the *interleavings* that a
+functional source of truth — this harness attacks the _interleavings_ that a
 single-session matrix cannot express).
 
 ## Run
@@ -35,17 +35,17 @@ STRESS_REPLAY=3706727369 STRESS_ONLY=request_vs_delete \
 Exit code: `0` every executed iteration HELD, `1` at least one BROKEN (or a
 short run), `2` harness/setup failure.
 
-| env | default | meaning |
-| --- | --- | --- |
-| `STRESS_DB_URL` | `postgres://postgres:x@127.0.0.1:5499/postgres` | target DB |
-| `STRESS_ITER` | `24` | iterations (campaigns use 600+) |
-| `STRESS_SEED` | `1` | master seed; iteration seed = `sha256(seed:i)` |
-| `STRESS_OUT` | — | write the full seed → outcome JSON table here |
-| `STRESS_REPLAY` | — | comma-separated iteration seeds to replay |
-| `STRESS_ONLY` | — | restrict to one scenario (RNG stream unchanged) |
-| `STRESS_ISOLATION` | `read_committed` | `serializable` for SERIALIZABLE actors |
-| `STRESS_POOL` | `24` | concurrent sessions |
-| `STRESS_ITER_WALL_MS` | `30000` | per-iteration wall-time bound (hang/deadlock) |
+| env                   | default                                         | meaning                                         |
+| --------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `STRESS_DB_URL`       | `postgres://postgres:x@127.0.0.1:5499/postgres` | target DB                                       |
+| `STRESS_ITER`         | `24`                                            | iterations (campaigns use 600+)                 |
+| `STRESS_SEED`         | `1`                                             | master seed; iteration seed = `sha256(seed:i)`  |
+| `STRESS_OUT`          | —                                               | write the full seed → outcome JSON table here   |
+| `STRESS_REPLAY`       | —                                               | comma-separated iteration seeds to replay       |
+| `STRESS_ONLY`         | —                                               | restrict to one scenario (RNG stream unchanged) |
+| `STRESS_ISOLATION`    | `read_committed`                                | `serializable` for SERIALIZABLE actors          |
+| `STRESS_POOL`         | `24`                                            | concurrent sessions                             |
+| `STRESS_ITER_WALL_MS` | `30000`                                         | per-iteration wall-time bound (hang/deadlock)   |
 
 Every iteration provisions two fresh users (Apple/Google identities through the
 shim's `handle_new_user` trigger), drives one scenario as `Promise.all` bursts
@@ -68,16 +68,16 @@ a deletion race (`23503`) or an RLS denial (`42501`).
 
 ## Scenarios
 
-| scenario | interleaving | invariants |
-| --- | --- | --- |
-| `request_rearm_burst` | N concurrent PostgREST-shaped re-arm upserts, one user | exactly one row, no lost update (surviving challenge == last applied), challenge live |
-| `request_two_actors` | two users re-arm while one tries cross-user select/update/delete/owner-reassign | per-user row counts, no cross-user write or read, denials are `42501` |
-| `consent_burst` | grant/withdraw appends across scopes + UPDATE/DELETE/cross-user/null-owner attacks | row count == successful appends, append-only, owner-pinned, fold deterministic |
-| `request_vs_delete` | request writes + consent + exit survey racing `delete from auth.users` | cascade removes owned rows, surveys survive anonymized, losers fail `23503` only |
-| `external_credentials_race` | service-role capture/checkpoint/revoke/clear (+ optional cascade, + client read) | ≤1 row, `token ⇔ captured_at`, client `42501`, revoked state == last applied write |
-| `double_confirm` | two devices race delete-confirm, then a stale bearer re-arms | exactly one delete lands, stale write fails closed |
-| `clock_skew_probe` | backdated `created_at`, far-future / inverted `expires_at` | records what the schema accepts (see the repro `.sql` next door) |
-| `survey_burst` | duplicate survey submissions + owner read / cross-user / null-owner / UPDATE / owner DELETE | write-only for clients, append-only even for the owner plane |
+| scenario                    | interleaving                                                                                | invariants                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `request_rearm_burst`       | N concurrent PostgREST-shaped re-arm upserts, one user                                      | exactly one row, no lost update (surviving challenge == last applied), challenge live |
+| `request_two_actors`        | two users re-arm while one tries cross-user select/update/delete/owner-reassign             | per-user row counts, no cross-user write or read, denials are `42501`                 |
+| `consent_burst`             | grant/withdraw appends across scopes + UPDATE/DELETE/cross-user/null-owner attacks          | row count == successful appends, append-only, owner-pinned, fold deterministic        |
+| `request_vs_delete`         | request writes + consent + exit survey racing `delete from auth.users`                      | cascade removes owned rows, surveys survive anonymized, losers fail `23503` only      |
+| `external_credentials_race` | service-role capture/checkpoint/revoke/clear (+ optional cascade, + client read)            | ≤1 row, `token ⇔ captured_at`, client `42501`, revoked state == last applied write    |
+| `double_confirm`            | two devices race delete-confirm, then a stale bearer re-arms                                | exactly one delete lands, stale write fails closed                                    |
+| `clock_skew_probe`          | backdated `created_at`, far-future / inverted `expires_at`                                  | records what the schema accepts (see the repro `.sql` next door)                      |
+| `survey_burst`              | duplicate survey submissions + owner read / cross-user / null-owner / UPDATE / owner DELETE | write-only for clients, append-only even for the owner plane                          |
 
 Behaviours that are ambiguous rather than wrong are recorded as per-iteration
 `observations` (e.g. `created_at` ordering vs commit ordering in the consent
