@@ -71,7 +71,10 @@ export async function loadCoachReviewData(): Promise<CoachReviewData> {
     getJson<FaultTaxonomy>("/datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json"),
     getJson<DrillLibrary>("/datasets/coach-review/drills/drill-library.v0.json"),
     getJson<CoachRegistry>("/datasets/coach-review/coaches.json"),
-    getJson<Array<{ file: string; review: CoachReview }>>("/api/coach-reviews"),
+    getJson<{
+      reviews: Array<{ file: string; review: CoachReview }>;
+      invalidFiles: Array<{ file: string; message: string }>;
+    }>("/api/coach-reviews"),
     getJson<AssignmentsFile>("/api/coach-assignments").catch(() => EMPTY_ASSIGNMENTS),
     getJson<AdjudicationRecord[]>("/api/coach-adjudications").catch(
       () => [] as AdjudicationRecord[],
@@ -86,7 +89,10 @@ export async function loadCoachReviewData(): Promise<CoachReviewData> {
       `queue.json schemaVersion ${queue.schemaVersion} ≠ UI's expected ${EXPECTED_SCHEMA_VERSION} — regenerate with \`pnpm lab:coach-queue\` or update the UI mirror.`,
     );
   }
-  const reviews: LoadedReview[] = realReviews.map((entry) => ({
+  for (const invalid of realReviews.invalidFiles) {
+    problems.push(`${invalid.file} ${invalid.message} — repair or remove it to list that review.`);
+  }
+  const reviews: LoadedReview[] = realReviews.reviews.map((entry) => ({
     review: entry.review,
     source: entry.file,
     synthetic: false,

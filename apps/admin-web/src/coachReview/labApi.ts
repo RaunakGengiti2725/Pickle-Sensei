@@ -66,35 +66,99 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
+class BodyTooLargeError extends Error {
+  constructor(readonly limitBytes: number) {
+    super(`request body exceeds the ${limitBytes}-byte limit`);
+    this.name = "BodyTooLargeError";
+  }
+}
+
+/** Buffers the request body up to `limitBytes`. An oversized body is DRAINED
+ * (not destroyed) so the client always gets to read the 413 that follows —
+ * tearing the socket down mid-upload surfaces as ECONNRESET on the client
+ * instead of a status. Draining is capped so a runaway upload still ends. */
 function readBody(req: IncomingMessage, limitBytes: number): Promise<string> {
   return new Promise((resolvePromise, rejectPromise) => {
+    const declared = Number(req.headers["content-length"]);
+    const drainCapBytes = Math.max(limitBytes * 16, 16_000_000);
     const chunks: Buffer[] = [];
     let total = 0;
+    let tooLarge = Number.isFinite(declared) && declared > limitBytes;
+    let settled = false;
+    const settle = (outcome: () => void): void => {
+      if (settled) return;
+      settled = true;
+      outcome();
+    };
     req.on("data", (chunk: Buffer) => {
       total += chunk.length;
+      if (tooLarge) {
+        if (total > drainCapBytes) {
+          settle(() => rejectPromise(new BodyTooLargeError(limitBytes)));
+          req.destroy();
+        }
+        return;
+      }
       if (total > limitBytes) {
-        rejectPromise(new Error("body too large"));
-        req.destroy();
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
-    req.on("end", () => resolvePromise(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", rejectPromise);
+    req.on("end", () =>
+      settle(() =>
+        tooLarge
+          ? rejectPromise(new BodyTooLargeError(limitBytes))
+          : resolvePromise(Buffer.concat(chunks).toString("utf8")),
+      ),
+    );
+    req.on("error", (error) => settle(() => rejectPromise(error)));
   });
 }
 
-async function readJsonBody<T>(
+function isJsonObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type JsonBodyResult<T> = { ok: true; value: T } | { ok: false };
+
+/** Reads and parses a JSON OBJECT body. On any failure the response has
+ * already been written (413 too large, 400 malformed / not an object) and
+ * `{ ok: false }` is returned so handlers can simply stop. */
+async function readJsonBody<T extends object>(
   req: IncomingMessage,
   res: ServerResponse,
   limitBytes: number,
-): Promise<T | null> {
+): Promise<JsonBodyResult<T>> {
+  let raw: string;
   try {
-    return JSON.parse(await readBody(req, limitBytes)) as T;
+    raw = await readBody(req, limitBytes);
   } catch (error) {
-    sendJson(res, 400, { message: `invalid JSON body: ${String(error)}` });
-    return null;
+    if (error instanceof BodyTooLargeError) {
+      res.setHeader("connection", "close");
+      sendJson(res, 413, { message: error.message });
+      return { ok: false };
+    }
+    throw error;
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "unparseable";
+    sendJson(res, 400, { message: `invalid JSON body: ${detail}` });
+    return { ok: false };
+  }
+  if (!isJsonObject(parsed)) {
+    sendJson(res, 400, {
+      message: `invalid JSON body: expected an object, got ${
+        parsed === null ? "null" : Array.isArray(parsed) ? "an array" : `a ${typeof parsed}`
+      }`,
+    });
+    return { ok: false };
+  }
+  return { ok: true, value: parsed as T };
 }
 
 export type LabApiMiddleware = (
@@ -188,6 +252,41 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       }));
   }
 
+  /** Lists persisted reviews. A file that cannot be read or parsed is reported
+   * in `invalidFiles` (path only — never the parser's text) instead of failing
+   * the whole list, so one damaged file cannot hide every other review. */
+  function listReviews(): {
+    reviews: Array<{ file: string; review: CoachReview }>;
+    invalidFiles: Array<{ file: string; message: string }>;
+  } {
+    mkdirSync(REVIEWS_DIR, { recursive: true });
+    const reviews: Array<{ file: string; review: CoachReview }> = [];
+    const invalidFiles: Array<{ file: string; message: string }> = [];
+    for (const name of readdirSync(REVIEWS_DIR).filter((entry) => entry.endsWith(".json"))) {
+      const file = `datasets/coach-review/reviews/${name}`;
+      let raw: string;
+      try {
+        raw = readFileSync(join(REVIEWS_DIR, name), "utf8");
+      } catch {
+        invalidFiles.push({ file, message: "could not be read — skipped" });
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        invalidFiles.push({ file, message: "is not valid JSON — skipped" });
+        continue;
+      }
+      if (!isJsonObject(parsed)) {
+        invalidFiles.push({ file, message: "is not a JSON object — skipped" });
+        continue;
+      }
+      reviews.push({ file, review: parsed as CoachReview });
+    }
+    return { reviews, invalidFiles };
+  }
+
   function loadRegistry(): CoachRegistry {
     return JSON.parse(
       readFileSync(join(COACH_REVIEW_DIR, "coaches.json"), "utf8"),
@@ -276,8 +375,9 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       sendJson(res, 405, { message: "method not allowed" });
       return;
     }
-    const record = await readJsonBody<AdjudicationRecord>(req, res, 1_000_000);
-    if (record === null) return;
+    const body = await readJsonBody<AdjudicationRecord>(req, res, 1_000_000);
+    if (!body.ok) return;
+    const record = body.value;
     if (!gateIdentity(res, record.adjudicatorId, record.adjudicatorCredentialRef)) return;
     const reviewerCoachIdsByReviewId: Record<string, string> = {};
     const reviewQueueItemIdsByReviewId: Record<string, string> = {};
@@ -315,8 +415,9 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       sendJson(res, 405, { message: "method not allowed" });
       return;
     }
-    const amendment = await readJsonBody<ReviewAmendment>(req, res, 1_000_000);
-    if (amendment === null) return;
+    const body = await readJsonBody<ReviewAmendment>(req, res, 1_000_000);
+    if (!body.ok) return;
+    const amendment = body.value;
     const activeCoach = gateIdentity(
       res,
       amendment.review?.coachId,
@@ -379,8 +480,9 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       sendJson(res, 405, { message: "method not allowed" });
       return;
     }
-    const entry = await readJsonBody<AssignmentEntry>(req, res, 100_000);
-    if (entry === null) return;
+    const body = await readJsonBody<AssignmentEntry>(req, res, 100_000);
+    if (!body.ok) return;
+    const entry = body.value;
     const registry = loadRegistry();
     const activeCoachIds = registry.coaches
       .filter((coach) => isEligibleReviewer(coach))
@@ -429,8 +531,9 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       sendJson(res, 405, { message: "method not allowed" });
       return;
     }
-    const proposal = await readJsonBody<DrillMappingProposal>(req, res, 200_000);
-    if (proposal === null) return;
+    const body = await readJsonBody<DrillMappingProposal>(req, res, 200_000);
+    if (!body.ok) return;
+    const proposal = body.value;
     if (!gateIdentity(res, proposal.coachId, proposal.coachCredentialRef)) return;
     const problems = validateMappingProposal(proposal, loadValidationContext());
     if (problems.length > 0) {
@@ -457,8 +560,9 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       sendJson(res, 405, { message: "method not allowed" });
       return;
     }
-    const action = await readJsonBody<ProvisioningAction>(req, res, 500_000);
-    if (action === null) return;
+    const body = await readJsonBody<ProvisioningAction>(req, res, 500_000);
+    if (!body.ok) return;
+    const action = body.value;
     const registry = loadRegistry();
     if (registry.schemaVersion !== EXPECTED_REGISTRY_SCHEMA_VERSION) {
       sendJson(res, 409, {
@@ -566,22 +670,16 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
         return;
       }
       if (req.method === "GET") {
-        mkdirSync(REVIEWS_DIR, { recursive: true });
-        const entries = readdirSync(REVIEWS_DIR)
-          .filter((name) => name.endsWith(".json"))
-          .map((name) => ({
-            file: `datasets/coach-review/reviews/${name}`,
-            review: JSON.parse(readFileSync(join(REVIEWS_DIR, name), "utf8")) as CoachReview,
-          }));
-        sendJson(res, 200, entries);
+        sendJson(res, 200, listReviews());
         return;
       }
       if (req.method !== "POST") {
         sendJson(res, 405, { message: "method not allowed" });
         return;
       }
-      const review = await readJsonBody<CoachReview>(req, res, 1_000_000);
-      if (review === null) return;
+      const body = await readJsonBody<CoachReview>(req, res, 1_000_000);
+      if (!body.ok) return;
+      const review = body.value;
       const activeCoach = gateIdentity(res, review.coachId, review.coachCredentialRef);
       if (!activeCoach) return;
       const snapshot = review.provenance?.coachQualificationSnapshot;
@@ -617,6 +715,15 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
         message: "review persisted (append-only)",
         path: `datasets/coach-review/reviews/${review.reviewId}.json`,
       });
-    })().catch((error) => sendJson(res, 500, { message: String(error) }));
+    })().catch((error: unknown) => {
+      console.error(`[coach-review-lab] ${req.method ?? ""} ${req.url ?? ""} failed:`, error);
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
+      sendJson(res, 500, {
+        message: "internal error while handling the request — see the dev server log for detail",
+      });
+    });
   };
 }
