@@ -35,11 +35,11 @@ tools/attack/native-camera-engine-xctest/linux-proxy/run.sh
 
 ## Expected outcomes at 4d812e1a
 
-- `S1SuppressionOneShotLeakTests.testArmedWhileIdleSuppressionSwallowsTheNextRealFinish`
+- `S1SuppressionOneShotLeakTests.testArmedWhileIdleThenDiscardNoOpSwallowsTheNextRealFinish`
   and `S7SerializedCoverageTimeoutTests.testFiveExtractsPastReadableEdgeAreBoundedByOneCoverageTimeout`
   are written to the scenario's _expected_ behaviour and are therefore
   expected RED at this revision (see the findings in the pass-3 report).
-- `S2PreviewAttachDetachTests.testWindowRoundTripKeepsPoseSubscription` is a
+- `S2PreviewAttachDetachTests.testWindowRoundTripKeepsPoseSubscriptionAlive` is a
   candidate finding (pose callback dropped on `willMove(toWindow: nil)` and not
   re-established on re-add); expected RED.
 - Everything else is expected GREEN.
