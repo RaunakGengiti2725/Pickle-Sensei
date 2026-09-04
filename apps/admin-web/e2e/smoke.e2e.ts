@@ -31,6 +31,20 @@ function watchBrowserFaults(page: Page): BrowserFaults {
   return faults;
 }
 
+/**
+ * Drains the collector after a phase that deliberately provoked 401s (a
+ * rejected token) — those must be the ONLY faults so far, and nothing after
+ * this point may fault.
+ */
+function expectOnlyUnauthorizedFaults(faults: BrowserFaults): void {
+  expect(faults.pageErrors, "uncaught page errors").toEqual([]);
+  expect(faults.failedRequests, "rejected-token requests").not.toEqual([]);
+  for (const fault of faults.failedRequests) expect(fault).toMatch(/ → HTTP 401$/);
+  for (const fault of faults.consoleErrors) expect(fault).toMatch(/401/);
+  faults.failedRequests.length = 0;
+  faults.consoleErrors.length = 0;
+}
+
 function expectNoFaults(faults: BrowserFaults): void {
   expect(faults.consoleErrors, "browser console errors").toEqual([]);
   expect(faults.pageErrors, "uncaught page errors").toEqual([]);
@@ -123,18 +137,11 @@ test.describe("admin-web smoke", () => {
     await page.goto("/#/");
     const tokenInput = page.getByPlaceholder("paste OIDC (or local dev) admin token");
 
-    // A rejected token surfaces the API error in the panels (negative control). The
-    // 401s it provokes are the only faults this test tolerates; everything after
-    // this point must be clean, so the collector is drained once they are checked.
+    // A rejected token surfaces the API error in the panels (negative control).
     await tokenInput.fill("not-a-valid-token");
     await expect(page.getByText(/Token verification failed/).first()).toBeVisible();
     await page.waitForLoadState("networkidle");
-    expect(faults.pageErrors, "uncaught page errors").toEqual([]);
-    expect(faults.failedRequests, "rejected-token requests").not.toEqual([]);
-    for (const fault of faults.failedRequests) expect(fault).toMatch(/ → HTTP 401$/);
-    for (const fault of faults.consoleErrors) expect(fault).toMatch(/401/);
-    faults.failedRequests.length = 0;
-    faults.consoleErrors.length = 0;
+    expectOnlyUnauthorizedFaults(faults);
 
     // A later successful load must clear the error — a stale error above a
     // correctly loaded table is what an operator typing a token keystroke-by-
@@ -152,6 +159,48 @@ test.describe("admin-web smoke", () => {
     await expect(page.locator("table").first().locator("tbody tr")).not.toHaveCount(0);
     await expect(page.getByText(/Token verification failed/)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 2, name: /Quality dashboard/ })).toBeVisible();
+
+    // Out-of-order settlement: panels reload on every keystroke, so a rejection
+    // for an OLDER token can arrive AFTER the valid token's success. Hold the
+    // bogus token's responses back until the valid ones have landed; the late
+    // 401s must not resurrect the error over correctly loaded panels.
+    const staleToken = "not-a-valid-token-either";
+    const isStale = (request: Request) =>
+      request.headers()["authorization"] === `Bearer ${staleToken}`;
+    const panelRoutes = /\/v1\/(flags|admin\/quality-dashboard)/;
+    let releaseStaleResponses = (): void => {};
+    const staleGate = new Promise<void>((release) => (releaseStaleResponses = release));
+    let staleHeld = 0;
+    await page.route(panelRoutes, async (route) => {
+      if (isStale(route.request())) {
+        staleHeld += 1;
+        await staleGate;
+      }
+      await route.continue();
+    });
+    const lateFlagsRejection = page.waitForResponse(
+      (response) => response.url().endsWith("/v1/flags") && isStale(response.request()),
+    );
+    const validFlags = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/v1/flags") &&
+        response.request().headers()["authorization"] === `Bearer ${token}`,
+    );
+    await tokenInput.fill(staleToken);
+    await tokenInput.fill(token);
+    expect((await validFlags).status(), "valid token's GET /v1/flags").toBe(200);
+    await expect(page.locator("table").first().locator("tbody tr")).not.toHaveCount(0);
+    await expect
+      .poll(() => staleHeld, { message: "stale-token panel requests held back" })
+      .toBeGreaterThanOrEqual(2);
+    releaseStaleResponses();
+    expect((await lateFlagsRejection).status(), "stale token's GET /v1/flags").toBe(401);
+    await page.waitForLoadState("networkidle");
+    await page.unroute(panelRoutes);
+    expectOnlyUnauthorizedFaults(faults);
+    await expect(page.getByText(/Token verification failed/)).toHaveCount(0);
+    await expect(page.locator("table").first().locator("tbody tr")).not.toHaveCount(0);
+
     await expect(
       page.getByRole("heading", { level: 2, name: "Model bundle release" }),
     ).toBeVisible();

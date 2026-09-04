@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CoachReviewLab, useHashRoute } from "./coachReview/CoachReviewLab";
 import { SupportDiagnosticsPanel } from "./supportDiagnostics/SupportDiagnosticsPanel";
 
@@ -38,6 +38,31 @@ function useApi(token: string) {
       return json;
     },
     [token],
+  );
+}
+
+/**
+ * Lets only the most recently started request touch a panel's state. Panels
+ * reload on every token keystroke, so an older rejection can settle after a
+ * newer success (and vice versa); without this the panel would show whichever
+ * response happened to arrive last.
+ */
+function useLatestRequest() {
+  const sequence = useRef(0);
+  useEffect(() => () => void (sequence.current += 1), []);
+  return useCallback(
+    <T,>(request: Promise<T>, onValue: (value: T) => void, onError: (error: unknown) => void) => {
+      const mine = (sequence.current += 1);
+      request.then(
+        (value) => {
+          if (mine === sequence.current) onValue(value);
+        },
+        (error: unknown) => {
+          if (mine === sequence.current) onError(error);
+        },
+      );
+    },
+    [],
   );
 }
 
@@ -103,15 +128,18 @@ function QualityDashboardPanel({ token }: { token: string }) {
   const [windowDays, setWindowDays] = useState(7);
   const [data, setData] = useState<QualityDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const latest = useLatestRequest();
 
   const load = useCallback(() => {
-    api("GET", `/v1/admin/quality-dashboard?windowDays=${windowDays}`)
-      .then((json) => {
+    latest(
+      api("GET", `/v1/admin/quality-dashboard?windowDays=${windowDays}`),
+      (json) => {
         setData(json as unknown as QualityDashboard);
         setError(null);
-      })
-      .catch((e) => setError(String(e)));
-  }, [api, windowDays]);
+      },
+      (e) => setError(String(e)),
+    );
+  }, [api, latest, windowDays]);
   useEffect(load, [load]);
 
   return (
@@ -252,15 +280,18 @@ function FlagsPanel({ token }: { token: string }) {
   const [editKey, setEditKey] = useState("");
   const [editPercent, setEditPercent] = useState(100);
   const [editEnabled, setEditEnabled] = useState(true);
+  const latest = useLatestRequest();
 
   const load = useCallback(() => {
-    api("GET", "/v1/flags")
-      .then((json) => {
+    latest(
+      api("GET", "/v1/flags"),
+      (json) => {
         setFlags((json as { flags: Record<string, boolean> }).flags);
         setError(null);
-      })
-      .catch((e) => setError(String(e)));
-  }, [api]);
+      },
+      (e) => setError(String(e)),
+    );
+  }, [api, latest]);
   useEffect(load, [load]);
 
   return (
