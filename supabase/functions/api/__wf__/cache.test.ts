@@ -58,6 +58,70 @@ Deno.test("cacheGet does NOT warm L1 from a Redis value without a TTL", async ()
 });
 
 Deno.test(
+  "cacheDel bumps the key's invalidation generation; cacheSetIfCurrent with the pre-delete generation writes nothing (L1 or L2)",
+  async () => {
+    // A rank/progress build captures the generation BEFORE its DB read and
+    // writes through cacheSetIfCurrent, so an accepted shot sync (cacheDel)
+    // that lands mid-build wins over the build's pre-sync payload.
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      const before = iso.cache.cacheGeneration("rank:u1");
+      assertEquals(
+        iso.cache.cacheGeneration("rank:u1"),
+        before,
+        "reading the generation does not change it",
+      );
+
+      await iso.cache.cacheDel("rank:u1"); // the sync lands while the build is reading
+      assert(iso.cache.cacheGeneration("rank:u1") !== before, "cacheDel bumps the generation");
+
+      assertEquals(await iso.cache.cacheSetIfCurrent("rank:u1", "stale", 60, before), false);
+      assertEquals(await iso.cache.cacheGet("rank:u1"), null, "no L1 copy of the stale payload");
+      assertEquals(redis.store.has("rank:u1"), false, "no L2 copy of the stale payload");
+
+      const current = iso.cache.cacheGeneration("rank:u1");
+      assertEquals(await iso.cache.cacheSetIfCurrent("rank:u1", "fresh", 60, current), true);
+      assertEquals(await iso.cache.cacheGet("rank:u1"), "fresh");
+      assertEquals(redis.store.get("rank:u1")?.value, "fresh");
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheSetIfCurrent on a key that was never invalidated behaves exactly like cacheSet; each key has its own generation",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      const rankGen = iso.cache.cacheGeneration("rank:u2");
+      const progressGen = iso.cache.cacheGeneration("progress:u2");
+      await iso.cache.cacheSet("rank:u2", "a", 60);
+      assertEquals(await iso.cache.cacheGet("rank:u2"), "a");
+      assertEquals(
+        iso.cache.cacheGeneration("rank:u2"),
+        rankGen,
+        "cacheSet/cacheGet never move the generation",
+      );
+
+      await iso.cache.cacheDel("progress:u2"); // a different key
+      assertEquals(iso.cache.cacheGeneration("rank:u2"), rankGen, "other keys are unaffected");
+      assert(iso.cache.cacheGeneration("progress:u2") !== progressGen);
+
+      assertEquals(await iso.cache.cacheSetIfCurrent("rank:u2", "b", 60, rankGen), true);
+      assertEquals(await iso.cache.cacheGet("rank:u2"), "b");
+      assertEquals(redis.store.get("rank:u2")?.value, "b");
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
   "[defect] cross-isolate cacheDel leaves the OTHER isolate's L1 copy alive for the full TTL",
   async () => {
     // index.ts busts rank:/progress: keys on every accepted shot sync and on

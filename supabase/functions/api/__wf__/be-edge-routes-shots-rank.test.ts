@@ -18,14 +18,18 @@
  *
  * (`--config` points Deno at the local import map / nodeModulesDir=none so
  * the root pnpm workspace package.json is not picked up.) Without
- * PICKLE_AUDIT_PG_URL every test is skipped (ignore: true).
+ * PICKLE_AUDIT_PG_URL every Postgres test is skipped (ignore: true).
+ *
+ * The "rank/progress cache" tests at the end drive the REAL edge handler via
+ * routesHarness (fetch-level PostgREST stubs, no database) and always run.
  */
 import postgres from "postgres";
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
 import {
   computePlayerRank,
   type PlayerRankAnalysisInput,
 } from "../../../../packages/shared-types/src/playerRank.ts";
+import { fakeGoogleIdToken, loadHarness, userRequest } from "./routesHarness.ts";
 
 const PG_URL = Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
 const ignore = PG_URL === "";
@@ -472,3 +476,275 @@ Deno.test({
     }
   },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rank/progress cache: an accepted shots:sync invalidates rank:/progress:
+// (AGENTS.md "Scale & security"). A build that read the DB BEFORE the sync
+// and finishes AFTER the sync's cacheDel must not write its pre-sync payload
+// back into the 60 s cache; the 60 s cache + single-flight coalescing must
+// keep working for reads with no intervening sync.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const h = await loadHarness();
+
+type FetchFn = typeof fetch;
+
+/** Wrap the harness fetch for one test: `intercept` may return a Response for
+ * requests it wants to own (they are still recorded in h.calls); anything else
+ * falls through to the harness stubs. */
+async function withFetchIntercept<T>(
+  intercept: (request: Request) => Promise<Response | null>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const inner = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const owned = await intercept(request.clone());
+    if (owned) {
+      h.calls.push({ url: request.url, method: request.method, headers: {}, body: null });
+      return owned;
+    }
+    return inner(input, init);
+  }) as FetchFn;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = inner;
+  }
+}
+
+const jsonResponse = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+function syncShotBody() {
+  return {
+    shots: [
+      {
+        id: crypto.randomUUID(),
+        source: "real",
+        analysisPermitId: crypto.randomUUID(),
+        sessionId: null,
+        shotType: "dink",
+        cameraView: "side",
+        capturedAt: new Date().toISOString(),
+        timestamps: { startMs: 0, contactMs: 500, endMs: 1000 },
+        resultKind: "scored",
+        overallScore: 7.5,
+        confidence: 0.9,
+        phases: [],
+        checkpoints: [],
+        versionVector: {
+          appVersion: "1.0.0",
+          modelBundleVersion: "1",
+          poseModelVersion: "1",
+          paddleModelVersion: "1",
+          strokeDetectorVersion: "1",
+          phaseModelVersion: "1",
+          scoringModelVersion: "1",
+          shotConfigVersion: "1",
+        },
+      },
+    ],
+  };
+}
+
+const postgrestReads = (table: string) =>
+  h.calls.filter((call) => call.method === "GET" && call.url.includes(`/rest/v1/${table}`));
+
+/** A fresh user (and IP) per test so no earlier test's 60 s cache entry or
+ * rate-limit window is in play. */
+let userCounter = 0;
+function freshUser() {
+  userCounter += 1;
+  const userId = crypto.randomUUID();
+  const token = fakeGoogleIdToken(userId);
+  h.tables.profiles = [{ id: userId, email: "u@example.com", provider: "google" }];
+  return { userId, token, ip: `203.0.113.${100 + userCounter}` };
+}
+
+Deno.test(
+  "GET /v1/progress: a build that read before an accepted shots:sync must not re-cache the pre-sync payload; the next GET is a DB-backed build",
+  async () => {
+    h.reset();
+    const { token, ip } = freshUser();
+    h.tables.shots = [];
+    h.rpcs.apply_synced_shot = "accepted";
+    h.tables.progress_daily = [];
+    h.tables.practice_days = [];
+    const today = new Date().toISOString().slice(0, 10);
+
+    let releaseRead!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseRead = resolve));
+    let readReached!: () => void;
+    const reached = new Promise<void>((resolve) => (readReached = resolve));
+    let gated = false;
+
+    await withFetchIntercept(
+      async (request) => {
+        if (!gated && request.url.includes("/rest/v1/progress_daily")) {
+          gated = true;
+          readReached();
+          await gate;
+          return jsonResponse(200, []); // pre-sync snapshot: nothing practised
+        }
+        return null;
+      },
+      async () => {
+        // 1. Cache miss → build starts and blocks inside its DB read.
+        const inflight = h.handler(userRequest("GET", "/v1/progress", { token, ip }));
+        await reached;
+
+        // 2. Accepted sync → cacheDel(rank, progress).
+        const synced = await h.handler(
+          userRequest("POST", "/v1/shots:sync", { token, ip, body: syncShotBody() }),
+        );
+        assertEquals(synced.status, 200);
+        assertEquals(((await synced.json()) as { acceptedIds: string[] }).acceptedIds.length, 1);
+
+        // 3. Post-sync truth.
+        h.tables.progress_daily = [
+          {
+            day: today,
+            shot_type: "dink",
+            scoring_model_version: "1",
+            shot_count: 1,
+            avg_score: 7.5,
+            best_score: 7.5,
+          },
+        ];
+        h.tables.practice_days = [{ day: today }];
+
+        // 4. The stale build completes (its own response is the pre-sync view).
+        releaseRead();
+        const stale = await inflight;
+        assertEquals(stale.status, 200);
+        assertEquals(((await stale.json()) as { series: unknown[] }).series, []);
+
+        // 5. The next GET is a fresh DB-backed build that reflects the sync.
+        const readsBefore = postgrestReads("progress_daily").length;
+        const after = await h.handler(userRequest("GET", "/v1/progress", { token, ip }));
+        assertEquals(after.status, 200);
+        const payload = (await after.json()) as {
+          series: Array<{ day: string; shot_count: number }>;
+          streak: { practicedToday: boolean };
+        };
+        assertEquals(
+          postgrestReads("progress_daily").length,
+          readsBefore + 1,
+          "post-sync GET must re-read PostgREST, not serve the re-cached stale payload",
+        );
+        assertEquals(payload.series.length, 1, JSON.stringify(payload));
+        assertEquals(payload.series[0]?.day, today);
+        assertEquals(payload.streak.practicedToday, true);
+
+        // 6. …and THAT payload is cached again: the following GET is a hit.
+        const again = await h.handler(userRequest("GET", "/v1/progress", { token, ip }));
+        assertEquals(again.status, 200);
+        assertEquals(((await again.json()) as { series: unknown[] }).series.length, 1);
+        assertEquals(postgrestReads("progress_daily").length, readsBefore + 1, "cache hit");
+      },
+    );
+  },
+);
+
+Deno.test(
+  "GET /v1/rank: a build that read before an accepted shots:sync must not re-cache the pre-sync {rank:null}",
+  async () => {
+    h.reset();
+    const { token, ip } = freshUser();
+    h.tables.shots = [];
+    h.rpcs.apply_synced_shot = "accepted";
+
+    let releaseRead!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseRead = resolve));
+    let readReached!: () => void;
+    const reached = new Promise<void>((resolve) => (readReached = resolve));
+    let gated = false;
+
+    await withFetchIntercept(
+      async (request) => {
+        if (!gated && request.url.includes("/rest/v1/player_technique_rating")) {
+          gated = true;
+          readReached();
+          await gate;
+          return jsonResponse(200, []);
+        }
+        return null;
+      },
+      async () => {
+        const inflight = h.handler(userRequest("GET", "/v1/rank", { token, ip }));
+        await reached;
+        const synced = await h.handler(
+          userRequest("POST", "/v1/shots:sync", { token, ip, body: syncShotBody() }),
+        );
+        assertEquals(synced.status, 200);
+        await synced.body?.cancel();
+        h.tables.player_technique_rating = [
+          {
+            shot_type: "dink",
+            score: 7.5,
+            captured_at: new Date().toISOString(),
+            sampled_count: 1,
+            confidence_weight: 1,
+          },
+        ];
+        h.tables.player_rank_state = [];
+        releaseRead();
+        const stale = await inflight;
+        assertEquals(await stale.json(), { rank: null });
+
+        const readsBefore = postgrestReads("player_technique_rating").length;
+        const after = await h.handler(userRequest("GET", "/v1/rank", { token, ip }));
+        assertEquals(after.status, 200);
+        const payload = (await after.json()) as { rank: { rating: number } | null };
+        assertEquals(postgrestReads("player_technique_rating").length, readsBefore + 1);
+        assertNotEquals(
+          payload.rank,
+          null,
+          "stale pre-sync {rank:null} served after an accepted sync",
+        );
+        assertEquals(payload.rank?.rating, 7.5);
+      },
+    );
+  },
+);
+
+Deno.test(
+  "GET /v1/rank: back-to-back reads with no intervening sync make exactly one PostgREST read (coalesce + 60 s cache)",
+  async () => {
+    h.reset();
+    const { token, ip } = freshUser();
+    h.tables.player_technique_rating = [
+      {
+        shot_type: "dink",
+        score: 6.2,
+        captured_at: new Date().toISOString(),
+        sampled_count: 3,
+        confidence_weight: 3,
+      },
+    ];
+    h.tables.player_rank_state = [];
+
+    // Two concurrent cache misses share ONE in-flight build.
+    const [first, second] = await Promise.all([
+      h.handler(userRequest("GET", "/v1/rank", { token, ip })),
+      h.handler(userRequest("GET", "/v1/rank", { token, ip })),
+    ]);
+    assertEquals(first.status, 200);
+    assertEquals(second.status, 200);
+    const a = (await first.json()) as { rank: { rating: number } };
+    const b = (await second.json()) as { rank: { rating: number } };
+    assertEquals(a.rank.rating, 6.2);
+    assertEquals(b, a);
+    assertEquals(postgrestReads("player_technique_rating").length, 1, "coalesced into one read");
+
+    // A later sequential read is a cache hit.
+    const third = await h.handler(userRequest("GET", "/v1/rank", { token, ip }));
+    assertEquals(third.status, 200);
+    assertEquals(await third.json(), a);
+    assertEquals(postgrestReads("player_technique_rating").length, 1, "served from the 60 s cache");
+  },
+);

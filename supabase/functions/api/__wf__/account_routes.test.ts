@@ -19,6 +19,13 @@ interface FakeState {
   /** Status for POST /auth/v1/token?grant_type=id_token (200 = succeed). */
   tokenStatus: number;
   tokenCalls: number;
+  /** Status for POST /auth/v1/token?grant_type=refresh_token (200 = rotate,
+   * 400 = GoTrue refuses the refresh token with invalid_grant). */
+  refreshStatus: number;
+  /** When true the GoTrue refresh call never gets a response: fetch rejects
+   * (connection reset), which supabase-js surfaces as status 0. */
+  refreshTransportFailure: boolean;
+  refreshCalls: number;
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
   /** Last upsert payload PostgREST received for account_deletion_requests. */
@@ -33,6 +40,9 @@ interface FakeState {
 const state: FakeState = {
   tokenStatus: 200,
   tokenCalls: 0,
+  refreshStatus: 200,
+  refreshTransportFailure: false,
+  refreshCalls: 0,
   deletionRows: [],
   lastUpsert: null,
   adminDeleteStatuses: [],
@@ -44,6 +54,9 @@ const state: FakeState = {
 function resetState(): void {
   state.tokenStatus = 200;
   state.tokenCalls = 0;
+  state.refreshStatus = 200;
+  state.refreshTransportFailure = false;
+  state.refreshCalls = 0;
   state.deletionRows = [];
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
@@ -78,6 +91,31 @@ function providerToken(sub: string): string {
 async function fakeSupabase(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
+
+  if (
+    request.method === "POST" &&
+    path === "/auth/v1/token" &&
+    url.searchParams.get("grant_type") === "refresh_token"
+  ) {
+    state.refreshCalls += 1;
+    if (state.refreshStatus !== 200) {
+      return jsonResponse(state.refreshStatus, {
+        error: "invalid_grant",
+        error_code: "refresh_token_not_found",
+        msg: "Invalid Refresh Token: Refresh Token Not Found",
+      });
+    }
+    const body = (await request.json()) as { refresh_token: string };
+    const userId = body.refresh_token.replace(/^sb-refresh-/, "");
+    return jsonResponse(200, {
+      access_token: `sb-access-${userId}-rotated`,
+      token_type: "bearer",
+      expires_in: 3_600,
+      expires_at: Math.floor(Date.now() / 1_000) + 3_600,
+      refresh_token: `sb-refresh-${userId}-rotated`,
+      user: { id: userId, aud: "authenticated", role: "authenticated", email: "u@example.com" },
+    });
+  }
 
   if (request.method === "POST" && path === "/auth/v1/token") {
     state.tokenCalls += 1;
@@ -156,6 +194,14 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     assertEquals(request.headers.get("authorization"), "Bearer sk_test_revenuecat");
     return Promise.resolve(new Response(null, { status: 200 }));
   }
+  if (
+    state.refreshTransportFailure &&
+    request.url.startsWith(`${fakeUrl}/auth/v1/token`) &&
+    new URL(request.url).searchParams.get("grant_type") === "refresh_token"
+  ) {
+    state.refreshCalls += 1;
+    return Promise.reject(new TypeError("error sending request: connection reset"));
+  }
   return realFetch(input, init);
 }) as typeof fetch;
 
@@ -173,7 +219,13 @@ await import("../index.ts");
 if (!handler) throw new Error("index.ts did not register a Deno.serve handler");
 const api: Handler = handler;
 
-const call = (method: string, path: string, token: string, body?: unknown): Promise<Response> =>
+const call = (
+  method: string,
+  path: string,
+  token: string,
+  body?: unknown,
+  ip = "203.0.113.7",
+): Promise<Response> =>
   Promise.resolve(
     api(
       new Request(`http://edge.local/functions/v1/api${path}`, {
@@ -181,7 +233,7 @@ const call = (method: string, path: string, token: string, body?: unknown): Prom
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "x-forwarded-for": "203.0.113.7",
+          "x-forwarded-for": ip,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
@@ -262,6 +314,137 @@ Deno.test(
     assertEquals(state.tokenCalls, 1);
   },
 );
+
+// ─── /v1/auth/refresh: only a GoTrue REFUSAL may sign the device out ────────
+// AGENTS.md "Auth sessions": the ONE implicit sign-out is the server refusing
+// the refresh token (401/403). A refresh that never reached GoTrue is a
+// transient failure the sessionKeeper retries — and it must not spend the
+// per-IP auth-failure budget, which is reserved for credential probing.
+
+const AUTH_FAILURE_LIMIT = 30;
+
+/** Burn `count` auth failures for `ip` with unverifiable provider tokens. */
+async function burnAuthFailures(ip: string, count: number): Promise<void> {
+  state.tokenStatus = 401;
+  for (let index = 0; index < count; index += 1) {
+    const res = await call(
+      "GET",
+      "/v1/me/access",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      ip,
+    );
+    assertEquals(res.status, 401, `auth failure ${index + 1} of ${count}`);
+    await res.body?.cancel();
+  }
+  state.tokenStatus = 200;
+}
+
+Deno.test(
+  "refresh: GoTrue unreachable (fetch rejects) is a retryable 5xx and does not spend the auth-failure budget",
+  async () => {
+    resetState();
+    const ip = "203.0.113.71";
+    // One failure short of the budget: a 401 here would be the 30th and trip it.
+    await burnAuthFailures(ip, AUTH_FAILURE_LIMIT - 1);
+
+    state.refreshTransportFailure = true;
+    const res = await call(
+      "POST",
+      "/v1/auth/refresh",
+      "unused-bearer",
+      { refreshToken: "sb-refresh-transport-failure" },
+      ip,
+    );
+    state.refreshTransportFailure = false;
+    assertEquals(
+      [502, 503].includes(res.status),
+      true,
+      `expected a retryable 5xx for a transport failure, got ${res.status}`,
+    );
+    const body = (await res.json()) as { error: { message: string } };
+    assertStringIncludes(body.error.message, "temporarily unavailable");
+    assertEquals(body.error.message.includes("Sign in again"), false);
+    assertEquals(state.refreshCalls >= 1, true, "the refresh reached the (failing) GoTrue call");
+
+    // The budget still has its last slot: a following request from the same
+    // IP is judged on its own credentials (401), not refused up front (429).
+    state.tokenStatus = 401;
+    const following = await call(
+      "GET",
+      "/v1/me/access",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      ip,
+    );
+    assertEquals(following.status, 401);
+    await following.body?.cancel();
+    // …and that genuine failure was the 30th: the budget is now exhausted,
+    // proving the counter is live and the 5xx above was the one uncounted call.
+    const exhausted = await call(
+      "GET",
+      "/v1/me/access",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      ip,
+    );
+    assertEquals(exhausted.status, 429);
+    await exhausted.body?.cancel();
+    state.tokenStatus = 200;
+  },
+);
+
+Deno.test(
+  "refresh: GoTrue 400 invalid_grant is still a 401 'Sign in again' that counts as an auth failure",
+  async () => {
+    resetState();
+    const ip = "203.0.113.72";
+    state.refreshStatus = 400;
+    const res = await call(
+      "POST",
+      "/v1/auth/refresh",
+      "unused-bearer",
+      { refreshToken: "sb-refresh-revoked" },
+      ip,
+    );
+    assertEquals(res.status, 401);
+    assertStringIncludes(
+      ((await res.json()) as { error: { message: string } }).error.message,
+      "Sign in again",
+    );
+    assertEquals(state.refreshCalls, 1);
+
+    // The refusal spent one auth-failure slot: 29 more genuine failures
+    // exhaust the budget and the next request is refused up front.
+    await burnAuthFailures(ip, AUTH_FAILURE_LIMIT - 1);
+    state.tokenStatus = 401;
+    const exhausted = await call(
+      "GET",
+      "/v1/me/access",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      ip,
+    );
+    assertEquals(exhausted.status, 429);
+    await exhausted.body?.cancel();
+    state.tokenStatus = 200;
+  },
+);
+
+Deno.test("refresh: a GoTrue rotation returns the new session", async () => {
+  resetState();
+  const res = await call(
+    "POST",
+    "/v1/auth/refresh",
+    "unused-bearer",
+    { refreshToken: "sb-refresh-user-1" },
+    "203.0.113.73",
+  );
+  assertEquals(res.status, 200);
+  const body = (await res.json()) as { session: { accessToken: string; refreshToken: string } };
+  assertEquals(body.session.accessToken, "sb-access-user-1-rotated");
+  assertEquals(body.session.refreshToken, "sb-refresh-user-1-rotated");
+});
 
 // ─── REPRO: delete-confirm is not idempotent under duplicate requests ────────
 
