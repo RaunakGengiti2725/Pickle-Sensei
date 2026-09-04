@@ -1,0 +1,943 @@
+{
+  "note": "Actions-row geometry from real Yoga (yoga-layout@3 WASM, pointScaleFactor 3 = iPhone @3x) with the advance widths in fontMetrics.fixture.json. Regenerate with generateYogaFixture.mjs.",
+  "engine": "yoga-layout@3",
+  "pointScaleFactor": 3,
+  "rows": [
+    {
+      "fontScaleName": "large",
+      "screenWidth": 320,
+      "fontScale": 1,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 95.99999237060547,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 44,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 16.666702270507812,
+      "overflowPastCardBorder": 0.33335113525390625,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 320,
+      "fontScale": 1,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 95.99999237060547,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 44,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 16.666702270507812,
+      "overflowPastCardBorder": 0.33335113525390625,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 320,
+      "fontScale": 1,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 95.99999237060547,
+          "height": 44.00001525878906,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 44.00001525878906,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 16.666702270507812,
+      "overflowPastCardBorder": 0.33335113525390625,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 375,
+      "fontScale": 1,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 95.99999237060547,
+          "height": 43.99999237060547,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 43.99999237060547,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 375,
+      "fontScale": 1,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 95.99999237060547,
+          "height": 43.99999237060547,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 43.99999237060547,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 375,
+      "fontScale": 1,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 95.99999237060547,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 44,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 430,
+      "fontScale": 1,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 95.99999237060547,
+          "height": 43.99999237060547,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 43.99999237060547,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 430,
+      "fontScale": 1,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 95.99999237060547,
+          "height": 43.99999237060547,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 43.99999237060547,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "large",
+      "screenWidth": 430,
+      "fontScale": 1,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 200.00000762939453,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 95.99999237060547,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 96.00001525878906,
+          "height": 44,
+          "left": 200.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 320,
+      "fontScale": 1.353,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 206.33332061767578,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 96.33333587646484,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 44,
+          "left": 200.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 23.00000762939453,
+      "overflowPastCardBorder": 6.666656494140625,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 320,
+      "fontScale": 1.353,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 210.66666412353516,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 100.66666412353516,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 102,
+          "height": 44,
+          "left": 205
+        }
+      ],
+      "overflowPastCopyColumn": 27.333351135253906,
+      "overflowPastCardBorder": 11,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 320,
+      "fontScale": 1.353,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 218.33332061767578,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 108.33333587646484,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 44,
+          "left": 212.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 35.00000762939453,
+      "overflowPastCardBorder": 18.666656494140625,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 375,
+      "fontScale": 1.353,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 206.33332061767578,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 96.33333587646484,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 44,
+          "left": 200.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 375,
+      "fontScale": 1.353,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 210.66666412353516,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 100.66666412353516,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 102,
+          "height": 44,
+          "left": 205
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 375,
+      "fontScale": 1.353,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 218.33332061767578,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 108.33333587646484,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 44,
+          "left": 212.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 430,
+      "fontScale": 1.353,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 206.33332061767578,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 96.33333587646484,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 44,
+          "left": 200.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 430,
+      "fontScale": 1.353,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 210.66666412353516,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 100.66666412353516,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 102,
+          "height": 44,
+          "left": 205
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "xxxLarge",
+      "screenWidth": 430,
+      "fontScale": 1.353,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 218.33332061767578,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 108.33333587646484,
+          "height": 43.99998474121094,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 101.99998474121094,
+          "height": 43.99998474121094,
+          "left": 212.6666717529297
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 320,
+      "fontScale": 2.143,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 282.33331298828125,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 132.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 237.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 99.00001525878906,
+      "overflowPastCardBorder": 82.66666412353516,
+      "overflowPastScreen": 58.666664123535156
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 320,
+      "fontScale": 2.143,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 289.6666564941406,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 139.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 142,
+          "height": 44,
+          "left": 244.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 106.33335876464844,
+      "overflowPastCardBorder": 90.00000762939453,
+      "overflowPastScreen": 66.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 320,
+      "fontScale": 2.143,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 301.6666564941406,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 152,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 256.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 118.33334350585938,
+      "overflowPastCardBorder": 101.99999237060547,
+      "overflowPastScreen": 77.99999237060547
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 375,
+      "fontScale": 2.143,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 282.33331298828125,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 132.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 237.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 44.00001525878906,
+      "overflowPastCardBorder": 27.666664123535156,
+      "overflowPastScreen": 3.6666641235351562
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 375,
+      "fontScale": 2.143,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 289.6666564941406,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 139.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 142,
+          "height": 44,
+          "left": 244.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 51.33335876464844,
+      "overflowPastCardBorder": 35.00000762939453,
+      "overflowPastScreen": 11.000007629394531
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 375,
+      "fontScale": 2.143,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 301.6666564941406,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 152,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 256.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 63.333343505859375,
+      "overflowPastCardBorder": 46.99999237060547,
+      "overflowPastScreen": 22.99999237060547
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 430,
+      "fontScale": 2.143,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 282.33331298828125,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 132.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 237.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 430,
+      "fontScale": 2.143,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 289.6666564941406,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 139.66665649414062,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 142,
+          "height": 44,
+          "left": 244.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 0,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "accessibilityLarge",
+      "screenWidth": 430,
+      "fontScale": 2.143,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 301.6666564941406,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 152,
+          "height": 44,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 141.66665649414062,
+          "height": 44,
+          "left": 256.33333587646484
+        }
+      ],
+      "overflowPastCopyColumn": 8.333343505859375,
+      "overflowPastCardBorder": 0,
+      "overflowPastScreen": 0
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 320,
+      "fontScale": 3.571,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 269.3333282470703,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 135.33334350585938,
+          "height": 130.6666259765625,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 125.99998474121094,
+          "height": 130.6666259765625,
+          "left": 239.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 86,
+      "overflowPastCardBorder": 69.6666488647461,
+      "overflowPastScreen": 45.666648864746094
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 320,
+      "fontScale": 3.571,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 317.33331298828125,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 183.33331298828125,
+          "height": 66.333251953125,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 126,
+          "height": 130.6666259765625,
+          "left": 287.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 134.00001525878906,
+      "overflowPastCardBorder": 117.66666412353516,
+      "overflowPastScreen": 93.66666412353516
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 320,
+      "fontScale": 3.571,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 183.33331298828125,
+      "rowContentWidth": 287.6666564941406,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 153.66665649414062,
+          "height": 130.666748046875,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 126,
+          "height": 130.666748046875,
+          "left": 258.00000762939453
+        }
+      ],
+      "overflowPastCopyColumn": 104.33335876464844,
+      "overflowPastCardBorder": 88.00000762939453,
+      "overflowPastScreen": 64.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 375,
+      "fontScale": 3.571,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 419.6666564941406,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 198.33331298828125,
+          "height": 66.3333740234375,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.33334350585938,
+          "height": 66.3333740234375,
+          "left": 302.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 181.33335876464844,
+      "overflowPastCardBorder": 165.00000762939453,
+      "overflowPastScreen": 141.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 375,
+      "fontScale": 3.571,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 431.6666564941406,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 210.33331298828125,
+          "height": 66.3333740234375,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.33334350585938,
+          "height": 66.3333740234375,
+          "left": 314.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 193.33335876464844,
+      "overflowPastCardBorder": 177.00000762939453,
+      "overflowPastScreen": 153.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 375,
+      "fontScale": 3.571,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 238.33331298828125,
+      "rowContentWidth": 451.9999694824219,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 230.33331298828125,
+          "height": 66.3333740234375,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.66665649414062,
+          "height": 66.3333740234375,
+          "left": 334.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 213.6666717529297,
+      "overflowPastCardBorder": 197.33332061767578,
+      "overflowPastScreen": 173.33332061767578
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 430,
+      "fontScale": 3.571,
+      "primaryLabel": "Turn on",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 419.6666564941406,
+      "pills": [
+        {
+          "label": "Turn on",
+          "width": 198.33331298828125,
+          "height": 66.33331298828125,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.33334350585938,
+          "height": 66.33331298828125,
+          "left": 302.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 126.33335876464844,
+      "overflowPastCardBorder": 110.00000762939453,
+      "overflowPastScreen": 86.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 430,
+      "fontScale": 3.571,
+      "primaryLabel": "Asking…",
+      "failed": false,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 431.6666564941406,
+      "pills": [
+        {
+          "label": "Asking…",
+          "width": 210.33331298828125,
+          "height": 66.33331298828125,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.33334350585938,
+          "height": 66.33331298828125,
+          "left": 314.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 138.33335876464844,
+      "overflowPastCardBorder": 122.00000762939453,
+      "overflowPastScreen": 98.00000762939453
+    },
+    {
+      "fontScaleName": "accessibilityExtraExtraExtraLarge",
+      "screenWidth": 430,
+      "fontScale": 3.571,
+      "primaryLabel": "Try again",
+      "failed": true,
+      "copyColumnWidth": 293.33331298828125,
+      "rowContentWidth": 451.9999694824219,
+      "pills": [
+        {
+          "label": "Try again",
+          "width": 230.33331298828125,
+          "height": 66,
+          "left": 96.33333587646484
+        },
+        {
+          "label": "Not now",
+          "width": 213.66665649414062,
+          "height": 66,
+          "left": 334.66666412353516
+        }
+      ],
+      "overflowPastCopyColumn": 158.6666717529297,
+      "overflowPastCardBorder": 142.33332061767578,
+      "overflowPastScreen": 118.33332061767578
+    }
+  ]
+}
