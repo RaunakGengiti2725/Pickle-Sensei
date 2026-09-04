@@ -157,11 +157,12 @@ describe('C2: shared-connection BEGIN IMMEDIATE collision (real SQLite)', () => 
 
     expect(describeSettled(drainResult)).toBe('fulfilled');
     expect(await hasShotSyncReceipt(db, shotId(1))).toBe(true);
-    expect(await outboxRows(db, OWNER)).toHaveLength(1);
     expect(describeSettled(saveResult)).toBe('fulfilled');
     expect(await getAnalysis(db, shotId(2))).not.toBeNull();
-    const rows = await outboxRows(db, OWNER);
-    expect(rows[0]?.last_error ?? '').not.toContain('transaction');
+    // The drain requested while the save was open runs after its COMMIT and
+    // reads the committed queue: the second rating is delivered by it too.
+    expect(await hasShotSyncReceipt(db, shotId(2))).toBe(true);
+    expect(await outboxRows(db, OWNER)).toHaveLength(0);
     expect(maxTransactionDepth(statementLog(logStart))).toBe(1);
   });
 });

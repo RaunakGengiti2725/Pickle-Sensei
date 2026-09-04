@@ -79,6 +79,10 @@ export function createFakeOutboxDb(): FakeOutboxDb {
         }
         return { rows: [] };
       }
+      if (sql.trimStart().startsWith('SELECT ls.id AS id FROM local_session')) {
+        // No local_session rows exist in this fake: no parked set to re-queue.
+        return { rows: [] };
+      }
       if (sql.trimStart().startsWith('SELECT count(*)')) {
         return {
           rows: [

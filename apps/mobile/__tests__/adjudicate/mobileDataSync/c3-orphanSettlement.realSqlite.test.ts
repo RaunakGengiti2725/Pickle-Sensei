@@ -192,8 +192,9 @@ describe('C3: orphan settlement and full-backlog paging (real SQLite)', () => {
     await queueSession(db, DEAD_SESSION);
     await saveShot(db, 0x401, DEAD_SESSION);
 
-    // While the session row still has budget the shots are an ordering
-    // artifact: transient, attempts untouched, offered again next drain.
+    // While the session row still has budget the shots would be an ordering
+    // artifact (the server has not seen the set yet): they are not offered
+    // at all — attempts untouched, no verdict, still simply queued.
     for (let i = 0; i < OUTBOX_MAX_ATTEMPTS - 1; i++) {
       await drainOutbox(db, server);
       const shots = (await outboxRows(db, OWNER)).filter(
@@ -201,9 +202,10 @@ describe('C3: orphan settlement and full-backlog paging (real SQLite)', () => {
       );
       expect(shots).toHaveLength(2);
       expect(shots.every(r => r.attempts === 0)).toBe(true);
-      expect(
-        shots.every(r => r.last_error?.startsWith(SESSION_NOT_FOUND_REJECTION)),
-      ).toBe(true);
+      expect(shots.every(r => r.last_error === null)).toBe(true);
+      expect(server.offered.some(ids => ids.includes(shotId(0x400)))).toBe(
+        false,
+      );
     }
     expect(await getShotOutboxStatus(db, shotId(0x400))).toMatchObject({
       state: 'queued',

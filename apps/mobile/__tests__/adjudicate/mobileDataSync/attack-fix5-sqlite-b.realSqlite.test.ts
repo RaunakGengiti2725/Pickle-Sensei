@@ -44,6 +44,7 @@ import { ApiError } from '../../../src/data/api';
 import { getDb } from '../../../src/data/db';
 import {
   getShotOutboxStatus,
+  hasShotSyncReceipt,
   purgeOwnerData,
   saveAnalysis,
   type SessionInput,
@@ -324,7 +325,7 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
     });
   });
 
-  it('C5: a set whose session.create spent its budget is never asked for again — later shots of the set get one doomed offer each and park forever, even after the server would accept the set', async () => {
+  it('C5: a set whose session.create spent its budget is asked for again (once, bounded) when a new shot joins it; every parked read of the set is delivered once the server accepts the set', async () => {
     const emulator = serverEmulator();
     emulator.createError = () =>
       new ApiError(409, 'session.id_conflict', 'conflict');
@@ -370,20 +371,30 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
       laterShots.map(id => getShotOutboxStatus(db, id)),
     );
 
-    // Observed on the candidate: 0 new createSession calls, one doomed offer
-    // per new shot (session_not_found -> parked at attempt 0), 1 exhausted
-    // session.create row (attempts=8) pinned forever, all six shots
-    // 'orphaned' ("paused until the set is accepted").
-    expect(states.map(s => s.state)).toEqual(laterShots.map(() => 'orphaned'));
-    expect(sessionCreates).toEqual([
-      expect.objectContaining({ attempts: OUTBOX_MAX_ATTEMPTS }),
-    ]);
-    expect(emulator.offered.length).toBe(offeredBefore + laterShots.length);
-
+    // Observed on the unfixed candidate: 0 new createSession calls, one
+    // doomed offer per new shot (session_not_found -> parked at attempt 0),
+    // 1 exhausted session.create row (attempts=8) pinned forever, all six
+    // shots 'orphaned' ("paused until the set is accepted") — a permanence
+    // the Result screen's copy denied.
+    //
     // Expected by the candidate's own contract ("re-offered when the set's
     // session.create is accepted"; ResultScreen: "this read is sent again
-    // automatically"): the set is asked for again at least once after a new
-    // shot joins it, so the parked reads can ever leave the paused state.
-    expect(emulator.created.length).toBeGreaterThan(createdBefore);
+    // automatically"): the first new shot joining the set re-arms its
+    // exhausted session.create, the next drain creates the set, releases the
+    // parked read and delivers both; every later shot syncs directly. The
+    // re-ask is bounded: ONE createSession for the whole episode, nothing
+    // further during the idle drains.
+    expect(emulator.created.length).toBe(createdBefore + 1);
+    expect(emulator.created.slice(createdBefore)).toEqual([SET_A]);
+    expect(emulator.offered.length).toBe(offeredBefore + laterShots.length);
+    expect(states.map(s => s.state)).toEqual(laterShots.map(() => 'absent'));
+    expect(await getShotOutboxStatus(db, firstShot)).toEqual({
+      state: 'absent',
+    });
+    for (const id of [firstShot, ...laterShots]) {
+      expect(await hasShotSyncReceipt(db, id)).toBe(true);
+    }
+    expect(sessionCreates).toEqual([]);
+    expect(rows).toEqual([]);
   });
 });

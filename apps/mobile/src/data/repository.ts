@@ -6,13 +6,18 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
-import { runInTransaction } from './transaction';
+import { runInTransaction, runPreemptingTransaction } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
-import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
+import {
+  getActiveDataOwner,
+  markOwnerPurged,
+  requireWritableDataOwner,
+} from './accountScope';
 import {
   OUTBOX_MAX_ATTEMPTS,
-  hasLiveSessionCreate,
+  enqueueLiveSessionCreate,
   isSessionOrphanedVerdict,
+  rearmExhaustedSessionCreate,
 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
@@ -109,13 +114,15 @@ export const OWNER_SCOPED_KV_NAMESPACES = [
  * Removes every locally stored row belonging to `owner` — called after the
  * server confirms account deletion, so no analysis history, outbox entry, or
  * cached profile survives on the device. Transactional: either the whole
- * owner bucket is gone or nothing changed.
+ * owner bucket is gone or nothing changed. A drain that is mid-flight for
+ * this owner is not waited for: the purge runs while it awaits the server
+ * and the bumped purge generation tells it to settle nothing.
  */
 export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await runInTransaction(db, async () => {
+  await runPreemptingTransaction(db, async () => {
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -125,6 +132,7 @@ export async function purgeOwnerData(
       ]);
     }
   });
+  markOwnerPurged(owner);
 }
 
 export interface SessionInput {
@@ -136,31 +144,15 @@ export interface SessionInput {
 }
 
 /**
- * Queues `session.create` for `session` unless a row for that id is already
- * waiting with attempt budget: the server upsert is idempotent, so one
- * pending entry per set is all a drain needs. Runs inside the caller's
- * transaction.
- */
-async function enqueueSessionCreate(
-  db: LocalDb,
-  owner: string,
-  session: SessionInput,
-): Promise<void> {
-  if (await hasLiveSessionCreate(db, owner, session.id)) return;
-  await db.execute(
-    `INSERT INTO outbox (owner_key, kind, payload)
-     VALUES (?, 'session.create', ?)`,
-    [owner, JSON.stringify(session)],
-  );
-}
-
-/**
  * Persists a scored rating: the `local_shot` row and its `shot.sync` outbox
  * entry, atomically. When the shot belongs to a practice set, pass the set as
  * `options.session`: a set this device has no `local_session` row for yet
  * gets that row AND its `session.create` outbox entry in the SAME
  * transaction, ahead of the shot — so a kill or a failed follow-up write can
- * never leave a shot whose session no queue entry will ever name.
+ * never leave a shot whose session no queue entry will ever name. A set the
+ * device already knows whose `session.create` spent its budget is asked for
+ * again (`rearmExhaustedSessionCreate`): a new read joining the set is the
+ * bounded occasion on which the refused set gets a fresh budget.
  */
 export async function saveAnalysis(
   db: LocalDb,
@@ -203,7 +195,9 @@ export async function saveAnalysis(
             session.startedAt,
           ],
         );
-        await enqueueSessionCreate(db, owner, session);
+        await enqueueLiveSessionCreate(db, owner, session);
+      } else {
+        await rearmExhaustedSessionCreate(db, owner, session.id);
       }
     }
     await db.execute(
@@ -805,7 +799,7 @@ export async function saveSession(
         session.startedAt,
       ],
     );
-    await enqueueSessionCreate(db, owner, session);
+    await enqueueLiveSessionCreate(db, owner, session);
   });
 }
 

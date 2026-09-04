@@ -127,7 +127,15 @@ describe('attack fix5 / C2: the drain reads rows of an open saveAnalysis transac
       sql => sql.trim().toUpperCase() === 'ROLLBACK',
     );
     expect(firstShotPage).toBeGreaterThan(-1);
-    expect(rollback).toBeGreaterThan(firstShotPage);
+    expect(rollback).toBeGreaterThan(-1);
+    // Ported from fix4-mds-sqlite-a, where this precondition read
+    // `rollback > firstShotPage`: the drain's page SELECT ran INSIDE the open
+    // save transaction. On this base the interleaving is structurally
+    // impossible — the drain was scheduled while the save was open (the hook
+    // fired at COMMIT) and still its first read of the queue lands only
+    // after the save's ROLLBACK; every drain read is serialized behind the
+    // repository transaction on the shared connection.
+    expect(firstShotPage).toBeGreaterThan(rollback);
     // The save did roll back: nothing of the rating survived locally.
     expect(await getAnalysis(db, shotId(2))).toBeNull();
     expect(await outboxRows(db, OWNER)).toHaveLength(0);

@@ -45,3 +45,19 @@ export function requireWritableDataOwner(): string {
 export function profileKeyForOwner(owner: string): string {
   return `profile:${owner}`;
 }
+
+const purgeGenerations = new Map<string, number>();
+
+/**
+ * Bumped every time an owner's bucket is purged (account deletion). A unit
+ * of work that read the bucket earlier compares the generation it started
+ * under before writing anything on the owner's behalf: a purge that landed
+ * in between retired every row it was about to settle.
+ */
+export function ownerPurgeGeneration(owner: string): number {
+  return purgeGenerations.get(owner) ?? 0;
+}
+
+export function markOwnerPurged(owner: string): void {
+  purgeGenerations.set(owner, ownerPurgeGeneration(owner) + 1);
+}

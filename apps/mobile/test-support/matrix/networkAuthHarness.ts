@@ -264,6 +264,10 @@ export function fakeDb() {
         }
         return { rows: [] };
       }
+      if (statement.startsWith('SELECT ls.id AS id FROM local_session')) {
+        // No local_session rows exist in this fake: no parked set to re-queue.
+        return { rows: [] };
+      }
       if (statement.startsWith('SELECT count(*)')) {
         return {
           rows: [{ n: outbox.filter(r => r.owner_key === params[0]).length }],

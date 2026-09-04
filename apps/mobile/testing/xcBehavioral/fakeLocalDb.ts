@@ -82,10 +82,42 @@ function pageAcceptsBudget(
   if (sql.includes("OR kind = 'session.create'")) {
     return row.kind === 'session.create';
   }
-  if (sql.includes(`OR last_error LIKE '${PARKED_PREFIX}%'`)) {
-    return row.last_error !== null && row.last_error.startsWith(PARKED_PREFIX);
-  }
   return false;
+}
+
+/** A live (budgeted) `session.create` row naming `sessionId`. */
+function hasLiveSessionCreate(
+  outbox: OutboxRow[],
+  owner: string,
+  sessionId: unknown,
+  maxAttempts: number,
+): boolean {
+  return outbox.some(
+    r =>
+      r.owner_key === owner &&
+      r.attempts < maxAttempts &&
+      r.kind === 'session.create' &&
+      payloadField(r, 'id') === sessionId,
+  );
+}
+
+const MAX_ATTEMPTS_IN_SQL = /s\.attempts < (\d+)/;
+
+/** Mirrors the shot pass's `AND NOT (… IN (SELECT … session.create …))`
+ * predicate: a shot whose set still has a live session.create row is not
+ * offered. */
+function pageOffersRow(sql: string, row: OutboxRow, outbox: OutboxRow[]) {
+  const live = MAX_ATTEMPTS_IN_SQL.exec(sql);
+  if (!live || !sql.includes('AND NOT (')) return true;
+  if (row.kind !== 'shot.sync') return true;
+  const sessionId = payloadField(row, 'sessionId');
+  if (typeof sessionId !== 'string') return true;
+  return !hasLiveSessionCreate(
+    outbox,
+    row.owner_key,
+    sessionId,
+    Number(live[1]),
+  );
 }
 
 export function createFakeLocalDb(): FakeLocalDb {
@@ -149,6 +181,15 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
+        // Owner-fenced: written only while the outbox row still exists.
+        if (
+          sql.includes('WHERE EXISTS') &&
+          !outbox.some(
+            r => r.owner_key === String(params[2]) && r.id === params[3],
+          )
+        ) {
+          return { rows: [] };
+        }
         receipts.push({
           owner: String(params[0]),
           kind: 'shot.sync',
@@ -163,12 +204,55 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: hit ? [{ '1': 1 }] : [] };
       }
       if (sql.includes('INSERT INTO outbox')) {
-        const kindMatch = /VALUES \(\?, '([a-z.]+)', \?\)/.exec(sql);
+        if (sql.includes('FROM local_session ls')) {
+          // enqueueLiveSessionCreateFromLocal: the set's row, unless a live
+          // session.create already names it.
+          const s = sessions.find(
+            row => row.owner === params[0] && row.id === params[1],
+          );
+          if (
+            s &&
+            !hasLiveSessionCreate(outbox, s.owner, s.id, Number(params[2]))
+          ) {
+            outbox.push({
+              id: nextOutboxId++,
+              owner_key: s.owner,
+              kind: 'session.create',
+              payload: JSON.stringify({
+                id: s.id,
+                mode: s.mode,
+                shotType: s.shotType,
+                focusCheckpoint: s.focusCheckpoint,
+                startedAt: s.startedAt,
+              }),
+              attempts: 0,
+              last_error: null,
+            });
+          }
+          return { rows: [] };
+        }
+        const kindMatch = /(?:VALUES \(|SELECT )\?, '([a-z.]+)', \?/.exec(sql);
+        const kind = kindMatch ? kindMatch[1]! : String(params[1]);
+        const payload = String(
+          kindMatch ? params[1] : params[params.length - 1],
+        );
+        if (
+          kind === 'session.create' &&
+          sql.includes('WHERE NOT EXISTS') &&
+          hasLiveSessionCreate(
+            outbox,
+            String(params[0]),
+            payloadField({ payload } as OutboxRow, 'id'),
+            Number(params[3]),
+          )
+        ) {
+          return { rows: [] };
+        }
         outbox.push({
           id: nextOutboxId++,
           owner_key: String(params[0]),
-          kind: kindMatch ? kindMatch[1]! : String(params[1]),
-          payload: String(params[params.length - 1]),
+          kind,
+          payload,
           attempts: 0,
           last_error: null,
         });
@@ -183,7 +267,8 @@ export function createFakeLocalDb(): FakeLocalDb {
                 r.owner_key === String(params[0]) &&
                 pageAcceptsBudget(sql, r, Number(params[1])) &&
                 r.id > cursor &&
-                pageAcceptsKind(sql, r.kind),
+                pageAcceptsKind(sql, r.kind) &&
+                pageOffersRow(sql, r, outbox),
             )
             .sort((a, b) => a.id - b.id)
             .slice(0, 50)
@@ -192,25 +277,54 @@ export function createFakeLocalDb(): FakeLocalDb {
       }
       if (sql.startsWith('SELECT 1 FROM outbox')) {
         // hasLiveSessionCreate: a session.create for `$.id` with budget left.
-        const hit = outbox.some(
-          r =>
-            r.owner_key === params[0] &&
-            r.attempts < Number(params[1]) &&
-            r.kind === 'session.create' &&
-            payloadField(r, 'id') === params[2],
+        const hit = hasLiveSessionCreate(
+          outbox,
+          String(params[0]),
+          params[2],
+          Number(params[1]),
         );
         return { rows: hit ? [{ '1': 1 }] : [] };
       }
+      if (sql.startsWith('SELECT ls.id AS id FROM local_session ls')) {
+        // selectParkedSetsWithoutQueueEntry.
+        const ids = sessions
+          .filter(
+            s =>
+              s.owner === params[0] &&
+              outbox.some(
+                r =>
+                  r.owner_key === s.owner &&
+                  r.kind === 'shot.sync' &&
+                  r.last_error !== null &&
+                  r.last_error.startsWith(PARKED_PREFIX) &&
+                  payloadField(r, 'sessionId') === s.id,
+              ) &&
+              !outbox.some(
+                r =>
+                  r.owner_key === s.owner &&
+                  r.kind === 'session.create' &&
+                  payloadField(r, 'id') === s.id,
+              ),
+          )
+          .sort((a, b) =>
+            a.startedAt === b.startedAt
+              ? a.id.localeCompare(b.id)
+              : a.startedAt.localeCompare(b.startedAt),
+          );
+        return { rows: ids.map(s => ({ id: s.id })) };
+      }
       if (sql.startsWith('DELETE FROM outbox')) {
         if (sql.includes('attempts >= ?')) {
-          // Exhausted session.create rows for a set the server now has.
+          // retireAcceptedSessionCreate: the accepted row plus the exhausted
+          // session.create rows for a set the server now has.
           for (let i = outbox.length - 1; i >= 0; i -= 1) {
             const r = outbox[i]!;
             if (
               r.owner_key === params[0] &&
-              r.attempts >= Number(params[1]) &&
-              r.kind === 'session.create' &&
-              payloadField(r, 'id') === params[2]
+              (r.id === params[1] ||
+                (r.attempts >= Number(params[2]) &&
+                  r.kind === 'session.create' &&
+                  payloadField(r, 'id') === params[3]))
             ) {
               outbox.splice(i, 1);
             }
@@ -224,6 +338,28 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('UPDATE outbox')) {
+        if (sql.includes('SELECT max(id) FROM outbox')) {
+          // rearmExhaustedSessionCreate: the newest exhausted session.create
+          // for `$.id`, unless a live one exists.
+          const max = Number(params[2]);
+          if (hasLiveSessionCreate(outbox, String(params[0]), params[3], max)) {
+            return { rows: [] };
+          }
+          const exhausted = outbox
+            .filter(
+              r =>
+                r.owner_key === params[0] &&
+                r.attempts >= max &&
+                r.kind === 'session.create' &&
+                payloadField(r, 'id') === params[3],
+            )
+            .sort((a, b) => b.id - a.id)[0];
+          if (exhausted) {
+            exhausted.attempts = 0;
+            exhausted.last_error = null;
+          }
+          return { rows: [] };
+        }
         if (sql.includes('SET attempts = 0, last_error = NULL')) {
           // releaseParkedShotsOfSession: parked shots of `$.sessionId`.
           for (const r of outbox) {
@@ -305,12 +441,6 @@ export function createFakeLocalDb(): FakeLocalDb {
           startedAt: String(params[5]),
         });
         return { rows: [] };
-      }
-      if (sql.startsWith('SELECT 1 FROM local_session')) {
-        const hit = sessions.some(
-          s => s.owner === params[0] && s.id === params[1],
-        );
-        return { rows: hit ? [{ '1': 1 }] : [] };
       }
       if (
         sql.startsWith('SELECT mode, shot_type, focus_checkpoint, started_at')

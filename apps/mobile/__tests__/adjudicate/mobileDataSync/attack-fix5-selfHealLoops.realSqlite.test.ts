@@ -45,7 +45,7 @@ import {
   getShotOutboxStatus,
   hasShotSyncReceipt,
   saveAnalysis,
-  type LocalSessionInput,
+  type SessionInput,
 } from '../../../src/data/repository';
 import {
   OUTBOX_MAX_ATTEMPTS,
@@ -68,7 +68,7 @@ function sessionUuid(n: number): string {
   return `5e551011-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 }
 
-function sessionRow(id: string): LocalSessionInput {
+function sessionRow(id: string): SessionInput {
   return {
     id,
     mode: 'practice_set',

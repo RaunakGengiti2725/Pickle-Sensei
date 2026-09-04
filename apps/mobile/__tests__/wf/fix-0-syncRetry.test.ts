@@ -72,6 +72,10 @@ function fakeDb() {
         }
         return { rows: [] };
       }
+      if (sql.startsWith('SELECT ls.id AS id FROM local_session')) {
+        // No local_session rows exist in this fake: no parked set to re-queue.
+        return { rows: [] };
+      }
       if (sql.startsWith('SELECT count(*)')) {
         return {
           rows: [

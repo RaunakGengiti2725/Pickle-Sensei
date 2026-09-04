@@ -29,7 +29,13 @@ export function nextSyncRetryDelayMs(
 }
 
 let generation = 0;
-const runningGenerations = new Set<number>();
+/** Generations with a drain running or waiting for its turn: a second
+ * trigger of the same generation coalesces into it. */
+const activeGenerations = new Set<number>();
+/** The drain in flight per data owner, across generations: a runtime
+ * configured while the previous runtime's drain for the same owner still
+ * awaits the server waits for it instead of draining interleaved. */
+const drainsByOwner = new Map<string, Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
 let triggerForGeneration: (() => Promise<void>) | null = null;
@@ -72,7 +78,7 @@ export function configureSyncRuntime(session: ApiSession): void {
   const trigger = async () => {
     if (
       configuredGeneration !== generation ||
-      runningGenerations.has(configuredGeneration)
+      activeGenerations.has(configuredGeneration)
     ) {
       return;
     }
@@ -80,17 +86,39 @@ export function configureSyncRuntime(session: ApiSession): void {
       schedule();
       return;
     }
-    runningGenerations.add(configuredGeneration);
+    activeGenerations.add(configuredGeneration);
     try {
-      const result = await drainOutbox(getDb(), transport);
-      consecutiveFailures = result.failed > 0 ? consecutiveFailures + 1 : 0;
-    } catch {
-      // Outbox rows remain durable with their attempt history. The foreground
-      // event or the backed-off timer retries without inventing a receipt.
-      consecutiveFailures += 1;
+      let inFlight = drainsByOwner.get(owner);
+      while (inFlight !== undefined) {
+        await inFlight;
+        inFlight = drainsByOwner.get(owner);
+      }
+      if (configuredGeneration !== generation) return;
+      if (getActiveDataOwner() !== owner) {
+        schedule();
+        return;
+      }
+      let settled: () => void = () => {};
+      drainsByOwner.set(
+        owner,
+        new Promise<void>(resolve => {
+          settled = resolve;
+        }),
+      );
+      try {
+        const result = await drainOutbox(getDb(), transport);
+        consecutiveFailures = result.failed > 0 ? consecutiveFailures + 1 : 0;
+      } catch {
+        // Outbox rows remain durable with their attempt history. The foreground
+        // event or the backed-off timer retries without inventing a receipt.
+        consecutiveFailures += 1;
+      } finally {
+        drainsByOwner.delete(owner);
+        settled?.();
+        schedule();
+      }
     } finally {
-      runningGenerations.delete(configuredGeneration);
-      schedule();
+      activeGenerations.delete(configuredGeneration);
     }
   };
 
