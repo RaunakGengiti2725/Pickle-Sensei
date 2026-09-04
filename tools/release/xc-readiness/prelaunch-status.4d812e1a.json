@@ -1,0 +1,211 @@
+{
+  "gitSha": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "walkedAt": "2026-09-04",
+  "legend": {
+    "verified": "executed on this checkout on Linux; command + exit code + artifact recorded",
+    "human-only": "requires a human decision, an Apple/RevenueCat/Supabase console, a credential, or a physical device — cannot be verified from this plane",
+    "BLOCKED": "a plane or artifact this role may not touch (hosted Supabase, App Store Connect, same-SHA Mac run) — NOT a pass"
+  },
+  "items": {
+    "10": {
+      "status": "verified",
+      "evidence": "scripts/verify-cloud.sh --only release,security → exit 0 (security stage = gitleaks + secret scan) — /home/ubuntu/xc-artifacts/verify-cloud-release-security/security.log; rg -n \"sk_live|service_role|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC )?PRIVATE KEY|sbp_\" --glob '!node_modules' → 18 hits, all role-name literals / PEM header strings in tests+SQL shims, no key material — /home/ubuntu/xc-artifacts/secret-scan-rg.log; runtimeConfig.ts ships only appl_ public key + OAuth client ids (version-triple.json runtimeConfig.iosRevenueCatKeyPrefix=appl)"
+    },
+    "14": {
+      "status": "verified",
+      "evidence": "git check-ignore -v .env .env.local supabase/.temp/x → matched (.gitignore:7, :8, :55). BUT `.env*` is NOT fully covered: git check-ignore -v .env.production .env.staging .env.development apps/mobile/.env.production → exit 1 (not ignored; only `.env`, `.env.local`, `.env.*.local` are). Only tracked .env file today is .env.example (git ls-files). Recorded as finding F3 (P3); probe output in prelaunch-walk.json probes.gitignore_env_gap."
+    },
+    "15": {
+      "status": "verified",
+      "evidence": "same rg command as item 10, exit 0, 18 hits reviewed one by one — /home/ubuntu/xc-artifacts/secret-scan-rg.log"
+    },
+    "17": {
+      "status": "human-only",
+      "evidence": "Key rotation is a RevenueCat dashboard + `supabase secrets set` operation on project ucqnaiwqwjtgvlduiuib — prohibited for this role. Minimum action: project owner confirms no departed collaborator held REVENUECAT_SECRET_API_KEY / REVENUECAT_WEBHOOK_AUTH, or rotates both."
+    },
+    "19": {
+      "status": "verified",
+      "evidence": "apps/mobile/src/config/runtimeConfig.ts REVENUECAT_IOS_PUBLIC_SDK_KEY starts with appl_ (version-triple check 'runtimeConfig iOS RevenueCat key is production (appl_)' ok). Android key remains test_ — Android is not shipping (AGENTS.md → Billing)."
+    },
+    "24": {
+      "status": "verified",
+      "evidence": "./supabase/tests/run_rls_tests.sh → exit 0, 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' (Docker postgres:16, every migration applied) — /home/ubuntu/xc-artifacts/rls-tests.log"
+    },
+    "27": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh append-only ledger cases — same artifact as item 24"
+    },
+    "29": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh billing_entitlements owner-read / no-write cases — same artifact as item 24. Hosted project state is NOT verified (BLOCKED plane); this is the migration set as applied to a local postgres."
+    },
+    "31": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh webhook_events cases — same artifact as item 24 (local plane only)"
+    },
+    "32": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh anon revoke cases incl. views — same artifact as item 24 (local plane only)"
+    },
+    "34": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh function EXECUTE / SECURITY INVOKER cases — same artifact as item 24 (local plane only)"
+    },
+    "37": {
+      "status": "BLOCKED",
+      "evidence": "No storage bucket is created by any migration (grep -rn 'storage.buckets' supabase/migrations → 0 hits, see prelaunch-walk.log). Whether a bucket exists on the HOSTED project cannot be read from this plane. Minimum action: owner runs `supabase storage ls` (or checks Dashboard → Storage) on ucqnaiwqwjtgvlduiuib and confirms none."
+    },
+    "39": {
+      "status": "BLOCKED",
+      "evidence": "Cross-user spot-check is pinned locally by run_rls_tests.sh (user B vs user A, anon) — item 24 artifact — but the item asks for a PostgREST check against the hosted project. Minimum action: owner runs two authenticated PostgREST reads (user B token against user A's shots) on the hosted project after the next `supabase db push`."
+    },
+    "44": {
+      "status": "verified",
+      "evidence": "(cd supabase/functions/api/__wf__ && deno task test) → exit 0, 127 passed / 0 failed / 6 ignored (the 6 ignored are live-DB RPC cases that need a local supabase stack — NOT counted as passing) — /home/ubuntu/xc-artifacts/edge-tests.log; rate-limit suites are part of that run"
+    },
+    "49": {
+      "status": "verified",
+      "evidence": "deno task test validation suites — same artifact as item 44; DB CHECK constraint mirrored in run_rls_tests.sh size-cap cases (item 24 artifact)"
+    },
+    "52": {
+      "status": "verified",
+      "evidence": "deno task test http.ts sanitizeUserText suite — item 44 artifact"
+    },
+    "55": {
+      "status": "verified",
+      "evidence": "deno task test http.ts headers / generic-5xx suites — item 44 artifact"
+    },
+    "58": {
+      "status": "verified",
+      "evidence": "deno task test routes harness (no admin route registered) — item 44 artifact; static: grep -n '/admin' supabase/functions/api/index.ts → 0 hits (prelaunch-walk.log)"
+    },
+    "60": {
+      "status": "verified",
+      "evidence": "deno task test DB-error → 503 suites — item 44 artifact"
+    },
+    "62": {
+      "status": "BLOCKED",
+      "evidence": "Post-deploy curl against https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api is a production-plane action this role may not perform. Minimum action: after the coordinator deploys, owner runs `curl -sS $BASE/healthz`, `curl -sS $BASE/privacy | head`, and `curl -sS -H 'Authorization: Bearer invalid' $BASE/v1/me/access` (expect 401, generic body)."
+    },
+    "67": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh billing_entitlements column set + no card columns (item 24 artifact); grep -rn -iE 'card_number|pan|cvv' supabase/migrations → 0 hits (prelaunch-walk.log)"
+    },
+    "70": {
+      "status": "verified",
+      "evidence": "deno task test billing sync suites (server re-verification against RevenueCat mock) — item 44 artifact"
+    },
+    "72": {
+      "status": "verified",
+      "evidence": "deno task test webhook suites (constant-time auth compare, re-verify, dedupe) — item 44 artifact"
+    },
+    "76": {
+      "status": "human-only",
+      "evidence": "RevenueCat dashboard configuration; cannot be read from the repo. Minimum action: owner confirms Integrations → Webhooks URL = https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/webhooks/revenuecat with Authorization = REVENUECAT_WEBHOOK_AUTH."
+    },
+    "79": {
+      "status": "human-only",
+      "evidence": "App Store Connect + RevenueCat offering configuration. Minimum action: owner confirms offering packages MONTHLY/ANNUAL/LIFETIME map to pickle_sensei_pro_monthly / yearly successor / pickle_sensei_pro_lifetime under entitlement pickle_sensei_pro (docs/APP_STORE_SUBMISSION.md §4)."
+    },
+    "82": {
+      "status": "BLOCKED",
+      "evidence": "Requires a physical iPhone with a Sandbox Apple Account signed in. Minimum action: owner runs purchase → restore → cancel → lapse on a TestFlight build and records the server verdict after each step."
+    },
+    "92": {
+      "status": "verified",
+      "evidence": "cd apps/mobile && npx jest --ci --silent → exit 0, 2900 passed (ManageAccount deletion flow suites incl. two-step challenge) — /home/ubuntu/xc-artifacts/mobile-jest.log; deno task test deletion suites — item 44 artifact"
+    },
+    "97": {
+      "status": "verified",
+      "evidence": "deno task test legal route suites (GET /privacy, /terms public, text/plain) — item 44 artifact; mobile jest paywall/settings link suites — item 92 artifact. NOTE: forbidden-terms scan finds 'Google Play' ×3 and 'DUPR' ×1 inside these pages (finding F2)."
+    },
+    "100": {
+      "status": "human-only",
+      "evidence": "Support mailbox monitoring and counsel review are human actions. Minimum action: owner confirms SUPPORT_EMAIL in supabase/functions/api/legal.ts is monitored and records counsel sign-off date."
+    },
+    "102": {
+      "status": "human-only",
+      "evidence": "App Store Connect privacy nutrition labels live in ASC (docs/APP_STORE_SUBMISSION.md §3 documents the intended answers). Minimum action: owner compares ASC → App Privacy against legal.ts §2 and the dossier §3 table."
+    },
+    "107": {
+      "status": "verified",
+      "evidence": "deno task test cache.ts suites (L1 + Upstash L2 mock) — item 44 artifact. Whether Upstash is configured on the hosted project is BLOCKED (see item 120)."
+    },
+    "110": {
+      "status": "verified",
+      "evidence": "deno task test access_state / apply_synced_shot route suites — item 44 artifact; RPC bodies pinned by run_rls_tests.sh (item 24) and __wf__/db_migrations_rls_indexes.test.ts"
+    },
+    "114": {
+      "status": "verified",
+      "evidence": "run_rls_tests.sh applies 20260831000000_scale_and_security.sql (indexes created) — item 24 artifact; static pin __wf__/db_migrations_rls_indexes.test.ts in item 44 run"
+    },
+    "116": {
+      "status": "verified",
+      "evidence": "pg_cron schedules are in the migrations applied by run_rls_tests.sh (item 24 artifact). Whether pg_cron is ENABLED on the hosted project is BLOCKED."
+    },
+    "118": {
+      "status": "verified",
+      "evidence": "deno task test batched-lookup suites — item 44 artifact (code-level; no production traffic observed)"
+    },
+    "120": {
+      "status": "BLOCKED",
+      "evidence": "`supabase secrets set` on project ucqnaiwqwjtgvlduiuib is prohibited for this role and secret presence cannot be read. Minimum action: owner runs `supabase secrets list` and confirms UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are set."
+    },
+    "122": {
+      "status": "BLOCKED",
+      "evidence": "tools/loadtest/ (k6) targets a deployed API base URL; running it against production is prohibited and no staging origin exists (release-manifest.json environments.staging.apiOrigin = 'tbd'). Minimum action: owner points K6 BASE_URL at a staging deploy and runs smoke + auth-abuse + user-flow per tools/loadtest/README.md."
+    },
+    "127": {
+      "status": "human-only",
+      "evidence": "Manual screen sweep on a device/simulator. Note: this item still lists 'Live Court', which docs/APP_STORE_SUBMISSION.md rule 4 says was cut from v1 and which has no screen in apps/mobile/src/screens — the sweep list is stale (finding F4)."
+    },
+    "131": {
+      "status": "human-only",
+      "evidence": "Manual empty-state / airplane-mode sweep on a device."
+    },
+    "133": {
+      "status": "human-only",
+      "evidence": "Manual offline/degraded sweep on a device (outbox retry behaviour is pinned by jest — item 92 artifact — but the item asks for the device run)."
+    },
+    "136": {
+      "status": "human-only",
+      "evidence": "Physical device matrix (SE/mini, Pro Max, Dynamic Type, reduced motion)."
+    },
+    "139": {
+      "status": "human-only",
+      "evidence": "Xcode Instruments leak run on a device; Mac-plane only."
+    },
+    "141": {
+      "status": "verified",
+      "evidence": "npx jest --ci --silent selector/render suites — item 92 artifact (code-level pin only)"
+    },
+    "143": {
+      "status": "verified",
+      "evidence": "cd apps/mobile && npx tsc --noEmit → exit 0 (/home/ubuntu/xc-artifacts/mobile-tsc.log); npx jest --ci --silent → exit 0, 247 suites / 2900 tests passed, 1 skipped (/home/ubuntu/xc-artifacts/mobile-jest.log); pnpm -r typecheck → exit 0 after `pnpm install --frozen-lockfile` (/home/ubuntu/xc-artifacts/pnpm-typecheck.log)"
+    },
+    "148": {
+      "status": "BLOCKED",
+      "evidence": "Release-scheme device build, `fastlane beta`, screenshots and version/build bump are Mac + ASC actions this role may not run. Same-SHA Apple evidence: Mac Full Verify run 33841813597 on 4d812e1a was still `queued` at audit time (not a pass). Prior green run 33829297073 (SHA 4e4ae958) built version 1.0 (1) and launched on simulator (alive_after_25s=1, crash_reports=0) — prior-SHA evidence only. `cd apps/mobile && node scripts/check-ios-distribution.mjs` → exit 0 (Linux-checkable preconditions) — /home/ubuntu/xc-artifacts/check-distribution.log. Minimum action: wait for run 33841813597 to finish and read its summary.json; then owner runs `bundle exec fastlane beta` on the Mac."
+    },
+    "151": {
+      "status": "BLOCKED",
+      "evidence": "Hosted secret presence cannot be read from this plane. Minimum action: owner runs `supabase secrets list` on ucqnaiwqwjtgvlduiuib and confirms REVENUECAT_SECRET_API_KEY, REVENUECAT_WEBHOOK_AUTH, APPLE_SIGN_IN_*, APPLE_TOKEN_ENCRYPTION_KEY present."
+    },
+    "155": {
+      "status": "BLOCKED",
+      "evidence": "`supabase db push` / `supabase functions deploy` are production actions prohibited for this role. Migration set applies cleanly in order on a fresh postgres:16 (item 24 artifact). Minimum action: coordinator/owner runs db push, then functions deploy, in that order."
+    },
+    "157": {
+      "status": "human-only",
+      "evidence": "Supabase Dashboard → Database → Backups (PITR) and a restore drill. Minimum action: owner confirms PITR or daily backups enabled and records one restore test."
+    },
+    "159": {
+      "status": "human-only",
+      "evidence": "Uptime monitor + log review on the hosted platform. Minimum action: owner wires GET /healthz into an uptime monitor and an alert on sustained 5xx in Supabase function logs."
+    },
+    "161": {
+      "status": "verified",
+      "evidence": "No analytics/crash SDK in apps/mobile/package.json dependencies (grep -iE 'sentry|crashlytics|bugsnag|firebase|amplitude|segment|mixpanel' → 0 hits, prelaunch-walk.log); decision recorded in docs/APP_STORE_SUBMISSION.md §3 and legal.ts. Human confirmation of the recorded decision remains a human step."
+    }
+  }
+}
