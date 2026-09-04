@@ -26,8 +26,9 @@ jest.mock('../src/data/db', () => ({
   getDb: jest.fn(() => ({})),
 }));
 
+const mockListShots = jest.fn(async (): Promise<unknown[]> => []);
 jest.mock('../src/data/repository', () => ({
-  listShots: jest.fn(async () => []),
+  listShots: () => mockListShots(),
   listPendingCaptures: jest.fn(async () => []),
 }));
 
@@ -119,6 +120,7 @@ async function renderLibrary(): Promise<TestRenderer.ReactTestRenderer> {
 describe('Library saved drills visibility', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    mockListShots.mockReset().mockImplementation(async () => []);
     useTrainingStore.setState({
       savedStatus: 'ready',
       planStatus: 'ready',
@@ -182,6 +184,88 @@ describe('Library saved drills visibility', () => {
     expect(text).not.toContain('Gone ');
     expect(text).toContain('1 additional saved');
     expect(text).toContain('entry is hidden');
+
+    act(() => renderer.unmount());
+  });
+});
+
+describe('Library reads tab repository failure', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear();
+    useTrainingStore.setState({
+      savedStatus: 'ready',
+      planStatus: 'ready',
+      mutation: 'idle',
+      savedDrills: [],
+      drillDetails: {},
+      currentPlan: null,
+      savedError: null,
+      planError: null,
+      mutationError: null,
+      loadSavedDrills: async () => true,
+      loadCurrentPlan: async () => true,
+    });
+  });
+
+  it('renders an error state with a retry when listShots rejects, never the first-run empty state', async () => {
+    mockListShots.mockImplementation(async () => {
+      throw new Error('SQLITE_IOERR: disk I/O error');
+    });
+    const renderer = await renderLibrary();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const text = renderedText(renderer);
+
+    expect(text).toMatch(/try again|retry/i);
+    expect(text).not.toContain('Your measured reads, in one place.');
+    expect(text).not.toContain('Analyze your first stroke');
+
+    act(() => renderer.unmount());
+  });
+
+  it('retry re-runs the repository load and renders the reads once it succeeds', async () => {
+    mockListShots
+      .mockImplementationOnce(async () => {
+        throw new Error('SQLITE_IOERR: disk I/O error');
+      })
+      .mockImplementation(async () => [
+        {
+          id: 'shot-1',
+          sessionId: null,
+          shotType: 'forehand_drive',
+          capturedAt: '2026-09-01T10:00:00.000Z',
+          overallScore: 7.2,
+          confidence: 0.9,
+          resultKind: 'scored',
+          source: 'guided_camera',
+          favorite: false,
+        },
+      ]);
+    const renderer = await renderLibrary();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockListShots).toHaveBeenCalledTimes(1);
+
+    const retry = renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Try again' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(retry.length).toBeGreaterThan(0);
+    await act(async () => {
+      retry[0]!.props.onPress();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    const text = renderedText(renderer);
+    expect(text).toContain('1 analyzed read');
+    expect(text).toContain('forehand drive');
+    expect(text).not.toMatch(/try again/i);
 
     act(() => renderer.unmount());
   });
