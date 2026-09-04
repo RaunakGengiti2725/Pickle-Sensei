@@ -3,14 +3,14 @@
   "contract": "pickle-sensei-linux-regression",
   "contractVersion": 1,
   "runId": "baseline",
-  "generatedAtIso": "2026-09-04T03:28:55.202Z",
+  "generatedAtIso": "2026-09-04T14:36:38.864Z",
   "runner": {
-    "node": "v22.23.2",
+    "node": "v22.12.0",
     "platform": "linux",
     "arch": "x64"
   },
   "provenance": {
-    "gitSha": "7c034aa00ea3c4ff0e63c3b84b548cec8d62c96f",
+    "gitSha": "6368f7f57efe51c24e20d424577eaada0d6de33e",
     "gitBranch": null,
     "gitDirty": false,
     "datasetsTreeSha": "a79a163fc65c01006f031e9e23873c025f5e987e",
@@ -56,13 +56,13 @@
       "contactEstimator": "contact-evidence-4.4",
       "contactOwnershipPosterior": "ownership-posterior-v1",
       "offlineTrigger": "offline-trigger-1",
-      "strokeHeuristic": "stroke-heuristic-7 (uncalibrated)",
+      "strokeHeuristic": "stroke-heuristic-8 (uncalibrated)",
       "strokeHeuristicBench": "stroke-heuristic-bench-v1",
       "strokeEventProposer": "stroke-event-2 (body proposes · paddle confirms; heuristic, uncalibrated)",
       "phaseTemporal": "phase.paddle-temporal.v1 (heuristic, uncalibrated)",
       "phaseTemporalV2": "phase.paddle-temporal.v2 (event-local, anchor-or-abstain; heuristic, uncalibrated)",
       "phaseTemporalV2AnchorFree": "phase.paddle-temporal.v2.4 (event-local, anchor-free around measured UNIQUE motion peak; margin motion in a rest-separated burst belongs to a neighboring stroke; an apex within one sampling interval of the event boundary and motion-connected to the in-event peak is this event's apex at measurement resolution; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)",
-      "featureExtractor": "features-geometry-1",
+      "featureExtractor": "features-geometry-2",
       "frameAnalyzability": "frame-analyzability-3",
       "geometryBundle": "geometry-1",
       "paddleTrackIdentity": "paddle-track-identity-1",
@@ -82,7 +82,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 59,
+      "wallClockMs": 62,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/*.json (wave-a gold sidecars: devin-visual-v2/v3/v4)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/ (committed Apple-Vision pose replay windows)",
@@ -111,7 +111,7 @@
       },
       "labels": {
         "benchVersion": "stroke-heuristic-bench-v1",
-        "classifierVersion": "stroke-heuristic-7 (uncalibrated)"
+        "classifierVersion": "stroke-heuristic-8 (uncalibrated)"
       }
     },
     {
@@ -122,7 +122,7 @@
       "cwd": "packages/vision-geometry",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 44,
+      "wallClockMs": 45,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/devin-visual-v3-waveD-contact.json (gold contact events)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/people.json (committed pose)",
@@ -163,7 +163,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 11,
+      "wallClockMs": 13,
       "inputs": [
         "datasets/corpus/bundles/{wavea-marne-serve,wavea-wgm-wheelchair,wavea-sasebo-volleys}/annotation/devin-visual-v4-waveD2-events.json",
         "datasets/corpus/bundles/*/runs-wave-a/ (windowed auto-target wrist series)"
@@ -204,7 +204,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 173,
+      "wallClockMs": 245,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/*events*.json (gold target events, held-out excluded)",
         "datasets/corpus/bundles/*/runs-wave-a/ + committed run artifacts (wrist series)",
@@ -242,7 +242,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 172,
+      "wallClockMs": 235,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/ (event + phase labels incl. event-bounds-wave-a.json)",
         "datasets/corpus/bundles/*/runs-wave-a/ (wrist speed series)",
@@ -285,7 +285,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 71,
+      "wallClockMs": 65,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/ (dual-paddle frame labels)",
         "datasets/corpus/bundles/*/runs-wave-a/people.json (committed pose, subset of frames)"
@@ -360,7 +360,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 455,
+      "wallClockMs": 920,
       "inputs": [
         "datasets/experiments/wave-e/e12-ball-hard-slices/manifest.json (+ referenced labels and candidate files)"
       ],
@@ -449,7 +449,7 @@
       "cwd": "packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 145,
+      "wallClockMs": 256,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/ (gold phase boundaries / contacts)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/ (committed pose)"
@@ -712,5 +712,5 @@
     "Gold counts are small (single-digit to low tens per bench); treat every delta as a per-case finding, not a rate estimate.",
     "Abstentions are first-class outcomes. A metric value of null means 'not measurable in this run', never zero."
   ],
-  "totalWallClockMs": 1157
+  "totalWallClockMs": 1868
 }
