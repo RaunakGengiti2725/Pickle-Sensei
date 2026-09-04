@@ -23,9 +23,9 @@
 #
 # Artifacts land in $MAC_ARTIFACTS (default macos-ci-artifacts/): logs,
 # *.xcresult, xunit XML, Info.plist, launch screenshots/logs, summary.json.
-# Helper scripts under tools/macos-ci/ are used when present (they carry
-# extra diagnostics: crash-report scan, RN fatal-error scan); the script has
-# self-contained fallbacks so it never silently skips a stage.
+# Per-step helpers live in tools/macos-ci/ (simulator selection, CocoaPods,
+# launch/crash check, xcresult and swing-lab summaries); this script is the
+# only orchestrator, so the workflow YAML stays a thin wrapper.
 #
 # Usage (on the Mac):
 #   scripts/mac-full-verify.sh                       # all stages
@@ -96,7 +96,7 @@ fi
 if [ -n "$ONLY" ]; then IFS=',' read -r -a STAGES <<<"$ONLY"; else STAGES=("${ALL_STAGES[@]}"); fi
 
 export LANG="${LANG:-en_US.UTF-8}" LC_ALL="${LC_ALL:-en_US.UTF-8}"
-export DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p 2>/dev/null | sed 's#/Contents/Developer$##')/Contents/Developer}"
+export DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 export HOMEBREW_NO_AUTO_UPDATE=1 CI="${CI:-true}" COCOAPODS_DISABLE_STATS=1
 # Persistent per-machine build cache OUTSIDE the checkout (survives clean checkouts).
 export PICKLE_CI_CACHE="${PICKLE_CI_CACHE:-$HOME/Library/Caches/PickleSensei-CI}"
@@ -104,7 +104,11 @@ ARTIFACTS="${MAC_ARTIFACTS:-macos-ci-artifacts}"
 mkdir -p "$ARTIFACTS" "$PICKLE_CI_CACHE"
 ARTIFACTS="$(cd "$ARTIFACTS" && pwd)"
 HELPERS="$REPO_ROOT/tools/macos-ci"
-[ -d "$HELPERS" ] && chmod +x "$HELPERS"/*.sh "$HELPERS"/*.py 2>/dev/null
+for h in select-simulator.sh inspect-environment.sh simulator-launch-check.sh pod-install.sh \
+         xcresult-summary.py check-swing-lab-extract.py describe-package.py; do
+  [ -f "$HELPERS/$h" ] || { echo "missing helper tools/macos-ci/$h" >&2; exit 2; }
+done
+chmod +x "$HELPERS"/*.sh "$HELPERS"/*.py
 
 WORKSPACE="apps/mobile/ios/PickleSensei.xcworkspace"
 SCHEME="PickleSensei"
@@ -132,62 +136,16 @@ run_stage() {
   fi
 }
 
-# Pick an available iPhone simulator on the newest iOS runtime and boot it.
-select_simulator() {
-  if [ -x "$HELPERS/select-simulator.sh" ]; then "$HELPERS/select-simulator.sh" --boot; return; fi
-  local udid
-  udid="$(xcrun simctl list devices available -j | python3 -c '
-import json, sys
-c = []
-for rt, devs in json.load(sys.stdin)["devices"].items():
-    if "SimRuntime.iOS-" not in rt: continue
-    v = tuple(int(p) for p in rt.rsplit("iOS-", 1)[1].split("-"))
-    for d in devs:
-        if d.get("isAvailable") and "iPhone" in d.get("name", ""):
-            c.append((v, d.get("state") == "Booted", "Pro" in d["name"], d["name"], d["udid"]))
-c.sort(reverse=True)
-if c:
-    print(c[0][4]); print("selected simulator:", c[0][3], ".".join(map(str, c[0][0])), file=sys.stderr)
-')"
-  [ -n "$udid" ] || { echo "no available iPhone simulator; install an iOS runtime via Xcode > Settings > Components" >&2; return 1; }
-  xcrun simctl boot "$udid" >/dev/null 2>&1 || true
-  xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 || true
-  echo "$udid"
-}
-
-xcresult_summary() {
-  if [ -x "$HELPERS/xcresult-summary.py" ]; then "$HELPERS/xcresult-summary.py" "$@"; return; fi
-  local r
-  for r in "$@"; do
-    [ -d "$r" ] || continue
-    echo "-- $(basename "$r")"
-    xcrun xcresulttool get test-results summary --path "$r" 2>/dev/null \
-      | python3 -c 'import json,sys; d=json.load(sys.stdin); print("result:", d.get("result"), "passed:", d.get("passedTests"), "failed:", d.get("failedTests"), "skipped:", d.get("skippedTests"))' \
-      || xcrun xcresulttool get --path "$r" --format json 2>/dev/null | head -c 400
-  done
-}
-
 # ---------------------------------------------------------------- stages ----
 stage_environment() {
-  if [ -x "$HELPERS/inspect-environment.sh" ]; then
-    "$HELPERS/inspect-environment.sh" "$ARTIFACTS/environment.txt"
-  else
-    {
-      echo "=== macOS ==="; sw_vers; echo "arch: $(uname -m)"
-      echo "=== Xcode ==="; echo "DEVELOPER_DIR=$DEVELOPER_DIR"; xcodebuild -version; swift --version 2>&1 | head -1
-      echo "=== SDKs ==="; xcodebuild -showsdks
-      echo "=== Simulator runtimes ==="; xcrun simctl list runtimes
-      echo "=== Toolchains ==="; echo "node: $(command -v node && node --version)"; echo "ruby: $(command -v ruby && ruby --version)"
-      echo "pod: $(command -v pod && pod --version 2>/dev/null || echo none)"
-    } | tee "$ARTIFACTS/environment.txt"
-  fi
+  "$HELPERS/inspect-environment.sh" "$ARTIFACTS/environment.txt"
   {
     echo "=== Xcode configuration of Pickle Sensei ==="
     echo "workspace: $WORKSPACE  scheme: $SCHEME  configuration: $CONFIGURATION  bundle: $BUNDLE_ID"
     xcodebuild -list -project apps/mobile/ios/PickleSensei.xcodeproj
     grep -E 'SUPPORTED_PLATFORMS|IPHONEOS_DEPLOYMENT_TARGET|CODE_SIGN_STYLE' apps/mobile/ios/PickleSensei.xcodeproj/project.pbxproj | sort -u
-    echo "--- native/vision-core ---"; (cd native/vision-core && swift package describe --type json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("name:", d["name"]); [print(" target:", t["name"], t["type"]) for t in d["targets"]]')
-    echo "--- native/swing-lab ---"; (cd native/swing-lab && swift package describe --type json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("name:", d["name"]); [print(" target:", t["name"], t["type"]) for t in d["targets"]]')
+    echo "--- native/vision-core (SwiftPM) ---"; (cd native/vision-core && swift package describe --type json | "$HELPERS/describe-package.py")
+    echo "--- native/swing-lab (SwiftPM executable, macOS) ---"; (cd native/swing-lab && swift package describe --type json | "$HELPERS/describe-package.py")
   } | tee -a "$ARTIFACTS/environment.txt"
 }
 
@@ -208,7 +166,7 @@ stage_swift_native() {
      -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
      | tee "$ARTIFACTS/vision-core-xcodebuild-macos.log" | { grep -E 'Test Suite|Executed|error:|\*\* TEST' || true; } | tail -30)
 
-  udid="$(select_simulator)"
+  udid="$("$HELPERS/select-simulator.sh" --boot)"
   result="$ARTIFACTS/vision-core-ios-simulator.xcresult"; rm -rf "$result"
   (cd native/vision-core && xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$udid" \
      -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
@@ -222,20 +180,9 @@ stage_swift_native() {
   [ -f "$CLIP" ] || { echo "committed clip missing: $CLIP"; return 1; }
   "$bin" extract "$CLIP" --out "$out" 2>&1 | tee "$ARTIFACTS/swing-lab-extract.log" | tail -20
   [ -f "$out/extract-meta.json" ] || { echo "swing-lab extract produced no extract-meta.json"; return 1; }
-  if [ -x "$HELPERS/check-swing-lab-extract.py" ]; then
-    "$HELPERS/check-swing-lab-extract.py" "$out" | tee "$ARTIFACTS/swing-lab-extract-summary.txt"
-  else
-    python3 - "$out/extract-meta.json" <<'PY' | tee "$ARTIFACTS/swing-lab-extract-summary.txt"
-import json, sys
-meta = json.load(open(sys.argv[1]))
-frames = meta.get("frameCount") or meta.get("frames") or 0
-poses = meta.get("poseFrameCount") or meta.get("posesDetected") or meta.get("poseCount") or 0
-print(f"swing-lab extract: frames={frames} poseFrames={poses} keys={sorted(meta)[:12]}")
-if not poses:
-    sys.exit("Apple Vision detected no poses in the committed clip — pipeline not exercised")
-PY
-  fi
-  xcresult_summary "$ARTIFACTS"/*.xcresult | tee "$ARTIFACTS/swift-native-xcresult-summary.txt"
+  cat "$out/extract-meta.json"; echo
+  "$HELPERS/check-swing-lab-extract.py" "$out" | tee "$ARTIFACTS/swing-lab-extract-summary.txt"
+  "$HELPERS/xcresult-summary.py" "$ARTIFACTS"/*.xcresult | tee "$ARTIFACTS/swift-native-xcresult-summary.txt"
 }
 
 stage_ios_app() {
@@ -247,12 +194,7 @@ stage_ios_app() {
     (cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent 2>&1 | tee "$ARTIFACTS/jest.log" | tail -15)
   fi
 
-  if [ -x "$HELPERS/pod-install.sh" ]; then
-    "$HELPERS/pod-install.sh" 2>&1 | tee "$ARTIFACTS/pod-install.log" | tail -20
-  else
-    export BUNDLE_PATH="${BUNDLE_PATH:-$PICKLE_CI_CACHE/bundle}"
-    (cd apps/mobile && bundle install && cd ios && bundle exec pod install) 2>&1 | tee "$ARTIFACTS/pod-install.log" | tail -20
-  fi
+  "$HELPERS/pod-install.sh" 2>&1 | tee "$ARTIFACTS/pod-install.log" | tail -20
 
   # The RN "Bundle React Native code and images" phase resolves node via ios/.xcode.env(.local).
   echo "export NODE_BINARY=$(command -v node)" >apps/mobile/ios/.xcode.env.local
@@ -268,7 +210,7 @@ stage_ios_app() {
     -resultBundlePath "$result" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY="" COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
     | tee "$ARTIFACTS/xcodebuild-build.log" \
-    | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|The following build commands failed)' || true; } | tail -40
+    | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; } | tail -60
   rm -f apps/mobile/ios/.xcode.env.local
   app="$PICKLE_CI_CACHE/app-derived/Build/Products/$CONFIGURATION-iphonesimulator/PickleSensei.app"
   [ -d "$app" ] || { echo "no app bundle at $app — see $ARTIFACTS/xcodebuild-build.log"; return 1; }
@@ -278,25 +220,7 @@ stage_ios_app() {
   /usr/libexec/PlistBuddy -c 'Print' "$app/Info.plist" | { grep -E 'CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|DTSDKName' || true; }
 
   if [ "$SKIP_LAUNCH" = 1 ]; then echo "launch check skipped (--skip-launch)"; return 0; fi
-  if [ -x "$HELPERS/simulator-launch-check.sh" ]; then
-    "$HELPERS/simulator-launch-check.sh" "$app" "$BUNDLE_ID" "$ARTIFACTS/launch" 25
-    return
-  fi
-  local udid pid
-  udid="$(select_simulator)"
-  mkdir -p "$ARTIFACTS/launch"
-  xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
-  xcrun simctl uninstall "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
-  xcrun simctl install "$udid" "$app"
-  pid="$(xcrun simctl launch "$udid" "$BUNDLE_ID" | awk -F': ' '{print $2}')"
-  echo "launched $BUNDLE_ID pid=$pid; settling 25s"
-  sleep 25
-  xcrun simctl io "$udid" screenshot "$ARTIFACTS/launch/after-25s.png" >/dev/null 2>&1 || true
-  xcrun simctl spawn "$udid" log show --last 40s --predicate "processImagePath CONTAINS 'PickleSensei'" >"$ARTIFACTS/launch/app.log" 2>/dev/null || true
-  kill -0 "$pid" 2>/dev/null || { echo "app process $pid is gone — crashed or exited within 25s"; return 1; }
-  ! grep -qE 'RCTFatal|Unhandled JS Exception' "$ARTIFACTS/launch/app.log" || { echo "fatal React Native error in app log"; return 1; }
-  xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
-  echo "alive after 25s: yes" | tee "$ARTIFACTS/launch/launch-summary.txt"
+  "$HELPERS/simulator-launch-check.sh" "$app" "$BUNDLE_ID" "$ARTIFACTS/launch" 25
 }
 
 # -------------------------------------------------------------------- main ----
