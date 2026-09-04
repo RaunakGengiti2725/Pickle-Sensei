@@ -112,7 +112,7 @@ def load_json(p: Path):
 
 def dump_json(p: Path, obj) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
-    Path(p).write_text(json.dumps(obj, indent=1))
+    Path(p).write_text(json.dumps(obj, indent=1, allow_nan=False))
 
 
 def font(size: int = 20):

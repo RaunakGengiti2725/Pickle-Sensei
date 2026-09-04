@@ -32,6 +32,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+import frame_clock
 from student_lib import (
     TEACHER_SCORE_FLOOR,
     StudentPaddleNet,
@@ -182,8 +183,10 @@ def main() -> None:
         dfine = AutoModelForObjectDetection.from_pretrained("ustc-community/dfine-medium-coco")
         dfine.eval()
         clip = repo / "datasets/paddle-bench/bundles" / BENCH_CASES[0] / "clip.mp4"
-        _, _, fps = video_meta(clip)
-        t_list = [i * 1000.0 / fps for i in range(args.latency_frames)]
+        meta = frame_clock.probe_stream(str(clip))
+        # Absolute CFR stamps of frames 0..N-1 (start_time + i/fps), the clock
+        # extract_frames inverts; relative i/fps stamps would sit one frame early.
+        t_list = [frame_clock.t_ms_for_frame_index(i, meta.fps, meta.start_time_ms) for i in range(args.latency_frames)]
         frames = extract_frames(clip, t_list)
         times = []
         for img in frames.values():
@@ -218,9 +221,9 @@ def main() -> None:
     }
     out = args.out or str(repo / "datasets/experiments/wave-d4/d4-06-student/bench.json")
     with open(out, "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, allow_nan=False)
         f.write("\n")
-    print(json.dumps(report, indent=2))
+    print(json.dumps(report, indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":

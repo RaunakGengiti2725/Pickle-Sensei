@@ -21,13 +21,16 @@ detect_paddle.frame_iter stamps on paddle detections (frame_clock.py), so the
 TypeScript tracker's 60 ms association gate is not eaten by container
 start_time or a non-frame-aligned `-ss`.
 
-Exit codes: 2 for invalid arguments (non-finite or out-of-range numbers are
-rejected by argparse before ffmpeg is spawned); 1 for windows outside the clip,
-ffmpeg errors or truncated/partial media (ffmpeg stderr reports it, or fewer
-frames decode than the probe implies — exactly the probed count for a
-whole-clip decode, one frame of `-to` boundary tolerance with --end-ms). The
-artifact is only written after a complete, successful decode and is strict
-JSON (no NaN/Infinity literals).
+Exit codes: 2 for invalid arguments (non-finite or out-of-range numbers —
+--start-ms/--end-ms above frame_clock.MAX_TIME_MS, --scale above MAX_SCALE,
+end <= start — are rejected by argparse before ffmpeg is spawned); 1 for
+windows outside the clip, unprobeable input, ffmpeg errors or truncated/partial
+media (ffmpeg stderr reports it, or fewer frames decode than the probe implies
+— min(nb_frames, floor(duration*fps)) for a whole-clip decode, one frame of
+`-to` boundary tolerance with --end-ms). A container with no stream, tag or
+format duration decodes open-ended with one stderr notice that truncation
+cannot be detected. The artifact is only written after a complete, successful
+decode and is strict JSON (no NaN/Infinity literals).
 """
 
 from __future__ import annotations
@@ -68,6 +71,7 @@ def gray_frames(
     fps: float | None = None,
     start_time_ms: float = 0.0,
     duration_ms: float = 0.0,
+    nb_frames: int | None = None,
 ):
     """Yield (absolute_frame_index, t_ms, gray_float32) for the window [start_ms, end_ms).
 
@@ -76,14 +80,16 @@ def gray_frames(
     labelled with its own absolute pts. Raises ValueError for windows that
     cannot contain a frame and RuntimeError when ffmpeg fails, reports
     partial/corrupt media, or decodes fewer frames than the window implies
-    (every probed frame without --end-ms; one `-to` boundary frame tolerated
-    with it).
+    (frame_clock.clip_frame_count without --end-ms; one `-to` boundary frame
+    tolerated with it; no count when the clip duration is unknown).
     """
     if fps is None:
         meta = frame_clock.probe_stream(video)
-        fps, start_time_ms, duration_ms = meta.fps, meta.start_time_ms, meta.duration_ms
-    first_index, last_exclusive = frame_clock.window_frame_range(start_ms, end_ms, fps, start_time_ms, duration_ms)
-    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index, bounded_end=end_ms > 0)
+        fps, start_time_ms, duration_ms, nb_frames = meta.fps, meta.start_time_ms, meta.duration_ms, meta.nb_frames
+    first_index, last_exclusive = frame_clock.window_frame_range(
+        start_ms, end_ms, fps, start_time_ms, duration_ms, nb_frames,
+    )
+    min_frames = frame_clock.min_frames_for_window(first_index, last_exclusive, bounded_end=end_ms > 0, video=video)
     seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
@@ -116,11 +122,9 @@ def gray_frames(
     stderr_text = stderr_reader()
     frame_clock.check_decode_health(proc.returncode, stderr_text, video)
     if piped < min_frames:
-        raise RuntimeError(
-            f"ffmpeg decoded {piped} frames of window [{start_ms:.1f}, {end_ms:.1f}) ms in {video} "
-            f"but the probed stream implies at least {min_frames} (frames {first_index}..{last_exclusive - 1}) "
-            f"— truncated or partial media? ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
-        )
+        raise RuntimeError(frame_clock.shortfall_message(
+            piped, min_frames, first_index, last_exclusive, start_ms, end_ms, video, stderr_text,
+        ))
     if stderr_text:
         print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
@@ -143,13 +147,17 @@ def select_candidates(candidates: list[dict], max_per_frame: int) -> list[dict]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # Numeric types are the shared finite validators: nan/inf/1e400 exit 2 here.
+    # Numeric types are the shared bounded validators: nan/inf/1e400 and
+    # finite-but-absurd values (--end-ms 1e308, --scale 1e6) exit 2 here.
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--start-ms", type=frame_clock.non_negative_float, default=0)
-    parser.add_argument("--end-ms", type=frame_clock.non_negative_float, default=0, help="0 = to the end of the clip")
-    parser.add_argument("--scale", type=frame_clock.positive_float, default=0.5)
+    parser.add_argument("--start-ms", type=frame_clock.time_ms, default=0,
+                        help=f"absolute ms, 0..{frame_clock.MAX_TIME_MS:g}")
+    parser.add_argument("--end-ms", type=frame_clock.time_ms, default=0,
+                        help=f"absolute ms, 0..{frame_clock.MAX_TIME_MS:g}; 0 = to the end of the clip")
+    parser.add_argument("--scale", type=frame_clock.scale_factor, default=0.5,
+                        help=f"downscale factor, 0 < scale <= {frame_clock.MAX_SCALE:g}")
     parser.add_argument("--max-per-frame", type=frame_clock.positive_int, default=40)
     # Area bounds are in DOWNSCALED pixels; ball ≈ 5–15 px diameter at 0.5×1080p,
     # motion-blur streaks stretch that; players/paddles are far larger.
@@ -166,18 +174,23 @@ def main() -> None:
     if args.end_ms > 0 and args.end_ms <= args.start_ms:
         parser.error(f"--end-ms ({args.end_ms:g}) must be greater than --start-ms ({args.start_ms:g})")
 
-    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(args.video)
+    try:
+        meta = frame_clock.probe_stream(args.video)
+    except (subprocess.CalledProcessError, ValueError, KeyError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        sys.exit(f"ball_candidates: cannot probe {args.video}: {detail}")
+    width, height, fps, duration_ms, start_time_ms = meta.width, meta.height, meta.fps, meta.duration_ms, meta.start_time_ms
     out_w, out_h = int(width * args.scale) // 2 * 2, int(height * args.scale) // 2 * 2
     if out_w < 2 or out_h < 2:
         parser.error(f"--scale {args.scale:g} downsamples {width}x{height} to {out_w}x{out_h}; need at least 2x2")
     start_ms = args.start_ms
     try:
         first_index, last_exclusive = frame_clock.window_frame_range(
-            start_ms, args.end_ms, fps, start_time_ms, duration_ms,
+            start_ms, args.end_ms, fps, start_time_ms, duration_ms, meta.nb_frames,
         )
     except ValueError as exc:
         sys.exit(f"ball_candidates: invalid window for {args.video}: {exc}")
-    if last_exclusive - first_index < 3:
+    if last_exclusive is not None and last_exclusive - first_index < 3:
         sys.exit(
             f"ball_candidates: window [{start_ms:g}, {args.end_ms or duration_ms:g}) ms holds "
             f"{last_exclusive - first_index} frame(s); 3-frame differencing needs at least 3"
@@ -187,11 +200,16 @@ def main() -> None:
     try:
         decoded = gray_frames(
             args.video, start_ms, args.end_ms, out_w, out_h,
-            fps=fps, start_time_ms=start_time_ms, duration_ms=duration_ms,
+            fps=fps, start_time_ms=start_time_ms, duration_ms=duration_ms, nb_frames=meta.nb_frames,
         )
         frames_out, activity, processed = difference_frames(decoded, args, out_w, out_h)
     except RuntimeError as exc:
         sys.exit(f"ball_candidates: {exc}")
+    if processed == 0:
+        sys.exit(
+            f"ball_candidates: window [{start_ms:g}, {args.end_ms or duration_ms:g}) ms of {args.video} decoded "
+            "fewer than 3 frames; 3-frame differencing needs at least 3"
+        )
 
     wall = time.perf_counter() - started
     total_frames = max(1, processed)

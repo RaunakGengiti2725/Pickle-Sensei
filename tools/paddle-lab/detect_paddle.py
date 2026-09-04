@@ -130,6 +130,7 @@ def frame_iter(
     legacy: bool = False,
     start_time_ms: float = 0.0,
     duration_ms: float | None = None,
+    nb_frames: int | None = None,
 ):
     """Decode upright RGB frames via ffmpeg rawvideo pipe (applies rotation).
 
@@ -140,9 +141,10 @@ def frame_iter(
     (ValueError for end <= start or start at/after the clip end) and, after
     the pipe drains, a RuntimeError is raised if ffmpeg exited non-zero,
     reported partial/corrupt media on stderr (it exits 0 for that), or yielded
-    fewer frames than the window implies — every probed frame for a whole-clip
-    decode (no `-to`), one boundary frame tolerated when end_ms bounds it.
-    `duration_ms` is probed when the caller does not pass it.
+    fewer frames than the window implies — frame_clock.clip_frame_count for a
+    whole-clip decode (no `-to`), one boundary frame tolerated when end_ms
+    bounds it, no count (one stderr notice) when the clip duration is unknown.
+    `duration_ms` (and `nb_frames`) are probed when the caller passes neither.
 
     Default path: skipped frames are dropped inside ffmpeg (`select`), so only
     needed frames are rgb24-converted and piped; with `decode_size`, frames
@@ -151,9 +153,14 @@ def frame_iter(
     full resolution, stride applied Python-side.
     """
     if duration_ms is None:
-        duration_ms = ffprobe_meta(video)[3]
-    first_index, last_exclusive = frame_clock.window_frame_range(start_ms, end_ms, fps, start_time_ms, duration_ms)
-    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index, stride, bounded_end=end_ms > 0)
+        meta = frame_clock.probe_stream(video)
+        duration_ms, nb_frames = meta.duration_ms, meta.nb_frames
+    first_index, last_exclusive = frame_clock.window_frame_range(
+        start_ms, end_ms, fps, start_time_ms, duration_ms, nb_frames,
+    )
+    min_frames = frame_clock.min_frames_for_window(
+        first_index, last_exclusive, stride, bounded_end=end_ms > 0, video=video,
+    )
     seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
@@ -218,11 +225,9 @@ def frame_iter(
     stderr_text = stderr_reader()
     frame_clock.check_decode_health(proc.returncode, stderr_text, video)
     if yielded < min_frames:
-        raise RuntimeError(
-            f"ffmpeg decoded {yielded} frames of window [{start_ms:.1f}, {end_ms:.1f}) ms in {video} "
-            f"but the probed stream implies at least {min_frames} (frames {first_index}..{last_exclusive - 1}, "
-            f"stride {stride}) — truncated or partial media? ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
-        )
+        raise RuntimeError(frame_clock.shortfall_message(
+            yielded, min_frames, first_index, last_exclusive, start_ms, end_ms, video, stderr_text, stride,
+        ))
     if stderr_text:
         print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
@@ -280,7 +285,8 @@ def run_window(
     Output schema is identical to the pre-W2 script; box/score values on the
     default path are bit-equal to the legacy path (same decoded pixels, same
     model, batched instead of per-value GPU->CPU transfer)."""
-    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(video)
+    meta = frame_clock.probe_stream(video)
+    width, height, fps, duration_ms, start_time_ms = meta.width, meta.height, meta.fps, meta.duration_ms, meta.start_time_ms
     frames_out = []
     infer_sec_total = 0.0
     wall_started = time.perf_counter()
@@ -300,7 +306,7 @@ def run_window(
     for _, t_ms, rgb in frame_iter(
         video, start_ms, end_ms, width, height, fps,
         stride=stride, decode_size=decode_size, legacy=legacy_decode,
-        start_time_ms=start_time_ms, duration_ms=duration_ms,
+        start_time_ms=start_time_ms, duration_ms=duration_ms, nb_frames=meta.nb_frames,
     ):
         dec_h, dec_w = rgb.shape[0], rgb.shape[1]
         crop_x0 = crop_y0 = 0
@@ -677,8 +683,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=False)
     parser.add_argument("--out", required=False)
-    parser.add_argument("--start-ms", type=frame_clock.non_negative_float, default=0)
-    parser.add_argument("--end-ms", type=frame_clock.non_negative_float, default=0)
+    parser.add_argument("--start-ms", type=frame_clock.time_ms, default=0)
+    parser.add_argument("--end-ms", type=frame_clock.time_ms, default=0)
     parser.add_argument("--stride", type=frame_clock.positive_int, default=1)
     parser.add_argument("--floor", type=frame_clock.non_negative_float, default=0.08)
     parser.add_argument(

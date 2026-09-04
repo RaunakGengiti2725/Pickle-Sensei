@@ -45,33 +45,33 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
     tMs values are the detector's absolute clock (start_time + k/fps, as
     emitted by detect_paddle.frame_iter), so the source index is
     k = round((tMs - start_time) * fps / 1000) — the same inversion run_crops
-    uses. Legacy relative-clock labels (paddle-distill-v0.1 `clockCaveat`:
-    afn-sasebo-rally1 labelled at tMs=0.0 with start_time 33.367 ms) may sit up
-    to one frame period before the stream start; those map to frame 0 with one
-    LegacyClockWarning per clip, anything earlier raises ValueError. Raises
-    RuntimeError if ffmpeg fails, reports partial/corrupt media, or any
-    requested frame is not decoded (index past the end of the media /
-    truncated file) instead of silently returning a partial mapping.
+    uses. Pass ALL labels of a clip in one call: the clock is decided per clip
+    (frame_clock.frame_indices_for_labelled_clip). Legacy relative-clock labels
+    (paddle-distill-v0.1 `clockCaveat`: afn-sasebo-rally1 stamped i*1000/fps
+    from the first decoded frame, tMs=0.0 with start_time 33.367 ms) are
+    recognised by any label lying within one frame period before the stream
+    start; the whole clip is then mapped relative to its first frame (0.0 ->
+    frame 0, 33.37 -> frame 1) with one LegacyClockWarning per clip, and a
+    label earlier than that raises ValueError. Raises RuntimeError if ffmpeg
+    fails, reports partial/corrupt media, or any requested frame is not decoded
+    (index past the end of the media / truncated file) instead of silently
+    returning a partial mapping.
     """
     meta = frame_clock.probe_stream(str(video))
     w, h, fps, start_time_ms = meta.width, meta.height, meta.fps, meta.start_time_ms
     frames: dict[float, np.ndarray] = {}
     if not t_ms_list:
         return frames
-    index_for_t: dict[float, int] = {}
-    legacy_t_ms: list[float] = []
-    for t in t_ms_list:
-        try:
-            index_for_t[t], legacy = frame_clock.frame_index_for_labelled_t_ms(t, fps, start_time_ms)
-        except ValueError as exc:
-            raise ValueError(f"{exc} (requested from {video})") from None
-        if legacy:
-            legacy_t_ms.append(t)
+    try:
+        index_for_t, legacy_t_ms = frame_clock.frame_indices_for_labelled_clip(t_ms_list, fps, start_time_ms)
+    except ValueError as exc:
+        raise ValueError(f"{exc} (requested from {video})") from None
     if legacy_t_ms:
         warnings.warn(
             f"{video}: {len(legacy_t_ms)} label timestamp(s) (tMs {min(legacy_t_ms):.3f}..{max(legacy_t_ms):.3f}) "
-            f"lie within one frame period before the stream start ({start_time_ms:.3f} ms); "
-            "mapped to frame 0 (legacy relative-clock labels, see the dataset clockCaveat)",
+            f"lie within one frame period before the stream start ({start_time_ms:.3f} ms), so this clip's "
+            f"{len(index_for_t)} label(s) are legacy relative-clock stamps (see the dataset clockCaveat): "
+            "all mapped as round(tMs * fps / 1000) from the first decoded frame",
             frame_clock.LegacyClockWarning,
             stacklevel=2,
         )
