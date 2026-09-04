@@ -30,7 +30,7 @@ pnpm inside `apps/mobile` (npm + package-lock there).
    scripts/verify-cloud.sh --tier pr 2>&1 | tee /tmp/verify-pr.log
    echo "exit=${PIPESTATUS[0]}"
    ```
-   Stages: `deps format lint typecheck test db mobile ml edge rls security`.
+   Stages: `deps format lint typecheck test db mobile ml tooling edge rls security`.
    `test` needs `DATABASE_URL_TEST` (default matches docker-compose); `db`
    needs `DATABASE_URL`. `rls` needs Docker (postgres:16 throwaway).
 3. Read `artifacts/verify-cloud/<UTC>/summary.json`. Every stage must be

@@ -18,6 +18,8 @@
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+#   tooling    Linux self-tests of the Mac CI helper scripts (tools/macos-ci)
+#              driven by a fake xcrun — pins simulator selection/creation
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
@@ -50,9 +52,9 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin e2e release)
+ALL_STAGES=(deps format lint typecheck test db mobile ml tooling edge rls security admin e2e release)
 # What .github/workflows/ci.yml gates on every PR (verify + mobile + edge + supabase-security jobs).
-PR_STAGES=(deps format lint typecheck test db mobile ml edge rls security)
+PR_STAGES=(deps format lint typecheck test db mobile ml tooling edge rls security)
 
 TIER="full"
 ONLY=""
@@ -61,7 +63,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,49p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -166,7 +168,7 @@ stage_deps() {
   need node
   local root_needed=0 s
   for s in "${STAGES[@]}"; do
-    case "$s" in deps|mobile|ml|rls|edge) ;; *) root_needed=1 ;; esac
+    case "$s" in deps|mobile|ml|tooling|rls|edge) ;; *) root_needed=1 ;; esac
   done
   if [ $root_needed = 1 ] || [ "${#STAGES[@]}" -eq 1 ]; then
     need pnpm
@@ -223,6 +225,11 @@ stage_mobile() {
 stage_ml() {
   need python3
   python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+}
+
+stage_tooling() {
+  need python3
+  bash tools/adjudicate/native-swing-lab-camera-engine/select_simulator_repro.sh
 }
 
 stage_edge() {

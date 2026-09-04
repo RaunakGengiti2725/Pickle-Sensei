@@ -34,7 +34,7 @@ sessions never deploy to it, push migrations to it, or mutate its data.
 `docs/devin/TEST_MATRIX.md` is the authoritative table. Summary:
 
 - **Deterministic gates (block merge):** verify-cloud `--tier pr` stages
-  (`deps format lint typecheck test db mobile ml edge rls security`), plus the
+  (`deps format lint typecheck test db mobile ml tooling edge rls security`), plus the
   Mac run when `native/`, `apps/mobile/ios/`, Podfile/SwiftPM, or
   Vision/CoreML/AVFoundation code changed.
 - **Full tier adds:** `admin` (Vite build), `e2e` (Playwright smoke against the

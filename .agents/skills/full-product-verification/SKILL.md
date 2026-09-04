@@ -32,7 +32,7 @@ queue behind another run (single physical runner).
 ## Evidence to collect
 
 - `artifacts/verify-cloud/<UTC>/summary.json` — `ok: true`, all stages
-  `passed` (`deps format lint typecheck test db mobile ml edge rls security admin e2e release`).
+  `passed` (`deps format lint typecheck test db mobile ml tooling edge rls security admin e2e release`).
   `e2e` = admin-web Playwright smoke (3 tests; the authenticated-panel test
   runs only when the dev Postgres is up — a Playwright "skipped" is not a pass).
 - `artifacts/mac-full-verify/<run-id>/mac-full-verify-*/summary.json` —
