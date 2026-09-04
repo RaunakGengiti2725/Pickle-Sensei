@@ -88,9 +88,13 @@ RT18="com.apple.CoreSimulator.SimRuntime.iOS-18-5"
 RTTV="com.apple.CoreSimulator.SimRuntime.tvOS-26-0"
 
 dev() {
-  # dev <name> <udid> <state> [isAvailable]
+  # dev <name> <udid> <state> [isAvailable] [device type name]
+  # A CI-created device is named PickleSensei-CI but its device type is still
+  # an iPhone — the picker must recognise it by type, not by name.
+  local type="${5:-$1}"
+  [ "$1" = "PickleSensei-CI" ] && type="${5:-iPhone 16 Pro}"
   printf '{"name": "%s", "udid": "%s", "state": "%s", "isAvailable": %s, "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.%s"}' \
-    "$1" "$2" "$3" "${4:-true}" "${1// /-}"
+    "$1" "$2" "$3" "${4:-true}" "${type// /-}"
 }
 
 write_devices() {
@@ -108,6 +112,7 @@ RUNTIMES='{"runtimes": [
 # last among the Pro models, which is what `(pro or types)[-1]` returned.
 DEVICETYPES='{"devicetypes": [
   {"name": "iPhone 16", "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16", "productFamily": "iPhone"},
+  {"name": "iPhone 17", "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17", "productFamily": "iPhone"},
   {"name": "iPhone 16 Pro Max", "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max", "productFamily": "iPhone"},
   {"name": "iPhone 16 Pro", "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro", "productFamily": "iPhone"},
   {"name": "iPad Pro 13-inch (M4)", "identifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4", "productFamily": "iPad"},
@@ -180,9 +185,10 @@ while IFS= read -r body_file; do
     RC=1; cat "$WORK/pyc.err" >&2; flunk "embedded python program #$i does not compile ($body_file)"
   fi
 done < <(awk -v dir="$WORK" '
-  /<<'\''PY'\''$/ { n++; f = dir "/embedded-" n ".py"; inblock = 1; next }
   inblock && /^PY$/ { inblock = 0; close(f); print f; next }
-  inblock { print > f }
+  inblock { print > f; next }
+  !/^[[:space:]]*#/ && /<<'\''PY'\''/ { n++; f = dir "/embedded-" n ".py"; inblock = 1 }
+  END { if (inblock) { print "unterminated PY heredoc" > "/dev/stderr"; exit 1 } }
 ' "$SCRIPT")
 if [ "$heredocs" -ge 3 ]; then
   pass "python programs live in <<'PY' heredocs ($heredocs found)"
@@ -251,10 +257,11 @@ fi
 # …and a PickleSensei-CI device that IS the selection survives.
 write_devices "\"$RT26\": [$(dev 'PickleSensei-CI' CI-KEEP Booted), $(dev 'PickleSensei-CI' CI-STALE Shutdown)]"
 run_script
-if [ "$RC" = 0 ] && [ "$OUT" = "CI-KEEP" ] && simctl_called '^simctl delete CI-STALE$' && ! simctl_called '^simctl delete CI-KEEP$'; then
-  pass "a selected PickleSensei-CI device is kept while its duplicates are deleted"
+if [ "$RC" = 0 ] && [ "$OUT" = "CI-KEEP" ] && simctl_called '^simctl delete CI-STALE$' && ! simctl_called '^simctl delete CI-KEEP$' \
+  && ! simctl_called '^simctl create ' && grep -q 'selected simulator: PickleSensei-CI \[iPhone 16 Pro\] (iOS 26.4) CI-KEEP' "$WORK/err"; then
+  pass "a PickleSensei-CI device (an iPhone by type) is picked, not re-created; its duplicates are deleted"
 else
-  flunk "stale cleanup: expected CI-KEEP kept and CI-STALE deleted"
+  flunk "stale cleanup: expected CI-KEEP picked (no create) and CI-STALE deleted"
 fi
 
 # 7. --boot
