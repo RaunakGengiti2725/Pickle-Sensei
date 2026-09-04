@@ -171,6 +171,25 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   });
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
+  // A backend that dies while its client sits IDLE in the pool (admin
+  // pg_terminate_backend, failover, restart, idle_session_timeout) is reported
+  // on the pool, not on any query; pg has already discarded the client. With
+  // no listener Node treats the event as an uncaught exception and the
+  // process exits. pg pins the dead client (a large object graph) onto the
+  // error, so only the diagnostic fields are logged.
+  pool?.on("error", (error: Error & { code?: string; severity?: string }) => {
+    app.log.error(
+      {
+        err: {
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          severity: error.severity,
+        },
+      },
+      "postgres pool: idle client error",
+    );
+  });
   const queue =
     options.queue ??
     (config.sqsQueueUrl
