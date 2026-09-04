@@ -149,6 +149,11 @@ jest.mock('../../src/design/components', () => {
   return {
     LoadingState: (props: { label: string }) =>
       React.createElement('LoadingState', props),
+    ErrorState: (props: {
+      title: string;
+      detail: string;
+      onRetry?: () => void;
+    }) => React.createElement('ErrorState', props),
   };
 });
 
@@ -156,7 +161,9 @@ type AccessStatus = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
 type MockAccessState = {
   status: AccessStatus;
   canonicalAccess: { canStartRating: boolean } | null;
+  error: { message: string } | null;
   initialize: jest.Mock<Promise<void>, []>;
+  refreshAccess: jest.Mock<Promise<boolean>, []>;
 };
 jest.mock('../../src/state/accessStore', () => {
   const { create } = require('zustand');
@@ -164,7 +171,9 @@ jest.mock('../../src/state/accessStore', () => {
     useAccessStore: create(() => ({
       status: 'ready',
       canonicalAccess: { canStartRating: true },
+      error: null,
       initialize: jest.fn(async () => {}),
+      refreshAccess: jest.fn(async () => true),
     })),
   };
 });
@@ -304,7 +313,9 @@ beforeEach(() => {
     useMockAccessStore.setState({
       status: 'ready',
       canonicalAccess: { canStartRating: true },
+      error: null,
       initialize: jest.fn(async () => {}),
+      refreshAccess: jest.fn(async () => true),
     });
     useMockAuthStore.setState({
       session: { provider: 'apple', localOnly: false },
@@ -479,17 +490,54 @@ describe('navigation-tabs: Analyze route access gate', () => {
     expect(nav.replace).toHaveBeenCalledWith('Paywall', { source: 'rating' });
   });
 
-  it('access lookup fails (status error, no access) → replace(Paywall) rather than spinning', () => {
+  it('access lookup fails (status error, no access) → one refreshAccess(), then a retryable error state — never Paywall, never spinning (XCF-06)', () => {
+    const refreshAccess = jest.fn(async () => false);
     useMockAccessStore.setState({
       status: 'loading',
       canonicalAccess: null,
+      refreshAccess,
     });
     const renderer = renderRoot();
     const nav = fakeNavigation();
-    mountRoute(renderer, 'Analyze', nav);
+    const mounted = mountRoute(renderer, 'Analyze', nav);
     act(() => {
-      useMockAccessStore.setState({ status: 'error', canonicalAccess: null });
+      useMockAccessStore.setState({
+        status: 'error',
+        canonicalAccess: null,
+        error: {
+          message: 'Membership verification is temporarily unavailable.',
+        },
+      });
     });
+    // No server answer yet: the gate asks the server once more instead of
+    // treating the failure as "no access".
+    expect(refreshAccess).toHaveBeenCalledTimes(1);
+    expect(nav.replace).not.toHaveBeenCalled();
+    // The re-ask failed too: a retryable error state replaces the spinner.
+    const errorState = mounted.root.findAll(
+      n => (n.type as unknown) === 'ErrorState',
+    );
+    expect(errorState).toHaveLength(1);
+    expect(errorState[0]!.props.detail).toBe(
+      'Membership verification is temporarily unavailable.',
+    );
+    expect(
+      mounted.root.findAll(n => (n.type as unknown) === 'LoadingState'),
+    ).toHaveLength(0);
+    act(() => {
+      errorState[0]!.props.onRetry();
+    });
+    expect(refreshAccess).toHaveBeenCalledTimes(2);
+    expect(nav.replace).not.toHaveBeenCalled();
+    // Only a real server answer routes.
+    act(() => {
+      useMockAccessStore.setState({
+        status: 'ready',
+        canonicalAccess: { canStartRating: false },
+        error: null,
+      });
+    });
+    expect(nav.replace).toHaveBeenCalledTimes(1);
     expect(nav.replace).toHaveBeenCalledWith('Paywall', { source: 'rating' });
   });
 

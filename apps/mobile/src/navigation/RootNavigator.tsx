@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
 import {
   NavigationContainer,
@@ -29,7 +29,7 @@ import { ManageAccountScreen } from '../screens/ManageAccountScreen';
 import { ConsentSettingsScreen } from '../screens/ConsentSettingsScreen';
 import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
 import { PremiumTabBar } from './PremiumTabBar';
-import { LoadingState } from '../design/components';
+import { ErrorState, LoadingState } from '../design/components';
 import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
@@ -117,8 +117,14 @@ function useRatingRouteGate<RouteName extends keyof RootStackParams>(
 ) {
   const status = useAccessStore(state => state.status);
   const canonicalAccess = useAccessStore(state => state.canonicalAccess);
+  const error = useAccessStore(state => state.error);
   const initialize = useAccessStore(state => state.initialize);
+  const refreshAccess = useAccessStore(state => state.refreshAccess);
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
+  // `status: 'error'` with no snapshot is not a server answer (401 before the
+  // bearer rotated, backend 5xx, offline); the gate asks once more before it
+  // shows the retryable error state, and only ever routes on a real answer.
+  const [reasked, setReasked] = useState(false);
 
   useEffect(() => {
     if (localOnly) {
@@ -130,28 +136,60 @@ function useRatingRouteGate<RouteName extends keyof RootStackParams>(
       void initialize();
       return;
     }
+    if (status === 'loading') return;
     if (
       canonicalAccess !== null ||
       status === 'ready' ||
-      status === 'unconfigured' ||
-      status === 'error'
+      status === 'unconfigured'
     ) {
       navigation.replace('Paywall', { source });
+      return;
     }
-  }, [canonicalAccess, initialize, localOnly, navigation, source, status]);
+    if (!reasked) {
+      setReasked(true);
+      void refreshAccess();
+    }
+  }, [
+    canonicalAccess,
+    initialize,
+    localOnly,
+    navigation,
+    reasked,
+    refreshAccess,
+    source,
+    status,
+  ]);
 
-  return canonicalAccess?.canStartRating === true;
+  const allowed = canonicalAccess?.canStartRating === true;
+  return {
+    allowed,
+    unanswered:
+      !allowed && status === 'error' && canonicalAccess === null && reasked
+        ? {
+            message:
+              error?.message ??
+              'Membership verification is temporarily unavailable.',
+            retry: () => void refreshAccess(),
+          }
+        : null,
+  };
 }
 
 function AnalyzeRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParams, 'Analyze'>) {
-  const allowed = useRatingRouteGate(navigation, 'rating');
-  return allowed ? (
-    <AnalyzeScreen />
-  ) : (
-    <LoadingState label="Checking access…" />
-  );
+  const gate = useRatingRouteGate(navigation, 'rating');
+  if (gate.allowed) return <AnalyzeScreen />;
+  if (gate.unanswered) {
+    return (
+      <ErrorState
+        title="Couldn’t check access"
+        detail={gate.unanswered.message}
+        onRetry={gate.unanswered.retry}
+      />
+    );
+  }
+  return <LoadingState label="Checking access…" />;
 }
 
 const theme = {

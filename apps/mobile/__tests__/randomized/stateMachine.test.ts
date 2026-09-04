@@ -2408,30 +2408,38 @@ class Harness {
         const account = this.currentAccount();
         const serverView =
           account && !account.deleted ? this.server.accessView(account) : null;
+        // Mirrors useRatingRouteGate: idle → initialize(); a real answer
+        // (snapshot, ready, unconfigured) routes; status 'error' with no
+        // snapshot is re-asked ONCE via refreshAccess() and then rests on the
+        // retryable error state ('checking' here) — never the Paywall.
         let decision: 'proceed' | 'paywall' | 'checking' = 'checking';
-        if (access.canonicalAccess?.canStartRating) decision = 'proceed';
-        else if (access.status === 'idle') {
+        const decide = (
+          state: ReturnType<typeof useAccessStore.getState>,
+        ): 'proceed' | 'paywall' | 'checking' | 'reask' => {
+          if (state.canonicalAccess?.canStartRating) return 'proceed';
+          if (
+            state.canonicalAccess !== null ||
+            state.status === 'ready' ||
+            state.status === 'unconfigured'
+          )
+            return 'paywall';
+          return state.status === 'error' ? 'reask' : 'checking';
+        };
+        if (access.status === 'idle') {
           await this.guarded('accessStore.initialize', stepIndex, step, () =>
             useAccessStore.getState().initialize(),
           );
           await this.settle();
-          const after = useAccessStore.getState();
-          if (after.canonicalAccess?.canStartRating) decision = 'proceed';
-          else if (
-            after.canonicalAccess !== null ||
-            after.status === 'ready' ||
-            after.status === 'unconfigured' ||
-            after.status === 'error'
-          )
-            decision = 'paywall';
-        } else if (
-          access.canonicalAccess !== null ||
-          access.status === 'ready' ||
-          access.status === 'unconfigured' ||
-          access.status === 'error'
-        ) {
-          decision = 'paywall';
         }
+        let verdict = decide(useAccessStore.getState());
+        if (verdict === 'reask') {
+          await this.guarded('accessStore.refreshAccess', stepIndex, step, () =>
+            useAccessStore.getState().refreshAccess(),
+          );
+          await this.settle();
+          verdict = decide(useAccessStore.getState());
+        }
+        decision = verdict === 'reask' ? 'checking' : verdict;
         const sessionLive =
           useAuthStore.getState().session?.canonicalAppUserId === account?.id;
         if (this.network.mode === 'ok' && serverView && sessionLive) {
@@ -2447,8 +2455,15 @@ class Harness {
               step,
             );
           }
-          if (decision === 'paywall' && serverView.canStartRating) {
-            const after = useAccessStore.getState();
+          const after = useAccessStore.getState();
+          const restsOnError =
+            decision === 'checking' &&
+            after.status === 'error' &&
+            after.canonicalAccess === null;
+          if (
+            (decision === 'paywall' || restsOnError) &&
+            serverView.canStartRating
+          ) {
             const rejected401 = this.server.requests
               .slice(this.requestCursor)
               .some(
@@ -2458,10 +2473,14 @@ class Harness {
                   e.bearerAccount === account?.id,
               );
             const detail = `server access is ${JSON.stringify(serverView)} (store: ${JSON.stringify(after.canonicalAccess)}, status ${after.status}, error ${after.error?.code ?? 'none'})`;
+            const landing =
+              decision === 'paywall'
+                ? 'routed to Paywall'
+                : 'rested on the retryable error state after its one re-ask';
             if (after.status === 'error' && rejected401) {
               this.fail(
                 'gate-recovers-after-bearer-rotation',
-                `first access load got 401 on a bearer the server no longer accepts; the gate routed to Paywall (status stays 'error' after the refresh rotated the bearer) although ${detail}`,
+                `first access load got 401 on a bearer the server no longer accepts; the gate ${landing} (status 'error' after the refresh rotated the bearer) although ${detail}`,
                 stepIndex,
                 step,
               );
@@ -2471,7 +2490,7 @@ class Harness {
             ) {
               this.fail(
                 'gate-recovers-after-access-error',
-                `an earlier access refresh failed and left status 'error' / snapshot null; with the network healthy again the gate routed straight to Paywall although ${detail}`,
+                `an earlier access refresh failed and left status 'error' / snapshot null; with the network healthy again the gate ${landing} although ${detail}`,
                 stepIndex,
                 step,
               );

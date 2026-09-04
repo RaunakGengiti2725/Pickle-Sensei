@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import {
+  getApiSession,
+  subscribeToApiSession,
+  type ApiSession,
+} from '../account/apiSession';
+import {
   BillingError,
   type BillingAccessDependencies,
   type BillingErrorCode,
@@ -34,6 +39,60 @@ export interface AccessStoreState {
 
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
+
+/**
+ * The bearer a failed access load was sent with. A 401 on it makes the auth
+ * store rotate the bearer (reportApiUnauthorized → refreshSessionNow); the
+ * rotated session is the moment to ask the server again, so the store never
+ * rests on `status: 'error', canonicalAccess: null` for an account the server
+ * would let rate. One re-run per rotation: a failure on the rotated bearer
+ * re-arms on THAT bearer and waits for the next one.
+ */
+let awaitingRotationOf: {
+  session: ApiSession;
+  version: number;
+} | null = null;
+let apiSessionSubscribed = false;
+
+function isRotationOf(
+  stale: ApiSession,
+  current: ApiSession | null,
+): current is ApiSession {
+  return (
+    current !== null &&
+    current.canonicalAppUserId === stale.canonicalAppUserId &&
+    current.bearerToken !== stale.bearerToken
+  );
+}
+
+function retryAfterRotation(): void {
+  const pending = awaitingRotationOf;
+  if (!pending || pending.version !== configurationVersion || !dependencies) {
+    awaitingRotationOf = null;
+    return;
+  }
+  if (!isRotationOf(pending.session, getApiSession())) return;
+  awaitingRotationOf = null;
+  void useAccessStore.getState().refreshAccess();
+}
+
+function armRetryAfterRotation(
+  sentWith: ApiSession | null,
+  version: number,
+): void {
+  if (!sentWith || version !== configurationVersion) return;
+  awaitingRotationOf = { session: sentWith, version };
+  if (!apiSessionSubscribed) {
+    apiSessionSubscribed = true;
+    subscribeToApiSession(retryAfterRotation);
+  }
+  // The rotation may already have landed while the failed load was in flight.
+  retryAfterRotation();
+}
+
+function disarmRetryAfterRotation(): void {
+  awaitingRotationOf = null;
+}
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -113,6 +172,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return;
     }
     const version = configurationVersion;
+    const sentWith = getApiSession();
     set({ status: 'loading', error: null });
     let storeConfigurationError: BillingError | null = null;
     try {
@@ -178,6 +238,9 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       canonicalAccess: accessResult.value,
       error: error?.toState() ?? null,
     });
+    if (accessError && statusFor(accessError) === 'error') {
+      armRetryAfterRotation(sentWith, version);
+    }
   },
 
   refreshAccess: async () => {
@@ -192,6 +255,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const sentWith = getApiSession();
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
@@ -205,11 +269,13 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         'billing.backend_unavailable',
         'Membership verification is temporarily unavailable.',
       );
+      const status = statusFor(error);
       set({
-        status: statusFor(error),
+        status,
         canonicalAccess: null,
         error: error.toState(),
       });
+      if (status === 'error') armRetryAfterRotation(sentWith, version);
       return false;
     }
   },
@@ -421,6 +487,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   reset: () => {
     configurationVersion += 1;
+    disarmRetryAfterRotation();
     set(dataDefaults());
   },
 }));
@@ -434,6 +501,7 @@ export function configureAccessStore(
 ): void {
   dependencies = nextDependencies;
   configurationVersion += 1;
+  disarmRetryAfterRotation();
   useAccessStore.setState(dataDefaults());
 }
 
@@ -441,5 +509,6 @@ export function configureAccessStore(
 export function clearAccessStoreConfiguration(): void {
   dependencies = null;
   configurationVersion += 1;
+  disarmRetryAfterRotation();
   useAccessStore.setState(dataDefaults());
 }

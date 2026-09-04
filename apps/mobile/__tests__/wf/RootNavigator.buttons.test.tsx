@@ -938,6 +938,8 @@ describe('RootNavigator button ledger', () => {
 
       it('routes to Paywall only once the re-fetch brings a real server answer that requires it', async () => {
         const refreshAccess = jest.fn(async () => {
+          useAccessStore.setState({ status: 'loading', error: null });
+          await Promise.resolve();
           useAccessStore.setState({
             status: 'ready',
             canonicalAccess: exhaustedAccess,
