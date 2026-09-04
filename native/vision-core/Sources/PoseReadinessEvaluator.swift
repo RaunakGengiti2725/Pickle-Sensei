@@ -170,8 +170,12 @@ public final class PoseReadinessEvaluator {
       height: height
     )
     stableSamples.append(sample)
+    // Keep the newest sample at or before the cutoff as the window anchor so
+    // the retained run spans at least `stableDurationMs` on any frame cadence.
     let cutoff = pose.timestampMs - config.stableDurationMs
-    stableSamples.removeAll { $0.timestampMs < cutoff }
+    if let anchorMs = stableSamples.lazy.map(\.timestampMs).filter({ $0 <= cutoff }).max() {
+      stableSamples.removeAll { $0.timestampMs < anchorMs }
+    }
 
     let stableForMs = max(0, pose.timestampMs - (stableSamples.first?.timestampMs ?? pose.timestampMs))
     let centerTravel = maximumPairwiseTravel(in: stableSamples)
