@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pickle-sensei.dev/schemas/regression-summary.v1.json",
+  "title": "Pickle Sensei Linux regression summary (v1)",
+  "description": "One document per `bench:regression` invocation, written to datasets/reports/regression/<runId>.json. The executable validator is validateRegressionSummary() in packages/evaluation/src/regression/summarySchema.ts; this file is the committed contract and must stay in lock-step with it (pinned by test/regressionSummary.test.ts). A metric value of null means 'not measurable in this run' and is never a zero.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contract",
+    "contractVersion",
+    "runId",
+    "generatedAtIso",
+    "runner",
+    "provenance",
+    "benches",
+    "metrics",
+    "caveats",
+    "totalWallClockMs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contract": { "const": "pickle-sensei-linux-regression" },
+    "contractVersion": { "type": "integer", "minimum": 1 },
+    "runId": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "generatedAtIso": { "type": "string", "format": "date-time" },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "platform", "arch"],
+      "properties": {
+        "node": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string", "minLength": 1 },
+        "arch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gitSha",
+        "gitBranch",
+        "gitDirty",
+        "datasetsTreeSha",
+        "datasetReleases",
+        "modelVersions",
+        "evidenceClass"
+      ],
+      "properties": {
+        "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "gitBranch": { "type": ["string", "null"] },
+        "gitDirty": { "type": "boolean" },
+        "datasetsTreeSha": {
+          "description": "git tree sha of datasets/ at HEAD — identifies every committed gold artifact the benches read.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "datasetReleases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["releaseDir", "releaseId", "datasetId", "manifestSha256"],
+            "properties": {
+              "releaseDir": { "type": "string", "minLength": 1 },
+              "releaseId": { "type": "string", "minLength": 1 },
+              "datasetId": { "type": ["string", "null"] },
+              "manifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        "modelVersions": {
+          "description": "Version constants of every heuristic / estimator exercised (all uncalibrated heuristics; no trained model exists in-repo).",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "evidenceClass": { "enum": ["linux_replay_proxy"] }
+      }
+    },
+    "benches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "command",
+          "cwd",
+          "status",
+          "exitCode",
+          "wallClockMs",
+          "inputs",
+          "caveats",
+          "error",
+          "metrics",
+          "labels"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["in_process", "subprocess"] },
+          "command": { "type": "string", "minLength": 1 },
+          "cwd": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["ok", "failed"] },
+          "exitCode": {
+            "description": "Subprocess exit code; null for in_process benches.",
+            "type": ["integer", "null"]
+          },
+          "wallClockMs": { "type": "integer", "minimum": 0 },
+          "inputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "caveats": { "type": "array", "items": { "type": "string" } },
+          "error": { "type": ["string", "null"] },
+          "metrics": {
+            "type": "object",
+            "propertyNames": { "pattern": "^[A-Za-z0-9_.-]+$" },
+            "additionalProperties": { "type": ["number", "null"] }
+          },
+          "labels": {
+            "description": "Non-numeric facts about the run (bench/classifier versions, verdict strings).",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "description": "Flattened `<benchId>.<metric>` view of every bench's metrics; must equal the per-bench maps exactly.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*\\.[A-Za-z0-9_.-]+$" },
+      "additionalProperties": { "type": ["number", "null"] }
+    },
+    "caveats": { "type": "array", "items": { "type": "string" } },
+    "totalWallClockMs": { "type": "integer", "minimum": 0 }
+  }
+}
