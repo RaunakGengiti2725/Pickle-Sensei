@@ -50,6 +50,8 @@ class FakeScheduler implements SchedulerPort {
   cancelAllCalls = 0;
   requestCalls = 0;
   requestResult: PermissionState = 'granted';
+  /** Every scheduler write in call order: `applyPlan(n)` / `cancelAllPlanned`. */
+  ops: string[] = [];
 
   async permissionState(): Promise<PermissionState> {
     return this.permission;
@@ -61,9 +63,11 @@ class FakeScheduler implements SchedulerPort {
   }
   async applyPlan(plan: readonly PlannedNotification[]): Promise<void> {
     this.appliedPlans.push([...plan]);
+    this.ops.push(`applyPlan(${plan.length})`);
   }
   async cancelAllPlanned(): Promise<void> {
     this.cancelAllCalls += 1;
+    this.ops.push('cancelAllPlanned');
   }
   async openSystemSettings(): Promise<void> {}
 }
@@ -77,6 +81,24 @@ const planContext: NotificationPlanContext = {
 
 function deps(scheduler: FakeScheduler) {
   return { scheduler, loadContext: async () => planContext };
+}
+
+function deferredContext() {
+  let resolve!: (value: NotificationPlanContext) => void;
+  const promise = new Promise<NotificationPlanContext>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+async function enableReminders(scheduler: FakeScheduler) {
+  setActiveDataOwner(owner);
+  await useNotificationStore.getState().hydrate(deps(scheduler));
+  await useNotificationStore
+    .getState()
+    .requestPermissionAndEnable(deps(scheduler));
+  expect(useNotificationStore.getState().prefs.enabled).toBe(true);
+  expect(scheduler.appliedPlans.length).toBeGreaterThan(0);
 }
 
 function resetStore() {
@@ -197,6 +219,93 @@ describe('notification store', () => {
       .getState()
       .setPrefs({ enabled: false }, deps(scheduler));
     expect(scheduler.cancelAllCalls).toBeGreaterThan(cancelsBefore);
+  });
+
+  it('overlapping syncs ON then OFF end with cancelAllPlanned as the last scheduler op', async () => {
+    const scheduler = new FakeScheduler();
+    await enableReminders(scheduler);
+
+    const gate = deferredContext();
+    const staleSync = useNotificationStore
+      .getState()
+      .syncNow({ scheduler, loadContext: () => gate.promise });
+    await useNotificationStore
+      .getState()
+      .setPrefs({ enabled: false }, deps(scheduler));
+    const opsAfterOff = scheduler.ops.length;
+    expect(scheduler.ops.at(-1)).toBe('cancelAllPlanned');
+
+    gate.resolve(planContext);
+    await staleSync;
+
+    expect(scheduler.ops.at(-1)).toBe('cancelAllPlanned');
+    expect(
+      scheduler.ops.slice(opsAfterOff).some(op => op.startsWith('applyPlan')),
+    ).toBe(false);
+    expect(useNotificationStore.getState().scheduleFailed).toBe(false);
+  });
+
+  it('a sync whose context resolves after prefs changed applies the new prefs, not its starting snapshot', async () => {
+    const scheduler = new FakeScheduler();
+    await enableReminders(scheduler);
+    const initialHour = new Date(
+      scheduler.appliedPlans
+        .at(-1)!
+        .find(item => item.id === 'ps.reminder.practice')!.timestampMs,
+    ).getHours();
+    expect(initialHour).not.toBe(6);
+
+    const gate = deferredContext();
+    const inFlight = useNotificationStore
+      .getState()
+      .syncNow({ scheduler, loadContext: () => gate.promise });
+    // The preference changes underneath the in-flight sync without a
+    // competing sync of its own (e.g. a persisted write landing).
+    useNotificationStore.setState(state => ({
+      prefs: { ...state.prefs, practiceReminderMinutes: 6 * 60 },
+    }));
+    const plansBefore = scheduler.appliedPlans.length;
+
+    gate.resolve(planContext);
+    await inFlight;
+
+    expect(scheduler.appliedPlans.length).toBe(plansBefore + 1);
+    const practice = scheduler.appliedPlans
+      .at(-1)!
+      .find(item => item.id === 'ps.reminder.practice')!;
+    expect(new Date(practice.timestampMs).getHours()).toBe(6);
+    expect(useNotificationStore.getState().scheduleFailed).toBe(false);
+  });
+
+  it('a superseded sync never applies over a newer one', async () => {
+    const scheduler = new FakeScheduler();
+    await enableReminders(scheduler);
+
+    const first = deferredContext();
+    const firstSync = useNotificationStore
+      .getState()
+      .syncNow({ scheduler, loadContext: () => first.promise });
+    const second = deferredContext();
+    const secondSync = useNotificationStore
+      .getState()
+      .setPrefs(
+        { practiceReminderMinutes: 7 * 60 },
+        { scheduler, loadContext: () => second.promise },
+      );
+    const plansBefore = scheduler.appliedPlans.length;
+
+    // The newer sync lands first; the older one resolves afterwards.
+    second.resolve(planContext);
+    await secondSync;
+    expect(scheduler.appliedPlans.length).toBe(plansBefore + 1);
+    first.resolve(planContext);
+    await firstSync;
+
+    expect(scheduler.appliedPlans.length).toBe(plansBefore + 1);
+    const practice = scheduler.appliedPlans
+      .at(-1)!
+      .find(item => item.id === 'ps.reminder.practice')!;
+    expect(new Date(practice.timestampMs).getHours()).toBe(7);
   });
 
   it('holds a granted pre-auth onboarding choice until a writable owner hydrates', async () => {
