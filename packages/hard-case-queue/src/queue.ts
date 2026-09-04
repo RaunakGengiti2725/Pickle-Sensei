@@ -54,6 +54,12 @@ export interface IngestResult {
   entry: HardCaseEntry;
 }
 
+/** Pure resolution of a report against current state — nothing is mutated. */
+type IngestPlan = { category: HardCaseCategory; fingerprint: string } & (
+  | { outcome: "created"; existing: undefined }
+  | { outcome: "merged" | "regression_reopened"; existing: HardCaseEntry }
+);
+
 export class HardCaseQueue {
   private readonly byId = new Map<string, HardCaseEntry>();
   private readonly byFingerprint = new Map<string, string>();
@@ -82,7 +88,7 @@ export class HardCaseQueue {
         );
       }
       if (event.type === "ingested") {
-        queue.applyIngest(event.report, event.atIso, event.entryId);
+        queue.applyIngest(queue.planIngest(event.report), event.report, event.atIso, event.entryId);
       } else {
         queue.applyTransition(event.entryId, event.to, event.actor, event.note, event.atIso);
       }
@@ -95,32 +101,46 @@ export class HardCaseQueue {
    * Every report is accounted for: it either creates a case, merges into an
    * open case, or reopens a resolved case as a regression. There is no code
    * path that returns without one of those three outcomes.
+   *
+   * Durability first: the event is validated and appended to the log BEFORE
+   * memory or `seq` change, so a failed append leaves the live queue exactly
+   * equal to a replay of its log and the sequence has no gap.
    */
   ingest(report: HardCaseReport): IngestResult {
     const atIso = this.now();
-    const category = routeCategory(report);
-    const fingerprint = fingerprintOf(report.source, category, report.subjectKey);
-    const existingId = this.byFingerprint.get(fingerprint);
-    const entryId = existingId ?? `hc-${String(this.seq + 1).padStart(6, "0")}`;
-    const result = this.applyIngest(report, atIso, entryId);
-    this.seq += 1;
-    this.log.append({
-      seq: this.seq,
+    const plan = this.planIngest(report);
+    const entryId = plan.existing?.id ?? `hc-${String(this.seq + 1).padStart(6, "0")}`;
+    const event: HardCaseEvent = {
+      seq: this.seq + 1,
       type: "ingested",
       atIso,
       report,
-      outcome: result.outcome,
-      entryId: result.entry.id,
-    });
+      outcome: plan.outcome,
+      entryId,
+    };
+    this.log.append(event);
+    const result = this.applyIngest(plan, report, atIso, entryId);
+    this.seq = event.seq;
     return result;
   }
 
   transition(entryId: string, to: HardCaseState, actor: string, note: string): HardCaseEntry {
     const atIso = this.now();
     const from = this.get(entryId).state;
+    assertTransition(entryId, from, to);
+    const event: HardCaseEvent = {
+      seq: this.seq + 1,
+      type: "transitioned",
+      atIso,
+      entryId,
+      from,
+      to,
+      actor,
+      note,
+    };
+    this.log.append(event);
     const entry = this.applyTransition(entryId, to, actor, note, atIso);
-    this.seq += 1;
-    this.log.append({ seq: this.seq, type: "transitioned", atIso, entryId, from, to, actor, note });
+    this.seq = event.seq;
     return entry;
   }
 
@@ -164,12 +184,31 @@ export class HardCaseQueue {
     }
   }
 
-  private applyIngest(report: HardCaseReport, atIso: string, entryId: string): IngestResult {
+  private planIngest(report: HardCaseReport): IngestPlan {
     const category = routeCategory(report);
     const fingerprint = fingerprintOf(report.source, category, report.subjectKey);
-    this.counts.ingested += 1;
     const existingId = this.byFingerprint.get(fingerprint);
     if (existingId === undefined) {
+      return { category, fingerprint, existing: undefined, outcome: "created" };
+    }
+    const existing = this.byId.get(existingId);
+    if (existing === undefined) throw new HardCaseNotFoundError(existingId);
+    if (existing.state === "resolved") {
+      assertTransition(existing.id, "resolved", "regression");
+      return { category, fingerprint, existing, outcome: "regression_reopened" };
+    }
+    return { category, fingerprint, existing, outcome: "merged" };
+  }
+
+  private applyIngest(
+    plan: IngestPlan,
+    report: HardCaseReport,
+    atIso: string,
+    entryId: string,
+  ): IngestResult {
+    const { category, fingerprint } = plan;
+    this.counts.ingested += 1;
+    if (plan.outcome === "created") {
       const entry: HardCaseEntry = {
         id: entryId,
         fingerprint,
@@ -190,16 +229,15 @@ export class HardCaseQueue {
       this.counts.created += 1;
       return { outcome: "created", entry };
     }
-    const entry = this.byId.get(existingId);
-    if (entry === undefined) throw new HardCaseNotFoundError(existingId);
+    const entry = plan.existing;
     entry.occurrenceCount += 1;
     entry.evidence.push(report.evidence);
     entry.severity = severityMax(entry.severity, report.severity);
     entry.updatedAtIso = atIso;
-    if (entry.state === "resolved") {
+    if (plan.outcome === "regression_reopened") {
       // A resolved case that recurs is a REGRESSION — it reopens, it is
       // never absorbed into the closed case.
-      assertTransition(entry.id, "resolved", "regression");
+      assertTransition(entry.id, entry.state, "regression");
       entry.state = "regression";
       entry.regressionCount += 1;
       entry.history.push({
