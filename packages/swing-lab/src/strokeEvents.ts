@@ -87,7 +87,7 @@ const GLUE_GATES = {
   distinctPeakRatio: 0.6,
 } as const;
 
-type SpeedSample = { timestampMs: number; value: number };
+type SpeedSeriesSample = { timestampMs: number; value: number };
 
 /** Why a proposer returned no source: the clip window itself is unusable
  * (inverted, zero-length, or non-finite bounds), or no series covers enough
@@ -105,10 +105,10 @@ function isDegenerateWindow(clipStartMs: number, clipEndMs: number): boolean {
  * Proposals are built only from what survives, so every emitted timestamp is
  * a real observation inside [clipStartMs, clipEndMs]. */
 function usableSamples(
-  series: ReadonlyArray<SpeedSample> | null,
+  series: ReadonlyArray<SpeedSeriesSample> | null,
   clipStartMs: number,
   clipEndMs: number,
-): SpeedSample[] {
+): SpeedSeriesSample[] {
   if (!series) return [];
   return series
     .filter(
@@ -122,7 +122,7 @@ function usableSamples(
 }
 
 /** Light smoothing (3-sample) to suppress single-frame jitter. */
-function smoothSeries(sorted: ReadonlyArray<SpeedSample>): SpeedSample[] {
+function smoothSeries(sorted: ReadonlyArray<SpeedSeriesSample>): SpeedSeriesSample[] {
   return sorted.map((sample, index) => {
     const window = sorted.slice(Math.max(0, index - 1), index + 2);
     return {
@@ -133,8 +133,8 @@ function smoothSeries(sorted: ReadonlyArray<SpeedSample>): SpeedSample[] {
 }
 
 export function proposeStrokeEvents(input: {
-  paddleSpeeds: ReadonlyArray<SpeedSample> | null;
-  wristSpeeds: ReadonlyArray<SpeedSample> | null;
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
   clipStartMs: number;
   clipEndMs: number;
 }):
@@ -144,14 +144,14 @@ export function proposeStrokeEvents(input: {
     return { events: [], source: "none", reason: "degenerate_window" };
   }
   const clipLength = input.clipEndMs - input.clipStartMs;
-  const coverage = (series: ReadonlyArray<SpeedSample>): number => {
+  const coverage = (series: ReadonlyArray<SpeedSeriesSample>): number => {
     if (series.length < 4) return 0;
     return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
   };
   const paddle = usableSamples(input.paddleSpeeds, input.clipStartMs, input.clipEndMs);
   const wrist = usableSamples(input.wristSpeeds, input.clipStartMs, input.clipEndMs);
   let source: "paddle" | "wrist";
-  let sorted: ReadonlyArray<SpeedSample>;
+  let sorted: ReadonlyArray<SpeedSeriesSample>;
   if (input.paddleSpeeds && coverage(paddle) >= 0.35) {
     source = "paddle";
     sorted = paddle;
@@ -335,8 +335,8 @@ export interface StrokeEventProposalV2 extends StrokeEventProposal {
 }
 
 export function proposeStrokeEventsV2(input: {
-  paddleSpeeds: ReadonlyArray<SpeedSample> | null;
-  wristSpeeds: ReadonlyArray<SpeedSample> | null;
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
   clipStartMs: number;
   clipEndMs: number;
 }):

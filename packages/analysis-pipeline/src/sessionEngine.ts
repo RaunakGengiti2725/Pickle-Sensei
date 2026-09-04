@@ -125,37 +125,81 @@ const GLUE_GATES = {
   distinctPeakRatio: 0.6,
 } as const;
 
-export function proposeStrokeEvents(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  clipStartMs: number;
-  clipEndMs: number;
-}): { events: StrokeEventProposal[]; source: "paddle" | "wrist" | "none" } {
-  const clipLength = Math.max(1, input.clipEndMs - input.clipStartMs);
-  const coverage = (series: ReadonlyArray<{ timestampMs: number }> | null): number => {
-    if (!series || series.length < 4) return 0;
-    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
-  };
-  let source: "paddle" | "wrist";
-  let series: ReadonlyArray<{ timestampMs: number; value: number }>;
-  if (input.paddleSpeeds && coverage(input.paddleSpeeds) >= 0.35) {
-    source = "paddle";
-    series = input.paddleSpeeds;
-  } else if (input.wristSpeeds && coverage(input.wristSpeeds) >= 0.4) {
-    source = "wrist";
-    series = input.wristSpeeds;
-  } else {
-    return { events: [], source: "none" };
-  }
-  const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
-  // Light smoothing (3-sample) to suppress single-frame jitter.
-  const smoothed = sorted.map((sample, index) => {
+type SpeedSeriesSample = { timestampMs: number; value: number };
+
+/** Why a proposer returned no source: the clip window itself is unusable
+ * (inverted, zero-length, or non-finite bounds), or no series covers enough
+ * of it once non-finite and out-of-clip samples are set aside. */
+export type StrokeEventNoneReason = "degenerate_window" | "insufficient_coverage";
+
+function isDegenerateWindow(clipStartMs: number, clipEndMs: number): boolean {
+  return !Number.isFinite(clipStartMs) || !Number.isFinite(clipEndMs) || clipEndMs <= clipStartMs;
+}
+
+/** Time-ordered samples that are finite AND inside the clip window. A sample
+ * with a NaN/±Infinity timestamp cannot be placed in time; a NaN/±Infinity
+ * speed would poison the smoothing average, the peak search and every
+ * boundary walk; a sample outside the clip belongs to a different window.
+ * Proposals are built only from what survives, so every emitted timestamp is
+ * a real observation inside [clipStartMs, clipEndMs]. */
+function usableSamples(
+  series: ReadonlyArray<SpeedSeriesSample> | null,
+  clipStartMs: number,
+  clipEndMs: number,
+): SpeedSeriesSample[] {
+  if (!series) return [];
+  return series
+    .filter(
+      (sample) =>
+        Number.isFinite(sample.timestampMs) &&
+        Number.isFinite(sample.value) &&
+        sample.timestampMs >= clipStartMs &&
+        sample.timestampMs <= clipEndMs,
+    )
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+}
+
+/** Light smoothing (3-sample) to suppress single-frame jitter. */
+function smoothSeries(sorted: ReadonlyArray<SpeedSeriesSample>): SpeedSeriesSample[] {
+  return sorted.map((sample, index) => {
     const window = sorted.slice(Math.max(0, index - 1), index + 2);
     return {
       timestampMs: sample.timestampMs,
       value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
     };
   });
+}
+
+export function proposeStrokeEvents(input: {
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  clipStartMs: number;
+  clipEndMs: number;
+}):
+  | { events: StrokeEventProposal[]; source: "paddle" | "wrist"; reason?: undefined }
+  | { events: []; source: "none"; reason: StrokeEventNoneReason } {
+  if (isDegenerateWindow(input.clipStartMs, input.clipEndMs)) {
+    return { events: [], source: "none", reason: "degenerate_window" };
+  }
+  const clipLength = input.clipEndMs - input.clipStartMs;
+  const coverage = (series: ReadonlyArray<SpeedSeriesSample>): number => {
+    if (series.length < 4) return 0;
+    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
+  };
+  const paddle = usableSamples(input.paddleSpeeds, input.clipStartMs, input.clipEndMs);
+  const wrist = usableSamples(input.wristSpeeds, input.clipStartMs, input.clipEndMs);
+  let source: "paddle" | "wrist";
+  let sorted: ReadonlyArray<SpeedSeriesSample>;
+  if (input.paddleSpeeds && coverage(paddle) >= 0.35) {
+    source = "paddle";
+    sorted = paddle;
+  } else if (input.wristSpeeds && coverage(wrist) >= 0.4) {
+    source = "wrist";
+    sorted = wrist;
+  } else {
+    return { events: [], source: "none", reason: "insufficient_coverage" };
+  }
+  const smoothed = smoothSeries(sorted);
   const globalPeak = smoothed.reduce((best, sample) => Math.max(best, sample.value), 0);
   const threshold = Math.max(
     EVENT_GATES.minPeakSpeed,
@@ -329,11 +373,16 @@ export interface StrokeEventProposalV2 extends StrokeEventProposal {
 }
 
 export function proposeStrokeEventsV2(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
   clipStartMs: number;
   clipEndMs: number;
-}): { events: StrokeEventProposalV2[]; source: "wrist" | "paddle_fallback" | "none" } {
+}):
+  | { events: StrokeEventProposalV2[]; source: "wrist" | "paddle_fallback"; reason?: undefined }
+  | { events: []; source: "none"; reason: StrokeEventNoneReason } {
+  if (isDegenerateWindow(input.clipStartMs, input.clipEndMs)) {
+    return { events: [], source: "none", reason: "degenerate_window" };
+  }
   const body = proposeStrokeEvents({
     paddleSpeeds: null,
     wristSpeeds: input.wristSpeeds,
@@ -373,15 +422,9 @@ export function proposeStrokeEventsV2(input: {
   // gold events — volley 240/800ms, rally2 123/670ms overlap). Boundaries
   // extend while smoothed wrist speed stays ≥ max(12% of peak, 0.08),
   // within the same reach cap. Peaks and event identity are untouched.
-  if (input.wristSpeeds && input.wristSpeeds.length >= 4) {
-    const sorted = [...input.wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
-    const smoothed = sorted.map((sample, index) => {
-      const window = sorted.slice(Math.max(0, index - 1), index + 2);
-      return {
-        timestampMs: sample.timestampMs,
-        value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
-      };
-    });
+  const wrist = usableSamples(input.wristSpeeds, input.clipStartMs, input.clipEndMs);
+  if (wrist.length >= 4) {
+    const smoothed = smoothSeries(wrist);
     for (const event of glued) {
       const relax = Math.max(0.12 * event.peakSpeed, 0.08);
       let startIndex = smoothed.findIndex((sample) => sample.timestampMs >= event.startMs);
@@ -437,13 +480,14 @@ export function proposeStrokeEventsV2(input: {
       source = "paddle_fallback";
     }
   }
+  if (source === "none") {
+    return { events: [], source: "none", reason: "insufficient_coverage" };
+  }
   // Paddle CONFIRMATION applies only to body-sourced proposals; in the
   // paddle_fallback path the paddle already sourced the events — letting it
   // also "confirm" itself would double-count the same evidence.
   const paddle =
-    source === "wrist"
-      ? (input.paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
-      : [];
+    source === "wrist" ? usableSamples(input.paddleSpeeds, input.clipStartMs, input.clipEndMs) : [];
   const paddleMax = paddle.reduce((best, sample) => Math.max(best, sample.value), 0);
   const events: StrokeEventProposalV2[] = baseEvents.map((event) => {
     const inside = paddle.filter(
