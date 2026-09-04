@@ -1,0 +1,506 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 1-press Start your first read 1`] = `
+"[button "Back" hint="Return to the welcome screen"]
+[progressbar "Onboarding step 1 of 8" value=1/8]
+"1/8"
+"PLAYER SETUP"
+"What should we call you?"
+"Your coach personalizes every session."
+[TextInput "First name" placeholder="First name" value=""]
+[image "Pickle Sensei mascot. A few quick answers shape your first session around you." #onboarding-mascot-name]
+  "LET’S WARM UP"
+  "A few quick answers shape your first session around you."
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 2-whitespace name keeps Continue locked 1`] = `
+"[button "Back" hint="Return to the welcome screen"]
+[progressbar "Onboarding step 1 of 8" value=1/8]
+"1/8"
+"PLAYER SETUP"
+"What should we call you?"
+"Your coach personalizes every session."
+[TextInput "First name" placeholder="First name" value="   "]
+[image "Pickle Sensei mascot. A few quick answers shape your first session around you." #onboarding-mascot-name]
+  "LET’S WARM UP"
+  "A few quick answers shape your first session around you."
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 3-type name " Dana " 1`] = `
+"[button "Back" hint="Return to the welcome screen"]
+[progressbar "Onboarding step 1 of 8" value=1/8]
+"1/8"
+"PLAYER SETUP"
+"What should we call you?"
+"Your coach personalizes every session."
+[TextInput "First name" placeholder="First name" value=" Dana "]
+[image "Pickle Sensei mascot. A few quick answers shape your first session around you." #onboarding-mascot-name]
+  "LET’S WARM UP"
+  "A few quick answers shape your first session around you."
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 4-arrive gender 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 2 of 8" value=2/8]
+"2/8"
+"PLAYER SETUP"
+"How do you identify?"
+"Used to tailor coaching references and demo models."
+[image "Pickle Sensei mascot. Your references should feel natural and respectful." #onboarding-mascot-gender]
+  "COACHING THAT FITS"
+  "Your references should feel natural and respectful."
+[radio "Female"]
+  "Female"
+[radio "Male"]
+  "Male"
+[radio "Non-binary"]
+  "Non-binary"
+[radio "Prefer not to say"]
+  "Prefer not to say"
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 5-select Female 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 2 of 8" value=2/8]
+"2/8"
+"PLAYER SETUP"
+"How do you identify?"
+"Used to tailor coaching references and demo models."
+[image "Pickle Sensei mascot. Your references should feel natural and respectful." #onboarding-mascot-gender]
+  "COACHING THAT FITS"
+  "Your references should feel natural and respectful."
+[radio "Female" {selected}]
+  "Female"
+[radio "Male"]
+  "Male"
+[radio "Non-binary"]
+  "Non-binary"
+[radio "Prefer not to say"]
+  "Prefer not to say"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 6-arrive level 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 3 of 8" value=3/8]
+"3/8"
+"PLAYER SETUP"
+"Where is your game today?"
+"Sets coaching language — never used to inflate scores."
+[image "Pickle Sensei mascot. The right baseline keeps every cue clear and useful." #onboarding-mascot-level]
+  "START AT YOUR LEVEL"
+  "The right baseline keeps every cue clear and useful."
+[radio "Brand new" hint="First paddle, first weeks"]
+  "Brand new"
+  "First paddle, first weeks"
+[radio "2.5" hint="Learning rallies and positioning"]
+  "2.5"
+  "Learning rallies and positioning"
+[radio "3.0" hint="Consistent recreational play"]
+  "3.0"
+  "Consistent recreational play"
+[radio "3.5" hint="League nights, working on strategy"]
+  "3.5"
+  "League nights, working on strategy"
+[radio "4.0" hint="Competitive, controlled pace"]
+  "4.0"
+  "Competitive, controlled pace"
+[radio "4.5" hint="Tournament regular"]
+  "4.5"
+  "Tournament regular"
+[radio "5.0+" hint="Open play, high level"]
+  "5.0+"
+  "Open play, high level"
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 7-select 3.5 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 3 of 8" value=3/8]
+"3/8"
+"PLAYER SETUP"
+"Where is your game today?"
+"Sets coaching language — never used to inflate scores."
+[image "Pickle Sensei mascot. The right baseline keeps every cue clear and useful." #onboarding-mascot-level]
+  "START AT YOUR LEVEL"
+  "The right baseline keeps every cue clear and useful."
+[radio "Brand new" hint="First paddle, first weeks"]
+  "Brand new"
+  "First paddle, first weeks"
+[radio "2.5" hint="Learning rallies and positioning"]
+  "2.5"
+  "Learning rallies and positioning"
+[radio "3.0" hint="Consistent recreational play"]
+  "3.0"
+  "Consistent recreational play"
+[radio "3.5" {selected} hint="League nights, working on strategy"]
+  "3.5"
+  "League nights, working on strategy"
+[radio "4.0" hint="Competitive, controlled pace"]
+  "4.0"
+  "Competitive, controlled pace"
+[radio "4.5" hint="Tournament regular"]
+  "4.5"
+  "Tournament regular"
+[radio "5.0+" hint="Open play, high level"]
+  "5.0+"
+  "Open play, high level"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 8-arrive handedness 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 4 of 8" value=4/8]
+"4/8"
+"PLAYER SETUP"
+"Which side is home?"
+"Mirrors every measurement to your swing."
+[image "Pickle Sensei mascot. Every checkpoint follows your real hitting side." #onboarding-mascot-handedness]
+  "MIRRORED FOR YOU"
+  "Every checkpoint follows your real hitting side."
+[radio "Right-handed"]
+  "Right-handed"
+[radio "Left-handed"]
+  "Left-handed"
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 9-select Right-handed 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 4 of 8" value=4/8]
+"4/8"
+"PLAYER SETUP"
+"Which side is home?"
+"Mirrors every measurement to your swing."
+[image "Pickle Sensei mascot. Every checkpoint follows your real hitting side." #onboarding-mascot-handedness]
+  "MIRRORED FOR YOU"
+  "Every checkpoint follows your real hitting side."
+[radio "Right-handed" {selected}]
+  "Right-handed"
+[radio "Left-handed"]
+  "Left-handed"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 10-arrive goal 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 5 of 8" value=5/8]
+"5/8"
+"PLAYER SETUP"
+"What do you want to own?"
+"Your first training focus starts here."
+[image "Pickle Sensei mascot. Your first training focus starts with what matters most." #onboarding-mascot-goal]
+  "A TARGET WORTH CHASING"
+  "Your first training focus starts with what matters most."
+[radio "Dinks" hint="Own the soft game at the kitchen"]
+  "Dinks"
+  "Own the soft game at the kitchen"
+[radio "Drives" hint="Clean, repeatable pace"]
+  "Drives"
+  "Clean, repeatable pace"
+[radio "Third-shot drops" hint="Get to the net on your terms"]
+  "Third-shot drops"
+  "Get to the net on your terms"
+[radio "Serve" hint="Start every point ahead"]
+  "Serve"
+  "Start every point ahead"
+[radio "Volleys" hint="Win the fast exchanges"]
+  "Volleys"
+  "Win the fast exchanges"
+[radio "Footwork" hint="Balance and positioning"]
+  "Footwork"
+  "Balance and positioning"
+[radio "All-around" hint="Raise the whole game"]
+  "All-around"
+  "Raise the whole game"
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 11-select Third-shot drops 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 5 of 8" value=5/8]
+"5/8"
+"PLAYER SETUP"
+"What do you want to own?"
+"Your first training focus starts here."
+[image "Pickle Sensei mascot. Your first training focus starts with what matters most." #onboarding-mascot-goal]
+  "A TARGET WORTH CHASING"
+  "Your first training focus starts with what matters most."
+[radio "Dinks" hint="Own the soft game at the kitchen"]
+  "Dinks"
+  "Own the soft game at the kitchen"
+[radio "Drives" hint="Clean, repeatable pace"]
+  "Drives"
+  "Clean, repeatable pace"
+[radio "Third-shot drops" {selected} hint="Get to the net on your terms"]
+  "Third-shot drops"
+  "Get to the net on your terms"
+[radio "Serve" hint="Start every point ahead"]
+  "Serve"
+  "Start every point ahead"
+[radio "Volleys" hint="Win the fast exchanges"]
+  "Volleys"
+  "Win the fast exchanges"
+[radio "Footwork" hint="Balance and positioning"]
+  "Footwork"
+  "Balance and positioning"
+[radio "All-around" hint="Raise the whole game"]
+  "All-around"
+  "Raise the whole game"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 12-arrive problem 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 6 of 8" value=6/8]
+"6/8"
+"PLAYER SETUP"
+"What breaks down most?"
+"Helps prioritize your first fixes."
+[image "Pickle Sensei mascot. Tell Sensei where the rally usually slips away." #onboarding-mascot-problem]
+  "FIND THE PATTERN"
+  "Tell Sensei where the rally usually slips away."
+[radio "Consistency" hint="Great one rally, gone the next"]
+  "Consistency"
+  "Great one rally, gone the next"
+[radio "Control" hint="Balls sail or die in the net"]
+  "Control"
+  "Balls sail or die in the net"
+[radio "Power" hint="Drives lack punch"]
+  "Power"
+  "Drives lack punch"
+[radio "Contact" hint="Mis-hits, late swings"]
+  "Contact"
+  "Mis-hits, late swings"
+[radio "Footwork" hint="Caught flat or out of position"]
+  "Footwork"
+  "Caught flat or out of position"
+[radio "Placement" hint="The ball goes where it wants"]
+  "Placement"
+  "The ball goes where it wants"
+[radio "Not sure" hint="That's what the analysis is for"]
+  "Not sure"
+  "That's what the analysis is for"
+[button "Continue" {disabled}]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 13-select Control 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 6 of 8" value=6/8]
+"6/8"
+"PLAYER SETUP"
+"What breaks down most?"
+"Helps prioritize your first fixes."
+[image "Pickle Sensei mascot. Tell Sensei where the rally usually slips away." #onboarding-mascot-problem]
+  "FIND THE PATTERN"
+  "Tell Sensei where the rally usually slips away."
+[radio "Consistency" hint="Great one rally, gone the next"]
+  "Consistency"
+  "Great one rally, gone the next"
+[radio "Control" {selected} hint="Balls sail or die in the net"]
+  "Control"
+  "Balls sail or die in the net"
+[radio "Power" hint="Drives lack punch"]
+  "Power"
+  "Drives lack punch"
+[radio "Contact" hint="Mis-hits, late swings"]
+  "Contact"
+  "Mis-hits, late swings"
+[radio "Footwork" hint="Caught flat or out of position"]
+  "Footwork"
+  "Caught flat or out of position"
+[radio "Placement" hint="The ball goes where it wants"]
+  "Placement"
+  "The ball goes where it wants"
+[radio "Not sure" hint="That's what the analysis is for"]
+  "Not sure"
+  "That's what the analysis is for"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 14-arrive reveal 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 7 of 8" value=7/8]
+"7/8"
+"YOUR STARTING PLAN"
+"One focus.
+Visible progress."
+"Built for Dana."
+[image "Pickle Sensei mascot. Your answers are now one focused place to begin." #onboarding-mascot-reveal]
+  "PLAN READY"
+  "Your answers are now one focused place to begin."
+"FIRST FOCUS"
+"01"
+"Paddle Set"
+"A calm, early paddle set is what makes soft drops repeatable."
+"1"
+"Step into frame — live pose guidance captures the motion automatically."
+"2"
+"A stroke name and score appear only when a validated model is confident."
+"3"
+"Reviewed drills follow real scored evidence—not a guessed profile."
+"Two ratings are on us."
+"After your second successful, server-accepted Technique Score, Pickle Sensei Pro is required before another rating can start. Unscored attempts do not count. Past results and saved drills stay available; reviewed plans appear only when matching work is published."
+"MONTHLY + ANNUAL · LOCAL STORE PRICING · ELIGIBLE TRIALS ONLY"
+[button "Continue"]
+  "Continue""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: 15-arrive notifications 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 8 of 8" value=8/8]
+"8/8"
+"STAY IN RHYTHM"
+"Stay match-ready."
+"Get a useful nudge when it can help—never a stream of noise."
+[image "Pickle Sensei mascot. A timely nudge can keep the next session in rhythm." #onboarding-mascot-notifications]
+  "ON YOUR SCHEDULE"
+  "A timely nudge can keep the next session in rhythm."
+"PICKLE SENSEI"
+"PRACTICE REMINDER · 5:30 PM"
+"Ready for a few clean reps?"
+"A short court session today keeps your training plan moving."
+"Practice nudge"
+"Once a day at 5:30 PM by default"
+"Streak defense"
+"Only when a real streak needs attention"
+"Weekly recap"
+"A Sunday pointer to your Performance tab"
+"Scheduled on this phone. Lock-screen copy never includes your name, scores, or clips."
+[button "Turn on reminders"]
+  "Turn on reminders"
+[button "Not now" hint="Finish setup without enabling reminders"]
+  "Not now"
+"Change this anytime in Settings.""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn canonical path: every step in order, "Not now" stashes the profile and lands on SignIn without any OS prompt or network: signin 1`] = `
+"[button "Back"]
+[image "Pickle Sensei"]
+  "Pickle Sensei"
+"Your ratings,
+tied to you."
+"A connected account is required for free ratings, membership, and server-verified coaching. Synced progress stays with that account."
+[button "Continue with Apple"]
+  ""
+  "Continue with Apple"
+[button "Continue with Google"]
+  "G"
+  "Continue with Google"
+"Your existing on-device reads stay here when you connect.""
+`;
+
+exports[`Welcome → all onboarding steps → notification choice → SignIn while the finish is in flight both notification controls are disabled and read "Finishing setup…"; no double submit: notifications-finishing 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 8 of 8" value=8/8]
+"8/8"
+"STAY IN RHYTHM"
+"Stay match-ready."
+"Get a useful nudge when it can help—never a stream of noise."
+[image "Pickle Sensei mascot. A timely nudge can keep the next session in rhythm." #onboarding-mascot-notifications]
+  "ON YOUR SCHEDULE"
+  "A timely nudge can keep the next session in rhythm."
+"PICKLE SENSEI"
+"PRACTICE REMINDER · 5:30 PM"
+"Ready for a few clean reps?"
+"A short court session today keeps your training plan moving."
+"Practice nudge"
+"Once a day at 5:30 PM by default"
+"Streak defense"
+"Only when a real streak needs attention"
+"Weekly recap"
+"A Sunday pointer to your Performance tab"
+"Scheduled on this phone. Lock-screen copy never includes your name, scores, or clips."
+[button "Finishing setup…" {disabled}]
+  "Finishing setup…"
+[button "Not now" {disabled} hint="Finish setup without enabling reminders"]
+  "Not now"
+"Change this anytime in Settings.""
+`;
+
+exports[`first launch → Welcome cold start on an empty device hydrates the real stores, paints Welcome under the splash, then clears the splash: welcome 1`] = `
+"[image "Pickle Sensei"]
+  "Pickle Sensei"
+"PRIVATE BY DEFAULT"
+"See the stroke.
+Know the fix."
+"A private technique coach that guides each capture and turns validated reads into one clear next step."
+"POSE-GUIDED"
+"Automatic
+capture."
+"No shot picker. No timer."
+"ON-DEVICE"
+[button "Start your first read"]
+  "Start your first read"
+[button "I already have an account" hint="Sign in to an existing account"]
+  "I already have an account"
+"Two successful validated ratings free · Unscored attempts don’t count""
+`;
+
+exports[`first launch → Welcome cold start on an empty device hydrates the real stores, paints Welcome under the splash, then clears the splash: welcome-under-splash 1`] = `
+"[image "Pickle Sensei"]
+  "Pickle Sensei"
+"PRIVATE BY DEFAULT"
+"See the stroke.
+Know the fix."
+"A private technique coach that guides each capture and turns validated reads into one clear next step."
+"POSE-GUIDED"
+"Automatic
+capture."
+"No shot picker. No timer."
+"ON-DEVICE"
+[button "Start your first read"]
+  "Start your first read"
+[button "I already have an account" hint="Sign in to an existing account"]
+  "I already have an account"
+"Two successful validated ratings free · Unscored attempts don’t count"
+[View #splash-screen]
+  [image "Pickle Sensei intro animation"]
+    [View #splash-video]"
+`;
+
+exports[`persistence failure at the very end stash write fails → error shown, stays on the notification step, no SignIn; retry does NOT re-prompt the OS and then succeeds: notifications-stash-error 1`] = `
+"[button "Back" hint="Return to the previous question"]
+[progressbar "Onboarding step 8 of 8" value=8/8]
+"8/8"
+"STAY IN RHYTHM"
+"Stay match-ready."
+"Get a useful nudge when it can help—never a stream of noise."
+[image "Pickle Sensei mascot. A timely nudge can keep the next session in rhythm." #onboarding-mascot-notifications]
+  "ON YOUR SCHEDULE"
+  "A timely nudge can keep the next session in rhythm."
+"PICKLE SENSEI"
+"PRACTICE REMINDER · 5:30 PM"
+"Ready for a few clean reps?"
+"A short court session today keeps your training plan moving."
+"Practice nudge"
+"Once a day at 5:30 PM by default"
+"Streak defense"
+"Only when a real streak needs attention"
+"Weekly recap"
+"A Sunday pointer to your Performance tab"
+"Scheduled on this phone. Lock-screen copy never includes your name, scores, or clips."
+"SQLITE_FULL: database or disk is full"
+[button "Turn on reminders"]
+  "Turn on reminders"
+[button "Not now" hint="Finish setup without enabling reminders"]
+  "Not now"
+"Change this anytime in Settings.""
+`;
