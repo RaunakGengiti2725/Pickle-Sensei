@@ -71,7 +71,8 @@ const interceptedTo = (fragment: string) => intercepted.filter((r) => r.url.incl
 
 /** getUser answers healthy; the logout upstream answers per `logout`. */
 const authFault =
-  (logout: () => Promise<Response> | Response): Fault => (request) => {
+  (logout: () => Promise<Response> | Response): Fault =>
+  (request) => {
     if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`)) {
       intercepted.push(request);
       return jsonResponse(200, healthyUser());
@@ -125,30 +126,33 @@ Deno.test("logout: 401 without a bearer", async () => {
   assertEquals(interceptedTo("/auth/v1/logout").length, 0, "no upstream logout without a bearer");
 });
 
-Deno.test("logout: 503 (generic body) when Supabase Auth answers 5xx, and the bearer is NOT evicted", async () => {
-  const h = await loadHarness();
-  const ip = freshIp();
-  const token = fakeSupabaseAccessToken("upstream-5xx");
-  intercepted.length = 0;
-  await withFault(
-    authFault(() => new Response("bad gateway", { status: 502 })),
-    async () => {
-      const response = await h.handler(userRequest("POST", "/v1/auth/logout", { token, ip }));
-      assertEquals(response.status, 503);
-      const body = (await response.json()) as { error: { message: string } };
-      assertEquals(body.error.message, "Sign-out is temporarily unavailable. Please try again.");
+Deno.test(
+  "logout: 503 (generic body) when Supabase Auth answers 5xx, and the bearer is NOT evicted",
+  async () => {
+    const h = await loadHarness();
+    const ip = freshIp();
+    const token = fakeSupabaseAccessToken("upstream-5xx");
+    intercepted.length = 0;
+    await withFault(
+      authFault(() => new Response("bad gateway", { status: 502 })),
+      async () => {
+        const response = await h.handler(userRequest("POST", "/v1/auth/logout", { token, ip }));
+        assertEquals(response.status, 503);
+        const body = (await response.json()) as { error: { message: string } };
+        assertEquals(body.error.message, "Sign-out is temporarily unavailable. Please try again.");
 
-      // Upstream still holds the session, so the cached verification stays
-      // valid: the next request is served without a second getUser.
-      const getUserCalls = () => interceptedTo("/auth/v1/user").length;
-      const before = getUserCalls();
-      assertEquals(before, 1, "the logout itself verified the bearer once");
-      const after = await h.handler(userRequest("GET", "/v1/me/saved-drills", { token, ip }));
-      assertEquals(after.status, 200);
-      assertEquals(getUserCalls(), before, "served from the (un-evicted) auth cache");
-    },
-  );
-});
+        // Upstream still holds the session, so the cached verification stays
+        // valid: the next request is served without a second getUser.
+        const getUserCalls = () => interceptedTo("/auth/v1/user").length;
+        const before = getUserCalls();
+        assertEquals(before, 1, "the logout itself verified the bearer once");
+        const after = await h.handler(userRequest("GET", "/v1/me/saved-drills", { token, ip }));
+        assertEquals(after.status, 200);
+        assertEquals(getUserCalls(), before, "served from the (un-evicted) auth cache");
+      },
+    );
+  },
+);
 
 Deno.test("LOGOUT-1 /v1/auth/logout answers 503 (not 500) when Auth is unreachable", async () => {
   const h = await loadHarness();

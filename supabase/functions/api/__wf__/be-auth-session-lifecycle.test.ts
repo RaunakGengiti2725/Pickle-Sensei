@@ -134,7 +134,10 @@ function redisCommand(command: Array<string | number>): { result: unknown } {
     }
     case "SET": {
       const ttl = args[2] === "EX" ? Number(args[3]) : null;
-      redisStore.set(args[0], { value: args[1], expiresAtMs: ttl ? Date.now() + ttl * 1000 : null });
+      redisStore.set(args[0], {
+        value: args[1],
+        expiresAtMs: ttl ? Date.now() + ttl * 1000 : null,
+      });
       return { result: "OK" };
     }
     case "DEL": {
@@ -196,7 +199,11 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
           return json(200, sessionJson(session, mintAccessToken(session)));
         }
       }
-      return json(400, { code: 400, error_code: "refresh_token_not_found", msg: "Invalid Refresh Token" });
+      return json(400, {
+        code: 400,
+        error_code: "refresh_token_not_found",
+        msg: "Invalid Refresh Token",
+      });
     }
     return json(400, { code: 400, msg: "unsupported grant" });
   }
@@ -204,7 +211,11 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     timeline.push("auth:getUser");
     const session = liveSessionForToken(bearer);
     if (!session) {
-      return json(401, { code: 401, error_code: "session_not_found", msg: "Session does not exist" });
+      return json(401, {
+        code: 401,
+        error_code: "session_not_found",
+        msg: "Session does not exist",
+      });
     }
     return json(200, userJson(session.userId));
   }
@@ -276,8 +287,7 @@ async function boot(): Promise<(request: Request) => Promise<Response>> {
   captureAccessLog(() => undefined);
   Deno.serve = ((...args: unknown[]) => {
     const found = args.find((arg) => typeof arg === "function") as
-      | ((request: Request) => Promise<Response>)
-      | undefined;
+      ((request: Request) => Promise<Response>) | undefined;
     if (!found) throw new Error("Deno.serve called without a handler");
     handler = found;
     return {
@@ -359,7 +369,10 @@ async function refresh(ip: string, refreshToken: string): Promise<string> {
     }),
   );
   const payload = (await response.json()) as { session?: { accessToken: string } };
-  assert(response.status === 200 && payload.session, `refresh should rotate (status ${response.status})`);
+  assert(
+    response.status === 200 && payload.session,
+    `refresh should rotate (status ${response.status})`,
+  );
   return payload.session.accessToken;
 }
 
@@ -373,13 +386,25 @@ Deno.test(
   async () => {
     const ip = freshIp();
     const { accessToken: oldToken, refreshToken } = await bootstrap(ip);
-    assertEquals((await call("GET", PROBE_ROUTE, { token: oldToken, ip })).status, 200, "old token cached");
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: oldToken, ip })).status,
+      200,
+      "old token cached",
+    );
     const newToken = await refresh(ip, refreshToken);
     assert(newToken !== oldToken, "refresh minted a second access token");
     assertEquals(sessionIdOf(newToken), sessionIdOf(oldToken), "…in the same Supabase session");
-    assertEquals((await call("GET", PROBE_ROUTE, { token: newToken, ip })).status, 200, "new token cached");
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: newToken, ip })).status,
+      200,
+      "new token cached",
+    );
 
-    assertEquals((await call("POST", "/v1/auth/logout", { token: newToken, ip })).status, 204, "logout");
+    assertEquals(
+      (await call("POST", "/v1/auth/logout", { token: newToken, ip })).status,
+      204,
+      "logout",
+    );
     assertEquals(liveSessionForToken(oldToken), null, "upstream session revoked");
 
     timeline.length = 0;
@@ -407,7 +432,11 @@ Deno.test(
   async () => {
     const ip = freshIp();
     const { accessToken: bearer, refreshToken } = await bootstrap(ip);
-    assertEquals((await call("GET", PROBE_ROUTE, { token: bearer, ip })).status, 200, "bearer cached");
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: bearer, ip })).status,
+      200,
+      "bearer cached",
+    );
     // A second bearer of the SAME session that nothing has cached yet: the
     // request racing the logout will verify it upstream (still live) and write
     // it into L1 + L2 inside the revocation window.
@@ -431,7 +460,11 @@ Deno.test(
     );
 
     const raced = await call("GET", PROBE_ROUTE, { token: sibling, ip });
-    assertEquals(raced.status, 200, "racing request verifies upstream (session still live) and caches");
+    assertEquals(
+      raced.status,
+      200,
+      "racing request verifies upstream (session still live) and caches",
+    );
     assert(redisStore.has(await authCacheKey(sibling)), "…the racing request re-populated L2");
 
     releaseLogout();
@@ -478,7 +511,11 @@ Deno.test(
   async () => {
     const ip = freshIp();
     const { accessToken: bearer } = await bootstrap(ip);
-    assertEquals((await call("GET", PROBE_ROUTE, { token: bearer, ip })).status, 200, "bearer in L1 + L2");
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: bearer, ip })).status,
+      200,
+      "bearer in L1 + L2",
+    );
     const key = await authCacheKey(bearer);
     assert(redisStore.has(key), "L2 row present");
 
@@ -508,8 +545,16 @@ Deno.test(
     // The tombstone is now known locally too: the next request is refused the
     // same way, and still nothing is re-verified or re-cached.
     timeline.length = 0;
-    assertEquals((await call("GET", PROBE_ROUTE, { token: bearer, ip })).status, 401, "still refused");
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: bearer, ip })).status,
+      401,
+      "still refused",
+    );
     assertEquals(getUserCalls(), 0, "no Supabase Auth call on the repeat either");
-    assertEquals(timeline.filter((entry) => entry === `redis:SET:${key}`), [], "still not re-cached");
+    assertEquals(
+      timeline.filter((entry) => entry === `redis:SET:${key}`),
+      [],
+      "still not re-cached",
+    );
   },
 );
