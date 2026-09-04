@@ -32,7 +32,8 @@ import { measureOodNegatives } from "../src/oodNegativesMeasure.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(here, "..");
 const repoRoot = resolve(packageRoot, "..", "..");
-const validClip = join(repoRoot, "datasets", "ood", "positive", "backhand-dink-front-view.mp4");
+/** Same committed positive control as oodGate.test.ts. */
+const validClip = join(repoRoot, "datasets", "paddle-bench", "bundles", "wm-volley-02", "clip.mp4");
 
 const ffmpegAvailable = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0;
 if (!ffmpegAvailable && process.env.CI !== undefined) {
