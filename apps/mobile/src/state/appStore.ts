@@ -237,7 +237,9 @@ export const useAppStore = create<AppState>(set => ({
       );
       // This completion is newer intent than any pre-auth stash still
       // waiting for adoption; drop it so no later hydrate resurrects it.
-      await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+      if (await getKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY)) {
+        await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+      }
       if (getActiveDataOwner() === owner) {
         set({
           profile: canonicalProfile,
