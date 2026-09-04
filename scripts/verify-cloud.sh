@@ -30,8 +30,11 @@
 #   release    node tools/release/check-release-manifest.mjs when present
 #
 # Policy: a SKIPPED stage is never reported as passed. Skips are explicit
-# (--skip / --only) and appear in the summary; the exit code is non-zero if any
-# stage failed. No stage uses `|| true` to hide a failure.
+# (--skip / --only) and appear in the summary. The run is OK (exit 0,
+# summary.json ok:true) only when every recorded stage PASSED: a failed,
+# unavailable or skipped stage — or a selection in which no stage executed at
+# all — is a non-zero exit with the reason in summary.json. No stage uses
+# `|| true` to hide a failure.
 #
 # Usage:
 #   scripts/verify-cloud.sh                 # everything (PR gate + the rest)
@@ -62,7 +65,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,51p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -104,7 +107,6 @@ GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 GIT_DIRTY="$(git status --porcelain 2>/dev/null | grep -qv '^?? artifacts/' && echo true || echo false)"
 
 declare -a RESULT_NAMES=() RESULT_STATUS=() RESULT_SECONDS=() RESULT_NOTES=()
-FAILED=0
 
 is_skipped() {
   local s="$1"
@@ -137,12 +139,10 @@ run_stage() {
     # for the run (skipped != passed) but labelled so agents know what to install.
     echo "    [$name] UNAVAILABLE in $((end - start))s — $(tail -n 1 "$log")"
     record "$name" unavailable $((end - start)) "$(tail -n 1 "$log")"
-    FAILED=1
   else
     echo "    [$name] FAIL (exit $rc) in $((end - start))s — last lines:"
     tail -n 25 "$log" | sed 's/^/        /'
     record "$name" failed $((end - start)) "exit $rc"
-    FAILED=1
   fi
 }
 
@@ -301,13 +301,84 @@ for s in "${STAGES[@]}"; do
   run_stage "$s" "stage_$s"
 done
 
+# Verdict: computed from the recorded statuses, never from a side flag.
+declare -A STATUS_COUNT=([passed]=0 [failed]=0 [unavailable]=0 [skipped]=0)
+for st in "${RESULT_STATUS[@]}"; do STATUS_COUNT[$st]=$(( ${STATUS_COUNT[$st]:-0} + 1 )); done
+EXECUTED=$(( ${#RESULT_STATUS[@]} - STATUS_COUNT[skipped] ))
+REASON=""
+if [ "$EXECUTED" -eq 0 ]; then
+  REASON="no stages executed (${#RESULT_STATUS[@]} selected, all skipped)"
+elif [ "${STATUS_COUNT[passed]}" -ne "${#RESULT_STATUS[@]}" ]; then
+  REASON="${STATUS_COUNT[failed]} failed, ${STATUS_COUNT[unavailable]} unavailable, ${STATUS_COUNT[skipped]} skipped of ${#RESULT_STATUS[@]} stages (only passed counts)"
+fi
+if [ -z "$REASON" ]; then OK=true; else OK=false; fi
+
 # Machine-readable summary.
+# json_escape <string>: the JSON string-body encoding of <string> (no quotes).
+# Notes are arbitrary log lines, so this works byte-wise: every C0 control and
+# DEL becomes an escape (\n \r \t \b \f or \u00XX), valid UTF-8 passes through,
+# and a byte that is not part of a valid UTF-8 sequence is rendered as the text
+# \xNN instead of being dropped — the file must parse everywhere (jq, python,
+# node) and the note must stay readable.
 json_escape() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\n'/\\n}
-  printf '%s' "$s"
+  local LC_ALL=C
+  local s=$1 out="" esc c b b2 need lo hi i=0 j n
+  n=${#s}
+  if [[ $s =~ ^[[:print:]]*$ ]]; then
+    s=${s//\\/\\\\}
+    printf '%s' "${s//\"/\\\"}"
+    return
+  fi
+  while (( i < n )); do
+    c=${s:i:1}
+    printf -v b '%d' "'$c"
+    if (( b < 0x20 || b == 0x7f )); then
+      case $b in
+        8) out+='\b' ;;
+        9) out+='\t' ;;
+        10) out+='\n' ;;
+        12) out+='\f' ;;
+        13) out+='\r' ;;
+        *) printf -v esc '\\u%04x' "$b"; out+=$esc ;;
+      esac
+      (( i++ ))
+    elif (( b < 0x80 )); then
+      case $c in
+        '"') out+='\"' ;;
+        '\') out+='\\' ;;
+        *) out+=$c ;;
+      esac
+      (( i++ ))
+    else
+      # Multi-byte UTF-8: lead byte decides the length and the allowed range
+      # of the second byte (rejects overlongs, surrogates and > U+10FFFF).
+      need=0; lo=0x80; hi=0xbf
+      if (( b >= 0xc2 && b <= 0xdf )); then need=1
+      elif (( b == 0xe0 )); then need=2; lo=0xa0
+      elif (( b >= 0xe1 && b <= 0xef && b != 0xed )); then need=2
+      elif (( b == 0xed )); then need=2; hi=0x9f
+      elif (( b == 0xf0 )); then need=3; lo=0x90
+      elif (( b >= 0xf1 && b <= 0xf3 )); then need=3
+      elif (( b == 0xf4 )); then need=3; hi=0x8f
+      fi
+      j=1
+      while (( need > 0 && j <= need && i + j < n )); do
+        printf -v b2 '%d' "'${s:i+j:1}"
+        (( j > 1 )) && { lo=0x80; hi=0xbf; }
+        (( b2 >= lo && b2 <= hi )) || break
+        (( j++ ))
+      done
+      if (( need > 0 && j == need + 1 )); then
+        out+=${s:i:need+1}
+        (( i += need + 1 ))
+      else
+        printf -v esc '\\\\x%02x' "$b"
+        out+=$esc
+        (( i++ ))
+      fi
+    fi
+  done
+  printf '%s' "$out"
 }
 {
   echo "{"
@@ -318,7 +389,8 @@ json_escape() {
   echo "  \"started_utc\": \"$STAMP\","
   echo "  \"host\": \"$(uname -srm)\","
   echo "  \"node\": \"$(node --version 2>/dev/null || echo unknown)\","
-  echo "  \"ok\": $([ $FAILED -eq 0 ] && echo true || echo false),"
+  echo "  \"ok\": $OK,"
+  echo "  \"reason\": \"$(json_escape "$REASON")\","
   echo "  \"stages\": ["
   for i in "${!RESULT_NAMES[@]}"; do
     sep=","; [ "$i" -eq $((${#RESULT_NAMES[@]} - 1)) ] && sep=""
@@ -337,8 +409,8 @@ for i in "${!RESULT_NAMES[@]}"; do
 done
 echo "summary: $SUMMARY"
 
-if [ $FAILED -ne 0 ]; then
-  echo "verify-cloud: FAILED"
+if [ "$OK" != true ]; then
+  echo "verify-cloud: FAILED — $REASON"
   exit 1
 fi
 echo "verify-cloud: OK"
