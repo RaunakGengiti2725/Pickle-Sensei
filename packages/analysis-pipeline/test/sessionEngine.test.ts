@@ -6,6 +6,8 @@ import {
   BOUND_STABILITY_MS,
   SESSION_COMPLETION,
   SessionEventEngine,
+  WRIST_RETENTION_BEHIND_FRONTIER_MS,
+  proposeStrokeEventsV2,
   type SessionStrokeEvent,
   type SpeedSample,
 } from "../src/sessionEngine.js";
@@ -106,6 +108,84 @@ describe("SessionEventEngine — smoke from its new home", () => {
     expect(() => {
       (emitted[0]!.proposal as { startMs: number }).startMs = 0;
     }).toThrow();
+  });
+});
+
+/**
+ * NSLC-02: the engine re-proposes on every push, so per-push cost is the size
+ * of the series it proposes over. That series must be bounded by the
+ * documented retention window behind the frontier — never by session length —
+ * while ingestion accounting and the emitted events stay exactly what the
+ * full-series run produces.
+ */
+describe("SessionEventEngine — bounded retention behind the frontier", () => {
+  const STEP_MS = 40;
+  const SESSION_MS = 60_000; // 6× the retention window
+  const strokes = Array.from({ length: 29 }, (_, index) => ({
+    peakMs: 1500 + index * 2000,
+    height: 2.0,
+    halfWidthMs: 120,
+  }));
+  const series = speedBumps(strokes, 0, SESSION_MS, STEP_MS);
+
+  it("retained wrist series is bounded by the window while wristSamples counts every ingested sample", () => {
+    const engine = new SessionEventEngine({ sessionId: "ap-bounded-retention" });
+    let pushed = 0;
+    let maxRetained = 0;
+    let frontierMs = Number.NEGATIVE_INFINITY;
+    for (const sample of series) {
+      const closed = engine.pushWristSample(sample);
+      pushed += 1;
+      const last = closed[closed.length - 1];
+      if (last) frontierMs = last.proposal.endMs;
+      const retained = engine.retainedWristSampleCount();
+      maxRetained = Math.max(maxRetained, retained);
+      // Exactly the pushed samples newer than frontier − window survive.
+      const cutoffMs = frontierMs - WRIST_RETENTION_BEHIND_FRONTIER_MS;
+      const expected = series
+        .slice(0, pushed)
+        .filter((entry) => entry.timestampMs >= cutoffMs).length;
+      expect(retained).toBe(expected);
+      expect(engine.snapshot().qualityState.wristSamples).toBe(pushed);
+    }
+    expect(engine.snapshot().events.length).toBeGreaterThanOrEqual(20);
+    // The window (10 s) plus the open tail past the frontier (a stroke's
+    // settle + bound-stability wait, < 5 s) — far below the 1501 pushed.
+    const documentedBound = (WRIST_RETENTION_BEHIND_FRONTIER_MS + 5000) / STEP_MS;
+    expect(maxRetained).toBeLessThanOrEqual(documentedBound);
+    expect(maxRetained).toBeLessThan(series.length / 2);
+    expect(engine.retainedWristSampleCount()).toBeLessThanOrEqual(documentedBound);
+
+    const snapshot = engine.snapshot();
+    expect(snapshot.qualityState.wristSamples).toBe(series.length);
+    expect(snapshot.qualityState.droppedLateSamples).toBe(0);
+    expect(snapshot.qualityState.lastSampleMs).toBe(SESSION_MS);
+
+    // A late sample behind the frontier is still dropped AND counted.
+    expect(engine.pushWristSample({ timestampMs: 100, value: 3 })).toEqual([]);
+    expect(engine.snapshot().qualityState.droppedLateSamples).toBe(1);
+    expect(engine.snapshot().qualityState.wristSamples).toBe(series.length + 1);
+    expect(engine.retainedWristSampleCount()).toBeLessThanOrEqual(documentedBound);
+  });
+
+  it("pruning changes no emitted event: streamed ids/bounds/reasons equal the full-series batch", () => {
+    const engine = new SessionEventEngine({ sessionId: "ap-bounded-retention-equal" });
+    const emitted: SessionStrokeEvent[] = [];
+    for (const sample of series) emitted.push(...engine.pushWristSample(sample));
+    emitted.push(...engine.flush());
+    const batch = proposeStrokeEventsV2({
+      paddleSpeeds: null,
+      wristSpeeds: series,
+      clipStartMs: 0,
+      clipEndMs: SESSION_MS,
+    }).events;
+    expect(batch.length).toBe(strokes.length);
+    expect(emitted.map((event) => event.eventId)).toEqual(batch.map((_, i) => `E${i + 1}`));
+    expect(
+      emitted.map((event) => [event.proposal.startMs, event.proposal.peakMs, event.proposal.endMs]),
+    ).toEqual(batch.map((event) => [event.startMs, event.peakMs, event.endMs]));
+    expect(new Set(emitted.map((event) => event.closeReason))).toEqual(new Set(["settle"]));
+    expect(engine.snapshot().qualityState.notes).toEqual([]);
   });
 });
 

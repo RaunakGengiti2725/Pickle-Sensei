@@ -579,7 +579,7 @@ export function selectTargetEvent(
  *
  *  1. EVENT IDENTITY = stroke-event-2 (D-030, strokeEvents.ts). The engine
  *     never invents its own proposer: on every reconciliation it runs
- *     `proposeStrokeEventsV2` over the ACCUMULATED series (target BODY
+ *     `proposeStrokeEventsV2` over the RETAINED series (target BODY
  *     motion proposes; paddle only confirms/ranks/refines). Emitted events
  *     carry the canonical `StrokeEventProposalV2` — no second event type.
  *
@@ -602,9 +602,26 @@ export function selectTargetEvent(
  *     and may close per D-029;
  *   - wrist samples at/before the frontier arriving late are DROPPED and
  *     counted (`droppedLateSamples`) — they may not rewrite history. Paddle
- *     samples are kept regardless: per D-030 paddle evidence can never
- *     create/delete/re-bound a proposal, so late paddle history only feeds
- *     the confirm-normalization of FUTURE candidates.
+ *     samples are kept regardless of the frontier (within the retention
+ *     window below): per D-030 paddle evidence can never create/delete/
+ *     re-bound a proposal, so late paddle history only feeds the
+ *     confirm-normalization of FUTURE candidates.
+ *
+ * BOUNDED RETENTION (per-push cost independent of session length): every
+ * reconciliation re-proposes over the RETAINED series, so the engine keeps
+ * only the samples a not-yet-closed candidate can still depend on — those
+ * newer than `frontierMs − WRIST_RETENTION_BEHIND_FRONTIER_MS` (see that
+ * constant for the derivation). Older samples are pruned after the frontier
+ * advances (never before an event is closed over them). Pruning cannot
+ * change an emitted event (append-only) and, by construction of the window,
+ * cannot change the bounds a future candidate is proposed with; what it does
+ * change is the SCOPE of two relative gates in stroke-event-2 — the 30 %
+ * proposal floor is relative to the loudest retained peak (not the loudest
+ * peak of the whole session) and paddle confirm-normalization uses the
+ * retained paddle maximum — i.e. both become windowed rather than
+ * session-global. Ingestion accounting is unaffected: `wristSamples` keeps
+ * counting every ingested sample; `retainedWristSampleCount()` exposes the
+ * window occupancy.
  *
  * BOUND-STABILITY WAIT (why emission is not instant on settle): proposal
  * boundaries walk outward while smoothed wrist speed stays above the
@@ -650,6 +667,30 @@ export const SESSION_COMPLETION = {
  * there): once the stream passes peak+this, no sample can extend the
  * proposal's boundaries any further — bounds are stable and freezable. */
 export const BOUND_STABILITY_MS = 1200;
+
+/**
+ * How far BEHIND the emission frontier wrist (and paddle) samples are kept.
+ * Everything older is pruned once the frontier advances, which bounds the
+ * per-push proposal/completion work to one window instead of the whole
+ * session (the engine re-proposes on every push).
+ *
+ * The window must cover every sample a still-open candidate can depend on,
+ * all of which are anchored on the frontier event (the last emitted one) or
+ * on the candidate itself (peak > frontier):
+ *   - the candidate's own bounds walk ≤ ±maxBoundaryReachMs (1200) from its
+ *     peak, and its prominence baseline is the median of the ±1500 ms
+ *     context outside its bounds → ≥ frontier − 2700;
+ *   - the frontier event is re-proposed alongside the candidate (merge-valley
+ *     against its peak, glue across ≤ 350 ms gaps, midpoint clamp of the
+ *     shared boundary, the retro/suppression notes): its endMs IS the
+ *     frontier and its peak sits ≤ 1200 (+ one glued fragment: 350 + 2·1200)
+ *     before that, plus its own 1500 ms baseline → ≥ frontier − 5450;
+ *   - the D-029 completion scan starts at the candidate's peak.
+ * Rounded up to a full 10 s so no gate ever sees a truncated frontier event.
+ * At 30 fps that is 300 samples (600 at 60 fps) plus whatever is still open
+ * past the frontier.
+ */
+export const WRIST_RETENTION_BEHIND_FRONTIER_MS = 10_000;
 
 export interface SpeedSample {
   timestampMs: number;
@@ -808,6 +849,9 @@ export class SessionEventEngine {
   private readonly paddle: SpeedSample[] = [];
   private readonly events: SessionStrokeEvent[] = [];
   private frontierMs = Number.NEGATIVE_INFINITY;
+  /** Every finite wrist sample accepted into the series (pruned or not). */
+  private ingestedWristSamples = 0;
+  private ingestedPaddleSamples = 0;
   private droppedLateSamples = 0;
   private readonly notes: string[] = [];
   private readonly suppressionNoted = new Set<number>();
@@ -830,8 +874,13 @@ export class SessionEventEngine {
     wrist?: readonly SpeedSample[];
     paddle?: readonly SpeedSample[];
   }): SessionStrokeEvent[] {
+    const retainFromMs = this.retentionCutoffMs();
     for (const sample of input.paddle ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
+      this.ingestedPaddleSamples += 1;
+      // Older than the retained window: it could only feed gates that no
+      // longer see that window (kept in the count, not in the series).
+      if (sample.timestampMs < retainFromMs) continue;
       insertSorted(this.paddle, sample);
     }
     for (const sample of input.wrist ?? []) {
@@ -841,6 +890,7 @@ export class SessionEventEngine {
         this.droppedLateSamples += 1;
         continue;
       }
+      this.ingestedWristSamples += 1;
       insertSorted(this.wrist, sample);
     }
     return this.reconcile(false);
@@ -892,8 +942,8 @@ export class SessionEventEngine {
           "adaptive-completion (D-029 settle-or-valley-or-safety; constants mirrored from eventCompletionBench.ts)",
       },
       qualityState: {
-        wristSamples: this.wrist.length + this.droppedLateSamples,
-        paddleSamples: this.paddle.length,
+        wristSamples: this.ingestedWristSamples + this.droppedLateSamples,
+        paddleSamples: this.ingestedPaddleSamples,
         droppedLateSamples: this.droppedLateSamples,
         lastSampleMs: this.lastSampleMs(),
         notes: [...this.notes],
@@ -944,15 +994,36 @@ export class SessionEventEngine {
     return this.events.find((entry) => entry.eventId === eventId)?.state ?? null;
   }
 
+  /** Wrist samples currently held for proposal/completion: everything newer
+   * than `frontierMs − WRIST_RETENTION_BEHIND_FRONTIER_MS`. Bounded by the
+   * window (plus the open tail past the frontier), not by session length. */
+  retainedWristSampleCount(): number {
+    return this.wrist.length;
+  }
+
   private lastSampleMs(): number | null {
     const last = this.wrist[this.wrist.length - 1]?.timestampMs;
     return last ?? null;
   }
 
-  /** Canonical proposals over the accumulated series (stroke-event-2). Clip
+  /** Oldest timestamp still retained; −∞ until the first event closes. */
+  private retentionCutoffMs(): number {
+    return this.frontierMs - WRIST_RETENTION_BEHIND_FRONTIER_MS;
+  }
+
+  /** Drop samples that fell behind the retention window (after the frontier
+   * moved). Both series are sorted, so this is a prefix removal. */
+  private pruneBehindFrontier(): void {
+    const cutoff = this.retentionCutoffMs();
+    if (!Number.isFinite(cutoff)) return;
+    dropPrefixBefore(this.wrist, cutoff);
+    dropPrefixBefore(this.paddle, cutoff);
+  }
+
+  /** Canonical proposals over the retained series (stroke-event-2). Clip
    * bounds are the observed sample span — in proposeStrokeEventsV2 they only
    * gate coverage, so a live session (full coverage by construction) sees
-   * identical events to the offline batch run. */
+   * identical events to the offline batch run over the same window. */
   private propose(): StrokeEventProposalV2[] {
     if (this.wrist.length < 4) return [];
     return proposeStrokeEventsV2({
@@ -1010,6 +1081,7 @@ export class SessionEventEngine {
       this.events.push(event);
       emitted.push(event);
       this.frontierMs = Math.max(this.frontierMs, proposal.endMs);
+      this.pruneBehindFrontier();
     }
     return emitted;
   }
@@ -1023,10 +1095,16 @@ export class SessionEventEngine {
    * afn-sasebo-rally2: a 0.60 u/s movement at 67–1401ms vanishes once the
    * 6.87 u/s stroke arrives). The emitted event stays (append-only; it was
    * proposed over all evidence available at close time) and is flagged for
-   * downstream confidence handling.
+   * downstream confidence handling. Only events whose span is still fully
+   * inside the retained window can be judged — an event pruned behind it is
+   * out of the batch's scope, not suppressed by it (events are time-ordered,
+   * so the scan walks back from the newest and stops at the window edge).
    */
   private noteRetroSubthreshold(batch: readonly StrokeEventProposalV2[]): void {
-    for (const event of this.events) {
+    const windowStartMs = this.wrist[0]?.timestampMs ?? Number.POSITIVE_INFINITY;
+    for (let index = this.events.length - 1; index >= 0; index -= 1) {
+      const event = this.events[index]!;
+      if (event.proposal.startMs < windowStartMs) break;
       if (this.retroNoted.has(event.eventId)) continue;
       const stillProposed = batch.some(
         (proposal) =>
@@ -1037,7 +1115,7 @@ export class SessionEventEngine {
       this.retroNoted.add(event.eventId);
       this.notes.push(
         `SESSION_EVENT_RETRO_SUPPRESSED: ${event.eventId} (peak ${event.proposal.peakSpeed.toFixed(2)} u/s ` +
-          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the full-series batch ` +
+          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the retained-series batch ` +
           `(a later stroke raised the relative proposal floor); kept append-only, flagged`,
       );
     }
@@ -1076,4 +1154,16 @@ function insertSorted(series: SpeedSample[], sample: SpeedSample): void {
     else high = mid;
   }
   series.splice(low, 0, { ...sample });
+}
+
+/** Remove every leading sample with timestampMs < cutoffMs (series sorted). */
+function dropPrefixBefore(series: SpeedSample[], cutoffMs: number): void {
+  let low = 0;
+  let high = series.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (series[mid]!.timestampMs < cutoffMs) low = mid + 1;
+    else high = mid;
+  }
+  if (low > 0) series.splice(0, low);
 }
