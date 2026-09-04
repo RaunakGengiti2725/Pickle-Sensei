@@ -27,6 +27,7 @@ import {
   clearPersistedSession,
   loadPersistedSession,
   savePersistedSession,
+  SessionVaultReadError,
   type PersistedSession,
 } from '../account/sessionVault';
 import {
@@ -79,7 +80,13 @@ export interface AuthError {
     | 'auth.canceled'
     | 'auth.not_configured'
     | 'auth.failed'
-    | 'auth.session_expired';
+    | 'auth.session_expired'
+    /** Signed in for this run, but the Keychain refused the session record:
+     * the sign-in will not survive a relaunch. */
+    | 'auth.session_not_persisted'
+    /** A stored session exists but the Keychain could not be read at launch;
+     * the record is kept and the user is asked to sign in for this run. */
+    | 'auth.session_unavailable';
   message: string;
 }
 
@@ -95,6 +102,12 @@ const LOCAL_PURGE_ATTEMPTS = 3;
 
 export const SESSION_EXPIRED_MESSAGE =
   'Your sign-in expired. Sign in again to keep syncing — everything on this phone is still here.';
+
+export const SESSION_NOT_PERSISTED_MESSAGE =
+  'You are signed in, but this phone could not save your sign-in securely. You may be asked to sign in again the next time you open the app.';
+
+export const SESSION_UNAVAILABLE_MESSAGE =
+  'Your saved sign-in could not be read from this phone’s secure storage. Sign in again to keep syncing — everything on this phone is still here.';
 
 interface NativePickleAuth {
   signInWithApple(): Promise<{
@@ -238,13 +251,15 @@ function installApiSession(apiSession: ApiSession): void {
 }
 
 /** The Keychain record for a synced session — only when the server minted a
- * refresh token (a legacy provider-token session has nothing durable). */
+ * refresh token (a legacy provider-token session has nothing durable, so
+ * there is nothing to fail: true). False means the Keychain refused the
+ * write and this sign-in will not survive a relaunch. */
 async function persistSession(
   session: AuthSession,
   apiSession: ApiSession,
-): Promise<void> {
-  if (!apiSession.refreshToken || !session.canonicalAppUserId) return;
-  await savePersistedSession({
+): Promise<boolean> {
+  if (!apiSession.refreshToken || !session.canonicalAppUserId) return true;
+  return savePersistedSession({
     version: 1,
     provider: apiSession.provider,
     canonicalAppUserId: session.canonicalAppUserId,
@@ -301,7 +316,22 @@ function adoptRotatedTokens(
   } else {
     installApiSession(next);
   }
-  void persistSession(session, next);
+  void persistSession(session, next).then(persisted => {
+    if (
+      persisted ||
+      useAuthStore.getState().session?.canonicalAppUserId !== canonicalAppUserId
+    ) {
+      return;
+    }
+    // The rotated refresh token is only in memory: the next launch would
+    // present the superseded one. Same surface as a failed sign-in persist.
+    useAuthStore.setState({
+      error: {
+        code: 'auth.session_not_persisted',
+        message: SESSION_NOT_PERSISTED_MESSAGE,
+      },
+    });
+  });
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
@@ -334,13 +364,19 @@ function keepSessionAlive(
   });
 }
 
+/** A server-established sign-in plus whether its Keychain record landed. */
+interface EstablishedAccount {
+  session: AuthSession;
+  persisted: boolean;
+}
+
 async function establishSyncedAccount(input: {
   provider: 'apple' | 'google';
   identityToken: string | null | undefined;
   appleAuthorizationCode?: string | null;
   displayName: string | null;
   providerEmail: string | null;
-}): Promise<AuthSession> {
+}): Promise<EstablishedAccount> {
   const config = getRuntimePublicConfig();
   const result = await bootstrapCanonicalAccount({
     apiBaseUrl: config.apiBaseUrl,
@@ -359,9 +395,27 @@ async function establishSyncedAccount(input: {
     displayName: input.displayName,
     email: result.account.email ?? input.providerEmail,
   };
-  await persistSession(session, result.apiSession);
+  const persisted = await persistSession(session, result.apiSession);
   keepSessionAlive(session, result.apiSession);
-  return session;
+  return { session, persisted };
+}
+
+/** The auth-store patch for a fresh sign-in: signed in either way (the
+ * server session is real), with the error surface carrying the fact that
+ * the Keychain refused the record rather than reporting a durable success. */
+function signedInState(
+  established: EstablishedAccount,
+): Pick<AuthState, 'session' | 'busy' | 'error'> {
+  return {
+    session: established.session,
+    busy: false,
+    error: established.persisted
+      ? null
+      : {
+          code: 'auth.session_not_persisted',
+          message: SESSION_NOT_PERSISTED_MESSAGE,
+        },
+  };
 }
 
 function sessionFromPersisted(persisted: PersistedSession): AuthSession {
@@ -454,7 +508,7 @@ async function loadGoogleSignin(): Promise<GoogleSigninModule> {
  */
 async function restoreGoogleSessionSilently(
   webClientId: string,
-): Promise<AuthSession | null> {
+): Promise<EstablishedAccount | null> {
   const { GoogleSignin } = await loadGoogleSignin();
   GoogleSignin.configure({
     webClientId,
@@ -516,10 +570,10 @@ function handleApiUnauthorized(expired: ApiSession): void {
   void (async () => {
     if (expired.provider === 'google' && GOOGLE_WEB_CLIENT_ID) {
       try {
-        const session =
+        const established =
           await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
-        if (session) {
-          useAuthStore.setState({ session, error: null });
+        if (established) {
+          useAuthStore.setState(signedInState(established));
           return;
         }
       } catch {
@@ -565,7 +619,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // signed in across relaunches, backgrounding and reboots, for any
       // provider, until they sign out or the server refuses the refresh
       // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
+      let persisted: PersistedSession | null;
+      try {
+        persisted = await loadPersistedSession();
+      } catch (error) {
+        if (!(error instanceof SessionVaultReadError)) throw error;
+        // The record may well be intact and is kept for the next launch;
+        // this launch cannot know who is signed in, so it asks — with the
+        // reason — instead of settling signed-out as if nobody ever was.
+        set({
+          session: null,
+          hydrated: true,
+          error: {
+            code: 'auth.session_unavailable',
+            message: SESSION_UNAVAILABLE_MESSAGE,
+          },
+        });
+        return;
+      }
       if (persisted) {
         const outcome = await restorePersistedSession(persisted);
         if (outcome !== 'revoked') {
@@ -582,10 +653,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
-          const session =
+          const established =
             await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
-          if (session) {
-            set({ session, hydrated: true });
+          if (established) {
+            set({ ...signedInState(established), hydrated: true });
             return;
           }
         } catch {
@@ -624,7 +695,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const name =
         [result.givenName, result.familyName].filter(Boolean).join(' ') || null;
       clearSyncedRuntime();
-      const session = await establishSyncedAccount({
+      const established = await establishSyncedAccount({
         provider: 'apple',
         identityToken: result.identityToken,
         appleAuthorizationCode: result.authorizationCode,
@@ -636,7 +707,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // next launch. Apple itself gets no silent-restore flag — its identity
       // tokens are only issued interactively.
       await persistLastProvider(null);
-      set({ session, busy: false });
+      set(signedInState(established));
     } catch (error) {
       clearSyncedRuntime();
       set({ busy: false, error: toAuthError(error) });
@@ -679,7 +750,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       const user = response.data.user;
       clearSyncedRuntime();
-      const session = await establishSyncedAccount({
+      const established = await establishSyncedAccount({
         provider: 'google',
         identityToken: response.data.idToken,
         displayName: user.name ?? null,
@@ -689,7 +760,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // now silently restore this Google session (provider name only — the
       // token itself is never persisted).
       await persistLastProvider('google');
-      set({ session, busy: false });
+      set(signedInState(established));
     } catch (error) {
       clearSyncedRuntime();
       set({ busy: false, error: toAuthError(error) });

@@ -885,6 +885,7 @@ export function ManageAccountScreen() {
         onCancel={() => setConfirmingDeletion(false)}
         onDeleted={result => {
           setConfirmingDeletion(false);
+          const deletedProvider = session?.provider;
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
@@ -897,6 +898,19 @@ export function ManageAccountScreen() {
                   'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
                 tone: 'danger',
                 eyebrow: 'LOCAL CLEANUP NEEDED',
+              });
+            } else if (
+              result?.appleAuthorizationRevocation === 'unknown' &&
+              deletedProvider === 'apple'
+            ) {
+              // The confirm response was lost, so the server's Apple
+              // revocation verdict never arrived; point at the manual check.
+              showBrandNotice({
+                title: 'Account deleted',
+                detail:
+                  'Your account is gone. If iPhone Settings → your name → Sign in with Apple still lists Pickle Sensei, choose Stop Using Apple ID to disconnect it.',
+                tone: 'neutral',
+                eyebrow: 'ONE APPLE CHECK',
               });
             } else if (
               result?.appleAuthorizationRevocation === 'manual_action_required'

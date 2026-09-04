@@ -12,7 +12,15 @@ import type { ApiSession } from './apiSession';
  * The confirm call must present the challenge minted by a separate prior
  * request, so no single tap — accidental or scripted — can destroy an
  * account. Local sign-out and data-owner reset stay the caller's job
- * (authStore.signOut) after the server confirms deletion.
+ * (authStore.completeAccountDeletion) after the server confirms deletion.
+ *
+ * Only step 2 destroys anything, so only step 2 can end in an UNKNOWN
+ * outcome: when the confirm request leaves the device but its response never
+ * arrives, the server may have deleted the account. That challenge is
+ * remembered as unresolved; the bearer being refused (401) on its retry is
+ * then the deletion completing — the account the bearer named is gone — and
+ * resolves like a confirmation (with an unknown Apple-revocation outcome)
+ * instead of dead-ending at "sign in again".
  *
  * The optional exit survey rides along with step 1 so it is stored BEFORE
  * the account (and the bearer) cease to exist; the server keeps it
@@ -89,25 +97,38 @@ export interface AccountDeletionChallenge {
 }
 
 export interface AccountDeletionResult {
+  /** `unknown` when the deletion was inferred from the bearer being refused
+   * after a lost confirm response: the server ran its revocation step, but
+   * its verdict never reached the device. */
   appleAuthorizationRevocation:
-    'revoked' | 'not_applicable' | 'manual_action_required';
+    'revoked' | 'not_applicable' | 'manual_action_required' | 'unknown';
 }
+
+export const DELETE_REQUEST_OFFLINE_MESSAGE =
+  'Account deletion is temporarily offline. Nothing was deleted — please try again.';
+
+export const DELETE_CONFIRM_OUTCOME_UNKNOWN_MESSAGE =
+  'The connection dropped before the server answered, so we can’t tell yet whether your account was deleted. Tap Permanently delete again — if the account is already gone, we’ll finish signing you out.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-async function post(
+/** Thrown by `send` when no response arrived (network error or timeout). */
+class TransportFailure {
+  constructor(readonly cause: unknown) {}
+}
+
+async function send(
   session: ApiSession,
   fetchFn: AccountDeletionFetch,
   path: string,
   body?: unknown,
-): Promise<Record<string, unknown>> {
-  let response: Response;
+): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    response = await fetchFn(`${session.apiBaseUrl}${path}`, {
+    return await fetchFn(`${session.apiBaseUrl}${path}`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -117,15 +138,17 @@ async function post(
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-  } catch {
-    throw new AccountDeletionError(
-      'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
-      true,
-    );
+  } catch (cause) {
+    throw new TransportFailure(cause);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function readPayload(
+  response: Response,
+  rejectedFallback: string,
+): Promise<Record<string, unknown>> {
   let payload: unknown = null;
   try {
     payload = await response.json();
@@ -145,7 +168,7 @@ async function post(
     const message =
       error && typeof error['message'] === 'string'
         ? error['message']
-        : 'The deletion request could not be completed. Nothing was deleted.';
+        : rejectedFallback;
     throw new AccountDeletionError(
       'deletion.rejected',
       message,
@@ -162,6 +185,10 @@ async function post(
   return payload;
 }
 
+/** Challenges whose confirm request left the device without a response: the
+ * deletion may have executed. Cleared by the next definitive answer. */
+const unresolvedConfirmations = new Set<string>();
+
 /** Step 1 — mint the deletion challenge. Destroys nothing by itself. A
  * skipped survey sends no body at all (the pre-survey wire shape). */
 export async function requestAccountDeletion(
@@ -176,11 +203,25 @@ export async function requestAccountDeletion(
       false,
     );
   }
-  const payload = await post(
-    session,
-    fetchFn,
-    '/v1/me/delete-request',
-    survey ? { survey } : undefined,
+  let response: Response;
+  try {
+    response = await send(
+      session,
+      fetchFn,
+      '/v1/me/delete-request',
+      survey ? { survey } : undefined,
+    );
+  } catch (failure) {
+    if (!(failure instanceof TransportFailure)) throw failure;
+    throw new AccountDeletionError(
+      'deletion.unavailable',
+      DELETE_REQUEST_OFFLINE_MESSAGE,
+      true,
+    );
+  }
+  const payload = await readPayload(
+    response,
+    'The deletion request could not be completed. Nothing was deleted.',
   );
   const challenge = payload['challenge'];
   const expiresAt = payload['expiresAt'];
@@ -207,9 +248,32 @@ export async function confirmAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-confirm', {
-    challenge,
-  });
+  const previouslyUnresolved = unresolvedConfirmations.has(challenge);
+  unresolvedConfirmations.add(challenge);
+  let response: Response;
+  try {
+    response = await send(session, fetchFn, '/v1/me/delete-confirm', {
+      challenge,
+    });
+  } catch (failure) {
+    if (!(failure instanceof TransportFailure)) throw failure;
+    throw new AccountDeletionError(
+      'deletion.unavailable',
+      DELETE_CONFIRM_OUTCOME_UNKNOWN_MESSAGE,
+      true,
+    );
+  }
+  // A response — any response — is a definitive answer for this challenge.
+  unresolvedConfirmations.delete(challenge);
+  if (response.status === 401 && previouslyUnresolved) {
+    // The bearer named an account that no longer exists: the earlier confirm
+    // executed and this retry found nothing left to delete.
+    return { appleAuthorizationRevocation: 'unknown' };
+  }
+  const payload = await readPayload(
+    response,
+    'The deletion could not be completed — please try again.',
+  );
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
       'deletion.rejected',

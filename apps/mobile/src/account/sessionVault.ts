@@ -11,9 +11,13 @@
  * relaunch can refresh) and never leaves this device through backups or
  * Keychain sync.
  *
- * Every operation fails soft: a build without the native module, or a
- * Keychain error, degrades to "nothing persisted" — the user stays signed in
- * for this run and is asked again next launch — never to a crash.
+ * No operation crashes the app, but Keychain FAULTS are not folded into the
+ * "nothing stored" outcome: a write that fails after a retry reports false so
+ * the caller can tell the user the sign-in will not survive a relaunch, and a
+ * read that fails after a retry throws `SessionVaultReadError` so a launch
+ * can keep the record and surface the problem instead of settling signed-out
+ * as if the user had never signed in. Only a build without the native module
+ * degrades to "nothing persisted".
  */
 
 export const SESSION_VAULT_SERVICE = 'com.picklesensei.auth.session';
@@ -29,6 +33,35 @@ export interface PersistedSession {
 }
 
 type KeychainModule = typeof import('react-native-keychain');
+
+/** Transient Keychain faults (e.g. errSecInteractionNotAllowed before the
+ * first unlock, errSecIO) get exactly one immediate retry. */
+const KEYCHAIN_ATTEMPTS = 2;
+
+/** The Keychain item could not be READ — distinct from "no item stored".
+ * The record is left in place for the next launch to retry. */
+export class SessionVaultReadError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error && cause.message
+        ? `Keychain read failed: ${cause.message}`
+        : 'Keychain read failed.',
+    );
+    this.name = 'SessionVaultReadError';
+  }
+}
+
+async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < KEYCHAIN_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
 
 /** Loaded lazily like the Google SDK: launches never pay the import cost
  * before they need it, and a build missing the native module fails only
@@ -79,20 +112,23 @@ function parsePersistedSession(raw: string): PersistedSession | null {
   }
 }
 
-/** Returns whether the session is now durably stored. */
+/** Returns whether the session is now durably stored. False means the
+ * caller must not report a durable sign-in. */
 export async function savePersistedSession(
   session: PersistedSession,
 ): Promise<boolean> {
   const keychain = loadKeychain();
   if (!keychain) return false;
   try {
-    const result = await keychain.setGenericPassword(
-      SESSION_VAULT_ACCOUNT,
-      JSON.stringify(session),
-      {
-        service: SESSION_VAULT_SERVICE,
-        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
-      },
+    const result = await withRetry(() =>
+      keychain.setGenericPassword(
+        SESSION_VAULT_ACCOUNT,
+        JSON.stringify(session),
+        {
+          service: SESSION_VAULT_SERVICE,
+          accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+        },
+      ),
     );
     return result !== false;
   } catch {
@@ -100,22 +136,24 @@ export async function savePersistedSession(
   }
 }
 
-/** Null when nothing is stored, the item is unreadable, or it is malformed —
- * a malformed item is discarded rather than trusted. */
+/** Null when nothing is stored or the item is malformed — a malformed item
+ * is discarded rather than trusted. Throws `SessionVaultReadError` when the
+ * Keychain itself could not be read; the item is kept. */
 export async function loadPersistedSession(): Promise<PersistedSession | null> {
   const keychain = loadKeychain();
   if (!keychain) return null;
+  let stored: Awaited<ReturnType<KeychainModule['getGenericPassword']>>;
   try {
-    const stored = await keychain.getGenericPassword({
-      service: SESSION_VAULT_SERVICE,
-    });
-    if (!stored) return null;
-    const session = parsePersistedSession(stored.password);
-    if (!session) await clearPersistedSession();
-    return session;
-  } catch {
-    return null;
+    stored = await withRetry(() =>
+      keychain.getGenericPassword({ service: SESSION_VAULT_SERVICE }),
+    );
+  } catch (error) {
+    throw new SessionVaultReadError(error);
   }
+  if (!stored) return null;
+  const session = parsePersistedSession(stored.password);
+  if (!session) await clearPersistedSession();
+  return session;
 }
 
 export async function clearPersistedSession(): Promise<void> {

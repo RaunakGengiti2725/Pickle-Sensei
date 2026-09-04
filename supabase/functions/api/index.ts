@@ -37,6 +37,9 @@
 //                                per-technique scores it averages
 //   GET  /v1/me/consent/status, POST /v1/me/consent/grant|withdraw
 //   GET/PUT/DELETE /v1/me/saved-drills[/:slug]
+//   GET  /v1/training-plans/current → { plan: null } until validated content ships
+//   POST /v1/training-plans, /v1/drill-completions,
+//        /v1/training-plans/:id/reassessment → 409 training.plan_unavailable
 //   POST /v1/me/delete-request  → two-step account deletion, step 1 (body may
 //                                carry the optional exit survey)
 //   POST /v1/me/delete-confirm  → step 2 (requires the step-1 challenge)
@@ -2044,6 +2047,20 @@ async function getCatalogDrill(authed: AuthedUser, slug: string): Promise<Respon
   });
 }
 
+/** No training plan can exist until coach-validated drill content is
+ * published, so nothing plan-scoped can be created, completed, or reassessed.
+ * The mobile client renders `error.message` from a 409 as the mutation error
+ * (training/api.ts request → TrainingError). */
+function trainingPlanUnavailable(): Response {
+  return json(409, {
+    error: {
+      code: "training.plan_unavailable",
+      message:
+        "Training plans require coach-validated drill content, which has not been published yet.",
+    },
+  });
+}
+
 /** GET /v1/me/saved-drills — mirrors apps/mobile/src/training/api.ts
  * listSavedDrills (lines 405-411): { items: [SavedDrill] }. */
 async function listSavedDrills(authed: AuthedUser): Promise<Response> {
@@ -2997,6 +3014,14 @@ async function handleRequest(request: Request): Promise<Response> {
       return request.method === "PUT" ? saveDrill(authed, slug) : unsaveDrill(authed, slug);
     }
   }
+  if (request.method === "POST") {
+    const m = /^\/v1\/training-plans\/([^/]+)\/reassessment$/.exec(path);
+    if (m) {
+      const planId = decodePathSegment(m[1]);
+      if (planId instanceof Response) return planId;
+      return trainingPlanUnavailable();
+    }
+  }
 
   if (request.method === "GET") {
     if (path === "/v1/catalog/drills") {
@@ -3226,20 +3251,18 @@ async function handleRequest(request: Request): Promise<Response> {
 
     // ── Training plans: honest empty states. Plans require published,
     // coach-validated drill content; none exists (0 real coach reviews — the
-    // coach gates are frozen shut), so the current plan is null. These are
+    // coach gates are frozen shut), so the current plan is null and every
+    // plan-scoped write (create, drill completion, reassessment — the routes
+    // apps/mobile/src/training/api.ts calls) answers the same 409. These are
     // truthful values, not stubs: the moment validated content ships, these
-    // grow real backends.
+    // grow real backends. The inventory is pinned by
+    // __wf__/adjudicate_xc_ci_release_static.test.ts.
     case "GET /v1/training-plans/current":
       return json(200, { plan: null });
 
     case "POST /v1/training-plans":
-      return json(409, {
-        error: {
-          code: "training.plan_unavailable",
-          message:
-            "Training plans require coach-validated drill content, which has not been published yet.",
-        },
-      });
+    case "POST /v1/drill-completions":
+      return trainingPlanUnavailable();
 
     default:
       return errorJson(404, `Unknown endpoint: ${route}.`);
