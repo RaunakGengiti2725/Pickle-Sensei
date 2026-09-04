@@ -166,6 +166,17 @@ class E15DownloadTest(unittest.TestCase):
         self.assertFalse(e.get("shaVerified", False), e)
         self.assertNotEqual(proc.returncode, 0, "curl failure must fail the process")
 
+    def test_stale_file_without_media_url_is_reported_unverified(self):
+        good = b"NO-URL-" * 1024
+        self.scratch.add("rec-nourl", good, local=b"junk" * 64)
+        self.scratch.sources[-1]["acquisition"] = {}
+        proc, report = self.scratch.run()
+
+        e = by_id(report)["rec-nourl"]
+        self.assertEqual(e["status"], "no_media_url", e)
+        self.assertFalse(e["shaVerified"], e)
+        self.assertNotEqual(proc.returncode, 0, "corrupt file that cannot be re-fetched must fail")
+
     def test_exit_zero_only_when_every_entry_verified(self):
         self.scratch.add("rec-a", b"A" * 2048)
         self.scratch.add("rec-b", b"B" * 2048, local=b"B" * 2048)
