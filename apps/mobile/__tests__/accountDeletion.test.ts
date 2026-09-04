@@ -4,7 +4,12 @@
  * always say NOTHING was deleted unless the server confirmed), and the
  * post-confirmation local purge that removes every owner-scoped row.
  */
-import type { ApiSession } from '../src/account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+  type ApiSession,
+} from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
@@ -171,6 +176,245 @@ describe('account deletion client', () => {
     await expect(
       confirmAccountDeletion(session, 'challenge', down),
     ).rejects.toBeInstanceOf(AccountDeletionError);
+  });
+});
+
+/**
+ * delete-confirm is the one request whose failure is AMBIGUOUS: the server
+ * commits the delete before it answers, so a timeout / dropped connection
+ * may hide a deletion that already happened. Once that account is gone its
+ * bearer is dead and every later call — including a retry on the SAME
+ * challenge — answers 401. The client keeps a per-challenge ledger of
+ * confirms that went out unanswered and reads that 401 as "already
+ * deleted", instead of telling the user to sign in to an account that no
+ * longer exists.
+ */
+describe('ambiguous delete-confirm outcomes', () => {
+  const appleSession: ApiSession = {
+    apiBaseUrl: 'https://api.example.test/functions/v1/api',
+    bearerToken: 'access-token-apple',
+    canonicalAppUserId: '22222222-2222-4222-8222-222222222222',
+    provider: 'apple',
+  };
+  const unauthorizedListener = jest.fn();
+
+  function abortingFetch(): jest.Mock<
+    Promise<Response>,
+    [string, RequestInit?]
+  > {
+    return jest.fn(
+      (_input: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const error = new Error('Aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        }),
+    );
+  }
+
+  async function timeOut<T>(pending: Promise<T>): Promise<unknown> {
+    const settled = pending.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await jest.advanceTimersByTimeAsync(15_000);
+    return settled;
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    unauthorizedListener.mockReset();
+    establishApiSession(appleSession);
+    setApiUnauthorizedListener(unauthorizedListener);
+  });
+
+  afterEach(() => {
+    setApiUnauthorizedListener(null);
+    clearApiSession();
+    jest.useRealTimers();
+  });
+
+  it('step 2: a 401 reports the rejected bearer to the auth store exactly once', async () => {
+    const fetchFn = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, 'challenge-plain-401', fetchFn),
+    ).rejects.toMatchObject({
+      code: 'deletion.session_expired',
+      retryable: false,
+      message:
+        'Your sign-in has expired. Sign in again, then delete your account.',
+    });
+    expect(unauthorizedListener).toHaveBeenCalledTimes(1);
+    expect(unauthorizedListener).toHaveBeenCalledWith(appleSession);
+  });
+
+  it('step 2: a 401 for a bearer that already rotated away is not reported (stale token)', async () => {
+    establishApiSession({
+      ...appleSession,
+      bearerToken: 'access-token-rotated',
+    });
+    const fetchFn = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, 'challenge-stale-401', fetchFn),
+    ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+    expect(unauthorizedListener).not.toHaveBeenCalled();
+  });
+
+  it('step 2: a timed-out confirm is retryable and never claims nothing was deleted', async () => {
+    const fetchFn = abortingFetch();
+    const error = (await timeOut(
+      confirmAccountDeletion(appleSession, 'challenge-timeout', fetchFn),
+    )) as AccountDeletionError;
+    expect(error).toBeInstanceOf(AccountDeletionError);
+    expect(error).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+    });
+    expect(error.message).not.toMatch(/Nothing was deleted/);
+    expect(error.message).toMatch(/could not confirm/i);
+    expect(unauthorizedListener).not.toHaveBeenCalled();
+  });
+
+  it('step 1: a timed-out delete-request still says nothing was deleted (no challenge was confirmed)', async () => {
+    const fetchFn = abortingFetch();
+    const error = (await timeOut(
+      requestAccountDeletion(appleSession, null, fetchFn),
+    )) as AccountDeletionError;
+    expect(error).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+      message:
+        'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+    });
+  });
+
+  it('step 2: 401 on the SAME challenge after an unanswered confirm resolves as deleted (Apple revocation unconfirmed)', async () => {
+    const challenge = 'challenge-lost-then-401';
+    await timeOut(
+      confirmAccountDeletion(appleSession, challenge, abortingFetch()),
+    );
+    const retry = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, challenge, retry),
+    ).resolves.toEqual({ appleAuthorizationRevocation: 'unconfirmed' });
+    // The caller runs completeAccountDeletion (purge + Keychain clear); the
+    // generic expired-session path is not raced against it.
+    expect(unauthorizedListener).not.toHaveBeenCalled();
+
+    // The ledger entry is consumed: a THIRD 401 on that challenge is a plain
+    // expired session again.
+    await expect(
+      confirmAccountDeletion(appleSession, challenge, retry),
+    ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+    expect(unauthorizedListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('step 2: inferred deletion for a Google account has no Apple revocation to report', async () => {
+    const googleSession: ApiSession = {
+      ...appleSession,
+      canonicalAppUserId: '33333333-3333-4333-8333-333333333333',
+      provider: 'google',
+    };
+    const challenge = 'challenge-google-lost';
+    await timeOut(
+      confirmAccountDeletion(googleSession, challenge, abortingFetch()),
+    );
+    const retry = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(googleSession, challenge, retry),
+    ).resolves.toEqual({ appleAuthorizationRevocation: 'not_applicable' });
+  });
+
+  it('step 2: a dropped connection (not only a timeout) counts as an unanswered confirm', async () => {
+    const challenge = 'challenge-network-then-401';
+    const dropped = jest.fn(async () => {
+      throw new TypeError('Network request failed');
+    });
+    await expect(
+      confirmAccountDeletion(appleSession, challenge, dropped),
+    ).rejects.toMatchObject({ code: 'deletion.unavailable', retryable: true });
+    const retry = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, challenge, retry),
+    ).resolves.toEqual({ appleAuthorizationRevocation: 'unconfirmed' });
+  });
+
+  it('step 2: an unanswered confirm on ANOTHER challenge does not excuse a 401', async () => {
+    await timeOut(
+      confirmAccountDeletion(appleSession, 'challenge-A', abortingFetch()),
+    );
+    const retry = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, 'challenge-B', retry),
+    ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+    expect(unauthorizedListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('step 2: an unanswered confirm followed by a definitive answer forgets the ambiguity', async () => {
+    const challenge = 'challenge-lost-then-answered';
+    await timeOut(
+      confirmAccountDeletion(appleSession, challenge, abortingFetch()),
+    );
+    // The server never saw the first attempt; the retry lands normally.
+    const ok = jest.fn(async () =>
+      jsonResponse(200, {
+        deleted: true,
+        appleAuthorizationRevocation: 'revoked',
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, challenge, ok),
+    ).resolves.toEqual({ appleAuthorizationRevocation: 'revoked' });
+
+    // Same for a stale-challenge refusal: it is definitive, so a 401 that
+    // comes later is an ordinary expired session.
+    const other = 'challenge-lost-then-expired';
+    await timeOut(confirmAccountDeletion(appleSession, other, abortingFetch()));
+    const stale = jest.fn(async () =>
+      jsonResponse(403, {
+        error: {
+          code: 'account.deletion_challenge_expired',
+          message: 'The deletion request expired. Start again from Settings.',
+        },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, other, stale),
+    ).rejects.toMatchObject({ code: 'deletion.rejected' });
+    const unauthorized = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid.' },
+      }),
+    );
+    await expect(
+      confirmAccountDeletion(appleSession, other, unauthorized),
+    ).rejects.toMatchObject({ code: 'deletion.session_expired' });
   });
 });
 
