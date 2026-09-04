@@ -6,13 +6,15 @@
  * license string. Its header states: "Anything not matched returns
  * all-unclear." These probes check that restrictive Creative Commons
  * variants (NonCommercial / NoDerivatives) and negated phrases are NOT
- * upgraded to permissive rights. A FAILING case is the evidence for a finding;
- * production code is not modified.
+ * upgraded to permissive rights. The first three blocks are the adjudicator's
+ * reproducer (finding SL-01, verbatim); the SL-01 blocks below pin the exact
+ * expected values and the parser that now backs the derivation.
  *
  * Plane: Linux bench.
  */
 import { describe, expect, it } from "vitest";
 import {
+  parseLicense,
   redistributionEligible,
   rightsForLicense,
   trainingEligible,
@@ -194,5 +196,58 @@ describe("SL-01: permissive controls keep their full profiles (corpus strings)",
     expect(rights.basis).toContain("CC BY-NC 4.0");
     expect(rights.reviewedBy).toBe(REVIEWER);
     expect(Number.isNaN(Date.parse(rights.reviewedAtIso))).toBe(false);
+  });
+});
+
+describe("SL-01 mechanism: parseLicense yields a structured designation", () => {
+  it("parses Creative Commons element sets and versions, in any spelling", () => {
+    for (const [license, elements, version] of [
+      ["CC BY 3.0", ["by"], "3.0"],
+      ["cc-by-4.0", ["by"], "4.0"],
+      ["CC BY-NC-SA 4.0", ["by", "nc", "sa"], "4.0"],
+      ["cc-by-nc-nd 3.0", ["by", "nc", "nd"], "3.0"],
+      ["CC BY-ND", ["by", "nd"], null],
+      ["Creative Commons Attribution-ShareAlike 2.5 Generic", ["by", "sa"], "2.5"],
+      ["Creative Commons Attribution-NonCommercial-NoDerivs 3.0", ["by", "nc", "nd"], "3.0"],
+    ] as const) {
+      const parsed = parseLicense(license);
+      expect(parsed.kind, license).toBe("creative_commons");
+      if (parsed.kind !== "creative_commons") continue;
+      expect([...parsed.elements].sort(), license).toEqual([...elements].sort());
+      expect(parsed.version, license).toBe(version);
+    }
+  });
+
+  it("parses public-domain designations that lead the string", () => {
+    for (const license of [
+      "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "PD-USGov",
+      "PD-self",
+      "CC0 1.0 Universal",
+      "CC0",
+    ]) {
+      expect(parseLicense(license).kind, license).toBe("public_domain");
+    }
+  });
+
+  it("refuses designations that do not lead the string or carry a hedge", () => {
+    for (const [license, reasonFragment] of [
+      ["NOT public domain — all rights reserved", "hedge marker"],
+      ["Released into the public domain by the author", "no known license designation"],
+      ["Standard YouTube License", "no known license designation"],
+      ["CC BY-SA-ND 4.0", "never appear together"],
+      ["CC BY-XYZ 4.0", "no known license designation"],
+      ["", "empty"],
+    ] as const) {
+      const parsed = parseLicense(license);
+      expect(parsed.kind, license).toBe("unrecognized");
+      if (parsed.kind === "unrecognized") expect(parsed.reason, license).toContain(reasonFragment);
+    }
+  });
+
+  it("unrecognized basis explains why so the human reviewer sees the trigger", () => {
+    expect(rightsForLicense("NOT public domain — all rights reserved", REVIEWER).basis).toContain(
+      'hedge marker ("not")',
+    );
   });
 });
