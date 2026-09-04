@@ -48,12 +48,28 @@ import type {
 import {
   clearAccessStoreConfiguration,
   configureAccessStore,
+  selectHasPremium,
+  useAccessStore,
 } from '../src/state/accessStore';
 import { PaywallScreen } from '../src/screens/PaywallScreen';
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
   entitlements: [],
+  freeRatings: {
+    limit: 2,
+    used: 1,
+    reserved: 0,
+    remaining: 1,
+    availableToReserve: 1,
+  },
+  canStartRating: true,
+  paywallRequired: false,
+};
+
+const paidAccess: CanonicalAccessState = {
+  premium: true,
+  entitlements: ['pickle_sensei_pro'],
   freeRatings: {
     limit: 2,
     used: 1,
@@ -98,6 +114,7 @@ const plans: StorePlans = {
 
 function dependencies(options?: {
   loadPlans?: () => Promise<StorePlans>;
+  syncBilling?: BillingAccessDependencies['backend']['syncBilling'];
 }): BillingAccessDependencies {
   return {
     store: {
@@ -121,17 +138,39 @@ function dependencies(options?: {
     },
     backend: {
       getAccess: jest.fn(async () => freeAccess),
-      syncBilling: jest.fn(async () => {
-        throw new Error('not exercised in these tests');
-      }),
+      syncBilling: jest.fn(
+        options?.syncBilling ??
+          (async () => {
+            throw new Error('not exercised in these tests');
+          }),
+      ),
     },
   };
 }
 
-async function renderPaywall() {
+const verifiedPremiumSync: BillingAccessDependencies['backend']['syncBilling'] =
+  async () => ({
+    billing: {
+      premium: true,
+      productKey: 'premium_annual_3999',
+      expiresAt: '2027-08-27T00:00:00.000Z',
+      verifiedAt: '2026-08-27T00:00:00.000Z',
+    },
+    access: paidAccess,
+  });
+
+async function renderPaywall(callbacks?: {
+  onClose?: () => void;
+  onPurchased?: () => void;
+}) {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = TestRenderer.create(<PaywallScreen onClose={jest.fn()} />);
+    renderer = TestRenderer.create(
+      <PaywallScreen
+        onClose={callbacks?.onClose ?? jest.fn()}
+        onPurchased={callbacks?.onPurchased}
+      />,
+    );
   });
   // Flush initialize(): configure + getAccess/loadPlans promise chains.
   await act(async () => {
@@ -274,6 +313,112 @@ describe('PaywallScreen podium', () => {
       '$159.99 one-time purchase. Not a subscription — no renewal.',
     );
     expect(copy).not.toContain('automatically renewing');
+
+    act(() => renderer.unmount());
+  });
+
+  it('calls onPurchased exactly once when the screen stays mounted through a verified purchase', async () => {
+    const clients = dependencies({ syncBilling: verifiedPremiumSync });
+    configureAccessStore(clients);
+    const onClose = jest.fn();
+    const onPurchased = jest.fn();
+    const renderer = await renderPaywall({ onClose, onPurchased });
+    await openPricing(renderer);
+
+    await act(async () => {
+      pressable(renderer, 'paywall-continue').props.onPress();
+    });
+    await act(async () => {
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
+    });
+
+    expect(clients.store.purchase).toHaveBeenCalledWith('annual-plan');
+    expect(clients.backend.syncBilling).toHaveBeenCalledTimes(1);
+    expect(onPurchased).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().operation).toBe('idle');
+    expect(selectHasPremium(useAccessStore.getState())).toBe(true);
+
+    act(() => renderer.unmount());
+  });
+
+  it('calls onPurchased exactly once when the screen stays mounted through a verified restore', async () => {
+    const clients = dependencies({ syncBilling: verifiedPremiumSync });
+    configureAccessStore(clients);
+    const onPurchased = jest.fn();
+    const renderer = await renderPaywall({ onPurchased });
+    await openPricing(renderer);
+
+    await act(async () => {
+      pressable(renderer, 'paywall-restore').props.onPress();
+    });
+    await act(async () => {
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
+    });
+
+    expect(clients.store.restore).toHaveBeenCalledTimes(1);
+    expect(clients.store.purchase).not.toHaveBeenCalled();
+    expect(onPurchased).toHaveBeenCalledTimes(1);
+    expect(selectHasPremium(useAccessStore.getState())).toBe(true);
+
+    act(() => renderer.unmount());
+  });
+
+  it('disables Close and Back only while a store operation is in flight', async () => {
+    let resolvePurchase!: (value: {
+      premium: boolean;
+      productId: string | null;
+      expirationDate: string | null;
+    }) => void;
+    const clients = dependencies({ syncBilling: verifiedPremiumSync });
+    (clients.store.purchase as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolvePurchase = resolve;
+        }),
+    );
+    configureAccessStore(clients);
+    const onClose = jest.fn();
+    const onPurchased = jest.fn();
+    const renderer = await renderPaywall({ onClose, onPurchased });
+
+    const closeControls = () =>
+      renderer.root.findAll(
+        n =>
+          n.props.accessibilityLabel === 'Close membership offer' &&
+          typeof n.props.onPress === 'function',
+      );
+    const closeStates = () =>
+      closeControls().map(n => ({
+        disabled: n.props.disabled,
+        announced: n.props.accessibilityState?.disabled,
+      }));
+    expect(closeStates().every(s => !s.disabled)).toBe(true);
+    await openPricing(renderer);
+    expect(pressable(renderer, 'paywall-back').props.disabled).toBeFalsy();
+    expect(closeStates().every(s => !s.disabled)).toBe(true);
+
+    await act(async () => {
+      pressable(renderer, 'paywall-continue').props.onPress();
+    });
+    expect(useAccessStore.getState().operation).toBe('purchasing');
+    expect(pressable(renderer, 'paywall-back').props.disabled).toBe(true);
+    expect(closeStates().every(s => s.disabled === true)).toBe(true);
+    // VoiceOver must hear it too (PressableScale mirrors disabled into
+    // accessibilityState on the underlying Pressable).
+    expect(closeStates().some(s => s.announced === true)).toBe(true);
+
+    resolvePurchase({
+      premium: true,
+      productId: 'premium_annual_3999',
+      expirationDate: null,
+    });
+    await act(async () => {
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
+    });
+    expect(useAccessStore.getState().operation).toBe('idle');
+    expect(onPurchased).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
 
     act(() => renderer.unmount());
   });

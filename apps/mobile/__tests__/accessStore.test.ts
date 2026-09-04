@@ -212,6 +212,155 @@ describe('accessStore', () => {
     expect(state.canonicalAccess).toEqual(paidAccess);
   });
 
+  it('discards a refresh that started before a purchase verified (stale GET never demotes premium)', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let resolveStale!: (value: CanonicalAccessState) => void;
+    const staleGet = new Promise<CanonicalAccessState>(resolve => {
+      resolveStale = resolve;
+    });
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () => staleGet,
+    );
+    const staleRefresh = useAccessStore.getState().refreshAccess();
+
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      true,
+    );
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    resolveStale(freeAccess);
+    await expect(staleRefresh).resolves.toBe(true);
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('still applies a refresh that starts after a purchase verified (no over-correction)', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      true,
+    );
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    // A NEWER server read wins even when it demotes: e.g. the subscription
+    // lapsed or was refunded since the purchase sync.
+    const lapsedAccess: CanonicalAccessState = {
+      ...freeAccess,
+      freeRatings: { ...freeAccess.freeRatings, used: 2, remaining: 0 },
+    };
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      async () => lapsedAccess,
+    );
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(
+      true,
+    );
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(lapsedAccess);
+    expect(selectHasPremium(state)).toBe(false);
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies the newest of two overlapping refreshes regardless of response order', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let resolveFirst!: (value: CanonicalAccessState) => void;
+    let resolveSecond!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock)
+      .mockImplementationOnce(
+        () =>
+          new Promise<CanonicalAccessState>(resolve => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<CanonicalAccessState>(resolve => {
+            resolveSecond = resolve;
+          }),
+      );
+    const first = useAccessStore.getState().refreshAccess();
+    const second = useAccessStore.getState().refreshAccess();
+    resolveSecond(paidAccess);
+    await second;
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+    expect(useAccessStore.getState().status).toBe('ready');
+    resolveFirst(freeAccess);
+    await expect(first).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+    expect(useAccessStore.getState().status).toBe('ready');
+  });
+
+  it('initialize() configures the store exactly once even while a refresh is loading', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    let resolveRefresh!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<CanonicalAccessState>(resolve => {
+          resolveRefresh = resolve;
+        }),
+    );
+    const refresh = useAccessStore.getState().refreshAccess();
+    expect(useAccessStore.getState().status).toBe('loading');
+
+    await Promise.all([
+      useAccessStore.getState().initialize(),
+      useAccessStore.getState().initialize(),
+    ]);
+    expect(clients.store.configure).toHaveBeenCalledTimes(1);
+    expect(clients.store.loadPlans).toHaveBeenCalledTimes(1);
+    expect(clients.store.restore).not.toHaveBeenCalled();
+    expect(clients.backend.syncBilling).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().plans).toEqual(plans);
+
+    resolveRefresh(freeAccess);
+    await refresh;
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(freeAccess);
+    expect(state.plans).toEqual(plans);
+    // The refresh that started first is the OLDER server read; initialize()'s
+    // own GET landed after it and is what the store keeps.
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(2);
+  });
+
+  it('a sign-out during initialize() lets the next account initialize immediately', async () => {
+    const first = dependencies();
+    let resolveConfigure!: () => void;
+    (first.store.configure as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveConfigure = resolve;
+        }),
+    );
+    configureAccessStore(first);
+    const stalled = useAccessStore.getState().initialize();
+
+    clearAccessStoreConfiguration();
+    const second = dependencies();
+    configureAccessStore(second);
+    await useAccessStore.getState().initialize();
+    expect(second.store.configure).toHaveBeenCalledTimes(1);
+    expect(second.store.loadPlans).toHaveBeenCalledTimes(1);
+    expect(useAccessStore.getState().status).toBe('ready');
+    expect(useAccessStore.getState().plans).toEqual(plans);
+
+    resolveConfigure();
+    await stalled;
+    expect(first.store.loadPlans).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().status).toBe('ready');
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess);
+  });
+
   it('clears stale access if a canonical refresh fails', async () => {
     let fail = false;
     configureAccessStore(
