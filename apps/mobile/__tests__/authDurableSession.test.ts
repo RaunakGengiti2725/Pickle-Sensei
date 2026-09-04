@@ -47,7 +47,10 @@ const { __keychainStore } = Keychain as unknown as {
 // ─── Module seams ────────────────────────────────────────────────────────────
 
 const mockKv = new Map<string, string>();
+/** When set, getDb() throws it — SQLite could not be opened or migrated. */
+let mockDbOpenError: Error | null = null;
 function mockCurrentDb(): LocalDb {
+  if (mockDbOpenError) throw mockDbOpenError;
   return {
     async execute(sql: string, params: unknown[] = []) {
       const statement = sql.trim().replace(/\s+/g, ' ');
@@ -180,6 +183,7 @@ const realFetch = globalThis.fetch;
 beforeEach(() => {
   jest.clearAllMocks();
   mockKv.clear();
+  mockDbOpenError = null;
   __keychainStore.clear();
   stopSessionKeeper();
   clearSyncRuntime();
@@ -404,6 +408,48 @@ describe('relaunch (hydrate) with a persisted session', () => {
     expect(vaultRecord()).toBeNull();
     // A revoked session must not be resurrected by the legacy silent path.
     expect(mockKv.get('auth.last-provider')).toBe('');
+  });
+
+  it('stays signed in when SQLite cannot be opened: the Keychain restore does not depend on the local database', async () => {
+    seedVault('refresh-1', 'apple');
+    mockDbOpenError = new Error('SQLITE_CANTOPEN: unable to open database file');
+    const fetchMock = installRoutes({
+      '/v1/auth/refresh': () =>
+        response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
+    });
+
+    await useAuthStore.getState().hydrate();
+
+    const state = useAuthStore.getState();
+    expect(state.hydrated).toBe(true);
+    expect(state.session).not.toBeNull();
+    expect(state.session?.canonicalAppUserId).toBe(canonicalId);
+    expect(getActiveDataOwner()).toBe(canonicalId);
+    // The sign-in itself is intact and the refresh still rotated.
+    expect(state.error).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getApiSession()).toMatchObject({
+      bearerToken: 'access-2',
+      canonicalAppUserId: canonicalId,
+    });
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+    // What actually failed is reported as a local-data problem, not sign-out.
+    expect(state.localDataError).toEqual({
+      code: 'local_data.unavailable',
+      message: expect.any(String),
+    });
+  });
+
+  it('SQLite failing with NO vault record lands signed out with the local-data problem reported', async () => {
+    mockDbOpenError = new Error('SQLITE_CANTOPEN: unable to open database file');
+
+    await useAuthStore.getState().hydrate();
+
+    const state = useAuthStore.getState();
+    expect(state.hydrated).toBe(true);
+    expect(state.session).toBeNull();
+    expect(getActiveDataOwner()).toBe(SIGNED_OUT_DATA_OWNER);
+    expect(state.localDataError?.code).toBe('local_data.unavailable');
   });
 
   it('discards a malformed Keychain record instead of trusting it', async () => {
