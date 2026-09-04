@@ -56,6 +56,10 @@ async function redisPipeline(
 interface MemoryEntry {
   value: string;
   expiresAtMs: number;
+  /** False once this isolate KNOWS its L2 write of the row was refused: the
+   * row then lives in L1 only, and L2 reporting it absent says nothing about
+   * another isolate having deleted it. */
+  inL2: boolean;
 }
 
 const MEMORY_MAX_ENTRIES = 5_000;
@@ -71,7 +75,25 @@ function memoryGet(key: string): string | null {
   return entry.value;
 }
 
-function memorySet(key: string, value: string, ttlSeconds: number): void {
+/** A per-command slot of a pipeline reply that actually answered (present and
+ * without a Redis-side error). Anything else is an unknown, never an absence. */
+function answered(
+  results: RedisPipelineResult,
+  index: number,
+): { result?: unknown } | null {
+  const slot = results[index];
+  if (!slot || typeof slot !== "object" || slot.error !== undefined) {
+    return null;
+  }
+  return slot;
+}
+
+function memorySet(
+  key: string,
+  value: string,
+  ttlSeconds: number,
+  inL2 = true,
+): void {
   if (memory.size >= MEMORY_MAX_ENTRIES) {
     // Evict expired entries first; if none expired, drop the oldest third so
     // a hot isolate can never grow without bound.
@@ -87,7 +109,11 @@ function memorySet(key: string, value: string, ttlSeconds: number): void {
       }
     }
   }
-  memory.set(key, { value, expiresAtMs: Date.now() + ttlSeconds * 1_000 });
+  memory.set(key, {
+    value,
+    expiresAtMs: Date.now() + ttlSeconds * 1_000,
+    inL2,
+  });
 }
 
 /** How long an L2 row read through into L1 may be served locally before L2
@@ -128,8 +154,16 @@ export interface GuardedCacheHit {
  * miss, not a hit). So a revocation published anywhere is honoured here on
  * the next request, not when the local copy ages out. A marker found in L2
  * is copied into L1 so the refusal stays cheap while the row it fences would
- * still be alive, and the fenced row is dropped from L1. Redis being
- * unavailable degrades to the L1 answer, like every other read here. */
+ * still be alive, and the fenced row is dropped from L1.
+ *
+ * Two degraded modes are told apart. Redis UNREACHABLE (HTTP failure,
+ * timeout) degrades to the L1 answer, like every other read here — an
+ * outage must not sign users out. Redis REACHED but not answering the
+ * question (a per-command error, a short reply) is "unknown": the row is
+ * not served and not dropped, so the caller re-verifies with the source of
+ * truth and the copy is there again once L2 answers. A row this isolate
+ * wrote but L2 refused to store is served from L1 for its lifetime: L2 has
+ * no row for another isolate to have deleted. */
 export async function cacheGetUnlessRevoked(
   key: string,
   revokedKey: string,
@@ -148,45 +182,78 @@ export async function cacheGetUnlessRevoked(
   const results = await redisPipeline(commands);
   if (!results) return { value: local, revoked: false };
 
-  const marker = results[0]?.result;
-  if (typeof marker === "string") {
-    memorySet(revokedKey, marker, L1_READTHROUGH_TTL_SECONDS);
+  const markerSlot = answered(results, 0);
+  if (!markerSlot) return { value: null, revoked: false };
+  if (typeof markerSlot.result === "string") {
+    memorySet(revokedKey, markerSlot.result, L1_READTHROUGH_TTL_SECONDS);
     memory.delete(key);
     return { value: null, revoked: true };
   }
-  const ttl = Number(results[results.length - 1]?.result);
+  const ttlSlot = answered(results, commands.length - 1);
+  if (!ttlSlot) return { value: null, revoked: false };
+  const ttl = Number(ttlSlot.result);
+
   if (local !== null) {
     if (ttl !== -2) return { value: local, revoked: false };
+    if (memory.get(key)?.inL2 === false) {
+      return { value: local, revoked: false };
+    }
     memory.delete(key);
     return { value: null, revoked: false };
   }
 
-  const value = results[1]?.result;
-  if (typeof value !== "string") return { value: null, revoked: false };
-  if (Number.isFinite(ttl) && ttl > 0) {
-    memorySet(key, value, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
+  const valueSlot = answered(results, 1);
+  if (!valueSlot || typeof valueSlot.result !== "string") {
+    return { value: null, revoked: false };
   }
-  return { value, revoked: false };
+  if (Number.isFinite(ttl) && ttl > 0) {
+    memorySet(key, valueSlot.result, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
+  }
+  return { value: valueSlot.result, revoked: false };
 }
 
 /** Whether the revocation marker `revokedKey` exists, L1 first, then L2
- * (copied into L1 when found). Null when it is absent locally and Redis is
- * unavailable — the caller decides what "unknown" means for it. */
-export async function cacheIsRevoked(revokedKey: string): Promise<boolean | null> {
+ * (copied into L1 when found). Null when it is absent locally and L2 did
+ * not answer (unreachable, per-command error, short reply) — the caller
+ * decides what "unknown" means for it. */
+export async function cacheIsRevoked(
+  revokedKey: string,
+): Promise<boolean | null> {
   if (memoryGet(revokedKey) !== null) return true;
   if (!redisConfigured()) return false;
   const results = await redisPipeline([["GET", revokedKey]]);
   if (!results) return null;
-  const marker = results[0]?.result;
-  if (typeof marker !== "string") return false;
-  memorySet(revokedKey, marker, L1_READTHROUGH_TTL_SECONDS);
+  const slot = answered(results, 0);
+  if (!slot) return null;
+  if (typeof slot.result !== "string") return false;
+  memorySet(revokedKey, slot.result, L1_READTHROUGH_TTL_SECONDS);
   return true;
 }
 
-export async function cacheSet(key: string, value: string, ttlSeconds: number): Promise<void> {
-  if (ttlSeconds <= 0) return;
+/** Write L1 and L2. Resolves to whether the L2 write is KNOWN to have landed
+ * (false when Redis is unconfigured, unreachable, or refused the command). */
+export async function cacheSet(
+  key: string,
+  value: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  if (ttlSeconds <= 0) return false;
   memorySet(key, value, ttlSeconds);
-  await redisPipeline([["SET", key, value, "EX", Math.ceil(ttlSeconds)]]);
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline([[
+    "SET",
+    key,
+    value,
+    "EX",
+    Math.ceil(ttlSeconds),
+  ]]);
+  const landed = results !== null && answered(results, 0)?.result === "OK";
+  if (!landed) {
+    const entry = memory.get(key);
+    // Only annotate the row this call wrote; a concurrent overwrite is its own write's business.
+    if (entry && entry.value === value) entry.inL2 = false;
+  }
+  return landed;
 }
 
 export async function cacheDel(...keys: string[]): Promise<void> {
@@ -198,7 +265,10 @@ export async function cacheDel(...keys: string[]): Promise<void> {
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */
-export async function redisWindowIncr(key: string, windowSeconds: number): Promise<number | null> {
+export async function redisWindowIncr(
+  key: string,
+  windowSeconds: number,
+): Promise<number | null> {
   const results = await redisPipeline([
     ["INCR", key],
     ["EXPIRE", key, windowSeconds, "NX"],
@@ -220,6 +290,10 @@ export async function redisWindowGet(key: string): Promise<number | null> {
 }
 
 export async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(input),
+  );
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }

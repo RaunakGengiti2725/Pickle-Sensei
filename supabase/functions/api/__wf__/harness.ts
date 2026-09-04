@@ -23,6 +23,12 @@ export interface FakeUpstash {
   failStatus: number | null;
   /** When true, every pipeline call hangs until the caller's AbortSignal fires. */
   hang: boolean;
+  /** When set, the pipeline answers every command it returns a string for with
+   * that per-command `{ error }` instead of executing it (Upstash reports
+   * e.g. `ERR max requests limit exceeded` this way, HTTP 200). */
+  commandError: ((cmd: Cmd) => string | null) | null;
+  /** When set, the pipeline reply carries only this many results (short reply). */
+  truncateRepliesTo: number | null;
   calls: number;
   restore(): void;
 }
@@ -53,7 +59,10 @@ function live(
   return entry;
 }
 
-function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; error?: string } {
+function runCommand(
+  store: FakeUpstash["store"],
+  cmd: Cmd,
+): { result?: unknown; error?: string } {
   const [name, ...args] = cmd.map(String);
   switch (name.toUpperCase()) {
     case "GET": {
@@ -63,7 +72,12 @@ function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; 
       const entry = live(store, args[0]);
       if (!entry) return { result: -2 };
       if (entry.expiresAtMs === null) return { result: -1 };
-      return { result: Math.max(1, Math.ceil((entry.expiresAtMs - Date.now()) / 1_000)) };
+      return {
+        result: Math.max(
+          1,
+          Math.ceil((entry.expiresAtMs - Date.now()) / 1_000),
+        ),
+      };
     }
     case "SET": {
       const [key, value, ex, seconds] = args;
@@ -83,14 +97,19 @@ function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; 
     case "INCR": {
       const entry = live(store, args[0]);
       const next = (entry ? Number(entry.value) : 0) + 1;
-      store.set(args[0], { value: String(next), expiresAtMs: entry?.expiresAtMs ?? null });
+      store.set(args[0], {
+        value: String(next),
+        expiresAtMs: entry?.expiresAtMs ?? null,
+      });
       return { result: next };
     }
     case "EXPIRE": {
       const [key, seconds, flag] = args;
       const entry = live(store, key);
       if (!entry) return { result: 0 };
-      if (flag && flag.toUpperCase() === "NX" && entry.expiresAtMs !== null) return { result: 0 };
+      if (flag && flag.toUpperCase() === "NX" && entry.expiresAtMs !== null) {
+        return { result: 0 };
+      }
       entry.expiresAtMs = Date.now() + Number(seconds) * 1_000;
       return { result: 1 };
     }
@@ -106,37 +125,52 @@ export function fakeUpstash(): FakeUpstash {
     commands: [],
     failStatus: null,
     hang: false,
+    commandError: null,
+    truncateRepliesTo: null,
     calls: 0,
     restore() {
       globalThis.fetch = original;
     },
   };
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (!url.startsWith(FAKE_REDIS_URL)) return original(input, init);
-    fake.calls += 1;
-    if (fake.hang) {
-      await new Promise<void>((_, reject) => {
-        const signal = init?.signal;
-        if (!signal) return;
-        if (signal.aborted) reject(signal.reason);
-        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  globalThis.fetch =
+    (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+        ? input.href
+        : input.url;
+      if (!url.startsWith(FAKE_REDIS_URL)) return original(input, init);
+      fake.calls += 1;
+      if (fake.hang) {
+        await new Promise<void>((_, reject) => {
+          const signal = init?.signal;
+          if (!signal) return;
+          if (signal.aborted) reject(signal.reason);
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      }
+      if (fake.failStatus !== null) {
+        return new Response("upstream error", { status: fake.failStatus });
+      }
+      const commands = JSON.parse(String(init?.body ?? "[]")) as Cmd[];
+      const results: PipelineResult = [];
+      for (const cmd of commands) {
+        fake.commands.push(cmd);
+        const injected = fake.commandError?.(cmd) ?? null;
+        results.push(
+          injected !== null ? { error: injected } : runCommand(fake.store, cmd),
+        );
+      }
+      const reply = fake.truncateRepliesTo === null
+        ? results
+        : results.slice(0, fake.truncateRepliesTo);
+      return new Response(JSON.stringify(reply), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
       });
-    }
-    if (fake.failStatus !== null) {
-      return new Response("upstream error", { status: fake.failStatus });
-    }
-    const commands = JSON.parse(String(init?.body ?? "[]")) as Cmd[];
-    const results: PipelineResult = [];
-    for (const cmd of commands) {
-      fake.commands.push(cmd);
-      results.push(runCommand(fake.store, cmd));
-    }
-    return new Response(JSON.stringify(results), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }) as typeof fetch;
+    }) as typeof fetch;
   return fake;
 }
 
@@ -146,7 +180,9 @@ export type CacheModule = typeof import("../cache.ts");
 export type RateLimitModule = typeof import("../rateLimit.ts");
 
 /** A fresh module instance of cache.ts + rateLimit.ts (own L1 maps). */
-export async function loadIsolate(): Promise<{ cache: CacheModule; rateLimit: RateLimitModule }> {
+export async function loadIsolate(): Promise<
+  { cache: CacheModule; rateLimit: RateLimitModule }
+> {
   isolateCounter += 1;
   const tag = `${Date.now()}-${isolateCounter}`;
   // rateLimit.ts imports "./cache.ts" statically, which Deno resolves to the
@@ -154,10 +190,16 @@ export async function loadIsolate(): Promise<{ cache: CacheModule; rateLimit: Ra
   // would share ONE cache.ts instance across isolates. To keep each isolate
   // self-contained, the rateLimit module is re-materialised from source
   // with its cache import pointed at this isolate's cache specifier.
-  const cacheSpecifier = new URL(`../cache.ts?iso=${tag}`, import.meta.url).href;
+  const cacheSpecifier =
+    new URL(`../cache.ts?iso=${tag}`, import.meta.url).href;
   const cache = (await import(cacheSpecifier)) as CacheModule;
-  const rateLimitSource = await Deno.readTextFile(new URL("../rateLimit.ts", import.meta.url));
-  const patched = rateLimitSource.replace('from "./cache.ts"', `from "${cacheSpecifier}"`);
+  const rateLimitSource = await Deno.readTextFile(
+    new URL("../rateLimit.ts", import.meta.url),
+  );
+  const patched = rateLimitSource.replace(
+    'from "./cache.ts"',
+    `from "${cacheSpecifier}"`,
+  );
   const blob = new Blob([patched], { type: "application/typescript" });
   const blobUrl = URL.createObjectURL(blob);
   const rateLimit = (await import(blobUrl)) as RateLimitModule;

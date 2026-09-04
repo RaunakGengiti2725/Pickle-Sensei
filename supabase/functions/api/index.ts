@@ -87,16 +87,21 @@ import {
   cacheIsRevoked,
   cacheSet,
   L1_READTHROUGH_TTL_SECONDS,
+  redisConfigured,
   sha256Hex,
 } from "./cache.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
-  JSON_SECURITY_HEADERS,
+  enforceRateLimit,
+  peekRateLimit,
+  rateLimitResponse,
+} from "./rateLimit.ts";
+import {
   accessLogEntry,
   clientIp,
   constantTimeEqual,
   emitAccessLog,
   errorCodeOf,
+  JSON_SECURITY_HEADERS,
   legalTextResponse,
   resolveRequestId,
   sanitizeUserText,
@@ -104,13 +109,13 @@ import {
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
-  ExternalAccountError,
+  type AppleServerConfiguration,
   decryptAppleRefreshToken,
   deleteRevenueCatCustomer,
   encryptAppleRefreshToken,
   exchangeAppleAuthorizationCode,
+  ExternalAccountError,
   revokeAppleRefreshToken,
-  type AppleServerConfiguration,
 } from "./externalAccounts.ts";
 
 // Publishable key (sb_publishable_…) set via `supabase secrets set
@@ -122,7 +127,8 @@ import {
 // platform-injected service-role key through billingAdminDb below. The client
 // has no write policy to any of those server-owned records.
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ??
+  Deno.env.get("SUPABASE_ANON_KEY")!;
 
 /** Service-role client for verified billing/webhook writes, encrypted Apple
  * revocation-token storage, retry-safe external-deletion checkpoints, and
@@ -192,7 +198,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value: unknown): value is string =>
   typeof value === "string" && UUID_RE.test(value);
 
@@ -201,7 +208,8 @@ const isUuid = (value: unknown): value is string =>
  * `Date.parse` is deliberately NOT the gate — V8's legacy parser accepts
  * free-form text such as `Jan 1 2026 (anything)`, which would then travel
  * verbatim into the database error path and the function logs. */
-const ISO_UTC_INSTANT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?Z$/;
+const ISO_UTC_INSTANT_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?Z$/;
 /** Sane range for a capture/session instant; mirrors the DB CHECKs
  * `shots_captured_at_bounds` / `captures_captured_at_bounds`. */
 const ISO_INSTANT_MIN_MS = Date.UTC(2000, 0, 1);
@@ -211,8 +219,13 @@ const isIsoDate = (value: unknown): value is string => {
   if (typeof value !== "string") return false;
   const match = ISO_UTC_INSTANT_RE.exec(value);
   if (!match) return false;
-  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
-  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(
+    Number,
+  );
+  if (
+    month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 ||
+    second > 59
+  ) {
     return false;
   }
   const ms = Date.parse(value);
@@ -235,7 +248,8 @@ const isIsoDate = (value: unknown): value is string => {
  * (SQLSTATE-only since 20260904000000) but the log line must stay categorical
  * even if a future RPC ever echoed input. */
 const RPC_STATUS_LOG_MAX = 120;
-const logSafeStatus = (status: string): string => sanitizeUserText(status, RPC_STATUS_LOG_MAX);
+const logSafeStatus = (status: string): string =>
+  sanitizeUserText(status, RPC_STATUS_LOG_MAX);
 
 /** Largest JSON body any route accepts. Shot batches are ~2 KB per shot ×
  * 200; evaluation trials are the biggest legitimate payload and get the
@@ -254,9 +268,14 @@ class RequestBodyTooLarge extends Error {
 /** Read the body as text while counting BYTES on the wire, cancelling the
  * stream the moment it passes the cap (Content-Length is advisory only —
  * chunked uploads carry none). */
-async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
+async function readBoundedText(
+  request: Request,
+  maxBytes: number,
+): Promise<string> {
   const declared = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > maxBytes) throw new RequestBodyTooLarge();
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new RequestBodyTooLarge();
+  }
   if (!request.body) return "";
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -342,7 +361,12 @@ const GOAL_FOCUS: Record<string, string> = {
 
 /** Optional onboarding gender vocabulary — mirrors the profiles.gender check
  * constraint (20260830120000_production_launch.sql). */
-const GENDER_OPTIONS = new Set(["female", "male", "nonbinary", "prefer_not_to_say"]);
+const GENDER_OPTIONS = new Set([
+  "female",
+  "male",
+  "nonbinary",
+  "prefer_not_to_say",
+]);
 
 interface AuthedUser {
   id: string;
@@ -377,9 +401,11 @@ const AUTH_CACHE_MAX_TTL_SECONDS = 600;
  * re-cached by a request that raced the logout) is refused from the very
  * next request. The marker outlives any cached verification of the session:
  * the cache cap plus the longest an L2 row can linger in an isolate's L1. */
-const AUTH_REVOCATION_TTL_SECONDS = AUTH_CACHE_MAX_TTL_SECONDS + L1_READTHROUGH_TTL_SECONDS;
+const AUTH_REVOCATION_TTL_SECONDS = AUTH_CACHE_MAX_TTL_SECONDS +
+  L1_READTHROUGH_TTL_SECONDS;
 
-const authRevokedKey = (sessionId: string): string => `auth:revoked:${sessionId}`;
+const authRevokedKey = (sessionId: string): string =>
+  `auth:revoked:${sessionId}`;
 
 function sessionIdOf(payload: Record<string, unknown> | null): string | null {
   const sessionId = payload?.session_id;
@@ -394,12 +420,26 @@ function sessionIdOf(payload: Record<string, unknown> | null): string | null {
 async function fenceRevokedSession(token: string): Promise<void> {
   const sessionId = sessionIdOf(decodeJwtPayload(token));
   if (sessionId) {
-    await cacheSet(authRevokedKey(sessionId), "1", AUTH_REVOCATION_TTL_SECONDS);
+    const shared = await cacheSet(
+      authRevokedKey(sessionId),
+      "1",
+      AUTH_REVOCATION_TTL_SECONDS,
+    );
+    if (!shared && redisConfigured()) {
+      // Upstream has already refused the session; only the cross-isolate
+      // fence is missing, so other isolates' cached verifications of it age
+      // out on their own (≤ AUTH_CACHE_MAX_TTL_SECONDS) instead of dying now.
+      console.warn(
+        `[api] session fence not shared (Redis unavailable): ${sessionId}`,
+      );
+    }
   }
   await cacheDel(await authCacheKey(token));
 }
 
-function userScopedClient(accessToken: string): ReturnType<typeof createClient> {
+function userScopedClient(
+  accessToken: string,
+): ReturnType<typeof createClient> {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -456,15 +496,21 @@ interface AuthUserLike {
 }
 
 function authUserOf(payload: unknown): AuthUserLike | null {
-  if (!isRecord(payload) || typeof payload.id !== "string" || !payload.id) return null;
+  if (!isRecord(payload) || typeof payload.id !== "string" || !payload.id) {
+    return null;
+  }
   return {
     id: payload.id,
     email: typeof payload.email === "string" ? payload.email : null,
-    app_metadata: isRecord(payload.app_metadata) ? payload.app_metadata : undefined,
+    app_metadata: isRecord(payload.app_metadata)
+      ? payload.app_metadata
+      : undefined,
   };
 }
 
-function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUserLike }) | null {
+function authSessionOf(
+  payload: unknown,
+): (SupabaseSessionLike & { user: AuthUserLike }) | null {
   if (!isRecord(payload)) return null;
   const user = authUserOf(payload.user);
   if (
@@ -479,8 +525,12 @@ function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUse
   return {
     access_token: payload.access_token,
     refresh_token: payload.refresh_token,
-    expires_at: typeof payload.expires_at === "number" ? payload.expires_at : undefined,
-    expires_in: typeof payload.expires_in === "number" ? payload.expires_in : undefined,
+    expires_at: typeof payload.expires_at === "number"
+      ? payload.expires_at
+      : undefined,
+    expires_in: typeof payload.expires_in === "number"
+      ? payload.expires_in
+      : undefined,
     user,
   };
 }
@@ -495,14 +545,20 @@ function authErrorDetail(status: number, body: unknown): string {
     const message = [body.msg, body.error_description, body.message].find(
       (candidate) => typeof candidate === "string" && candidate,
     );
-    return `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`.slice(0, 200);
+    return `HTTP ${status}${code ? ` ${code}` : ""}${
+      message ? `: ${message}` : ""
+    }`.slice(0, 200);
   }
-  return `HTTP ${status}${typeof body === "string" && body ? " (non-JSON body)" : ""}`;
+  return `HTTP ${status}${
+    typeof body === "string" && body ? " (non-JSON body)" : ""
+  }`;
 }
 
 function retryAfterOf(header: string | null): number {
   const seconds = Number(header);
-  return Number.isInteger(seconds) && seconds > 0 ? seconds : AUTH_RETRY_AFTER_SECONDS;
+  return Number.isInteger(seconds) && seconds > 0
+    ? seconds
+    : AUTH_RETRY_AFTER_SECONDS;
 }
 
 /** One bounded GoTrue call. `parse` turns a 2xx JSON body into the value the
@@ -510,10 +566,17 @@ function retryAfterOf(header: string | null): number {
  * half-written answer), never a verdict on the credential. */
 async function authRequest<T>(
   path: string,
-  init: { method: "GET" | "POST"; bearer?: string; body?: Record<string, unknown> },
+  init: {
+    method: "GET" | "POST";
+    bearer?: string;
+    body?: Record<string, unknown>;
+  },
   parse: (payload: unknown) => T | null,
 ): Promise<AuthVerdict<T>> {
-  const headers: Record<string, string> = { apikey: SUPABASE_ANON_KEY, Accept: "application/json" };
+  const headers: Record<string, string> = {
+    apikey: SUPABASE_ANON_KEY,
+    Accept: "application/json",
+  };
   if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
   if (init.body) headers["Content-Type"] = "application/json";
   const timeoutMs = authUpstreamTimeoutMs();
@@ -546,7 +609,9 @@ async function authRequest<T>(
   } catch (error) {
     return {
       kind: "unavailable",
-      detail: `Supabase Auth unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      detail: `Supabase Auth unreachable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
       retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
     };
   } finally {
@@ -559,14 +624,19 @@ async function authRequest<T>(
     // Non-JSON body: a verdict status still stands; a 2xx is malformed below.
   }
   if (AUTH_REFUSAL_STATUSES.has(answer.status)) {
-    return { kind: "refused", status: answer.status, detail: authErrorDetail(answer.status, body) };
+    return {
+      kind: "refused",
+      status: answer.status,
+      detail: authErrorDetail(answer.status, body),
+    };
   }
   if (answer.status >= 200 && answer.status < 300) {
     const value = parse(body);
     if (value !== null) return { kind: "ok", value };
     return {
       kind: "unavailable",
-      detail: `Supabase Auth answered HTTP ${answer.status} without a usable body`,
+      detail:
+        `Supabase Auth answered HTTP ${answer.status} without a usable body`,
       retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
     };
   }
@@ -579,7 +649,9 @@ async function authRequest<T>(
 
 /** GET /auth/v1/user — the user behind a Supabase access token, which also
  * fails (refused) once the session was logged out or the account deleted. */
-const verifyAccessToken = (accessToken: string): Promise<AuthVerdict<AuthUserLike>> =>
+const verifyAccessToken = (
+  accessToken: string,
+): Promise<AuthVerdict<AuthUserLike>> =>
   authRequest("/user", { method: "GET", bearer: accessToken }, authUserOf);
 
 /** POST /auth/v1/token?grant_type=refresh_token — rotate a refresh token. */
@@ -602,10 +674,13 @@ function bearerExpired(payload: Record<string, unknown> | null): boolean {
 
 function bearerOf(request: Request): string {
   const authorization = request.headers.get("Authorization") ?? "";
-  return authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : "";
+  return authorization.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length).trim()
+    : "";
 }
 
-const authCacheKey = async (token: string): Promise<string> => `auth:${await sha256Hex(token)}`;
+const authCacheKey = async (token: string): Promise<string> =>
+  `auth:${await sha256Hex(token)}`;
 
 /** Cached verification for the bearer, or null when there is none — or when
  * the Supabase session behind a session bearer has been revoked at this edge
@@ -617,7 +692,10 @@ async function readAuthCache(
 ): Promise<{ authed: AuthedUser | null; revoked: boolean }> {
   let cachedRaw: string | null;
   if (sessionId) {
-    const hit = await cacheGetUnlessRevoked(cacheKey, authRevokedKey(sessionId));
+    const hit = await cacheGetUnlessRevoked(
+      cacheKey,
+      authRevokedKey(sessionId),
+    );
     if (hit.revoked) return { authed: null, revoked: true };
     cachedRaw = hit.value;
   } else {
@@ -655,8 +733,12 @@ async function writeAuthCache(
   bearerExpSeconds: unknown,
   sessionExpSeconds: unknown,
 ): Promise<void> {
-  const bearerExpMs = typeof bearerExpSeconds === "number" ? bearerExpSeconds * 1_000 : 0;
-  const sessionExpMs = typeof sessionExpSeconds === "number" ? sessionExpSeconds * 1_000 : 0;
+  const bearerExpMs = typeof bearerExpSeconds === "number"
+    ? bearerExpSeconds * 1_000
+    : 0;
+  const sessionExpMs = typeof sessionExpSeconds === "number"
+    ? sessionExpSeconds * 1_000
+    : 0;
   const expiresAtMs = Math.min(
     bearerExpMs > 0 ? bearerExpMs : Number.MAX_SAFE_INTEGER,
     sessionExpMs > 0 ? sessionExpMs : Number.MAX_SAFE_INTEGER,
@@ -664,7 +746,11 @@ async function writeAuthCache(
   );
   const ttlSeconds = Math.floor((expiresAtMs - Date.now()) / 1_000) - 30;
   if (ttlSeconds >= 60) {
-    await cacheSet(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
+    await cacheSet(
+      cacheKey,
+      JSON.stringify({ ...entry, expiresAtMs }),
+      ttlSeconds,
+    );
   }
 }
 
@@ -682,7 +768,8 @@ function sessionView(session: SupabaseSessionLike) {
   return {
     accessToken: session.access_token,
     refreshToken: session.refresh_token,
-    expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
+    expiresAt: session.expires_at ??
+      Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
   };
 }
 
@@ -692,7 +779,10 @@ function providerOfUser(user: {
   app_metadata?: Record<string, unknown>;
 }): "google" | "apple" | null {
   const meta = user.app_metadata ?? {};
-  const candidates = [meta.provider, ...(Array.isArray(meta.providers) ? meta.providers : [])];
+  const candidates = [
+    meta.provider,
+    ...(Array.isArray(meta.providers) ? meta.providers : []),
+  ];
   for (const candidate of candidates) {
     if (candidate === "google" || candidate === "apple") return candidate;
   }
@@ -706,10 +796,10 @@ function providerOfUser(user: {
  * this path never reads the auth cache. */
 async function authenticateProviderToken(request: Request): Promise<
   | {
-      authed: AuthedUser;
-      session: SupabaseSessionLike;
-      providerSubject: string;
-    }
+    authed: AuthedUser;
+    session: SupabaseSessionLike;
+    providerSubject: string;
+  }
   | Response
 > {
   const token = bearerOf(request);
@@ -719,12 +809,17 @@ async function authenticateProviderToken(request: Request): Promise<
   if (!provider) {
     return errorJson(401, "Bearer token is not a Google or Apple ID token.");
   }
-  if (bearerExpired(payload)) return errorJson(401, "The identity token has expired.");
+  if (bearerExpired(payload)) {
+    return errorJson(401, "The identity token has expired.");
+  }
   const providerSubject = payload?.sub;
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
+  const signIn = await anonAuthClient().auth.signInWithIdToken({
+    provider,
+    token,
+  });
   if (signIn.error || !signIn.data.user || !signIn.data.session) {
     return errorJson(401, "The identity token could not be verified.");
   }
@@ -755,14 +850,20 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 
   const payload = decodeJwtPayload(token);
   const provider = providerForIssuer(payload?.iss);
-  const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
+  const supabaseIssued = typeof payload?.iss === "string" &&
+    payload.iss.endsWith("/auth/v1");
   if (!provider && !supabaseIssued) {
-    return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
+    return errorJson(
+      401,
+      "Bearer token is not a session token or a Google/Apple ID token.",
+    );
   }
   if (bearerExpired(payload)) {
     return errorJson(
       401,
-      provider ? "The identity token has expired." : "The session token has expired.",
+      provider
+        ? "The identity token has expired."
+        : "The session token has expired.",
     );
   }
 
@@ -771,11 +872,16 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const sessionId = provider ? null : sessionIdOf(payload);
   const cacheKey = await authCacheKey(token);
   const cached = await readAuthCache(cacheKey, provider, sessionId);
-  if (cached.revoked) return errorJson(401, "The session is no longer valid. Sign in again.");
+  if (cached.revoked) {
+    return errorJson(401, "The session is no longer valid. Sign in again.");
+  }
   if (cached.authed) return cached.authed;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
+    const signIn = await anonAuthClient().auth.signInWithIdToken({
+      provider,
+      token,
+    });
     if (signIn.error || !signIn.data.user || !signIn.data.session) {
       return errorJson(401, "The identity token could not be verified.");
     }
@@ -800,7 +906,11 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 
   const verified = await verifyAccessToken(token);
   if (verified.kind === "unavailable") {
-    return serviceUnavailable("Session verification", verified.detail, verified.retryAfterSeconds);
+    return serviceUnavailable(
+      "Session verification",
+      verified.detail,
+      verified.retryAfterSeconds,
+    );
   }
   if (verified.kind === "refused") {
     return errorJson(401, "The session is no longer valid. Sign in again.");
@@ -808,7 +918,10 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const user = verified.value;
   const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
-    return errorJson(401, "The session does not belong to a Google or Apple account.");
+    return errorJson(
+      401,
+      "The session does not belong to a Google or Apple account.",
+    );
   }
   // The session may have been logged out while getUser() was in flight: a
   // verification that raced its own revocation must neither be served nor
@@ -848,7 +961,11 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   }
   const rotated = await rotateRefreshToken(refreshToken.trim());
   if (rotated.kind === "unavailable") {
-    return serviceUnavailable("Session refresh", rotated.detail, rotated.retryAfterSeconds);
+    return serviceUnavailable(
+      "Session refresh",
+      rotated.detail,
+      rotated.retryAfterSeconds,
+    );
   }
   if (rotated.kind === "refused") {
     return errorJson(401, "The session could not be refreshed. Sign in again.");
@@ -954,7 +1071,8 @@ function permitView(row: PermitRow) {
     status: row.status,
     outcome: row.outcome,
     reservedAt: new Date(reservedAtMs).toISOString(),
-    expiresAt: new Date(reservedAtMs + PERMIT_LIFETIME_HOURS * 3_600_000).toISOString(),
+    expiresAt: new Date(reservedAtMs + PERMIT_LIFETIME_HOURS * 3_600_000)
+      .toISOString(),
   };
 }
 
@@ -997,11 +1115,13 @@ async function accessPayload(
   if (stateQ.error) {
     return serviceUnavailable("Access state", stateQ.error.message);
   }
-  const rows = stateQ.data as Array<{
-    premium: boolean;
-    scored_count: number;
-    reserved_count: number;
-  }> | null;
+  const rows = stateQ.data as
+    | Array<{
+      premium: boolean;
+      scored_count: number;
+      reserved_count: number;
+    }>
+    | null;
   const state = rows?.[0];
   if (!state) {
     return serviceUnavailable("Access state", "access_state returned no row");
@@ -1016,7 +1136,10 @@ async function accessPayload(
   const availableToReserve = remaining - reserved;
   const premium = billing.premium;
   const entitlements = premium
-    ? ["premium", ...billing.activeEntitlements.filter((name) => name !== "premium")]
+    ? [
+      "premium",
+      ...billing.activeEntitlements.filter((name) => name !== "premium"),
+    ]
     : [];
   const canStartRating = premium || availableToReserve > 0;
   return {
@@ -1037,10 +1160,16 @@ async function accessPayload(
 /** POST /v1/analysis-permits — mirrors apps/mobile/src/data/api.ts:121-134
  * (reserve): upsert-by-idempotency-key, respond { permit } (+ access, as
  * services/api does; the client only reads permit). */
-async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Promise<Response> {
+async function reserveAnalysisPermit(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const idempotencyKey = body.idempotencyKey;
-  if (typeof idempotencyKey !== "string" || !idempotencyKey.trim() || idempotencyKey.length > 128) {
+  if (
+    typeof idempotencyKey !== "string" || !idempotencyKey.trim() ||
+    idempotencyKey.length > 128
+  ) {
     return codedError(
       400,
       "validation.analysis_permit",
@@ -1067,15 +1196,19 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
   if (reserved.error) {
     return serviceUnavailable("Rating reservation", reserved.error.message);
   }
-  const row = (Array.isArray(reserved.data) ? reserved.data[0] : reserved.data) as {
-    result: string;
-    permit_id: string | null;
-    permit_status: string | null;
-    permit_outcome: string | null;
-    permit_created_at: string | null;
-  } | null;
+  const row =
+    (Array.isArray(reserved.data) ? reserved.data[0] : reserved.data) as {
+      result: string;
+      permit_id: string | null;
+      permit_status: string | null;
+      permit_outcome: string | null;
+      permit_created_at: string | null;
+    } | null;
   if (!row) {
-    return serviceUnavailable("Rating reservation", "reserve_analysis_permit returned no row");
+    return serviceUnavailable(
+      "Rating reservation",
+      "reserve_analysis_permit returned no row",
+    );
   }
   if (row.result === "access.paywall_required") {
     return codedError(
@@ -1116,7 +1249,11 @@ async function finalizeAnalysisPermitRoute(
   permitId: string,
 ): Promise<Response> {
   if (!isUuid(permitId)) {
-    return codedError(400, "validation.analysis_permit_finalize", "Permit id must be a UUID.");
+    return codedError(
+      400,
+      "validation.analysis_permit_finalize",
+      "Permit id must be a UUID.",
+    );
   }
   const body = await readBody(request);
   const outcome = body.outcome;
@@ -1145,7 +1282,11 @@ async function finalizeAnalysisPermitRoute(
     return serviceUnavailable("Rating finalize", found.error.message);
   }
   if (!found.data) {
-    return codedError(404, "access.permit_not_found", "Analysis permit not found.");
+    return codedError(
+      404,
+      "access.permit_not_found",
+      "Analysis permit not found.",
+    );
   }
   const row = found.data as unknown as PermitRow;
 
@@ -1186,11 +1327,15 @@ async function finalizeAnalysisPermitRoute(
       .eq("user_id", authed.id)
       .maybeSingle();
     const settledRow = settled.data as unknown as PermitRow | null;
-    if (settledRow && settledRow.outcome === outcome) return respond(settledRow);
+    if (settledRow && settledRow.outcome === outcome) {
+      return respond(settledRow);
+    }
     return codedError(
       409,
       "access.permit_already_finalized",
-      `Analysis permit was already finalized as ${settledRow?.outcome ?? settledRow?.status ?? "unknown"}.`,
+      `Analysis permit was already finalized as ${
+        settledRow?.outcome ?? settledRow?.status ?? "unknown"
+      }.`,
     );
   }
   return respond(updated.data as unknown as PermitRow);
@@ -1268,7 +1413,8 @@ function parseSyncShot(
   if (value.source !== "real") {
     return {
       rejectedCode: "shot.non_real_source",
-      rejectedMessage: "Only analyses produced by a real provider may be synced.",
+      rejectedMessage:
+        "Only analyses produced by a real provider may be synced.",
     };
   }
   if (!isUuid(value.analysisPermitId)) {
@@ -1277,14 +1423,21 @@ function parseSyncShot(
   if (value.sessionId !== null && !isUuid(value.sessionId)) {
     return invalid("sessionId must be a UUID or null.");
   }
-  if (typeof value.shotType !== "string" || !value.shotType.trim() || value.shotType.length > 64) {
+  if (
+    typeof value.shotType !== "string" || !value.shotType.trim() ||
+    value.shotType.length > 64
+  ) {
     return invalid("shotType is required (max 64 characters).");
   }
-  if (typeof value.cameraView !== "string" || !CAMERA_VIEWS.has(value.cameraView)) {
+  if (
+    typeof value.cameraView !== "string" || !CAMERA_VIEWS.has(value.cameraView)
+  ) {
     return invalid("cameraView must be side|rear_oblique.");
   }
   if (!isIsoDate(value.capturedAt)) {
-    return invalid("capturedAt must be an ISO-8601 UTC instant (e.g. 2026-08-31T10:00:00.000Z).");
+    return invalid(
+      "capturedAt must be an ISO-8601 UTC instant (e.g. 2026-08-31T10:00:00.000Z).",
+    );
   }
   const ts = value.timestamps;
   if (
@@ -1293,7 +1446,9 @@ function parseSyncShot(
     !isMs(ts.endMs) ||
     (ts.contactMs !== null && !isMs(ts.contactMs))
   ) {
-    return invalid("timestamps { startMs, contactMs|null, endMs } are required.");
+    return invalid(
+      "timestamps { startMs, contactMs|null, endMs } are required.",
+    );
   }
   if (value.resultKind !== "scored" && value.resultKind !== "low_confidence") {
     return invalid("resultKind must be scored|low_confidence.");
@@ -1306,7 +1461,9 @@ function parseSyncShot(
       overallScore < 0 ||
       overallScore > 10
     ) {
-      return invalid("overallScore (0..10) is required when resultKind=scored.");
+      return invalid(
+        "overallScore (0..10) is required when resultKind=scored.",
+      );
     }
   } else if (overallScore !== null) {
     return invalid("overallScore must be null when resultKind=low_confidence.");
@@ -1327,7 +1484,9 @@ function parseSyncShot(
       !isMs(p.endMs) ||
       !isUnit(p.confidence)
     ) {
-      return invalid("Each phase needs key, startMs, representativeMs, endMs, confidence.");
+      return invalid(
+        "Each phase needs key, startMs, representativeMs, endMs, confidence.",
+      );
     }
     if (phaseKeys.has(p.key)) return invalid(`Duplicate phase key: ${p.key}.`);
     phaseKeys.add(p.key);
@@ -1353,7 +1512,8 @@ function parseSyncShot(
       c.key.length > 64 ||
       !(
         c.score === null ||
-        (typeof c.score === "number" && Number.isFinite(c.score) && c.score >= 0 && c.score <= 100)
+        (typeof c.score === "number" && Number.isFinite(c.score) &&
+          c.score >= 0 && c.score <= 100)
       ) ||
       !isUnit(c.confidence) ||
       typeof c.band !== "string" ||
@@ -1367,7 +1527,9 @@ function parseSyncShot(
         "Each checkpoint needs key, score|null, confidence, band, direction, severity, applicable.",
       );
     }
-    if (checkpointKeys.has(c.key)) return invalid(`Duplicate checkpoint key: ${c.key}.`);
+    if (checkpointKeys.has(c.key)) {
+      return invalid(`Duplicate checkpoint key: ${c.key}.`);
+    }
     checkpointKeys.add(c.key);
     checkpoints.push({
       key: c.key,
@@ -1419,7 +1581,10 @@ const progressCacheKey = (userId: string): string => `progress:${userId}`;
  * same key share one DB read instead of each re-running it. Every caller
  * gets its own clone because a Response body can be sent only once. */
 const inflightBuilds = new Map<string, Promise<Response>>();
-function coalesce(key: string, build: () => Promise<Response>): Promise<Response> {
+function coalesce(
+  key: string,
+  build: () => Promise<Response>,
+): Promise<Response> {
   let pending = inflightBuilds.get(key);
   if (!pending) {
     pending = build().finally(() => {
@@ -1479,11 +1644,20 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
  * 20260831000000), replacing the previous ~7 sequential round trips per shot
  * with compensating deletes. Replays are detected with one batched lookup
  * for the whole request. */
-async function syncShots(authed: AuthedUser, request: Request): Promise<Response> {
+async function syncShots(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const shotsRaw = body.shots;
-  if (!Array.isArray(shotsRaw) || shotsRaw.length < 1 || shotsRaw.length > 200) {
-    return codedError(400, "validation.shots_sync", "Body must be { shots: [1..200 entries] }.");
+  if (
+    !Array.isArray(shotsRaw) || shotsRaw.length < 1 || shotsRaw.length > 200
+  ) {
+    return codedError(
+      400,
+      "validation.shots_sync",
+      "Body must be { shots: [1..200 entries] }.",
+    );
   }
 
   const acceptedIds: string[] = [];
@@ -1494,7 +1668,9 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
   // Validate the whole batch first; malformed entries never cost a query.
   const parsedShots: SyncShot[] = [];
   for (const raw of shotsRaw) {
-    const rawId = isRecord(raw) && typeof raw.id === "string" ? raw.id : "unknown";
+    const rawId = isRecord(raw) && typeof raw.id === "string"
+      ? raw.id
+      : "unknown";
     const parsed = parseSyncShot(raw);
     if ("rejectedCode" in parsed) {
       reject(rawId, parsed.rejectedCode, parsed.rejectedMessage);
@@ -1519,7 +1695,9 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       // Retryable for the whole batch: the outbox keeps every row.
       return serviceUnavailable("Shot sync", existing.error.message);
     }
-    replayIds = new Set(((existing.data ?? []) as Array<{ id: string }>).map((row) => row.id));
+    replayIds = new Set(
+      ((existing.data ?? []) as Array<{ id: string }>).map((row) => row.id),
+    );
   }
 
   let wroteEvidence = false;
@@ -1595,7 +1773,10 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
  * focusCheckpoint have no columns and are skipped, not invented (all client
  * modes are practice-type, so kind keeps its 'practice' default). The client
  * discards the response body → 200 {}. */
-async function createSession(authed: AuthedUser, request: Request): Promise<Response> {
+async function createSession(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   if (!isUuid(body.id) || !isIsoDate(body.startedAt)) {
     return codedError(
@@ -1624,7 +1805,11 @@ async function createSession(authed: AuthedUser, request: Request): Promise<Resp
     return serviceUnavailable("Session sync", owned.error.message);
   }
   if (!owned.data) {
-    return codedError(409, "session.id_conflict", "Session id belongs to another user.");
+    return codedError(
+      409,
+      "session.id_conflict",
+      "Session id belongs to another user.",
+    );
   }
   return json(200, {});
 }
@@ -1632,7 +1817,10 @@ async function createSession(authed: AuthedUser, request: Request): Promise<Resp
 /** POST /v1/sessions/:id/finalize — mirrors apps/mobile/src/data/sync.ts:272
  * (payload is just { id }; body unused, response discarded). Stamps ended_at
  * once (a replay never moves it). */
-async function finalizeSession(authed: AuthedUser, sessionId: string): Promise<Response> {
+async function finalizeSession(
+  authed: AuthedUser,
+  sessionId: string,
+): Promise<Response> {
   if (!isUuid(sessionId)) {
     return codedError(400, "validation.session", "Session id must be a UUID.");
   }
@@ -1665,7 +1853,11 @@ async function finalizeSession(authed: AuthedUser, sessionId: string): Promise<R
 // Consent ledger
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CONSENT_SCOPES = ["video_analysis", "model_training", "evaluation_telemetry"] as const;
+const CONSENT_SCOPES = [
+  "video_analysis",
+  "model_training",
+  "evaluation_telemetry",
+] as const;
 
 interface ConsentRow {
   scope: string;
@@ -1674,7 +1866,9 @@ interface ConsentRow {
   created_at: string;
 }
 
-async function loadConsentRows(authed: AuthedUser): Promise<ConsentRow[] | Response> {
+async function loadConsentRows(
+  authed: AuthedUser,
+): Promise<ConsentRow[] | Response> {
   const rows = await authed.db
     .from("consent_records")
     .select("scope, action, consent_version, created_at")
@@ -1703,7 +1897,11 @@ function foldConsentStatus(rows: ConsentRow[]) {
         scope,
         active: last?.action === "grant",
         consentVersion: last?.consent_version ?? null,
-        lastAction: last === null ? null : last.action === "grant" ? "granted" : "withdrawn",
+        lastAction: last === null
+          ? null
+          : last.action === "grant"
+          ? "granted"
+          : "withdrawn",
         lastActionAt: last?.created_at ?? null,
       };
     }),
@@ -1716,25 +1914,44 @@ const consentScopeActive = (rows: ConsentRow[], scope: string): boolean =>
 /** POST /v1/me/consent/grant — mirrors apps/mobile/src/account/consentApi.ts
  * grant callers (lines 139-151, 170-182): body { scope, consentVersion,
  * source, device, captureMode }; responds with the folded status. */
-async function grantConsent(authed: AuthedUser, request: Request): Promise<Response> {
+async function grantConsent(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const scope = body.scope;
   const consentVersion = body.consentVersion;
-  if (typeof scope !== "string" || !(CONSENT_SCOPES as readonly string[]).includes(scope)) {
-    return codedError(400, "validation.consent_grant", "Unknown consent scope.");
+  if (
+    typeof scope !== "string" ||
+    !(CONSENT_SCOPES as readonly string[]).includes(scope)
+  ) {
+    return codedError(
+      400,
+      "validation.consent_grant",
+      "Unknown consent scope.",
+    );
   }
   if (typeof consentVersion !== "string" || !consentVersion.trim()) {
-    return codedError(400, "validation.consent_grant", "consentVersion is required.");
+    return codedError(
+      400,
+      "validation.consent_grant",
+      "consentVersion is required.",
+    );
   }
   const inserted = await authed.db.from("consent_records").insert({
     user_id: authed.id,
     scope,
     consent_version: sanitizeUserText(consentVersion, 64),
     action: "grant",
-    source: typeof body.source === "string" ? sanitizeUserText(body.source, 64) : null,
-    device: typeof body.device === "string" ? sanitizeUserText(body.device, 512) : null,
-    capture_mode:
-      typeof body.captureMode === "string" ? sanitizeUserText(body.captureMode, 64) : null,
+    source: typeof body.source === "string"
+      ? sanitizeUserText(body.source, 64)
+      : null,
+    device: typeof body.device === "string"
+      ? sanitizeUserText(body.device, 512)
+      : null,
+    capture_mode: typeof body.captureMode === "string"
+      ? sanitizeUserText(body.captureMode, 64)
+      : null,
   });
   if (inserted.error) {
     return serviceUnavailable("Consent update", inserted.error.message);
@@ -1747,11 +1964,21 @@ async function grantConsent(authed: AuthedUser, request: Request): Promise<Respo
  * (lines 153-163, 184-194): body { scope, source, device }. The withdrawal
  * row carries forward the version being withdrawn from (or null when the
  * scope was never granted), mirroring services/api. */
-async function withdrawConsent(authed: AuthedUser, request: Request): Promise<Response> {
+async function withdrawConsent(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const scope = body.scope;
-  if (typeof scope !== "string" || !(CONSENT_SCOPES as readonly string[]).includes(scope)) {
-    return codedError(400, "validation.consent_withdraw", "Unknown consent scope.");
+  if (
+    typeof scope !== "string" ||
+    !(CONSENT_SCOPES as readonly string[]).includes(scope)
+  ) {
+    return codedError(
+      400,
+      "validation.consent_withdraw",
+      "Unknown consent scope.",
+    );
   }
   const before = await loadConsentRows(authed);
   if (before instanceof Response) return before;
@@ -1761,8 +1988,12 @@ async function withdrawConsent(authed: AuthedUser, request: Request): Promise<Re
     scope,
     consent_version: latest?.consent_version ?? null,
     action: "withdraw",
-    source: typeof body.source === "string" ? sanitizeUserText(body.source, 64) : null,
-    device: typeof body.device === "string" ? sanitizeUserText(body.device, 512) : null,
+    source: typeof body.source === "string"
+      ? sanitizeUserText(body.source, 64)
+      : null,
+    device: typeof body.device === "string"
+      ? sanitizeUserText(body.device, 512)
+      : null,
   });
   if (inserted.error) {
     return serviceUnavailable("Consent update", inserted.error.message);
@@ -1787,7 +2018,10 @@ const TRIAL_WRITE_FAILED_MESSAGE =
  * validateEvaluationTrial) is a workspace package this Deno function cannot
  * import, so structural checks here are minimal and labeling tools
  * re-validate offline. */
-async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Promise<Response> {
+async function uploadEvaluationTrials(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const trials = body.trials;
   if (!Array.isArray(trials) || trials.length < 1 || trials.length > 200) {
@@ -1808,7 +2042,8 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
   }
 
   const acceptedTrialIds: string[] = [];
-  const rejected: Array<{ trialId: string; code: string; message: string }> = [];
+  const rejected: Array<{ trialId: string; code: string; message: string }> =
+    [];
   for (const trial of trials) {
     const trialId = isRecord(trial) ? trial.trialId : undefined;
     if (!isUuid(trialId)) {
@@ -1838,7 +2073,10 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
         { onConflict: "id", ignoreDuplicates: true },
       );
     if (upserted.error) {
-      console.error("[api] evaluation trial write failed:", upserted.error.message);
+      console.error(
+        "[api] evaluation trial write failed:",
+        upserted.error.message,
+      );
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
@@ -1853,7 +2091,10 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
       .eq("user_id", authed.id)
       .maybeSingle();
     if (owned.error) {
-      console.error("[api] evaluation trial ownership read failed:", owned.error.message);
+      console.error(
+        "[api] evaluation trial ownership read failed:",
+        owned.error.message,
+      );
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
@@ -1900,19 +2141,27 @@ async function submitAnalysisFeedback(
   analysisId: string,
 ): Promise<Response> {
   if (!isUuid(analysisId)) {
-    return codedError(400, "validation.analysis_feedback", "Analysis id must be a UUID.");
+    return codedError(
+      400,
+      "validation.analysis_feedback",
+      "Analysis id must be a UUID.",
+    );
   }
   const body = await readBody(request);
   const rating = body.rating;
   const category = body.category ?? null;
   if (typeof rating !== "string" || !FEEDBACK_RATINGS.has(rating)) {
-    return codedError(400, "validation.analysis_feedback", "rating must be accurate|not_quite.");
+    return codedError(
+      400,
+      "validation.analysis_feedback",
+      "rating must be accurate|not_quite.",
+    );
   }
   // Category is required exactly when the answer is not_quite (contract
   // refine in packages/api-contracts AnalysisFeedbackRequest).
   if (
     (rating === "not_quite") !==
-    (typeof category === "string" && FEEDBACK_CATEGORIES.has(category))
+      (typeof category === "string" && FEEDBACK_CATEGORIES.has(category))
   ) {
     return codedError(
       400,
@@ -1990,7 +2239,9 @@ function computePracticeStreak(days: string[], today: string) {
     return Number.isFinite(parsed) ? Math.floor(parsed / DAY_MS) : null;
   };
   const todayDay = toDay(today)!;
-  const uniqueDays = [...new Set(days.map(toDay).filter((d): d is number => d !== null))]
+  const uniqueDays = [
+    ...new Set(days.map(toDay).filter((d): d is number => d !== null)),
+  ]
     .filter((d) => d <= todayDay)
     .sort((a, b) => a - b);
   if (uniqueDays.length === 0) {
@@ -2049,17 +2300,22 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
   return coalesce(cacheKey, () => buildProgress(authed, cacheKey));
 }
 
-async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Response> {
+async function buildProgress(
+  authed: AuthedUser,
+  cacheKey: string,
+): Promise<Response> {
   const [seriesQ, daysQ] = await Promise.all([
     readAllRows((from, to) =>
       authed.db
         .from("progress_daily")
-        .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
+        .select(
+          "day, shot_type, scoring_model_version, shot_count, avg_score, best_score",
+        )
         .eq("user_id", authed.id)
         .order("day", { ascending: true })
         .order("shot_type", { ascending: true })
         .order("scoring_model_version", { ascending: true })
-        .range(from, to),
+        .range(from, to)
     ),
     readAllRows((from, to) =>
       authed.db
@@ -2067,7 +2323,7 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
         .select("day")
         .eq("user_id", authed.id)
         .order("day", { ascending: true })
-        .range(from, to),
+        .range(from, to)
     ),
   ]);
   if ("error" in seriesQ) {
@@ -2158,7 +2414,10 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
   return coalesce(cacheKey, () => buildPlayerRank(authed, cacheKey));
 }
 
-async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Response> {
+async function buildPlayerRank(
+  authed: AuthedUser,
+  cacheKey: string,
+): Promise<Response> {
   const [techniquesQ, stateQ] = await Promise.all([
     authed.db
       .from("player_technique_rating")
@@ -2176,16 +2435,19 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   }
   // confidence_weight rides along for the inline fallback compute only; the
   // payload rows expose sampled_count but never the weight.
-  const techniqueRows = ((techniquesQ.data ?? []) as Array<Record<string, unknown>>)
-    .map((row) => ({
-      shot_type: String(row.shot_type),
-      score: Number(row.score),
-      captured_at: String(row.captured_at),
-      sampled_count: Number(row.sampled_count),
-      confidence_weight: Number(row.confidence_weight),
-    }))
-    .filter((row) => Number.isFinite(row.score))
-    .sort((a, b) => b.score - a.score || (a.shot_type < b.shot_type ? -1 : 1));
+  const techniqueRows =
+    ((techniquesQ.data ?? []) as Array<Record<string, unknown>>)
+      .map((row) => ({
+        shot_type: String(row.shot_type),
+        score: Number(row.score),
+        captured_at: String(row.captured_at),
+        sampled_count: Number(row.sampled_count),
+        confidence_weight: Number(row.confidence_weight),
+      }))
+      .filter((row) => Number.isFinite(row.score))
+      .sort((a, b) =>
+        b.score - a.score || (a.shot_type < b.shot_type ? -1 : 1)
+      );
   if (techniqueRows.length === 0) {
     // No scored evidence → honestly unranked, never a fabricated Bronze.
     const empty = { rank: null };
@@ -2229,8 +2491,8 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
         Number.isFinite(t.confidence_weight) && t.confidence_weight >= 1
           ? t.confidence_weight
           : Number.isFinite(t.sampled_count) && t.sampled_count >= 1
-            ? Math.min(t.sampled_count, 5)
-            : 1;
+          ? Math.min(t.sampled_count, 5)
+          : 1;
       confidenceSum += confidenceWeight;
       weightedHundredths += confidenceWeight * Math.round(t.score * 100);
     }
@@ -2302,12 +2564,18 @@ async function savedDrillEntry(slug: string): Promise<{
  * listCatalogDrills: { items: [...], cursor: null } with q/family filters.
  * Every item carries validation_state PUBLISHED under the Pickle Sensei
  * Training Library byline (see drills.ts for content provenance). */
-async function listCatalogDrills(authed: AuthedUser, url: URL): Promise<Response> {
+async function listCatalogDrills(
+  authed: AuthedUser,
+  url: URL,
+): Promise<Response> {
   const items = await searchDrillCatalog({
     q: url.searchParams.get("q") ?? undefined,
     family: url.searchParams.get("family") ?? undefined,
   });
-  const saved = await authed.db.from("user_saved_drills").select("slug").eq("user_id", authed.id);
+  const saved = await authed.db.from("user_saved_drills").select("slug").eq(
+    "user_id",
+    authed.id,
+  );
   if (saved.error) {
     return serviceUnavailable("Drill catalog", saved.error.message);
   }
@@ -2326,10 +2594,17 @@ async function listCatalogDrills(authed: AuthedUser, url: URL): Promise<Response
  * prescription is coach-endorsed). instructionalMedia serves the
  * oEmbed-verified, attributed third-party videos from drillMedia.ts — the
  * client labels them community video, never Pickle Sensei coaching. */
-async function getCatalogDrill(authed: AuthedUser, slug: string): Promise<Response> {
+async function getCatalogDrill(
+  authed: AuthedUser,
+  slug: string,
+): Promise<Response> {
   const entry = await drillCatalogEntry(slug);
   if (!entry) {
-    return codedError(404, "drill.not_found", "This drill is not in the catalog.");
+    return codedError(
+      404,
+      "drill.not_found",
+      "This drill is not in the catalog.",
+    );
   }
   const saved = await authed.db
     .from("user_saved_drills")
@@ -2378,7 +2653,10 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
   }
   const upserted = await authed.db
     .from("user_saved_drills")
-    .upsert({ user_id: authed.id, slug }, { onConflict: "user_id,slug", ignoreDuplicates: true });
+    .upsert({ user_id: authed.id, slug }, {
+      onConflict: "user_id,slug",
+      ignoreDuplicates: true,
+    });
   if (upserted.error) {
     return serviceUnavailable("Drill save", upserted.error.message);
   }
@@ -2401,7 +2679,10 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
 /** DELETE /v1/me/saved-drills/:slug — mirrors training/api.ts unsaveDrill
  * (lines 427-432): body ignored, request() maps 204 to null → respond 204.
  * Deleting an absent bookmark is a no-op (idempotent). */
-async function unsaveDrill(authed: AuthedUser, slug: string): Promise<Response> {
+async function unsaveDrill(
+  authed: AuthedUser,
+  slug: string,
+): Promise<Response> {
   const deleted = await authed.db
     .from("user_saved_drills")
     .delete()
@@ -2428,9 +2709,11 @@ interface BillingVerdict {
 
 /** Fetch + fold the subscriber's entitlements from RevenueCat. Returns null
  * when RevenueCat cannot be reached (callers respond retryably). */
-async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVerdict | null> {
-  const rcKey =
-    Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
+async function verifyRevenueCatSubscriber(
+  appUserId: string,
+): Promise<BillingVerdict | null> {
+  const rcKey = Deno.env.get("REVENUECAT_SECRET_API_KEY") ??
+    Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
   if (!rcKey) return null;
 
   // The RevenueCat app_user_id IS the canonical account id (the mobile SDK
@@ -2440,7 +2723,9 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   let subscriber: Record<string, unknown> | null = null;
   try {
     const rcResponse = await fetch(
-      `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`,
+      `https://api.revenuecat.com/v1/subscribers/${
+        encodeURIComponent(appUserId)
+      }`,
       {
         headers: {
           Authorization: `Bearer ${rcKey}`,
@@ -2451,7 +2736,9 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     );
     if (rcResponse.ok) {
       const parsed = (await rcResponse.json().catch(() => null)) as unknown;
-      subscriber = isRecord(parsed) && isRecord(parsed.subscriber) ? parsed.subscriber : null;
+      subscriber = isRecord(parsed) && isRecord(parsed.subscriber)
+        ? parsed.subscriber
+        : null;
     } else {
       await rcResponse.text().catch(() => undefined);
     }
@@ -2464,7 +2751,9 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   // entitlement is ACTIVE when expires_date is null (lifetime) or parses
   // to a future timestamp; anything else — including malformed shapes —
   // honestly does not grant membership.
-  const entitlementMap = isRecord(subscriber.entitlements) ? subscriber.entitlements : {};
+  const entitlementMap = isRecord(subscriber.entitlements)
+    ? subscriber.entitlements
+    : {};
   const verdict: BillingVerdict = {
     premium: false,
     productKey: null,
@@ -2475,8 +2764,7 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     const entitlement = entitlementMap[name];
     if (!isRecord(entitlement)) continue;
     const expires = entitlement.expires_date;
-    const active =
-      expires === null ||
+    const active = expires === null ||
       (typeof expires === "string" &&
         Number.isFinite(Date.parse(expires)) &&
         Date.parse(expires) > Date.now());
@@ -2486,8 +2774,9 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
       // First active entitlement (pickle_sensei_pro preferred) carries
       // the product/expiry the client displays.
       verdict.premium = true;
-      verdict.productKey =
-        typeof entitlement.product_identifier === "string" ? entitlement.product_identifier : null;
+      verdict.productKey = typeof entitlement.product_identifier === "string"
+        ? entitlement.product_identifier
+        : null;
       verdict.expiresAt = typeof expires === "string" ? expires : null;
     }
   }
@@ -2575,7 +2864,10 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   // completion, so its presence means "already processed": replays are
   // acknowledged without another RevenueCat round trip, while a delivery
   // that failed (503 below) leaves no row and is fully re-processed.
-  const seen = await adminDb.from("webhook_events").select("id").eq("id", eventId).maybeSingle();
+  const seen = await adminDb.from("webhook_events").select("id").eq(
+    "id",
+    eventId,
+  ).maybeSingle();
   if (seen.error) {
     console.error("[api] webhook event lookup failed:", seen.error.message);
   } else if (seen.data) {
@@ -2616,7 +2908,11 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const verifiedAt = new Date().toISOString();
   let verified = true;
   for (const { userId, verdict } of verdicts) {
-    const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
+    const persistError = await persistBillingVerdict(
+      userId,
+      verdict,
+      verifiedAt,
+    );
     if (persistError) {
       // A user who has never bootstrapped has no profiles row (FK target); log
       // and acknowledge — their state will be written on first billing sync.
@@ -2686,7 +2982,9 @@ interface DeletionSurvey {
 /** body.survey → validated survey, or null when absent/unusable. Free text
  * is sanitized (control/zero-width/bidi stripped, whitespace collapsed) and
  * capped; an empty remainder is stored as null, not "". */
-function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | null {
+function parseDeletionSurvey(
+  body: Record<string, unknown>,
+): DeletionSurvey | null {
   const survey = body.survey;
   if (!isRecord(survey)) return null;
   const reason = survey.reason;
@@ -2695,19 +2993,23 @@ function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | nu
     return null;
   }
   const wanted = survey.wanted;
-  const details =
-    typeof survey.details === "string"
-      ? sanitizeUserText(survey.details, DELETION_SURVEY_DETAILS_MAX)
-      : "";
+  const details = typeof survey.details === "string"
+    ? sanitizeUserText(survey.details, DELETION_SURVEY_DETAILS_MAX)
+    : "";
   const platform = survey.platform;
-  const appVersion =
-    typeof survey.appVersion === "string" ? sanitizeUserText(survey.appVersion, 64) : "";
+  const appVersion = typeof survey.appVersion === "string"
+    ? sanitizeUserText(survey.appVersion, 64)
+    : "";
   return {
     reason,
-    wanted: typeof wanted === "string" && DELETION_SURVEY_WANTED.has(wanted) ? wanted : null,
+    wanted: typeof wanted === "string" && DELETION_SURVEY_WANTED.has(wanted)
+      ? wanted
+      : null,
     details: details.length > 0 ? details : null,
     platform:
-      typeof platform === "string" && DELETION_SURVEY_PLATFORMS.has(platform) ? platform : null,
+      typeof platform === "string" && DELETION_SURVEY_PLATFORMS.has(platform)
+        ? platform
+        : null,
     appVersion: appVersion.length > 0 ? appVersion : null,
   };
 }
@@ -2717,13 +3019,20 @@ function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | nu
  * successful delete-request into an error the app shows. Churn context
  * (tenure, membership, how many reads they got) is stamped from the
  * user's own rows under RLS, so nothing here is client-asserted. */
-async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey): Promise<void> {
+async function recordDeletionSurvey(
+  authed: AuthedUser,
+  survey: DeletionSurvey,
+): Promise<void> {
   const [stateQ, profileQ] = await Promise.all([
     authed.db.rpc("access_state"),
-    authed.db.from("profiles").select("created_at").eq("id", authed.id).maybeSingle(),
+    authed.db.from("profiles").select("created_at").eq("id", authed.id)
+      .maybeSingle(),
   ]);
-  const state = (stateQ.data as Array<{ premium: boolean; scored_count: number }> | null)?.[0];
-  const createdAt = (profileQ.data as { created_at: string } | null)?.created_at;
+  const state =
+    (stateQ.data as Array<{ premium: boolean; scored_count: number }> | null)
+      ?.[0];
+  const createdAt = (profileQ.data as { created_at: string } | null)
+    ?.created_at;
   const createdAtMs = createdAt ? Date.parse(createdAt) : Number.NaN;
   const accountAgeDays = Number.isFinite(createdAtMs)
     ? Math.max(0, Math.floor((Date.now() - createdAtMs) / 86_400_000))
@@ -2744,14 +3053,22 @@ async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey):
     app_version: survey.appVersion,
     account_age_days: accountAgeDays,
     was_premium: state ? Boolean(state.premium) : null,
-    scored_count: state && Number.isFinite(state.scored_count) ? state.scored_count : null,
+    scored_count: state && Number.isFinite(state.scored_count)
+      ? state.scored_count
+      : null,
   });
   if (inserted.error) {
-    console.error("[api] delete-request: exit survey not recorded:", inserted.error.message);
+    console.error(
+      "[api] delete-request: exit survey not recorded:",
+      inserted.error.message,
+    );
   }
 }
 
-async function requestAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
+async function requestAccountDeletion(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const survey = parseDeletionSurvey(body);
   const challenge = crypto.randomUUID();
@@ -2780,7 +3097,10 @@ interface ExternalCredentialRow {
   revenuecat_deleted_at: string | null;
 }
 
-type AppleDeletionOutcome = "revoked" | "not_applicable" | "manual_action_required";
+type AppleDeletionOutcome =
+  | "revoked"
+  | "not_applicable"
+  | "manual_action_required";
 
 /** Complete provider-side erasure before removing the Supabase identity. A
  * successful external step is checkpointed in the service-role-only row so a
@@ -2791,7 +3111,9 @@ async function deleteExternalAccounts(
 ): Promise<AppleDeletionOutcome | Response> {
   const externalQ = await adminDb
     .from("account_external_credentials")
-    .select("apple_refresh_token_encrypted, apple_revoked_at, revenuecat_deleted_at")
+    .select(
+      "apple_refresh_token_encrypted, apple_revoked_at, revenuecat_deleted_at",
+    )
     .eq("user_id", authed.id)
     .maybeSingle();
   if (externalQ.error) {
@@ -2806,7 +3128,10 @@ async function deleteExternalAccounts(
     } else if (external?.apple_refresh_token_encrypted) {
       const config = appleServerConfiguration();
       if (!config) {
-        return serviceUnavailable("Account deletion", "Apple server secrets unavailable");
+        return serviceUnavailable(
+          "Account deletion",
+          "Apple server secrets unavailable",
+        );
       }
       try {
         const refreshToken = await decryptAppleRefreshToken(
@@ -2816,7 +3141,9 @@ async function deleteExternalAccounts(
         );
         await revokeAppleRefreshToken(refreshToken, config);
       } catch (error) {
-        const detail = error instanceof ExternalAccountError ? error.message : error;
+        const detail = error instanceof ExternalAccountError
+          ? error.message
+          : error;
         return serviceUnavailable("Account deletion", detail);
       }
       const marked = await adminDb
@@ -2836,7 +3163,9 @@ async function deleteExternalAccounts(
       // response tells the client to direct that user to Apple's manual
       // Sign in with Apple authorization controls.
       appleOutcome = "manual_action_required";
-      console.warn(`[api] account deletion has no Apple revocation token: ${authed.id}`);
+      console.warn(
+        `[api] account deletion has no Apple revocation token: ${authed.id}`,
+      );
     }
   }
 
@@ -2845,7 +3174,9 @@ async function deleteExternalAccounts(
     try {
       await deleteRevenueCatCustomer(authed.id, revenueCatSecret);
     } catch (error) {
-      const detail = error instanceof ExternalAccountError ? error.message : error;
+      const detail = error instanceof ExternalAccountError
+        ? error.message
+        : error;
       return serviceUnavailable("Account deletion", detail);
     }
     const now = new Date().toISOString();
@@ -2863,7 +3194,10 @@ async function deleteExternalAccounts(
   return appleOutcome;
 }
 
-async function confirmAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
+async function confirmAccountDeletion(
+  authed: AuthedUser,
+  request: Request,
+): Promise<Response> {
   const body = await readBody(request);
   const challenge = body.challenge;
   if (!isUuid(challenge)) {
@@ -2881,7 +3215,11 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   if (pending.error) {
     return serviceUnavailable("Account deletion", pending.error.message);
   }
-  const row = pending.data as { challenge: string; created_at: string; expires_at: string } | null;
+  const row = pending.data as {
+    challenge: string;
+    created_at: string;
+    expires_at: string;
+  } | null;
   if (!row || row.challenge !== challenge) {
     return codedError(
       403,
@@ -2908,8 +3246,13 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   if (!adminDb) {
     return serviceUnavailable("Account deletion", "service role unavailable");
   }
-  const appleAuthorizationRevocation = await deleteExternalAccounts(authed, adminDb);
-  if (appleAuthorizationRevocation instanceof Response) return appleAuthorizationRevocation;
+  const appleAuthorizationRevocation = await deleteExternalAccounts(
+    authed,
+    adminDb,
+  );
+  if (appleAuthorizationRevocation instanceof Response) {
+    return appleAuthorizationRevocation;
+  }
 
   const deleted = await adminDb.auth.admin.deleteUser(authed.id);
   const authError = deleted.error as {
@@ -2918,8 +3261,7 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     error_code?: string;
     message?: string;
   } | null;
-  const alreadyDeleted =
-    authError?.status === 404 ||
+  const alreadyDeleted = authError?.status === 404 ||
     authError?.code === "user_not_found" ||
     authError?.error_code === "user_not_found";
   if (authError && !alreadyDeleted) {
@@ -3018,15 +3360,18 @@ async function bootstrapAccount(
   const profile = await readProfile(authed);
   if (profile instanceof Response) return profile;
   if (profile.provider !== authed.provider) {
-    await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
+    await authed.db.from("profiles").update({ provider: authed.provider }).eq(
+      "id",
+      authed.id,
+    );
   }
 
   if (authed.provider === "apple") {
     const body = await readBody(request);
     const authorizationCode = body.appleAuthorizationCode;
-    const supportsRevocationProtocol = request.headers.get("X-Apple-Revocation-Protocol") === "1";
-    const usableAuthorizationCode =
-      typeof authorizationCode === "string" &&
+    const supportsRevocationProtocol =
+      request.headers.get("X-Apple-Revocation-Protocol") === "1";
+    const usableAuthorizationCode = typeof authorizationCode === "string" &&
       Boolean(authorizationCode.trim()) &&
       authorizationCode.length <= 4_096;
     if (!usableAuthorizationCode) {
@@ -3040,7 +3385,9 @@ async function bootstrapAccount(
       // Deployment must precede the new mobile build. A pre-protocol build
       // has no authorization code to send, so keep it working and let its
       // eventual deletion use Apple's documented manual-disconnect path.
-      console.warn(`[api] legacy Apple bootstrap has no revocation credential: ${authed.id}`);
+      console.warn(
+        `[api] legacy Apple bootstrap has no revocation credential: ${authed.id}`,
+      );
     } else {
       const config = appleServerConfiguration();
       const adminDb = billingAdminDb();
@@ -3051,7 +3398,10 @@ async function bootstrapAccount(
         );
       }
       try {
-        const grant = await exchangeAppleAuthorizationCode(authorizationCode.trim(), config);
+        const grant = await exchangeAppleAuthorizationCode(
+          authorizationCode.trim(),
+          config,
+        );
         if (grant.subject !== providerSubject) {
           return codedError(
             401,
@@ -3065,28 +3415,34 @@ async function bootstrapAccount(
           config.tokenEncryptionKey,
         );
         const now = new Date().toISOString();
-        const stored = await adminDb.from("account_external_credentials").upsert(
-          {
-            user_id: authed.id,
-            apple_refresh_token_encrypted: encrypted,
-            apple_token_captured_at: now,
-            apple_revoked_at: null,
-            updated_at: now,
-          },
-          { onConflict: "user_id" },
-        );
+        const stored = await adminDb.from("account_external_credentials")
+          .upsert(
+            {
+              user_id: authed.id,
+              apple_refresh_token_encrypted: encrypted,
+              apple_token_captured_at: now,
+              apple_revoked_at: null,
+              updated_at: now,
+            },
+            { onConflict: "user_id" },
+          );
         if (stored.error) {
           return serviceUnavailable("Apple sign-in", stored.error.message);
         }
       } catch (error) {
-        if (error instanceof ExternalAccountError && error.kind === "invalid_grant") {
+        if (
+          error instanceof ExternalAccountError &&
+          error.kind === "invalid_grant"
+        ) {
           return codedError(
             401,
             "auth.apple_authorization_invalid",
             "Apple could not validate this sign-in authorization. Try again.",
           );
         }
-        const detail = error instanceof ExternalAccountError ? error.message : error;
+        const detail = error instanceof ExternalAccountError
+          ? error.message
+          : error;
         return serviceUnavailable("Apple sign-in", detail);
       }
     }
@@ -3094,7 +3450,9 @@ async function bootstrapAccount(
 
   return json(200, {
     user: { id: profile.id, email: profile.email },
-    onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
+    onboardingState: profile.onboarding_state === "complete"
+      ? "complete"
+      : "pending",
     session: sessionView(session),
   });
 }
@@ -3170,7 +3528,9 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     return legalTextResponse(TERMS_TEXT);
   }
-  if (request.method === "POST" && url.pathname.endsWith("/webhooks/revenuecat")) {
+  if (
+    request.method === "POST" && url.pathname.endsWith("/webhooks/revenuecat")
+  ) {
     const rl = await enforceRateLimit(
       "webhook",
       ip,
@@ -3190,7 +3550,12 @@ async function handleRequest(request: Request): Promise<Response> {
   // ── Pre-auth limits: a global per-IP budget, plus a much tighter budget
   // for IPs that keep failing authentication (token stuffing / credential
   // probing) — those never even reach Supabase Auth once tripped.
-  const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
+  const ipLimit = await enforceRateLimit(
+    "ip",
+    ip,
+    IP_LIMIT.limit,
+    IP_LIMIT.windowSeconds,
+  );
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
   const authFailures = await peekRateLimit(
     "authfail",
@@ -3211,7 +3576,12 @@ async function handleRequest(request: Request): Promise<Response> {
   // Atomic INCR on the aligned auth-failure window (peeked above) — never a
   // read-then-write, so concurrent bad bearers cannot under-count.
   const recordAuthFailure = () =>
-    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+    enforceRateLimit(
+      "authfail",
+      ip,
+      AUTH_FAILURE_LIMIT.limit,
+      AUTH_FAILURE_LIMIT.windowSeconds,
+    );
 
   // ── Session establishment and rotation run BEFORE general authentication:
   // bootstrap is the one route that spends a provider ID token (and mints
@@ -3259,7 +3629,9 @@ async function handleRequest(request: Request): Promise<Response> {
 
   // ── Per-user budgets: the tightest matching route family wins; everything
   // else shares the general budget.
-  const routeLimit = ROUTE_LIMITS.find((entry) => entry.match(request.method, path));
+  const routeLimit = ROUTE_LIMITS.find((entry) =>
+    entry.match(request.method, path)
+  );
   const userLimit = await enforceRateLimit(
     routeLimit?.scope ?? "user",
     authed.id,
@@ -3295,7 +3667,9 @@ async function handleRequest(request: Request): Promise<Response> {
     if (m) {
       const slug = decodePathSegment(m[1]);
       if (slug instanceof Response) return slug;
-      return request.method === "PUT" ? saveDrill(authed, slug) : unsaveDrill(authed, slug);
+      return request.method === "PUT"
+        ? saveDrill(authed, slug)
+        : unsaveDrill(authed, slug);
     }
   }
 
@@ -3320,7 +3694,9 @@ async function handleRequest(request: Request): Promise<Response> {
       if (profile instanceof Response) return profile;
       return json(200, {
         user: { id: profile.id, email: profile.email },
-        onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
+        onboardingState: profile.onboarding_state === "complete"
+          ? "complete"
+          : "pending",
         profile: {
           skill_level: profile.skill_level,
           handedness: profile.handedness,
@@ -3336,11 +3712,15 @@ async function handleRequest(request: Request): Promise<Response> {
     case "PUT /v1/me/onboarding": {
       const body = await readBody(request);
       const handedness = body.handedness;
-      const skillLevel =
-        typeof body.skillLevel === "string" ? sanitizeUserText(body.skillLevel, 200) : "";
-      const goal = typeof body.goal === "string" ? sanitizeUserText(body.goal, 200) : "";
-      const biggestProblem =
-        typeof body.biggestProblem === "string" ? sanitizeUserText(body.biggestProblem, 1_000) : "";
+      const skillLevel = typeof body.skillLevel === "string"
+        ? sanitizeUserText(body.skillLevel, 200)
+        : "";
+      const goal = typeof body.goal === "string"
+        ? sanitizeUserText(body.goal, 200)
+        : "";
+      const biggestProblem = typeof body.biggestProblem === "string"
+        ? sanitizeUserText(body.biggestProblem, 1_000)
+        : "";
       if (
         !skillLevel ||
         skillLevel.length > 64 ||
@@ -3366,7 +3746,10 @@ async function handleRequest(request: Request): Promise<Response> {
         // spoofing defense in depth; clients render via <Text>).
         const cleaned = sanitizeUserText(firstNameRaw, 200);
         if (cleaned.length < 1 || cleaned.length > 40) {
-          return errorJson(400, "firstName must be 1-40 characters after trimming.");
+          return errorJson(
+            400,
+            "firstName must be 1-40 characters after trimming.",
+          );
         }
         firstName = cleaned;
       }
@@ -3374,7 +3757,10 @@ async function handleRequest(request: Request): Promise<Response> {
       let gender: string | undefined;
       if (genderRaw !== undefined && genderRaw !== null) {
         if (typeof genderRaw !== "string" || !GENDER_OPTIONS.has(genderRaw)) {
-          return errorJson(400, "gender must be one of female|male|nonbinary|prefer_not_to_say.");
+          return errorJson(
+            400,
+            "gender must be one of female|male|nonbinary|prefer_not_to_say.",
+          );
         }
         gender = genderRaw;
       }
@@ -3398,7 +3784,10 @@ async function handleRequest(request: Request): Promise<Response> {
         )
         .maybeSingle();
       if (updated.error || !updated.data) {
-        return serviceUnavailable("Your coaching profile", updated.error?.message);
+        return serviceUnavailable(
+          "Your coaching profile",
+          updated.error?.message,
+        );
       }
       const saved = updated.data as unknown as {
         skill_level: string | null;
@@ -3437,8 +3826,8 @@ async function handleRequest(request: Request): Promise<Response> {
       // webhook) — the client's local StoreKit state is never trusted. The
       // verified verdict is persisted to billing_entitlements so every
       // access computation benefits until the next sync or expiry.
-      const rcKey =
-        Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
+      const rcKey = Deno.env.get("REVENUECAT_SECRET_API_KEY") ??
+        Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
       if (!rcKey) {
         return codedError(
           503,
@@ -3457,7 +3846,11 @@ async function handleRequest(request: Request): Promise<Response> {
       }
 
       const verifiedAt = new Date().toISOString();
-      const persistError = await persistBillingVerdict(authed.id, verdict, verifiedAt);
+      const persistError = await persistBillingVerdict(
+        authed.id,
+        verdict,
+        verifiedAt,
+      );
       if (persistError === "service role unavailable") {
         return codedError(
           503,
@@ -3507,7 +3900,9 @@ async function handleRequest(request: Request): Promise<Response> {
 
     case "GET /v1/me/consent/status": {
       const rows = await loadConsentRows(authed);
-      return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
+      return rows instanceof Response
+        ? rows
+        : json(200, foldConsentStatus(rows));
     }
 
     case "POST /v1/me/consent/grant":
