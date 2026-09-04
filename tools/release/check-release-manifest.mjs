@@ -105,12 +105,19 @@ export function stripComments(text, quotes = ['"', "'", "`"]) {
 /**
  * Every effective (non-comment) value of an Xcode build setting in a
  * project.pbxproj, in file order, with surrounding quotes removed. One entry
- * per build configuration (Debug, Release, ...) that sets it.
+ * per build configuration (Debug, Release, ...) that sets it, INCLUDING
+ * conditional overrides — `"SETTING[sdk=iphoneos*]" = value;`, `[arch=...]`,
+ * `[config=...]`, or several conditions chained — which win over the plain
+ * `SETTING = value;` line for the builds they match (sdk=iphoneos* is the
+ * device / App Store archive). Xcode quotes such keys, so both the bare and
+ * the quoted spelling of the name are recognised; a different setting that
+ * merely contains the name (OTHER_SETTING, SETTING_SUFFIX) is not.
  */
 export function pbxSettingValues(pbxproj, setting) {
   const stripped = stripComments(pbxproj, ['"']);
+  const key = `${setting}(?:\\[[^\\]]*\\])*`;
   const re = new RegExp(
-    `(?<![\\w.])${setting}\\s*=\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|([^;\\s]+))\\s*;`,
+    `(?<![\\w.])(?:"${key}"|${key})\\s*=\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|([^;\\s]+))\\s*;`,
     "g",
   );
   const values = [];
@@ -120,29 +127,49 @@ export function pbxSettingValues(pbxproj, setting) {
   return values;
 }
 
-/** Every effective `versionName "X"` in build.gradle (Groovy; comments stripped). */
+/**
+ * Every effective `versionName` right-hand side in build.gradle (Groovy or
+ * Kotlin-DSL `=` spelling; comments stripped). A plain string literal is
+ * returned unquoted; any other expression (concatenation, a variable, a
+ * method call) is returned verbatim so it can never equal a version string.
+ */
 export function gradleVersionNames(gradle) {
   return [
-    ...stripComments(gradle, ['"', "'"]).matchAll(/\bversionName\s*=?\s*(["'])([^"']*)\1/g),
-  ].map((m) => m[2]);
+    ...stripComments(gradle, ['"', "'"]).matchAll(/\bversionName\b\s*=?[ \t]*([^\n;}]*)/g),
+  ].map((m) => {
+    const rhs = m[1].trim();
+    const literal = /^(["'])([^"']*)\1$/.exec(rhs);
+    return literal ? literal[2] : rhs;
+  });
 }
 
-/** Every effective `versionCode N` in build.gradle (Groovy; comments stripped). */
+/**
+ * Every effective `versionCode` right-hand side in build.gradle (comments
+ * stripped). A bare integer is returned as written; anything else
+ * (`1 + 11`, a variable, a method call) is returned verbatim so it can never
+ * equal the manifest build number.
+ */
 export function gradleVersionCodes(gradle) {
-  return [...stripComments(gradle, ['"', "'"]).matchAll(/\bversionCode\s*=?\s*(\d+)\b/g)].map(
-    (m) => m[1],
-  );
+  return [
+    ...stripComments(gradle, ['"', "'"]).matchAll(/\bversionCode\b\s*=?[ \t]*([^\n;}]*)/g),
+  ].map((m) => m[1].trim());
 }
 
 /** Every effective `const APP_VERSION = 'X';` (single or double quoted) in runtimeConfig.ts. */
 export function runtimeAppVersions(runtimeConfig) {
   return [
-    ...stripComments(runtimeConfig).matchAll(/\bconst\s+APP_VERSION\s*=\s*(["'])([^"']*)\1\s*;/g),
+    ...stripComments(runtimeConfig).matchAll(
+      /\bconst\s+APP_VERSION\s*(?::\s*string\s*)?=\s*(["'])([^"']*)\1\s*;/g,
+    ),
   ].map((m) => m[2]);
 }
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function describeValues(values) {
@@ -174,16 +201,26 @@ export function runReleaseManifestChecks(repoRoot) {
     check(`manifest: ${MANIFEST_PATH} is readable JSON (${error.message})`, false);
     return { lines, failures };
   }
-  const isObject = manifest !== null && typeof manifest === "object" && !Array.isArray(manifest);
+  const isObject = isPlainObject(manifest);
   check(`manifest: ${MANIFEST_PATH} is a JSON object`, isObject);
   if (!isObject) return { lines, failures };
 
-  /** A top-level list; a missing or non-array list is a FAIL and reads as empty. */
+  /**
+   * A top-level list of entry objects. A missing or non-array list is a FAIL
+   * and reads as empty; a null / non-object entry is a FAIL and is dropped so
+   * the per-entry rules below never throw on it.
+   */
   function list(name) {
     const value = manifest[name];
     const ok = Array.isArray(value);
     check(`${name}: is an array`, ok);
-    return ok ? value : [];
+    if (!ok) return [];
+    const entries = value.filter(isPlainObject);
+    check(
+      `${name}: every entry is an object (${value.length - entries.length} non-object)`,
+      entries.length === value.length,
+    );
+    return entries;
   }
 
   // --- manifest contract ----------------------------------------------------------
