@@ -1,9 +1,11 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -347,15 +349,9 @@ export async function runRegression(options: RunOptions = {}): Promise<RunResult
       : join(REPO_ROOT, options.outDir)
     : join(REPO_ROOT, DEFAULT_REPORT_DIR);
   const outPath = join(outDir, `${runId}.json`);
-  if (existsSync(outPath)) throw new Error(`refusing to overwrite existing summary ${outPath}`);
-
-  const scratchDir = mkdtempSync(join(tmpdir(), "pickle-regression-"));
-  const startedAll = process.hrtime.bigint();
-  const dirt = describeTreeDirt();
-  const provenance = collectProvenance(dirt);
-  log(
-    `regression run ${runId} @ ${provenance.gitSha.slice(0, 12)}${provenance.gitDirty ? " (dirty tree)" : ""}`,
-  );
+  const reservation = reserveSummaryPath(outDir, outPath);
+  let summaryWritten = false;
+  let scratchDir: string | null = null;
 
   const liveChildren = new Set<ChildProcess>();
   let interruptedBy: HandledSignal | null = null;
@@ -374,9 +370,17 @@ export async function runRegression(options: RunOptions = {}): Promise<RunResult
     return result;
   };
 
-  const benches: BenchRecord[] = [];
-  for (const signal of HANDLED_SIGNALS) process.on(signal, onSignal);
   try {
+    scratchDir = mkdtempSync(join(tmpdir(), "pickle-regression-"));
+    const startedAll = process.hrtime.bigint();
+    const dirt = describeTreeDirt();
+    const provenance = collectProvenance(dirt);
+    log(
+      `regression run ${runId} @ ${provenance.gitSha.slice(0, 12)}${provenance.gitDirty ? " (dirty tree)" : ""}`,
+    );
+
+    const benches: BenchRecord[] = [];
+    for (const signal of HANDLED_SIGNALS) process.on(signal, onSignal);
     let definitions = benchDefinitions(tracked, scratchDir);
     if (options.only && options.only.length > 0) {
       const wanted = new Set(options.only);
@@ -398,42 +402,64 @@ export async function runRegression(options: RunOptions = {}): Promise<RunResult
         `  ${record.status === "ok" ? "ok    " : "FAILED"} ${record.id.padEnd(22)} ${String(record.wallClockMs).padStart(6)}ms  ${metricCount} metrics${record.error ? `\n    ${record.error.split("\n")[0]}` : ""}`,
       );
     }
+
+    const failed = benches.filter((bench) => bench.status === "failed");
+    const summary: RegressionSummary = {
+      schemaVersion: REGRESSION_SUMMARY_SCHEMA_VERSION,
+      contract: REGRESSION_CONTRACT_ID,
+      contractVersion: REGRESSION_CONTRACT_VERSION,
+      runId,
+      generatedAtIso: new Date().toISOString(),
+      runner: { node: process.version, platform: process.platform, arch: process.arch },
+      provenance,
+      benches,
+      metrics: flattenBenchMetrics(benches),
+      caveats: [
+        "All benches replay COMMITTED artifacts on Linux (Apple-Vision pose captured earlier on macOS, oracle ball, no paddle track). They are proxies for the on-device pipeline, never Mac/device results.",
+        "Gold counts are small (single-digit to low tens per bench); treat every delta as a per-case finding, not a rate estimate.",
+        "Abstentions are first-class outcomes. A metric value of null means 'not measurable in this run', never zero.",
+        ...dirtyTreeCaveats(dirt),
+        ...(options.only && options.only.length > 0
+          ? [
+              `Partial run: only ${options.only.join(", ")} executed; not comparable to a full baseline.`,
+            ]
+          : []),
+      ],
+      totalWallClockMs: Number((process.hrtime.bigint() - startedAll) / 1_000_000n),
+    };
+
+    const validated = validateRegressionSummary(summary);
+    if (!validated.ok) {
+      throw new Error(`generated summary failed schema validation: ${validated.failure.message}`);
+    }
+    writeFileSync(reservation, `${JSON.stringify(validated.value, null, 2)}\n`);
+    summaryWritten = true;
+    log(
+      `wrote ${outPath} (${summary.totalWallClockMs}ms total, ${failed.length} failed bench(es))`,
+    );
+    return { summary: validated.value, outPath, exitCode: failed.length > 0 ? 1 : 0 };
   } finally {
     for (const signal of HANDLED_SIGNALS) process.off(signal, onSignal);
-    rmSync(scratchDir, { recursive: true, force: true });
+    if (scratchDir !== null) rmSync(scratchDir, { recursive: true, force: true });
+    closeSync(reservation);
+    if (!summaryWritten) rmSync(outPath, { force: true });
   }
+}
 
-  const failed = benches.filter((bench) => bench.status === "failed");
-  const summary: RegressionSummary = {
-    schemaVersion: REGRESSION_SUMMARY_SCHEMA_VERSION,
-    contract: REGRESSION_CONTRACT_ID,
-    contractVersion: REGRESSION_CONTRACT_VERSION,
-    runId,
-    generatedAtIso: new Date().toISOString(),
-    runner: { node: process.version, platform: process.platform, arch: process.arch },
-    provenance,
-    benches,
-    metrics: flattenBenchMetrics(benches),
-    caveats: [
-      "All benches replay COMMITTED artifacts on Linux (Apple-Vision pose captured earlier on macOS, oracle ball, no paddle track). They are proxies for the on-device pipeline, never Mac/device results.",
-      "Gold counts are small (single-digit to low tens per bench); treat every delta as a per-case finding, not a rate estimate.",
-      "Abstentions are first-class outcomes. A metric value of null means 'not measurable in this run', never zero.",
-      ...dirtyTreeCaveats(dirt),
-      ...(options.only && options.only.length > 0
-        ? [
-            `Partial run: only ${options.only.join(", ")} executed; not comparable to a full baseline.`,
-          ]
-        : []),
-    ],
-    totalWallClockMs: Number((process.hrtime.bigint() - startedAll) / 1_000_000n),
-  };
-
-  const validated = validateRegressionSummary(summary);
-  if (!validated.ok) {
-    throw new Error(`generated summary failed schema validation: ${validated.failure.message}`);
-  }
+/**
+ * Claims `outPath` with O_EXCL before any bench runs, so two runners handed the
+ * same run id cannot both pass an exists-check and then both write: exactly one
+ * owns the file, the other is refused. The caller writes the summary through
+ * the returned descriptor and removes the file if it never gets that far.
+ */
+function reserveSummaryPath(outDir: string, outPath: string): number {
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(outPath, `${JSON.stringify(validated.value, null, 2)}\n`);
-  log(`wrote ${outPath} (${summary.totalWallClockMs}ms total, ${failed.length} failed bench(es))`);
-  return { summary: validated.value, outPath, exitCode: failed.length > 0 ? 1 : 0 };
+  try {
+    return openSync(outPath, "wx");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+      throw new Error(`refusing to overwrite existing summary ${outPath}`);
+    }
+    throw error;
+  }
 }

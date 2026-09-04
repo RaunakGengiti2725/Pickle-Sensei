@@ -29,6 +29,7 @@ import {
   runRegression,
   timestampRunId,
   untrackedDatasetInputs,
+  type RunResult,
 } from "../src/regression/run.js";
 import { validateRegressionSummary } from "../src/index.js";
 
@@ -302,6 +303,30 @@ describe("runRegression (real in-process bench, isolated out dir)", () => {
     await expect(
       runRegression({ outDir, only: ["contact_replay"], runId: "test-run", log: () => {} }),
     ).rejects.toThrow(/refusing to overwrite/);
+  });
+
+  it("two concurrent runs with the same run id: exactly one writes, the other is refused up front", async () => {
+    const raceDir = join(scratch, "race");
+    const start = (): Promise<RunResult> =>
+      runRegression({ outDir: raceDir, only: ["contact_replay"], runId: "same", log: () => {} });
+    const settled = await Promise.allSettled([start(), start()]);
+    const fulfilled = settled.filter((r) => r.status === "fulfilled");
+    const rejected = settled.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(String(rejected[0]!.reason)).toMatch(/refusing to overwrite/);
+    expect(readdirSync(raceDir)).toEqual(["same.json"]);
+    expect(
+      validateRegressionSummary(JSON.parse(readFileSync(join(raceDir, "same.json"), "utf8"))).ok,
+    ).toBe(true);
+  });
+
+  it("a run that fails before any bench leaves no reservation file behind", async () => {
+    const dir = join(scratch, "failed-run");
+    await expect(
+      runRegression({ outDir: dir, only: ["not_a_bench"], runId: "gone", log: () => {} }),
+    ).rejects.toThrow(/unknown bench id/);
+    expect(readdirSync(dir)).toEqual([]);
   });
 
   it("rejects unknown bench ids before running anything", async () => {
