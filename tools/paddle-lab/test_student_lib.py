@@ -12,12 +12,14 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +31,7 @@ sys.path.insert(0, str(HERE.parent / "mining"))
 
 import ball_candidates  # noqa: E402
 import detect_paddle  # noqa: E402
+import frame_clock  # noqa: E402
 import student_lib  # noqa: E402
 import wave_g_g03_multi_paddle_miner as miner  # noqa: E402
 
@@ -164,6 +167,27 @@ class FrameClockAgreement(unittest.TestCase):
                     self.assertAlmostEqual(frame["tMs"], self.t_ms_of(k), delta=TOLERANCE_MS)
                     self.assertEqual(detect_paddle.frame_index_for_t_ms(frame["tMs"], self.fps, self.start_time_ms), k)
 
+    def test_extract_frames_legacy_clock_tolerance_is_one_frame_period(self) -> None:
+        # paddle-distill-v0.1 labels afn-sasebo-rally1 at tMs=0.0 (relative clock); the
+        # stream starts at 33.367 ms so the strict inversion names frame -1. Within one
+        # frame period before start_time -> frame 0 with ONE warning per clip; earlier raises.
+        legacy = [0.0, self.start_time_ms - 0.999 * self.frame_ms]
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            frames = student_lib.extract_frames(AFN_CLIP, legacy + [self.t_ms_of(3)])
+        legacy_warnings = [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
+        self.assertEqual(len(legacy_warnings), 1, [str(w.message) for w in caught])
+        self.assertIn("2 label timestamp(s)", str(legacy_warnings[0].message))
+        for t in legacy:
+            self.assertEqual(self.rgb_index[sha(np.ascontiguousarray(frames[t]).tobytes())], 0)
+        self.assertEqual(self.rgb_index[sha(np.ascontiguousarray(frames[self.t_ms_of(3)]).tobytes())], 3)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            student_lib.extract_frames(AFN_CLIP, [self.t_ms_of(3)])
+        self.assertFalse([w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)])
+        with self.assertRaises(ValueError):
+            student_lib.extract_frames(AFN_CLIP, [self.start_time_ms - 1.01 * self.frame_ms])
+
     def test_miner_frame_pack_grabs_named_frame(self) -> None:
         candidates = [
             {"candidateId": f"test-{k}", "caseId": "afn-sasebo-rally1", "tMs": round(self.t_ms_of(k), 2)}
@@ -188,6 +212,62 @@ class FrameClockAgreement(unittest.TestCase):
                 self.assertEqual(pack["frameIndexHint"], k_named)
 
 
+class FrameClockHelpers(unittest.TestCase):
+    """Pure arithmetic of frame_clock: legacy tolerance, decode-count rule, corruption markers, validators."""
+
+    def test_labelled_index_tolerates_exactly_one_frame_period(self) -> None:
+        fps, start = 29.97, 33.367
+        period = 1000.0 / fps
+        self.assertEqual(frame_clock.frame_index_for_labelled_t_ms(start, fps, start), (0, False))
+        self.assertEqual(frame_clock.frame_index_for_labelled_t_ms(start + 7 * period, fps, start), (7, False))
+        self.assertEqual(frame_clock.frame_index_for_labelled_t_ms(0.0, fps, start), (0, True))
+        self.assertEqual(frame_clock.frame_index_for_labelled_t_ms(start - period, fps, start), (0, True))
+        with self.assertRaises(ValueError):
+            frame_clock.frame_index_for_labelled_t_ms(start - 1.01 * period, fps, start)
+        with self.assertRaises(ValueError):
+            frame_clock.frame_index_for_labelled_t_ms(-period, fps, start)
+
+    def test_min_decoded_frames_exact_unless_end_bounded(self) -> None:
+        self.assertEqual(frame_clock.min_decoded_frames(200), 200)
+        self.assertEqual(frame_clock.min_decoded_frames(200, bounded_end=True), 199)
+        self.assertEqual(frame_clock.min_decoded_frames(200, 10), 20)
+        self.assertEqual(frame_clock.min_decoded_frames(200, 10, bounded_end=True), 20)
+        self.assertEqual(frame_clock.min_decoded_frames(201, 10, bounded_end=True), 20)
+        self.assertEqual(frame_clock.min_decoded_frames(201, 10), 21)
+        self.assertEqual(frame_clock.min_decoded_frames(1, bounded_end=True), 0)
+        self.assertEqual(frame_clock.min_decoded_frames(0), 0)
+
+    def test_check_decode_health_fails_on_partial_media_with_exit_zero(self) -> None:
+        frame_clock.check_decode_health(0, "", "clip.mp4")
+        frame_clock.check_decode_health(0, "deprecated pixel format used", "clip.mp4")
+        for text in (
+            "[mov,mp4,m4a,3gp,3g2,mj2 @ 0x1] stream 0, offset 0x1e70bf: partial file",
+            "trunc.mp4: Invalid data found when processing input",
+            "Error while decoding stream #0:0: Invalid data found when processing input",
+        ):
+            with self.assertRaises(RuntimeError, msg=text):
+                frame_clock.check_decode_health(0, text, "trunc.mp4")
+        with self.assertRaises(RuntimeError):
+            frame_clock.check_decode_health(1, "", "clip.mp4")
+
+    def test_numeric_validators_reject_non_finite(self) -> None:
+        for text in ("nan", "NaN", "inf", "-inf", "1e400", "-1e400"):
+            for validator in (frame_clock.finite_float, frame_clock.positive_float, frame_clock.non_negative_float):
+                with self.assertRaises(argparse.ArgumentTypeError, msg=f"{validator.__name__}({text!r})"):
+                    validator(text)
+        self.assertEqual(frame_clock.positive_float("0.5"), 0.5)
+        self.assertEqual(frame_clock.non_negative_float("0"), 0.0)
+        self.assertEqual(frame_clock.positive_int("3"), 3)
+        for validator, text in (
+            (frame_clock.positive_float, "0"),
+            (frame_clock.positive_float, "-1"),
+            (frame_clock.non_negative_float, "-0.1"),
+            (frame_clock.positive_int, "0"),
+        ):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                validator(text)
+
+
 class DecodeCompleteness(unittest.TestCase):
     """MLT-2: truncated media and impossible windows fail loudly, never a partial artifact."""
 
@@ -199,6 +279,16 @@ class DecodeCompleteness(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls.tmp.cleanup()
+
+    def test_whole_clip_decode_matches_probed_count_exactly(self) -> None:
+        w, h, fps, dur, st = detect_paddle.ffprobe_meta(str(WM_CLIP))
+        expected = frame_clock.clip_frame_count(fps, dur)
+        yielded = sum(1 for _ in detect_paddle.frame_iter(str(WM_CLIP), 0.0, 0.0, w, h, fps, decode_size=(64, 64),
+                                                          start_time_ms=st, duration_ms=dur))
+        self.assertEqual(yielded, expected)
+        rows = sum(1 for _ in ball_candidates.gray_frames(str(WM_CLIP), 0.0, 0.0, 64, 64, fps=fps,
+                                                          start_time_ms=st, duration_ms=dur))
+        self.assertEqual(rows, expected)
 
     def test_frame_iter_raises_on_truncated_media(self) -> None:
         w, h, fps, _, st = detect_paddle.ffprobe_meta(str(self.trunc))
