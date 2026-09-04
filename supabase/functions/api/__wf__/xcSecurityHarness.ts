@@ -497,6 +497,12 @@ export function installDefaultResponder(rpcStatus = "accepted"): void {
       return restJson(200, wantsSingleObject(req) ? row : [row]);
     }
     if (req.path === "rpc/apply_synced_shot") return restJson(200, rpcStatus);
+    if (req.path === "user_saved_drills" && req.method === "GET") {
+      const slug = req.query.get("slug")?.replace(/^eq\./, "");
+      if (slug === undefined) return restJson(200, []);
+      const row = { slug, saved_at: "2026-09-04T00:00:00.000Z" };
+      return restJson(200, wantsSingleObject(req) ? row : [row]);
+    }
     return null;
   });
 }

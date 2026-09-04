@@ -1509,7 +1509,16 @@ Deno.test(
     };
     const clip = (s: string) => (s.length > 80 ? `${s.slice(0, 80)}…(${s.length})` : s);
     const slugs = [
+      "wall-dink-rally",
       "dink-drop-ladder",
+      "WALL-DINK-RALLY",
+      "wall-dink-rally%00",
+      "wall-dink-rally/",
+      "__proto__",
+      "constructor",
+      "prototype",
+      "hasOwnProperty",
+      "toString",
       "../../etc/passwd",
       "..%2f..%2fetc%2fpasswd",
       "%2e%2e%2f%2e%2e%2fetc%2fpasswd",
@@ -1546,34 +1555,49 @@ Deno.test(
       for (const slug of slugs) {
         fresh();
         const mark1 = recorded.length;
-        const cat = await send("GET", `/v1/drills/catalog/${slug}`, {
+        const cat = await send("GET", `/v1/catalog/drills/${slug}`, {
           headers: { "x-forwarded-for": "203.0.113.70" },
         });
         const catReached = recordedSince(mark1);
         fresh();
         const mark2 = recorded.length;
-        const saveOut = await send("POST", `/v1/drills/saved/${slug}`, {
+        const saveOut = await send("PUT", `/v1/me/saved-drills/${slug}`, {
           headers: { "x-forwarded-for": "203.0.113.71" },
         });
         const saveReached = recordedSince(mark2);
         fresh();
         const mark3 = recorded.length;
-        const delOut = await send("DELETE", `/v1/drills/saved/${slug}`, {
+        const delOut = await send("DELETE", `/v1/me/saved-drills/${slug}`, {
           headers: { "x-forwarded-for": "203.0.113.72" },
         });
         const delReached = recordedSince(mark3);
-        const postgrestPathsOk = [...saveReached, ...delReached].every(
+        const postgrestPathsOk = [...catReached, ...saveReached, ...delReached].every(
           (r) => r.path === "user_saved_drills",
         );
-        const filterValues = [...saveReached, ...delReached].flatMap((r) =>
-          [...r.query.entries()].filter(([k]) => k === "drill_slug").map(([, v]) => v),
+        const filterValues = [...catReached, ...saveReached, ...delReached].flatMap((r) =>
+          [...r.query.entries()].filter(([k]) => k === "slug").map(([, v]) => v),
         );
+        const catBody = cat.body as {
+          code?: string;
+          drill?: { slug?: string };
+          instructionalMedia?: Array<{ embedUrl?: string; sourceUrl?: string }>;
+        } | null;
+        const media = catBody?.instructionalMedia ?? [];
         rows.push({
           slug: clip(slug),
           catalog: {
             status: cat.status,
-            code: (cat.body as { code?: string } | null)?.code ?? null,
+            code: catBody?.code ?? null,
             postgrest: catReached.length,
+            drillSlug: catBody?.drill?.slug ?? null,
+            mediaCount: media.length,
+            mediaUrlsOk: media.every(
+              (m) =>
+                /^https:\/\/www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(
+                  m.embedUrl ?? "",
+                ) &&
+                /^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(m.sourceUrl ?? ""),
+            ),
             bodyPreview: cat.text.slice(0, 160),
           },
           save: {
@@ -1588,6 +1612,13 @@ Deno.test(
           },
           postgrestPathsOk,
           drillSlugFilterValues: filterValues,
+          decodedSlug: (() => {
+            try {
+              return decodeURIComponent(slug);
+            } catch {
+              return null;
+            }
+          })(),
         });
       }
       for (const q of [
@@ -1603,10 +1634,19 @@ Deno.test(
         "__proto__",
       ]) {
         fresh();
-        const out = await send("GET", `/v1/drills/catalog?q=${encodeURIComponent(q)}`, {
-          headers: { "x-forwarded-for": "203.0.113.73" },
+        const out = await send(
+          "GET",
+          `/v1/catalog/drills?q=${encodeURIComponent(q)}&family=${encodeURIComponent(q.slice(0, 200))}`,
+          { headers: { "x-forwarded-for": "203.0.113.73" } },
+        );
+        const items = (out.body as { items?: unknown[] } | null)?.items;
+        rows.push({
+          search: clip(q),
+          status: out.status,
+          ms: out.ms,
+          bodyBytes: out.text.length,
+          items: Array.isArray(items) ? items.length : null,
         });
-        rows.push({ search: clip(q), status: out.status, ms: out.ms, bodyBytes: out.text.length });
       }
       for (const path of [
         "/v1/../healthz",
@@ -1614,10 +1654,14 @@ Deno.test(
         "/healthz/../v1/me",
         "/v1/me/../../healthz",
         "/v1/XCSEC_CANARY_PATH",
-        "/v1/sessions/XCSEC_CANARY_SEG/end",
-        "/v1/sessions/00000000-0000-4000-8000-000000000000/end",
-        "/v1/sessions/%00/end",
-        "/v1/sessions/%ZZ/end",
+        "/v1/sessions/XCSEC_CANARY_SEG/finalize",
+        "/v1/sessions/00000000-0000-4000-8000-000000000000/finalize",
+        "/v1/sessions/%00/finalize",
+        "/v1/sessions/%ZZ/finalize",
+        "/v1/me/saved-drills/%ZZ",
+        "/v1/catalog/drills/%ZZ",
+        "/v1/catalog/drills/../../healthz",
+        "/v1/catalog/drills/wall-dink-rally/../wall-dink-rally",
         "/v1/analysis-permits/XCSEC_CANARY_PERMIT/finalize",
         "/v1/analyses/XCSEC_CANARY_ANALYSIS/feedback",
         "//v1//me",
@@ -1629,7 +1673,11 @@ Deno.test(
       ]) {
         fresh();
         const out = await send(
-          path.includes("finalize") || path.includes("feedback") ? "POST" : "GET",
+          path.includes("finalize") || path.includes("feedback")
+            ? "POST"
+            : path.includes("saved-drills")
+              ? "PUT"
+              : "GET",
           path,
           { headers: { "x-forwarded-for": "203.0.113.74" } },
         );
@@ -1673,8 +1721,15 @@ Deno.test(
     for (const r of rows) {
       if ("catalog" in r) {
         const row = r as {
-          catalog: { status: number };
-          save: { status: number };
+          slug: string;
+          catalog: {
+            status: number;
+            code: string | null;
+            drillSlug: string | null;
+            mediaCount: number;
+            mediaUrlsOk: boolean;
+          };
+          save: { status: number; code: string | null };
           unsave: { status: number };
           postgrestPathsOk: boolean;
           drillSlugFilterValues: string[];
@@ -1683,17 +1738,48 @@ Deno.test(
           row.catalog.status < 500 && row.save.status < 500 && row.unsave.status < 500,
           `slug ${String(r.slug)}`,
         );
+        if (row.slug === "wall-dink-rally") {
+          assertEquals(row.catalog.status, 200);
+          assertEquals(row.catalog.drillSlug, "wall-dink-rally");
+          assert(row.catalog.mediaCount > 0, "catalog drill should carry verified media");
+          assertEquals(row.save.status, 200);
+          assertEquals(row.unsave.status, 204);
+        } else {
+          // every other slug (case variants, proto keys, traversal, injection)
+          // is not in the catalog: 404 drill.not_found, never a media entry
+          assert(
+            row.catalog.status === 404 ||
+              (row.catalog.status === 400 && (r as { decodedSlug: unknown }).decodedSlug === null),
+            `catalog ${row.slug} → ${row.catalog.status}`,
+          );
+          assertEquals(row.catalog.mediaCount, 0);
+        }
+        assertEquals(row.catalog.mediaUrlsOk, true, `media URLs for ${row.slug}`);
+        if (row.save.status === 200) {
+          assert(
+            /^[a-z0-9][a-z0-9_-]{0,119}$/i.test(
+              String((r as { decodedSlug: string | null }).decodedSlug),
+            ),
+            `saved unsafe slug ${row.slug}`,
+          );
+        }
         assertEquals(
           row.postgrestPathsOk,
           true,
           `slug ${String(r.slug)} changed the PostgREST path`,
         );
-        // any slug that reached PostgREST as a filter must be a plain slug
-        for (const v of row.drillSlugFilterValues)
-          assert(
-            /^eq\.[a-z0-9-]{1,120}$/.test(v),
-            `unsafe PostgREST filter ${v} for slug ${String(r.slug)}`,
-          );
+        // a slug that reached PostgREST must arrive as ONE literal `eq.` filter
+        // on the `slug` column — never re-parsed into operators / extra filters
+        const decoded = (r as { decodedSlug: string | null }).decodedSlug;
+        for (const v of row.drillSlugFilterValues) {
+          assertEquals(v, `eq.${decoded}`, `PostgREST filter for slug ${String(r.slug)}`);
+        }
+        expectContract(
+          "paths",
+          row.drillSlugFilterValues.every((v) => /^eq\.[a-z0-9][a-z0-9_-]{0,119}$/i.test(v)),
+          "DELETE /v1/me/saved-drills/:slug forwards a slug that fails DRILL_SLUG_RE to PostgREST (PUT validates, DELETE does not)",
+          { slug: row.slug, filters: row.drillSlugFilterValues.map((v) => v.slice(0, 80)) },
+        );
       }
       if ("search" in r || "path" in r) assert((r.status as number) < 500, safeJson(r));
     }
