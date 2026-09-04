@@ -111,13 +111,20 @@ export function isTransientSyncRejection(code: string): boolean {
 }
 
 /**
- * Client-side verdict for a shot the server rejected with
- * `shot.session_not_found` while its practice set's own `session.create` row
- * had already spent its attempt budget: the server will never learn that
- * session, so the shot can never be accepted. It is recorded in `last_error`
- * (the row keeps its untouched attempt count — the shot itself was never at
- * fault), excludes the row from every later drain, and is reported as
- * `orphaned` by getShotOutboxStatus so the Result surface can say so.
+ * Client-side PARKED verdict for a shot the server rejected with
+ * `shot.session_not_found` when nothing queued locally can still make its
+ * practice set known: the set's own `session.create` row spent its attempt
+ * budget, or no session row exists on this device and the shot's own bounded
+ * retry ran out. The verdict lives in `last_error`; a parked row is skipped
+ * by every drain (not offered, not counted as failed) and is reported as
+ * `orphaned` by getShotOutboxStatus so the Result surface can say the read
+ * is paused.
+ *
+ * It is NOT terminal. The server (`apply_synced_shot`) accepts the shot the
+ * moment the owner's session row exists and `POST /v1/sessions` is an
+ * idempotent upsert, so the marker is cleared — in the same transaction that
+ * retires the `session.create` row — whenever a session.create for that id
+ * is accepted, and the shot is offered again in that very drain.
  */
 export const SESSION_ORPHANED_VERDICT = 'shot.session_orphaned';
 
@@ -137,27 +144,29 @@ interface OutboxPass {
   kindSql: string;
   accepts(kind: string): boolean;
   /**
-   * Rows at or beyond the attempt budget are normally invisible to a drain;
-   * the session pass opts exhausted `session.create` rows back in so the shot
-   * pass can recognise the sets that will never exist server-side.
+   * Rows at or beyond the attempt budget are normally invisible to a drain.
+   * The session pass opts exhausted `session.create` rows back in so the shot
+   * pass can recognise the sets the server has refused; the shot pass opts
+   * parked shots back in so the drain that finally lands their session can
+   * offer them at once.
    */
-  includeExhaustedKind: string | null;
+  budgetSql: string;
 }
 
 const SESSION_PASS: OutboxPass = {
   kindSql: `kind NOT IN ('shot.sync', 'evaluation.trial')`,
   accepts: kind => kind !== 'shot.sync' && kind !== 'evaluation.trial',
-  includeExhaustedKind: 'session.create',
+  budgetSql: `(attempts < ? OR kind = 'session.create')`,
 };
 const SHOT_PASS: OutboxPass = {
   kindSql: `kind = 'shot.sync'`,
   accepts: kind => kind === 'shot.sync',
-  includeExhaustedKind: null,
+  budgetSql: `(attempts < ? OR last_error LIKE '${SESSION_ORPHANED_VERDICT}:%')`,
 };
 const TRIAL_PASS: OutboxPass = {
   kindSql: `kind = 'evaluation.trial'`,
   accepts: kind => kind === 'evaluation.trial',
-  includeExhaustedKind: null,
+  budgetSql: `attempts < ?`,
 };
 
 /** One page of a pass's live rows, in id order, strictly after `cursor`. */
@@ -167,18 +176,103 @@ async function selectOutboxPage(
   pass: OutboxPass,
   cursor: number,
 ): Promise<OutboxRow[]> {
-  const budgetSql = pass.includeExhaustedKind
-    ? `(attempts < ? OR kind = '${pass.includeExhaustedKind}')`
-    : `attempts < ?`;
   const { rows } = await db.execute(
     `SELECT id, kind, payload, attempts, last_error FROM outbox
-     WHERE owner_key = ? AND ${budgetSql} AND id > ?
+     WHERE owner_key = ? AND ${pass.budgetSql} AND id > ?
        AND ${pass.kindSql}
-       AND (last_error IS NULL OR last_error NOT LIKE ?)
      ORDER BY id ASC LIMIT ${OUTBOX_PAGE_SIZE}`,
-    [owner, OUTBOX_MAX_ATTEMPTS, cursor, `${SESSION_ORPHANED_VERDICT}:%`],
+    [owner, OUTBOX_MAX_ATTEMPTS, cursor],
   );
   return rows;
+}
+
+/** The predicate that picks the `session.create` rows naming `sessionId`;
+ * guarded per row so one corrupt payload cannot fail the lookup (C1). */
+const SESSION_CREATE_FOR_ID_SQL = `kind = 'session.create'
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.id') END = ?`;
+
+/**
+ * True while a `session.create` row for `sessionId` still has attempt budget
+ * — the set will be (re)offered to the server by a later session pass, so
+ * neither a second queue entry nor a shot-side attempt is warranted.
+ */
+export async function hasLiveSessionCreate(
+  db: LocalDb,
+  owner: string,
+  sessionId: string,
+): Promise<boolean> {
+  const { rows } = await db.execute(
+    `SELECT 1 FROM outbox
+     WHERE owner_key = ? AND attempts < ? AND ${SESSION_CREATE_FOR_ID_SQL}
+     LIMIT 1`,
+    [owner, OUTBOX_MAX_ATTEMPTS, sessionId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Runs inside the transaction that retires an accepted `session.create` row:
+ * every shot of that set parked under SESSION_ORPHANED_VERDICT becomes
+ * deliverable again with a fresh budget (its failures were all about the
+ * missing session), and any exhausted duplicate `session.create` rows for
+ * the same id are dropped — the server has the session now, so they no
+ * longer describe a refused set.
+ */
+async function releaseParkedShotsOfSession(
+  db: LocalDb,
+  owner: string,
+  sessionId: string,
+  dropExhaustedCreates: boolean,
+): Promise<void> {
+  await db.execute(
+    `UPDATE outbox SET attempts = 0, last_error = NULL
+     WHERE owner_key = ? AND kind = 'shot.sync'
+       AND last_error LIKE '${SESSION_ORPHANED_VERDICT}:%'
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.sessionId') END = ?`,
+    [owner, sessionId],
+  );
+  if (dropExhaustedCreates) {
+    await db.execute(
+      `DELETE FROM outbox
+       WHERE owner_key = ? AND attempts >= ? AND ${SESSION_CREATE_FOR_ID_SQL}`,
+      [owner, OUTBOX_MAX_ATTEMPTS, sessionId],
+    );
+  }
+}
+
+interface LocalSessionRow {
+  id: string;
+  mode: string;
+  shotType: string | null;
+  focusCheckpoint: string | null;
+  startedAt: string;
+}
+
+async function readLocalSession(
+  db: LocalDb,
+  owner: string,
+  sessionId: string,
+): Promise<LocalSessionRow | null> {
+  const { rows } = await db.execute(
+    `SELECT mode, shot_type, focus_checkpoint, started_at FROM local_session
+     WHERE owner_key = ? AND id = ?`,
+    [owner, sessionId],
+  );
+  const row = rows[0];
+  if (!row || typeof row['mode'] !== 'string') return null;
+  if (typeof row['started_at'] !== 'string') return null;
+  return {
+    id: sessionId,
+    mode: row['mode'],
+    shotType: typeof row['shot_type'] === 'string' ? row['shot_type'] : null,
+    focusCheckpoint:
+      typeof row['focus_checkpoint'] === 'string'
+        ? row['focus_checkpoint']
+        : null,
+    startedAt: row['started_at'],
+  };
 }
 
 /**
@@ -234,6 +328,87 @@ async function recordRowFailure(
   }
 }
 
+/**
+ * What a drain does with a shot the server rejected `shot.session_not_found`
+ * for session `sessionId`, in order:
+ *
+ *  1. The set's `session.create` row is exhausted (`deadSession`): the shot
+ *     is parked (SESSION_ORPHANED_VERDICT), attempts untouched — it was never
+ *     at fault, and a later accepted session.create releases it.
+ *  2. A `session.create` row for the set still has budget: an ordering
+ *     artifact (the set is created by a session pass), transient, attempts
+ *     untouched.
+ *  3. No queue entry names the set but the local session row exists — the
+ *     capture flow was interrupted between the shot and its set: re-queue
+ *     the set from that row (the server upsert is idempotent) and count the
+ *     attempt on the shot, so a server that keeps refusing the shot after
+ *     the set landed is bounded by the shot's own budget.
+ *  4. Nothing local knows the set: the shot spends its budget one drain at a
+ *     time and, when it runs out, is parked instead of exhausted — a session
+ *     row that appears later (saveSession) still brings it along.
+ *
+ * Returns 'parked' when the row was settled without counting as a failure.
+ */
+async function settleSessionNotFound(
+  db: LocalDb,
+  owner: string,
+  row: OutboxRow,
+  sessionId: string,
+  message: string,
+  deadSession: string | undefined,
+): Promise<'parked' | 'failed'> {
+  const reason = `${SESSION_NOT_FOUND_REJECTION}: ${message}`;
+  if (deadSession !== undefined) {
+    await recordRowFailure(
+      db,
+      owner,
+      row['id'],
+      `${SESSION_ORPHANED_VERDICT}: ${message} ` +
+        `Its practice set was refused (${deadSession}); ` +
+        `this read is paused until the set is accepted.`,
+      false,
+    );
+    return 'parked';
+  }
+  if (await hasLiveSessionCreate(db, owner, sessionId)) {
+    await recordRowFailure(db, owner, row['id'], reason, false);
+    return 'failed';
+  }
+  const localSession = await readLocalSession(db, owner, sessionId);
+  if (localSession !== null) {
+    await runInTransaction(db, async () => {
+      await db.execute(
+        `INSERT INTO outbox (owner_key, kind, payload)
+         VALUES (?, 'session.create', ?)`,
+        [owner, JSON.stringify(localSession)],
+      );
+      await recordRowFailure(
+        db,
+        owner,
+        row['id'],
+        `${reason} Its practice set was queued again from this device.`,
+        true,
+      );
+    });
+    return 'failed';
+  }
+  const attemptsAfter = Number(row['attempts']) + 1;
+  if (attemptsAfter >= OUTBOX_MAX_ATTEMPTS) {
+    await recordRowFailure(
+      db,
+      owner,
+      row['id'],
+      `${SESSION_ORPHANED_VERDICT}: ${message} ` +
+        `No practice set is known for this read on this device; ` +
+        `it is paused until one is accepted.`,
+      true,
+    );
+    return 'parked';
+  }
+  await recordRowFailure(db, owner, row['id'], reason, true);
+  return 'failed';
+}
+
 export async function drainOutbox(
   db: LocalDb,
   transport: SyncTransport,
@@ -254,10 +429,13 @@ export async function drainOutbox(
   // shot. Session creation is idempotent server-side, so draining it ahead of
   // the shots costs nothing when it was already accepted.
   //
-  // A session.create row that spent its budget names a set the server will
-  // never know; its id is kept so the shot pass can settle that set's shots
-  // instead of retrying them forever.
+  // A session.create row that spent its budget names a set the server has
+  // refused; its id is kept so the shot pass can park that set's shots
+  // instead of retrying them forever. A later session.create for the same id
+  // that IS accepted moves the id to `createdSessions`: its parked shots were
+  // released in the same transaction and are offered in this drain.
   const deadSessions = new Map<string, string>();
+  const createdSessions = new Set<string>();
   await forEachOutboxPage(db, owner, SESSION_PASS, async rows => {
     let reachable = true;
     for (const r of rows) {
@@ -280,13 +458,30 @@ export async function drainOutbox(
         continue;
       }
       try {
-        if (r['kind'] === 'session.create')
+        if (r['kind'] === 'session.create') {
           await transport.createSession(payload);
-        else await transport.finalizeSession(String(payload['id']));
-        await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
-          owner,
-          r['id'],
-        ]);
+          const sessionId = String(payload['id']);
+          await runInTransaction(db, async () => {
+            await db.execute(
+              `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
+              [owner, r['id']],
+            );
+            await releaseParkedShotsOfSession(
+              db,
+              owner,
+              sessionId,
+              deadSessions.has(sessionId),
+            );
+          });
+          deadSessions.delete(sessionId);
+          createdSessions.add(sessionId);
+        } else {
+          await transport.finalizeSession(String(payload['id']));
+          await db.execute(
+            `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
+            [owner, r['id']],
+          );
+        }
         synced++;
       } catch (error) {
         const permanent = isPermanentSyncFailure(error);
@@ -322,11 +517,24 @@ export async function drainOutbox(
         if (typeof analysis.analysisPermitId !== 'string') {
           throw new Error('shot.sync_missing_analysis_permit');
         }
+        const sessionId =
+          typeof analysis.sessionId === 'string' ? analysis.sessionId : null;
+        // A parked shot waits, silently, until a session.create for its set
+        // is accepted. This page was read before the session pass, so a row
+        // released by this very drain still carries the marker here; the set
+        // it names is in `createdSessions` and the shot is offered now.
+        if (
+          isSessionOrphanedVerdict(
+            typeof r['last_error'] === 'string' ? r['last_error'] : null,
+          ) &&
+          (sessionId === null || !createdSessions.has(sessionId))
+        ) {
+          continue;
+        }
         entries.push({
           row: r,
           shotId: analysis.id,
-          sessionId:
-            typeof analysis.sessionId === 'string' ? analysis.sessionId : null,
+          sessionId,
           payload: toSyncPayload(analysis, analysis.analysisPermitId),
         });
       } catch (error) {
@@ -360,22 +568,20 @@ export async function drainOutbox(
           continue;
         }
         const rejection = rejected.get(entry.shotId);
-        const deadSession =
+        if (
           rejection?.code === SESSION_NOT_FOUND_REJECTION &&
           entry.sessionId !== null
-            ? deadSessions.get(entry.sessionId)
-            : undefined;
-        if (rejection && deadSession !== undefined) {
-          // Settled, not failed: nothing a later drain could do would make
-          // the server accept this shot.
-          await recordRowFailure(
+        ) {
+          const settled = await settleSessionNotFound(
             db,
             owner,
-            entry.row['id'],
-            `${SESSION_ORPHANED_VERDICT}: ${rejection.message} ` +
-              `Its practice set was refused for good (${deadSession}).`,
-            false,
+            entry.row,
+            entry.sessionId,
+            rejection.message,
+            deadSessions.get(entry.sessionId),
           );
+          if (settled === 'parked') continue;
+          failed++;
           continue;
         }
         await recordRowFailure(

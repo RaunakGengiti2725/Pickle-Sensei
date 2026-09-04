@@ -76,6 +76,16 @@ function fakeDb() {
         });
         return { rows: [] };
       }
+      if (statement.startsWith('SELECT 1 FROM outbox')) {
+        // enqueueSessionCreate: is a session.create for `$.id` still queued?
+        const hit = outbox.some(
+          row =>
+            row.owner === params[0] &&
+            row.kind === 'session.create' &&
+            row.payload['id'] === params[2],
+        );
+        return { rows: hit ? [{ '1': 1 }] : [] };
+      }
       if (statement.includes('INSERT INTO outbox')) {
         const kind = /'([a-z.]+)'/.exec(statement)?.[1] ?? 'unknown';
         outbox.push({

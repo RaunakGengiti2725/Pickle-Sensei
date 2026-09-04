@@ -58,6 +58,26 @@ function fakeDb() {
             .map(r => ({ ...r })),
         };
       }
+      if (sql.startsWith('SELECT 1 FROM outbox')) {
+        const hit = outbox.some(r => {
+          if (
+            r.owner_key !== params[0] ||
+            r.attempts >= Number(params[1]) ||
+            r.kind !== 'session.create'
+          ) {
+            return false;
+          }
+          try {
+            return (JSON.parse(r.payload) as { id?: unknown }).id === params[2];
+          } catch {
+            return false;
+          }
+        });
+        return { rows: hit ? [{ '1': 1 }] : [] };
+      }
+      if (sql.startsWith('SELECT mode, shot_type')) {
+        return { rows: [] };
+      }
       if (sql.startsWith('DELETE FROM outbox')) {
         const idx = outbox.findIndex(
           r => r.owner_key === params[0] && r.id === params[1],
@@ -228,12 +248,44 @@ describe('drainOutbox', () => {
     });
   });
 
-  it('does not spend the retry budget on a shot whose practice-set session has not synced yet', async () => {
-    // The practice set's session.create row is queued moments AFTER its
-    // first scored shot (the set is committed once a score exists). If a
-    // drain slips between the two writes, the server rejects the shot as
-    // session_not_found — an ordering artifact, not a permanent failure, so
-    // the row keeps its full attempt budget for the next pass.
+  it('does not spend the retry budget on a shot whose queued practice-set session has not synced yet', async () => {
+    // The set's session.create row is queued with the shot; when the session
+    // pass cannot reach the server this drain, the shot's session_not_found
+    // is an ordering artifact, not a permanent failure, so the row keeps its
+    // full attempt budget for the next pass.
+    const { db, push, outbox } = fakeDb();
+    const sessionId = '11111111-2222-4333-8444-555555555555';
+    push('shot.sync', { ...permittedAnalysis, sessionId });
+    push('session.create', { id: sessionId, mode: 'practice_set' });
+    const result = await drainOutbox(db, {
+      syncShots: async () => ({
+        acceptedIds: [],
+        rejected: [
+          {
+            id: analysis.id,
+            code: SESSION_NOT_FOUND_REJECTION,
+            message: 'Session not found or not yours.',
+          },
+        ],
+      }),
+      createSession: async () => {
+        throw new TypeError('Network request failed');
+      },
+      finalizeSession: async () => {},
+    });
+    expect(result).toMatchObject({ synced: 0, failed: 2, remaining: 2 });
+    expect(outbox[0]).toMatchObject({
+      kind: 'shot.sync',
+      attempts: 0,
+      last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
+    });
+    expect(outbox[1]).toMatchObject({ kind: 'session.create', attempts: 0 });
+  });
+
+  it('counts the attempt on a shot whose practice set nothing on the device knows (bounded, not retried forever)', async () => {
+    // No session.create row and no local session row can ever make the
+    // server learn this set, so the shot spends its own budget one drain at
+    // a time instead of being re-sent unchanged for as long as the app lives.
     const { db, push, outbox } = fakeDb();
     push('shot.sync', {
       ...permittedAnalysis,
@@ -255,7 +307,7 @@ describe('drainOutbox', () => {
     });
     expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
     expect(outbox[0]).toMatchObject({
-      attempts: 0,
+      attempts: 1,
       last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
     });
   });

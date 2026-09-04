@@ -57,6 +57,7 @@ import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import {
   commitPracticeSet,
   planPracticeSet,
+  practiceSetSession,
   type PracticeSetPlan,
 } from '../analysis/practiceSet';
 import { getApiSession } from '../account/apiSession';
@@ -897,6 +898,7 @@ export function AnalyzeScreen() {
           },
           appVersion: getRuntimePublicConfig().appVersion,
           sessionId,
+          session: practiceSet ? practiceSetSession(practiceSet) : null,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -947,10 +949,10 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
+          // The scored analysis landed in one transaction with the plan's
+          // session row + sync entry; the commit refreshes the kv activity
+          // stamp that keeps the set alive. Best-effort — the score and its
+          // set are already durable.
           if (practiceSet) {
             await commitPracticeSet(getDb(), practiceSet).catch(() => {});
           }

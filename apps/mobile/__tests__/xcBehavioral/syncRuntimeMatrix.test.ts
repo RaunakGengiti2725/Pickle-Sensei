@@ -7,7 +7,7 @@
  * triggers, overlapping drains, account reconfiguration mid-drain,
  * kill/relaunch between the server write and the local receipt, transient vs
  * permanent server failures, and a shot whose practice-set session never
- * reached the outbox.
+ * reached the outbox (bounded, then parked until the set is created).
  *
  * Invariants asserted:
  *   - a shot id reaches the server at most once per drain and never while a
@@ -16,16 +16,21 @@
  *   - no transaction is left open (no orphaned BEGIN) after a fault;
  *   - receipts and deletes are owner-scoped after an account switch;
  *   - exactly one retry timer is armed after any storm (no timer leak);
- *   - permanent failures are bounded by OUTBOX_MAX_ATTEMPTS.
+ *   - permanent failures are bounded by OUTBOX_MAX_ATTEMPTS;
+ *   - a shot whose session no queue entry names spends a bounded budget, is
+ *     parked (never offered again on its own), and is delivered by the drain
+ *     that finally creates its session.
  *
  * Replay a failing line: XC_SEED=<seed> npx jest __tests__/xcBehavioral/syncRuntimeMatrix
  */
 import { AppState } from 'react-native';
 import { getDb } from '../../src/data/db';
 import { createTransport, ApiError } from '../../src/data/api';
+import * as syncModule from '../../src/data/sync';
 import {
   OUTBOX_MAX_ATTEMPTS,
   SESSION_NOT_FOUND_REJECTION,
+  SESSION_ORPHANED_VERDICT,
   type SyncTransport,
 } from '../../src/data/sync';
 import {
@@ -203,11 +208,16 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
   let server: FakeServer;
   let appStateHandlers: Array<(state: string) => void>;
   let listenerRemovals: number;
+  let drainSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
     fake = createFakeLocalDb();
     server = fakeServer();
+    // Pass-through spy: the runtime resolves `drainOutbox` through the module
+    // record on every call, so each invocation is observed exactly once,
+    // however many page reads a drain issues.
+    drainSpy = jest.spyOn(syncModule, 'drainOutbox');
     appStateHandlers = [];
     listenerRemovals = 0;
     (getDb as jest.Mock).mockReturnValue(fake.db);
@@ -239,11 +249,9 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
     for (const handler of appStateHandlers) handler(state);
   }
 
-  /** Drains observed by the DB (the transport is only hit when rows exist). */
+  /** Drain invocations (the transport is only hit when rows exist). */
   function drainCount() {
-    return fake.statements.filter(s =>
-      s.sql.startsWith('SELECT id, kind, payload'),
-    ).length;
+    return drainSpy.mock.calls.length;
   }
 
   const ownerA = canonicalDataOwner(USER_A);
@@ -602,12 +610,12 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
     );
   });
 
-  it('a shot whose session.create row never exists is re-sent on every drain with attempts pinned at 0 (unbounded retry — see analyzeScreenMatrix close-during-measuring)', async () => {
+  it('a shot whose session.create row never exists spends OUTBOX_MAX_ATTEMPTS drains, is then parked, and is delivered by the drain that creates its session', async () => {
     await recordScenario(
       SUITE,
-      'orphanSessionUnbounded',
+      'orphanSessionBoundedThenReleased',
       0,
-      { drains: 40 },
+      { drains: 40, maxAttempts: OUTBOX_MAX_ATTEMPTS },
       async () => {
         fake.push('shot.sync', shotPayload('shot-0', 'orphan-session'), ownerA);
         configureSyncRuntime(sessionFor(USER_A));
@@ -616,15 +624,36 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
           await advance(SYNC_RETRY_MAX_MS * 1.3);
         }
         const sends = server.received.filter(id => id === 'shot-0').length;
-        // Observational: the transient classification is by design
-        // (sync.ts TRANSIENT_SYNC_REJECTION_CODES) so the row is re-sent on
-        // every cadence tick for as long as the app lives.
-        expect(sends).toBe(41);
-        expect(fake.outbox[0]!.attempts).toBe(0);
-        expect(fake.outbox[0]!.last_error).toContain(
-          SESSION_NOT_FOUND_REJECTION,
+        // No session.create row and no local session row can ever make the
+        // server learn 'orphan-session': the shot is offered once per drain
+        // for its budget and then parked — a paused, not terminal, state.
+        expect(sends).toBe(OUTBOX_MAX_ATTEMPTS);
+        expect(fake.outbox).toHaveLength(1);
+        expect(fake.outbox[0]!.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+        expect(fake.outbox[0]!.last_error).toContain(SESSION_ORPHANED_VERDICT);
+        expect(fake.outbox[0]!.last_error).toContain('unknown session');
+
+        // The set is queued later (e.g. commitPracticeSet on relaunch): the
+        // very drain that creates it releases and delivers the parked shot.
+        const drainsBefore = drainCount();
+        fake.push(
+          'session.create',
+          { id: 'orphan-session', mode: 'practice_set' },
+          ownerA,
         );
-        return { sends, attempts: fake.outbox[0]!.attempts };
+        triggerOutboxSync();
+        await flushMicrotasks(20);
+        expect(drainCount()).toBe(drainsBefore + 1);
+        expect(server.knownSessions.has('orphan-session')).toBe(true);
+        expect(server.received.filter(id => id === 'shot-0')).toHaveLength(
+          OUTBOX_MAX_ATTEMPTS + 1,
+        );
+        expect(fake.outbox).toHaveLength(0);
+        expect(fake.receipts).toEqual([
+          { owner: ownerA, kind: 'shot.sync', entityId: 'shot-0' },
+        ]);
+        expect(fake.openTransactions()).toBe(0);
+        return { sends, released: fake.receipts.length };
       },
     );
   });

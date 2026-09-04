@@ -4,7 +4,12 @@ import {
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
-import { getKv, saveSession, setKv } from '../data/repository';
+import {
+  getKv,
+  saveSession,
+  setKv,
+  type SessionInput,
+} from '../data/repository';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -205,11 +210,27 @@ export async function planPracticeSet(
 }
 
 /**
+ * The `local_session` row a plan stands for. The capture flow hands it to
+ * runCaptureAnalysis so saveAnalysis writes the set (row + session.create
+ * outbox entry) in the SAME transaction as the scored shot when this device
+ * has no row for it yet — a shot can never outlive the set it names.
+ */
+export function practiceSetSession(plan: PracticeSetPlan): SessionInput {
+  return {
+    id: plan.sessionId,
+    mode: PRACTICE_SET_MODE,
+    shotType: plan.shotType,
+    focusCheckpoint: null,
+    startedAt: plan.startedAtIso,
+  };
+}
+
+/**
  * Persists a plan: a new set writes its `practice_set` local_session row +
- * session.create outbox entry (drained ahead of shots by sync.ts); every
- * commit refreshes the kv record's activity stamp. Called AFTER a scored
- * analysis was saved with the plan's sessionId, so the session row and the
- * shot that references it always land together.
+ * session.create outbox entry (drained ahead of shots by sync.ts; the entry
+ * is skipped when one for the set is already queued — saveAnalysis usually
+ * wrote it beside the shot); every commit refreshes the kv record's activity
+ * stamp. Called AFTER a scored analysis was saved with the plan's sessionId.
  */
 export async function commitPracticeSet(
   db: LocalDb,
@@ -218,13 +239,7 @@ export async function commitPracticeSet(
 ): Promise<void> {
   const now = resolveNow(nowIso ?? plan.nowIso);
   if (!plan.resumed) {
-    await saveSession(db, {
-      id: plan.sessionId,
-      mode: PRACTICE_SET_MODE,
-      shotType: plan.shotType,
-      focusCheckpoint: null,
-      startedAt: plan.startedAtIso,
-    });
+    await saveSession(db, practiceSetSession(plan));
   }
   await writeStoredSet(db, plan.owner, {
     sessionId: plan.sessionId,

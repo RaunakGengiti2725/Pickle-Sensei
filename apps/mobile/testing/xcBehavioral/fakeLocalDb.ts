@@ -31,7 +31,14 @@ export interface FakeLocalDb {
   receipts: Array<{ owner: string; kind: string; entityId: string }>;
   kv: Map<string, string>;
   shots: Array<{ owner: string; id: string; sessionId: string | null }>;
-  sessions: Array<{ owner: string; id: string; mode: string }>;
+  sessions: Array<{
+    owner: string;
+    id: string;
+    mode: string;
+    shotType: string | null;
+    focusCheckpoint: string | null;
+    startedAt: string;
+  }>;
   captures: Array<{ owner: string; id: string }>;
   analysisRecords: Array<{ owner: string; id: string }>;
   /** Fail the next statement whose SQL contains `needle` (once). */
@@ -41,6 +48,44 @@ export interface FakeLocalDb {
   openTransactions(): number;
   push(kind: string, payload: unknown, owner: string): number;
   reset(): void;
+}
+
+const PARKED_PREFIX = 'shot.session_orphaned:';
+
+function payloadField(row: OutboxRow, field: string): unknown {
+  try {
+    return (JSON.parse(row.payload) as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Mirrors the `kind` predicate of the pass that issued a page query. */
+function pageAcceptsKind(sql: string, kind: string): boolean {
+  if (sql.includes("kind = 'shot.sync'")) return kind === 'shot.sync';
+  if (sql.includes("kind = 'evaluation.trial'")) {
+    return kind === 'evaluation.trial';
+  }
+  if (sql.includes("kind NOT IN ('shot.sync', 'evaluation.trial')")) {
+    return kind !== 'shot.sync' && kind !== 'evaluation.trial';
+  }
+  return true;
+}
+
+/** Mirrors the pass's budget predicate (exhausted opt-ins included). */
+function pageAcceptsBudget(
+  sql: string,
+  row: OutboxRow,
+  maxAttempts: number,
+): boolean {
+  if (row.attempts < maxAttempts) return true;
+  if (sql.includes("OR kind = 'session.create'")) {
+    return row.kind === 'session.create';
+  }
+  if (sql.includes(`OR last_error LIKE '${PARKED_PREFIX}%'`)) {
+    return row.last_error !== null && row.last_error.startsWith(PARKED_PREFIX);
+  }
+  return false;
 }
 
 export function createFakeLocalDb(): FakeLocalDb {
@@ -130,19 +175,48 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
+        const cursor = Number(params[2] ?? 0);
         return {
           rows: outbox
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
+                pageAcceptsBudget(sql, r, Number(params[1])) &&
+                r.id > cursor &&
+                pageAcceptsKind(sql, r.kind),
             )
             .sort((a, b) => a.id - b.id)
             .slice(0, 50)
             .map(r => ({ ...r })),
         };
       }
+      if (sql.startsWith('SELECT 1 FROM outbox')) {
+        // hasLiveSessionCreate: a session.create for `$.id` with budget left.
+        const hit = outbox.some(
+          r =>
+            r.owner_key === params[0] &&
+            r.attempts < Number(params[1]) &&
+            r.kind === 'session.create' &&
+            payloadField(r, 'id') === params[2],
+        );
+        return { rows: hit ? [{ '1': 1 }] : [] };
+      }
       if (sql.startsWith('DELETE FROM outbox')) {
+        if (sql.includes('attempts >= ?')) {
+          // Exhausted session.create rows for a set the server now has.
+          for (let i = outbox.length - 1; i >= 0; i -= 1) {
+            const r = outbox[i]!;
+            if (
+              r.owner_key === params[0] &&
+              r.attempts >= Number(params[1]) &&
+              r.kind === 'session.create' &&
+              payloadField(r, 'id') === params[2]
+            ) {
+              outbox.splice(i, 1);
+            }
+          }
+          return { rows: [] };
+        }
         const idx = outbox.findIndex(
           r => r.owner_key === params[0] && r.id === params[1],
         );
@@ -150,6 +224,22 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('UPDATE outbox')) {
+        if (sql.includes('SET attempts = 0, last_error = NULL')) {
+          // releaseParkedShotsOfSession: parked shots of `$.sessionId`.
+          for (const r of outbox) {
+            if (
+              r.owner_key === params[0] &&
+              r.kind === 'shot.sync' &&
+              r.last_error !== null &&
+              r.last_error.startsWith(PARKED_PREFIX) &&
+              payloadField(r, 'sessionId') === params[1]
+            ) {
+              r.attempts = 0;
+              r.last_error = null;
+            }
+          }
+          return { rows: [] };
+        }
         const row = outbox.find(
           r => r.owner_key === params[1] && r.id === params[2],
         );
@@ -202,12 +292,44 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.includes('INSERT OR REPLACE INTO local_session')) {
+        const idx = sessions.findIndex(
+          s => s.owner === params[0] && s.id === params[1],
+        );
+        if (idx >= 0) sessions.splice(idx, 1);
         sessions.push({
           owner: String(params[0]),
           id: String(params[1]),
           mode: String(params[2]),
+          shotType: params[3] == null ? null : String(params[3]),
+          focusCheckpoint: params[4] == null ? null : String(params[4]),
+          startedAt: String(params[5]),
         });
         return { rows: [] };
+      }
+      if (sql.startsWith('SELECT 1 FROM local_session')) {
+        const hit = sessions.some(
+          s => s.owner === params[0] && s.id === params[1],
+        );
+        return { rows: hit ? [{ '1': 1 }] : [] };
+      }
+      if (
+        sql.startsWith('SELECT mode, shot_type, focus_checkpoint, started_at')
+      ) {
+        const s = sessions.find(
+          row => row.owner === params[0] && row.id === params[1],
+        );
+        return {
+          rows: s
+            ? [
+                {
+                  mode: s.mode,
+                  shot_type: s.shotType,
+                  focus_checkpoint: s.focusCheckpoint,
+                  started_at: s.startedAt,
+                },
+              ]
+            : [],
+        };
       }
       if (sql.includes('INSERT INTO local_capture')) {
         captures.push({ owner: String(params[0]), id: String(params[1]) });

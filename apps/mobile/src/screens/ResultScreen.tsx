@@ -1602,17 +1602,17 @@ function TrainingPlanSection(props: {
       ) : syncEvidence.kind === 'orphaned' ? (
         <Card tone="soft" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="close" size={22} color={color.bad} />
+            <Icon name="upload" size={22} color={color.court} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             The server did not accept this read.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {`The practice set this read belongs to was refused by the server, so the read cannot be accepted and will not be sent again${
+            {`The practice set this read belongs to was refused or has not reached the server${
               syncEvidence.lastError
                 ? ` (last response: ${syncEvidence.lastError})`
                 : ''
-            }. It stays on this device; capture a new read to build training.`}
+            }. Sync is paused until the set is accepted, then this read is sent again automatically. It stays on this device; capture a new read to build training now.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button

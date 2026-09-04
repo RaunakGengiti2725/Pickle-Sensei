@@ -76,7 +76,10 @@ jest.mock('../../../src/components/AnalysisFeedbackPrompt', () => ({
 }));
 
 import { getShotOutboxStatus } from '../../../src/data/repository';
-import { SESSION_ORPHANED_VERDICT } from '../../../src/data/sync';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  SESSION_ORPHANED_VERDICT,
+} from '../../../src/data/sync';
 import { ResultDetailsScreen } from '../../../src/screens/ResultDetailsScreen';
 import { clearTryAgainHandoff } from '../../../src/screens/tryAgainHandoff';
 
@@ -160,7 +163,7 @@ async function renderResult(): Promise<TestRenderer.ReactTestRenderer> {
 }
 
 describe('C3: getShotOutboxStatus reports the orphan verdict', () => {
-  it('is `orphaned` — a terminal state with the untouched attempt count', async () => {
+  it('is `orphaned` — a parked (paused, re-offerable) state that wins over the attempt budget', async () => {
     await expect(
       getShotOutboxStatus(
         fakeDb([{ attempts: 0, last_error: ORPHAN_VERDICT }]),
@@ -169,6 +172,18 @@ describe('C3: getShotOutboxStatus reports the orphan verdict', () => {
     ).resolves.toEqual({
       state: 'orphaned',
       attempts: 0,
+      lastError: ORPHAN_VERDICT,
+    });
+    // A shot parked after spending its budget is still `orphaned`, never
+    // `exhausted`: the row is re-offered once its session is created.
+    await expect(
+      getShotOutboxStatus(
+        fakeDb([{ attempts: OUTBOX_MAX_ATTEMPTS, last_error: ORPHAN_VERDICT }]),
+        'shot-1',
+      ),
+    ).resolves.toEqual({
+      state: 'orphaned',
+      attempts: OUTBOX_MAX_ATTEMPTS,
       lastError: ORPHAN_VERDICT,
     });
     // A plain session_not_found (session row still queued) stays queued.
@@ -186,7 +201,7 @@ describe('C3: getShotOutboxStatus reports the orphan verdict', () => {
   });
 });
 
-describe('C3: Result breakdown tells the truth about an orphaned shot', () => {
+describe('C3: Result breakdown tells the truth about a parked shot', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     clearTryAgainHandoff();
@@ -216,14 +231,18 @@ describe('C3: Result breakdown tells the truth about an orphaned shot', () => {
     jest.useRealTimers();
   });
 
-  it('names the refused practice set, says the read will not be sent again, and offers a new read', async () => {
+  it('names the refused practice set, says sync is paused (never that the read is gone for good), and offers a new read', async () => {
     const renderer = await renderResult();
     const text = textOf(renderer);
 
     expect(text).toContain('The server did not accept this read.');
     expect(text).toContain('practice set this read belongs to was refused');
-    expect(text).toContain('will not be sent again');
+    expect(text).toContain('Sync is paused until the set is accepted');
+    expect(text).toContain('sent again automatically');
     expect(text).toContain('Session id belongs to another user.');
+    // The server accepts the shot as soon as its session exists, so the copy
+    // must not promise permanence.
+    expect(text).not.toContain('will not be sent again');
     expect(text).not.toContain('still in the secure outbox');
     expect(text).not.toContain('will be retried');
     expect(
