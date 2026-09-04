@@ -36,6 +36,7 @@ import frame_clock
 from student_lib import (
     TEACHER_SCORE_FLOOR,
     StudentPaddleNet,
+    clip_labels_are_legacy,
     extract_frames,
     heatmap_peaks,
     heatmap_to_px,
@@ -126,7 +127,13 @@ def main() -> None:
                 continue
             rows.append((t_ms, gold, near))
 
-        frames = extract_frames(clip, [t for t, _, _ in rows])
+        # Gold tMs were matched to teacher stamps on the same clock: the teacher rows'
+        # clockCaveat provenance decides the clip's clock before the pre-start heuristic.
+        frames = extract_frames(
+            clip,
+            [t for t, _, _ in rows],
+            legacy_clock=clip_labels_are_legacy([near for _, _, near in rows]),
+        )
         t_stats = {"matchedGold": 0, "goldTotal": 0, "claimsMatched": 0, "claimsTotal": 0, "errors": []}
         s_stats = {"matchedGold": 0, "goldTotal": 0, "claimsMatched": 0, "claimsTotal": 0, "errors": []}
         for t_ms, gold, teacher_ex in rows:

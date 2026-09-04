@@ -22,7 +22,12 @@ The round-2 attacks (test_attack_fix2_mlt.py) are green there; these go further.
   0) AND 33.37 (legacy frame 1); the candidate maps both to absolute frame 0,
   so `extract_frames` hands two distinct labels the same pixels — 124 release
   labels collapse to 123 frames (a duplicated training sample whose box was
-  drawn on the other frame). The base commit returned distinct frames.
+  drawn on the other frame). The base commit returned distinct frames. The
+  fix decides the clock per CLIP (`frame_clock.frame_indices_for_labelled_clip`,
+  the path `student_lib.extract_frames` runs for every release clip), so the
+  test pins that API on the real release labels; the per-label primitive
+  `frame_index_for_labelled_t_ms` keeps its tolerance contract in
+  test_student_lib.FrameClockHelpers.
 * MLT-3: `--end-ms 1e308` is finite, so the validators pass it, and
   `window_frame_range` dies with an uncaught OverflowError traceback
   (math.ceil(inf)) instead of the contract's clean argparse exit 2.
@@ -33,11 +38,13 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -190,9 +197,38 @@ class LegacyLabelsMustNotCollide(unittest.TestCase):
 
     def test_release_labels_map_to_distinct_frames(self) -> None:
         fps, start = self.meta.fps, self.meta.start_time_ms
-        indices = [frame_clock.frame_index_for_labelled_t_ms(t, fps, start)[0] for t in self.afn_t_ms]
+        index_for_t, pre_start = frame_clock.frame_indices_for_labelled_clip(self.afn_t_ms, fps, start)
+        indices = [index_for_t[t] for t in self.afn_t_ms]
         collisions = {i: [t for t, k in zip(self.afn_t_ms, indices) if k == i] for i in set(indices) if indices.count(i) > 1}
         self.assertEqual(collisions, {}, f"{len(self.afn_t_ms)} labels -> {len(set(indices))} frames; collisions: {collisions}")
+        self.assertEqual(len(set(indices)), len(self.afn_t_ms))
+        self.assertEqual(len(self.afn_t_ms), 124)
+        self.assertEqual((index_for_t[0.0], index_for_t[33.37]), (0, 1))
+        # tMs=0.0 (one period before start_time 33.367 ms) is what flags the clip as legacy-relative.
+        self.assertEqual(pre_start, [0.0])
+        self.assertEqual(indices, sorted(indices))
+        self.assertEqual(indices, [round(t * fps / 1000.0) for t in self.afn_t_ms])
+
+    def test_extract_frames_maps_the_release_clip_to_distinct_pixels_with_one_warning(self) -> None:
+        """The loader path real releases use: 124 labels -> 124 distinct decoded
+        frames, 0.0 -> frame 0 and 33.37 -> frame 1, exactly one legacy warning."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            frames = student_lib.extract_frames(AFN_CLIP, self.afn_t_ms)
+        legacy = [w for w in caught if issubclass(w.category, frame_clock.LegacyClockWarning)]
+        self.assertEqual(len(legacy), 1, [str(w.message) for w in caught])
+        self.assertIn("124 label(s)", str(legacy[0].message))
+        self.assertEqual(sorted(frames), self.afn_t_ms)
+        digests = [hashlib.sha256(np.ascontiguousarray(frames[t]).tobytes()).hexdigest() for t in self.afn_t_ms]
+        self.assertEqual(len(set(digests)), 124, "two release labels received the same pixels")
+        width, height = self.meta.width, self.meta.height
+        proc = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(AFN_CLIP), "-frames:v", "2", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, check=True,
+        )
+        frame_bytes = width * height * 3
+        first_two = [hashlib.sha256(proc.stdout[i * frame_bytes : (i + 1) * frame_bytes]).hexdigest() for i in range(2)]
+        self.assertEqual(digests[:2], first_two, "tMs 0.0 / 33.37 must be decoded frames 0 / 1")
 
     def test_extract_frames_returns_distinct_pixels_for_distinct_labels(self) -> None:
         frames = student_lib.extract_frames(AFN_CLIP, [0.0, 33.37])

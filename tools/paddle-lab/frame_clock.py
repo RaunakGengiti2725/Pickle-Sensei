@@ -182,22 +182,29 @@ def frame_index_for_labelled_t_ms(t_ms: float, fps: float, start_time_ms: float 
 
 
 def frame_indices_for_labelled_clip(
-    t_ms_list: Iterable[float], fps: float, start_time_ms: float = 0.0
+    t_ms_list: Iterable[float],
+    fps: float,
+    start_time_ms: float = 0.0,
+    *,
+    legacy_clock: bool = False,
 ) -> tuple[dict[float, int], list[float]]:
     """({tMs: absolute frame index}, pre-start labels) for ALL labels of one clip.
 
-    The clock is decided per clip: if any label lies before the stream start
-    (strict inversion < 0, at most one frame period early — anything earlier
-    raises ValueError) the clip was labelled on the legacy relative clock, and
-    EVERY label maps as round(tMs * fps / 1000) from the first decoded frame
-    (0.0 -> frame 0, 33.37 -> frame 1, never below 0). Otherwise labels are
-    absolute pts (frame_index_for_t_ms). The returned pre-start list is
-    non-empty exactly when the relative clock was used, so the caller can warn
-    once per clip.
+    The clock is decided per clip, provenance first: `legacy_clock=True` (the
+    release stamps the clip's teacher rows with a `clockCaveat`) forces the
+    legacy relative clock. Heuristic second: if any label lies before the
+    stream start (strict inversion < 0, at most one frame period early —
+    anything earlier raises ValueError, whatever the clock) the clip was
+    labelled on the legacy relative clock too. On that clock EVERY label maps
+    as round(tMs * fps / 1000) from the first decoded frame (0.0 -> frame 0,
+    33.37 -> frame 1, never below 0); otherwise labels are absolute pts
+    (frame_index_for_t_ms). The returned pre-start list holds the labels that
+    triggered the heuristic (empty when only provenance did), so the caller
+    can warn once per clip via `legacy_clock or pre_start`.
     """
     labels = list(t_ms_list)
     pre_start = [t for t in labels if frame_index_for_labelled_t_ms(t, fps, start_time_ms)[1]]
-    if pre_start:
+    if legacy_clock or pre_start:
         return {t: max(0, frame_index_for_t_ms(t, fps, 0.0)) for t in labels}, pre_start
     return {t: frame_index_for_t_ms(t, fps, start_time_ms) for t in labels}, pre_start
 
