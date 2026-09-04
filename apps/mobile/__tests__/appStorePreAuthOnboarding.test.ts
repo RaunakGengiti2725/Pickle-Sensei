@@ -2,6 +2,7 @@ import type { Profile } from '../src/state/profile';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
+  canonicalDataOwner,
   setActiveDataOwner,
 } from '../src/data/accountScope';
 
@@ -59,6 +60,8 @@ jest.mock('../src/account/onboarding', () => ({
 }));
 
 import {
+  CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+  ONBOARDING_ACCOUNT_UNAVAILABLE_MESSAGE,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../src/state/appStore';
@@ -103,6 +106,8 @@ beforeEach(() => {
     hydrated: false,
     ownerKey: null,
     profile: null,
+    hydrateError: null,
+    awaitingBearer: false,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -289,5 +294,88 @@ describe('hydrate with a pre-auth stash', () => {
     const state = useAppStore.getState();
     expect(state.profile).toBeNull();
     expect(mockKvTable.get(profileKeyFor(GUEST_DATA_OWNER))).toBeUndefined();
+  });
+
+  it('ignores a stash whose handedness is out of vocabulary', async () => {
+    stashAnswers({ ...answers, handedness: 'both' as Profile['handedness'] });
+    setActiveDataOwner(GUEST_DATA_OWNER);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toBeNull();
+    expect(mockKvTable.get(profileKeyFor(GUEST_DATA_OWNER))).toBeUndefined();
+  });
+});
+
+describe('canonical owner without a bearer (launch restore still refreshing / offline)', () => {
+  const canonicalOwner = canonicalDataOwner(CANONICAL_OWNER);
+  const apiSession = {
+    apiBaseUrl: 'https://api.example.test',
+    bearerToken: 'token',
+    canonicalAppUserId: CANONICAL_OWNER,
+    provider: 'apple' as const,
+  };
+
+  it('flags awaitingBearer while a stash waits, and clears it once the bearer-backed hydrate saves it', async () => {
+    stashAnswers();
+    setActiveDataOwner(canonicalOwner);
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().awaitingBearer).toBe(true);
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+
+    mockApiSession = apiSession;
+    await useAppStore.getState().hydrate();
+    const state = useAppStore.getState();
+    expect(state.awaitingBearer).toBe(false);
+    expect(state.hydrateError).toBeNull();
+    expect(state.profile).toEqual(answers);
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+    expect(pendingRaw()).toBeNull();
+  });
+
+  it('flags awaitingBearer when there is no local profile, but not when one is already on this device', async () => {
+    setActiveDataOwner(canonicalOwner);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().awaitingBearer).toBe(true);
+    expect(useAppStore.getState().profile).toBeNull();
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
+
+    mockKvTable.set(profileKeyFor(canonicalOwner), JSON.stringify(answers));
+    await useAppStore.getState().hydrate();
+    const state = useAppStore.getState();
+    expect(state.awaitingBearer).toBe(false);
+    expect(state.hydrateError).toBeNull();
+    expect(state.profile).toEqual(answers);
+  });
+
+  it('never flags awaitingBearer for the guest bucket', async () => {
+    stashAnswers();
+    setActiveDataOwner(GUEST_DATA_OWNER);
+    await useAppStore.getState().hydrate();
+    const state = useAppStore.getState();
+    expect(state.awaitingBearer).toBe(false);
+    expect(state.profile).toEqual(answers);
+  });
+
+  it('completeOnboarding refuses a local-only write with curated retryable copy', async () => {
+    setActiveDataOwner(canonicalOwner);
+    await useAppStore.getState().completeOnboarding(answers);
+    const state = useAppStore.getState();
+    expect(state.onboardingBusy).toBe(false);
+    expect(state.onboardingError).toBe(ONBOARDING_ACCOUNT_UNAVAILABLE_MESSAGE);
+    expect(state.profile).toBeNull();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+    expect(mockKvTable.get(profileKeyFor(canonicalOwner))).toBeUndefined();
+
+    mockApiSession = apiSession;
+    await useAppStore.getState().completeOnboarding(answers);
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().onboardingError).toBeNull();
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(JSON.parse(mockKvTable.get(profileKeyFor(canonicalOwner))!)).toEqual(
+      answers,
+    );
   });
 });

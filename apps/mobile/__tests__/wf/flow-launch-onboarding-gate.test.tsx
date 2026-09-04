@@ -149,6 +149,9 @@ let mockApiSession: {
 } | null = null;
 jest.mock('../../src/account/apiSession', () => ({
   getApiSession: () => mockApiSession,
+  useApiSessionStore: <T,>(
+    selector: (state: { session: typeof mockApiSession }) => T,
+  ): T => selector({ session: mockApiSession }),
 }));
 
 const mockFetchCanonical = jest.fn<Promise<Profile | null>, [unknown]>(

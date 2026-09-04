@@ -11,6 +11,7 @@ import { ErrorState, LoadingState } from './src/design/components';
 import { color } from './src/design/tokens';
 import { useAppStore } from './src/state/appStore';
 import { useAuthStore } from './src/auth/authStore';
+import { useApiSessionStore } from './src/account/apiSession';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -119,7 +120,11 @@ function Gate() {
   const appOwnerKey = useAppStore(s => s.ownerKey);
   const profile = useAppStore(s => s.profile);
   const hydrateError = useAppStore(s => s.hydrateError);
+  const awaitingBearer = useAppStore(s => s.awaitingBearer);
   const hydrateApp = useAppStore(s => s.hydrate);
+  const bearerAccountId = useApiSessionStore(
+    s => s.session?.canonicalAppUserId ?? null,
+  );
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
   const hydrateAuth = useAuthStore(s => s.hydrate);
@@ -143,6 +148,18 @@ function Gate() {
     if (!desiredOwner) return;
     void hydrateApp();
   }, [desiredOwner, hydrateApp]);
+
+  // Launch restore may finish signed-in before its bearer refresh lands
+  // (≤ 8s wait, then 'offline'); that first hydrate cannot consult /v1/me or
+  // save the pre-auth stash. Re-hydrate once this account's bearer arrives.
+  const bearerOwner =
+    bearerAccountId !== null ? canonicalDataOwner(bearerAccountId) : null;
+  useEffect(() => {
+    if (!awaitingBearer || !desiredOwner || bearerOwner !== desiredOwner) {
+      return;
+    }
+    void hydrateApp();
+  }, [awaitingBearer, bearerOwner, desiredOwner, hydrateApp]);
 
   // Stamp stability events with the pseudonymous data-owner key (never an
   // email or device id) once it is known; the session key stays the run's.

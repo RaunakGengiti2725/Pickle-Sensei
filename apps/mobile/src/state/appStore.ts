@@ -10,12 +10,12 @@ import {
   profileKeyForOwner,
   requireWritableDataOwner,
 } from '../data/accountScope';
-import { getApiSession } from '../account/apiSession';
+import { getApiSession, type ApiSession } from '../account/apiSession';
 import {
   fetchCanonicalOnboardingProfile,
   saveCanonicalOnboardingProfile,
 } from '../account/onboarding';
-import type { Profile } from './profile';
+import { parseProfile, type Profile } from './profile';
 export { focusForGoal, type Gender, type Profile } from './profile';
 
 /** Session/UI state (Zustand); durable copies live in SQLite kv. */
@@ -37,32 +37,49 @@ export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
 export const CANONICAL_PROFILE_UNAVAILABLE_MESSAGE =
   'Pickle Sensei could not reach your account to load your coaching profile. Check your connection and try again.';
 
-function parsePendingProfile(raw: string | null): Profile | null {
+/** Local kv read failed (SQLite) — the driver text never reaches the user. */
+export const LOCAL_PROFILE_UNAVAILABLE_MESSAGE =
+  'Pickle Sensei could not load your coaching profile on this device. Try again.';
+
+/** Canonical owner completing onboarding while no bearer is installed. */
+export const ONBOARDING_ACCOUNT_UNAVAILABLE_MESSAGE =
+  'Pickle Sensei could not reach your account to save your answers. Check your connection and try again.';
+
+/** Parses kv JSON; anything unparseable reads as absent. */
+function parseKvJson(raw: string | null): unknown {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return null;
-    }
-    const profile = (parsed as Record<string, unknown>)['profile'];
-    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
-      return null;
-    }
-    const candidate = profile as Record<string, unknown>;
-    const requiredStrings = [
-      'skillLevel',
-      'handedness',
-      'goal',
-      'biggestProblem',
-      'focusCheckpoint',
-    ] as const;
-    for (const key of requiredStrings) {
-      if (typeof candidate[key] !== 'string') return null;
-    }
-    return profile as Profile;
+    return JSON.parse(raw) as unknown;
   } catch {
     return null;
   }
+}
+
+function parsePendingProfile(raw: string | null): Profile | null {
+  const parsed = parseKvJson(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  return parseProfile((parsed as Record<string, unknown>)['profile']);
+}
+
+function parseStoredProfile(raw: string | null): Profile | null {
+  return parseProfile(parseKvJson(raw));
+}
+
+/** Owners that live on the server (not the guest bucket, not signed-out). */
+function isCanonicalOwner(owner: string): boolean {
+  return owner !== GUEST_DATA_OWNER && owner !== SIGNED_OUT_DATA_OWNER;
+}
+
+/** The bearer-backed session for this owner, or null while none is installed
+ * (launch restore still refreshing / offline). A canonical owner without one
+ * is never treated like a guest: nothing is saved locally on its behalf. */
+function apiSessionFor(owner: string): ApiSession | null {
+  const session = getApiSession();
+  return session && canonicalDataOwner(session.canonicalAppUserId) === owner
+    ? session
+    : null;
 }
 
 interface AppState {
@@ -73,6 +90,10 @@ interface AppState {
    * could not be read (canonical fetch or local read failed) — the Gate shows
    * a retry state instead of re-asking the questionnaire. */
   hydrateError: string | null;
+  /** hydrate() finished for a canonical owner with no bearer installed and
+   * could not settle the profile (nothing local, or a pre-auth stash still
+   * waiting for its canonical save); the Gate re-hydrates once a bearer lands. */
+  awaitingBearer: boolean;
   onboardingBusy: boolean;
   onboardingError: string | null;
   lastShotType: ShotTypeSlug;
@@ -102,6 +123,7 @@ export const useAppStore = create<AppState>(set => ({
   ownerKey: null,
   profile: null,
   hydrateError: null,
+  awaitingBearer: false,
   onboardingBusy: false,
   onboardingError: null,
   lastShotType: 'forehand_drive',
@@ -112,27 +134,34 @@ export const useAppStore = create<AppState>(set => ({
       ownerKey: owner,
       profile: null,
       hydrateError: null,
+      awaitingBearer: false,
     });
     try {
       const db = getDb();
+      const profileKey = profileKeyForOwner(owner);
       let pending = parsePendingProfile(
         await getKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY),
       );
-      let raw = await getKv(db, profileKeyForOwner(owner));
+      let raw = await getKv(db, profileKey);
       if (!raw && owner === GUEST_DATA_OWNER) {
         const legacy = await getKv(db, 'profile');
         if (legacy) {
-          await setKv(db, profileKeyForOwner(owner), legacy);
+          await setKv(db, profileKey, legacy);
           await setKv(db, 'profile', '');
           raw = legacy;
         }
       }
-      const apiSession = getApiSession();
-      if (
-        !raw &&
-        apiSession &&
-        canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-      ) {
+      // A row that is not a Profile (corrupt bytes, non-object JSON, missing
+      // or mistyped fields) is blanked and treated as absent so the canonical
+      // fetch / questionnaire below can repair it instead of it hydrating as
+      // a truthy profile the Gate would mount the app on.
+      let profile = parseStoredProfile(raw);
+      if (raw && !profile) {
+        await setKv(db, profileKey, '');
+      }
+      const canonical = isCanonicalOwner(owner);
+      const apiSession = canonical ? apiSessionFor(owner) : null;
+      if (!profile && apiSession) {
         let canonicalProfile: Profile | null;
         try {
           canonicalProfile = await fetchCanonicalOnboardingProfile(apiSession);
@@ -148,55 +177,62 @@ export const useAppStore = create<AppState>(set => ({
           return;
         }
         if (canonicalProfile) {
-          raw = JSON.stringify(canonicalProfile);
-          await setKv(db, profileKeyForOwner(owner), raw);
+          profile = canonicalProfile;
+          await setKv(db, profileKey, JSON.stringify(profile));
         }
       }
       // Adopt the pre-auth questionnaire into the first writable owner that
       // hydrates, REPLACING whatever profile it had (the answers just given
       // on this device are the newest intent); synced accounts save through
       // the canonical endpoint first (server focusCheckpoint wins) exactly
-      // like completeOnboarding. A failed save keeps both the stash (retried
-      // next hydrate) and the existing profile.
+      // like completeOnboarding, so a canonical owner with no bearer leaves
+      // the stash untouched for a later hydrate. A failed save keeps both
+      // the stash (retried next hydrate) and the existing profile.
       if (
         pending &&
         owner !== SIGNED_OUT_DATA_OWNER &&
+        (!canonical || apiSession) &&
         getActiveDataOwner() === owner
       ) {
         try {
-          const adopted =
-            apiSession &&
-            canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-              ? await saveCanonicalOnboardingProfile(apiSession, pending)
-              : pending;
-          raw = JSON.stringify(adopted);
-          await setKv(db, profileKeyForOwner(owner), raw);
+          const adopted = apiSession
+            ? await saveCanonicalOnboardingProfile(apiSession, pending)
+            : pending;
+          await setKv(db, profileKey, JSON.stringify(adopted));
           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+          profile = adopted;
           pending = null;
         } catch {
           // Stash and existing profile both survive for the next attempt.
         }
       }
       if (getActiveDataOwner() !== owner) return;
+      const awaitingBearer =
+        canonical && !apiSession && (!profile || pending !== null);
       set({
-        profile: raw ? (JSON.parse(raw) as Profile) : null,
+        profile,
         hydrated: true,
         ownerKey: owner,
-        hydrateError: null,
+        // No bearer and nothing local to show: the account could not be
+        // consulted, so surface the retryable account state rather than
+        // re-asking the questionnaire (its answers could not be saved yet).
+        hydrateError:
+          awaitingBearer && !profile
+            ? CANONICAL_PROFILE_UNAVAILABLE_MESSAGE
+            : null,
+        awaitingBearer,
         lastShotType: 'forehand_drive',
         onboardingBusy: false,
         onboardingError: null,
       });
-    } catch (error) {
+    } catch {
       if (getActiveDataOwner() === owner) {
         set({
           hydrated: true,
           ownerKey: owner,
           profile: null,
-          hydrateError:
-            error instanceof Error
-              ? error.message
-              : 'Your coaching profile could not be loaded.',
+          hydrateError: LOCAL_PROFILE_UNAVAILABLE_MESSAGE,
+          awaitingBearer: false,
         });
       }
     }
@@ -204,13 +240,22 @@ export const useAppStore = create<AppState>(set => ({
   completeOnboarding: async profile => {
     const owner = requireWritableDataOwner();
     set({ onboardingBusy: true, onboardingError: null });
+    const apiSession = apiSessionFor(owner);
+    if (isCanonicalOwner(owner) && !apiSession) {
+      // Canonical answers save through /v1/me/onboarding first; without a
+      // bearer there is nothing to save against, and a local-only row would
+      // shadow /v1/me on every later hydrate. Retryable: the Gate re-hydrates
+      // when the bearer lands and the screen keeps its answers.
+      set({
+        onboardingBusy: false,
+        onboardingError: ONBOARDING_ACCOUNT_UNAVAILABLE_MESSAGE,
+      });
+      return;
+    }
     try {
-      const apiSession = getApiSession();
-      const canonicalProfile =
-        apiSession &&
-        canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-          ? await saveCanonicalOnboardingProfile(apiSession, profile)
-          : profile;
+      const canonicalProfile = apiSession
+        ? await saveCanonicalOnboardingProfile(apiSession, profile)
+        : profile;
       await setKv(
         getDb(),
         profileKeyForOwner(owner),
