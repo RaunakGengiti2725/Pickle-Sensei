@@ -10,10 +10,10 @@ import {
   API_BASE,
   authedInit,
   bootEdgeFunction,
-  fakeGoogleIdToken,
   recorded,
   resetRest,
   restJson,
+  sessionAccessToken,
   setRestResponder,
   streamedJsonBody,
   USER_ID,
@@ -309,15 +309,12 @@ Deno.test({
   async fn() {
     await bootEdgeFunction();
     resetRest();
-    const res = await fetch(
-      `${API_BASE}/v1/me/consent/status`,
-      authedInit({ method: "GET" }, fakeGoogleIdToken("another-subject")),
-    );
+    const res = await fetch(`${API_BASE}/v1/me/consent/status`, authedInit({ method: "GET" }));
     assertEquals(res.status, 200);
     await res.body?.cancel();
     const consent = recorded.find((r) => r.path === "consent_records");
     assert(consent);
-    assertEquals(consent.headers.get("authorization"), "Bearer fake-session-access-token");
+    assertEquals(consent.headers.get("authorization"), `Bearer ${sessionAccessToken()}`);
     assertEquals(consent.query.get("user_id"), `eq.${USER_ID}`);
   },
 });

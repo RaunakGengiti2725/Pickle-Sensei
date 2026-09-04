@@ -3,12 +3,15 @@ import { encryptAppleRefreshToken } from "../externalAccounts.ts";
 import {
   RC_URL,
   TEST_USER_ID,
+  bootstrapAccessToken,
   fakeAppleIdToken,
   loadHarness,
   userRequest,
 } from "./routesHarness.ts";
 
 const h = await loadHarness();
+// Deletion routes bear the session an Apple bootstrap issued, never the ID token.
+const appleSessionToken = await bootstrapAccessToken(h, { provider: "apple" });
 
 function profile(provider: "apple" | "google" = "apple") {
   return {
@@ -110,7 +113,7 @@ Deno.test(
 
     const response = await h.handler(
       userRequest("POST", "/v1/me/delete-confirm", {
-        token: fakeAppleIdToken(),
+        token: appleSessionToken,
         body: { challenge },
       }),
     );
@@ -156,7 +159,7 @@ Deno.test(
 
     const response = await h.handler(
       userRequest("POST", "/v1/me/delete-confirm", {
-        token: fakeAppleIdToken(),
+        token: appleSessionToken,
         body: { challenge },
       }),
     );

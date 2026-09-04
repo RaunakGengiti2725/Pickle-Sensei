@@ -2,6 +2,13 @@
 // captured (so no port is opened), Supabase (PostgREST + Auth) and RevenueCat
 // stubbed at the fetch layer, and env populated. Every request goes through
 // the REAL handler (auth → rate limits → routing → billing/webhook/drills).
+//
+// Bearer contract mirrored by the fake Auth: a provider ID token is spent
+// ONCE by `POST /v1/account/bootstrap` (fake `/auth/v1/token` mints a
+// Supabase-shaped session), and every other route bears the session ACCESS
+// token that bootstrap returned (fake `/auth/v1/user` verifies it, fake
+// `/auth/v1/logout` revokes it). `loadHarness()` performs that bootstrap once
+// for TEST_USER_ID, and `userRequest()` bears its access token by default.
 
 export interface RecordedCall {
   url: string;
@@ -23,8 +30,20 @@ export interface Harness {
   rpcs: Record<string, unknown>;
   /** Test-only copy of the generated AES key used by the lazy edge config. */
   appleTokenEncryptionKey: string;
+  /** Session access token bootstrap issued for TEST_USER_ID at harness load
+   * (what `userRequest()` bears by default). */
+  accessToken: string;
+  /** Access tokens the fake Supabase Auth currently considers live. Survives
+   * `reset()` because the default session is minted once per harness load. */
+  sessions: Map<string, FakeAuthUser>;
   reset(): void;
   callsTo(fragment: string): RecordedCall[];
+}
+
+export interface FakeAuthUser {
+  id: string;
+  email: string;
+  provider: "google" | "apple";
 }
 
 export const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -39,8 +58,21 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const b64url = (value: string): string =>
   btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const segment = token.split(".")[1] ?? "";
+  try {
+    const raw = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+    const parsed = JSON.parse(atob(padded));
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A syntactically valid Google ID token (issuer routing only — verification
- * is stubbed in the fake Supabase Auth). */
+ * is stubbed in the fake Supabase Auth). Only `POST /v1/account/bootstrap`
+ * accepts it; use `bootstrapAccessToken()` for every other route. */
 export function fakeGoogleIdToken(sub = TEST_USER_ID): string {
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const payload = b64url(
@@ -86,6 +118,50 @@ async function testApplePrivateKeyPem(): Promise<string> {
 
 let harness: Harness | null = null;
 
+/** Spend `idToken` on `POST /v1/account/bootstrap` through the real handler
+ * and return the session access token it issued — the bearer every other
+ * route expects. Bootstrap reads the profile row, so one is provided for the
+ * duration of the call when the test has not staged its own. */
+export async function bootstrapAccessToken(
+  h: Harness,
+  options: { sub?: string; provider?: "google" | "apple"; ip?: string } = {},
+): Promise<string> {
+  const sub = options.sub ?? TEST_USER_ID;
+  const provider = options.provider ?? "google";
+  const idToken = provider === "apple" ? fakeAppleIdToken(sub) : fakeGoogleIdToken(sub);
+  const stagedProfiles = h.tables.profiles;
+  if (!stagedProfiles || stagedProfiles.length === 0) {
+    h.tables.profiles = [
+      { id: sub, email: "user@example.com", provider, onboarding_state: "complete" },
+    ];
+  }
+  const callsBefore = h.calls.length;
+  try {
+    const response = await h.handler(
+      userRequest("POST", "/v1/account/bootstrap", {
+        token: idToken,
+        ip: options.ip ?? "203.0.113.250",
+        body: {},
+      }),
+    );
+    if (response.status !== 200) {
+      throw new Error(`harness bootstrap failed: ${response.status} ${await response.text()}`);
+    }
+    const body = (await response.json()) as { session?: { accessToken?: unknown } };
+    const accessToken = body.session?.accessToken;
+    if (typeof accessToken !== "string" || !accessToken) {
+      throw new Error("harness bootstrap returned no session access token");
+    }
+    return accessToken;
+  } finally {
+    if (!stagedProfiles || stagedProfiles.length === 0) {
+      if (stagedProfiles) h.tables.profiles = stagedProfiles;
+      else delete h.tables.profiles;
+    }
+    h.calls.splice(callsBefore);
+  }
+}
+
 export async function loadHarness(): Promise<Harness> {
   if (harness) {
     harness.reset();
@@ -117,6 +193,8 @@ export async function loadHarness(): Promise<Harness> {
     tables: {},
     rpcs: {},
     appleTokenEncryptionKey,
+    accessToken: "",
+    sessions: new Map(),
     reset() {
       state.calls = [];
       state.subscriber = {};
@@ -168,35 +246,81 @@ export async function loadHarness(): Promise<Harness> {
     if (url === "https://appleid.apple.com/auth/revoke") {
       return new Response(null, { status: 200 });
     }
+    const authUserJson = (user: FakeAuthUser) => ({
+      id: user.id,
+      aud: "authenticated",
+      role: "authenticated",
+      email: user.email,
+      app_metadata: { provider: user.provider, providers: [user.provider] },
+      user_metadata: {},
+      created_at: new Date().toISOString(),
+    });
     if (url.startsWith(`${SUPABASE_URL}/auth/v1/token`)) {
+      const grant = new URL(url).searchParams.get("grant_type");
       const payload = isRecord(body) ? body : {};
-      const token = typeof payload.id_token === "string" ? payload.id_token : "";
-      const segment = token.split(".")[1] ?? "";
-      let sub = TEST_USER_ID;
-      try {
-        const raw = segment.replace(/-/g, "+").replace(/_/g, "/");
-        const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
-        sub = String(JSON.parse(atob(padded)).sub ?? TEST_USER_ID);
-      } catch {
-        // keep default
+      let user: FakeAuthUser | null = null;
+      if (grant === "id_token") {
+        const idToken = typeof payload.id_token === "string" ? payload.id_token : "";
+        const claims = decodeJwtPayload(idToken);
+        const provider = payload.provider === "apple" ? "apple" : "google";
+        if (typeof claims?.sub === "string" && claims.sub) {
+          user = { id: claims.sub, email: "user@example.com", provider };
+        }
+      } else if (grant === "refresh_token") {
+        const refreshToken = typeof payload.refresh_token === "string" ? payload.refresh_token : "";
+        for (const [accessToken, live] of state.sessions) {
+          if (refreshToken === `refresh-for-${accessToken}`) {
+            user = live;
+            state.sessions.delete(accessToken);
+            break;
+          }
+        }
+      }
+      if (!user) {
+        return jsonResponse(400, {
+          error: "invalid_grant",
+          error_description: "fake auth: token not recognised",
+        });
       }
       const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      const accessToken = [
+        b64url(JSON.stringify({ alg: "HS256", typ: "JWT" })),
+        b64url(
+          JSON.stringify({
+            iss: `${SUPABASE_URL}/auth/v1`,
+            sub: user.id,
+            aud: "authenticated",
+            role: "authenticated",
+            exp: expiresAt,
+            jti: crypto.randomUUID(),
+          }),
+        ),
+        "sig",
+      ].join(".");
+      state.sessions.set(accessToken, user);
       return jsonResponse(200, {
-        access_token: `session-for-${sub}`,
+        access_token: accessToken,
         token_type: "bearer",
         expires_in: 3600,
         expires_at: expiresAt,
-        refresh_token: "refresh",
-        user: {
-          id: sub,
-          aud: "authenticated",
-          role: "authenticated",
-          email: "user@example.com",
-          app_metadata: {},
-          user_metadata: {},
-          created_at: new Date().toISOString(),
-        },
+        refresh_token: `refresh-for-${accessToken}`,
+        user: authUserJson(user),
       });
+    }
+    if (url === `${SUPABASE_URL}/auth/v1/user` && request.method === "GET") {
+      const bearer = (headers["authorization"] ?? "").replace(/^Bearer /, "");
+      const user = state.sessions.get(bearer);
+      if (!user) {
+        return jsonResponse(401, { code: 401, msg: "invalid JWT: session not found" });
+      }
+      return jsonResponse(200, authUserJson(user));
+    }
+    if (url.startsWith(`${SUPABASE_URL}/auth/v1/logout`) && request.method === "POST") {
+      const bearer = (headers["authorization"] ?? "").replace(/^Bearer /, "");
+      if (!state.sessions.delete(bearer)) {
+        return jsonResponse(401, { code: 401, msg: "invalid JWT: session not found" });
+      }
+      return new Response(null, { status: 204 });
     }
     if (request.method === "DELETE" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
       return jsonResponse(200, {});
@@ -261,6 +385,8 @@ export async function loadHarness(): Promise<Harness> {
   }) as typeof Deno.serve;
 
   await import("../index.ts");
+  state.accessToken = await bootstrapAccessToken(state);
+  state.reset();
   harness = state;
   return state;
 }
@@ -291,8 +417,12 @@ export function userRequest(
     headers?: Record<string, string>;
   } = {},
 ): Request {
+  const token = options.token ?? harness?.accessToken;
+  if (!token) {
+    throw new Error("userRequest(): call loadHarness() first or pass an explicit token");
+  }
   const headers = new Headers({
-    Authorization: `Bearer ${options.token ?? fakeGoogleIdToken()}`,
+    Authorization: `Bearer ${token}`,
     "x-forwarded-for": options.ip ?? "203.0.113.20",
     ...options.headers,
   });

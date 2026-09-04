@@ -8,7 +8,7 @@ import { drillCatalog } from "../drills.ts";
 import { drillInstructionalMedia } from "../drillMedia.ts";
 import {
   activeSubscriber,
-  fakeGoogleIdToken,
+  bootstrapAccessToken,
   loadHarness,
   OTHER_USER_ID,
   RC_URL,
@@ -219,7 +219,7 @@ Deno.test(
         `http://127.0.0.1:${server.addr.port}/functions/v1/api/v1/catalog/drills/%E0%A4%A`,
         {
           headers: {
-            Authorization: `Bearer ${fakeGoogleIdToken()}`,
+            Authorization: `Bearer ${h.accessToken}`,
             "x-forwarded-for": "198.51.100.7",
           },
         },
@@ -232,7 +232,7 @@ Deno.test(
         {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${fakeGoogleIdToken()}`,
+            Authorization: `Bearer ${h.accessToken}`,
             "x-forwarded-for": "198.51.100.7",
           },
         },
@@ -309,7 +309,7 @@ Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-
   const h = await loadHarness();
   h.subscriber = activeSubscriber();
   h.rpcs["access_state"] = ACCESS_ROW;
-  const token = fakeGoogleIdToken(OTHER_USER_ID);
+  const token = await bootstrapAccessToken(h, { sub: OTHER_USER_ID });
   let last: Response | null = null;
   for (let i = 0; i < 11; i += 1) {
     last = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.10", token }));

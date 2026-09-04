@@ -19,6 +19,8 @@ interface FakeState {
   /** Status for POST /auth/v1/token?grant_type=id_token (200 = succeed). */
   tokenStatus: number;
   tokenCalls: number;
+  /** GET /auth/v1/user verifications (one per uncached session bearer). */
+  userCalls: number;
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
   /** Last upsert payload PostgREST received for account_deletion_requests. */
@@ -33,6 +35,7 @@ interface FakeState {
 const state: FakeState = {
   tokenStatus: 200,
   tokenCalls: 0,
+  userCalls: 0,
   deletionRows: [],
   lastUpsert: null,
   adminDeleteStatuses: [],
@@ -44,6 +47,7 @@ const state: FakeState = {
 function resetState(): void {
   state.tokenStatus = 200;
   state.tokenCalls = 0;
+  state.userCalls = 0;
   state.deletionRows = [];
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
@@ -63,17 +67,35 @@ const b64url = (input: string): string =>
 
 /** Unsigned JWT-shaped token; the function only decodes the payload for
  * routing and delegates verification to (our fake) Supabase Auth. */
-function providerToken(sub: string): string {
+function jwt(claims: Record<string, unknown>): string {
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = b64url(
-    JSON.stringify({
-      iss: "https://accounts.google.com",
-      sub,
-      exp: Math.floor(Date.now() / 1_000) + 3_600,
-    }),
-  );
-  return `${header}.${payload}.sig`;
+  return `${header}.${b64url(JSON.stringify(claims))}.sig`;
 }
+
+function claimsOf(token: string): Record<string, unknown> {
+  const segment = token.split(".")[1] ?? "";
+  return JSON.parse(atob(segment.replace(/-/g, "+").replace(/_/g, "/"))) as Record<
+    string,
+    unknown
+  >;
+}
+
+/** A Google ID token — accepted by POST /v1/account/bootstrap only. */
+function providerToken(sub: string): string {
+  return jwt({
+    iss: "https://accounts.google.com",
+    sub,
+    exp: Math.floor(Date.now() / 1_000) + 3_600,
+  });
+}
+
+const fakeAuthUser = (userId: string) => ({
+  id: userId,
+  aud: "authenticated",
+  role: "authenticated",
+  email: "u@example.com",
+  app_metadata: { provider: "google", providers: ["google"] },
+});
 
 async function fakeSupabase(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -85,19 +107,33 @@ async function fakeSupabase(request: Request): Promise<Response> {
       return jsonResponse(state.tokenStatus, { code: state.tokenStatus, msg: "upstream down" });
     }
     const body = (await request.json()) as { id_token: string };
-    const payloadSegment = body.id_token.split(".")[1];
-    const claims = JSON.parse(atob(payloadSegment.replace(/-/g, "+").replace(/_/g, "/"))) as {
-      sub: string;
-    };
-    const userId = claims.sub;
+    const userId = String(claimsOf(body.id_token).sub);
+    const expiresAt = Math.floor(Date.now() / 1_000) + 3_600;
     return jsonResponse(200, {
-      access_token: `sb-access-${userId}`,
+      access_token: jwt({
+        iss: `${url.origin}/auth/v1`,
+        sub: userId,
+        aud: "authenticated",
+        role: "authenticated",
+        exp: expiresAt,
+        jti: crypto.randomUUID(),
+      }),
       token_type: "bearer",
       expires_in: 3_600,
-      expires_at: Math.floor(Date.now() / 1_000) + 3_600,
+      expires_at: expiresAt,
       refresh_token: `sb-refresh-${userId}`,
-      user: { id: userId, aud: "authenticated", role: "authenticated", email: "u@example.com" },
+      user: fakeAuthUser(userId),
     });
+  }
+
+  if (request.method === "GET" && path === "/auth/v1/user") {
+    state.userCalls += 1;
+    const bearer = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
+    const claims = claimsOf(bearer);
+    if (claims.iss !== `${url.origin}/auth/v1` || typeof claims.sub !== "string") {
+      return jsonResponse(401, { code: 401, msg: "invalid JWT" });
+    }
+    return jsonResponse(200, fakeAuthUser(claims.sub));
   }
 
   if (request.method === "DELETE" && path.startsWith("/auth/v1/admin/users/")) {
@@ -188,6 +224,26 @@ const call = (method: string, path: string, token: string, body?: unknown): Prom
     ),
   );
 
+/** Sign `sub` in through the real bootstrap route and return the session
+ * access token every other route expects as bearer. */
+async function sessionToken(sub: string): Promise<string> {
+  const stagedProfiles = state.profileRows;
+  state.profileRows = [
+    { id: sub, email: "u@example.com", provider: "google", onboarding_state: "complete" },
+  ];
+  const before = { tokenCalls: state.tokenCalls, userCalls: state.userCalls };
+  try {
+    const res = await call("POST", "/v1/account/bootstrap", providerToken(sub));
+    assertEquals(res.status, 200, "harness bootstrap");
+    const body = (await res.json()) as { session: { accessToken: string } };
+    return body.session.accessToken;
+  } finally {
+    state.profileRows = stagedProfiles;
+    state.tokenCalls = before.tokenCalls;
+    state.userCalls = before.userCalls;
+  }
+}
+
 const pastIso = (msAgo: number): string => new Date(Date.now() - msAgo).toISOString();
 const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).toISOString();
 
@@ -195,7 +251,7 @@ const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).to
 
 Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = await sessionToken(crypto.randomUUID());
   const res = await call("POST", "/v1/me/delete-request", token);
   assertEquals(res.status, 200);
   const body = (await res.json()) as { challenge: string; expiresAt: string };
@@ -206,7 +262,7 @@ Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async
 
 Deno.test("delete-confirm rejects a non-UUID challenge with 400 and no admin call", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = await sessionToken(crypto.randomUUID());
   const res = await call("POST", "/v1/me/delete-confirm", token, { challenge: "nope" });
   assertEquals(res.status, 400);
   assertEquals(
@@ -218,7 +274,7 @@ Deno.test("delete-confirm rejects a non-UUID challenge with 400 and no admin cal
 
 Deno.test("delete-confirm enforces the 3-second minimum challenge age (429)", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = await sessionToken(crypto.randomUUID());
   const challenge = crypto.randomUUID();
   state.deletionRows = [{ challenge, created_at: pastIso(500), expires_at: futureIso(60_000) }];
   const res = await call("POST", "/v1/me/delete-confirm", token, { challenge });
@@ -232,7 +288,7 @@ Deno.test("delete-confirm enforces the 3-second minimum challenge age (429)", as
 
 Deno.test("onboarding rejects malformed JSON with 400, not 5xx", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = await sessionToken(crypto.randomUUID());
   const res = await api(
     new Request("http://edge.local/functions/v1/api/v1/me/onboarding", {
       method: "PUT",
@@ -269,7 +325,7 @@ Deno.test(
   "two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone",
   async () => {
     resetState();
-    const token = providerToken(crypto.randomUUID());
+    const token = await sessionToken(crypto.randomUUID());
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -293,7 +349,7 @@ Deno.test(
   "replaying delete-confirm after deleteUser succeeded remains a successful deletion",
   async () => {
     resetState();
-    const token = providerToken(crypto.randomUUID());
+    const token = await sessionToken(crypto.randomUUID());
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -315,7 +371,7 @@ Deno.test(
   async () => {
     resetState();
     const userId = crypto.randomUUID();
-    const token = providerToken(userId);
+    const token = await sessionToken(userId);
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -324,7 +380,7 @@ Deno.test(
 
     const deleted = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(deleted.status, 200);
-    assertEquals(state.tokenCalls, 1);
+    assertEquals(state.userCalls, 1);
 
     // Post-deletion: the profile and deletion rows are gone (cascade).
     state.deletionRows = [];
@@ -333,7 +389,7 @@ Deno.test(
     // The cached session for the deleted user id must not be reused: the next
     // request with the same bearer goes back to Supabase Auth.
     const access = await call("GET", "/v1/me/access", token);
-    assertEquals(state.tokenCalls, 2);
+    assertEquals(state.userCalls, 2);
     assertEquals(access.status, 200);
 
     // Every further request keeps being verified from a fresh cache entry, so
