@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Text } from 'react-native';
+import { Linking, RefreshControl, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { CatalogDrill } from '../src/training/api';
 import type { ScoredCheckpointFact } from '../src/library/libraryFocus';
@@ -218,6 +218,37 @@ function renderScreen() {
     renderer = TestRenderer.create(<DrillLibraryScreen />);
   });
   return renderer;
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function saveToggleState(
+  renderer: TestRenderer.ReactTestRenderer,
+  slug: string,
+): { selected: boolean } {
+  const node = findPressableByTestId(renderer, `save-toggle-${slug}`);
+  if (!node) throw new Error(`No save toggle for ${slug}`);
+  return node.props.accessibilityState;
+}
+
+async function pullToRefresh(renderer: TestRenderer.ReactTestRenderer) {
+  await act(async () => {
+    renderer.root.findByType(RefreshControl).props.onRefresh();
+  });
 }
 
 /**
@@ -593,6 +624,160 @@ describe('DrillLibraryScreen', () => {
     expect(copy).toContain('Saving is offline right now.');
     expect(copy).not.toContain(SAVED_TOAST);
     act(() => renderer.unmount());
+  });
+
+  describe('save mutation vs. concurrent catalog refetch', () => {
+    it('keeps the optimistic bookmark when a refresh lands with pre-save truth while the PUT is in flight', async () => {
+      const save = deferred<void>();
+      mockSaveDrill.mockReset().mockImplementation(() => save.promise);
+      const refetch = deferred<CatalogDrill[]>();
+      const renderer = renderScreen();
+      await settle();
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: false,
+      });
+
+      await pressByLabel(renderer, 'Save Dink Target Ladder');
+      expect(mockSaveDrill).toHaveBeenCalledTimes(1);
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+
+      // The refresh GET was issued before the PUT committed, so the server
+      // still reports saved:false for the dink drill.
+      mockListCatalogDrills.mockImplementation(() => refetch.promise);
+      await pullToRefresh(renderer);
+      expect(mockListCatalogDrills).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        refetch.resolve([{ ...dinkDrill, saved: false }, { ...volleyDrill }]);
+      });
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+
+      await act(async () => {
+        save.resolve(undefined);
+      });
+      expect(allText(renderer)).toContain(SAVED_TOAST);
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+      // The refreshed catalog itself is still applied for other rows.
+      expect(saveToggleState(renderer, volleyDrill.slug)).toEqual({
+        selected: true,
+      });
+      act(() => renderer.unmount());
+    });
+
+    it('keeps the confirmed bookmark when a refresh issued before the PUT committed lands after it', async () => {
+      const save = deferred<void>();
+      mockSaveDrill.mockReset().mockImplementation(() => save.promise);
+      const refetch = deferred<CatalogDrill[]>();
+      const renderer = renderScreen();
+      await settle();
+
+      await pressByLabel(renderer, 'Save Dink Target Ladder');
+      mockListCatalogDrills.mockImplementation(() => refetch.promise);
+      await pullToRefresh(renderer);
+
+      await act(async () => {
+        save.resolve(undefined);
+      });
+      expect(allText(renderer)).toContain(SAVED_TOAST);
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+
+      // Stale read: the GET left before the PUT committed and only now
+      // returns the pre-save row. It must not undo a confirmed save.
+      await act(async () => {
+        refetch.resolve([{ ...dinkDrill, saved: false }, { ...volleyDrill }]);
+      });
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+
+      // A refetch issued AFTER the commit is authoritative again.
+      mockListCatalogDrills.mockImplementation(async () => [
+        { ...dinkDrill, saved: false },
+        { ...volleyDrill },
+      ]);
+      await pullToRefresh(renderer);
+      await settle();
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: false,
+      });
+      act(() => renderer.unmount());
+    });
+
+    it('keeps the optimistic unsave when a refresh lands with pre-delete truth while the DELETE is in flight', async () => {
+      const unsave = deferred<void>();
+      mockUnsaveDrill.mockReset().mockImplementation(() => unsave.promise);
+      const refetch = deferred<CatalogDrill[]>();
+      const renderer = renderScreen();
+      await settle();
+
+      await pressByLabel(
+        renderer,
+        'Remove Volley Wall Intervals from saved drills',
+      );
+      expect(saveToggleState(renderer, volleyDrill.slug)).toEqual({
+        selected: false,
+      });
+
+      mockListCatalogDrills.mockImplementation(() => refetch.promise);
+      await pullToRefresh(renderer);
+      await act(async () => {
+        refetch.resolve([{ ...dinkDrill }, { ...volleyDrill, saved: true }]);
+      });
+      expect(saveToggleState(renderer, volleyDrill.slug)).toEqual({
+        selected: false,
+      });
+
+      await act(async () => {
+        unsave.resolve(undefined);
+      });
+      expect(allText(renderer)).toContain(REMOVED_TOAST);
+      expect(saveToggleState(renderer, volleyDrill.slug)).toEqual({
+        selected: false,
+      });
+      act(() => renderer.unmount());
+    });
+
+    it('reverts to the refetched server row when the save fails after a mid-flight refresh', async () => {
+      const save = deferred<void>();
+      mockSaveDrill.mockReset().mockImplementation(() => save.promise);
+      const refetch = deferred<CatalogDrill[]>();
+      const renderer = renderScreen();
+      await settle();
+
+      await pressByLabel(renderer, 'Save Dink Target Ladder');
+      mockListCatalogDrills.mockImplementation(() => refetch.promise);
+      await pullToRefresh(renderer);
+      await act(async () => {
+        refetch.resolve([{ ...dinkDrill, saved: false }, { ...volleyDrill }]);
+      });
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: true,
+      });
+
+      await act(async () => {
+        save.reject(
+          new TrainingError(
+            'training.unavailable',
+            'Saving is offline right now.',
+            true,
+          ),
+        );
+      });
+      expect(saveToggleState(renderer, dinkDrill.slug)).toEqual({
+        selected: false,
+      });
+      const copy = allText(renderer);
+      expect(copy).toContain('Saving is offline right now.');
+      expect(copy).not.toContain(SAVED_TOAST);
+      act(() => renderer.unmount());
+    });
   });
 
   it('shows the clean empty state when no drill matches the search', async () => {
