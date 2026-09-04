@@ -1,0 +1,252 @@
+{
+  "description": "Declared critical paths for the shipping product. Every `via` entry must exist on disk (checked by the harness, invariant CP-01). `plane` records where the hop can be verified: linux = Cloud/CI, apple = M4 runner only, external = hosted platform (unverifiable from this repo).",
+  "paths": [
+    {
+      "id": "capture-and-score",
+      "title": "On-device capture → Apple Vision pose → analysis → score",
+      "hops": [
+        {
+          "from": "apps/mobile (AnalyzeScreen)",
+          "to": "PickleVideoCapture native module",
+          "via": ["apps/mobile/src/camera/capture.ts"],
+          "plane": "linux"
+        },
+        {
+          "from": "PickleVideoCapture native module",
+          "to": "native/camera-engine",
+          "via": [
+            "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleVideoCapture.swift",
+            "apps/mobile/ios/LocalPods/PickleNative/Sources/GuidedCaptureViewController.swift",
+            "native/camera-engine/Sources/CameraEngine.swift",
+            "native/camera-engine/Sources/SessionCaptureCoordinator.swift"
+          ],
+          "plane": "apple"
+        },
+        {
+          "from": "native/camera-engine",
+          "to": "native/vision-core (Apple Vision pose)",
+          "via": [
+            "native/vision-core/Sources/ApplePoseProvider.swift",
+            "native/vision-core/Sources/SessionMotionStream.swift",
+            "native/vision-core/Sources/TemporalStrokeDetector.swift",
+            "native/vision-core/Sources/VisionCoreContracts.swift"
+          ],
+          "plane": "apple"
+        },
+        {
+          "from": "native pose stream",
+          "to": "@pickle/vision-contracts / @pickle/analysis-pipeline",
+          "via": [
+            "apps/mobile/src/vision/providers.ts",
+            "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+            "packages/vision-contracts/src/index.ts",
+            "packages/analysis-pipeline/src/analyzeCapture.ts"
+          ],
+          "plane": "linux"
+        },
+        {
+          "from": "@pickle/analysis-pipeline",
+          "to": "@pickle/scoring",
+          "via": ["packages/scoring/src/engine.ts", "packages/scoring/src/index.ts"],
+          "plane": "linux"
+        }
+      ]
+    },
+    {
+      "id": "sign-in-bootstrap",
+      "title": "Apple/Google sign-in → POST /v1/account/bootstrap → durable session",
+      "hops": [
+        {
+          "from": "apps/mobile authStore",
+          "to": "POST /v1/account/bootstrap",
+          "via": ["apps/mobile/src/auth/authStore.ts", "apps/mobile/src/account/bootstrap.ts"],
+          "plane": "linux"
+        },
+        {
+          "from": "edge fn bootstrap",
+          "to": "Supabase Auth signInWithIdToken",
+          "via": ["supabase/functions/api/index.ts"],
+          "plane": "external"
+        },
+        {
+          "from": "session {accessToken, refreshToken}",
+          "to": "Keychain vault + refresh rotation",
+          "via": [
+            "apps/mobile/src/account/sessionVault.ts",
+            "apps/mobile/src/account/apiSession.ts",
+            "apps/mobile/src/account/sessionLifecycle.ts"
+          ],
+          "plane": "linux"
+        }
+      ]
+    },
+    {
+      "id": "free-rating-permit",
+      "title": "Rating gate: POST /v1/analysis-permits → reserve_analysis_permit → lifetime_scored_count",
+      "hops": [
+        {
+          "from": "apps/mobile accessApi",
+          "to": "POST /v1/analysis-permits",
+          "via": ["apps/mobile/src/billing/accessApi.ts"],
+          "plane": "linux"
+        },
+        {
+          "from": "edge fn",
+          "to": "reserve_analysis_permit() / lifetime_scored_count()",
+          "via": [
+            "supabase/functions/api/index.ts",
+            "supabase/migrations/20260901000000_permit_reservation_race.sql",
+            "supabase/migrations/20260902150000_free_rating_identity_ledger.sql"
+          ],
+          "plane": "linux"
+        }
+      ]
+    },
+    {
+      "id": "shot-sync",
+      "title": "Offline outbox → POST /v1/shots:sync → apply_synced_shot(jsonb)",
+      "hops": [
+        {
+          "from": "apps/mobile sync outbox",
+          "to": "POST /v1/shots:sync",
+          "via": [
+            "apps/mobile/src/data/sync.ts",
+            "apps/mobile/src/data/syncRuntime.ts",
+            "apps/mobile/src/data/api.ts"
+          ],
+          "plane": "linux"
+        },
+        {
+          "from": "edge fn",
+          "to": "apply_synced_shot RPC (SECURITY INVOKER, RLS)",
+          "via": [
+            "supabase/functions/api/index.ts",
+            "supabase/migrations/20260831000000_scale_and_security.sql"
+          ],
+          "plane": "linux"
+        }
+      ]
+    },
+    {
+      "id": "billing-entitlement",
+      "title": "StoreKit purchase → RevenueCat → POST /v1/billing/sync → billing_entitlements",
+      "hops": [
+        {
+          "from": "apps/mobile paywall",
+          "to": "RevenueCat SDK (StoreKit)",
+          "via": [
+            "apps/mobile/src/billing/revenueCatClient.ts",
+            "apps/mobile/src/config/runtimeConfig.ts"
+          ],
+          "plane": "external"
+        },
+        {
+          "from": "apps/mobile",
+          "to": "POST /v1/billing/sync",
+          "via": ["apps/mobile/src/billing/accessApi.ts"],
+          "plane": "linux"
+        },
+        {
+          "from": "edge fn",
+          "to": "RevenueCat REST (REVENUECAT_SECRET_API_KEY) → public.billing_entitlements",
+          "via": ["supabase/functions/api/index.ts"],
+          "plane": "external"
+        }
+      ]
+    },
+    {
+      "id": "account-deletion",
+      "title": "Delete request → confirm → Apple token revocation → Auth admin deleteUser",
+      "hops": [
+        {
+          "from": "apps/mobile Settings",
+          "to": "POST /v1/me/delete-request / delete-confirm",
+          "via": ["apps/mobile/src/account/deletion.ts"],
+          "plane": "linux"
+        },
+        {
+          "from": "edge fn",
+          "to": "Sign in with Apple revocation (APPLE_SIGN_IN_* secrets)",
+          "via": ["supabase/functions/api/externalAccounts.ts"],
+          "plane": "external"
+        }
+      ]
+    },
+    {
+      "id": "release-verification",
+      "title": "CI gate (Linux) + Mac Full Verify (Apple) + release manifest",
+      "hops": [
+        {
+          "from": ".github/workflows/ci.yml",
+          "to": "scripts/verify-cloud.sh stages",
+          "via": [".github/workflows/ci.yml", "scripts/verify-cloud.sh"],
+          "plane": "linux"
+        },
+        {
+          "from": ".github/workflows/mac-full-verify.yml",
+          "to": "scripts/mac-full-verify.sh on the single M4 runner",
+          "via": [
+            ".github/workflows/mac-full-verify.yml",
+            "scripts/mac-full-verify.sh",
+            "tools/macos-ci/apple-paths-changed.sh"
+          ],
+          "plane": "apple"
+        },
+        {
+          "from": "release manifest",
+          "to": "tools/release/check-release-manifest.mjs",
+          "via": [
+            "infra/release/release-manifest.json",
+            "tools/release/check-release-manifest.mjs"
+          ],
+          "plane": "linux"
+        }
+      ]
+    }
+  ],
+  "externalSinglePointsOfFailure": [
+    {
+      "id": "supabase-project",
+      "what": "Supabase project ucqnaiwqwjtgvlduiuib hosts Auth, Postgres, and the only production API (edge fn). No second region/project.",
+      "evidence": ["apps/mobile/src/config/runtimeConfig.ts", "AGENTS.md"],
+      "mitigation": "none in repo (platform SLA)"
+    },
+    {
+      "id": "m4-runner",
+      "what": "One physical self-hosted Apple Silicon machine is the only place Swift/Vision/XCTest/iOS-simulator evidence is produced.",
+      "evidence": [
+        ".github/workflows/mac-full-verify.yml",
+        ".github/workflows/mac-smoke-test.yml",
+        "scripts/mac-full-verify.sh"
+      ],
+      "mitigation": "none (no hosted macOS fallback)"
+    },
+    {
+      "id": "revenuecat",
+      "what": "Entitlement truth is RevenueCat (client SDK + server REST). Outage blocks purchases and server-side entitlement sync.",
+      "evidence": [
+        "apps/mobile/src/billing/revenueCatClient.ts",
+        "supabase/functions/api/index.ts"
+      ],
+      "mitigation": "server falls back to REVENUECAT_PUBLIC_SDK_KEY for subscriber reads only"
+    },
+    {
+      "id": "apple-sign-in-keys",
+      "what": "APPLE_SIGN_IN_* secrets are required for authorization-code exchange and revocation on account deletion.",
+      "evidence": ["supabase/functions/api/externalAccounts.ts", "AGENTS.md"],
+      "mitigation": "none"
+    },
+    {
+      "id": "upstash-redis",
+      "what": "Optional L2 cache + cross-instance rate limits.",
+      "evidence": ["supabase/functions/api/cache.ts", "supabase/functions/api/rateLimit.ts"],
+      "mitigation": "documented fallback to per-isolate memory (degrades rate limiting to per-isolate)"
+    },
+    {
+      "id": "ci-gate-aggregator",
+      "what": "A single `ci-gate` job aggregates all Linux jobs; the Mac workflow has no pull_request trigger, so Apple evidence is not part of the PR gate.",
+      "evidence": [".github/workflows/ci.yml", ".github/workflows/mac-full-verify.yml"],
+      "mitigation": "REVIEW.md requires a green Mac run for Apple-path changes (human-enforced)"
+    }
+  ]
+}
