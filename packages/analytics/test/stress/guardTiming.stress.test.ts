@@ -8,6 +8,12 @@
  * separately, each redaction regex on the same string, so the table shows
  * which rule dominates. Timings are recorded (INFO), not asserted — only the
  * verdict and its determinism are asserted.
+ *
+ * The regex work is synchronous and blocks the worker's event loop; the guard
+ * cost grows quadratically with length (~3 s at 64 Ki, ~56 s at 256 Ki on the
+ * Linux CI class), so above STRESS_MAX_STRING=131072 the vitest worker can miss
+ * its RPC heartbeat and the run exits non-zero even though every assertion
+ * passed and the JSON table was written. Use ≤ 131072 for a clean exit.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
