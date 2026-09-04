@@ -174,26 +174,53 @@ begin
   if not s.premium then raise exception 'lifetime (null expires_at) not premium'; end if;
 end $$;
 
--- 7. Stale reservations (>24h) neither count against the allowance nor can
---    be consumed; the user regains the slot without any sweep having run.
+-- 7. Stale reservations (>24h) do not count against the allowance — the user
+--    regains the slot for reserve/access_state without any sweep having run —
+--    but a rating captured against one is NOT lost: a late sync (device offline
+--    for a day) is still accepted, whether the permit is still 'reserved' or
+--    the hourly sweep already flipped it to released/expired. The lifetime
+--    scored count — not permit age — is what caps free ratings: once the two
+--    late shots are recorded, the fresh reservation hits the backstop.
 reset role;
 insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
 values
   ('30000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-0000000000a2', 'old1', now() - interval '25 hours'),
   ('30000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-0000000000a2', 'old2', now() - interval '25 hours');
+update public.analysis_permits set status = 'released', outcome = 'expired'
+ where id = '30000000-0000-4000-8000-000000000002';
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-0000000000a2';
 do $$
-declare s record; r record; res text;
+declare s record; r record; res text; p record;
 begin
   select * into s from public.access_state();
   if s.reserved_count <> 0 then raise exception 'stale permits counted: %', s; end if;
   select * into r from public.reserve_analysis_permit('fresh1');
   if r.result <> 'accepted' then raise exception 'reserve with stale holds: %', r.result; end if;
+  -- 25h-old, still reserved (sweep has not run yet)
   res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000001', 'scored'));
-  if res <> 'access.permit_expired' then raise exception 'expired permit consumed: %', res; end if;
-  if (select status from public.analysis_permits where id = '30000000-0000-4000-8000-000000000001') <> 'released' then
-    raise exception 'expired permit not released on sync';
+  if res <> 'accepted' then raise exception 'late reserved permit refused: %', res; end if;
+  select * into p from public.analysis_permits where id = '30000000-0000-4000-8000-000000000001';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'late permit not finalized like a fresh one: %/%', p.status, p.outcome;
+  end if;
+  -- swept by expire-stale-analysis-permits before the device came back online
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-000000000009', '30000000-0000-4000-8000-000000000002', 'scored'));
+  if res <> 'accepted' then raise exception 'swept (released/expired) permit refused: %', res; end if;
+  select * into p from public.analysis_permits where id = '30000000-0000-4000-8000-000000000002';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'swept permit not finalized like a fresh one: %/%', p.status, p.outcome;
+  end if;
+  -- a second, different shot on the consumed late permit is refused
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-00000000000a', '30000000-0000-4000-8000-000000000001', 'scored'));
+  if res <> 'access.permit_not_reserved' then raise exception 'late permit backed two shots: %', res; end if;
+  -- both free ratings are now spent: the fresh reservation hits the backstop
+  select * into s from public.access_state();
+  if s.scored_count <> 2 then raise exception 'late syncs must count: %', s; end if;
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-00000000000b', r.permit_id, 'scored'));
+  if res <> 'access.paywall_required' then raise exception 'third scored via fresh permit after late syncs: %', res; end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid()) and result_kind = 'scored') <> 2 then
+    raise exception 'free account exceeded two scored shots';
   end if;
 end $$;
 

@@ -36,6 +36,11 @@
 --      server already holds is 'accepted' even though its permit is consumed
 --      (never a permanent verdict), and the client roles hold no TRUNCATE /
 --      TRIGGER / REFERENCES on any public table
+--   N. offline > 24h durability: a shot backed by a permit this user reserved
+--      is accepted regardless of the permit's age (still reserved, or already
+--      swept to released/expired) and finalized once; the free limit is still
+--      capped by the lifetime scored count; every other permit state keeps its
+--      verdict; the direct-INSERT gate is not widened
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -2141,6 +2146,358 @@ begin
   end if;
 end $$;
 drop table public.m4_probe;
+
+-- ============================================================================
+-- N. offline > 24h: a durable local rating is never dropped from sync
+-- (20260906130000_late_permit_sync_durability.sql, OFF-24H-01)
+-- ============================================================================
+--
+-- A scored rating captured on device holds its reserved permit until the
+-- outbox drains. Before this migration apply_synced_shot() refused a permit
+-- older than 24h (access.permit_expired) and, once the hourly sweep had
+-- flipped it to released/expired, refused it again (permit_not_reserved) —
+-- both permanent verdicts, so the outbox exhausted the row and the rating
+-- vanished from the account. A permit THIS user reserved must back the shot
+-- regardless of age; free ratings stay capped by the lifetime scored count
+-- (H3/J3 backstop), not by permit age. Only 'reserved' (any age) and
+-- released/expired are acceptable backing; every other state keeps its verdict,
+-- and the direct table INSERT gate (section L) stays exactly as strict.
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000016', 'noor@example.com',
+   '{"full_name":"Noor"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000017', 'omar@example.com',
+   '{"full_name":"Omar"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-noor', '00000000-0000-4000-8000-000000000016',
+   '{"sub":"google-sub-noor","email":"noor@example.com"}'),
+  ('apple', 'apple-sub-omar', '00000000-0000-4000-8000-000000000017',
+   '{"sub":"apple-sub-omar","email":"omar@example.com"}');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000017', true, null);
+
+-- Permits as the device left them a day (or more) ago. e1/e3/e5/e7/e8 are
+-- still 'reserved' (sweep not yet run); e2/e4/e6/e9 were swept to
+-- released/expired; ea is a cancelled abstention.
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-000000000016', 'noor-late-1', 'reserved', null,      now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-000000000016', 'noor-late-2', 'released', 'expired', now() - interval '3 days'),
+  ('00000000-0000-4000-8000-0000000000e3', '00000000-0000-4000-8000-000000000016', 'noor-late-3', 'reserved', null,      now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-000000000016', 'noor-late-4', 'released', 'expired', now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-000000000016', 'noor-late-5', 'reserved', null,      now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e6', '00000000-0000-4000-8000-000000000017', 'omar-late-6', 'released', 'expired', now() - interval '3 days'),
+  ('00000000-0000-4000-8000-0000000000e7', '00000000-0000-4000-8000-000000000017', 'omar-late-7', 'reserved', null,      now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e8', '00000000-0000-4000-8000-000000000017', 'omar-late-8', 'reserved', null,      now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000e9', '00000000-0000-4000-8000-000000000017', 'omar-late-9', 'released', 'expired', now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000ea', '00000000-0000-4000-8000-000000000017', 'omar-cancel', 'released', 'cancelled', now() - interval '25 hours');
+
+create function pg_temp.n_shot(p_id uuid, p_permit uuid, p_kind text) returns jsonb
+language sql as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', p_permit,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000016';
+
+-- N0: reserve/access_state semantics are untouched — late holds do not count
+-- as reservations, so the slot is available to reserve again.
+do $$
+declare rec record;
+begin
+  select * into rec from public.access_state();
+  if rec.scored_count <> 0 or rec.reserved_count <> 0 then
+    raise exception 'N0: stale holds must not count as reservations (got %)', rec;
+  end if;
+end $$;
+
+-- N1: a 25h-old permit that is still 'reserved' backs the late sync, and is
+-- finalized exactly as a fresh one (finalized/scored).
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d1',
+    '00000000-0000-4000-8000-0000000000e1', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N1: a late (25h) reserved permit must back its shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e1';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'N1: the late permit must be finalized like a fresh one (got %/%)', p.status, p.outcome;
+  end if;
+  if (select count(*) from public.shots where id = '00000000-0000-4000-8000-0000000000d1') <> 1 then
+    raise exception 'N1: the late shot must be recorded';
+  end if;
+end $$;
+
+-- N2: a permit the hourly sweep already flipped to released/expired backs
+-- the shot too, and ends finalized/scored as well.
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d2',
+    '00000000-0000-4000-8000-0000000000e2', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N2: a swept (released/expired) permit must back its shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e2';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'N2: the swept permit must be finalized like a fresh one (got %/%)', p.status, p.outcome;
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'N2: both late ratings must count toward the lifetime limit (got %)',
+      public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- N3: THE SAFETY ARGUMENT. Both free ratings are spent; a further late permit
+-- — reserved or swept — cannot become a third free rating. The backstop, not
+-- permit age, caps the allowance; the permit is released as free_limit_exceeded.
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d3',
+    '00000000-0000-4000-8000-0000000000e3', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'N3: a late reserved permit past the limit must hit the backstop (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e3';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded' then
+    raise exception 'N3: the refused late permit must be released/free_limit_exceeded (got %/%)', p.status, p.outcome;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d4',
+    '00000000-0000-4000-8000-0000000000e4', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'N3: a swept permit past the limit must hit the backstop (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e4';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded' then
+    raise exception 'N3: the refused swept permit must be released/free_limit_exceeded (got %/%)', p.status, p.outcome;
+  end if;
+  if (select count(*) from public.shots
+      where user_id = (select auth.uid()) and result_kind = 'scored') <> 2 then
+    raise exception 'N3: a free account must never exceed two scored shots';
+  end if;
+end $$;
+
+-- N4: an abstention on a late permit is still free and releases the permit
+-- with its own outcome, exactly as a fresh abstention does.
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d5',
+    '00000000-0000-4000-8000-0000000000e5', 'low_confidence'));
+  if v <> 'accepted' then
+    raise exception 'N4: a late abstention must be accepted (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e5';
+  if p.status <> 'released' or p.outcome <> 'low_confidence' then
+    raise exception 'N4: the late abstention permit must be released/low_confidence (got %/%)', p.status, p.outcome;
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'N4: an abstention must not move the lifetime count';
+  end if;
+end $$;
+
+-- N5: idempotent replay stays first — the late shot replayed against its now
+-- finalized permit is still 'accepted' with one row; a DIFFERENT shot on that
+-- consumed permit, or on a released/free_limit_exceeded one, is refused.
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d1',
+    '00000000-0000-4000-8000-0000000000e1', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N5: replaying the late shot must be accepted (got %)', v;
+  end if;
+  if (select count(*) from public.shots where id = '00000000-0000-4000-8000-0000000000d1') <> 1 then
+    raise exception 'N5: the replay must not duplicate the row';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d6',
+    '00000000-0000-4000-8000-0000000000e1', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'N5: a consumed (finalized) permit must not back a new shot (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d7',
+    '00000000-0000-4000-8000-0000000000e3', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'N5: a released/free_limit_exceeded permit must not back a shot (got %)', v;
+  end if;
+  if exists (select 1 from public.shots
+             where id in ('00000000-0000-4000-8000-0000000000d6',
+                          '00000000-0000-4000-8000-0000000000d7')) then
+    raise exception 'N5: refused writes must leave no row';
+  end if;
+end $$;
+reset role;
+
+-- N6: a member's late permits are accepted too (premium bypasses the
+-- allowance, never the permit), and a released/cancelled permit keeps its
+-- verdict — only reserved and released/expired are acceptable backing.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000017';
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d8',
+    '00000000-0000-4000-8000-0000000000e6', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N6: a member''s swept permit must back its shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e6';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'N6: the member''s swept permit must be finalized (got %/%)', p.status, p.outcome;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000d9',
+    '00000000-0000-4000-8000-0000000000ea', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'N6: a released/cancelled permit must not back a shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000ea';
+  if p.status <> 'released' or p.outcome <> 'cancelled' then
+    raise exception 'N6: the refused cancelled permit must be untouched (got %/%)', p.status, p.outcome;
+  end if;
+end $$;
+
+-- N7: ONE late permit backs ONE shot. Two different shots on the same late
+-- permit — reserved or swept — the second is refused and only one row lands.
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000da',
+    '00000000-0000-4000-8000-0000000000e7', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N7: first shot on the late reserved permit must be accepted (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000db',
+    '00000000-0000-4000-8000-0000000000e7', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'N7: a second shot on the same late permit must be refused (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000dc',
+    '00000000-0000-4000-8000-0000000000e9', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N7: first shot on the swept permit must be accepted (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000dd',
+    '00000000-0000-4000-8000-0000000000e9', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'N7: a second shot on the same swept permit must be refused (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where id in ('00000000-0000-4000-8000-0000000000da',
+                   '00000000-0000-4000-8000-0000000000db',
+                   '00000000-0000-4000-8000-0000000000dc',
+                   '00000000-0000-4000-8000-0000000000dd')) <> 2 then
+    raise exception 'N7: exactly one shot per late permit may persist';
+  end if;
+end $$;
+
+-- N8: the direct-INSERT gate is NOT widened. A client writing public.shots
+-- straight through PostgREST with only a 25h-old reserved permit, or only a
+-- swept one, is still refused (member, so the allowance is not the reason);
+-- the SAME late permit then backs the shot through the RPC.
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000de',
+      '00000000-0000-4000-8000-000000000017',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'N8: a direct scored INSERT backed only by a 25h-old reserved permit must be refused';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000de') then
+    raise exception 'N8: the refused direct row must not persist';
+  end if;
+end $$;
+-- swept-only: drop the reserved hold so the only live-looking permit is the
+-- released/expired one (client role may update its own permit lifecycle columns)
+update public.analysis_permits set status = 'released', outcome = 'expired'
+ where id = '00000000-0000-4000-8000-0000000000e8';
+do $$
+declare v text; p record;
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000df',
+      '00000000-0000-4000-8000-000000000017',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'N8: a direct scored INSERT backed only by a swept permit must be refused';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000df') then
+    raise exception 'N8: the refused direct row must not persist';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000e0',
+    '00000000-0000-4000-8000-0000000000e8', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'N8: the RPC must accept the same swept permit the direct path refused (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000e8';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'N8: the RPC-consumed swept permit must be finalized (got %/%)', p.status, p.outcome;
+  end if;
+end $$;
+reset role;
+
+-- N9: access.permit_expired is retired from apply_synced_shot — no reachable
+-- branch returns it, so the outbox can never exhaust a row on it.
+do $$
+begin
+  if position('access.permit_expired' in pg_get_functiondef('public.apply_synced_shot(jsonb)'::regprocedure)) > 0 then
+    raise exception 'N9: apply_synced_shot must no longer return access.permit_expired';
+  end if;
+end $$;
 
 rollback;
 
