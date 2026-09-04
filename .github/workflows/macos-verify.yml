@@ -1,0 +1,356 @@
+# macOS verification on the self-hosted Apple Silicon runner.
+#
+# What is verified (all on the real Mac, nothing is inferred from Linux):
+#   1. environment — the runner is reachable; Xcode / Swift / SDKs / simulator
+#      runtimes and the Node + Ruby toolchains the iOS build needs; the actual
+#      Xcode project/scheme/targets and SwiftPM package layout are printed.
+#   2. swift-native — the Swift packages that hold the shipping perception code:
+#      native/vision-core builds and its XCTest suite passes on macOS
+#      (`swift test` + `xcodebuild test` for an .xcresult), and the same suite
+#      runs on an iOS simulator. native/swing-lab (macOS executable) builds in
+#      release and runs the REAL Apple Vision pose + trajectory pipeline over a
+#      committed pickleball clip, asserting that poses were actually detected.
+#   3. ios-app — the actual shipping app (apps/mobile/ios/PickleSensei.xcworkspace,
+#      scheme PickleSensei): npm ci, tsc + jest, CocoaPods install, SwiftPM
+#      resolution, `xcodebuild build` (Release, iOS Simulator, embedded JS
+#      bundle, no code signing), then install + launch on a simulator and
+#      verify the process stays alive with no crash report / fatal JS error.
+#
+# The app target is iOS-only (SUPPORTED_PLATFORMS = iphoneos iphonesimulator,
+# no Catalyst); the "macOS target" that exists in this repo is the Swift
+# package layer, which is why it is exercised natively on macOS above.
+#
+# Triggers: manual dispatch and pushes to main touching native/iOS code. No
+# pull_request trigger on purpose — this is a PUBLIC repo and the runner is a
+# personal machine; fork PRs must never execute on it.
+name: macOS Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: "Wipe the persistent DerivedData / SwiftPM caches before building"
+        type: boolean
+        default: false
+      launch_check:
+        description: "Install + launch the app on a simulator after building"
+        type: boolean
+        default: true
+      js_checks:
+        description: "Run tsc + jest for apps/mobile on the Mac"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - "apps/mobile/ios/**"
+      - "apps/mobile/package.json"
+      - "apps/mobile/package-lock.json"
+      - "apps/mobile/Gemfile*"
+      - "tools/macos-ci/**"
+      - ".github/workflows/macos-verify.yml"
+
+# One physical runner: never let two runs of the same ref fight over it.
+concurrency:
+  group: macos-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  CI: "true"
+  # Persistent per-machine cache (outside the checkout, survives `clean: true`).
+  PICKLE_CI_CACHE: ${{ github.workspace }}/../pickle-ci-cache
+  ARTIFACTS: macos-ci-artifacts
+
+jobs:
+  environment:
+    name: Inspect Mac / Xcode environment
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect runner environment
+        run: |
+          chmod +x tools/macos-ci/*.sh tools/macos-ci/*.py
+          tools/macos-ci/inspect-environment.sh "$ARTIFACTS/environment.txt"
+
+      - name: Identify the Xcode configuration of Pickle Sensei
+        run: |
+          set -o pipefail
+          {
+            echo "## Xcode configuration"
+            echo "workspace: apps/mobile/ios/PickleSensei.xcworkspace (PickleSensei.xcodeproj + Pods/Pods.xcodeproj)"
+            xcodebuild -list -project apps/mobile/ios/PickleSensei.xcodeproj 2>&1
+            echo "--- native/vision-core (SwiftPM) ---"
+            (cd native/vision-core && swift package describe --type json | "$GITHUB_WORKSPACE/tools/macos-ci/describe-package.py")
+            echo "--- native/swing-lab (SwiftPM executable, macOS) ---"
+            (cd native/swing-lab && swift package describe --type json | "$GITHUB_WORKSPACE/tools/macos-ci/describe-package.py")
+          } | tee -a "$ARTIFACTS/environment.txt"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Runner environment"
+            echo '```'
+            sw_vers
+            xcodebuild -version
+            swift --version 2>&1 | head -1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: environment-report
+          path: macos-ci-artifacts/
+          if-no-files-found: warn
+
+  swift-native:
+    name: Swift packages — macOS build, XCTest, Apple Vision pipeline
+    needs: environment
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare
+        run: |
+          mkdir -p "$ARTIFACTS" "$PICKLE_CI_CACHE"
+          chmod +x tools/macos-ci/*.sh tools/macos-ci/*.py
+          if [ "${{ inputs.clean_build }}" = "true" ]; then
+            echo "clean_build requested: wiping SwiftPM caches"
+            rm -rf "$PICKLE_CI_CACHE/swiftpm-derived" native/vision-core/.build native/swing-lab/.build
+          fi
+
+      - name: vision-core — swift build (macOS)
+        working-directory: native/vision-core
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-swift-build.log" | tail -40
+
+      - name: vision-core — swift test (macOS, XCTest)
+        working-directory: native/vision-core
+        run: |
+          set -o pipefail
+          swift test --parallel --xunit-output "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xunit.xml" 2>&1 \
+            | tee "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-swift-test.log" | tail -60
+
+      - name: vision-core — xcodebuild test (macOS, .xcresult)
+        working-directory: native/vision-core
+        run: |
+          set -o pipefail
+          xcodebuild -list 2>&1 | tee "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xcodebuild-list.txt"
+          SCHEME="PickleVisionCore-Package"
+          grep -q "$SCHEME" "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xcodebuild-list.txt" || SCHEME="PickleVisionCore"
+          echo "scheme: $SCHEME"
+          RESULT="$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-macos.xcresult"
+          rm -rf "$RESULT"
+          xcodebuild test \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" \
+            -resultBundlePath "$RESULT" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | tee "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xcodebuild-macos.log" \
+            | { grep -E 'Test Suite|Test Case.*(passed|failed)|Executed|error:|\*\* TEST' || true; } | tail -60
+
+      - name: vision-core — xcodebuild test (iOS Simulator, .xcresult)
+        working-directory: native/vision-core
+        run: |
+          set -o pipefail
+          UDID="$("$GITHUB_WORKSPACE/tools/macos-ci/select-simulator.sh" --boot)"
+          SCHEME="PickleVisionCore-Package"
+          grep -q "$SCHEME" "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xcodebuild-list.txt" || SCHEME="PickleVisionCore"
+          RESULT="$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-ios-simulator.xcresult"
+          rm -rf "$RESULT"
+          xcodebuild test \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" \
+            -resultBundlePath "$RESULT" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | tee "$GITHUB_WORKSPACE/$ARTIFACTS/vision-core-xcodebuild-ios.log" \
+            | { grep -E 'Test Suite|Test Case.*(passed|failed)|Executed|error:|\*\* TEST' || true; } | tail -60
+
+      - name: swing-lab — swift build -c release (macOS executable)
+        working-directory: native/swing-lab
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee "$GITHUB_WORKSPACE/$ARTIFACTS/swing-lab-swift-build.log" | tail -20
+          BIN="$(swift build -c release --show-bin-path)/swing-lab"
+          ls -la "$BIN"
+          file "$BIN"
+          echo "SWING_LAB_BIN=$BIN" >> "$GITHUB_ENV"
+
+      - name: swing-lab — run the real Apple Vision pose pipeline on a committed clip
+        run: |
+          set -o pipefail
+          CLIP="datasets/pickleball/fresh-candidates/va-O1dLhGGPErc.mp4"
+          OUT="$ARTIFACTS/swing-lab-extract"
+          rm -rf "$OUT"
+          ls -la "$CLIP"
+          time "$SWING_LAB_BIN" extract "$CLIP" --out "$OUT" 2>&1 | tee "$ARTIFACTS/swing-lab-extract.log"
+          ls -la "$OUT"
+          cat "$OUT/extract-meta.json"
+          echo
+          tools/macos-ci/check-swing-lab-extract.py "$OUT" | tee "$ARTIFACTS/swing-lab-extract-summary.txt"
+
+      - name: Summarize test results
+        if: always()
+        run: |
+          {
+            echo "### Swift packages (macOS)"
+            tools/macos-ci/xcresult-summary.py "$ARTIFACTS"/*.xcresult || true
+            if [ -f "$ARTIFACTS/swing-lab-extract-summary.txt" ]; then
+              echo "- $(cat "$ARTIFACTS/swing-lab-extract-summary.txt")"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-native-results
+          path: macos-ci-artifacts/
+          if-no-files-found: warn
+
+  ios-app:
+    name: Pickle Sensei app — iOS Simulator build + launch
+    needs: environment
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 120
+    env:
+      WORKSPACE: apps/mobile/ios/PickleSensei.xcworkspace
+      SCHEME: PickleSensei
+      CONFIGURATION: Release
+      BUNDLE_ID: com.picklesensei
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare
+        run: |
+          mkdir -p "$ARTIFACTS" "$PICKLE_CI_CACHE"
+          chmod +x tools/macos-ci/*.sh tools/macos-ci/*.py
+          if [ "${{ inputs.clean_build }}" = "true" ]; then
+            echo "clean_build requested: wiping DerivedData cache"
+            rm -rf "$PICKLE_CI_CACHE/app-derived"
+          fi
+
+      - name: Node 22 (apps/mobile engines >= 22.11)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: npm ci (apps/mobile — npm, NOT pnpm)
+        working-directory: apps/mobile
+        run: |
+          node --version
+          npm --version
+          npm ci --no-audit --no-fund
+
+      - name: TypeScript + Jest (apps/mobile)
+        if: ${{ inputs.js_checks != false }}
+        working-directory: apps/mobile
+        run: |
+          set -o pipefail
+          npx tsc --noEmit
+          npx jest --ci --silent 2>&1 | tee "$GITHUB_WORKSPACE/$ARTIFACTS/jest.log" | tail -30
+
+      - name: CocoaPods install
+        run: |
+          set -o pipefail
+          tools/macos-ci/pod-install.sh 2>&1 | tee "$ARTIFACTS/pod-install.log" | tail -40
+
+      - name: Pin node for Xcode script phases
+        run: |
+          # The "Bundle React Native code and images" phase resolves node via
+          # ios/.xcode.env(.local); make sure it sees the setup-node binary.
+          echo "export NODE_BINARY=$(command -v node)" > apps/mobile/ios/.xcode.env.local
+          cat apps/mobile/ios/.xcode.env.local
+
+      - name: xcodebuild -list (workspace, schemes, targets)
+        run: |
+          set -o pipefail
+          xcodebuild -list -workspace "$WORKSPACE" 2>&1 | tee "$ARTIFACTS/xcodebuild-list.txt" | head -60
+
+      - name: Resolve Swift package dependencies (supabase-swift)
+        run: |
+          set -o pipefail
+          xcodebuild -resolvePackageDependencies \
+            -workspace "$WORKSPACE" -scheme "$SCHEME" \
+            -derivedDataPath "$PICKLE_CI_CACHE/app-derived" 2>&1 \
+            | tee "$ARTIFACTS/xcodebuild-resolve.log" | tail -30
+
+      - name: xcodebuild build (Release, iOS Simulator, arm64, unsigned)
+        run: |
+          set -o pipefail
+          RESULT="$ARTIFACTS/PickleSensei-build.xcresult"
+          rm -rf "$RESULT"
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$PICKLE_CI_CACHE/app-derived" \
+            -resultBundlePath "$RESULT" \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
+            | tee "$ARTIFACTS/xcodebuild-build.log" \
+            | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; } | tail -80
+          APP="$PICKLE_CI_CACHE/app-derived/Build/Products/$CONFIGURATION-iphonesimulator/PickleSensei.app"
+          ls -la "$APP"
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c 'Print' "$APP/Info.plist" | { grep -E 'CFBundleIdentifier|CFBundleShortVersionString|CFBundleVersion|MinimumOSVersion|DTSDKName|DTXcode ' || true; }
+          [ -f "$APP/main.jsbundle" ] || { echo "::error::main.jsbundle missing — the React Native bundle phase did not run"; exit 1; }
+
+      - name: Launch the app on a simulator (alive check, screenshots, logs)
+        if: ${{ inputs.launch_check != false }}
+        run: |
+          tools/macos-ci/simulator-launch-check.sh "$APP_PATH" "$BUNDLE_ID" "$ARTIFACTS/launch" 25
+
+      - name: Collect app bundle metadata
+        if: always()
+        run: |
+          if [ -n "${APP_PATH:-}" ] && [ -d "$APP_PATH" ]; then
+            cp "$APP_PATH/Info.plist" "$ARTIFACTS/PickleSensei-Info.plist"
+            du -sh "$APP_PATH" | tee "$ARTIFACTS/app-size.txt"
+            find "$APP_PATH" -maxdepth 2 \( -name '*.framework' -o -name '*.bundle' \) | sort > "$ARTIFACTS/app-contents.txt" || true
+          fi
+          # Keep the workspace clean for the next run (untracked local env file).
+          rm -f apps/mobile/ios/.xcode.env.local
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Pickle Sensei app (iOS Simulator)"
+            echo "- workspace: \`$WORKSPACE\` scheme: \`$SCHEME\` configuration: \`$CONFIGURATION\`"
+            if [ -n "${APP_PATH:-}" ] && [ -d "$APP_PATH" ]; then
+              SIZE="$(cut -f1 < "$ARTIFACTS/app-size.txt" 2>/dev/null || true)"
+              if [ -f "$APP_PATH/main.jsbundle" ]; then JSB=embedded; else JSB=MISSING; fi
+              echo "- built: \`$(basename "$APP_PATH")\` $SIZE (main.jsbundle $JSB)"
+            else
+              echo "- built: **no app bundle produced**"
+            fi
+            if [ -f "$ARTIFACTS/launch/launch-summary.txt" ]; then
+              echo "- launch check:"; echo '```'; cat "$ARTIFACTS/launch/launch-summary.txt"; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-app-results
+          path: macos-ci-artifacts/
+          if-no-files-found: warn
