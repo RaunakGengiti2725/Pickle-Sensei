@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# PATH shim for the GitHub CLI: logs every invocation to $SHIM_LOG and answers
+# with canned data so scripts/mac-full-verify.sh --remote runs to completion
+# without any network call. `gh run list` reports a run for whatever HEAD sha
+# the caller filters on; `gh run watch` exits ${SHIM_GH_WATCH_RC:-0}.
+set -uo pipefail
+printf 'gh %s\n' "$*" >>"${SHIM_LOG:-/dev/stderr}"
+case "${1:-} ${2:-}" in
+  "run list")
+    # The caller pipes through --jq '.[] | select(.headSha=="<sha>") | .databaseId';
+    # with --json + --jq gh prints the jq result, so emit the id directly.
+    echo "${SHIM_GH_RUN_ID:-424242}"
+    ;;
+  "run view")
+    if printf '%s\n' "$@" | grep -q -- '--jq'; then
+      echo "https://github.invalid/shim/actions/runs/${SHIM_GH_RUN_ID:-424242}"
+    else
+      printf '{"databaseId":%s,"status":"completed","conclusion":"success","url":"https://github.invalid/shim","headSha":"shim"}\n' "${SHIM_GH_RUN_ID:-424242}"
+    fi
+    ;;
+  "run watch") exit "${SHIM_GH_WATCH_RC:-0}" ;;
+  "run download") exit 0 ;;
+  *) exit 0 ;;
+esac

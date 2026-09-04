@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# PATH shim: forwards every git subcommand to the real git EXCEPT `push`, which
+# is logged to $SHIM_LOG and answered with exit 0 without touching any remote.
+# Exists so scripts/mac-full-verify.sh --remote can be exercised on Linux
+# without ever creating a ci/mac-* branch or waking the M4 runner.
+set -uo pipefail
+REAL_GIT="${REAL_GIT:-$(PATH="${PATH#*:}" command -v git)}"
+if [ "${1:-}" = "push" ]; then
+  printf 'git %s\n' "$*" >>"${SHIM_LOG:-/dev/stderr}"
+  exit 0
+fi
+exec "$REAL_GIT" "$@"
