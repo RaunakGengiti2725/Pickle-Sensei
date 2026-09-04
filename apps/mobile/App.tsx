@@ -121,6 +121,7 @@ function Gate() {
   const hydrateError = useAppStore(s => s.hydrateError);
   const hydrateApp = useAppStore(s => s.hydrate);
   const authHydrated = useAuthStore(s => s.hydrated);
+  const authHydration = useAuthStore(s => s.hydration);
   const session = useAuthStore(s => s.session);
   const hydrateAuth = useAuthStore(s => s.hydrate);
   const [preAuthStage, setPreAuthStage] = useState<PreAuthStage>('welcome');
@@ -139,10 +140,14 @@ function Gate() {
         ? canonicalDataOwner(session.canonicalAppUserId)
         : SIGNED_OUT_DATA_OWNER;
 
+  // Re-keyed on each settled auth hydration as well: a re-entrant
+  // hydrateAuth() (remount, error-boundary retry) moves the active owner
+  // while an app hydration is in flight, which then bails on the owner
+  // mismatch, and may settle on the same desiredOwner as before.
   useEffect(() => {
     if (!desiredOwner) return;
     void hydrateApp();
-  }, [desiredOwner, hydrateApp]);
+  }, [desiredOwner, authHydration, hydrateApp]);
 
   // Stamp stability events with the pseudonymous data-owner key (never an
   // email or device id) once it is known; the session key stays the run's.

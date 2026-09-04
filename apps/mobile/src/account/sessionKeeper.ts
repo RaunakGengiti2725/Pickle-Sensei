@@ -20,14 +20,31 @@ import {
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
  * out; they just schedule another try.
+ *
+ * Refresh tokens are single-use: once a request is on the wire the server
+ * may already have spent the token, so its outcome can never be dropped.
+ * A rotation that lands after `stopSessionKeeper()` is still delivered
+ * (`onRotated` with `live: false` — persist it, nothing more), and a keeper
+ * started for a token whose exchange is still in flight joins that exchange
+ * instead of presenting the spent token a second time.
  */
+
+export interface RotationDelivery {
+  /** false ⇒ the keeper was stopped while this exchange was in flight: the
+   * caller must still store the rotated token, but the keeper schedules
+   * nothing further. */
+  live: boolean;
+}
 
 export interface SessionKeeperInput {
   apiBaseUrl: string;
   refreshToken: string;
   /** null ⇒ no valid bearer yet: refresh right away. */
   bearerExpiresAtMs: number | null;
-  onRotated: (tokens: RefreshedTokens) => void | Promise<void>;
+  onRotated: (
+    tokens: RefreshedTokens,
+    delivery: RotationDelivery,
+  ) => void | Promise<void>;
   onRevoked: () => void | Promise<void>;
   /** A refresh failed for a transient reason and a retry is scheduled. */
   onDeferred?: (error: unknown) => void;
@@ -48,8 +65,21 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
 let refreshNow: (() => void) | null = null;
 
-/** Stops all future work synchronously; an in-flight refresh's result is
- * dropped when it lands. */
+/** The refresh exchange currently on the wire. Cleared when it settles. */
+interface RefreshExchange {
+  spentToken: string;
+  result: Promise<RefreshedTokens>;
+  /** The keeper generation that delivers the outcome; a keeper started for
+   * the same token while the exchange is in flight takes this over. null ⇒
+   * abandoned, nobody delivers it. */
+  ownerGeneration: number | null;
+}
+let inflightExchange: RefreshExchange | null = null;
+
+/** Stops all future work synchronously (timers, foreground checks, new
+ * refreshes). An exchange already in flight still delivers its outcome: a
+ * rotation is reported through `onRotated` with `live: false`, a refusal or
+ * transient failure is dropped. */
 export function stopSessionKeeper(): void {
   generation += 1;
   if (timer) clearTimeout(timer);
@@ -57,6 +87,15 @@ export function stopSessionKeeper(): void {
   removeAppStateListener?.();
   removeAppStateListener = null;
   refreshNow = null;
+}
+
+/** `stopSessionKeeper()` for an account whose tokens no longer matter here
+ * (sign-out, deletion, revocation): an exchange still in flight is abandoned
+ * — its outcome is dropped and no later keeper joins it. */
+export function discardSessionKeeper(): void {
+  stopSessionKeeper();
+  if (inflightExchange) inflightExchange.ownerGeneration = null;
+  inflightExchange = null;
 }
 
 /**
@@ -104,19 +143,32 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   const refresh = async () => {
     if (!live() || inflight) return;
     inflight = true;
+    const exchange: RefreshExchange =
+      inflightExchange?.spentToken === refreshToken
+        ? inflightExchange
+        : {
+            spentToken: refreshToken,
+            result: refreshApiSession(
+              { apiBaseUrl: input.apiBaseUrl, refreshToken },
+              { fetchFn: input.fetchFn },
+            ),
+            ownerGeneration: myGeneration,
+          };
+    exchange.ownerGeneration = myGeneration;
+    inflightExchange = exchange;
+    const owner = () => exchange.ownerGeneration === myGeneration;
     try {
-      const tokens = await refreshApiSession(
-        { apiBaseUrl: input.apiBaseUrl, refreshToken },
-        { fetchFn: input.fetchFn },
-      );
-      if (!live()) return;
+      const tokens = await exchange.result;
+      if (!owner()) return;
       refreshToken = tokens.refreshToken;
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
       failedAttempts = 0;
-      await input.onRotated(tokens);
+      // The server has already spent the old token: the rotation is delivered
+      // even if this keeper was stopped while it was on the wire.
+      await input.onRotated(tokens, { live: live() });
       if (live()) scheduleAheadOfExpiry();
     } catch (error) {
-      if (!live()) return;
+      if (!owner() || !live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
         stopSessionKeeper();
         await input.onRevoked();
@@ -127,6 +179,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       schedule(retryDelayMs(failedAttempts));
     } finally {
       inflight = false;
+      if (inflightExchange === exchange) inflightExchange = null;
     }
   };
 

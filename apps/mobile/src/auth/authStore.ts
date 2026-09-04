@@ -15,9 +15,11 @@ import {
 } from '../account/apiSession';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
 import {
+  discardSessionKeeper,
   refreshSessionNow,
   startSessionKeeper,
   stopSessionKeeper,
+  type RotationDelivery,
 } from '../account/sessionKeeper';
 import {
   revokeApiSession,
@@ -109,6 +111,10 @@ interface NativePickleAuth {
 
 interface AuthState {
   hydrated: boolean;
+  /** Counts settled hydrate() runs. A re-entrant hydrate (Gate remount)
+   * leaves `hydrated` true and `session` unchanged, so owner-scoped stores
+   * key their re-hydration on this instead. */
+  hydration: number;
   session: AuthSession | null;
   busy: boolean;
   error: AuthError | null;
@@ -195,12 +201,22 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
   }
 }
 
+/** Tears the account runtime down for a hydrate that will rebuild it: a
+ * refresh already in flight stays deliverable (its rotation is persisted and
+ * the rebuilt keeper joins it). */
 function clearSyncedRuntime(): void {
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+}
+
+/** Tears the account runtime down for good (sign-out, guest, deletion,
+ * revocation): a refresh in flight is abandoned with it. */
+function discardSyncedRuntime(): void {
+  discardSessionKeeper();
+  clearSyncedRuntime();
 }
 
 /**
@@ -254,6 +270,30 @@ async function persistSession(
   });
 }
 
+/** Vault writes in flight. Rotations are persisted in the order they landed,
+ * and a hydrate never reads the vault while one is still being written — the
+ * rotated token is the only one the server still accepts. */
+let vaultWrites: Promise<void> = Promise.resolve();
+
+function queuePersistSession(
+  session: AuthSession,
+  apiSession: ApiSession,
+): Promise<void> {
+  vaultWrites = vaultWrites.then(() => persistSession(session, apiSession));
+  return vaultWrites;
+}
+
+/** The vault record as of the last completed write (re-reads if a write
+ * landed while the read was in flight). */
+async function loadSettledPersistedSession(): Promise<PersistedSession | null> {
+  for (;;) {
+    const writes = vaultWrites;
+    await writes;
+    const persisted = await loadPersistedSession();
+    if (vaultWrites === writes) return persisted;
+  }
+}
+
 /**
  * The session died server-side (refresh token revoked or rotated away, or
  * the account is gone): the only implicit sign-out in the app. Everything
@@ -261,7 +301,7 @@ async function persistSession(
  * sign-in is required to come back.
  */
 async function dropRevokedSession(): Promise<void> {
-  clearSyncedRuntime();
+  discardSyncedRuntime();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   useAuthStore.setState({ session: null, error: null, busy: false });
   await clearPersistedSession();
@@ -270,15 +310,19 @@ async function dropRevokedSession(): Promise<void> {
 }
 
 /**
- * Applies rotated tokens for the signed-in account: updates the live
- * ApiSession (or installs the first one of this run when the launch refresh
- * only landed later), then re-persists the rotated refresh token. Ignored if
- * the account is no longer the signed-in one.
+ * Applies rotated tokens for the signed-in account: re-persists the rotated
+ * refresh token, and — while the keeper that obtained them is live — updates
+ * the ApiSession (or installs the first one of this run when the launch
+ * refresh only landed later). A rotation delivered by a stopped keeper (a
+ * re-entrant hydrate stopped it mid-exchange) is persisted only: the
+ * hydrate in progress owns the runtime and will read the rotated token.
+ * Ignored if the account is no longer the signed-in one.
  */
 function adoptRotatedTokens(
   session: AuthSession,
   apiBaseUrl: string,
   tokens: RefreshedTokens,
+  delivery: RotationDelivery,
 ): void {
   const canonicalAppUserId = session.canonicalAppUserId;
   if (
@@ -296,12 +340,13 @@ function adoptRotatedTokens(
     refreshToken: tokens.refreshToken,
     bearerExpiresAtMs: tokens.bearerExpiresAtMs,
   };
+  void queuePersistSession(session, next);
+  if (!delivery.live) return;
   if (getApiSession()?.canonicalAppUserId === canonicalAppUserId) {
     establishApiSession(next);
   } else {
     installApiSession(next);
   }
-  void persistSession(session, next);
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
@@ -322,8 +367,8 @@ function keepSessionAlive(
     apiBaseUrl: apiSession.apiBaseUrl,
     refreshToken: apiSession.refreshToken,
     bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
-    onRotated: tokens => {
-      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+    onRotated: (tokens, delivery) => {
+      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens, delivery);
       onOutcome?.('online');
     },
     onRevoked: async () => {
@@ -379,6 +424,9 @@ function sessionFromPersisted(persisted: PersistedSession): AuthSession {
  * signed in with local data while the refresh keeps going in the background
  * (the keeper adopts the tokens when they land). */
 const LAUNCH_REFRESH_WAIT_MS = 8_000;
+
+/** hydrate() calls so far; the newest run is the one whose result stands. */
+let hydrateRuns = 0;
 
 /**
  * Brings a persisted session back: the user is signed in from the Keychain
@@ -540,12 +588,26 @@ function handleApiUnauthorized(expired: ApiSession): void {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   hydrated: false,
+  hydration: 0,
   session: null,
   busy: false,
   error: null,
   deletionCleanup: null,
 
   hydrate: async () => {
+    hydrateRuns += 1;
+    const run = hydrateRuns;
+    // Every run publishes what it read (all runs read the same vault, and the
+    // launch must not wait for a re-entrant run's own refresh budget), but
+    // only the newest run announces a settled hydration: the Gate re-drives
+    // owner-scoped stores once the final owner is in place, not against the
+    // transient one an older run may have left.
+    const settle = (patch: Partial<Pick<AuthState, 'session'>>) =>
+      set(state => ({
+        ...patch,
+        hydrated: true,
+        hydration: run === hydrateRuns ? state.hydration + 1 : state.hydration,
+      }));
     clearSyncedRuntime();
     try {
       const db = getDb();
@@ -557,7 +619,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const raw = await getKv(db, LOCAL_MODE_KV_KEY);
       if (raw === LOCAL_GUEST_VALUE) {
         setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
+        settle({ session: localGuestSession() });
         return;
       }
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
@@ -565,11 +627,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // signed in across relaunches, backgrounding and reboots, for any
       // provider, until they sign out or the server refuses the refresh
       // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
+      const persisted = await loadSettledPersistedSession();
       if (persisted) {
         const outcome = await restorePersistedSession(persisted);
         if (outcome !== 'revoked') {
-          set({ hydrated: true });
+          settle({});
           return;
         }
       }
@@ -585,7 +647,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const session =
             await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
           if (session) {
-            set({ session, hydrated: true });
+            settle({ session });
             return;
           }
         } catch {
@@ -596,11 +658,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
         }
       }
-      set({ session: null, hydrated: true });
+      settle({ session: null });
     } catch {
       clearSyncedRuntime();
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ session: null, hydrated: true });
+      settle({ session: null });
     }
   },
 
@@ -697,7 +759,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   continueAsGuest: async () => {
-    clearSyncedRuntime();
+    discardSyncedRuntime();
     const session = localGuestSession();
     await persistLocalGuest(true);
     setActiveDataOwner(GUEST_DATA_OWNER);
@@ -707,11 +769,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     const provider = get().session?.provider;
     const apiSession = getApiSession();
-    clearSyncedRuntime();
+    discardSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false });
     // The persisted session goes first: whatever else fails below, the next
-    // launch must not restore an account the user just signed out of.
+    // launch must not restore an account the user just signed out of. A
+    // rotation still being written must land before the clear, not after.
+    await vaultWrites;
     await clearPersistedSession();
     await persistLocalGuest(false);
     // Explicit sign-out always disarms the silent restore on the next launch.
@@ -736,7 +800,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const deletedOwner = session?.canonicalAppUserId
       ? canonicalDataOwner(session.canonicalAppUserId)
       : null;
-    clearSyncedRuntime();
+    discardSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false, deletionCleanup: null });
     // The account (and every server-side session) is already gone; the

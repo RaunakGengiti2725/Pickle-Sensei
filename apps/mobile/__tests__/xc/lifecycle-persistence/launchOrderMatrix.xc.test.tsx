@@ -258,7 +258,7 @@ import {
   clearApiSession,
   getApiSession,
 } from '../../../src/account/apiSession';
-import { stopSessionKeeper } from '../../../src/account/sessionKeeper';
+import { discardSessionKeeper } from '../../../src/account/sessionKeeper';
 import { clearSyncRuntime } from '../../../src/data/syncRuntime';
 import {
   SIGNED_OUT_DATA_OWNER,
@@ -995,10 +995,11 @@ let processResetting = false;
 
 function resetProcessState(): void {
   // Equivalent of the OS killing the process: every in-memory singleton is
-  // gone, only Keychain + SQLite survive.
+  // gone (a refresh request on the wire with it), only Keychain + SQLite
+  // survive.
   processResetting = true;
   clearSyncRuntime();
-  stopSessionKeeper();
+  discardSessionKeeper();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   useAuthStore.setState({
@@ -1416,7 +1417,7 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
   await Promise.all(secondHydratePromises);
   for (const unsubscribe of unsubscribers) unsubscribe();
   clearSyncRuntime();
-  stopSessionKeeper();
+  discardSessionKeeper();
   clearApiSession();
 
   // ── Oracle.
