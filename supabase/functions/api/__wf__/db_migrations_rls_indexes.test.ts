@@ -1,9 +1,10 @@
 // Static pins over the migration chain in supabase/migrations. The live
 // behaviour (grant layer, quota, planner, identity ledger) is asserted by
-// supabase/tests/security_regression.sql cases H7, I1–I3 and J1–J9 against a
-// real Postgres; this suite guards the chain itself so a later migration
-// cannot quietly reopen a closed path, drop a load-bearing index, or recreate
-// a free-rating decision point on the raw per-account count.
+// supabase/tests/security_regression.sql cases H7, I1–I3, J1–J11, K1–K6 and
+// L1–L3 against a real Postgres; this suite guards the chain itself so a
+// later migration cannot quietly reopen a closed path, drop a load-bearing
+// index, recreate a free-rating decision point on the raw per-account count,
+// or drop the table-level permit gate / permit state machine.
 //
 //   deno test --no-config --allow-read supabase/functions/api/__wf__/
 
@@ -18,6 +19,34 @@ const CASCADE_USER_INDEXES = "20260902130100_cascade_user_indexes.sql";
 const PERMITS_SWEEP_INDEX = "20260902130200_permits_reserved_sweep_index.sql";
 const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
+const IDENTITY_LINK_LEDGER = "20260904140000_ledger_backfill_on_identity_link.sql";
+const SHOTS_INSERT_REQUIRES_PERMIT = "20260904140100_shots_insert_requires_permit.sql";
+const PERMIT_STATUS_TRANSITIONS = "20260904140200_permit_status_transitions.sql";
+
+/** Every trigger that writes public.free_rating_ledger. The scored-shot writer
+ * covers the identities linked at the moment a rating is spent; the identity-
+ * link writer covers an identity linked afterwards (otherwise delete +
+ * re-sign-in with the late-linked provider starts the free ratings over). */
+const LEDGER_WRITING_TRIGGERS: ReadonlyArray<{
+  trigger: string;
+  create: string;
+  fn: string;
+  migration: string;
+}> = [
+  {
+    trigger: "shots_record_free_rating_ledger",
+    create:
+      "create trigger shots_record_free_rating_ledger after insert or update of result_kind on public.shots",
+    fn: "record_scored_shot_in_ledger",
+    migration: IDENTITY_LEDGER,
+  },
+  {
+    trigger: "identities_sync_free_rating_ledger",
+    create: "create trigger identities_sync_free_rating_ledger after insert on auth.identities",
+    fn: "sync_free_rating_ledger_on_identity_link",
+    migration: IDENTITY_LINK_LEDGER,
+  },
+];
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -223,6 +252,158 @@ Deno.test("permit sweep: the pg_cron predicate and the partial index stay in ste
 });
 
 Deno.test(
+  "shots: a scored INSERT is gated at the table (permit + lifetime limit), not only inside the RPC",
+  async () => {
+    const chain = await loadChain();
+    const gate = chain.find((m) => m.file === SHOTS_INSERT_REQUIRES_PERMIT);
+    ok(gate, `${SHOTS_INSERT_REQUIRES_PERMIT} must exist in the migration chain`);
+
+    const create = gate.statements.find((s) =>
+      s.startsWith("create trigger shots_insert_requires_permit "),
+    );
+    ok(create, "the gate migration must create shots_insert_requires_permit on public.shots");
+    ok(
+      create.includes(" before insert on public.shots ") &&
+        create.endsWith("for each row execute function public.enforce_scored_shot_permit()"),
+      `the gate must be a BEFORE INSERT row trigger running enforce_scored_shot_permit(): ${create}`,
+    );
+
+    const bodies = functionBodies(gate.raw, "enforce_scored_shot_permit");
+    ok(bodies.length === 1, "the gate migration must define public.enforce_scored_shot_permit()");
+    const body = bodies[0];
+    ok(body.includes("set search_path = ''"), "the gate must pin search_path");
+    ok(
+      body.includes("public.lifetime_scored_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(body),
+      "the gate must count through the identity ledger, never the raw per-account count",
+    );
+    ok(
+      body.includes("from public.analysis_permits") && body.includes("status = 'reserved'"),
+      "the gate must require a reserved permit",
+    );
+    ok(
+      body.includes("pg_advisory_xact_lock(public.access_lock_key("),
+      "the gate must serialize under the shared per-user access lock",
+    );
+    ok(
+      body.includes("errcode = 'insufficient_privilege'"),
+      "a refused scored write must surface as 42501",
+    );
+    ok(
+      gate.statements.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "enforce_scored_shot_permit must not be client-executable",
+    );
+
+    const check = gate.statements.find(
+      (s) =>
+        s.startsWith("alter table public.shots add constraint unscored_shots_have_no_score check") ||
+        s.includes("add constraint unscored_shots_have_no_score check"),
+    );
+    ok(check, "the gate migration must add the unscored_shots_have_no_score CHECK");
+    ok(
+      /result_kind = 'scored' or overall_score is null/.test(check),
+      `low_confidence rows must not carry a score: ${check}`,
+    );
+
+    for (const migration of after(chain, SHOTS_INSERT_REQUIRES_PERMIT)) {
+      for (const statement of migration.statements) {
+        ok(
+          !(
+            statement.startsWith("drop trigger") &&
+            statement.includes("shots_insert_requires_permit") &&
+            !migration.statements.some((s) =>
+              s.startsWith("create trigger shots_insert_requires_permit "),
+            )
+          ),
+          `${migration.file} drops shots_insert_requires_permit without recreating it`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter table public.shots") &&
+            /disable trigger (all|user|shots_insert_requires_permit)\b/.test(statement)
+          ),
+          `${migration.file} disables the shots insert gate: ${statement}`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter table public.shots drop constraint") &&
+            statement.includes("unscored_shots_have_no_score")
+          ),
+          `${migration.file} drops unscored_shots_have_no_score`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test("permits: terminal statuses are locked by a BEFORE UPDATE trigger", async () => {
+  const chain = await loadChain();
+  const lock = chain.find((m) => m.file === PERMIT_STATUS_TRANSITIONS);
+  ok(lock, `${PERMIT_STATUS_TRANSITIONS} must exist in the migration chain`);
+
+  const create = lock.statements.find((s) =>
+    s.startsWith("create trigger analysis_permits_terminal_lock "),
+  );
+  ok(create, "the transitions migration must create analysis_permits_terminal_lock");
+  ok(
+    create.includes(" before update ") &&
+      create.includes(" on public.analysis_permits ") &&
+      create.endsWith(
+        "for each row execute function public.reject_terminal_permit_transition()",
+      ),
+    `the lock must be a BEFORE UPDATE row trigger on public.analysis_permits: ${create}`,
+  );
+
+  const bodies = functionBodies(lock.raw, "reject_terminal_permit_transition");
+  ok(bodies.length === 1, "the transitions migration must define reject_terminal_permit_transition()");
+  const body = bodies[0];
+  ok(body.includes("set search_path = ''"), "the lock must pin search_path");
+  ok(
+    body.includes("old.status <> 'reserved'") || body.includes("old.status in ("),
+    "the lock must key off the OLD (terminal) status",
+  );
+  ok(
+    body.includes("new.status is distinct from old.status") &&
+      body.includes("new.outcome is distinct from old.outcome"),
+    "the lock must reject both a status change and an outcome change once terminal",
+  );
+  ok(
+    body.includes("errcode = 'insufficient_privilege'"),
+    "a refused permit transition must surface as 42501",
+  );
+  ok(
+    lock.statements.includes(
+      "revoke execute on function public.reject_terminal_permit_transition() from public, anon, authenticated",
+    ),
+    "reject_terminal_permit_transition must not be client-executable",
+  );
+
+  for (const migration of after(chain, PERMIT_STATUS_TRANSITIONS)) {
+    for (const statement of migration.statements) {
+      ok(
+        !(
+          statement.startsWith("drop trigger") &&
+          statement.includes("analysis_permits_terminal_lock") &&
+          !migration.statements.some((s) =>
+            s.startsWith("create trigger analysis_permits_terminal_lock "),
+          )
+        ),
+        `${migration.file} drops analysis_permits_terminal_lock without recreating it`,
+      );
+      ok(
+        !(
+          statement.startsWith("alter table public.analysis_permits") &&
+          /disable trigger (all|user|analysis_permits_terminal_lock)\b/.test(statement)
+        ),
+        `${migration.file} disables the permit state machine: ${statement}`,
+      );
+    }
+  }
+});
+
+Deno.test(
   "free ratings: every decision point counts through the identity ledger, from the ledger migration on",
   async () => {
     const chain = await loadChain();
@@ -244,14 +425,32 @@ Deno.test(
       ),
       "the ledger must carry no client grants",
     );
-    ok(
-      ledger.statements.some((s) =>
-        s.startsWith(
-          "create trigger shots_record_free_rating_ledger after insert or update of result_kind on public.shots",
+    for (const writer of LEDGER_WRITING_TRIGGERS) {
+      const migration = chain.find((m) => m.file === writer.migration);
+      ok(migration, `${writer.migration} must exist in the migration chain`);
+      ok(
+        migration.statements.some((s) => s.startsWith(writer.create)),
+        `${writer.migration} must create ${writer.trigger}: ${writer.create}`,
+      );
+      const bodies = functionBodies(migration.raw, writer.fn);
+      ok(bodies.length === 1, `${writer.migration} must define public.${writer.fn}()`);
+      ok(
+        bodies[0].includes("security definer") && bodies[0].includes("set search_path = ''"),
+        `public.${writer.fn} must be SECURITY DEFINER with a pinned search_path`,
+      );
+      ok(
+        /insert into public\.free_rating_ledger[\s\S]*on conflict \(identity_hash\) do update[\s\S]*greatest\(/.test(
+          bodies[0],
         ),
-      ),
-      "the ledger must be written by a trigger on scored shot inserts",
-    );
+        `public.${writer.fn} must upsert the ledger with greatest(...) (never lower a count)`,
+      );
+      ok(
+        migration.statements.includes(
+          `revoke execute on function public.${writer.fn}() from public, anon, authenticated`,
+        ),
+        `public.${writer.fn} must not be client-executable`,
+      );
+    }
     ok(
       functionBodies(ledger.raw, "lifetime_scored_count").length === 1,
       "the ledger migration must define lifetime_scored_count()",
@@ -283,16 +482,18 @@ Deno.test(
           !(statement.startsWith("drop table") && /\bpublic\.free_rating_ledger\b/.test(statement)),
           `${migration.file} drops public.free_rating_ledger`,
         );
-        ok(
-          !(
-            statement.startsWith("drop trigger") &&
-            statement.includes("shots_record_free_rating_ledger") &&
-            !migration.statements.some((s) =>
-              s.startsWith("create trigger shots_record_free_rating_ledger "),
-            )
-          ),
-          `${migration.file} drops the ledger trigger without recreating it`,
-        );
+        for (const writer of LEDGER_WRITING_TRIGGERS) {
+          ok(
+            !(
+              statement.startsWith("drop trigger") &&
+              statement.includes(writer.trigger) &&
+              !migration.statements.some((s) =>
+                s.startsWith(`create trigger ${writer.trigger} `),
+              )
+            ),
+            `${migration.file} drops ${writer.trigger} without recreating it`,
+          );
+        }
         ok(
           !(
             statement.startsWith("grant ") &&
