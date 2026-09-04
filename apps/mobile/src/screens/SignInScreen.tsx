@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   BrandMark,
   BrandSpinner,
@@ -69,78 +69,90 @@ export function SignInScreen(props: { onBack: () => void }) {
       ]}
     >
       <ScreenHeader onBack={props.onBack} />
-      <View style={styles.body}>
-        <BrandMark />
-        <Text style={[type.hero, styles.title]}>
-          Your ratings,{`\n`}tied to you.
-        </Text>
-        <Text style={styles.sub}>
-          A connected account is required for free ratings, membership, and
-          server-verified coaching. Synced progress stays with that account.
-        </Text>
+      {/* Everything under the header scrolls when it overflows (small
+          phones, large Dynamic Type, a long provider error) so the
+          providers and the trust note never stack over each other. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        alwaysBounceVertical={false}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.body} testID="sign-in-body">
+          <BrandMark />
+          <Text style={[type.hero, styles.title]}>
+            Your ratings,{`\n`}tied to you.
+          </Text>
+          <Text style={styles.sub}>
+            A connected account is required for free ratings, membership, and
+            server-verified coaching. Synced progress stays with that account.
+          </Text>
 
-        <View style={styles.providers}>
-          {Platform.OS === 'ios' ? (
+          <View style={styles.providers}>
+            {Platform.OS === 'ios' ? (
+              <ProviderButton
+                label="Continue with Apple"
+                mark=""
+                dark
+                disabled={busy}
+                onPress={() => void signInWithApple()}
+              />
+            ) : null}
             <ProviderButton
-              label="Continue with Apple"
-              mark=""
-              dark
+              label="Continue with Google"
+              mark="G"
               disabled={busy}
-              onPress={() => void signInWithApple()}
+              onPress={() => void signInWithGoogle()}
             />
+          </View>
+
+          {busy ? (
+            <View style={styles.busyRow}>
+              <BrandSpinner color={color.court} />
+              <Text style={[type.caption, { color: color.inkSoft }]}>
+                Signing in securely…
+              </Text>
+            </View>
           ) : null}
-          <ProviderButton
-            label="Continue with Google"
-            mark="G"
-            disabled={busy}
-            onPress={() => void signInWithGoogle()}
-          />
+
+          {error && error.code !== 'auth.canceled' ? (
+            <PressableScale
+              onPress={clearError}
+              accessibilityLabel="Dismiss sign-in error"
+              accessibilityHint={error.message}
+              accessibilityLiveRegion="assertive"
+              style={styles.errorCard}
+            >
+              <Text style={[type.micro, { color: color.bad }]}>
+                {error.code === 'auth.not_configured'
+                  ? 'NOT CONFIGURED YET'
+                  : 'SIGN-IN FAILED'}
+              </Text>
+              <Text style={[type.caption, { color: color.ink, marginTop: 4 }]}>
+                {error.message}
+              </Text>
+            </PressableScale>
+          ) : null}
         </View>
 
-        {busy ? (
-          <View style={styles.busyRow}>
-            <BrandSpinner color={color.court} />
-            <Text style={[type.caption, { color: color.inkSoft }]}>
-              Signing in securely…
+        <View style={styles.footer}>
+          <View style={styles.trustRow}>
+            <Icon name="shield" color={color.court} size={17} />
+            <Text style={styles.trustCopy}>
+              Your existing on-device reads stay here when you connect.
             </Text>
           </View>
-        ) : null}
-
-        {error && error.code !== 'auth.canceled' ? (
-          <PressableScale
-            onPress={clearError}
-            accessibilityLabel="Dismiss sign-in error"
-            accessibilityHint={error.message}
-            accessibilityLiveRegion="assertive"
-            style={styles.errorCard}
-          >
-            <Text style={[type.micro, { color: color.bad }]}>
-              {error.code === 'auth.not_configured'
-                ? 'NOT CONFIGURED YET'
-                : 'SIGN-IN FAILED'}
-            </Text>
-            <Text style={[type.caption, { color: color.ink, marginTop: 4 }]}>
-              {error.message}
-            </Text>
-          </PressableScale>
-        ) : null}
-      </View>
-
-      <View style={styles.footer}>
-        <View style={styles.trustRow}>
-          <Icon name="shield" color={color.court} size={17} />
-          <Text style={styles.trustCopy}>
-            Your existing on-device reads stay here when you connect.
-          </Text>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
-  body: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.lg },
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  body: { flexGrow: 1, paddingHorizontal: space.lg, paddingTop: space.lg },
   title: { color: color.ink, marginTop: space.xl },
   sub: {
     ...type.body,

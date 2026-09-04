@@ -1,14 +1,26 @@
 import React from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { BrandMark, Button, Pill, PressableScale } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 
+/**
+ * Illustration card. Its copy is laid out in flow so the card is never
+ * shorter than its own text at any Dynamic Type size; the court drawing
+ * floats behind it, and when the column has room the card grows and the
+ * caption row settles at its bottom edge.
+ */
 function CourtStory() {
   return (
-    <View style={styles.courtStory}>
-      <Svg width="100%" height="100%" viewBox="0 0 340 300">
+    <View style={styles.courtStory} testID="welcome-court-story">
+      <Svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 340 300"
+        style={styles.courtDrawing}
+        pointerEvents="none"
+      >
         <Path
           d="M35 42h270v216H35z"
           stroke={color.lineDark}
@@ -50,20 +62,17 @@ function CourtStory() {
         <Circle cx="84" cy="221" r="8" fill={color.volt} />
         <Circle cx="231" cy="112" r="5" fill={color.onDark} />
       </Svg>
-      <View style={styles.readout}>
-        <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
-        <Text style={[type.h1, styles.readoutTitle]}>
-          Automatic{`\n`}capture.
-        </Text>
-        <Text
-          style={[type.caption, { color: color.onDarkMuted, marginTop: 5 }]}
-        >
-          No shot picker. No timer.
-        </Text>
-      </View>
-      <View style={styles.livePill}>
-        <View style={styles.privateIcon} />
-        <Text style={[type.micro, { color: color.onDark }]}>ON-DEVICE</Text>
+      <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
+      <Text style={[type.h1, styles.readoutTitle]}>
+        Automatic{`\n`}capture.
+      </Text>
+      <View style={styles.readoutSpacer} />
+      <View style={styles.readoutRow}>
+        <Text style={styles.readoutCaption}>No shot picker. No timer.</Text>
+        <View style={styles.livePill}>
+          <View style={styles.privateIcon} />
+          <Text style={[type.micro, { color: color.onDark }]}>ON-DEVICE</Text>
+        </View>
       </View>
     </View>
   );
@@ -79,22 +88,32 @@ export function WelcomeScreen(props: {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.topBar}>
-        <BrandMark light />
-        <Pill label="PRIVATE BY DEFAULT" tone="dark" />
-      </View>
+      {/* The body scrolls only when it genuinely overflows (small phones,
+          large Dynamic Type); the footer below stays pinned so the primary
+          action is reachable without scrolling. */}
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        alwaysBounceVertical={false}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <BrandMark light />
+          <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+        </View>
 
-      <View style={styles.heroCopy}>
-        <Text style={[type.hero, { color: color.onDark }]}>
-          See the stroke.{`\n`}Know the fix.
-        </Text>
-        <Text style={styles.tagline}>
-          A private technique coach that guides each capture and turns validated
-          reads into one clear next step.
-        </Text>
-      </View>
+        <View style={styles.heroCopy}>
+          <Text style={[type.hero, { color: color.onDark }]}>
+            See the stroke.{`\n`}Know the fix.
+          </Text>
+          <Text style={styles.tagline}>
+            A private technique coach that guides each capture and turns
+            validated reads into one clear next step.
+          </Text>
+        </View>
 
-      <CourtStory />
+        <CourtStory />
+      </ScrollView>
 
       <View style={styles.footer}>
         <Button
@@ -125,6 +144,8 @@ export function WelcomeScreen(props: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
+  body: { flex: 1 },
+  bodyContent: { flexGrow: 1 },
   topBar: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
@@ -140,20 +161,33 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   courtStory: {
-    flex: 1,
+    flexGrow: 1,
     marginHorizontal: space.lg,
     marginTop: space.lg,
-    minHeight: 270,
+    paddingTop: 28,
+    paddingLeft: 28,
+    paddingRight: 20,
+    paddingBottom: 20,
     borderRadius: radius.xl,
     backgroundColor: color.inkElevated,
     overflow: 'hidden',
   },
-  readout: { position: 'absolute', top: 28, left: 28 },
+  courtDrawing: { position: 'absolute', top: 0, left: 0 },
   readoutTitle: { color: color.onDark, marginTop: space.sm },
+  readoutSpacer: { flexGrow: 1 },
+  readoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    marginTop: 5,
+  },
+  readoutCaption: {
+    ...type.caption,
+    color: color.onDarkMuted,
+    flexShrink: 1,
+  },
   livePill: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,

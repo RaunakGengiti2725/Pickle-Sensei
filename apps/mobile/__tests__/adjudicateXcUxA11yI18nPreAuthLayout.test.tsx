@@ -95,6 +95,19 @@ function byLabel(root: ReactTestInstance, label: string) {
   return root.findAll(n => n.props.accessibilityLabel === label);
 }
 
+/** Text nodes whose (possibly segmented) children join to `text`. */
+function byText(root: ReactTestInstance, text: string) {
+  return root.findAll(n => {
+    const children: unknown = n.props.children;
+    const joined = Array.isArray(children)
+      ? children.every(c => typeof c === 'string')
+        ? children.join('')
+        : null
+      : children;
+    return joined === text;
+  });
+}
+
 function hostByTestId(root: ReactTestInstance, testID: string) {
   return root.findAll(
     n => typeof n.type === 'string' && n.props.testID === testID,
@@ -173,11 +186,9 @@ describe('C1 — WelcomeScreen: scrolling body under a pinned CTA footer', () =>
     expect(contentContainer(scroll)).toMatchObject({ flexGrow: 1 });
     expect(scroll.props.alwaysBounceVertical).toBe(false);
     // The hero copy scrolls with the body.
-    expect(
-      scroll.findAll(
-        n => n.props.children === 'See the stroke.\nKnow the fix.',
-      ),
-    ).not.toHaveLength(0);
+    expect(byText(scroll, 'See the stroke.\nKnow the fix.')).not.toHaveLength(
+      0,
+    );
   });
 
   test('primary CTA and "I already have an account" are pinned outside the ScrollView', () => {
@@ -199,17 +210,13 @@ describe('C1 — WelcomeScreen: scrolling body under a pinned CTA footer', () =>
     // The illustration copy is laid out in flow so the box can never be
     // shorter than its own text (the old absolute overlay clipped at large
     // Dynamic Type sizes).
-    const readout = court!.findAll(
-      n => n.props.children === 'Automatic\ncapture.',
-    );
-    expect(readout).not.toHaveLength(0);
+    expect(byText(court!, 'Automatic\ncapture.')).not.toHaveLength(0);
     for (const node of court!.findAll(n => typeof n.type === 'string')) {
-      const s = flat(node);
+      const s = flat(node) as Record<string, unknown> | undefined;
       if (s && s.position === 'absolute') {
         // Only the decorative SVG may float; text never does.
-        expect(
-          node.findAll(n => n.props.children === 'ON-DEVICE'),
-        ).toHaveLength(0);
+        expect(byText(node, 'ON-DEVICE')).toHaveLength(0);
+        expect(byText(node, 'Automatic\ncapture.')).toHaveLength(0);
       }
     }
   });
