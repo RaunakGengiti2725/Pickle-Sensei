@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { findCycles, singlePointsOfFailure, fanIn } from "./graph.mjs";
-import { exists } from "./fsutil.mjs";
+import { exists, readText } from "./fsutil.mjs";
 import { isRuntimeSourceFile } from "./extract.mjs";
 
 const REPLAY = "node tools/archmap/archmap.mjs --check";
@@ -812,6 +812,10 @@ export function checkAll(model, repoRoot) {
   // never execute in a clean checkout on ANY plane — it is dead coverage that
   // still reports "skipped", not "failed".
   {
+    const matrixFile = "docs/devin/TEST_MATRIX.md";
+    const matrix = exists(path.join(repoRoot, matrixFile))
+      ? readText(path.join(repoRoot, matrixFile))
+      : "";
     const failures = model.unverifiable.conditionalSkips
       .filter((c) => c.fsGatedUntracked)
       .map((c) => ({
@@ -819,12 +823,15 @@ export function checkAll(model, repoRoot) {
         guard: c.guardExpr,
         gatedOn: c.fsGatedUntracked,
         runsIn: "no CI plane (path absent in a clean checkout)",
+        documentedIn: matrix.includes(c.where.split(":")[0]) ? matrixFile : null,
       }));
+    // Documented known non-gates are polish; an undocumented one hides coverage.
+    const severity = failures.some((f) => !f.documentedIn) ? "P2" : "P3";
     checks.push(
       result(
         "UNV-02",
         "Filesystem-gated test suites are runnable from a clean checkout",
-        "P2",
+        severity,
         failures,
         [],
       ),

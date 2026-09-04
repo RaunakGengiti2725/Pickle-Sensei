@@ -53,23 +53,23 @@ probe file itself type-checks clean.)
 
 ## Invariants
 
-| ID           | Checks                                                                                                                                                                                               |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DEP-01..05   | Runtime dependency cycles (dev-only cycles are info), undeclared / unused workspace deps, `workspace:*` protocol, relative imports crossing package boundaries from runtime code.                    |
-| MOB-01..02   | apps/mobile `@pickle/*` aliases agree across tsconfig / metro / jest; every `NativeModules.X` / `requireNativeComponent` name used by TS has an iOS native export.                                   |
-| NAT-01..02   | App pod symlinks resolve to `native/` sources and match the podspec; SwiftPM local package dependencies resolve.                                                                                     |
-| ROUTE-01..03 | Mobile → edge route coverage (static), rate-limit route families match served routes, black-box probe agreement.                                                                                     |
-| ENV-01..04   | Env vars read by `services/*` vs `.env.example`; edge-fn secrets documented; `.env.example` keys with no consumer (info); no non-public secret literals in the mobile runtime config.                |
-| WF-01..04    | Workflow-referenced scripts exist; self-hosted workflows have no PR trigger and explicit read-only `permissions:`; verify-cloud stages ↔ ci.yml in sync; Mac workflows do not duplicate each other.  |
-| SCR-01       | Shell entry points: references resolve, strict mode on, no gate verdict masked with `\|\| true` (diagnostic probes are classified benign).                                                           |
-| MIG-01       | Supabase migration filenames follow `YYYYMMDDHHMMSS_description.sql` and are unique; the legacy tree is flagged.                                                                                     |
-| CP-01..02    | Every critical-path hop file and SPOF evidence file exists; critical-path HTTP routes are served by the edge function.                                                                               |
-| FLAG-01      | Registry flags == seeded flags, plus reachability from the shipping app.                                                                                                                             |
-| DATA-01      | Bench baseline / tolerances exist; dataset references resolve.                                                                                                                                       |
-| ART-01       | Release manifest paths exist; artifact roots written by scripts are git-ignored (asked of `git check-ignore`).                                                                                       |
-| UNV-01       | Surfaces Linux cannot verify (Swift/Vision/Xcode/iOS runtime) are enumerated; no skipped tests. Precondition-gated suites (`skipIf`, `x ? describe : describe.skip`, Deno `ignore:`) listed as info. |
-| UNV-02       | Filesystem-gated suites gate on a path git tracks — a suite gated on a git-ignored path never runs on any CI plane yet reports "skipped".                                                            |
-| SPOF-01      | Computed package-graph single points of failure (info).                                                                                                                                              |
+| ID           | Checks                                                                                                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DEP-01..05   | Runtime dependency cycles (dev-only cycles are info), undeclared / unused workspace deps, `workspace:*` protocol, relative imports crossing package boundaries from runtime code.                      |
+| MOB-01..02   | apps/mobile `@pickle/*` aliases agree across tsconfig / metro / jest; every `NativeModules.X` / `requireNativeComponent` name used by TS has an iOS native export.                                     |
+| NAT-01..02   | App pod symlinks resolve to `native/` sources and match the podspec; SwiftPM local package dependencies resolve.                                                                                       |
+| ROUTE-01..03 | Mobile → edge route coverage (static), rate-limit route families match served routes, black-box probe agreement.                                                                                       |
+| ENV-01..04   | Env vars read by `services/*` vs `.env.example`; edge-fn secrets documented; `.env.example` keys with no consumer (info); no non-public secret literals in the mobile runtime config.                  |
+| WF-01..04    | Workflow-referenced scripts exist; self-hosted workflows have no PR trigger and explicit read-only `permissions:`; verify-cloud stages ↔ ci.yml in sync; Mac workflows do not duplicate each other.    |
+| SCR-01       | Shell entry points: references resolve, strict mode on, no gate verdict masked with `\|\| true` (diagnostic probes are classified benign).                                                             |
+| MIG-01       | Supabase migration filenames follow `YYYYMMDDHHMMSS_description.sql` and are unique; the legacy tree is flagged.                                                                                       |
+| CP-01..02    | Every critical-path hop file and SPOF evidence file exists; critical-path HTTP routes are served by the edge function.                                                                                 |
+| FLAG-01      | Registry flags == seeded flags, plus reachability from the shipping app.                                                                                                                               |
+| DATA-01      | Bench baseline / tolerances exist; dataset references resolve.                                                                                                                                         |
+| ART-01       | Release manifest paths exist; artifact roots written by scripts are git-ignored (asked of `git check-ignore`).                                                                                         |
+| UNV-01       | Surfaces Linux cannot verify (Swift/Vision/Xcode/iOS runtime) are enumerated; no skipped tests. Precondition-gated suites (`skipIf`, `x ? describe : describe.skip`, Deno `ignore:`) listed as info.   |
+| UNV-02       | Filesystem-gated suites gate on a path git tracks — a suite gated on a git-ignored path never runs on any CI plane yet reports "skipped" (P3 when documented in `docs/devin/TEST_MATRIX.md`, else P2). |
+| SPOF-01      | Computed package-graph single points of failure (info).                                                                                                                                                |
 
 Each result carries `replay: { command, focus, inputs }` so a failure can be
 reproduced with exactly one command.
