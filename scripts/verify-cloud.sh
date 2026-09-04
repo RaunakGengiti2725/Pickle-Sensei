@@ -26,7 +26,8 @@
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
 #              DATABASE_URL is reachable (db stage migrates/seeds it first)
-#   release    node tools/release/check-release-manifest.mjs when present
+#   release    node tools/release/check-release-manifest.mjs when present, plus
+#              its node --test suite (check-release-manifest.test.mjs)
 #
 # Policy: a SKIPPED stage is never reported as passed. Skips are explicit
 # (--skip / --only) and appear in the summary; the exit code is non-zero if any
@@ -277,6 +278,7 @@ stage_release() {
     exit 75
   fi
   node tools/release/check-release-manifest.mjs
+  node --test tools/release/check-release-manifest.test.mjs
 }
 
 # -------------------------------------------------------------------- main ----
