@@ -86,6 +86,7 @@ import {
   cacheGet,
   cacheGetUnlessRevoked,
   cacheIsRevoked,
+  cacheLocalGeneration,
   cacheSet,
   cacheSetFenced,
   L1_READTHROUGH_TTL_SECONDS,
@@ -1519,21 +1520,36 @@ const progressCacheKey = (userId: string): string => `progress:${userId}`;
 
 /** Per-isolate single-flight for cache misses: concurrent requests for the
  * same key share one DB read instead of each re-running it. Every caller
- * gets its own clone because a Response body can be sent only once. */
-const inflightBuilds = new Map<string, Promise<Response>>();
+ * gets its own clone because a Response body can be sent only once. A
+ * request that arrives after the key was invalidated (an accepted sync ran
+ * cacheDel while a build was in flight) must not join that build: it read
+ * the database before the write and would answer with the pre-sync payload,
+ * so it starts a fresh build under the new generation. */
+interface InflightBuild {
+  readonly generation: string;
+  readonly response: Promise<Response>;
+}
+const inflightBuilds = new Map<string, InflightBuild>();
 function coalesce(key: string, build: () => Promise<Response>): Promise<Response> {
+  const generation = cacheLocalGeneration(key);
   let pending = inflightBuilds.get(key);
-  if (!pending) {
-    pending = build().finally(() => {
-      inflightBuilds.delete(key);
-    });
-    inflightBuilds.set(key, pending);
+  if (!pending || pending.generation !== generation) {
+    const entry: InflightBuild = {
+      generation,
+      response: build().finally(() => {
+        if (inflightBuilds.get(key) === entry) inflightBuilds.delete(key);
+      }),
+    };
+    inflightBuilds.set(key, entry);
+    pending = entry;
   }
-  return pending.then((response) => response.clone());
+  return pending.response.then((response) => response.clone());
 }
 
 /** PostgREST silently truncates unpaged reads at its max_rows (1000 on the
- * hosted platform); page in that unit until a short page arrives. */
+ * hosted platform); page in that unit until a short page arrives. Callers
+ * order newest-first so that the MAX_PAGES bound, if ever reached, drops the
+ * oldest history rather than today's rows. */
 const PAGE_ROWS = 1_000;
 const MAX_PAGES = 20;
 async function readAllRows(
@@ -2162,9 +2178,9 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
         .from("progress_daily")
         .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
         .eq("user_id", authed.id)
-        .order("day", { ascending: true })
-        .order("shot_type", { ascending: true })
-        .order("scoring_model_version", { ascending: true })
+        .order("day", { ascending: false })
+        .order("shot_type", { ascending: false })
+        .order("scoring_model_version", { ascending: false })
         .range(from, to),
     ),
     readAllRows((from, to) =>
@@ -2172,7 +2188,7 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
         .from("practice_days")
         .select("day")
         .eq("user_id", authed.id)
-        .order("day", { ascending: true })
+        .order("day", { ascending: false })
         .range(from, to),
     ),
   ]);
@@ -2183,16 +2199,24 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
     return serviceUnavailable("Progress", daysQ.error);
   }
 
-  const series = seriesQ.rows.map((row) => ({
-    day: String(row.day),
-    shot_type: String(row.shot_type),
-    scoring_model_version: String(row.scoring_model_version),
-    shot_count: Number(row.shot_count),
-    // View scores are 0-10; the contract (and services/api) sends 0-100
-    // with one decimal, and the client divides by 10.
-    avg_score: Math.round(Number(row.avg_score) * 100) / 10,
-    best_score: Math.round(Number(row.best_score) * 100) / 10,
-  }));
+  // Read newest-first (see readAllRows); the contract is chronological.
+  const series = seriesQ.rows
+    .map((row) => ({
+      day: String(row.day),
+      shot_type: String(row.shot_type),
+      scoring_model_version: String(row.scoring_model_version),
+      shot_count: Number(row.shot_count),
+      // View scores are 0-10; the contract (and services/api) sends 0-100
+      // with one decimal, and the client divides by 10.
+      avg_score: Math.round(Number(row.avg_score) * 100) / 10,
+      best_score: Math.round(Number(row.best_score) * 100) / 10,
+    }))
+    .sort(
+      (a, b) =>
+        a.day.localeCompare(b.day) ||
+        a.shot_type.localeCompare(b.shot_type) ||
+        a.scoring_model_version.localeCompare(b.scoring_model_version),
+    );
   const streak = computePracticeStreak(
     daysQ.rows.map((row) => String(row.day)),
     new Date().toISOString().slice(0, 10),
@@ -2930,10 +2954,11 @@ async function deleteExternalAccounts(
         revoked = true;
       } catch (error) {
         const detail = error instanceof ExternalAccountError ? error.message : error;
-        // Transport failures, Apple 5xx/429 and missing secrets are retried
-        // by the client (fail closed: nothing downstream runs). A credential
-        // that can never be revoked — ciphertext under a rotated key, a token
-        // Apple refuses with 4xx — must not leave the account undeletable:
+        // Transport failures, Apple 5xx/429, missing secrets and Apple
+        // refusing OUR client secret are retried by the client (fail closed:
+        // nothing downstream runs). A credential that can never be revoked —
+        // ciphertext under a rotated key, a token Apple refuses with
+        // invalid_grant — must not leave the account undeletable:
         // Apple requires deletion to be fulfilled, so it is dropped and the
         // user is directed to Apple's manual authorization controls.
         if (!isPermanentExternalAccountError(error)) {

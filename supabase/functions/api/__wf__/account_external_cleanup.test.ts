@@ -305,13 +305,14 @@ Deno.test(
   },
 );
 
-for (const [index, code] of ["invalid_grant", "invalid_client"].entries()) {
-  Deno.test(
-    `delete-confirm: Apple revoke 400 ${code} is permanent → 200 manual_action_required, RevenueCat + Auth deleted`,
-    async () => {
+Deno.test(
+  "delete-confirm: Apple revoke 400 invalid_grant is permanent → 200 manual_action_required, RevenueCat + Auth deleted",
+  async () => {
+    {
+      const code = "invalid_grant";
       h.reset();
       const challenge = "56565656-5656-4656-8656-565656565656";
-      const userId = `bbbbbbbb-000${index}-4bbb-8bbb-bbbbbbbbbbbb`;
+      const userId = "bbbbbbbb-0000-4bbb-8bbb-bbbbbbbbbbbb";
       h.tables.account_deletion_requests = pendingDeletion(challenge);
       h.tables.account_external_credentials = storedAppleCredential(
         await encryptAppleRefreshToken("refresh-apple-refuses", userId, h.appleTokenEncryptionKey),
@@ -338,13 +339,27 @@ for (const [index, code] of ["invalid_grant", "invalid_client"].entries()) {
       });
       assertEquals(revokeCalls, 1);
       assertPermanentFailureFulfilled();
-    },
-  );
-}
+    }
+  },
+);
+
+// Only `invalid_grant` refuses the stored token. Apple's other ErrorResponse
+// codes blame OUR client secret / request (rotated .p8, wrong key id, clock
+// skew) and code-less 4xx blame the path to Apple — the operator repairs
+// those and the SAME token revokes afterwards, so the credential must survive.
+const appleError = (status: number, code: string): Response =>
+  new Response(JSON.stringify({ error: code }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
 const transientAppleFailures: Array<[string, () => Promise<Response>]> = [
   ["503", () => Promise.resolve(new Response("upstream error", { status: 503 }))],
   ["429", () => Promise.resolve(new Response(null, { status: 429 }))],
+  ["400 invalid_client", () => Promise.resolve(appleError(400, "invalid_client"))],
+  ["400 invalid_request", () => Promise.resolve(appleError(400, "invalid_request"))],
+  ["401 without a body", () => Promise.resolve(new Response(null, { status: 401 }))],
+  ["403 without a body", () => Promise.resolve(new Response("Forbidden", { status: 403 }))],
   [
     "fetch rejection",
     () => Promise.reject(new TypeError("error sending request: connection reset")),

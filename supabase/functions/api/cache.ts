@@ -271,7 +271,9 @@ function bumpGeneration(key: string): void {
   generations.set(key, (generations.get(key) ?? 0) + 1);
 }
 
-function localGeneration(key: string): string {
+/** This isolate's invalidation generation for `key`: changes on every
+ * cacheDel here. Opaque — compare for equality only. */
+export function cacheLocalGeneration(key: string): string {
   return `${generationEpoch}:${generations.get(key) ?? 0}`;
 }
 
@@ -293,7 +295,7 @@ function sharedGeneration(results: RedisPipelineResult | null, index: number): s
 /** Capture `key`'s invalidation generation. Take it BEFORE reading the
  * source of truth the value is derived from, then write with cacheSetFenced. */
 export async function cacheFence(key: string): Promise<CacheFence> {
-  const local = localGeneration(key);
+  const local = cacheLocalGeneration(key);
   if (!redisConfigured()) return { key, local, shared: null };
   const results = await redisPipeline([["GET", generationKey(key)]]);
   return { key, local, shared: sharedGeneration(results, 0) };
@@ -312,7 +314,7 @@ export async function cacheSetFenced(
   ttlSeconds: number,
 ): Promise<boolean> {
   if (ttlSeconds <= 0) return false;
-  if (localGeneration(fence.key) !== fence.local) return false;
+  if (cacheLocalGeneration(fence.key) !== fence.local) return false;
   const canWriteShared = redisConfigured() && fence.shared !== null;
   memorySet(fence.key, value, ttlSeconds, canWriteShared);
   if (!canWriteShared) return true;

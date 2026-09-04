@@ -249,10 +249,21 @@ Deno.test(
         if (request.method !== "GET") return null;
         if (request.url.includes("/rest/v1/progress_daily")) return jsonResponse(200, []);
         if (request.url.includes("/rest/v1/practice_days")) {
+          const url = new URL(request.url);
+          const offset = url.searchParams.get("offset");
+          const limit = url.searchParams.get("limit");
           const range = request.headers.get("range") ?? "0-999";
-          const [from, to] = range.split("-").map(Number);
+          const [from, to] =
+            offset !== null && limit !== null
+              ? [Number(offset), Number(offset) + Number(limit) - 1]
+              : range.split("-").map(Number);
+          // PostgREST applies `order` before paging: honour day.asc/day.desc.
+          const order = url.searchParams.get("order") ?? "day.asc";
+          const descending = order.startsWith("day.desc");
           const rows: Array<{ day: string }> = [];
-          for (let i = from; i <= Math.min(to, total - 1); i += 1) rows.push({ day: dayAt(i) });
+          for (let i = from; i <= Math.min(to, total - 1); i += 1) {
+            rows.push({ day: dayAt(descending ? total - 1 - i : i) });
+          }
           return jsonResponse(200, rows);
         }
         return null;

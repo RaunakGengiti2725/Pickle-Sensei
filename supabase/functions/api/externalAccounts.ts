@@ -23,14 +23,14 @@ export interface AppleTokenGrant {
 
 /** `kind` sorts failures by what a retry can do about them:
  *  - configuration / unavailable — retryable once the operator or the
- *    provider recovers (missing secret, transport failure, 5xx, 429);
- *  - invalid_grant / rejected / invalid_response — the provider (or our own
+ *    provider recovers (missing secret, client-secret refusal, transport
+ *    failure, 5xx, 429);
+ *  - invalid_grant / invalid_response — the provider (or our own
  *    decryption) refused THIS credential deterministically; the same call
  *    fails the same way forever. */
 export class ExternalAccountError extends Error {
   constructor(
-    readonly kind:
-      "configuration" | "invalid_grant" | "invalid_response" | "rejected" | "unavailable",
+    readonly kind: "configuration" | "invalid_grant" | "invalid_response" | "unavailable",
     readonly provider: "apple" | "revenuecat",
     message: string,
   ) {
@@ -44,9 +44,7 @@ export class ExternalAccountError extends Error {
 export function isPermanentExternalAccountError(error: unknown): boolean {
   return (
     error instanceof ExternalAccountError &&
-    (error.kind === "invalid_grant" ||
-      error.kind === "rejected" ||
-      error.kind === "invalid_response")
+    (error.kind === "invalid_grant" || error.kind === "invalid_response")
   );
 }
 
@@ -293,12 +291,13 @@ export async function revokeAppleRefreshToken(
   );
   if (!response.ok) {
     const code = await appleErrorCode(response);
-    // Apple answers a refused revocation with 400 (invalid_grant for a token
-    // it no longer recognises, invalid_client / invalid_request otherwise);
-    // none of those change on retry. 429 and 5xx are the provider's problem.
-    const permanent = response.status >= 400 && response.status < 500 && response.status !== 429;
+    // Only `invalid_grant` speaks about the stored token. Every other Apple
+    // ErrorResponse code (invalid_client, invalid_request, unauthorized_client,
+    // unsupported_grant_type, invalid_scope) describes OUR client secret or
+    // request, so the same token revokes fine once the operator repairs it;
+    // code-less 4xx, 429 and 5xx are transport/provider trouble.
     throw new ExternalAccountError(
-      permanent ? (code === "invalid_grant" ? "invalid_grant" : "rejected") : "unavailable",
+      code === "invalid_grant" ? "invalid_grant" : "unavailable",
       "apple",
       `Apple token revocation failed (${response.status}${code ? ` ${code}` : ""}).`,
     );
