@@ -97,9 +97,8 @@ if [ "$REMOTE" = 1 ]; then
   SHA="$(git rev-parse HEAD)"
   if [ -n "$REF" ]; then
     SRC="$REF"
-  else
-    SRC="$(git symbolic-ref -q --short HEAD 2>/dev/null || true)"
-    [ -n "$SRC" ] || SRC="${SHA:0:12}"
+  elif ! SRC="$(git symbolic-ref -q --short HEAD 2>/dev/null)"; then
+    SRC="${SHA:0:12}"
   fi
   case "$SRC" in
     ci/mac-*) TRIGGER="$SRC" ;;
