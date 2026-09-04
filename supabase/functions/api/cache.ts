@@ -236,10 +236,134 @@ export async function cacheSet(key: string, value: string, ttlSeconds: number): 
   return landed;
 }
 
+// ─── Invalidation fence ──────────────────────────────────────────────────────
+//
+// Derived-state rows (rank:/progress:) are BUILT from the database and then
+// written here, while the writes they derive from (accepted shot syncs) bust
+// the key with cacheDel. The two race: a build that read the database before
+// the sync and writes after the sync's cacheDel would re-cache the pre-sync
+// payload for the full TTL. Every cacheDel therefore bumps a per-key
+// invalidation generation — locally (L1) and in Redis (L2) — and a fenced
+// write compares the generation it captured BEFORE its database read with
+// the generation at write time. A mismatch means the payload is already
+// stale and the write is dropped; the next reader rebuilds from the database.
+
+const GENERATION_KEY_PREFIX = "gen:";
+/** Longer than any single build can take; a generation that has aged out
+ * reads as "unknown" and refuses the write (a miss, never a stale hit). */
+const GENERATION_TTL_SECONDS = 15 * 60;
+const GENERATION_MAX_ENTRIES = MEMORY_MAX_ENTRIES;
+
+const generationKey = (key: string): string => `${GENERATION_KEY_PREFIX}${key}`;
+
+/** Per-isolate invalidation counters (0 when a key was never invalidated
+ * here). Bounded: when the map is full it is cleared and the epoch below
+ * advances, which invalidates EVERY outstanding fence — a forgotten counter
+ * must never read as "unchanged". */
+const generations = new Map<string, number>();
+let generationEpoch = 0;
+
+function bumpGeneration(key: string): void {
+  if (generations.size >= GENERATION_MAX_ENTRIES && !generations.has(key)) {
+    generations.clear();
+    generationEpoch += 1;
+  }
+  generations.set(key, (generations.get(key) ?? 0) + 1);
+}
+
+function localGeneration(key: string): string {
+  return `${generationEpoch}:${generations.get(key) ?? 0}`;
+}
+
+export interface CacheFence {
+  readonly key: string;
+  /** L1 generation when the fence was taken. */
+  readonly local: string;
+  /** L2 generation when the fence was taken ("0" when the key was never
+   * invalidated there); null when Redis is off or did not answer. */
+  readonly shared: string | null;
+}
+
+function sharedGeneration(results: RedisPipelineResult | null, index: number): string | null {
+  const slot = results ? answered(results, index) : null;
+  if (!slot) return null;
+  return typeof slot.result === "string" ? slot.result : "0";
+}
+
+/** Capture `key`'s invalidation generation. Take it BEFORE reading the
+ * source of truth the value is derived from, then write with cacheSetFenced. */
+export async function cacheFence(key: string): Promise<CacheFence> {
+  const local = localGeneration(key);
+  if (!redisConfigured()) return { key, local, shared: null };
+  const results = await redisPipeline([["GET", generationKey(key)]]);
+  return { key, local, shared: sharedGeneration(results, 0) };
+}
+
+/** Write L1 and L2 unless `fence.key` was invalidated (cacheDel, in any
+ * isolate) since the fence was taken. Resolves to whether the value is now
+ * being served (false when dropped as stale or when ttlSeconds <= 0). The L2
+ * write is verified against the shared generation in the same pipeline and
+ * undone when it lost the race; when the shared generation is unknown (Redis
+ * off/unreachable at fence time) the value stays in this isolate's L1 only,
+ * exactly as an unreachable Redis degrades cacheSet. */
+export async function cacheSetFenced(
+  fence: CacheFence,
+  value: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  if (ttlSeconds <= 0) return false;
+  if (localGeneration(fence.key) !== fence.local) return false;
+  const canWriteShared = redisConfigured() && fence.shared !== null;
+  memorySet(fence.key, value, ttlSeconds, canWriteShared);
+  if (!canWriteShared) return true;
+
+  // SET then GET the generation in one pipeline: cacheDel bumps the
+  // generation BEFORE deleting the row, so a bump we do not observe here
+  // happened after our SET and its DEL removes our row; a bump we do observe
+  // is undone by the compensating DEL below. Either way no stale row survives.
+  const results = await redisPipeline([
+    ["SET", fence.key, value, "EX", Math.ceil(ttlSeconds)],
+    ["GET", generationKey(fence.key)],
+  ]);
+  if (results === null) {
+    // Redis unreachable: the row lives in L1 only, as after a failed cacheSet.
+    const entry = memory.get(fence.key);
+    if (entry && entry.value === value) entry.inL2 = false;
+    return true;
+  }
+  const landed = answered(results, 0)?.result === "OK";
+  const shared = sharedGeneration(results, 1);
+  if (shared === fence.shared) {
+    if (!landed) {
+      const entry = memory.get(fence.key);
+      if (entry && entry.value === value) entry.inL2 = false;
+    }
+    return true;
+  }
+  // Invalidated meanwhile (or unknown, which is never trusted): drop the row.
+  const entry = memory.get(fence.key);
+  if (entry && entry.value === value) memory.delete(fence.key);
+  if (landed) await redisPipeline([["DEL", fence.key]]);
+  return false;
+}
+
+/** Delete rows from L1 and L2 and bump their invalidation generation so any
+ * in-flight fenced write derived from pre-deletion state is dropped. */
 export async function cacheDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  for (const key of keys) memory.delete(key);
-  await redisPipeline([["DEL", ...keys]]);
+  for (const key of keys) {
+    bumpGeneration(key);
+    memory.delete(key);
+  }
+  const commands: Array<Array<string | number>> = [];
+  for (const key of keys) {
+    commands.push(
+      ["INCR", generationKey(key)],
+      ["EXPIRE", generationKey(key), GENERATION_TTL_SECONDS],
+    );
+  }
+  commands.push(["DEL", ...keys]);
+  await redisPipeline(commands);
 }
 
 /** Increment a fixed-window counter, creating it with the window's TTL.

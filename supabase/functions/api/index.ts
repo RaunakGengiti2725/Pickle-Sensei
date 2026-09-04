@@ -82,10 +82,12 @@ import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import {
   cacheDel,
+  cacheFence,
   cacheGet,
   cacheGetUnlessRevoked,
   cacheIsRevoked,
   cacheSet,
+  cacheSetFenced,
   L1_READTHROUGH_TTL_SECONDS,
   redisConfigured,
   sha256Hex,
@@ -111,6 +113,7 @@ import {
   encryptAppleRefreshToken,
   exchangeAppleAuthorizationCode,
   ExternalAccountError,
+  isPermanentExternalAccountError,
   revokeAppleRefreshToken,
 } from "./externalAccounts.ts";
 
@@ -2149,6 +2152,10 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  // Taken before the reads: an accepted sync that busts the key while the
+  // build is in flight turns the cacheSetFenced below into a no-op instead of
+  // re-caching the pre-sync payload.
+  const fence = await cacheFence(cacheKey);
   const [seriesQ, daysQ] = await Promise.all([
     readAllRows((from, to) =>
       authed.db
@@ -2191,7 +2198,7 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
     new Date().toISOString().slice(0, 10),
   );
   const payload = { series, improving: [], needsAttention: [], streak };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetFenced(fence, JSON.stringify(payload), 60);
   return json(200, payload);
 }
 
@@ -2258,6 +2265,7 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  const fence = await cacheFence(cacheKey);
   const [techniquesQ, stateQ] = await Promise.all([
     authed.db
       .from("player_technique_rating")
@@ -2288,7 +2296,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   if (techniqueRows.length === 0) {
     // No scored evidence → honestly unranked, never a fabricated Bronze.
     const empty = { rank: null };
-    await cacheSet(cacheKey, JSON.stringify(empty), 60);
+    await cacheSetFenced(fence, JSON.stringify(empty), 60);
     return json(200, empty);
   }
 
@@ -2354,7 +2362,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
       techniques,
     },
   };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetFenced(fence, JSON.stringify(payload), 60);
   return json(200, payload);
 }
 
@@ -2911,6 +2919,7 @@ async function deleteExternalAccounts(
       if (!config) {
         return serviceUnavailable("Account deletion", "Apple server secrets unavailable");
       }
+      let revoked = false;
       try {
         const refreshToken = await decryptAppleRefreshToken(
           external.apple_refresh_token_encrypted,
@@ -2918,21 +2927,43 @@ async function deleteExternalAccounts(
           config.tokenEncryptionKey,
         );
         await revokeAppleRefreshToken(refreshToken, config);
+        revoked = true;
       } catch (error) {
         const detail = error instanceof ExternalAccountError ? error.message : error;
-        return serviceUnavailable("Account deletion", detail);
+        // Transport failures, Apple 5xx/429 and missing secrets are retried
+        // by the client (fail closed: nothing downstream runs). A credential
+        // that can never be revoked — ciphertext under a rotated key, a token
+        // Apple refuses with 4xx — must not leave the account undeletable:
+        // Apple requires deletion to be fulfilled, so it is dropped and the
+        // user is directed to Apple's manual authorization controls.
+        if (!isPermanentExternalAccountError(error)) {
+          return serviceUnavailable("Account deletion", detail);
+        }
+        console.error(
+          `[api] account deletion: Apple credential unrevocable for ${authed.id}:`,
+          detail,
+        );
       }
+      // Checkpoint before RevenueCat so a later failure retries without a
+      // second revoke attempt. The capture pair (token + captured_at) is
+      // cleared together — the table constrains them to be null together.
+      const now = new Date().toISOString();
       const marked = await adminDb
         .from("account_external_credentials")
-        .update({
-          apple_revoked_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .update(
+          revoked
+            ? { apple_revoked_at: now, updated_at: now }
+            : {
+                apple_refresh_token_encrypted: null,
+                apple_token_captured_at: null,
+                updated_at: now,
+              },
+        )
         .eq("user_id", authed.id);
       if (marked.error) {
         return serviceUnavailable("Account deletion", marked.error.message);
       }
-      appleOutcome = "revoked";
+      appleOutcome = revoked ? "revoked" : "manual_action_required";
     } else {
       // Accounts created by an older app build have no stored Apple refresh
       // token. Apple explicitly says deletion must still be fulfilled; the
