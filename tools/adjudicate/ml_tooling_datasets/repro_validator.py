@@ -97,6 +97,17 @@ def main() -> int:
                             "stderr": err[-200:]})
     ok = ok and fifo_graceful
 
+    # Paths the OS refuses to stat (ENAMETOOLONG) or open must also yield INVALID, not a traceback
+    for name, odd_path in (
+        ("path_name_too_long", tmp / ("x" * 300 + ".json")),
+        ("path_missing", tmp / "missing.json"),
+        ("path_is_directory", tmp),
+    ):
+        rc, out, err = run([str(odd_path)], timeout=5)
+        odd_graceful = rc == 1 and "Traceback" not in err and out.startswith("INVALID")
+        report["cases"].append({"case": name, "exitCode": rc, "graceful": odd_graceful, "stderr": err[-200:]})
+        ok = ok and odd_graceful
+
     # Batch: an early bad file must not abort the run — every later file still gets
     # its own `ok` / `INVALID` line and the exit code reflects the whole batch.
     batch_bad = tmp / "batch_bad.json"

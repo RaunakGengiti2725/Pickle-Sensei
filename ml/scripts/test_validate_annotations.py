@@ -9,6 +9,7 @@ import copy
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -330,6 +331,36 @@ class ValidateTypeSafetyTest(unittest.TestCase):
             with self.subTest(doc=doc):
                 self.assertEqual(validate(doc, "x"), ["x: annotation must be a JSON object"])
 
+    def test_seeded_random_type_mutations_never_raise(self):
+        junk = [None, True, False, 0, -1, 1, 1.5, 10**20, "", "x", "clean", [], [[]], [{}], {}, {"a": []}]
+        rng = random.Random(20260904)
+
+        def mutate(node):
+            if isinstance(node, dict) and node and rng.random() < 0.7:
+                key = rng.choice(sorted(node))
+                roll = rng.random()
+                if roll < 0.15:
+                    del node[key]
+                elif roll < 0.25:
+                    node["unexpected"] = copy.deepcopy(rng.choice(junk))
+                else:
+                    node[key] = mutate(node[key])
+                return node
+            if isinstance(node, list) and node and rng.random() < 0.6:
+                index = rng.randrange(len(node))
+                node[index] = mutate(node[index])
+                return node
+            return copy.deepcopy(rng.choice(junk))
+
+        bases = (valid_doc, no_stroke_doc, lambda: negative_doc("partial"), lambda: negative_doc("aborted"))
+        for _ in range(3000):
+            doc = rng.choice(bases)()
+            for _ in range(rng.randint(1, 4)):
+                doc = mutate(doc)
+            problems = validate(doc, "fuzz")
+            self.assertIsInstance(problems, list)
+            self.assertTrue(all(problem.startswith("fuzz: ") for problem in problems))
+
 
 class ValidateSchemaParityTest(unittest.TestCase):
     """Every constraint annotation.schema.json declares must also be enforced here."""
@@ -480,10 +511,24 @@ class ValidatorCliContractTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertTrue(lines[0].startswith(f"INVALID {deep}: unreadable"), lines)
 
-    def test_missing_file_and_directory_are_reported_as_invalid(self):
-        code, lines = run_main([self.tmp / "missing.json", self.tmp])
+    def test_unreadable_paths_are_reported_as_invalid(self):
+        unreadable = self.tmp / "unreadable.json"
+        unreadable.write_text(json.dumps(valid_doc()), encoding="utf-8")
+        unreadable.chmod(0)
+        paths = [
+            self.tmp / "missing.json",
+            self.tmp,
+            self.tmp / ("x" * 300 + ".json"),
+            self.tmp / "missing.json" / "child.json",
+        ]
+        if not os.access(unreadable, os.R_OK):  # root ignores mode bits
+            paths.append(unreadable)
+        try:
+            code, lines = run_main(paths)
+        finally:
+            unreadable.chmod(0o600)
         self.assertEqual(code, 1)
-        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(lines), len(paths))
         self.assertTrue(all(line.startswith("INVALID ") for line in lines), lines)
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes need POSIX")
