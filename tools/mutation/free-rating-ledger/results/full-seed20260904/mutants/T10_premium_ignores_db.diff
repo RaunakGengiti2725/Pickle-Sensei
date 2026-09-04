@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T10_premium_ignores_db/supabase/functions/api/index.ts	2026-09-04 06:41:19.980641320 +0000
+@@ -706,7 +706,7 @@
+     return serviceUnavailable("Access state", "access_state returned no row");
+   }
+   const billing = verifiedBilling ?? {
+-    premium: Boolean(state.premium),
++    premium: false,
+     activeEntitlements: [],
+   };
+   const used = Math.min(2, state.scored_count ?? 0);

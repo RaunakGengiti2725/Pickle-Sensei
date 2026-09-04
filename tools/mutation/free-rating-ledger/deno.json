@@ -1,0 +1,12 @@
+{
+  "nodeModulesDir": "none",
+  "lock": false,
+  "imports": {
+    "postgres": "npm:postgres@3.4.5",
+    "@std/fs": "jsr:@std/fs@1",
+    "@std/path": "jsr:@std/path@1"
+  },
+  "tasks": {
+    "run": "deno run -A run.ts"
+  }
+}

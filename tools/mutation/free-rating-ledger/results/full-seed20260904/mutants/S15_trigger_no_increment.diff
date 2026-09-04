@@ -1,0 +1,20 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S15_trigger_no_increment/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:34:15.468621077 +0000
+@@ -160,7 +160,7 @@
+     return new;
+   end if;
+ 
+-  select coalesce(max(l.scored_count), 0) + 1 into v_next
++  select coalesce(max(l.scored_count), 0) + 0 into v_next
+   from auth.identities i
+   join public.free_rating_ledger l
+     on l.identity_hash = public.free_rating_identity_hash(i.provider, i.provider_id)
+@@ -171,7 +171,7 @@
+   from auth.identities i
+   where i.user_id = new.user_id
+   on conflict (identity_hash) do update
+-    set scored_count = greatest(led.scored_count + 1, excluded.scored_count),
++    set scored_count = greatest(led.scored_count, excluded.scored_count),
+         updated_at = now();
+ 
+   return new;

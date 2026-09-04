@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S01_lifetime_greatest_to_least/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:32:05.588614884 +0000
+@@ -121,7 +121,7 @@
+ security invoker
+ set search_path = ''
+ as $$
+-  select greatest(
++  select least(
+     (
+       select count(*)::int from public.shots s
+       where s.user_id = (select auth.uid()) and s.result_kind = 'scored'

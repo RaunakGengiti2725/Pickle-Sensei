@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed99/scratch/S45_apply_no_advisory_lock/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:43:14.076646760 +0000
+@@ -395,8 +395,6 @@
+   -- FREE-LIMIT BACKSTOP (1/2): take the same per-user lock reserve_analysis_
+   -- permit uses, so the scored-shot count below cannot change under us and
+   -- two concurrent syncs holding DIFFERENT permits cannot both pass it.
+-  perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+-
+   -- Lock the permit so a concurrent retry of the same sync serializes here.
+   select * into v_permit
+   from public.analysis_permits p

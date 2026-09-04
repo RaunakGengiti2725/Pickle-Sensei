@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S37_reserve_stale_window_48h/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:37:40.740630866 +0000
+@@ -310,7 +310,7 @@
+       select count(*)::int from public.analysis_permits p
+       where p.user_id = v_uid
+         and p.status = 'reserved'
+-        and p.created_at > now() - interval '24 hours'
++        and p.created_at > now() - interval '48 hours'
+     )
+   into v_premium, v_scored, v_reserved;
+ 

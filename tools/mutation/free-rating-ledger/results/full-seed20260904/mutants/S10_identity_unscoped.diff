@@ -1,0 +1,10 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S10_identity_unscoped/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:33:30.572618937 +0000
+@@ -98,7 +98,6 @@
+   from auth.identities i
+   join public.free_rating_ledger l
+     on l.identity_hash = public.free_rating_identity_hash(i.provider, i.provider_id)
+-  where i.user_id = (select auth.uid())
+ $$;
+ 
+ comment on function public.identity_scored_count() is

@@ -1,0 +1,12 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T13_sync_paywall_unmapped/supabase/functions/api/index.ts	2026-09-04 06:41:35.712642070 +0000
+@@ -1162,8 +1162,7 @@
+   // Free-limit backstop in apply_synced_shot: the permit was valid but the
+   // account is already at its two lifetime scored ratings, so the scored shot
+   // is refused rather than recorded as a third free rating.
+-  "access.paywall_required":
+-    "Both lifetime free ratings have been used. Membership is required for another rating.",
++
+   "shot.session_not_found": "Session not found or not yours.",
+   "shot.id_conflict": "Shot id is already bound to a different user.",
+ };

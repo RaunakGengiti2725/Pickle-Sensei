@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T11_reserve_paywall_not_402/supabase/functions/api/index.ts	2026-09-04 06:41:25.204641569 +0000
+@@ -776,7 +776,7 @@
+   if (!row) {
+     return serviceUnavailable("Rating reservation", "reserve_analysis_permit returned no row");
+   }
+-  if (row.result === "access.paywall_required") {
++  if (row.result === "access.paywall_required__never") {
+     return codedError(
+       402,
+       "access.paywall_required",

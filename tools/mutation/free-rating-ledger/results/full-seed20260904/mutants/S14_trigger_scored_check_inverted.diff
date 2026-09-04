@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S14_trigger_scored_check_inverted/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:34:05.944620623 +0000
+@@ -155,7 +155,7 @@
+ declare
+   v_next integer;
+ begin
+-  if new.result_kind <> 'scored'
++  if new.result_kind = 'scored'
+      or (tg_op = 'UPDATE' and old.result_kind = 'scored') then
+     return new;
+   end if;

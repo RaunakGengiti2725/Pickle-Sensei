@@ -1,0 +1,22 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S24_backfill_removed/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:35:36.628624947 +0000
+@@ -190,18 +190,7 @@
+ -- 6. Backfill from the shots that exist today, so nobody's current count
+ --    drops when the ledger becomes the floor. Idempotent (greatest).
+ -- ---------------------------------------------------------------------------
+-insert into public.free_rating_ledger as led (identity_hash, scored_count)
+-select public.free_rating_identity_hash(i.provider, i.provider_id), c.scored
+-from (
+-  select s.user_id, count(*)::int as scored
+-  from public.shots s
+-  where s.result_kind = 'scored'
+-  group by s.user_id
+-) c
+-join auth.identities i on i.user_id = c.user_id
+-on conflict (identity_hash) do update
+-  set scored_count = greatest(led.scored_count, excluded.scored_count),
+-      updated_at = now();
++
+ 
+ -- ---------------------------------------------------------------------------
+ -- 7. access_state() — scored_count is now the identity-aware count. Same

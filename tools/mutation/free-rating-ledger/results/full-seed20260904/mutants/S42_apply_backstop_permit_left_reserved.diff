@@ -1,0 +1,12 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S42_apply_backstop_permit_left_reserved/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:38:30.832633254 +0000
+@@ -431,9 +431,6 @@
+     ), false) into v_premium;
+ 
+     if not v_premium and public.lifetime_scored_count() >= 2 then
+-      update public.analysis_permits
+-         set status = 'released', outcome = 'free_limit_exceeded'
+-       where id = v_permit_id and user_id = v_uid and status = 'reserved';
+       return 'access.paywall_required';
+     end if;
+   end if;

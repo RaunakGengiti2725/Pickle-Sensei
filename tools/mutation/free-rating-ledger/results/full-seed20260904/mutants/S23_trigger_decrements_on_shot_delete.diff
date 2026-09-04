@@ -1,0 +1,29 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S23_trigger_decrements_on_shot_delete/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:35:26.968624487 +0000
+@@ -155,6 +155,17 @@
+ declare
+   v_next integer;
+ begin
++  if tg_op = 'DELETE' then
++    if old.result_kind = 'scored' then
++      update public.free_rating_ledger led
++         set scored_count = greatest(0, led.scored_count - 1), updated_at = now()
++       where led.identity_hash in (
++         select public.free_rating_identity_hash(i.provider, i.provider_id)
++         from auth.identities i where i.user_id = old.user_id
++       );
++    end if;
++    return old;
++  end if;
+   if new.result_kind <> 'scored'
+      or (tg_op = 'UPDATE' and old.result_kind = 'scored') then
+     return new;
+@@ -183,7 +194,7 @@
+ 
+ drop trigger if exists shots_record_free_rating_ledger on public.shots;
+ create trigger shots_record_free_rating_ledger
+-  after insert or update of result_kind on public.shots
++  after insert or delete or update of result_kind on public.shots
+   for each row execute function public.record_scored_shot_in_ledger();
+ 
+ -- ---------------------------------------------------------------------------

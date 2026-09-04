@@ -1,0 +1,15 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S13_identity_always_zero/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:33:56.332620165 +0000
+@@ -94,11 +94,7 @@
+ security definer
+ set search_path = ''
+ as $$
+-  select coalesce(max(l.scored_count), 0)::int
+-  from auth.identities i
+-  join public.free_rating_ledger l
+-    on l.identity_hash = public.free_rating_identity_hash(i.provider, i.provider_id)
+-  where i.user_id = (select auth.uid())
++  select 0::int
+ $$;
+ 
+ comment on function public.identity_scored_count() is

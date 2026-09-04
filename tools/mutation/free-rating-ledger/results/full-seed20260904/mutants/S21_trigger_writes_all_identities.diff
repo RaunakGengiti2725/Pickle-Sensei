@@ -1,0 +1,10 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S21_trigger_writes_all_identities/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:35:07.964623581 +0000
+@@ -169,7 +169,6 @@
+   insert into public.free_rating_ledger as led (identity_hash, scored_count)
+   select public.free_rating_identity_hash(i.provider, i.provider_id), v_next
+   from auth.identities i
+-  where i.user_id = new.user_id
+   on conflict (identity_hash) do update
+     set scored_count = greatest(led.scored_count + 1, excluded.scored_count),
+         updated_at = now();

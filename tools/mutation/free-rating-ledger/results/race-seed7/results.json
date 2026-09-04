@@ -1,0 +1,589 @@
+{
+  "meta": {
+    "run_id": "race-seed7",
+    "seed": 7,
+    "commit": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+    "started": "2026-09-04T06:42:25.658Z",
+    "finished": "2026-09-04T06:42:54.832Z",
+    "deno": "2.9.6",
+    "postgres_image": "postgres:16",
+    "replay": "MUT_SEED=7 MUT_RUN_ID=<new> deno task run"
+  },
+  "summary": {
+    "sql": {
+      "total": 2,
+      "killed": 0,
+      "survived": 2,
+      "survived_caught_by_new_probes": 2,
+      "survived_equivalent_prior": 0,
+      "harness_error": 0
+    },
+    "ts": {
+      "total": 0,
+      "killed": 0,
+      "survived": 0,
+      "survived_caught_by_new_test": 0,
+      "harness_error": 0
+    },
+    "baselines": [
+      {
+        "id": "S00_baseline",
+        "verdict": "BASELINE_OK"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "S00_baseline",
+      "kind": "baseline",
+      "target": "baseline",
+      "description": "unmodified migration chain (control)",
+      "expect": "pass",
+      "diff": null,
+      "stages": {
+        "migrate": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 1159,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S00_baseline/migrate.log",
+          "failures": [],
+          "command": "psql -f /tests/shim_auth.sql && for f in /mut/S00_baseline/*.sql; psql -f $f"
+        },
+        "edge_live": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 3296,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S00_baseline/edge_live.log",
+          "failures": [],
+          "command": "PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55499/m_s00_baseline deno test -A --no-check --config deno.json be-edge-routes-shots-rank.test.ts"
+        },
+        "security_regression": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 117,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S00_baseline/security_regression.log",
+          "failures": [],
+          "command": "psql -d m_s00_baseline -v ON_ERROR_STOP=1 -q -f /tests/security_regression.sql"
+        },
+        "edge_static": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 76,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S00_baseline/edge_static.log",
+          "failures": [],
+          "command": "deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts  (cwd: scratch/S00_baseline/supabase/functions/api/__wf__)"
+        },
+        "backfill_probe": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": null,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S00_baseline/backfill_probe.log",
+          "failures": [],
+          "command": "shim + migrations < 20260902150000_free_rating_identity_ledger.sql → seed → 20260902150000_free_rating_identity_ledger.sql → assert ledger"
+        }
+      },
+      "probes": [
+        {
+          "id": "P1_reserve_race_two_keys",
+          "passed": true,
+          "detail": "A=accepted B=access.paywall_required reserved_after=1 b_returned_before_A_commit=false (expected A=accepted, B=access.paywall_required, reserved=1, B waited)",
+          "seed": {
+            "uid": "53c2bf8a-2716-4605-8065-000007000065",
+            "provider": "google",
+            "provider_id": "probe-race-reserve-7",
+            "keys": ["race-a-7", "race-b-7"]
+          }
+        },
+        {
+          "id": "P2_sync_race_two_permits",
+          "passed": true,
+          "detail": "A=accepted B=access.paywall_required scored_after=2 forged_permit=released/free_limit_exceeded b_returned_before_A_commit=false (expected accepted / access.paywall_required / 2 / released/free_limit_exceeded)",
+          "seed": {
+            "uid": "54008d06-0942-4bfb-80c9-0000070000c9",
+            "provider": "apple",
+            "provider_id": "probe-race-sync-7",
+            "shot_ids": [
+              "54012b3d-4b85-4c0a-80ca-0000070000ca",
+              "5401c974-8dc8-4c19-80cb-0000070000cb",
+              "540267ab-d00b-4c28-80cc-0000070000cc"
+            ],
+            "permits": [
+              "c497f7ca-5f13-4084-8fd0-d4b886d5a6f2",
+              "6dd7133a-0a85-47f2-a1bc-98ed2ce0b6fc"
+            ]
+          }
+        },
+        {
+          "id": "P3_grants_and_rls",
+          "passed": true,
+          "detail": "all denials held; RLS on, 0 policies, 0 client grants",
+          "seed": {}
+        },
+        {
+          "id": "P4_inherited_ledger_above_cap",
+          "passed": true,
+          "detail": "access_state.scored_count=5 reserve=access.paywall_required permits_created=0 forged_sync=access.paywall_required (expected 5 / access.paywall_required / 0 / access.paywall_required)",
+          "seed": {
+            "uid": "543e5a82-eb6e-41f0-812d-00000700012d",
+            "provider": "google",
+            "provider_id": "probe-cap-7",
+            "ledger_count": 5
+          }
+        },
+        {
+          "id": "P5_lapsed_premium_not_premium",
+          "passed": true,
+          "detail": "access_state.premium=false scored=2 reserve=access.paywall_required forged_sync=access.paywall_required (expected false / 2 / access.paywall_required / access.paywall_required)",
+          "seed": {
+            "uid": "547c27fe-cd9a-47e6-8191-000007000191",
+            "provider": "apple",
+            "provider_id": "probe-lapsed-7",
+            "expires_at": "now() - 1 day",
+            "ledger_count": 2
+          }
+        },
+        {
+          "id": "P6_update_to_scored_increments_once",
+          "passed": true,
+          "detail": "identity_scored_count before=0 after=1 (expected 0 → 1)",
+          "seed": {
+            "uid": "54b9f57a-afc6-4ddc-81f5-0000070001f5",
+            "provider": "google",
+            "provider_id": "probe-update-7",
+            "shot_id": "54ba93b1-f209-4deb-81f6-0000070001f6"
+          }
+        },
+        {
+          "id": "P8_active_premium_bypasses_backstop",
+          "passed": true,
+          "detail": "access_state.premium=true scored=5 reserve=accepted sync=accepted ledger_after=6 (expected true / 5 / accepted / accepted / 6)",
+          "seed": {
+            "uid": "55359072-741e-49c8-82bd-0000070002bd",
+            "provider": "apple",
+            "provider_id": "probe-premium-7",
+            "expires_at": "now() + 30 days",
+            "ledger_count": 5,
+            "shot_id": "55362ea9-b661-49d7-82be-0000070002be"
+          }
+        },
+        {
+          "id": "P9_multi_identity_counts_by_max",
+          "passed": true,
+          "detail": "identity_scored_count before=1 sync=accepted after=2 ledger_rows=[2,2] (expected 1 / accepted / 2 / [2,2])",
+          "seed": {
+            "uid": "55735dee-564a-4fbe-8321-000007000321",
+            "identities": {
+              "apple": "probe-multi-apple-7",
+              "google": "probe-multi-google-7"
+            },
+            "ledger": {
+              "apple": 1,
+              "google": 0
+            },
+            "shot_id": "5573fc25-988d-4fcd-8322-000007000322"
+          }
+        },
+        {
+          "id": "P10_stale_reserved_permit_ignored",
+          "passed": true,
+          "detail": "access_state.reserved_count=0 reserve=accepted (expected 0 / accepted)",
+          "seed": {
+            "uid": "55b12b6a-3876-45b4-8385-000007000385",
+            "provider": "google",
+            "provider_id": "probe-stale-7",
+            "ledger_count": 1,
+            "stale_permit_age": "30 hours"
+          }
+        },
+        {
+          "id": "P7_backfill_pre_existing_scored_shots",
+          "passed": true,
+          "detail": "ledger_after_migration=2 access_state.scored_count=2 ledger_after_account_delete=2 (expected 2 / 2 / 2)",
+          "seed": {
+            "uid": "54f7c2f6-91f2-43d2-8259-000007000259",
+            "provider": "google",
+            "provider_id": "probe-backfill-7",
+            "scored_before_migration": 2,
+            "abstentions_before_migration": 1
+          }
+        }
+      ],
+      "killed_by_existing": [],
+      "caught_by_new_probes": [],
+      "verdict": "BASELINE_OK"
+    },
+    {
+      "id": "S36_reserve_no_advisory_lock",
+      "kind": "sql",
+      "target": "concurrency",
+      "description": "reserve_analysis_permit() drops the per-user advisory lock (concurrent different-key reserves both pass)",
+      "expect": "survive_gap",
+      "diff": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/mutants/S36_reserve_no_advisory_lock.diff",
+      "stages": {
+        "migrate": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 1389,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S36_reserve_no_advisory_lock/migrate.log",
+          "failures": [],
+          "command": "psql -f /tests/shim_auth.sql && for f in /mut/S36_reserve_no_advisory_lock/*.sql; psql -f $f"
+        },
+        "edge_live": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 3312,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S36_reserve_no_advisory_lock/edge_live.log",
+          "failures": [],
+          "command": "PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55499/m_s36_reserve_no_advisory_lock deno test -A --no-check --config deno.json be-edge-routes-shots-rank.test.ts"
+        },
+        "security_regression": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 110,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S36_reserve_no_advisory_lock/security_regression.log",
+          "failures": [],
+          "command": "psql -d m_s36_reserve_no_advisory_lock -v ON_ERROR_STOP=1 -q -f /tests/security_regression.sql"
+        },
+        "edge_static": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 90,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S36_reserve_no_advisory_lock/edge_static.log",
+          "failures": [],
+          "command": "deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts  (cwd: scratch/S36_reserve_no_advisory_lock/supabase/functions/api/__wf__)"
+        },
+        "backfill_probe": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": null,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S36_reserve_no_advisory_lock/backfill_probe.log",
+          "failures": [],
+          "command": "shim + migrations < 20260902150000_free_rating_identity_ledger.sql → seed → 20260902150000_free_rating_identity_ledger.sql → assert ledger"
+        }
+      },
+      "probes": [
+        {
+          "id": "P1_reserve_race_two_keys",
+          "passed": false,
+          "detail": "A=accepted B=accepted reserved_after=2 b_returned_before_A_commit=true (expected A=accepted, B=access.paywall_required, reserved=1, B waited)",
+          "seed": {
+            "uid": "53c2bf8a-2716-4605-8065-000007000065",
+            "provider": "google",
+            "provider_id": "probe-race-reserve-7",
+            "keys": ["race-a-7", "race-b-7"]
+          }
+        },
+        {
+          "id": "P2_sync_race_two_permits",
+          "passed": true,
+          "detail": "A=accepted B=access.paywall_required scored_after=2 forged_permit=released/free_limit_exceeded b_returned_before_A_commit=false (expected accepted / access.paywall_required / 2 / released/free_limit_exceeded)",
+          "seed": {
+            "uid": "54008d06-0942-4bfb-80c9-0000070000c9",
+            "provider": "apple",
+            "provider_id": "probe-race-sync-7",
+            "shot_ids": [
+              "54012b3d-4b85-4c0a-80ca-0000070000ca",
+              "5401c974-8dc8-4c19-80cb-0000070000cb",
+              "540267ab-d00b-4c28-80cc-0000070000cc"
+            ],
+            "permits": [
+              "7f34d4ce-03f3-40cc-8d53-148b577a12f7",
+              "355d109e-5e20-4900-88f2-1169f77bc1fe"
+            ]
+          }
+        },
+        {
+          "id": "P3_grants_and_rls",
+          "passed": true,
+          "detail": "all denials held; RLS on, 0 policies, 0 client grants",
+          "seed": {}
+        },
+        {
+          "id": "P4_inherited_ledger_above_cap",
+          "passed": true,
+          "detail": "access_state.scored_count=5 reserve=access.paywall_required permits_created=0 forged_sync=access.paywall_required (expected 5 / access.paywall_required / 0 / access.paywall_required)",
+          "seed": {
+            "uid": "543e5a82-eb6e-41f0-812d-00000700012d",
+            "provider": "google",
+            "provider_id": "probe-cap-7",
+            "ledger_count": 5
+          }
+        },
+        {
+          "id": "P5_lapsed_premium_not_premium",
+          "passed": true,
+          "detail": "access_state.premium=false scored=2 reserve=access.paywall_required forged_sync=access.paywall_required (expected false / 2 / access.paywall_required / access.paywall_required)",
+          "seed": {
+            "uid": "547c27fe-cd9a-47e6-8191-000007000191",
+            "provider": "apple",
+            "provider_id": "probe-lapsed-7",
+            "expires_at": "now() - 1 day",
+            "ledger_count": 2
+          }
+        },
+        {
+          "id": "P6_update_to_scored_increments_once",
+          "passed": true,
+          "detail": "identity_scored_count before=0 after=1 (expected 0 → 1)",
+          "seed": {
+            "uid": "54b9f57a-afc6-4ddc-81f5-0000070001f5",
+            "provider": "google",
+            "provider_id": "probe-update-7",
+            "shot_id": "54ba93b1-f209-4deb-81f6-0000070001f6"
+          }
+        },
+        {
+          "id": "P8_active_premium_bypasses_backstop",
+          "passed": true,
+          "detail": "access_state.premium=true scored=5 reserve=accepted sync=accepted ledger_after=6 (expected true / 5 / accepted / accepted / 6)",
+          "seed": {
+            "uid": "55359072-741e-49c8-82bd-0000070002bd",
+            "provider": "apple",
+            "provider_id": "probe-premium-7",
+            "expires_at": "now() + 30 days",
+            "ledger_count": 5,
+            "shot_id": "55362ea9-b661-49d7-82be-0000070002be"
+          }
+        },
+        {
+          "id": "P9_multi_identity_counts_by_max",
+          "passed": true,
+          "detail": "identity_scored_count before=1 sync=accepted after=2 ledger_rows=[2,2] (expected 1 / accepted / 2 / [2,2])",
+          "seed": {
+            "uid": "55735dee-564a-4fbe-8321-000007000321",
+            "identities": {
+              "apple": "probe-multi-apple-7",
+              "google": "probe-multi-google-7"
+            },
+            "ledger": {
+              "apple": 1,
+              "google": 0
+            },
+            "shot_id": "5573fc25-988d-4fcd-8322-000007000322"
+          }
+        },
+        {
+          "id": "P10_stale_reserved_permit_ignored",
+          "passed": true,
+          "detail": "access_state.reserved_count=0 reserve=accepted (expected 0 / accepted)",
+          "seed": {
+            "uid": "55b12b6a-3876-45b4-8385-000007000385",
+            "provider": "google",
+            "provider_id": "probe-stale-7",
+            "ledger_count": 1,
+            "stale_permit_age": "30 hours"
+          }
+        },
+        {
+          "id": "P7_backfill_pre_existing_scored_shots",
+          "passed": true,
+          "detail": "ledger_after_migration=2 access_state.scored_count=2 ledger_after_account_delete=2 (expected 2 / 2 / 2)",
+          "seed": {
+            "uid": "54f7c2f6-91f2-43d2-8259-000007000259",
+            "provider": "google",
+            "provider_id": "probe-backfill-7",
+            "scored_before_migration": 2,
+            "abstentions_before_migration": 1
+          }
+        }
+      ],
+      "killed_by_existing": [],
+      "caught_by_new_probes": ["P1_reserve_race_two_keys"],
+      "verdict": "SURVIVED"
+    },
+    {
+      "id": "S45_apply_no_advisory_lock",
+      "kind": "sql",
+      "target": "concurrency",
+      "description": "apply_synced_shot() drops the per-user advisory lock (two concurrent syncs with different permits both pass the backstop)",
+      "expect": "survive_gap",
+      "diff": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/mutants/S45_apply_no_advisory_lock.diff",
+      "stages": {
+        "migrate": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 1176,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S45_apply_no_advisory_lock/migrate.log",
+          "failures": [],
+          "command": "psql -f /tests/shim_auth.sql && for f in /mut/S45_apply_no_advisory_lock/*.sql; psql -f $f"
+        },
+        "edge_live": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 3538,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S45_apply_no_advisory_lock/edge_live.log",
+          "failures": [],
+          "command": "PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55499/m_s45_apply_no_advisory_lock deno test -A --no-check --config deno.json be-edge-routes-shots-rank.test.ts"
+        },
+        "security_regression": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 116,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S45_apply_no_advisory_lock/security_regression.log",
+          "failures": [],
+          "command": "psql -d m_s45_apply_no_advisory_lock -v ON_ERROR_STOP=1 -q -f /tests/security_regression.sql"
+        },
+        "edge_static": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": 79,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S45_apply_no_advisory_lock/edge_static.log",
+          "failures": [],
+          "command": "deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts  (cwd: scratch/S45_apply_no_advisory_lock/supabase/functions/api/__wf__)"
+        },
+        "backfill_probe": {
+          "ran": true,
+          "passed": true,
+          "exit": 0,
+          "ms": null,
+          "log": "/home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/race-seed7/logs/S45_apply_no_advisory_lock/backfill_probe.log",
+          "failures": [],
+          "command": "shim + migrations < 20260902150000_free_rating_identity_ledger.sql → seed → 20260902150000_free_rating_identity_ledger.sql → assert ledger"
+        }
+      },
+      "probes": [
+        {
+          "id": "P1_reserve_race_two_keys",
+          "passed": true,
+          "detail": "A=accepted B=access.paywall_required reserved_after=1 b_returned_before_A_commit=false (expected A=accepted, B=access.paywall_required, reserved=1, B waited)",
+          "seed": {
+            "uid": "53c2bf8a-2716-4605-8065-000007000065",
+            "provider": "google",
+            "provider_id": "probe-race-reserve-7",
+            "keys": ["race-a-7", "race-b-7"]
+          }
+        },
+        {
+          "id": "P2_sync_race_two_permits",
+          "passed": false,
+          "detail": "A=accepted B=accepted scored_after=3 forged_permit=finalized/scored b_returned_before_A_commit=false (expected accepted / access.paywall_required / 2 / released/free_limit_exceeded)",
+          "seed": {
+            "uid": "54008d06-0942-4bfb-80c9-0000070000c9",
+            "provider": "apple",
+            "provider_id": "probe-race-sync-7",
+            "shot_ids": [
+              "54012b3d-4b85-4c0a-80ca-0000070000ca",
+              "5401c974-8dc8-4c19-80cb-0000070000cb",
+              "540267ab-d00b-4c28-80cc-0000070000cc"
+            ],
+            "permits": [
+              "13ff22a3-3cc2-4ffb-b217-ec8dc658569d",
+              "c57a6c8c-702c-465f-9cb8-a43282b5af09"
+            ]
+          }
+        },
+        {
+          "id": "P3_grants_and_rls",
+          "passed": true,
+          "detail": "all denials held; RLS on, 0 policies, 0 client grants",
+          "seed": {}
+        },
+        {
+          "id": "P4_inherited_ledger_above_cap",
+          "passed": true,
+          "detail": "access_state.scored_count=5 reserve=access.paywall_required permits_created=0 forged_sync=access.paywall_required (expected 5 / access.paywall_required / 0 / access.paywall_required)",
+          "seed": {
+            "uid": "543e5a82-eb6e-41f0-812d-00000700012d",
+            "provider": "google",
+            "provider_id": "probe-cap-7",
+            "ledger_count": 5
+          }
+        },
+        {
+          "id": "P5_lapsed_premium_not_premium",
+          "passed": true,
+          "detail": "access_state.premium=false scored=2 reserve=access.paywall_required forged_sync=access.paywall_required (expected false / 2 / access.paywall_required / access.paywall_required)",
+          "seed": {
+            "uid": "547c27fe-cd9a-47e6-8191-000007000191",
+            "provider": "apple",
+            "provider_id": "probe-lapsed-7",
+            "expires_at": "now() - 1 day",
+            "ledger_count": 2
+          }
+        },
+        {
+          "id": "P6_update_to_scored_increments_once",
+          "passed": true,
+          "detail": "identity_scored_count before=0 after=1 (expected 0 → 1)",
+          "seed": {
+            "uid": "54b9f57a-afc6-4ddc-81f5-0000070001f5",
+            "provider": "google",
+            "provider_id": "probe-update-7",
+            "shot_id": "54ba93b1-f209-4deb-81f6-0000070001f6"
+          }
+        },
+        {
+          "id": "P8_active_premium_bypasses_backstop",
+          "passed": true,
+          "detail": "access_state.premium=true scored=5 reserve=accepted sync=accepted ledger_after=6 (expected true / 5 / accepted / accepted / 6)",
+          "seed": {
+            "uid": "55359072-741e-49c8-82bd-0000070002bd",
+            "provider": "apple",
+            "provider_id": "probe-premium-7",
+            "expires_at": "now() + 30 days",
+            "ledger_count": 5,
+            "shot_id": "55362ea9-b661-49d7-82be-0000070002be"
+          }
+        },
+        {
+          "id": "P9_multi_identity_counts_by_max",
+          "passed": true,
+          "detail": "identity_scored_count before=1 sync=accepted after=2 ledger_rows=[2,2] (expected 1 / accepted / 2 / [2,2])",
+          "seed": {
+            "uid": "55735dee-564a-4fbe-8321-000007000321",
+            "identities": {
+              "apple": "probe-multi-apple-7",
+              "google": "probe-multi-google-7"
+            },
+            "ledger": {
+              "apple": 1,
+              "google": 0
+            },
+            "shot_id": "5573fc25-988d-4fcd-8322-000007000322"
+          }
+        },
+        {
+          "id": "P10_stale_reserved_permit_ignored",
+          "passed": true,
+          "detail": "access_state.reserved_count=0 reserve=accepted (expected 0 / accepted)",
+          "seed": {
+            "uid": "55b12b6a-3876-45b4-8385-000007000385",
+            "provider": "google",
+            "provider_id": "probe-stale-7",
+            "ledger_count": 1,
+            "stale_permit_age": "30 hours"
+          }
+        },
+        {
+          "id": "P7_backfill_pre_existing_scored_shots",
+          "passed": true,
+          "detail": "ledger_after_migration=2 access_state.scored_count=2 ledger_after_account_delete=2 (expected 2 / 2 / 2)",
+          "seed": {
+            "uid": "54f7c2f6-91f2-43d2-8259-000007000259",
+            "provider": "google",
+            "provider_id": "probe-backfill-7",
+            "scored_before_migration": 2,
+            "abstentions_before_migration": 1
+          }
+        }
+      ],
+      "killed_by_existing": [],
+      "caught_by_new_probes": ["P2_sync_race_two_permits"],
+      "verdict": "SURVIVED"
+    }
+  ]
+}

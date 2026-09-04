@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T07_canStart_uses_remaining/supabase/functions/api/index.ts	2026-09-04 06:41:04.308640572 +0000
+@@ -717,7 +717,7 @@
+   const entitlements = premium
+     ? ["premium", ...billing.activeEntitlements.filter((name) => name !== "premium")]
+     : [];
+-  const canStartRating = premium || availableToReserve > 0;
++  const canStartRating = premium || remaining > 0;
+   return {
+     premium,
+     entitlements,

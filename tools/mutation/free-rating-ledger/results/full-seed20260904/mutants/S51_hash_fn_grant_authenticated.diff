@@ -1,0 +1,10 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S51_hash_fn_grant_authenticated/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:39:58.068637414 +0000
+@@ -78,6 +78,7 @@
+ 
+ revoke execute on function public.free_rating_identity_hash(text, text)
+   from public, anon, authenticated;
++grant execute on function public.free_rating_identity_hash(text, text) to authenticated;
+ 
+ -- ---------------------------------------------------------------------------
+ -- 3. identity_scored_count() — SECURITY DEFINER because auth.identities and

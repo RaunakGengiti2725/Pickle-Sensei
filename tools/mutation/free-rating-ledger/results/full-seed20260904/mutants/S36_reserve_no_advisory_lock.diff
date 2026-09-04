@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S36_reserve_no_advisory_lock/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:37:32.240630460 +0000
+@@ -280,8 +280,6 @@
+   end if;
+ 
+   -- Serialize the check-then-insert for this user. This is the fix.
+-  perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+-
+   -- Re-check under the lock: a concurrent request with the SAME key may have
+   -- inserted between the fast-path read above and acquiring the lock.
+   select * into v_row

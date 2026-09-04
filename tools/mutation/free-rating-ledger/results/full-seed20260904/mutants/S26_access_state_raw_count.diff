@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S26_access_state_raw_count/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:35:55.776625860 +0000
+@@ -221,7 +221,7 @@
+       from public.billing_entitlements b
+       where b.user_id = (select auth.uid())
+     ), false) as premium,
+-    public.lifetime_scored_count() as scored_count,
++    (select count(*)::int from public.shots s where s.user_id = (select auth.uid()) and s.result_kind = 'scored') as scored_count,
+     (
+       select count(*)::int from public.analysis_permits p
+       where p.user_id = (select auth.uid())

@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S31_reserve_limit_three/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:36:44.404628179 +0000
+@@ -314,7 +314,7 @@
+     )
+   into v_premium, v_scored, v_reserved;
+ 
+-  v_remaining := 2 - least(v_scored, 2);
++  v_remaining := 3 - least(v_scored, 3);
+ 
+   if not v_premium and v_remaining <= v_reserved then
+     result := 'access.paywall_required';

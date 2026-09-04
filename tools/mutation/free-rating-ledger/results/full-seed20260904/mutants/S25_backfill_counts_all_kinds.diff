@@ -1,0 +1,10 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S25_backfill_counts_all_kinds/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:35:45.912625390 +0000
+@@ -195,7 +195,6 @@
+ from (
+   select s.user_id, count(*)::int as scored
+   from public.shots s
+-  where s.result_kind = 'scored'
+   group by s.user_id
+ ) c
+ join auth.identities i on i.user_id = c.user_id

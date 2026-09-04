@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S50_ledger_permissive_policy/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:39:48.468636956 +0000
+@@ -59,6 +59,8 @@
+ 
+ alter table public.free_rating_ledger enable row level security;
+ revoke all on public.free_rating_ledger from public, anon, authenticated;
++grant select on public.free_rating_ledger to authenticated;
++create policy mutant_ledger_read on public.free_rating_ledger for select to authenticated using (true);
+ 
+ -- ---------------------------------------------------------------------------
+ -- 2. Hash helper — the ONE definition of the ledger key. Not client-callable.

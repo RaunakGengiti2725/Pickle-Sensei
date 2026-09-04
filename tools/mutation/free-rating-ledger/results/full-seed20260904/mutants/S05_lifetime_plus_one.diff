@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S05_lifetime_plus_one/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:32:44.464616738 +0000
+@@ -127,7 +127,7 @@
+       where s.user_id = (select auth.uid()) and s.result_kind = 'scored'
+     ),
+     public.identity_scored_count()
+-  )
++  ) + 1
+ $$;
+ 
+ comment on function public.lifetime_scored_count() is

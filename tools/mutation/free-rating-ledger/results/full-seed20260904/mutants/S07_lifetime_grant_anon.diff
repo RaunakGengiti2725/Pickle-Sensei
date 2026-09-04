@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S07_lifetime_grant_anon/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:33:02.012617575 +0000
+@@ -134,7 +134,7 @@
+   'Scored-shot count that the two-lifetime-free-ratings rule is applied to: greatest(caller''s own scored shots, caller''s identity ledger). access_state(), reserve_analysis_permit() and apply_synced_shot() MUST all use this — a copy of the raw shots count anywhere reopens the delete-and-recreate hole.';
+ 
+ revoke all on function public.lifetime_scored_count() from public, anon;
+-grant execute on function public.lifetime_scored_count() to authenticated;
++grant execute on function public.lifetime_scored_count() to authenticated, anon;
+ 
+ -- ---------------------------------------------------------------------------
+ -- 5. Ledger writer — fires on every scored shot INSERT (and on the

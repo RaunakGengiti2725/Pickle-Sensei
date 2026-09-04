@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S11_identity_security_invoker/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:33:40.088619390 +0000
+@@ -91,7 +91,7 @@
+ returns integer
+ language sql
+ stable
+-security definer
++security invoker
+ set search_path = ''
+ as $$
+   select coalesce(max(l.scored_count), 0)::int

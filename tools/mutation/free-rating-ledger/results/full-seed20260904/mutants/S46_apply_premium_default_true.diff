@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S46_apply_premium_default_true/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:39:09.708635108 +0000
+@@ -428,7 +428,7 @@
+       select b.premium and (b.expires_at is null or b.expires_at > now())
+       from public.billing_entitlements b
+       where b.user_id = v_uid
+-    ), false) into v_premium;
++    ), true) into v_premium;
+ 
+     if not v_premium and public.lifetime_scored_count() >= 2 then
+       update public.analysis_permits

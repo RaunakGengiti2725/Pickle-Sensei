@@ -1,0 +1,17 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S03_lifetime_drops_shots_floor/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:32:24.876615804 +0000
+@@ -121,13 +121,7 @@
+ security invoker
+ set search_path = ''
+ as $$
+-  select greatest(
+-    (
+-      select count(*)::int from public.shots s
+-      where s.user_id = (select auth.uid()) and s.result_kind = 'scored'
+-    ),
+-    public.identity_scored_count()
+-  )
++  select public.identity_scored_count()
+ $$;
+ 
+ comment on function public.lifetime_scored_count() is

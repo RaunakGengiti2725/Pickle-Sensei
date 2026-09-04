@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T02_limit_three/supabase/functions/api/index.ts	2026-09-04 06:40:37.832639310 +0000
+@@ -710,7 +710,7 @@
+     activeEntitlements: [],
+   };
+   const used = Math.min(2, state.scored_count ?? 0);
+-  const remaining = 2 - used;
++  const remaining = 3 - used;
+   const reserved = Math.min(state.reserved_count ?? 0, remaining);
+   const availableToReserve = remaining - reserved;
+   const premium = billing.premium;

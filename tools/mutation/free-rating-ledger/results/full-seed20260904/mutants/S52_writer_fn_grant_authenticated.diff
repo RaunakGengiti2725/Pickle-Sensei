@@ -1,0 +1,10 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S52_writer_fn_grant_authenticated/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:40:08.008637888 +0000
+@@ -180,6 +180,7 @@
+ 
+ revoke execute on function public.record_scored_shot_in_ledger()
+   from public, anon, authenticated;
++grant execute on function public.record_scored_shot_in_ledger() to authenticated;
+ 
+ drop trigger if exists shots_record_free_rating_ledger on public.shots;
+ create trigger shots_record_free_rating_ledger

@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts	2026-09-04 06:16:48.560571157 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/T14_sync_paywall_accepted/supabase/functions/api/index.ts	2026-09-04 06:41:40.956642320 +0000
+@@ -1254,7 +1254,7 @@
+       continue;
+     }
+     const status = String(applied.data ?? "");
+-    if (status === "accepted") {
++    if (status === "accepted" || status === "access.paywall_required") {
+       acceptedIds.push(shot.id);
+       wroteEvidence = true;
+       continue;

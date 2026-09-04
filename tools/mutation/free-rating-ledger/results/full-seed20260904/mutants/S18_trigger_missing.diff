@@ -1,0 +1,13 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S18_trigger_missing/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:34:44.216622448 +0000
+@@ -182,9 +182,7 @@
+   from public, anon, authenticated;
+ 
+ drop trigger if exists shots_record_free_rating_ledger on public.shots;
+-create trigger shots_record_free_rating_ledger
+-  after insert or update of result_kind on public.shots
+-  for each row execute function public.record_scored_shot_in_ledger();
++
+ 
+ -- ---------------------------------------------------------------------------
+ -- 6. Backfill from the shots that exist today, so nobody's current count

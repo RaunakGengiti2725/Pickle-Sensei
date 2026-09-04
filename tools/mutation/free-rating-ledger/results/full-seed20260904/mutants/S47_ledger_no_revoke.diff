@@ -1,0 +1,11 @@
+--- /home/ubuntu/repos/Pickle-Sensei/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 05:43:03.727761870 +0000
++++ /home/ubuntu/repos/Pickle-Sensei/artifacts/mutation/free-rating-ledger/full-seed20260904/scratch/S47_ledger_no_revoke/supabase/migrations/20260902150000_free_rating_identity_ledger.sql	2026-09-04 06:39:19.440635572 +0000
+@@ -58,7 +58,7 @@
+   'Lifetime scored-shot count per sign-in identity (SHA-256 of provider:provider_id from auth.identities). Survives account deletion on purpose so the two free ratings cannot be re-earned by deleting and re-creating the account. Service-only: no client grants, no policies; read through identity_scored_count() (caller-scoped) and written by the shots trigger.';
+ 
+ alter table public.free_rating_ledger enable row level security;
+-revoke all on public.free_rating_ledger from public, anon, authenticated;
++
+ 
+ -- ---------------------------------------------------------------------------
+ -- 2. Hash helper — the ONE definition of the ledger key. Not client-callable.
