@@ -14,7 +14,12 @@
 #   typecheck  pnpm typecheck                (pnpm build == pnpm -r typecheck)
 #   test       pnpm test with DATABASE_URL_TEST (integration suites need Postgres);
 #              @pickle/queue's 3 SQS tests run only when SQS_ENDPOINT_TEST
-#              (ElasticMQ) is reachable — the stage reports which it was
+#              (ElasticMQ) is reachable — the stage reports which it was.
+#              Then the session-replay gate: @pickle/swing-lab
+#              test/sessionEngine.test.ts is re-collected with the JSON
+#              reporter and the stage FAILS if any of its tests is skipped,
+#              todo, or failed, or if the replay describes are absent
+#              (test-session-replay.json next to the logs)
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
@@ -203,6 +208,50 @@ stage_test() {
     unset SQS_ENDPOINT_TEST
   fi
   pnpm test
+  assert_session_replay_ran
+}
+
+# The @pickle/swing-lab session-replay regression (sessionEngine.test.ts) is
+# the only test that replays real dev-rally footage through the streaming
+# engine. A skipped replay test is a silent loss of that coverage, not a pass
+# (REVIEW.md), so the stage re-collects that one file with vitest's JSON
+# reporter and fails unless every test in it PASSED and the replay describes
+# were actually present.
+assert_session_replay_ran() {
+  local report
+  report="$(cd "$ARTIFACTS" && pwd)/test-session-replay.json"
+  echo "session-replay gate: re-running test/sessionEngine.test.ts with the JSON reporter → $report"
+  pnpm --filter @pickle/swing-lab exec vitest run test/sessionEngine.test.ts \
+    --reporter=default --reporter=json --outputFile="$report"
+  node - "$report" <<'EOF'
+const fs = require("node:fs");
+const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const file = (report.testResults ?? []).find((r) => /[\\/]test[\\/]sessionEngine\.test\.ts$/.test(r.name));
+const fail = (msg) => {
+  console.error(`session-replay gate: FAIL — ${msg}`);
+  process.exit(1);
+};
+if (!file) fail("test/sessionEngine.test.ts was not collected");
+const tests = file.assertionResults ?? [];
+const replay = tests.filter((t) => /session replay/i.test(t.fullName));
+if (replay.length === 0) fail("no 'session replay' tests were collected");
+if (!replay.some((t) => t.fullName.includes("afn-sasebo-rally1"))) {
+  fail("the afn-sasebo-rally1 dev-rally replay is missing");
+}
+const notPassed = tests.filter((t) => t.status !== "passed");
+if (notPassed.length > 0) {
+  fail(
+    `${notPassed.length} of ${tests.length} sessionEngine test(s) did not pass:\n` +
+      notPassed.map((t) => `  [${t.status}] ${t.fullName}`).join("\n"),
+  );
+}
+if ((report.numPendingTests ?? 0) > 0 || (report.numTodoTests ?? 0) > 0) {
+  fail(`${report.numPendingTests ?? 0} skipped / ${report.numTodoTests ?? 0} todo tests reported`);
+}
+console.log(
+  `session-replay gate: OK — ${replay.length} replay tests passed (${tests.length} total in sessionEngine.test.ts, 0 skipped)`,
+);
+EOF
 }
 
 stage_db() {
