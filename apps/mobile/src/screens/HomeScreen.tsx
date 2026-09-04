@@ -46,7 +46,7 @@ import { NotificationPrimingCard } from '../notifications/NotificationPrimingCar
 import { flameIntensityForStreak } from '../consistency/engine';
 import { FlameIcon } from '../consistency/FlameIcon';
 import { useConsistencyStore } from '../consistency/store';
-import { formatDuprEstimate } from '../progress/duprEstimate';
+import { formatMatchRatingEstimate } from '../progress/matchRatingEstimate';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import { plural } from '../util/plural';
 
@@ -490,8 +490,8 @@ export function HomeScreen() {
               {displayedScore === null ? '—' : displayedScore.toFixed(1)}
             </Text>
             {displayedScore !== null ? (
-              <Text style={[type.micro, styles.techniqueSummaryDupr]}>
-                {formatDuprEstimate(displayedScore)}
+              <Text style={[type.micro, styles.techniqueSummaryMatchRating]}>
+                {formatMatchRatingEstimate(displayedScore)}
               </Text>
             ) : null}
           </View>
@@ -804,7 +804,7 @@ const styles = StyleSheet.create({
     fontSize: 30,
     lineHeight: 34,
   },
-  techniqueSummaryDupr: { color: color.inkSoft, marginTop: 2 },
+  techniqueSummaryMatchRating: { color: color.inkSoft, marginTop: 2 },
   scoreCard: { padding: space.lg, minHeight: 358 },
   scoreCardTop: {
     flexDirection: 'row',

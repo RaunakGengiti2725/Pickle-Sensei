@@ -9,8 +9,6 @@
  * those verbatim) and a static scan of every shipped mobile source file, so
  * a Settings/Progress/Result footnote or a comment cannot reintroduce it.
  */
-import fs from 'fs';
-import path from 'path';
 import React from 'react';
 import { Text, View } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -29,6 +27,21 @@ jest.mock('../../src/progress/rankCelebration', () => {
 
 import { PlayerRankCard } from '../../src/components/PlayerRankCard';
 import type { RealAnalysisFact } from '../../src/data/repository';
+
+// Node built-ins for the static source scan. The mobile tsconfig excludes
+// node typings (see be-mobile-sync-outbox.test.ts), so shims stay local.
+declare const require: (id: string) => unknown;
+declare const __dirname: string;
+const { readdirSync, readFileSync, statSync } = require('fs') as {
+  readdirSync: (path: string) => string[];
+  readFileSync: (path: string, encoding: 'utf8') => string;
+  statSync: (path: string) => { isDirectory(): boolean };
+};
+const { join, relative, resolve } = require('path') as {
+  join: (...parts: string[]) => string;
+  relative: (from: string, to: string) => string;
+  resolve: (...parts: string[]) => string;
+};
 
 const BANNED = /DUPR/;
 
@@ -71,10 +84,10 @@ function allAccessibilityCopy(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 function listSourceFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) listSourceFiles(full, out);
-    else if (/\.tsx?$/.test(entry.name)) out.push(full);
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) listSourceFiles(full, out);
+    else if (/\.tsx?$/.test(name)) out.push(full);
   }
   return out;
 }
@@ -106,10 +119,10 @@ describe('R5 — third-party trademark absent from user-facing copy', () => {
   });
 
   it('no shipped mobile source file (apps/mobile/src) mentions DUPR', () => {
-    const srcRoot = path.resolve(__dirname, '../../src');
+    const srcRoot = resolve(__dirname, '../../src');
     const offenders = listSourceFiles(srcRoot)
-      .filter(file => BANNED.test(fs.readFileSync(file, 'utf8')))
-      .map(file => path.relative(srcRoot, file));
+      .filter(file => BANNED.test(readFileSync(file, 'utf8')))
+      .map(file => relative(srcRoot, file));
     expect(offenders).toEqual([]);
   });
 });

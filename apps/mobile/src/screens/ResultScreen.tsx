@@ -87,9 +87,9 @@ import {
 } from '../components/strokeResultModel';
 import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
 import {
-  DUPR_ESTIMATE_NOTE,
-  formatDuprEstimate,
-} from '../progress/duprEstimate';
+  MATCH_RATING_ESTIMATE_NOTE,
+  formatMatchRatingEstimate,
+} from '../progress/matchRatingEstimate';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -98,7 +98,7 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * idea per page, stepped through with a pinned Next, and NO page scrolls on
  * a 6.1" phone:
  *
- *   1. SCORE       — the technique score ring, the DUPR-style estimate and
+ *   1. SCORE       — the technique score ring, the match-rating estimate and
  *                    the ONE measured insight (plus this sitting's set).
  *   2. THE PROBLEM — the form-review replay IS the page: the stage fills
  *                    the height, frozen on the priority fault's stop, and
@@ -954,10 +954,12 @@ function ScorePage(props: {
           dark
         />
       </View>
-      <Text style={[type.caption, styles.duprEstimate]}>
-        {formatDuprEstimate(analysis.overallScore)}
+      <Text style={[type.caption, styles.matchRatingEstimate]}>
+        {formatMatchRatingEstimate(analysis.overallScore)}
       </Text>
-      <Text style={[type.caption, styles.duprNote]}>{DUPR_ESTIMATE_NOTE}</Text>
+      <Text style={[type.caption, styles.matchRatingNote]}>
+        {MATCH_RATING_ESTIMATE_NOTE}
+      </Text>
 
       {/* ONE insight: the strongest defensible evidence — for a scored read,
           the engine's own worst measured checkpoint plus the cue that matches
@@ -1766,12 +1768,12 @@ const styles = StyleSheet.create({
   sub: { color: color.onDarkMuted, marginTop: space.sm, maxWidth: 340 },
   // ── Score page ──
   ringWrap: { alignItems: 'center', marginTop: space.lg },
-  duprEstimate: {
+  matchRatingEstimate: {
     color: color.onDarkMuted,
     textAlign: 'center',
     marginTop: space.md,
   },
-  duprNote: {
+  matchRatingNote: {
     color: color.onDarkFaint,
     textAlign: 'center',
     marginTop: space.xs,

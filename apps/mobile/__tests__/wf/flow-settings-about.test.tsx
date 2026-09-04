@@ -766,11 +766,13 @@ describe('AGENTS.md invariants for settings-about', () => {
     act(() => renderer.unmount());
   });
 
-  it('the Technique Score disclaimer is present (not a verified DUPR)', () => {
+  it('the Technique Score disclaimer is present (not a verified match rating) and names no third-party rating trademark', () => {
     const renderer = renderScreen();
-    expect(allText(renderer)).toContain(
-      'Technique Score is coaching feedback—not a verified DUPR or player rating.',
+    const copy = allText(renderer);
+    expect(copy).toContain(
+      'Technique Score is coaching feedback—not a verified match or player rating.',
     );
+    expect(copy).not.toMatch(/DUPR/);
     act(() => renderer.unmount());
   });
 

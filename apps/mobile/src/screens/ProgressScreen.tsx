@@ -42,9 +42,9 @@ import {
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
 import {
-  DUPR_ESTIMATE_NOTE,
-  formatDuprEstimate,
-} from '../progress/duprEstimate';
+  MATCH_RATING_ESTIMATE_NOTE,
+  formatMatchRatingEstimate,
+} from '../progress/matchRatingEstimate';
 import { DashSectionHeader } from '../progress/DashSectionHeader';
 import { PracticeSetCard } from '../progress/PracticeSetCard';
 import { latestPracticeSet } from '../progress/practiceSetProgress';
@@ -823,8 +823,8 @@ export function ProgressScreen() {
                     {latestScore.toFixed(1)}
                   </Text>
                   <Text style={[type.body, styles.techniqueScale]}>/ 10</Text>
-                  <Text style={[type.caption, styles.techniqueDupr]}>
-                    {formatDuprEstimate(latestScore)}
+                  <Text style={[type.caption, styles.techniqueMatchRating]}>
+                    {formatMatchRatingEstimate(latestScore)}
                   </Text>
                 </View>
               )}
@@ -1112,8 +1112,8 @@ export function ProgressScreen() {
               </View>
             </View>
             <Text style={styles.ratingDisclosure}>
-              Technique Score is coaching feedback, not a DUPR or verified match
-              rating. {DUPR_ESTIMATE_NOTE}
+              Technique Score is coaching feedback, not a verified match or
+              player rating. {MATCH_RATING_ESTIMATE_NOTE}
             </Text>
           </>
         )}
@@ -1440,7 +1440,7 @@ const styles = StyleSheet.create({
     lineHeight: 74,
   },
   techniqueScale: { color: color.onDarkSubtle, marginLeft: 8 },
-  techniqueDupr: { color: color.onDarkFaint, marginLeft: 8 },
+  techniqueMatchRating: { color: color.onDarkFaint, marginLeft: 8 },
   trendCard: { paddingBottom: space.md },
   trendCardTop: {
     flexDirection: 'row',

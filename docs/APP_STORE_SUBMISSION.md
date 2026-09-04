@@ -173,10 +173,15 @@ Hard rules for the agent filling this in:
 - [x] Code: Terms require users to be at least 13, with parent/guardian agreement
       where local law requires it; the Privacy Policy retains the matching
       under-13 disclosure.
-- [ ] Optional: the in-app "DUPR-style estimate" (commit 65839e9) uses a third-
-      party trademark inside the product. It is disclaimed in Settings and is a
-      low-probability 5.2.1 risk. Keep it out of all metadata; consider renaming
-      the label to "match-rating estimate" in a later build.
+- [x] Optional (done 2026-09-04): the in-app estimate introduced in commit
+      65839e9 used a third-party trademark ("DUPR") inside the product. It is
+      now the "match-rating estimate" everywhere the app renders it (inline
+      "(≈ match rating N.N)", the accessibility label on the rank card, and the
+      disclaimer note on Settings / Progress / Result); the helper module is
+      `apps/mobile/src/progress/matchRatingEstimate.ts`. No user-facing string
+      in `apps/mobile/src` contains the trademark any longer (pinned by
+      `__tests__/adjudicate/mobile-design-components-walkthrough.repro.test.tsx`).
+      Keep it out of all metadata as before.
 
 ### 2.6 Build
 
@@ -772,7 +777,7 @@ Account.
 | 5.1.1(ix) Health/fitness data safeguards   | Analysis results are fitness data; stored per user with RLS; never used for ads                                                                                                 | Privacy label + policy already state no ads/tracking.                                                                                                                                                                                    |
 | 5.1.2 Data use and sharing                 | Consent-gated telemetry off by default; RevenueCat is a processor                                                                                                               | Policy §1 and §4 describe both.                                                                                                                                                                                                          |
 | 5.1.3 Health and health research           | Not HealthKit; no clinical claims                                                                                                                                               | n/a                                                                                                                                                                                                                                      |
-| 5.2.1 Intellectual property                | YouTube embeds via official player with attribution; in-app "DUPR-style estimate" label                                                                                         | Content Rights = Yes (§3.2). Keep DUPR out of metadata; rename in-app label in a later build if challenged.                                                                                                                              |
+| 5.2.1 Intellectual property                | YouTube embeds via official player with attribution; in-app "match-rating estimate" label (renamed from the trademarked label 2026-09-04)                                       | Content Rights = Yes (§3.2). Keep DUPR out of metadata; the in-app label no longer carries the trademark.                                                                                                                                |
 | 5.6.1 Ratings prompt                       | `SKStoreReviewController` only; no custom nag                                                                                                                                   | n/a                                                                                                                                                                                                                                      |
 | Sign in with Apple token revocation        | Implemented end-to-end: authorization-code exchange, encrypted refresh-token storage, revocation before account deletion (§2.5)                                                 | Verify all five Apple Edge Function secrets and test with a fresh Apple account before submission.                                                                                                                                       |
 | RevenueCat customer deletion               | Implemented before Supabase deletion with the secret REST API key and retry checkpoint (§2.5)                                                                                   | Verify `REVENUECAT_SECRET_API_KEY` is a secret key; deleting a RevenueCat customer does not cancel Apple billing, so retain the subscription warning.                                                                                    |

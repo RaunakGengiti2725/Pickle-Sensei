@@ -666,7 +666,7 @@ nothing flashes light), top row close · segmented progress · "N OF M ·
 LABEL", pinned footer (primary Next with a descriptive label, Back/Done
 links). `GuideShell scroll={false}` gives a page a fixed flex column. Pages,
 each evidence-gated and SKIPPED when its evidence is absent: **Score** (ring,
-DUPR line, ONE `selectInsight` sentence, THIS SET card) → **The problem**
+match-rating estimate line, ONE `selectInsight` sentence, THIS SET card) → **The problem**
 (with replay evidence the page IS `FormReviewPlayer fill` and NOTHING else —
 no kicker, no h1, no sub line, no "Full screen" link (2026-09-02: the page
 headline only repeated the player's stop card and cost the video its height;
