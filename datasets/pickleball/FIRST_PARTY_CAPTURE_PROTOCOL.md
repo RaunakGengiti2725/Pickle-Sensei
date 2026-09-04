@@ -182,13 +182,27 @@ The thresholds are PROVISIONAL (v0.1). Changing them requires re-versioning in
      --subject <subjectPseudonym> \
      --capture-meta <capture-meta.json> \
      --operator <operatorId> \
-     --out <intake-record.json>
+     --out <intake-record.json> \
+     --signing-key <hmacKey> \
+     --min-max-seq <n>
    ```
 
+   `--signing-key` is the consent export contract v2 HMAC key: an intake
+   host that has been issued the key MUST pass it on every run, so that an
+   unsigned (v1 or bare-array) or wrongly signed ledger is rejected instead of
+   trusted on its recomputable hash. `--min-max-seq` is the highest export
+   `maxSeq` already accepted for this subject; a signed but older export is a
+   stale replay (it may predate a withdrawal) and is rejected. Record the
+   accepted `maxSeq` per subject and carry it forward. An unrecognised flag
+   exits 2 with the usage line — a mistyped `--signing-key` never runs
+   unsigned.
+
 4. The CLI computes the SHA-256 digest, probes the stream, evaluates the
-   envelope, verifies the consent reference, and writes an intake record
-   containing a draft manifest entry. Exit code 0 = accepted (SUPPORTED or
-   DEGRADED), 1 = rejected, 2 = invalid invocation/inputs.
+   envelope, verifies the consent reference (ledger integrity, signature and
+   watermark when configured, then the subject's active grants), and writes
+   an intake record containing a draft manifest entry. Exit code 0 = accepted
+   (SUPPORTED or DEGRADED), 1 = rejected (including a ledger that fails
+   verification), 2 = invalid invocation/inputs.
 5. The intake record is a DRAFT: its `pendingBeforeSnapshot` list names every
    manifest requirement intake cannot honestly satisfy (annotation, two-person
    review + coach adjudication, quality flags, split assignment, eligibility

@@ -7,12 +7,13 @@ import {
   probeClipStream,
   type CaptureEnvelopeMeasurements,
 } from "@pickle/capture-envelope";
-import type { EnvelopeVerdict } from "@pickle/shared-types";
+import type { ConsentRecord, EnvelopeVerdict } from "@pickle/shared-types";
 import { loadCaptureMeta, type CaptureMeta } from "./captureMeta.js";
 import {
   checkConsentForSubject,
   loadConsentLedger,
   type ConsentCheckResult,
+  type ConsentLedgerVerifyOptions,
 } from "./consentRef.js";
 
 /**
@@ -45,6 +46,12 @@ export interface IntakeInput {
   subjectPseudonym: string;
   captureMetaPath: string;
   operatorId: string;
+  /** HMAC key for consent export contract v2. When set, unsigned (v1 or
+   * bare-array) ledgers and bad signatures REJECT the clip. */
+  consentSigningKey?: string;
+  /** Highest export maxSeq this host has already accepted for the subject.
+   * Exports behind it are stale replays and REJECT the clip. */
+  consentMinMaxSeq?: number;
 }
 
 export interface ManifestDraft {
@@ -87,12 +94,49 @@ export function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+/** Unreadable file (ENOENT, EACCES, …) or unparseable JSON: an invocation
+ * problem, not a verdict about the ledger's content. */
+function isLedgerReadError(error: unknown): boolean {
+  return (
+    error instanceof SyntaxError ||
+    (error instanceof Error && typeof (error as NodeJS.ErrnoException).code === "string")
+  );
+}
+
+/**
+ * Load the referenced ledger with the host's verification options and fold
+ * it for the subject. A ledger whose CONTENT fails verification (unsigned
+ * when a key is configured, bad signature, stale watermark, tampered
+ * integrity fields, malformed rows) is NOT consent: the clip is REJECTED
+ * with the verifier's reason. Read/parse failures still throw.
+ */
+function verifyConsent(input: IntakeInput): ConsentCheckResult {
+  let ledger: ConsentRecord[];
+  try {
+    const options: ConsentLedgerVerifyOptions = {};
+    if (input.consentSigningKey !== undefined) options.signingKey = input.consentSigningKey;
+    if (input.consentMinMaxSeq !== undefined) options.minMaxSeq = input.consentMinMaxSeq;
+    ledger = loadConsentLedger(input.consentLedgerPath, options);
+  } catch (error) {
+    if (isLedgerReadError(error)) throw error;
+    return {
+      ok: false,
+      subjectPseudonym: input.subjectPseudonym,
+      subjectRecordCount: 0,
+      videoAnalysisActive: false,
+      modelTrainingActive: false,
+      modelTrainingConsentVersion: null,
+      errors: [`consent ledger rejected: ${(error as Error).message}`],
+    };
+  }
+  return checkConsentForSubject(ledger, input.subjectPseudonym);
+}
+
 export function intakeClip(input: IntakeInput): IntakeRecord {
   const reasons: string[] = [];
 
   const meta = loadCaptureMeta(input.captureMetaPath);
-  const ledger = loadConsentLedger(input.consentLedgerPath);
-  const consent = checkConsentForSubject(ledger, input.subjectPseudonym);
+  const consent = verifyConsent(input);
   reasons.push(...consent.errors);
 
   let measurements: CaptureEnvelopeMeasurements | null = null;

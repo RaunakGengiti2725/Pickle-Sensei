@@ -272,5 +272,27 @@ describe("SPO-01: intake consent gate can require a signed, fresh ledger", () =>
     ]);
     expect(badWatermark.status).toBe(2);
     expect(badWatermark.stderr).toMatch(/usage: intake/);
+
+    // A repeated flag is ambiguous (which key wins?) and is refused.
+    const repeated = runCli([
+      ...base,
+      "--consent-ledger",
+      staleSignedPath,
+      "--signing-key",
+      KEY,
+      "--signing-key",
+      "other",
+    ]);
+    expect(repeated.status).toBe(2);
+    expect(repeated.stderr).toMatch(/more than once/);
+
+    // An unreadable ledger is an invocation problem (2), not a consent verdict (1).
+    const missing = runCli([...base, "--consent-ledger", join(dir, "does-not-exist.json")]);
+    expect(missing.status).toBe(2);
+    expect(missing.stderr).toMatch(/intake failed: ENOENT/);
+
+    const help = runCli(["--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toMatch(/usage: intake .*--signing-key <hmacKey>.*--min-max-seq <n>/);
   });
 });
