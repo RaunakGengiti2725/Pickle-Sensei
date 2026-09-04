@@ -14,7 +14,7 @@ import {
   type SourceRecord,
 } from "./corpus.js";
 import { probeMedia, sha256File } from "./probe.js";
-import { rightsForLicense } from "./rights.js";
+import { rightsForLicense, trainingEligible } from "./rights.js";
 import { assignSplit, loadSplits, saveSplits, type SplitsFile } from "./splits.js";
 
 /**
@@ -27,6 +27,11 @@ import { assignSplit, loadSplits, saveSplits, type SplitsFile } from "./splits.j
  * split assignments that preserve the held-out discipline built up so far
  * (sessions whose footage was already inspected can never be promoted to
  * locked_test/shadow). Idempotent: re-running upserts the same records.
+ *
+ * Rights come from the same parser as live acquisition; a v1 license that
+ * does not derive as training-eligible is still imported (provenance must
+ * not be lost) but is reported loudly here and quarantined by the release
+ * gate (`gateEventForTraining`), which reads the stored rights record.
  */
 
 interface LegacyVideo {
@@ -148,10 +153,21 @@ if (isMain) {
       (a, b) => Number(!!originOf(a, byId).parentId) - Number(!!originOf(b, byId).parentId),
     );
     const recordingIdByLegacyId = new Map<string, string>();
+    const quarantined = new Set<string>();
     let imported = 0;
     for (const video of ordered) {
       const { sourceId, origin, originId, url, parentId } = originOf(video, byId);
       const root = parentId ? byId.get(parentId)! : video;
+      const rights = rightsForLicense(
+        root.license,
+        "lab:corpus-init (rule-derived from v1 registry license)",
+      );
+      if (!trainingEligible(rights) && !quarantined.has(sourceId)) {
+        quarantined.add(sourceId);
+        console.warn(
+          `⚠ ${sourceId}: license "${root.license}" is not training-eligible (train=${rights.train}, store=${rights.store}, analyze=${rights.analyze}) — imported for provenance, quarantined from training`,
+        );
+      }
       const source: SourceRecord = {
         schemaVersion: 1,
         sourceId,
@@ -161,10 +177,7 @@ if (isMain) {
         title: root.description?.split(".")[0] ?? root.id,
         author: root.author ?? "unknown",
         license: root.license,
-        rights: rightsForLicense(
-          root.license,
-          "lab:corpus-init (rule-derived from v1 registry license)",
-        ),
+        rights,
         acquisition: {
           acquiredAtIso: root.dateAcquiredIso ?? "2026-08-27",
           method: "manual acquisition in earlier runs (v1 registry)",
@@ -217,7 +230,7 @@ if (isMain) {
     saveSplits(paths.splits, splits);
     console.log("═".repeat(66));
     console.log(
-      `imported ${imported} legacy files into ${CORPUS_DIR.replace(`${REPO_ROOT}/`, "")}`,
+      `imported ${imported} legacy files into ${CORPUS_DIR.replace(`${REPO_ROOT}/`, "")}${quarantined.size ? ` · ${quarantined.size} source(s) quarantined from training` : ""}`,
     );
   })().catch((error) => {
     console.error(error);

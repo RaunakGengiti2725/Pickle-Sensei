@@ -16,7 +16,7 @@ import {
   type SourceRecord,
 } from "./corpus.js";
 import { probeMedia, sha256File } from "./probe.js";
-import { rightsForLicense } from "./rights.js";
+import { parseLicense, rightsForLicense, trainingEligible } from "./rights.js";
 import { assignSplit, loadSplits, saveSplits } from "./splits.js";
 
 /**
@@ -29,9 +29,11 @@ import { assignSplit, loadSplits, saveSplits } from "./splits.js";
  *  - DVIDS (dvidshub.net): U.S. DoD media, public domain as works of the
  *    federal government (17 U.S.C. §105); DVIDS asks courtesy credit and no
  *    implied endorsement. Each page's credit block is recorded verbatim.
- *  - Wikimedia Commons: only files whose extmetadata license resolves to
- *    PD / CC0 / CC BY / CC BY-SA are accepted; the license and author are
- *    recorded per file. Anything else is skipped loudly.
+ *  - Wikimedia Commons: only files whose extmetadata license the rights
+ *    parser recognizes (PD / CC0 / CC BY / CC BY-SA) AND derives as
+ *    training-eligible are accepted — the same classifier that writes the
+ *    stored rights record, so the pre-filter cannot disagree with it. The
+ *    license and author are recorded per file. Anything else is skipped loudly.
  *
  * Every acquisition records: origin, originId, canonical URL, direct media
  * URL, license, per-modality rights, timestamps, SHA-256, and probe facts.
@@ -216,8 +218,18 @@ async function acquireDvids(
 
 // ── Wikimedia Commons ────────────────────────────────────────────────────
 
-const COMMONS_ALLOWED_LICENSE =
-  /^(public domain|pd|cc0|cc[ -]by(?:[ -]sa)?[ -]\d|cc[ -]by(?:[ -]sa)?$)/i;
+const ACQUIRE_REVIEWER = "lab:acquire (rule-derived; human spot-check required for unclear)";
+
+/** Automated acquisition admits a license only when the parsed rights allow training. */
+function commonsLicenseRejection(licenseShort: string): string | null {
+  const parsed = parseLicense(licenseShort);
+  if (parsed.status !== "recognized") return parsed.reason;
+  const rights = rightsForLicense(licenseShort, ACQUIRE_REVIEWER);
+  if (!trainingEligible(rights)) {
+    return `"${licenseShort}" is not training-eligible (train=${rights.train}, store=${rights.store}, analyze=${rights.analyze})`;
+  }
+  return null;
+}
 
 async function acquireCommons(
   query: string,
@@ -262,14 +274,16 @@ async function acquireCommons(
     const imageInfo = pages[0]?.imageinfo?.[0];
     const meta = imageInfo?.extmetadata ?? {};
     const licenseShort = (meta.LicenseShortName?.value ?? "unknown").replace(/<[^>]+>/g, "").trim();
-    if (!imageInfo || !COMMONS_ALLOWED_LICENSE.test(licenseShort)) {
+    const rejection = imageInfo ? commonsLicenseRejection(licenseShort) : "no imageinfo";
+    if (!imageInfo || rejection !== null) {
       outcomes.push({
         sourceId,
         status: "skipped",
-        detail: `license "${licenseShort}" not in the accepted set`,
+        detail: `license not accepted: ${rejection}`,
       });
       continue;
     }
+    const parsedLicense = parseLicense(licenseShort);
     if (dryRun) {
       outcomes.push({
         sourceId,
@@ -308,9 +322,10 @@ async function acquireCommons(
         title: originId,
         author: (meta.Artist?.value ?? "unknown").replace(/<[^>]+>/g, "").trim(),
         license: licenseShort,
-        restrictions: licenseShort.toLowerCase().includes("by")
-          ? ["attribution required on redistribution"]
-          : [],
+        restrictions:
+          parsedLicense.status === "recognized" && parsedLicense.license.kind === "cc"
+            ? ["attribution required on redistribution"]
+            : [],
         description: `Wikimedia Commons file; transcoded to H.264 for AVFoundation (original retained: ${originalPath.replace(`${REPO_ROOT}/`, "")})`,
         sessionKey: `commons-${sanitizeIdPart(originId).slice(0, 60)}`,
       });
@@ -376,10 +391,7 @@ async function registerAcquired(input: {
     author: input.author,
     publishedDate: input.publishedDate,
     license: input.license,
-    rights: rightsForLicense(
-      input.license,
-      "lab:acquire (rule-derived; human spot-check required for unclear)",
-    ),
+    rights: rightsForLicense(input.license, ACQUIRE_REVIEWER),
     acquisition: {
       acquiredAtIso: new Date().toISOString(),
       method: `${input.origin} page parse + direct media download`,

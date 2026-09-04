@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { REPO_ROOT, type SourceRecord } from "../src/engine/corpus.js";
 import {
+  parseLicense,
   redistributionEligible,
   rightsForLicense,
   trainingEligible,
@@ -155,6 +156,61 @@ describe("rightsForLicense — positive controls stay affirmative", () => {
       expect(redistributionEligible(rights)).toBe(true);
     },
   );
+});
+
+describe("parseLicense — canonical license parser (the only affirmative path)", () => {
+  it.each([
+    ["CC BY 4.0", "cc-by", "4.0"],
+    ["cc-by-nc-nd 3.0", "cc-by-nc-nd", "3.0"],
+    ["CC BY-SA-NC", "cc-by-nc-sa", null],
+    ["CC-BY-NC-ND", "cc-by-nc-nd", null],
+  ])("%s → canonical %s (version %s)", (license, id, version) => {
+    const parsed = parseLicense(license);
+    expect(parsed.status).toBe("recognized");
+    if (parsed.status === "recognized" && parsed.license.kind === "cc") {
+      expect(parsed.license.id).toBe(id);
+      expect(parsed.license.version).toBe(version);
+    } else {
+      throw new Error(`expected a Creative Commons parse for ${license}`);
+    }
+  });
+
+  it.each([
+    ["NOT public domain — all rights reserved", "contradicted"],
+    ["not CC0 — copyright claimed by uploader", "contradicted"],
+    ["CC BY 4.0 (non-exclusive, restricted)", "contradicted"],
+    ["CC BY-XY 4.0", "malformed"],
+    ["CC", "malformed"],
+    ["CC SA 1.0", "malformed"],
+    ["CC BY 4.0 or CC BY-NC 4.0", "ambiguous"],
+    ["Standard YouTube License", "unrecognized"],
+    ["", "unrecognized"],
+  ])("%s → %s (quarantined)", (license, status) => {
+    expect(parseLicense(license).status).toBe(status);
+    for (const modality of MODALITIES) {
+      expect(rightsForLicense(license, "test")[modality]).toBe("unclear");
+    }
+  });
+
+  it("restrictive answers are explicit refusals, not silent downgrades", () => {
+    expect(answers(rightsForLicense("CC BY-NC 4.0", "test"))).toEqual({
+      store: "unclear",
+      analyze: "unclear",
+      annotate: "unclear",
+      train: "no",
+      redistributeDerivatives: "no",
+      commercial: "no",
+    });
+    expect(answers(rightsForLicense("CC BY-ND 4.0", "test"))).toEqual({
+      store: "yes_with_attribution",
+      analyze: "yes_with_attribution",
+      annotate: "yes_with_attribution",
+      train: "unclear",
+      redistributeDerivatives: "no",
+      commercial: "yes_with_attribution",
+    });
+    expect(rightsForLicense("CC BY-NC-SA 4.0", "test").redistributeDerivatives).toBe("no");
+  });
 });
 
 describe("corpus registry — stored rights agree with the classifier", () => {
