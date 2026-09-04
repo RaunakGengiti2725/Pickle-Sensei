@@ -162,7 +162,7 @@ def main() -> None:
         "honestFraming": "TINY-DATA groundwork: 2 clips / 2 sessions; not a promotion candidate; no accuracy claim beyond student_bench.py numbers",
     }
     with open(out_dir / "training-report.json", "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, allow_nan=False)
         f.write("\n")
     print(f"params {n_params}, wall {wall:.1f}s -> {out_dir}")
 
