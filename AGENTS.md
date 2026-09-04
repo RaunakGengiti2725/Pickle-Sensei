@@ -138,6 +138,26 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   PostgREST upserts (`resolution=merge-duplicates`) put EVERY payload column
   in DO UPDATE — the grant must include them all (see
   account_deletion_requests).
+- Grant layer, table-enforced (2026-09-05, `20260905000000..02`): a client
+  role can INSERT into `shots` ONLY through `apply_synced_shot()` — the
+  BEFORE INSERT guard `shots_insert_only_via_rpc` admits a row from
+  anon/authenticated only when the RPC armed the transaction-local setting
+  `pickle.apply_synced_shot` with that row's id (consumed on use; the RPC
+  stays SECURITY INVOKER and the INSERT grant it needs stays). If you add
+  another server-side shots writer, arm the setting the same way in a NEW
+  migration — never re-grant a direct client path. `anon`/`authenticated`
+  hold no TRUNCATE/TRIGGER/REFERENCES on any public relation and the
+  schema's default privileges no longer hand them out (new tables inherit
+  the shape; security_regression.sql K iterates every public relation);
+  `captures` has no client UPDATE/DELETE. `analysis_permits` is one-way:
+  `reserved → finalized | released` once, settled rows immutable for EVERY
+  role (BEFORE UPDATE guard `analysis_permits_lifecycle_one_way`, 42501),
+  terminal status ⇔ outcome present, and `outcome` is CHECK-bounded to
+  scored | low_confidence | cancelled | failed | unsupported |
+  incorrect_recognition | expired | free_limit_exceeded — add a new outcome
+  by extending `analysis_permits_outcome_known` in a new migration AND the
+  static pin's `PERMIT_OUTCOMES`. Live: security_regression.sql E0/K/L and
+  `./supabase/tests/run_adjudication_repro.sh`.
 - RLS/security regression matrix: `./supabase/tests/run_rls_tests.sh`
   (Docker postgres:16, or a throwaway local initdb cluster when Docker is
   absent; CI job `supabase-security`). It installs hosted-like default

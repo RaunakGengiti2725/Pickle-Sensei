@@ -180,8 +180,7 @@ function grantsInsertOnShots(statement: string): boolean {
     return false;
   }
   const [objects, grantees = ""] = rest.split(" to ", 2);
-  return /\bpublic\.shots\b/.test(objects) &&
-    /\b(anon|authenticated|public)\b/.test(grantees);
+  return /\bpublic\.shots\b/.test(objects) && /\b(anon|authenticated|public)\b/.test(grantees);
 }
 
 function dropsShotsInsertGuard(statement: string): boolean {
@@ -192,157 +191,200 @@ function dropsShotsInsertGuard(statement: string): boolean {
   );
 }
 
-Deno.test("shots: a client session can only INSERT through apply_synced_shot(), and no later migration reopens it", async () => {
-  const chain = await loadChain();
-  const guard = chain.find((m) => m.file === SHOTS_INSERT_VIA_RPC);
-  ok(guard, `${SHOTS_INSERT_VIA_RPC} must exist in the migration chain`);
+Deno.test(
+  "shots: a client session can only INSERT through apply_synced_shot(), and no later migration reopens it",
+  async () => {
+    const chain = await loadChain();
+    const guard = chain.find((m) => m.file === SHOTS_INSERT_VIA_RPC);
+    ok(guard, `${SHOTS_INSERT_VIA_RPC} must exist in the migration chain`);
 
-  // The RPC stays SECURITY INVOKER (RLS + caller grants apply), so the
-  // authenticated INSERT grant has to survive for the RPC's own insert —
-  // the direct path is closed by a BEFORE INSERT guard on the table that
-  // only the RPC can satisfy. Both halves must be present, and the RPC body
-  // must keep counting through the identity ledger (asserted below).
-  const createsGuard = guard.statements.some((s) =>
-    s.startsWith("create trigger shots_insert_only_via_rpc before insert on public.shots") &&
-    s.includes("for each row execute function public.shots_insert_only_via_rpc()")
-  );
-  ok(createsGuard, "the guard migration must attach a BEFORE INSERT trigger shots_insert_only_via_rpc to public.shots");
-  ok(
-    functionBodies(guard.raw, "shots_insert_only_via_rpc").length === 1,
-    "the guard migration must define public.shots_insert_only_via_rpc()",
-  );
-  ok(
-    guard.statements.includes(
-      "revoke all on function public.shots_insert_only_via_rpc() from public, anon, authenticated",
-    ),
-    "the guard function must not be client-executable",
-  );
-  const rpc = functionBodies(guard.raw, "apply_synced_shot");
-  ok(rpc.length === 1, "the guard migration must recreate public.apply_synced_shot() to satisfy the guard");
-  ok(
-    rpc[0].includes("security invoker"),
-    "apply_synced_shot must stay SECURITY INVOKER",
-  );
-  ok(
-    rpc[0].includes("set_config('pickle.apply_synced_shot'"),
-    "apply_synced_shot must arm the insert guard for exactly the row it writes",
-  );
+    // The RPC stays SECURITY INVOKER (RLS + caller grants apply), so the
+    // authenticated INSERT grant has to survive for the RPC's own insert —
+    // the direct path is closed by a BEFORE INSERT guard on the table that
+    // only the RPC can satisfy. Both halves must be present, and the RPC body
+    // must keep counting through the identity ledger (asserted below).
+    const createsGuard = guard.statements.some(
+      (s) =>
+        s.startsWith("create trigger shots_insert_only_via_rpc before insert on public.shots") &&
+        s.includes("for each row execute function public.shots_insert_only_via_rpc()"),
+    );
+    ok(
+      createsGuard,
+      "the guard migration must attach a BEFORE INSERT trigger shots_insert_only_via_rpc to public.shots",
+    );
+    ok(
+      functionBodies(guard.raw, "shots_insert_only_via_rpc").length === 1,
+      "the guard migration must define public.shots_insert_only_via_rpc()",
+    );
+    ok(
+      guard.statements.includes(
+        "revoke all on function public.shots_insert_only_via_rpc() from public, anon, authenticated",
+      ),
+      "the guard function must not be client-executable",
+    );
+    const rpc = functionBodies(guard.raw, "apply_synced_shot");
+    ok(
+      rpc.length === 1,
+      "the guard migration must recreate public.apply_synced_shot() to satisfy the guard",
+    );
+    ok(rpc[0].includes("security invoker"), "apply_synced_shot must stay SECURITY INVOKER");
+    ok(
+      rpc[0].includes("set_config('pickle.apply_synced_shot'"),
+      "apply_synced_shot must arm the insert guard for exactly the row it writes",
+    );
 
-  for (const migration of after(chain, SHOTS_INSERT_VIA_RPC)) {
-    for (const statement of migration.statements) {
-      ok(
-        !dropsShotsInsertGuard(statement) ||
-          migration.statements.some((s) =>
-            s.startsWith("create trigger shots_insert_only_via_rpc before insert on public.shots")
+    for (const migration of after(chain, SHOTS_INSERT_VIA_RPC)) {
+      for (const statement of migration.statements) {
+        ok(
+          !dropsShotsInsertGuard(statement) ||
+            migration.statements.some((s) =>
+              s.startsWith(
+                "create trigger shots_insert_only_via_rpc before insert on public.shots",
+              ),
+            ),
+          `${migration.file} drops the shots insert guard without recreating it: ${statement}`,
+        );
+        ok(
+          !(
+            statement.startsWith("drop function") &&
+            statement.includes("public.shots_insert_only_via_rpc")
           ),
-        `${migration.file} drops the shots insert guard without recreating it: ${statement}`,
-      );
-      ok(
-        !(statement.startsWith("drop function") && statement.includes("public.shots_insert_only_via_rpc")),
-        `${migration.file} drops the shots insert guard function: ${statement}`,
-      );
-      ok(
-        !(statement.startsWith("alter table public.shots") && /\bdisable trigger\b/.test(statement)),
-        `${migration.file} disables triggers on public.shots: ${statement}`,
-      );
+          `${migration.file} drops the shots insert guard function: ${statement}`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter table public.shots") &&
+            /\bdisable trigger\b/.test(statement)
+          ),
+          `${migration.file} disables triggers on public.shots: ${statement}`,
+        );
+      }
     }
-  }
 
-  // The INSERT grant the RPC relies on already exists (20260829120000); a
-  // later migration re-granting it is the signature of someone reopening the
-  // direct path on purpose and must be reviewed alongside the guard.
-  const grantsAfterGuard = after(chain, SHOTS_INSERT_VIA_RPC).flatMap((m) =>
-    m.statements.filter(grantsInsertOnShots).map((s) => `${m.file}: ${s}`)
-  );
-  ok(
-    grantsAfterGuard.length === 0,
-    `no migration after the guard may re-grant INSERT on public.shots to a client role:\n${grantsAfterGuard.join("\n")}`,
-  );
-});
+    // The INSERT grant the RPC relies on already exists (20260829120000); a
+    // later migration re-granting it is the signature of someone reopening the
+    // direct path on purpose and must be reviewed alongside the guard.
+    const grantsAfterGuard = after(chain, SHOTS_INSERT_VIA_RPC).flatMap((m) =>
+      m.statements.filter(grantsInsertOnShots).map((s) => `${m.file}: ${s}`),
+    );
+    ok(
+      grantsAfterGuard.length === 0,
+      `no migration after the guard may re-grant INSERT on public.shots to a client role:\n${grantsAfterGuard.join("\n")}`,
+    );
+  },
+);
 
-Deno.test("grants: anon/authenticated lose TRUNCATE/TRIGGER/REFERENCES on every public table, present and future", async () => {
-  const chain = await loadChain();
-  const revoke = statementsOf(chain, REVOKE_RLS_BLIND);
-  ok(
-    revoke.includes(
-      "alter default privileges in schema public revoke truncate, trigger, references on tables from anon, authenticated",
-    ),
-    "the revoke migration must alter default privileges so future tables inherit the same shape",
-  );
-  const raw = chain.find((m) => m.file === REVOKE_RLS_BLIND)?.raw.toLowerCase() ?? "";
-  ok(
-    raw.includes("revoke truncate, trigger, references on public.%i from anon, authenticated"),
-    "the revoke migration must iterate every existing public relation (format('... public.%I ...'))",
-  );
+Deno.test(
+  "grants: anon/authenticated lose TRUNCATE/TRIGGER/REFERENCES on every public table, present and future",
+  async () => {
+    const chain = await loadChain();
+    const revoke = statementsOf(chain, REVOKE_RLS_BLIND);
+    ok(
+      revoke.includes(
+        "alter default privileges in schema public revoke truncate, trigger, references on tables from anon, authenticated",
+      ),
+      "the revoke migration must alter default privileges so future tables inherit the same shape",
+    );
+    const raw = chain.find((m) => m.file === REVOKE_RLS_BLIND)?.raw.toLowerCase() ?? "";
+    ok(
+      raw.includes("revoke truncate, trigger, references on public.%i from anon, authenticated"),
+      "the revoke migration must iterate every existing public relation (format('... public.%I ...'))",
+    );
 
-  const blind = /\b(truncate|trigger|references|all)\b/;
-  for (const migration of after(chain, REVOKE_RLS_BLIND)) {
-    for (const statement of migration.statements) {
-      if (!statement.startsWith("grant ")) continue;
-      const [privileges, rest = ""] = statement.split(" on ", 2);
-      const grantees = rest.split(" to ", 2)[1] ?? "";
-      ok(
-        !(blind.test(privileges) && /\b(anon|authenticated|public)\b/.test(grantees) && !/\bon function\b/.test(statement) && !/\bon schema\b/.test(statement) && !/\bon sequence\b/.test(statement)),
-        `${migration.file} hands an RLS-blind privilege back to a client role: ${statement}`,
-      );
+    const blind = /\b(truncate|trigger|references|all)\b/;
+    for (const migration of after(chain, REVOKE_RLS_BLIND)) {
+      for (const statement of migration.statements) {
+        if (!statement.startsWith("grant ")) continue;
+        const [privileges, rest = ""] = statement.split(" on ", 2);
+        const grantees = rest.split(" to ", 2)[1] ?? "";
+        ok(
+          !(
+            blind.test(privileges) &&
+            /\b(anon|authenticated|public)\b/.test(grantees) &&
+            !/\bon function\b/.test(statement) &&
+            !/\bon schema\b/.test(statement) &&
+            !/\bon sequence\b/.test(statement)
+          ),
+          `${migration.file} hands an RLS-blind privilege back to a client role: ${statement}`,
+        );
+      }
     }
-  }
-});
+  },
+);
 
-Deno.test("permits: the lifecycle is one-way and outcome is confined to the known set", async () => {
-  const chain = await loadChain();
-  const lifecycle = chain.find((m) => m.file === PERMIT_LIFECYCLE);
-  ok(lifecycle, `${PERMIT_LIFECYCLE} must exist in the migration chain`);
-  ok(
-    lifecycle.statements.some((s) =>
-      s.startsWith("create trigger analysis_permits_lifecycle_one_way before update on public.analysis_permits") &&
-      s.includes("for each row execute function public.enforce_permit_lifecycle()")
-    ),
-    "the lifecycle migration must attach a BEFORE UPDATE trigger to public.analysis_permits",
-  );
-  const bodies = functionBodies(lifecycle.raw, "enforce_permit_lifecycle");
-  ok(bodies.length === 1, "the lifecycle migration must define public.enforce_permit_lifecycle()");
-  ok(
-    /old\.status\s*<>\s*'reserved'/.test(bodies[0]) || /old\.status\s*(!=|<>)\s*'reserved'/.test(bodies[0]),
-    "the guard must reject any change to a permit that is no longer reserved",
-  );
-  ok(
-    lifecycle.statements.includes(
-      "revoke all on function public.enforce_permit_lifecycle() from public, anon, authenticated",
-    ),
-    "the guard function must not be client-executable",
-  );
+Deno.test(
+  "permits: the lifecycle is one-way and outcome is confined to the known set",
+  async () => {
+    const chain = await loadChain();
+    const lifecycle = chain.find((m) => m.file === PERMIT_LIFECYCLE);
+    ok(lifecycle, `${PERMIT_LIFECYCLE} must exist in the migration chain`);
+    ok(
+      lifecycle.statements.some(
+        (s) =>
+          s.startsWith(
+            "create trigger analysis_permits_lifecycle_one_way before update on public.analysis_permits",
+          ) && s.includes("for each row execute function public.enforce_permit_lifecycle()"),
+      ),
+      "the lifecycle migration must attach a BEFORE UPDATE trigger to public.analysis_permits",
+    );
+    const bodies = functionBodies(lifecycle.raw, "enforce_permit_lifecycle");
+    ok(
+      bodies.length === 1,
+      "the lifecycle migration must define public.enforce_permit_lifecycle()",
+    );
+    ok(
+      /old\.status\s*<>\s*'reserved'/.test(bodies[0]) ||
+        /old\.status\s*(!=|<>)\s*'reserved'/.test(bodies[0]),
+      "the guard must reject any change to a permit that is no longer reserved",
+    );
+    ok(
+      lifecycle.statements.includes(
+        "revoke all on function public.enforce_permit_lifecycle() from public, anon, authenticated",
+      ),
+      "the guard function must not be client-executable",
+    );
 
-  const check = lifecycle.statements.find((s) =>
-    s.startsWith("alter table public.analysis_permits add constraint analysis_permits_outcome_known check")
-  );
-  ok(check, "the lifecycle migration must add the analysis_permits_outcome_known check constraint");
-  const listed = [...check.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
-  const expected = [...PERMIT_OUTCOMES].sort();
-  ok(
-    JSON.stringify(listed) === JSON.stringify(expected),
-    `outcome enumeration must be exactly ${expected.join(", ")} (got ${listed.join(", ")})`,
-  );
+    const check = lifecycle.statements.find((s) =>
+      s.startsWith(
+        "alter table public.analysis_permits add constraint analysis_permits_outcome_known check",
+      ),
+    );
+    ok(
+      check,
+      "the lifecycle migration must add the analysis_permits_outcome_known check constraint",
+    );
+    const listed = [...check.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+    const expected = [...PERMIT_OUTCOMES].sort();
+    ok(
+      JSON.stringify(listed) === JSON.stringify(expected),
+      `outcome enumeration must be exactly ${expected.join(", ")} (got ${listed.join(", ")})`,
+    );
 
-  for (const migration of after(chain, PERMIT_LIFECYCLE)) {
-    for (const statement of migration.statements) {
-      ok(
-        !(
-          statement.startsWith("drop trigger") &&
-          statement.includes("analysis_permits_lifecycle_one_way") &&
-          !migration.statements.some((s) =>
-            s.startsWith("create trigger analysis_permits_lifecycle_one_way before update on public.analysis_permits")
-          )
-        ),
-        `${migration.file} drops the permit lifecycle guard without recreating it`,
-      );
-      ok(
-        !(statement.startsWith("alter table public.analysis_permits") && statement.includes("drop constraint analysis_permits_outcome_known")),
-        `${migration.file} drops the outcome enumeration: ${statement}`,
-      );
+    for (const migration of after(chain, PERMIT_LIFECYCLE)) {
+      for (const statement of migration.statements) {
+        ok(
+          !(
+            statement.startsWith("drop trigger") &&
+            statement.includes("analysis_permits_lifecycle_one_way") &&
+            !migration.statements.some((s) =>
+              s.startsWith(
+                "create trigger analysis_permits_lifecycle_one_way before update on public.analysis_permits",
+              ),
+            )
+          ),
+          `${migration.file} drops the permit lifecycle guard without recreating it`,
+        );
+        ok(
+          !(
+            statement.startsWith("alter table public.analysis_permits") &&
+            statement.includes("drop constraint analysis_permits_outcome_known")
+          ),
+          `${migration.file} drops the outcome enumeration: ${statement}`,
+        );
+      }
     }
-  }
-});
+  },
+);
 
 Deno.test("shots: the pre-fix chain is the one the revoke was written against", async () => {
   const chain = await loadChain();

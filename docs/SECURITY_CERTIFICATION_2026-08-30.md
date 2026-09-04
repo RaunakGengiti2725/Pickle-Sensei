@@ -26,6 +26,38 @@
 > `scope=local` (this device's session), not global, and `authenticate()`
 > still accepts provider ID tokens transitionally for pre-contract app builds.
 > Live verification against the Supabase project is still pending.
+>
+> **Correction (2026-09-05) — grant layer.** Three claims below held only for
+> the Edge Function's code paths, not for the grant layer itself; a hostile
+> client holding its own access token could reach PostgREST directly. Fixed
+> by three new migrations (nothing applied was edited), each pinned statically
+> in `supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts` and
+> live in `supabase/tests/security_regression.sql` (E0, K1–K4, L1–L4):
+> (1) "score/version columns not client-writable" (Case E) — the INSERT grant
+> on `shots` that the SECURITY INVOKER `apply_synced_shot()` needs was
+> equally usable by `POST /rest/v1/shots`, recording scored shots with no
+> permit, past the lifetime free limit, with client-chosen columns.
+> `20260905000000_shots_insert_only_via_rpc.sql` adds a BEFORE INSERT guard
+> (`shots_insert_only_via_rpc`) that admits a client-role row only when the
+> RPC has armed the transaction-local setting `pickle.apply_synced_shot` with
+> that row's id (consumed on use); the RPC stays SECURITY INVOKER. (2) The
+> hosted default privileges left `TRUNCATE`, `TRIGGER` and `REFERENCES` with
+> `anon`/`authenticated` on every public table — RLS-blind, so an
+> authenticated `truncate` emptied `consent_records`, `shots`,
+> `analysis_permits`, `billing_entitlements` for every user (no shipped
+> surface reaches it; PostgREST exposes no TRUNCATE/DDL).
+> `20260905000001_revoke_rls_blind_privileges.sql` revokes them on every
+> existing public relation and from the schema's default privileges, and
+> drops the unused client UPDATE/DELETE on `captures`. (3) The client
+> `update (status, outcome)` grant on `analysis_permits` had no transition
+> guard: settled permits could be flipped back to `reserved` (one permit
+> consumed twice; `reserved_count` inflated) and `outcome` was free text.
+> `20260905000002_permit_lifecycle_one_way.sql` adds the BEFORE UPDATE guard
+> `analysis_permits_lifecycle_one_way` (settled rows immutable for every
+> role; a terminal status carries an outcome, a reserved one never does) and
+> the CHECK `analysis_permits_outcome_known` over the documented outcome set.
+> The identity ledger and the RPC's lifetime backstop had kept the paywall
+> itself intact throughout (verified); these close the grant-layer gaps.
 
 Scope: the Supabase deployment (Postgres/RLS, Edge Function `api`, Auth), the
 Fastify backend (`services/api`), the React Native app, CI/CD, secrets, and
