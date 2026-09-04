@@ -602,6 +602,116 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertNil(detector.lastBodyScale)
   }
 
+  // MARK: - Non-finite landmarks
+
+  /// The coordinate values a corrupt landmark can carry.
+  private let nonFiniteValues: [Double] = [.infinity, -.infinity, .nan]
+
+  func testOneNonFiniteAnkleFrameDoesNotPoisonBodyScaleOrHideTheNextDrive() {
+    // The ready position with one frame (t = 200) whose ankles read ±inf/NaN,
+    // then the moderate drive. The corrupt ankles must be ignored like hidden
+    // ones (the hip span stands in for that frame) — an EMA that absorbs ±inf
+    // becomes NaN and every later speed divides by it, so no stroke would ever
+    // be detected again in the session.
+    for corrupt in nonFiniteValues {
+      let detector = TemporalStrokeDetector()
+      var frames = poses(bodySpan: 0.5, path: ready(then: driveDeltas))
+      frames[5] = fullBodyPose(at: 5 * cadenceMs, bodySpan: 0.5, ankleBodyY: corrupt)
+      let events = run(detector, frames)
+
+      XCTAssertEqual(detector.lastBodyScale?.isFinite, true, "ankle \(corrupt): scale \(String(describing: detector.lastBodyScale))")
+      // Hip-span fallback (0.462) is blended in for the one frame and the
+      // scale recovers toward the measured 0.5 span afterwards.
+      XCTAssertGreaterThan(detector.lastBodyScale ?? -1, 0.45, "ankle \(corrupt)")
+      XCTAssertLessThanOrEqual(detector.lastBodyScale ?? -1, 0.5, "ankle \(corrupt)")
+      XCTAssertEqual(events.count, 1, "ankle \(corrupt): \(events)")
+      XCTAssertEqual(events.first?.tMs, 840, "ankle \(corrupt)")
+      XCTAssertEqual(events.first?.event.startMs, 400, "ankle \(corrupt)")
+      XCTAssertEqual(events.first?.event.endMs, 840, "ankle \(corrupt)")
+      XCTAssertEqual(events.first?.event.peakMotionMs, 480, "ankle \(corrupt)")
+      XCTAssertEqual(events.first?.event.confidence.isFinite, true, "ankle \(corrupt)")
+    }
+  }
+
+  func testNonFiniteWristCoordinateNeverProducesAStroke() {
+    // Ready position, one frame whose right wrist reads ±inf/NaN, then a long
+    // hold: nothing moved, so nothing may trigger. The corrupt wrist yields no
+    // speed sample and is not remembered — the next frame measures against
+    // the last FINITE observation, subject to the gap rule.
+    for corrupt in nonFiniteValues {
+      let detector = TemporalStrokeDetector()
+      let path = stillPath(readyFrames) + [corrupt] + stillPath(28)
+      let events = run(detector, poses(bodySpan: 0.5, path: path))
+      XCTAssertTrue(events.isEmpty, "wrist \(corrupt) produced \(events)")
+      XCTAssertEqual(detector.lastBodyScale?.isFinite, true, "wrist \(corrupt)")
+    }
+  }
+
+  func testNonFiniteWristFrameInsideADriveIsSkippedNotMeasured() {
+    // The moderate drive with its third moving sample (t = 520) corrupt: that
+    // frame contributes nothing, the next one (560) measures 80 ms against
+    // 480, and the drive still closes as one event with finite values.
+    for corrupt in nonFiniteValues {
+      let detector = TemporalStrokeDetector()
+      var path = ready(then: driveDeltas)
+      path[readyFrames + 2] = corrupt
+      let events = run(detector, poses(bodySpan: 0.5, path: path))
+      XCTAssertEqual(events.count, 1, "wrist \(corrupt): \(events)")
+      XCTAssertEqual(events.first?.tMs, 840, "wrist \(corrupt)")
+      XCTAssertEqual(events.first?.event.startMs, 400, "wrist \(corrupt)")
+      XCTAssertEqual(events.first?.event.endMs, 840, "wrist \(corrupt)")
+      XCTAssertEqual(events.first?.event.peakMotionMs, 480, "wrist \(corrupt)")
+      XCTAssertEqual(events.first?.event.confidence.isFinite, true, "wrist \(corrupt)")
+      XCTAssertEqual(detector.lastBodyScale ?? -1, 0.5, accuracy: 1e-9, "wrist \(corrupt)")
+    }
+  }
+
+  func testNonFiniteHipDoesNotAnchorOrScaleAFrame() {
+    // A corrupt hip must not become the body anchor (a finite wrist measured
+    // against an infinite hip is an infinite speed) nor feed the hip-span
+    // scale fallback. Ready position, hips corrupt on one frame, then the
+    // drive: exactly one event, everything finite.
+    for corrupt in nonFiniteValues {
+      let detector = TemporalStrokeDetector()
+      var frames = poses(bodySpan: 0.5, path: ready(then: driveDeltas))
+      let hipless = fullBodyPose(at: 5 * cadenceMs, bodySpan: 0.5, removing: ["left_hip", "right_hip"])
+      frames[5] = PoseFrame(
+        timestampMs: hipless.timestampMs,
+        landmarks: hipless.landmarks + [
+          PoseLandmark(name: "left_hip", x: 0.46, y: corrupt, visibility: 0.95),
+          PoseLandmark(name: "right_hip", x: corrupt, y: 0.46, visibility: 0.95),
+        ],
+        confidence: 0.95
+      )
+      let events = run(detector, frames)
+      XCTAssertEqual(events.count, 1, "hip \(corrupt): \(events)")
+      XCTAssertEqual(events.first?.event.startMs, 400, "hip \(corrupt)")
+      XCTAssertEqual(events.first?.event.endMs, 840, "hip \(corrupt)")
+      XCTAssertEqual(events.first?.event.confidence.isFinite, true, "hip \(corrupt)")
+      XCTAssertEqual(detector.lastBodyScale ?? -1, 0.5, accuracy: 1e-9, "hip \(corrupt)")
+    }
+  }
+
+  func testNonFiniteVisibilityIsNotATrustedLandmark() {
+    // visibility = +inf passes a plain `>= 0.35` comparison; it must be
+    // rejected with the other non-finite values. Ankles carrying such a
+    // visibility with a mis-detected y must not move the scale.
+    let detector = TemporalStrokeDetector()
+    _ = detector.ingest(pose: fullBodyPose(at: 0, bodySpan: 0.5), paddle: nil)
+    XCTAssertEqual(detector.lastBodyScale ?? -1, 0.5, accuracy: 1e-9)
+    let ankles = fullBodyPose(at: 40, bodySpan: 0.5, removing: ["left_ankle", "right_ankle", "left_hip", "right_hip"])
+    let corrupt = PoseFrame(
+      timestampMs: 40,
+      landmarks: ankles.landmarks + [
+        PoseLandmark(name: "left_ankle", x: 0.45, y: 0.6, visibility: .infinity),
+        PoseLandmark(name: "right_ankle", x: 0.55, y: 0.6, visibility: .nan),
+      ],
+      confidence: 0.95
+    )
+    _ = detector.ingest(pose: corrupt, paddle: nil)
+    XCTAssertEqual(detector.lastBodyScale ?? -1, 0.5, accuracy: 1e-9)
+  }
+
   // MARK: - Paddle centre
 
   func testPaddleCentreIsPreferredAndMeasuredRelativeToTheHips() {
