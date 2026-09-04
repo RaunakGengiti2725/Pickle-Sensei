@@ -249,6 +249,48 @@ Deno.test(
 );
 
 Deno.test(
+  "webhook: billing_entitlements upsert failing with a non-FK SQLSTATE (57P03) → 5xx with ZERO webhook_events rows; the redelivery performs exactly one RevenueCat GET and one upsert",
+  async () => {
+    const sim = await simulate();
+    try {
+      sim.h.subscriber = activeSubscriber();
+      sim.faults.push({
+        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        status: 503,
+        body: { code: "57P03", message: "the database system is starting up" },
+        times: 1,
+      });
+      const event = {
+        id: "evt-persist-57p03",
+        type: "INITIAL_PURCHASE",
+        app_user_id: TEST_USER_ID,
+      };
+      const first = await sim.h.handler(webhookRequest(event));
+      assert(
+        first.status >= 500 && first.status < 600,
+        `retryable 5xx expected, got ${first.status}`,
+      );
+      const text = await first.text();
+      assert(!/starting up|57P03/.test(text), `generic 5xx body: ${text}`);
+      assertEquals(sim.rcCalls(), 1);
+      assertEquals(sim.entitlementUpserts(), 1);
+      assertEquals(sim.entitlementRows.has(TEST_USER_ID), false, "nothing persisted");
+      assertEquals(sim.auditRows.size, 0, "zero webhook_events rows after the failed delivery");
+
+      const redelivery = await sim.h.handler(webhookRequest(event));
+      assertEquals(redelivery.status, 200);
+      assertEquals(await redelivery.json(), { received: true, verified: true });
+      assertEquals(sim.rcCalls(), 2, "redelivery re-verifies once");
+      assertEquals(sim.entitlementUpserts(), 2, "redelivery upserts once");
+      assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, true);
+      assert(typeof sim.auditRows.get("evt-persist-57p03")?.processed_at === "string");
+    } finally {
+      sim.restore();
+    }
+  },
+);
+
+Deno.test(
   "webhook: TRANSFER whose SECOND subject's billing_entitlements write fails transiently (503 PGRST001) → 503, no audit row; the redelivery re-verifies and persists BOTH subjects",
   async () => {
     const sim = await simulate();
