@@ -28,6 +28,13 @@ module.exports = {
   // Shared packages live outside this app's tree; resolve helpers from here.
   moduleDirectories: ['node_modules', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/jest.setup.js'],
+  // attack/*.tzcase.tsx are device-zone cases a __tests__ harness re-runs in a
+  // child jest with TZ pinned; they must also be runnable directly.
+  testMatch: [
+    '**/__tests__/**/*.[jt]s?(x)',
+    '**/?(*.)+(spec|test).[jt]s?(x)',
+    '<rootDir>/attack/**/*.tzcase.[jt]s?(x)',
+  ],
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation|react-native-.*|@op-engineering)/)',
   ],
