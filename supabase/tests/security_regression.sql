@@ -2499,6 +2499,106 @@ begin
   end if;
 end $$;
 
+-- ============================================================================
+-- O. late-permit acceptance is a CLOSED set: released/<NULL outcome>
+-- (adversary round 6, cluster sync-permit-durability, OFF-24H-01)
+-- ============================================================================
+--
+-- The 20260906130000 contract: acceptable backing is EXACTLY reserved (any
+-- age) or released/expired; "every other state keeps its verdict" —
+-- access.permit_not_reserved, as 1fb0efd7 returned for any non-reserved
+-- permit. `released` with a NULL outcome is one of those states and is
+-- client-reachable: `authenticated` holds UPDATE(status, outcome) on
+-- analysis_permits under analysis_permits_update_own (section N8 relies on
+-- the same grant), so `PATCH /rest/v1/analysis_permits?id=eq.<own>` with
+-- {"status":"released","outcome":null} produces it. The RPC's check
+--   not (status = 'reserved' or (status = 'released' and outcome = 'expired'))
+-- is three-valued: outcome IS NULL makes the whole predicate NULL, `if NULL`
+-- does not fire, and the permit falls through as if it were acceptable.
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000018', 'pia@example.com',
+        '{"full_name":"Pia"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-pia', '00000000-0000-4000-8000-000000000018',
+        '{"sub":"apple-sub-pia","email":"pia@example.com"}');
+-- member: the lifetime allowance can never be the reason for a verdict here
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000018', true, null);
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-0000000000f5', '00000000-0000-4000-8000-000000000018', 'pia-late-1', 'reserved', null, now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-0000000000f6', '00000000-0000-4000-8000-000000000018', 'pia-late-2', 'reserved', null, now() - interval '25 hours');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000018';
+
+-- What a client can do through PostgREST with its own bearer.
+update public.analysis_permits set status = 'released', outcome = null
+ where id = '00000000-0000-4000-8000-0000000000f5';
+update public.analysis_permits set status = 'released', outcome = null
+ where id = '00000000-0000-4000-8000-0000000000f6';
+
+-- O1: released/NULL, no other permit → must be access.permit_not_reserved
+-- (the verdict 1fb0efd7 gave and the migration promises). Anything else is a
+-- contract change: shot.write_failed:* is TRANSIENT for the mobile outbox
+-- (sync.ts TRANSIENT_SYNC_REJECTION_CODES) and burns attempts to exhausted.
+-- O2: released/NULL beside a LIVE reservation. The trigger's fallback ("some
+-- reserved permit younger than 24h") lets the RPC's insert through, so the
+-- shot is accepted on a permit that is NOT acceptable backing, the finalize
+-- UPDATE matches nothing (permit stays released/NULL), and the SAME permit
+-- backs a second, different shot — the one-permit-one-shot invariant (N7)
+-- no longer holds.
+-- Every deviation is collected and raised together so one run shows the
+-- whole observed-vs-expected picture.
+do $$
+declare v text; r record; p record; failures text[] := '{}';
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000f7',
+    '00000000-0000-4000-8000-0000000000f5', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    failures := failures || format('O1: a released permit with a NULL outcome must keep its old verdict access.permit_not_reserved (got %s)', v);
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000f7') then
+    failures := failures || 'O1: no row may land on a released/NULL permit';
+  end if;
+
+  select * into r from public.reserve_analysis_permit('pia-live');
+  if r.result <> 'accepted' then
+    raise exception 'O2 precondition: fresh reserve must succeed (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000f8',
+    '00000000-0000-4000-8000-0000000000f6', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    failures := failures || format('O2: released/NULL must be refused even while a live reservation exists (got %s)', v);
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-0000000000f9',
+    '00000000-0000-4000-8000-0000000000f6', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    failures := failures || format('O2: a second shot on the same released/NULL permit must be refused (got %s)', v);
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000000f6';
+  if p.status <> 'released' or p.outcome is not null then
+    failures := failures || format('O2: a refused permit must be untouched (got %s/%s)', p.status, p.outcome);
+  end if;
+  if (select count(*) from public.shots
+      where id in ('00000000-0000-4000-8000-0000000000f8',
+                   '00000000-0000-4000-8000-0000000000f9')) <> 0 then
+    failures := failures || format('O2: no shot may persist on a released/NULL permit (got %s rows)',
+      (select count(*) from public.shots
+        where id in ('00000000-0000-4000-8000-0000000000f8',
+                     '00000000-0000-4000-8000-0000000000f9')));
+  end if;
+  if cardinality(failures) > 0 then
+    raise exception E'section O failed:\n  %', array_to_string(failures, E'\n  ');
+  end if;
+end $$;
+reset role;
+
 rollback;
 
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED
