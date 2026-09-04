@@ -11,6 +11,16 @@ import Foundation
 /// prevent — and the centre-travel tolerance widened from 0.045 to 0.055 of
 /// the frame so breathing, weight shifts and paddle-tapping no longer restart
 /// the window endlessly. Everything else is unchanged.
+///
+/// Stillness is tracked as a RUN: `stillSinceMs` is the timestamp of the
+/// first framed sample of the current uninterrupted run and is what
+/// `stableForMs` is measured from. The sample buffer only holds the trailing
+/// `stableDurationMs` of samples for the centre-travel / scale checks, so
+/// readiness does not depend on a sample landing exactly `stableDurationMs`
+/// behind the current frame (which real 24/25/30 fps and back-pressured
+/// 60 fps cadences never produce). The run ends — and `stillSinceMs` moves to
+/// the current sample — on motion, a missing or unframed pose, a gap between
+/// framed samples longer than the window, or a non-monotonic timestamp.
 public final class PoseReadinessEvaluator {
   public enum State: String, Sendable {
     case noPerson = "no_person"
@@ -91,13 +101,14 @@ public final class PoseReadinessEvaluator {
 
   private let config: Config
   private var stableSamples: [StableSample] = []
+  private var stillSinceMs: Int?
 
   public init(config: Config = Config()) {
     self.config = config
   }
 
   public func ingestMissing(timestampMs: Int) -> Snapshot {
-    stableSamples.removeAll(keepingCapacity: true)
+    clearStillness()
     return Snapshot(
       state: .noPerson,
       timestampMs: timestampMs,
@@ -129,7 +140,7 @@ public final class PoseReadinessEvaluator {
       "left_knee", "right_knee", "left_ankle", "right_ankle",
     ]
     guard coverage >= 0.83, mandatory.allSatisfy({ visible[$0] != nil }) else {
-      stableSamples.removeAll(keepingCapacity: true)
+      clearStillness()
       return snapshot(
         state: .fullBodyRequired,
         pose: pose,
@@ -151,15 +162,15 @@ public final class PoseReadinessEvaluator {
 
     guard minX > config.frameMargin, maxX < 1 - config.frameMargin,
           minY > config.frameMargin, maxY < 1 - config.frameMargin else {
-      stableSamples.removeAll(keepingCapacity: true)
+      clearStillness()
       return snapshot(state: .fullBodyRequired, pose: pose, coverage: coverage, stableForMs: 0, missing: missing)
     }
     guard height >= config.minimumBodyHeight else {
-      stableSamples.removeAll(keepingCapacity: true)
+      clearStillness()
       return snapshot(state: .moveCloser, pose: pose, coverage: coverage, stableForMs: 0, missing: missing)
     }
     guard height <= config.maximumBodyHeight, width <= config.maximumBodyWidth else {
-      stableSamples.removeAll(keepingCapacity: true)
+      clearStillness()
       return snapshot(state: .moveFarther, pose: pose, coverage: coverage, stableForMs: 0, missing: missing)
     }
 
@@ -169,23 +180,31 @@ public final class PoseReadinessEvaluator {
       centerY: (minY + maxY) / 2,
       height: height
     )
+    if let previous = stableSamples.last,
+       pose.timestampMs < previous.timestampMs
+         || pose.timestampMs - previous.timestampMs > config.stableDurationMs {
+      // Evidence is not continuous across this sample: nothing observed the
+      // athlete during the gap, so the run cannot span it.
+      clearStillness()
+    }
     stableSamples.append(sample)
     let cutoff = pose.timestampMs - config.stableDurationMs
     stableSamples.removeAll { $0.timestampMs < cutoff }
 
-    let stableForMs = max(0, pose.timestampMs - (stableSamples.first?.timestampMs ?? pose.timestampMs))
     let centerTravel = maximumPairwiseTravel(in: stableSamples)
     let heights = stableSamples.map(\.height)
     let scaleChange = (heights.max() ?? height) - (heights.min() ?? height)
-    let isStable = stableForMs >= config.stableDurationMs
-      && centerTravel <= config.maximumCenterTravel
-      && scaleChange <= config.maximumScaleChange
-
-    if !isStable, centerTravel > config.maximumCenterTravel || scaleChange > config.maximumScaleChange {
+    if centerTravel > config.maximumCenterTravel || scaleChange > config.maximumScaleChange {
       // Restart the stability window from the current real observation rather
       // than allowing older motion to hold the athlete in a permanent loop.
       stableSamples = [sample]
+      stillSinceMs = nil
     }
+
+    let runStartMs = stillSinceMs ?? pose.timestampMs
+    stillSinceMs = runStartMs
+    let stableForMs = pose.timestampMs - runStartMs
+    let isStable = stableForMs >= config.stableDurationMs
 
     return snapshot(
       state: isStable ? .ready : .holdStill,
@@ -197,7 +216,12 @@ public final class PoseReadinessEvaluator {
   }
 
   public func reset() {
+    clearStillness()
+  }
+
+  private func clearStillness() {
     stableSamples.removeAll(keepingCapacity: true)
+    stillSinceMs = nil
   }
 
   private func snapshot(
