@@ -59,10 +59,7 @@ function live(
   return entry;
 }
 
-function runCommand(
-  store: FakeUpstash["store"],
-  cmd: Cmd,
-): { result?: unknown; error?: string } {
+function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; error?: string } {
   const [name, ...args] = cmd.map(String);
   switch (name.toUpperCase()) {
     case "GET": {
@@ -73,10 +70,7 @@ function runCommand(
       if (!entry) return { result: -2 };
       if (entry.expiresAtMs === null) return { result: -1 };
       return {
-        result: Math.max(
-          1,
-          Math.ceil((entry.expiresAtMs - Date.now()) / 1_000),
-        ),
+        result: Math.max(1, Math.ceil((entry.expiresAtMs - Date.now()) / 1_000)),
       };
     }
     case "SET": {
@@ -132,45 +126,37 @@ export function fakeUpstash(): FakeUpstash {
       globalThis.fetch = original;
     },
   };
-  globalThis.fetch =
-    (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-        ? input.href
-        : input.url;
-      if (!url.startsWith(FAKE_REDIS_URL)) return original(input, init);
-      fake.calls += 1;
-      if (fake.hang) {
-        await new Promise<void>((_, reject) => {
-          const signal = init?.signal;
-          if (!signal) return;
-          if (signal.aborted) reject(signal.reason);
-          signal.addEventListener("abort", () => reject(signal.reason), {
-            once: true,
-          });
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.startsWith(FAKE_REDIS_URL)) return original(input, init);
+    fake.calls += 1;
+    if (fake.hang) {
+      await new Promise<void>((_, reject) => {
+        const signal = init?.signal;
+        if (!signal) return;
+        if (signal.aborted) reject(signal.reason);
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
         });
-      }
-      if (fake.failStatus !== null) {
-        return new Response("upstream error", { status: fake.failStatus });
-      }
-      const commands = JSON.parse(String(init?.body ?? "[]")) as Cmd[];
-      const results: PipelineResult = [];
-      for (const cmd of commands) {
-        fake.commands.push(cmd);
-        const injected = fake.commandError?.(cmd) ?? null;
-        results.push(
-          injected !== null ? { error: injected } : runCommand(fake.store, cmd),
-        );
-      }
-      const reply = fake.truncateRepliesTo === null
-        ? results
-        : results.slice(0, fake.truncateRepliesTo);
-      return new Response(JSON.stringify(reply), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
       });
-    }) as typeof fetch;
+    }
+    if (fake.failStatus !== null) {
+      return new Response("upstream error", { status: fake.failStatus });
+    }
+    const commands = JSON.parse(String(init?.body ?? "[]")) as Cmd[];
+    const results: PipelineResult = [];
+    for (const cmd of commands) {
+      fake.commands.push(cmd);
+      const injected = fake.commandError?.(cmd) ?? null;
+      results.push(injected !== null ? { error: injected } : runCommand(fake.store, cmd));
+    }
+    const reply =
+      fake.truncateRepliesTo === null ? results : results.slice(0, fake.truncateRepliesTo);
+    return new Response(JSON.stringify(reply), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
   return fake;
 }
 
@@ -180,9 +166,7 @@ export type CacheModule = typeof import("../cache.ts");
 export type RateLimitModule = typeof import("../rateLimit.ts");
 
 /** A fresh module instance of cache.ts + rateLimit.ts (own L1 maps). */
-export async function loadIsolate(): Promise<
-  { cache: CacheModule; rateLimit: RateLimitModule }
-> {
+export async function loadIsolate(): Promise<{ cache: CacheModule; rateLimit: RateLimitModule }> {
   isolateCounter += 1;
   const tag = `${Date.now()}-${isolateCounter}`;
   // rateLimit.ts imports "./cache.ts" statically, which Deno resolves to the
@@ -190,16 +174,10 @@ export async function loadIsolate(): Promise<
   // would share ONE cache.ts instance across isolates. To keep each isolate
   // self-contained, the rateLimit module is re-materialised from source
   // with its cache import pointed at this isolate's cache specifier.
-  const cacheSpecifier =
-    new URL(`../cache.ts?iso=${tag}`, import.meta.url).href;
+  const cacheSpecifier = new URL(`../cache.ts?iso=${tag}`, import.meta.url).href;
   const cache = (await import(cacheSpecifier)) as CacheModule;
-  const rateLimitSource = await Deno.readTextFile(
-    new URL("../rateLimit.ts", import.meta.url),
-  );
-  const patched = rateLimitSource.replace(
-    'from "./cache.ts"',
-    `from "${cacheSpecifier}"`,
-  );
+  const rateLimitSource = await Deno.readTextFile(new URL("../rateLimit.ts", import.meta.url));
+  const patched = rateLimitSource.replace('from "./cache.ts"', `from "${cacheSpecifier}"`);
   const blob = new Blob([patched], { type: "application/typescript" });
   const blobUrl = URL.createObjectURL(blob);
   const rateLimit = (await import(blobUrl)) as RateLimitModule;

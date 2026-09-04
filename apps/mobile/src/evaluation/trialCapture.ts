@@ -146,7 +146,7 @@ export function buildEvaluationTrial(
         : null,
     envelopeOverall:
       outcome.kind === 'quality_blocked'
-        ? outcome.envelope.overall
+        ? (outcome.envelope?.overall ?? null)
         : isRecorded
           ? (outcome.record.captureEnvelope?.overall ?? null)
           : null,

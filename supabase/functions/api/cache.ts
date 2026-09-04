@@ -77,10 +77,7 @@ function memoryGet(key: string): string | null {
 
 /** A per-command slot of a pipeline reply that actually answered (present and
  * without a Redis-side error). Anything else is an unknown, never an absence. */
-function answered(
-  results: RedisPipelineResult,
-  index: number,
-): { result?: unknown } | null {
+function answered(results: RedisPipelineResult, index: number): { result?: unknown } | null {
   const slot = results[index];
   if (!slot || typeof slot !== "object" || slot.error !== undefined) {
     return null;
@@ -88,12 +85,7 @@ function answered(
   return slot;
 }
 
-function memorySet(
-  key: string,
-  value: string,
-  ttlSeconds: number,
-  inL2 = true,
-): void {
+function memorySet(key: string, value: string, ttlSeconds: number, inL2 = true): void {
   if (memory.size >= MEMORY_MAX_ENTRIES) {
     // Evict expired entries first; if none expired, drop the oldest third so
     // a hot isolate can never grow without bound.
@@ -216,9 +208,7 @@ export async function cacheGetUnlessRevoked(
  * (copied into L1 when found). Null when it is absent locally and L2 did
  * not answer (unreachable, per-command error, short reply) — the caller
  * decides what "unknown" means for it. */
-export async function cacheIsRevoked(
-  revokedKey: string,
-): Promise<boolean | null> {
+export async function cacheIsRevoked(revokedKey: string): Promise<boolean | null> {
   if (memoryGet(revokedKey) !== null) return true;
   if (!redisConfigured()) return false;
   const results = await redisPipeline([["GET", revokedKey]]);
@@ -232,21 +222,11 @@ export async function cacheIsRevoked(
 
 /** Write L1 and L2. Resolves to whether the L2 write is KNOWN to have landed
  * (false when Redis is unconfigured, unreachable, or refused the command). */
-export async function cacheSet(
-  key: string,
-  value: string,
-  ttlSeconds: number,
-): Promise<boolean> {
+export async function cacheSet(key: string, value: string, ttlSeconds: number): Promise<boolean> {
   if (ttlSeconds <= 0) return false;
   memorySet(key, value, ttlSeconds);
   if (!redisConfigured()) return false;
-  const results = await redisPipeline([[
-    "SET",
-    key,
-    value,
-    "EX",
-    Math.ceil(ttlSeconds),
-  ]]);
+  const results = await redisPipeline([["SET", key, value, "EX", Math.ceil(ttlSeconds)]]);
   const landed = results !== null && answered(results, 0)?.result === "OK";
   if (!landed) {
     const entry = memory.get(key);
@@ -265,10 +245,7 @@ export async function cacheDel(...keys: string[]): Promise<void> {
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */
-export async function redisWindowIncr(
-  key: string,
-  windowSeconds: number,
-): Promise<number | null> {
+export async function redisWindowIncr(key: string, windowSeconds: number): Promise<number | null> {
   const results = await redisPipeline([
     ["INCR", key],
     ["EXPIRE", key, windowSeconds, "NX"],
@@ -290,10 +267,6 @@ export async function redisWindowGet(key: string): Promise<number | null> {
 }
 
 export async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(input),
-  );
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

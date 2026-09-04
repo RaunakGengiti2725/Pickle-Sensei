@@ -412,7 +412,9 @@ describe('relaunch (hydrate) with a persisted session', () => {
 
   it('stays signed in when SQLite cannot be opened: the Keychain restore does not depend on the local database', async () => {
     seedVault('refresh-1', 'apple');
-    mockDbOpenError = new Error('SQLITE_CANTOPEN: unable to open database file');
+    mockDbOpenError = new Error(
+      'SQLITE_CANTOPEN: unable to open database file',
+    );
     const fetchMock = installRoutes({
       '/v1/auth/refresh': () =>
         response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
@@ -441,7 +443,9 @@ describe('relaunch (hydrate) with a persisted session', () => {
   });
 
   it('SQLite failing with NO vault record lands signed out with the local-data problem reported', async () => {
-    mockDbOpenError = new Error('SQLITE_CANTOPEN: unable to open database file');
+    mockDbOpenError = new Error(
+      'SQLITE_CANTOPEN: unable to open database file',
+    );
 
     await useAuthStore.getState().hydrate();
 
