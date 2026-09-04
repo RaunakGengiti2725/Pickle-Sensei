@@ -217,6 +217,70 @@ begin
   end if;
 end $$;
 
+-- B1b: EVERY user-owned relation a client session can read isolates rows —
+-- base tables through their RLS policies, the derived views through
+-- security_invoker (a definer view would aggregate everyone's shots). Alice
+-- first fills the relations A5 left empty, then each relation is asserted
+-- populated for its owner (so the zero-row check below is never vacuous) and
+-- empty for Bob.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+insert into public.shot_measurements (shot_id, user_id, metric_key, value, confidence, unit)
+values ('00000000-0000-4000-8000-0000000000e1',
+        '00000000-0000-4000-8000-00000000000a', 'paddle_speed', 12.5, 0.9, 'ratio');
+insert into public.captures
+  (id, user_id, session_id, shot_id, captured_at, duration_ms, fps,
+   capture_mode, evidence_status)
+values ('00000000-0000-4000-8000-0000000000c1',
+        '00000000-0000-4000-8000-00000000000a',
+        '00000000-0000-4000-8000-0000000000d1',
+        '00000000-0000-4000-8000-0000000000e1',
+        '2026-08-31T10:00:00Z', 1200, 30, 'automatic_pose_trigger', 'valid');
+insert into public.user_saved_drills (user_id, slug)
+values ('00000000-0000-4000-8000-00000000000a', 'dink-ladder');
+do $$
+declare
+  t text;
+  n int;
+begin
+  foreach t in array array[
+    'profiles','sessions','shots','shot_phases','shot_measurements',
+    'shot_checkpoints','captures','analysis_permits','consent_records',
+    'evaluation_trials','analysis_feedback','user_saved_drills',
+    'player_rank_state','progress_daily','practice_days',
+    'player_technique_rating'
+  ] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n = 0 then
+      raise exception 'B1b: owner must see their own rows in public.% (setup gap)', t;
+    end if;
+  end loop;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000b';
+do $$
+declare
+  t text;
+  n int;
+begin
+  foreach t in array array[
+    'sessions','shots','shot_phases','shot_measurements',
+    'shot_checkpoints','captures','analysis_permits','consent_records',
+    'evaluation_trials','analysis_feedback','user_saved_drills',
+    'player_rank_state','progress_daily','practice_days',
+    'player_technique_rating'
+  ] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n <> 0 then
+      raise exception 'B1b: public.% must show 0 rows to a second user (saw %)', t, n;
+    end if;
+  end loop;
+  -- profiles: Bob's own row is the only one visible.
+  if (select count(*) from public.profiles) <> 1
+     or exists (select 1 from public.profiles
+                where id <> '00000000-0000-4000-8000-00000000000b') then
+    raise exception 'B1b: public.profiles must show only the caller''s row to a second user';
+  end if;
+end $$;
+
 -- B2: Bob's UPDATE against Alice's session must hit zero rows
 update public.sessions set ended_at = null
   where id = '00000000-0000-4000-8000-0000000000d1';
