@@ -2,6 +2,7 @@
 // ../index.ts + ../cache.ts. Same fake Supabase Auth / Upstash pipeline as
 // be-auth-session-lifecycle.test.ts, plus two fault injectors:
 //   • redisMode  — "ok" | "down" (Upstash answers 503) | "garbage" (non-array body)
+//                 | "cmd-error" ([{error}] per command) | "empty" (HTTP 200 with [])
 //   • getUserGate — holds /auth/v1/user open AFTER liveness was decided, so a
 //     racing verification can land after the logout has tombstoned the session.
 //
@@ -63,7 +64,7 @@ const calls: string[] = [];
 let getUserGate: { token: string; held: Promise<void> } | null = null;
 let getUserStarted: (() => void) | null = null;
 
-type RedisMode = "ok" | "down" | "garbage" | "cmd-error";
+type RedisMode = "ok" | "down" | "garbage" | "cmd-error" | "empty";
 let redisMode: RedisMode = "ok";
 
 function mintAccessToken(session: Session, expOffsetSeconds = 3600): string {
@@ -214,6 +215,12 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
         200,
         commands.map((c) => ({ error: `ERR ${String(c[0])} rejected` })),
       );
+    }
+    if (redisMode === "empty") {
+      // Truncated pipeline reply: a well-formed JSON array with fewer entries than
+      // commands — the GET/TTL results the caller indexes are simply absent.
+      calls.push(`redis:EMPTY ${commands.map((c) => c[0]).join(",")}`);
+      return json(200, []);
     }
     return json(200, commands.map(runRedis));
   }
@@ -454,14 +461,20 @@ Deno.test(
     assertEquals((await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status, 200);
     liveSessionForToken(accessToken)!.revoked = true; // signed out upstream elsewhere
 
-    redisMode = "cmd-error";
-    calls.length = 0;
-    const response = await call("GET", PROBE_ROUTE, { token: accessToken, ip });
-    redisMode = "ok";
+    const served: string[] = [];
+    for (const mode of ["cmd-error", "empty"] as const) {
+      redisMode = mode;
+      calls.length = 0;
+      const response = await call("GET", PROBE_ROUTE, { token: accessToken, ip });
+      redisMode = "ok";
+      if (response.status !== 401) {
+        served.push(`[${mode}] status=${response.status} calls=${calls.join(", ")}`);
+      }
+    }
     assertEquals(
-      response.status,
-      401,
-      `revoked session served ${response.status} from L1 although the tombstone lookup did not succeed; calls=${calls.join(", ")}`,
+      served,
+      [],
+      `revoked session served from L1 although the tombstone lookup did not succeed:\n${served.join("\n")}`,
     );
   },
 );
