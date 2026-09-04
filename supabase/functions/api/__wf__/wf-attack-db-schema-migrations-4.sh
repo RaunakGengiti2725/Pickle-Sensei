@@ -30,7 +30,11 @@ command -v deno >/dev/null 2>&1 || { echo "deno is required" >&2; exit 2; }
 
 PORT="${ATTACK4_PORT:-55433}"
 CONTAINER="pickle-attack4-$PORT"
-cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
+cleanup() {
+  if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    docker rm -f "$CONTAINER" >/dev/null
+  fi
+}
 trap cleanup EXIT
 cleanup
 
@@ -52,6 +56,7 @@ fi
 
 docker cp tests "$CONTAINER":/tests
 docker cp migrations "$CONTAINER":/migrations
+migrate_code=0
 docker exec "$CONTAINER" bash -c '
   set -euo pipefail
   psql -U postgres -v ON_ERROR_STOP=1 -q -f /tests/shim_auth.sql
@@ -59,7 +64,12 @@ docker exec "$CONTAINER" bash -c '
     echo "applying $f"
     psql -U postgres -v ON_ERROR_STOP=1 -q -f "$f"
   done
-' 2>&1 | tee "$OUT/migrate.log" | grep -v NOTICE || true
+' > "$OUT/migrate.log" 2>&1 || migrate_code=$?
+grep -v NOTICE "$OUT/migrate.log" >&2 || [ "$?" -eq 1 ]   # 1 = every line was a NOTICE
+if [ "$migrate_code" -ne 0 ]; then
+  echo "migrations failed (exit $migrate_code) — see $OUT/migrate.log" >&2
+  exit "$migrate_code"
+fi
 
 echo "commit=$(git -C "$REPO" rev-parse HEAD) seed=${ATTACK4_SEED:-4d812e1a} port=$PORT" | tee "$OUT/run.txt"
 
