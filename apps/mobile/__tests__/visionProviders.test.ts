@@ -37,7 +37,7 @@ describe('vision provider selection', () => {
     expect(status.installed).toBe(true);
     expect(status.version).toBe(SCORING_STACK_VERSION);
     expect(status.version).toContain('sm-v1');
-    expect(status.version).toContain('geometry-1');
+    expect(status.version).toContain('geometry-2');
   });
 
   it('refuses to issue providers without a recorded pose sequence', () => {
