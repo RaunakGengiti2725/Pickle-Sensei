@@ -4,7 +4,12 @@
  * always say NOTHING was deleted unless the server confirmed), and the
  * post-confirmation local purge that removes every owner-scoped row.
  */
-import type { ApiSession } from '../src/account/apiSession';
+import {
+  type ApiSession,
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+} from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
@@ -171,6 +176,104 @@ describe('account deletion client', () => {
     await expect(
       confirmAccountDeletion(session, 'challenge', down),
     ).rejects.toBeInstanceOf(AccountDeletionError);
+  });
+
+  describe('lost delete-confirm response', () => {
+    const unauthorizedListener = jest.fn();
+
+    beforeEach(() => {
+      unauthorizedListener.mockReset();
+      establishApiSession(session);
+      setApiUnauthorizedListener(unauthorizedListener);
+    });
+
+    afterEach(() => {
+      setApiUnauthorizedListener(null);
+      clearApiSession();
+    });
+
+    it('step 2 → 401 reports the rejected bearer to the auth store exactly once', async () => {
+      const fetchFn = jest.fn(async () =>
+        jsonResponse(401, {
+          error: { message: 'The session is no longer valid. Sign in again.' },
+        }),
+      );
+
+      await expect(
+        confirmAccountDeletion(session, 'challenge', fetchFn),
+      ).rejects.toMatchObject({
+        code: 'deletion.session_expired',
+        retryable: false,
+      });
+      expect(unauthorizedListener).toHaveBeenCalledTimes(1);
+      expect(unauthorizedListener).toHaveBeenCalledWith(
+        expect.objectContaining({ bearerToken: session.bearerToken }),
+      );
+    });
+
+    it('step 1 → 401 reports the rejected bearer too (parity with every other API client)', async () => {
+      const fetchFn = jest.fn(async () =>
+        jsonResponse(401, { error: { message: 'unauthorized' } }),
+      );
+
+      await expect(
+        requestAccountDeletion(session, null, fetchFn),
+      ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+      expect(unauthorizedListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('a 401 for a bearer that is no longer current is not reported', async () => {
+      establishApiSession({ ...session, bearerToken: 'rotated-token' });
+      const fetchFn = jest.fn(async () =>
+        jsonResponse(401, { error: { message: 'unauthorized' } }),
+      );
+
+      await expect(
+        confirmAccountDeletion(session, 'challenge', fetchFn),
+      ).rejects.toBeInstanceOf(AccountDeletionError);
+      expect(unauthorizedListener).not.toHaveBeenCalled();
+    });
+
+    it('step 2 that aborts after the request went out is retryable and does not claim "Nothing was deleted"', async () => {
+      const fetchFn = jest.fn(async (_input: string, init?: RequestInit) => {
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        });
+      });
+
+      jest.useFakeTimers();
+      try {
+        const settled = confirmAccountDeletion(
+          session,
+          'challenge',
+          fetchFn,
+        ).catch((e: unknown) => e);
+        jest.advanceTimersByTime(15_000);
+        const error = (await settled) as AccountDeletionError;
+        expect(error).toBeInstanceOf(AccountDeletionError);
+        expect(error.retryable).toBe(true);
+        expect(error.message).not.toMatch(/Nothing was deleted/);
+        expect(error.message).toMatch(/may or may not/);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('step 1 network failure still says nothing was deleted (no request was ever committed)', async () => {
+      const down = jest.fn(async () => {
+        throw new Error('network down');
+      });
+      await expect(
+        requestAccountDeletion(session, null, down),
+      ).rejects.toMatchObject({
+        retryable: true,
+        message: expect.stringContaining('Nothing was deleted'),
+      });
+    });
   });
 });
 
