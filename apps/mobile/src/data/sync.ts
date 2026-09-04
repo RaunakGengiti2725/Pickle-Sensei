@@ -71,14 +71,19 @@ export const SESSION_NOT_FOUND_REJECTION = 'shot.session_not_found';
 
 /**
  * Only failures that can never succeed on retry consume the bounded attempt
- * budget. Everything else — device offline, timeouts, server 5xx, an expired
- * bearer that a fresh sign-in will replace — is transient: the row records
- * the error and stays fully retryable, because a durable local rating must
- * never be silently dropped from sync by a stretch of bad connectivity.
+ * budget: a 4xx the API itself issued through its error envelope (other than
+ * an expired bearer, a timeout or a rate limit). Everything else — device
+ * offline, timeouts, server 5xx, an expired bearer that a fresh sign-in will
+ * replace, a 4xx with no API envelope (functions gateway with nothing
+ * deployed under the slug during a redeploy/rollback, a CDN/WAF block page)
+ * — is transient: the row records the error and stays fully retryable,
+ * because a durable local rating must never be silently dropped from sync by
+ * a stretch of bad connectivity or an outage in front of the API.
  */
 export function isPermanentSyncFailure(error: unknown): boolean {
   if (error instanceof ApiError) {
     return (
+      error.isContractError &&
       error.status >= 400 &&
       error.status < 500 &&
       error.status !== 401 &&

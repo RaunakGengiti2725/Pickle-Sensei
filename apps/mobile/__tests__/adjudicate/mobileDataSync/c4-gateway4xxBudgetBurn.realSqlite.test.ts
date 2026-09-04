@@ -12,6 +12,11 @@
  * Driven through the real `createTransport()` + `api.ts request()` with a
  * fetch double, over real SQLite. Expected (fails on the baseline): a shot
  * queued during the gateway outage still reaches the server once it recovers.
+ *
+ * Pinned alongside: the contrast case — the SAME status codes carried in
+ * the API's own `{error: {code, message}}` envelope ARE a contract verdict
+ * and still consume the budget — and the persisted `last_error` naming the
+ * status when the body carries no message (`ApiError: HTTP 404`).
  */
 import { createRealOpSqliteModule } from '../../../adjudicate/mobile-data-sync/realSqliteOpMock';
 
@@ -41,9 +46,11 @@ import {
 
 const OWNER = canonicalDataOwner(CANONICAL_USER);
 
+type Outage = 'function_not_found' | 'waf_forbidden';
+
 type Gateway =
-  | { kind: 'function_not_found' }
-  | { kind: 'waf_forbidden' }
+  | { kind: Outage }
+  | { kind: 'api_envelope'; status: number; code: string }
   | { kind: 'healthy' };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -71,6 +78,15 @@ function installFetch(gateway: { current: Gateway }): { posts: number } {
             statusText: 'Forbidden',
             headers: { 'content-type': 'text/html' },
           });
+        case 'api_envelope':
+          // The API itself answering (supabase/functions/api index.ts
+          // `json(status, { error: { code, message } })`).
+          return jsonResponse(gateway.current.status, {
+            error: {
+              code: gateway.current.code,
+              message: 'The API rejected this request.',
+            },
+          });
         case 'healthy': {
           state.posts += 1;
           const body = JSON.parse(String(init.body)) as {
@@ -87,7 +103,7 @@ function installFetch(gateway: { current: Gateway }): { posts: number } {
   return state;
 }
 
-describe.each<Gateway['kind']>(['function_not_found', 'waf_forbidden'])(
+describe.each<Outage>(['function_not_found', 'waf_forbidden'])(
   'C4: whole-request %s burns the outbox budget (real SQLite + real api.ts)',
   outage => {
     const gateway: { current: Gateway } = { current: { kind: outage } };
@@ -129,9 +145,72 @@ describe.each<Gateway['kind']>(['function_not_found', 'waf_forbidden'])(
       }).toEqual({
         outage: expect.objectContaining({
           state: expect.not.stringMatching(/exhausted/),
+          attempts: 0,
+          // Diagnosable without the bearer or the body: the persisted error
+          // names the class and the status even when the body has none.
+          lastError:
+            outage === 'function_not_found'
+              ? 'ApiError: HTTP 404'
+              : 'ApiError: Forbidden',
         }),
         postsAfterRecovery: 1,
         receipt: true,
+      });
+    });
+  },
+);
+
+describe.each<{ status: number; code: string }>([
+  { status: 404, code: 'not_found' },
+  { status: 403, code: 'access.denied' },
+])(
+  'C4 contrast: the API\'s own $status "$code" envelope is still a contract verdict',
+  verdict => {
+    const gateway: { current: Gateway } = {
+      current: { kind: 'api_envelope', ...verdict },
+    };
+    const transport = createTransport({
+      baseUrl: 'https://example.invalid/functions/v1/api',
+      token: 'test-access-token',
+    });
+    const id = shotId(0x50 + verdict.status);
+
+    beforeAll(async () => {
+      setActiveDataOwner(OWNER);
+      const db = getDb();
+      await db.execute('DELETE FROM outbox');
+      await db.execute('DELETE FROM sync_receipt');
+      await saveAnalysis(db, realAnalysis({ id }), PERMIT_ID);
+    });
+
+    afterAll(() => {
+      getDb().close();
+      mockSqlite.reset();
+    });
+
+    it('consumes the attempt budget and is not replayed once exhausted', async () => {
+      const db = getDb();
+      const fetchState = installFetch(gateway);
+      for (let i = 0; i < OUTBOX_MAX_ATTEMPTS; i++) {
+        await drainOutbox(db, transport);
+      }
+      const during = await getShotOutboxStatus(db, id);
+
+      gateway.current = { kind: 'healthy' };
+      await drainOutbox(db, transport);
+
+      expect({
+        outage: during,
+        postsAfterRecovery: fetchState.posts,
+        receipt: await hasShotSyncReceipt(db, id),
+      }).toEqual({
+        outage: expect.objectContaining({
+          state: 'exhausted',
+          attempts: OUTBOX_MAX_ATTEMPTS,
+          lastError: 'ApiError: The API rejected this request.',
+        }),
+        postsAfterRecovery: 0,
+        receipt: false,
       });
     });
   },

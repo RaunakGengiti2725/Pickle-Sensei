@@ -48,6 +48,12 @@ export interface ReservedAnalysisPermitWithAccess {
   access: ReserveAccessSnapshot | null;
 }
 
+/** `code` of an error response that did not carry the API's own
+ * `{error: {code, message}}` envelope — a gateway "function not found"
+ * body, a CDN/WAF block page, an HTML error page. The status then describes
+ * the infrastructure in front of the API, not a verdict from the API. */
+export const API_ERROR_CODE_UNENVELOPED = 'unknown';
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -55,6 +61,12 @@ export class ApiError extends Error {
     message: string,
   ) {
     super(message);
+    this.name = 'ApiError';
+  }
+
+  /** True when the API itself answered with a contract code. */
+  get isContractError(): boolean {
+    return this.code !== API_ERROR_CODE_UNENVELOPED;
   }
 }
 
@@ -99,15 +111,20 @@ async function request<T>(
     clearTimeout(timer);
   }
   const json = (await response.json().catch(() => null)) as
-    (T & { error?: { code: string; message: string } }) | null;
+    (T & { error?: { code?: unknown; message?: unknown } }) | null;
   if (!response.ok) {
     if (response.status === 401 && token) {
       reportApiUnauthorized(token);
     }
+    const envelope = json?.error;
     throw new ApiError(
       response.status,
-      json?.error?.code ?? 'unknown',
-      json?.error?.message ?? response.statusText,
+      typeof envelope?.code === 'string'
+        ? envelope.code
+        : API_ERROR_CODE_UNENVELOPED,
+      typeof envelope?.message === 'string'
+        ? envelope.message
+        : response.statusText || `HTTP ${response.status}`,
     );
   }
   return json as T;
