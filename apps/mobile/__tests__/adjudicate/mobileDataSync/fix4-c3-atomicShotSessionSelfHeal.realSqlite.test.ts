@@ -174,7 +174,7 @@ describe('fix4 / MDS-C3: atomic shot+session persistence and self-healing strand
       log.indexOf('COMMIT'),
     );
     const order = inside
-      .map(s =>
+      .map((s): string | null =>
         /INSERT OR REPLACE INTO local_session/.test(s)
           ? 'local_session'
           : /INSERT INTO outbox[\s\S]*'session\.create'/.test(s)
