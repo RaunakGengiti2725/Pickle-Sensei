@@ -19,7 +19,7 @@ Architecture, not a settings page (directive §34, spec pp. 39–40).
 ## User rights (implemented)
 
 - Export: `POST /v1/me/export` — full structured bundle (profile, settings, consent history, goals, sessions, shots incl. version vectors, achievements), audited. Tested.
-- Deletion: `DELETE /v1/me` — workflow per directive §58: access revoked immediately (tested), social rows removed, media marked + purge queued, ML dataset review queued, IdP revocation queued (visibly blocked until credentials configured), final hard delete only after prior tasks complete (worker-tested). Deleted accounts cannot re-bootstrap (410, tested). Only `audit_log`/billing records retained.
+- Deletion: `DELETE /v1/me` — workflow per directive §58: access revoked immediately (tested), social rows removed, media marked + purge queued, ML dataset review queued, IdP revocation queued (the worker records it as skipped with the reason when no IdP credentials are configured, so the row is terminal and never outlives the account), final hard delete only after prior tasks complete (worker-tested). Deleted accounts cannot re-bootstrap (410, tested). Only `audit_log`/billing records retained.
 - Individual video deletion: `DELETE /v1/media/:id` → queued object purge (worker-tested).
 
 ## Prohibitions (architecture-level)

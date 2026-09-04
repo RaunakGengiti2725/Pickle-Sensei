@@ -373,14 +373,20 @@ describe.skipIf(!testUrl)("media deletion propagation (API + worker + PostgreSQL
     );
     expect(audit.rowCount).toBe(1);
 
-    // idp_revoke stays honestly queued/blocked (no IdP credentials in test);
-    // every other deletion task completed.
-    const tasks = await pool.query("SELECT kind, status FROM deletion_task WHERE user_id = $1", [
-      userId,
-    ]);
-    for (const row of tasks.rows as Array<{ kind: string; status: string }>) {
-      if (row.kind === "idp_revoke") expect(row.status).toBe("queued");
-      else expect(row.status, row.kind).toBe("done");
+    // Every deletion task is terminal; idp_revoke records honestly that no
+    // IdP credentials were configured instead of lingering as an open row.
+    const tasks = await pool.query(
+      "SELECT kind, status, detail FROM deletion_task WHERE user_id = $1",
+      [userId],
+    );
+    for (const row of tasks.rows as Array<{
+      kind: string;
+      status: string;
+      detail: { skipped?: string };
+    }>) {
+      expect(row.status, row.kind).toBe("done");
+      if (row.kind === "idp_revoke")
+        expect(row.detail.skipped).toBe("idp credentials not configured");
     }
   });
 });
