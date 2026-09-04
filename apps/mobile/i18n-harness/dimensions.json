@@ -1,0 +1,85 @@
+{
+  "locales": [
+    {
+      "tag": "de-DE",
+      "region": "DE",
+      "zone": "Europe/Berlin",
+      "posix": "de_DE"
+    },
+    {
+      "tag": "fr-FR",
+      "region": "FR",
+      "zone": "Europe/Paris",
+      "posix": "fr_FR"
+    },
+    {
+      "tag": "ar-EG",
+      "region": "EG",
+      "zone": "Africa/Cairo",
+      "posix": "ar_EG"
+    },
+    {
+      "tag": "hi-IN",
+      "region": "IN",
+      "zone": "Asia/Kolkata",
+      "posix": "hi_IN"
+    },
+    { "tag": "ja-JP", "region": "JP", "zone": "Asia/Tokyo", "posix": "ja_JP" },
+    {
+      "tag": "pt-BR",
+      "region": "BR",
+      "zone": "America/Sao_Paulo",
+      "posix": "pt_BR"
+    },
+    {
+      "tag": "tr-TR",
+      "region": "TR",
+      "zone": "Europe/Istanbul",
+      "posix": "tr_TR"
+    },
+    {
+      "tag": "ru-RU",
+      "region": "RU",
+      "zone": "Europe/Moscow",
+      "posix": "ru_RU"
+    },
+    {
+      "tag": "th-TH",
+      "region": "TH",
+      "zone": "Asia/Bangkok",
+      "posix": "th_TH"
+    },
+    {
+      "tag": "zh-CN",
+      "region": "CN",
+      "zone": "Asia/Shanghai",
+      "posix": "zh_CN"
+    },
+    {
+      "tag": "en-IN",
+      "region": "IN",
+      "zone": "Asia/Kolkata",
+      "posix": "en_IN"
+    },
+    {
+      "tag": "es-419",
+      "region": "MX",
+      "zone": "America/Mexico_City",
+      "posix": "es_419"
+    }
+  ],
+  "adversarialZones": [
+    "UTC",
+    "America/Los_Angeles",
+    "America/St_Johns",
+    "Asia/Kathmandu",
+    "Australia/Lord_Howe",
+    "Pacific/Auckland",
+    "Pacific/Fiji",
+    "Pacific/Chatham",
+    "Pacific/Apia",
+    "Pacific/Kiritimati",
+    "Pacific/Pago_Pago",
+    "America/Santiago"
+  ]
+}
