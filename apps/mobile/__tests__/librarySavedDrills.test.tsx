@@ -192,6 +192,7 @@ describe('Library saved drills visibility', () => {
 describe('Library reads tab repository failure', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    mockListShots.mockReset().mockImplementation(async () => []);
     useTrainingStore.setState({
       savedStatus: 'ready',
       planStatus: 'ready',
