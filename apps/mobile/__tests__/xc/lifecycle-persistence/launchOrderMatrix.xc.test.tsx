@@ -1752,10 +1752,11 @@ describe('XC matrix-lifecycle-persistence — harness C: launch ordering', () =>
           {
             description: KNOWN_DEVIATIONS[id as DeviationId],
             rows: list.length,
-            scenarios: list.slice(0, 12).map(r => ({
+            scenarios: list.map(r => ({
               scenario: r.scenario,
               seed: r.seed,
               failed: r.failed,
+              inputs: r.inputs,
             })),
           },
         ]),
