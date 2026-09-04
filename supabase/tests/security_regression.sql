@@ -467,12 +467,17 @@ insert into public.shots (
   'scoring-1', 'config-1'
 );
 
--- E1: synced shots are fully immutable from a client session
+-- E1: synced shots are fully immutable from a client session. Every UPDATE
+-- must fail on PRIVILEGE (SQLSTATE 42501), so each value satisfies the row's
+-- CHECK constraints — `result_kind = 'low_confidence'` is a legal
+-- shots_result_kind_check value; a column-level UPDATE(result_kind) grant
+-- would let the owner rewrite a scored rating into an abstention (or back).
 do $$
 declare col text;
 begin
   foreach col in array array[
     'favorite = true', 'overall_score = 9.9',
+    'result_kind = ''low_confidence''',
     'user_id = ''00000000-0000-4000-8000-00000000000b''',
     'scoring_model_version = ''forged'''
   ] loop
@@ -481,9 +486,22 @@ begin
         'update public.shots set %s where id = ''00000000-0000-4000-8000-0000000000e2''',
         col);
       raise exception 'E1: shots.% must not be client-writable', col;
-    exception when insufficient_privilege then null;
+    exception when sqlstate '42501' then null;
     end;
   end loop;
+  -- Catalog pin: no table- or column-level UPDATE grant on shots at all, so a
+  -- future grant on ANY column (not just the ones probed above) trips here.
+  if has_table_privilege('authenticated', 'public.shots', 'UPDATE') then
+    raise exception 'E1: authenticated must hold no table-level UPDATE grant on shots';
+  end if;
+  if exists (select 1 from information_schema.column_privileges
+             where grantee = 'authenticated' and table_schema = 'public'
+               and table_name = 'shots' and privilege_type = 'UPDATE') then
+    raise exception 'E1: authenticated must hold no column-level UPDATE grant on shots (%)',
+      (select string_agg(column_name, ', ') from information_schema.column_privileges
+        where grantee = 'authenticated' and table_schema = 'public'
+          and table_name = 'shots' and privilege_type = 'UPDATE');
+  end if;
 end $$;
 
 -- E2: profiles identity/bookkeeping columns are locked (email is
@@ -505,25 +523,57 @@ begin
   end loop;
 end $$;
 
--- E3: shot detail evidence is write-once (no UPDATE/DELETE grant)
+-- E3: shot detail evidence is write-once (no UPDATE/DELETE grant). The owner
+-- CAN insert the rows (that is the sync path), and must then be refused on
+-- privilege (SQLSTATE 42501) — not on RLS row visibility — when rewriting or
+-- deleting them. Probed live for shot_phases AND shot_measurements, and pinned
+-- in the catalog so a table-level grant on either trips even without a row.
 insert into public.shot_phases
   (shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence)
 values ('00000000-0000-4000-8000-0000000000e2',
         '00000000-0000-4000-8000-00000000000a', 'prepare', 0, 100, 200, 0.9);
+insert into public.shot_measurements
+  (shot_id, user_id, metric_key, value, confidence, unit)
+values ('00000000-0000-4000-8000-0000000000e2',
+        '00000000-0000-4000-8000-00000000000a', 'paddle_speed', 12.5, 0.9, 'ratio');
 do $$
+declare t text;
 begin
   begin
     update public.shot_phases set confidence = 1
       where shot_id = '00000000-0000-4000-8000-0000000000e2';
     raise exception 'E3a: shot_phases must not be client-updatable';
-  exception when insufficient_privilege then null;
+  exception when sqlstate '42501' then null;
   end;
   begin
     delete from public.shot_phases
       where shot_id = '00000000-0000-4000-8000-0000000000e2';
     raise exception 'E3b: shot_phases must not be client-deletable';
-  exception when insufficient_privilege then null;
+  exception when sqlstate '42501' then null;
   end;
+  begin
+    update public.shot_measurements set value = 99.9, confidence = 1
+      where shot_id = '00000000-0000-4000-8000-0000000000e2';
+    raise exception 'E3c: shot_measurements must not be client-updatable';
+  exception when sqlstate '42501' then null;
+  end;
+  begin
+    delete from public.shot_measurements
+      where shot_id = '00000000-0000-4000-8000-0000000000e2';
+    raise exception 'E3d: shot_measurements must not be client-deletable';
+  exception when sqlstate '42501' then null;
+  end;
+  foreach t in array array['shot_phases', 'shot_measurements', 'shot_checkpoints'] loop
+    if has_table_privilege('authenticated', 'public.' || t, 'UPDATE')
+       or has_table_privilege('authenticated', 'public.' || t, 'DELETE') then
+      raise exception 'E3: authenticated must hold no UPDATE/DELETE grant on %', t;
+    end if;
+    if exists (select 1 from information_schema.column_privileges
+               where grantee = 'authenticated' and table_schema = 'public'
+                 and table_name = t and privilege_type = 'UPDATE') then
+      raise exception 'E3: authenticated must hold no column-level UPDATE grant on %', t;
+    end if;
+  end loop;
 end $$;
 
 -- E4: rank state is trigger-maintained; clients cannot write it
@@ -1319,6 +1369,327 @@ begin
         public.free_rating_identity_hash('apple', 'apple-sub-finn'))
         and scored_count = 1) <> 2 then
     raise exception 'J9: every identity of the account must carry the scored count';
+  end if;
+end $$;
+
+-- ──────── K: the free-rating decision points are live-probed, not inferred ──
+--
+-- H and J pin the OUTCOMES of the free limit. K pins the MECHANISMS that make
+-- those outcomes hold under concurrency and over time, each with an input
+-- that distinguishes the correct implementation from its nearest plausible
+-- regression: the per-user advisory lock both RPCs must take (a single psql
+-- session cannot race itself, but pg_locks shows exactly which xact-scoped
+-- advisory locks this backend holds — and run_rls_tests.sh additionally races
+-- two real connections), active premium bypassing the sync backstop, a
+-- lapsed entitlement no longer counting as premium, identity_scored_count()
+-- taking the MAX across linked identities, the 24-hour stale-reservation
+-- window, and RLS actually enabled on the ledger.
+
+reset role;
+
+-- K1: reserve_analysis_permit() holds pg_advisory_xact_lock(access_lock_key
+-- (uid)) for the rest of the transaction once it has passed the idempotent
+-- fast path. Without it two concurrent reserves with DIFFERENT keys both
+-- read remaining=1 and both insert.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000010', 'gina@example.com',
+        '{"full_name":"Gina"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-gina', '00000000-0000-4000-8000-000000000010',
+        '{"sub":"google-sub-gina","email":"gina@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000010';
+do $$
+declare
+  k bigint := public.access_lock_key((select auth.uid()));
+  r record;
+begin
+  -- pg_advisory_xact_lock(bigint) shows up in pg_locks as the two 32-bit
+  -- halves of the key (classid = high word, objid = low word, objsubid = 1).
+  if exists (select 1 from pg_locks l
+             where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+               and l.classid::bigint = ((k >> 32) & 4294967295)
+               and l.objid::bigint = (k & 4294967295)) then
+    raise exception 'K1: precondition — a fresh account holds no per-user lock yet';
+  end if;
+  select * into r from public.reserve_analysis_permit('gina-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'K1: first free reserve must succeed (got %)', r.result;
+  end if;
+  if not exists (select 1 from pg_locks l
+                 where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+                   and l.granted and l.objsubid = 1
+                   and l.classid::bigint = ((k >> 32) & 4294967295)
+                   and l.objid::bigint = (k & 4294967295)) then
+    raise exception
+      'K1: reserve_analysis_permit must serialize on pg_advisory_xact_lock(access_lock_key(uid)) — the lock is not held after a fresh-key reserve';
+  end if;
+end $$;
+reset role;
+
+-- K2: apply_synced_shot() takes the SAME per-user lock before the scored-shot
+-- backstop, so two concurrent syncs holding different permits cannot both
+-- pass it. Hank never called reserve in this session, so the only way the
+-- lock can be held is apply_synced_shot taking it.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000011', 'hank@example.com',
+        '{"full_name":"Hank"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-hank', '00000000-0000-4000-8000-000000000011',
+        '{"sub":"apple-sub-hank","email":"hank@example.com"}');
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000b1',
+        '00000000-0000-4000-8000-000000000011', 'hank-key-1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000011';
+do $$
+declare
+  k bigint := public.access_lock_key((select auth.uid()));
+  v text;
+begin
+  if exists (select 1 from pg_locks l
+             where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+               and l.classid::bigint = ((k >> 32) & 4294967295)
+               and l.objid::bigint = (k & 4294967295)) then
+    raise exception 'K2: precondition — no per-user lock before the first sync';
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000b2',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000b1',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'K2: the first scored sync must be accepted (got %)', v;
+  end if;
+  if not exists (select 1 from pg_locks l
+                 where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+                   and l.granted and l.objsubid = 1
+                   and l.classid::bigint = ((k >> 32) & 4294967295)
+                   and l.objid::bigint = (k & 4294967295)) then
+    raise exception
+      'K2: apply_synced_shot must serialize on pg_advisory_xact_lock(access_lock_key(uid)) — the lock is not held after a scored sync';
+  end if;
+end $$;
+reset role;
+
+-- K3: ACTIVE premium bypasses the sync backstop. Carol's second life (user d)
+-- sits at identity count 2 and holds the permit J5 reserved as a member; the
+-- scored sync must be accepted and recorded, and access_state must say
+-- premium. (J5 only proved the RESERVE side of the bypass.)
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000d';
+do $$
+declare v text; p uuid; rec record;
+begin
+  select * into rec from public.access_state();
+  if not rec.premium then
+    raise exception 'K3: an unexpired entitlement must read as premium';
+  end if;
+  select permit_id into p from public.reserve_analysis_permit('carol-second-life-pro');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000d5',
+    'analysisPermitId', p,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception
+      'K3: a member''s scored sync must bypass the free-limit backstop (got %)', v;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-0000000000d5'
+                   and user_id = (select auth.uid()) and result_kind = 'scored') then
+    raise exception 'K3: the member''s scored shot must be recorded';
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = p and status = 'finalized' and outcome = 'scored') then
+    raise exception 'K3: the member''s permit must be finalized as scored, not released';
+  end if;
+end $$;
+reset role;
+
+-- K4: a LAPSED entitlement (premium = true, expires_at in the past) is not
+-- premium at any decision point: access_state, reserve, and the sync
+-- backstop all treat the account as free — and it is over the limit.
+update public.billing_entitlements
+   set expires_at = now() - interval '1 day'
+ where user_id = '00000000-0000-4000-8000-00000000000d';
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000d6',
+        '00000000-0000-4000-8000-00000000000d', 'carol-lapsed-forged');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000d';
+do $$
+declare rec record; r record; v text;
+begin
+  select * into rec from public.access_state();
+  if rec.premium then
+    raise exception 'K4: access_state must not report a lapsed entitlement as premium';
+  end if;
+  if rec.scored_count < 2 then
+    raise exception 'K4: the lapsed account is over the free limit (got %)', rec.scored_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('carol-lapsed-key');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'K4: reserve must refuse a lapsed member over the limit (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000d7',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000d6',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.paywall_required' then
+    raise exception
+      'K4: the sync backstop must refuse a lapsed member over the limit (got %)', v;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000d7') then
+    raise exception 'K4: no scored shot may be recorded for a lapsed member over the limit';
+  end if;
+end $$;
+reset role;
+
+-- K5: identity_scored_count() is the MAX across the account's linked
+-- identities, never the min. Finn's Apple identity arrives with more history
+-- (2 — e.g. spent on a since-deleted account) than his Google identity (1):
+-- the account is at the limit, not one rating short of it.
+update public.free_rating_ledger
+   set scored_count = 2
+ where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-finn');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000f';
+do $$
+declare rec record; r record;
+begin
+  if public.identity_scored_count() <> 2 then
+    raise exception
+      'K5: identity_scored_count must take the max across linked identities (got %)',
+      public.identity_scored_count();
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'K5: lifetime_scored_count must inherit the max (got %)',
+      public.lifetime_scored_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.scored_count <> 2 then
+    raise exception 'K5: access_state must report the max identity count (got %)', rec.scored_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('finn-key-2');
+  if r.result <> 'access.paywall_required' then
+    raise exception
+      'K5: reserve must refuse once ANY linked identity has spent both ratings (got %)', r.result;
+  end if;
+end $$;
+reset role;
+
+-- K6: a reserved permit older than 24 hours is stale — the hourly sweep
+-- releases it, so the limit must not count it either (a widened window would
+-- let an abandoned reservation lock a player out of their last rating). Erin
+-- (1 scored, 0 reserved) gets a 30-hour-old reserved permit: access_state
+-- reports reserved=0 and a fresh reserve is still accepted; the stale permit
+-- itself is refused by the sync as expired.
+insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+values ('00000000-0000-4000-8000-0000000000e6',
+        '00000000-0000-4000-8000-00000000000e', 'erin-stale-key',
+        now() - interval '30 hours');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000e';
+do $$
+declare rec record; r record; v text;
+begin
+  select * into rec from public.access_state();
+  if rec.scored_count <> 1 or rec.reserved_count <> 0 then
+    raise exception
+      'K6: a 30-hour-old reservation must not count as reserved (scored %, reserved %)',
+      rec.scored_count, rec.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('erin-key-2');
+  if r.result <> 'accepted' then
+    raise exception
+      'K6: the last free rating must still be reservable past a stale reservation (got %)',
+      r.result;
+  end if;
+  select * into r from public.reserve_analysis_permit('erin-key-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'K6: 1 scored + 1 fresh reserved is the limit (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e7',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000e6',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.permit_expired' then
+    raise exception 'K6: a stale permit must be refused as expired by the sync (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000e6'
+                   and status = 'released' and outcome = 'expired') then
+    raise exception 'K6: the stale permit must be released as expired';
+  end if;
+end $$;
+reset role;
+
+-- K7: the ledger's service-only posture is in the catalog, not just observed
+-- through J8's denials: RLS enabled, zero policies, zero client grants.
+do $$
+begin
+  if not (select c.relrowsecurity from pg_class c
+          where c.oid = 'public.free_rating_ledger'::regclass) then
+    raise exception 'K7: row level security must be ENABLED on free_rating_ledger';
+  end if;
+  if exists (select 1 from pg_policies
+             where schemaname = 'public' and tablename = 'free_rating_ledger') then
+    raise exception 'K7: free_rating_ledger must carry no policies (service-only table)';
+  end if;
+  if exists (select 1 from information_schema.role_table_grants
+             where table_schema = 'public' and table_name = 'free_rating_ledger'
+               and grantee in ('PUBLIC', 'anon', 'authenticated')) then
+    raise exception 'K7: free_rating_ledger must hold no client grants (%)',
+      (select string_agg(grantee || ':' || privilege_type, ', ')
+         from information_schema.role_table_grants
+        where table_schema = 'public' and table_name = 'free_rating_ledger'
+          and grantee in ('PUBLIC', 'anon', 'authenticated'));
+  end if;
+  if has_table_privilege('anon', 'public.free_rating_ledger', 'SELECT')
+     or has_table_privilege('authenticated', 'public.free_rating_ledger', 'SELECT')
+     or has_table_privilege('authenticated', 'public.free_rating_ledger', 'INSERT')
+     or has_table_privilege('authenticated', 'public.free_rating_ledger', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.free_rating_ledger', 'DELETE') then
+    raise exception 'K7: client roles must hold no privilege on free_rating_ledger';
   end if;
 end $$;
 
