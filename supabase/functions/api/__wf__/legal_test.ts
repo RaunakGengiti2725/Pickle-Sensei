@@ -66,7 +66,8 @@ Deno.test(
   () => {
     const text = flat(TERMS_TEXT);
     for (const needle of [
-      "not an official league, tournament, DUPR, medical, fitness, or professional coaching assessment",
+      "score or rank is an in-app estimate only",
+      "not an official league, tournament, third-party rating system, medical, fitness, or professional coaching assessment",
       "does not provide medical advice, diagnosis, treatment, physical therapy, or emergency services",
       "NOTHING IN THESE TERMS EXCLUDES A WARRANTY OR CONSUMER RIGHT THAT CANNOT LAWFULLY BE EXCLUDED",
       "Apple Standard EULA",

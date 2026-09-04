@@ -221,16 +221,16 @@ retained with the account for accountability and are deleted with it.
 
 G. Purchase and entitlement information
 
-Apple's App Store or Google Play processes purchases. RevenueCat helps us
-validate receipts and determine access. We and RevenueCat may process your
-Pickle Sensei account identifier, store, product identifier, purchase and
-renewal history, transaction/receipt status, entitlement status, expiration
-date, trial or introductory-offer status, and related store metadata. We use
-this information to provide Pro features, prevent purchase fraud, restore
-purchases, support customers, and understand subscription performance.
+Apple's App Store processes purchases. RevenueCat helps us validate receipts
+and determine access. We and RevenueCat may process your Pickle Sensei account
+identifier, store, product identifier, purchase and renewal history,
+transaction/receipt status, entitlement status, expiration date, trial or
+introductory-offer status, and related store metadata. We use this information
+to provide Pro features, prevent purchase fraud, restore purchases, support
+customers, and understand subscription performance.
 
 We do not receive or store your full payment-card number, bank-account
-details, or store-account password. Apple or Google handles the payment.
+details, or store-account password. Apple handles the payment.
 
 H. Network, app, and security information
 
@@ -322,8 +322,9 @@ We disclose information only as needed for the purposes in this policy:
 • RevenueCat receives an internal account identifier and purchase-related
   information to validate purchases, manage entitlements, prevent fraud,
   provide subscription analytics, and support purchase restoration.
-• Apple and Google provide sign-in and store-payment services. Information
-  sent to or received from them is also governed by their policies.
+• Apple and Google provide sign-in services, and Apple provides App Store
+  payment services. Information sent to or received from them is also
+  governed by their policies.
 • Upstash may provide short-lived cache and rate-limit infrastructure when
   enabled. Cached values are derived service state, token hashes, and
   short-lived request counters rather than raw court media.
@@ -434,7 +435,7 @@ free-rating record described in Section 7 applies to the new account, so the
 two free ratings are not offered a second time.
 
 Deleting a Pickle Sensei account does not cancel an auto-renewing subscription
-managed by Apple or Google, does not itself create a refund, and does not
+managed by Apple, does not itself create a refund, and does not
 erase device-only clips. Cancel a subscription in the applicable store before
 deleting if you do not want it to renew. Apple subscriptions can be managed
 at https://apps.apple.com/account/subscriptions.
@@ -444,8 +445,8 @@ You can also:
 • withdraw optional model-improvement permission in Settings → Data & consent;
 • change camera, microphone, photo, and notification permissions in device
   Settings;
-• manage or cancel subscriptions through your App Store or Google Play
-  account; and
+• manage or cancel subscriptions through your Apple Account's App Store
+  subscription settings; and
 • ask us for access, correction, deletion, or a portable copy of personal
   information by emailing ${SUPPORT_EMAIL}.
 
@@ -530,8 +531,9 @@ development summaries.
 Scores, ranks, checkpoint measurements, stroke labels, phase timing, and
 coaching suggestions are estimates produced from the available recording and
 model. They may be incomplete, inaccurate, or unavailable. A Pickle Sensei
-score or rank is not an official league, tournament, DUPR, medical, fitness,
-or professional coaching assessment, and it must not be represented as one.
+score or rank is an in-app estimate only. It is not an official league,
+tournament, third-party rating system, medical, fitness, or professional
+coaching assessment, and it must not be represented as one.
 
 The Service may abstain from producing a score when evidence is insufficient.
 No particular score, improvement, detection rate, athletic result, ranking,
@@ -636,7 +638,7 @@ varies by store and region.
 
 A. Subscriptions
 
-Payment is charged to your Apple App Store or Google Play account when you
+Payment is charged to your Apple Account through the App Store when you
 confirm the purchase. A subscription automatically renews for another period
 of the same duration unless you cancel at least 24 hours before the end of the
 current period. Your store account may be charged for renewal within 24 hours
@@ -669,10 +671,10 @@ required notice or consent for subscription-price changes. Purchase
 restoration requires the store account that owns or is entitled to the
 purchase and successful store verification.
 
-Apple or Google, not Pickle Sensei, processes payment and controls store
-refunds, billing disputes, cancellations, and purchase eligibility under its
-rules. Except where law or store policy requires otherwise, fees are
-nonrefundable and there are no credits for partially used periods.
+Apple, not Pickle Sensei, processes payment and controls store refunds,
+billing disputes, cancellations, and purchase eligibility under its rules.
+Except where law or store policy requires otherwise, fees are nonrefundable
+and there are no credits for partially used periods.
 
 
 9. THIRD-PARTY SERVICES AND CONTENT

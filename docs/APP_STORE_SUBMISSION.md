@@ -35,6 +35,10 @@ Hard rules for the agent filling this in:
    any competitor app anywhere in App Store metadata. Android is not shipping,
    guest mode has no UI entry point, Live Court was cut from v1, DUPR is a
    third-party trademark, and competitor names violate guideline 2.3.7.
+   This covers the Privacy Policy / Terms / Support pages served from
+   `supabase/functions/api/legal.ts` too — their URLs are entered in ASC, so
+   they are store-facing copy; `__wf__/legal_test.ts` fails the `edge` CI job
+   on any hit.
 5. Do not claim accuracy percentages, "AI coach equivalence", or "best" in any
    copy. The repo's claim gate (`docs/CLAIM_REVIEW.md`) forbids it, and the app's
    own copy only ever says "validated", "server-accepted", and "estimate".

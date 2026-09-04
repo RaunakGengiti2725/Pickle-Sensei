@@ -2190,6 +2190,23 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   return verdict;
 }
 
+interface BillingPersistError {
+  /** PostgREST/Postgres error code (SQLSTATE such as "23503"), "" when the
+   * request never reached PostgREST, or the local sentinel below. */
+  code: string;
+  message: string;
+}
+
+const SERVICE_ROLE_UNAVAILABLE: BillingPersistError = {
+  code: "service_role_unavailable",
+  message: "service role unavailable",
+};
+
+/** SQLSTATE foreign_key_violation: billing_entitlements.user_id references
+ * profiles, so this means the account row is gone (or never existed) — a
+ * definitive state a retry cannot change, unlike every other write error. */
+const PG_FOREIGN_KEY_VIOLATION = "23503";
+
 /** Persist the verified verdict — premium AND not-premium alike, so a lapsed
  * subscription revokes saved access on its next sync. Written with the
  * service-role client: billing_entitlements has no user write policies, so
@@ -2198,9 +2215,9 @@ async function persistBillingVerdict(
   userId: string,
   verdict: BillingVerdict,
   verifiedAt: string,
-): Promise<string | null> {
+): Promise<BillingPersistError | null> {
   const adminDb = billingAdminDb();
-  if (!adminDb) return "service role unavailable";
+  if (!adminDb) return SERVICE_ROLE_UNAVAILABLE;
   const upserted = await adminDb.from("billing_entitlements").upsert(
     {
       user_id: userId,
@@ -2211,7 +2228,8 @@ async function persistBillingVerdict(
     },
     { onConflict: "user_id" },
   );
-  return upserted.error ? upserted.error.message : null;
+  if (!upserted.error) return null;
+  return { code: upserted.error.code ?? "", message: upserted.error.message };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2313,12 +2331,26 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   let verified = true;
   for (const { userId, verdict } of verdicts) {
     const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
-    if (persistError) {
-      // A user who has never bootstrapped has no profiles row (FK target); log
-      // and acknowledge — their state will be written on first billing sync.
-      console.error("[api] webhook verdict persist failed:", persistError);
+    if (!persistError) continue;
+    if (persistError.code === PG_FOREIGN_KEY_VIOLATION) {
+      // No account row to attach the verdict to (deleted, or never
+      // bootstrapped): definitive, so acknowledge — a later billing sync
+      // writes the state once the account exists.
+      console.error(
+        "[api] webhook verdict persist skipped (no account row):",
+        eventId,
+        persistError.message,
+      );
       verified = false;
+      continue;
     }
+    // Anything else is transient from RevenueCat's point of view (PostgREST
+    // unreachable, connection reset, grant/outage): answer 503 so RevenueCat
+    // retries with its backoff. No audit row is written, so the retry is
+    // fully re-processed; the upsert is idempotent, so partial persistence
+    // across a TRANSFER pair is safe to redo.
+    console.error("[api] webhook verdict persist failed:", eventId, persistError.message);
+    return errorJson(503, "Verification is temporarily unavailable.");
   }
   await logEvent();
   return json(200, { received: true, verified });
@@ -3157,7 +3189,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
       const verifiedAt = new Date().toISOString();
       const persistError = await persistBillingVerdict(authed.id, verdict, verifiedAt);
-      if (persistError === "service role unavailable") {
+      if (persistError?.code === SERVICE_ROLE_UNAVAILABLE.code) {
         return codedError(
           503,
           "billing_unconfigured",
@@ -3165,7 +3197,7 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
       if (persistError) {
-        return serviceUnavailable("Billing verification", persistError);
+        return serviceUnavailable("Billing verification", persistError.message);
       }
 
       // Build access from the state just verified (not a re-read) so

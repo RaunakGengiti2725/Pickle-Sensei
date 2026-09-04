@@ -195,6 +195,35 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
   }
 }
 
+interface LaunchPrefs {
+  localGuest: boolean;
+  lastProvider: string | null;
+}
+
+/**
+ * Device-local launch preferences from SQLite kv. Best-effort like
+ * persistLocalGuest: the kv holds no session material, so a storage fault
+ * here (e.g. SQLITE_CANTOPEN) must never decide the auth outcome — hydrate()
+ * consults the Keychain vault regardless. Unreadable prefs read as "not a
+ * local guest, no legacy provider", which only removes the two paths that
+ * depend on SQLite anyway.
+ */
+async function readLaunchPrefs(): Promise<LaunchPrefs> {
+  try {
+    const db = getDb();
+    // Earlier builds wrote provider subjects to SQLite. Blank that legacy
+    // value during migration instead of hydrating it into a trusted session.
+    if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
+      await setKv(db, LEGACY_SESSION_KV_KEY, '');
+    }
+    const localMode = await getKv(db, LOCAL_MODE_KV_KEY);
+    const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+    return { localGuest: localMode === LOCAL_GUEST_VALUE, lastProvider };
+  } catch {
+    return { localGuest: false, lastProvider: null };
+  }
+}
+
 function clearSyncedRuntime(): void {
   stopSessionKeeper();
   clearSyncRuntime();
@@ -547,20 +576,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hydrate: async () => {
     clearSyncedRuntime();
+    const prefs = await readLaunchPrefs();
+    if (prefs.localGuest) {
+      setActiveDataOwner(GUEST_DATA_OWNER);
+      set({ session: localGuestSession(), hydrated: true });
+      return;
+    }
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     try {
-      const db = getDb();
-      // Earlier builds wrote provider subjects to SQLite. Blank that legacy
-      // value during migration instead of hydrating it into a trusted session.
-      if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
-        await setKv(db, LEGACY_SESSION_KV_KEY, '');
-      }
-      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      if (raw === LOCAL_GUEST_VALUE) {
-        setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
-        return;
-      }
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       // The durable session: whoever signed in on this device last stays
       // signed in across relaunches, backgrounding and reboots, for any
       // provider, until they sign out or the server refuses the refresh
@@ -579,8 +602,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // worth attempting when the web client id needed for a
       // backend-verifiable token is configured. A success bootstraps a new
       // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
-      if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
+      if (
+        prefs.lastProvider === LAST_PROVIDER_GOOGLE_VALUE &&
+        GOOGLE_WEB_CLIENT_ID
+      ) {
         try {
           const session =
             await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
