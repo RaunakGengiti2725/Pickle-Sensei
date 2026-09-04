@@ -108,9 +108,7 @@ describe("player visibility — known gaps (pinned, replayable)", () => {
     expect(result.preGate.analyzable).toBe(false);
     expect(result.preGate.reasons).toContain("stroke_window_tracking_gap");
     expect(result.fusion.kind).not.toBe("scored");
-    expect(result.fusion.kind === "scored" && result.fusion.presentation === "normal").toBe(
-      false,
-    );
+    expect(result.fusion.kind === "scored" && result.fusion.presentation === "normal").toBe(false);
     expect(result.reference.outcome).toBe("scored");
   });
 

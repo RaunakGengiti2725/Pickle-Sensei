@@ -34,7 +34,7 @@ import {
   GOOGLE_WEB_CLIENT_ID,
 } from '../config/authConfig';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
-import { getDb } from '../data/db';
+import { getDb, type LocalDb } from '../data/db';
 import { getKv, purgeOwnerData, setKv } from '../data/repository';
 import {
   GUEST_DATA_OWNER,
@@ -83,6 +83,20 @@ export interface AuthError {
   message: string;
 }
 
+/**
+ * The on-device SQLite store could not be opened, migrated or read during
+ * hydrate(). Local data (shots, kv) is unreachable for this launch; the
+ * SIGN-IN itself is unaffected — the durable session lives in the Keychain
+ * and never depends on SQLite.
+ */
+export interface LocalDataError {
+  code: 'local_data.unavailable';
+  message: string;
+}
+
+export const LOCAL_DATA_UNAVAILABLE_MESSAGE =
+  'Your saved shots on this phone could not be opened. You are still signed in; restart the app to try again.';
+
 /** Outcome of the on-device cleanup that follows a server-confirmed
  * deletion. `failed` means the account is gone server-side but some of its
  * rows are still on this phone — the surface that started the deletion must
@@ -112,6 +126,8 @@ interface AuthState {
   session: AuthSession | null;
   busy: boolean;
   error: AuthError | null;
+  /** SQLite failed during the most recent hydrate(); null when local data opened. */
+  localDataError: LocalDataError | null;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
   hydrate: () => Promise<void>;
@@ -305,6 +321,13 @@ function adoptRotatedTokens(
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
+
+function localDataUnavailable(): LocalDataError {
+  return {
+    code: 'local_data.unavailable',
+    message: LOCAL_DATA_UNAVAILABLE_MESSAGE,
+  };
+}
 
 function keepSessionAlive(
   session: AuthSession,
@@ -543,43 +566,72 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   busy: false,
   error: null,
+  localDataError: null,
   deletionCleanup: null,
 
   hydrate: async () => {
     clearSyncedRuntime();
+    set({ localDataError: null });
+    // The durable session is read from the Keychain FIRST, before SQLite is
+    // touched: whoever signed in on this device last stays signed in across
+    // relaunches, backgrounding, reboots AND a broken local database, for
+    // any provider, until they sign out or the server refuses the refresh
+    // token. No provider SDK is consulted for this.
+    const persisted = await loadPersistedSession();
+
+    // SQLite is the LOCAL-DATA layer. Its failure is reported as such and
+    // never decides the sign-in state.
+    let db: LocalDb | null = null;
+    let localMode: string | null = null;
     try {
-      const db = getDb();
+      db = getDb();
       // Earlier builds wrote provider subjects to SQLite. Blank that legacy
       // value during migration instead of hydrating it into a trusted session.
       if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
         await setKv(db, LEGACY_SESSION_KV_KEY, '');
       }
-      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      if (raw === LOCAL_GUEST_VALUE) {
-        setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
+      localMode = await getKv(db, LOCAL_MODE_KV_KEY);
+    } catch {
+      db = null;
+      set({ localDataError: localDataUnavailable() });
+    }
+    if (localMode === LOCAL_GUEST_VALUE) {
+      setActiveDataOwner(GUEST_DATA_OWNER);
+      set({ session: localGuestSession(), hydrated: true });
+      return;
+    }
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    if (persisted) {
+      let outcome: RestoreOutcome;
+      try {
+        outcome = await restorePersistedSession(persisted);
+      } catch {
+        // The record parsed but cannot be adopted as a data owner: land
+        // signed out for this launch rather than half-restored.
+        clearSyncedRuntime();
+        setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+        set({ session: null, hydrated: true });
         return;
       }
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      // The durable session: whoever signed in on this device last stays
-      // signed in across relaunches, backgrounding and reboots, for any
-      // provider, until they sign out or the server refuses the refresh
-      // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
-      if (persisted) {
-        const outcome = await restorePersistedSession(persisted);
-        if (outcome !== 'revoked') {
-          set({ hydrated: true });
-          return;
-        }
+      if (outcome !== 'revoked') {
+        set({ hydrated: true });
+        return;
       }
-      // Legacy fallback for devices that signed in before sessions were
-      // persisted: silent restore is Google-only (see
-      // restoreGoogleSessionSilently for why Apple cannot have one) and only
-      // worth attempting when the web client id needed for a
-      // backend-verifiable token is configured. A success bootstraps a new
-      // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+    }
+    // Legacy fallback for devices that signed in before sessions were
+    // persisted: silent restore is Google-only (see
+    // restoreGoogleSessionSilently for why Apple cannot have one) and only
+    // worth attempting when the web client id needed for a
+    // backend-verifiable token is configured. A success bootstraps a new
+    // session, which IS persisted — so this path runs at most once. It
+    // needs the local database for its flag; a failed database skips it.
+    if (db) {
+      let lastProvider: string | null = null;
+      try {
+        lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+      } catch {
+        set({ localDataError: localDataUnavailable() });
+      }
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
           const session =
@@ -596,12 +648,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
         }
       }
-      set({ session: null, hydrated: true });
-    } catch {
-      clearSyncedRuntime();
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ session: null, hydrated: true });
     }
+    set({ session: null, hydrated: true });
   },
 
   signInWithApple: async () => {

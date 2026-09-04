@@ -545,26 +545,161 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   };
 }
 
+/** Refresh-grant outcomes as the edge classifies them at the GoTrue boundary.
+ * The mobile app signs out on 401/403 and retries everything else, so the
+ * ONLY outcome allowed to become 401 is GoTrue itself refusing the token. */
+type UpstreamRefreshOutcome =
+  | { kind: "rotated"; session: SupabaseSessionLike }
+  | { kind: "refused"; detail: string }
+  | { kind: "rate_limited"; retryAfterSeconds: number }
+  | { kind: "unavailable"; detail: string };
+
+/** GoTrue error codes that mean "this refresh token is not (or no longer)
+ * good" — the class of answer that legitimately ends the device session. */
+const REFRESH_REFUSAL_ERROR_CODES = new Set([
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "session_not_found",
+  "session_expired",
+  "user_not_found",
+  "user_banned",
+  "bad_jwt",
+]);
+
+const REFRESH_UPSTREAM_ATTEMPTS = 6;
+const REFRESH_UPSTREAM_ATTEMPT_TIMEOUT_MS = 8_000;
+const REFRESH_UPSTREAM_BACKOFF_MS = 100;
+const REFRESH_UPSTREAM_DEFAULT_RETRY_AFTER_SECONDS = 10;
+
+function parseRetryAfterSeconds(header: string | null): number {
+  const asNumber = Number(header);
+  if (header !== null && Number.isFinite(asNumber) && asNumber > 0) {
+    return Math.ceil(asNumber);
+  }
+  const asDate = header === null ? Number.NaN : Date.parse(header);
+  if (Number.isFinite(asDate)) {
+    return Math.max(1, Math.ceil((asDate - Date.now()) / 1_000));
+  }
+  return REFRESH_UPSTREAM_DEFAULT_RETRY_AFTER_SECONDS;
+}
+
+function isValidRefreshGrant(value: unknown): value is SupabaseSessionLike {
+  if (!isRecord(value)) return false;
+  const { access_token, refresh_token, expires_in, expires_at } = value;
+  if (typeof access_token !== "string" || !access_token) return false;
+  if (typeof refresh_token !== "string" || !refresh_token) return false;
+  if (expires_in !== undefined && !(typeof expires_in === "number" && expires_in > 0)) {
+    return false;
+  }
+  if (expires_at !== undefined && !(typeof expires_at === "number" && expires_at > 0)) {
+    return false;
+  }
+  return expires_in !== undefined || expires_at !== undefined;
+}
+
+/** One refresh grant against GoTrue's token endpoint, spoken directly so the
+ * raw HTTP outcome (status, Retry-After, body shape) is classified here
+ * instead of being flattened by a client library into "some AuthError".
+ * Connection failures and timeouts are retried with bounded backoff; every
+ * other answer is final. */
+async function refreshUpstream(refreshToken: string): Promise<UpstreamRefreshOutcome> {
+  const url = `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`;
+  let lastNetworkDetail = "no attempt made";
+  for (let attempt = 0; attempt < REFRESH_UPSTREAM_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, REFRESH_UPSTREAM_BACKOFF_MS * 2 ** (attempt - 1))
+      );
+    }
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        signal: AbortSignal.timeout(REFRESH_UPSTREAM_ATTEMPT_TIMEOUT_MS),
+      });
+    } catch (error) {
+      lastNetworkDetail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      continue;
+    }
+    const text = await response.text();
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+    const { status } = response;
+    if (status >= 200 && status < 300) {
+      if (isValidRefreshGrant(parsed)) return { kind: "rotated", session: parsed };
+      return {
+        kind: "unavailable",
+        detail: `upstream ${status} without a usable session (${text.slice(0, 120)})`,
+      };
+    }
+    if (status === 429) {
+      return {
+        kind: "rate_limited",
+        retryAfterSeconds: parseRetryAfterSeconds(response.headers.get("Retry-After")),
+      };
+    }
+    if (status === 401 || status === 403) {
+      return { kind: "refused", detail: `upstream ${status}` };
+    }
+    if (status === 400 && isRecord(parsed)) {
+      const code = typeof parsed.error_code === "string" ? parsed.error_code : null;
+      const legacy = typeof parsed.error === "string" ? parsed.error : null;
+      if ((code && REFRESH_REFUSAL_ERROR_CODES.has(code)) || legacy === "invalid_grant") {
+        return { kind: "refused", detail: `upstream 400 ${code ?? legacy}` };
+      }
+    }
+    return { kind: "unavailable", detail: `upstream ${status} (${text.slice(0, 120)})` };
+  }
+  return { kind: "unavailable", detail: lastNetworkDetail };
+}
+
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
- * session. 401 means the refresh token was revoked or already rotated away:
- * the app must sign in again. Anything else is transient for the app. */
+ * session. 401 means GoTrue refused the refresh token (revoked, already
+ * rotated away, session gone): the app must sign in again. Upstream rate
+ * limiting is 429 + Retry-After and every other upstream failure — network,
+ * timeout, 5xx, a 2xx without a usable session — is a generic 503, so the app
+ * keeps its durable session and retries with backoff. */
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
   if (typeof refreshToken !== "string" || !refreshToken.trim()) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const refreshed = await anonAuthClient().auth.refreshSession({
-    refresh_token: refreshToken.trim(),
-  });
-  if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
-    }
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+  const outcome = await refreshUpstream(refreshToken.trim());
+  switch (outcome.kind) {
+    case "rotated":
+      return json(200, { session: sessionView(outcome.session) });
+    case "refused":
+      return errorJson(401, "The session could not be refreshed. Sign in again.");
+    case "rate_limited":
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "auth.refresh_rate_limited",
+            message: "Too many session refreshes right now. Please try again shortly.",
+          },
+        }),
+        {
+          status: 429,
+          headers: {
+            ...JSON_SECURITY_HEADERS,
+            "Retry-After": String(outcome.retryAfterSeconds),
+          },
+        },
+      );
+    case "unavailable":
+      return serviceUnavailable("Session refresh", outcome.detail);
   }
-  return json(200, { session: sessionView(refreshed.data.session) });
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:

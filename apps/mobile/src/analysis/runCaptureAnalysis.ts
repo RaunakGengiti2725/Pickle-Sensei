@@ -2,13 +2,16 @@ import { Platform } from 'react-native';
 import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  evaluatePreAnalysisGate,
   type CaptureAnalysisRecord,
+  type PreAnalysisGateDecision,
 } from '@pickle/analysis-pipeline';
 import {
   parsePoseSequence,
   sha256Hex,
   unavailable,
 } from '@pickle/swing-domain';
+import { evaluateCaptureQuality } from '@pickle/vision-geometry';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
@@ -37,10 +40,14 @@ import { stabilitySlo } from './stabilityTelemetry';
  * - Analysis runs only on the real recorded pose sequence (hash-addressed
  *   sidecar written at capture time, or by the explicit native extraction
  *   pass for imported videos). No sequence → no analysis.
+ * - The pose-quality gate (`evaluateCaptureQuality` + `evaluatePreAnalysisGate`
+ *   over the parsed sidecar and the stroke window) is decided BEFORE the
+ *   analysis engine sees the sequence: footage whose tracking is measurably
+ *   unusable is an honest abstention, never a rating.
  * - A server-reserved analysis permit is consumed exactly as the entitlement
  *   system requires; abstentions release the permit instead of burning it.
- * - Every run appends an immutable AnalysisRecord; scored runs additionally
- *   promote the product rating (local_shot + sync outbox).
+ * - Every analyzed run appends an immutable AnalysisRecord; scored runs
+ *   additionally promote the product rating (local_shot + sync outbox).
  */
 
 export type CaptureAnalysisOutcome =
@@ -70,13 +77,16 @@ export type CaptureAnalysisOutcome =
     }
   | {
       /**
-       * The capture envelope is UNSUPPORTED: analysis is honestly withheld
-       * BEFORE inference — poor input never becomes a confident score. No
-       * permit is reserved and nothing is recorded as an analysis.
+       * Analysis is honestly withheld BEFORE inference — poor input never
+       * becomes a confident score, and nothing is recorded as an analysis.
+       * Either the capture envelope is UNSUPPORTED (no permit is reserved), or
+       * the recorded pose sequence failed the pose-quality gate (`poseQuality`
+       * carries the measured reasons; the reserved permit was released).
        */
       kind: 'quality_blocked';
       reason: string;
-      envelope: EnvelopeVerdict;
+      envelope: EnvelopeVerdict | null;
+      poseQuality?: PreAnalysisGateDecision;
     };
 
 export interface RunCaptureAnalysisRequest {
@@ -171,6 +181,34 @@ export async function runCaptureAnalysis(
 }
 
 export const PAYWALL_REQUIRED_CODE = 'access.paywall_required';
+
+type CaptureTrigger = Parameters<typeof analyzeCapture>[1]['trigger'];
+
+const POSE_QUALITY_REASON_COPY: Record<string, string> = {
+  no_person_found: 'no player was tracked',
+  too_few_pose_frames: 'too few tracked frames',
+  insufficient_fps: 'the tracking frame rate was too low',
+  low_pose_confidence: 'the player could not be tracked with confidence',
+  body_not_fully_visible: 'the full body was not in view',
+  person_implausible_scale:
+    'the player was too small or too close in the frame',
+  tracking_dropout_gap: 'tracking dropped out during the clip',
+  stroke_window_tracking_gap: 'tracking dropped out during the stroke',
+  torso_not_measured: 'the torso could not be measured',
+};
+
+function poseQualityBlockedReason(gate: PreAnalysisGateDecision): string {
+  const measured = gate.reasons
+    .map(
+      reason => POSE_QUALITY_REASON_COPY[reason] ?? reason.replace(/_/g, ' '),
+    )
+    .join(', ');
+  return (
+    'This capture cannot be analyzed honestly — the recorded motion could ' +
+    `not be measured well enough to rate (${measured}). Nothing was rated. ` +
+    'Keep your whole body in frame through the stroke and try again.'
+  );
+}
 
 function isPaywallRequired(error: ApiError): boolean {
   return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
@@ -283,7 +321,7 @@ async function runCaptureAnalysisCore(
   // honestly the whole clip, and the provenance says exactly that instead
   // of impersonating the live temporal-motion detector. Phase segmentation
   // still finds (or honestly fails to find) the stroke inside that window.
-  const trigger =
+  const trigger: CaptureTrigger =
     clip.captureMode === 'automatic_pose_trigger'
       ? {
           startMs: clip.trigger.startMs,
@@ -311,6 +349,29 @@ async function runCaptureAnalysisCore(
             artifactHash: null,
           },
         };
+
+  // ── Pose-quality gate: the engine only sees measurably usable tracking ──
+  const gate = evaluatePreAnalysisGate({
+    frame: null,
+    pose: parsed.value,
+    poseQuality: evaluateCaptureQuality(parsed.value),
+    stroke: {
+      windowStartMs: trigger.startMs,
+      windowEndMs: trigger.endMs,
+      handedness: request.handedness,
+    },
+  });
+  if (!gate.analyzable) {
+    await permits.release(permitId, 'unsupported').catch(() => {
+      // Server-side expiry covers a lost release.
+    });
+    return {
+      kind: 'quality_blocked',
+      reason: poseQualityBlockedReason(gate),
+      envelope,
+      poseQuality: gate,
+    };
+  }
 
   const analysisId = makeUuid();
   const result = await analyzeCapture(
