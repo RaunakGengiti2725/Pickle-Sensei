@@ -135,3 +135,22 @@ jobs:
         run: docker build -f services/media-worker/Dockerfile -t pickle-media-worker:${{ github.sha }} .
       # Push to ECR + Terraform plan/deploy gate on AWS credentials being
       # configured as repo secrets; see docs/DEPLOYMENT.md.
+
+  # Single pass/fail check per commit. Branch protection and the Devin
+  # "CI failure investigator" automation key off THIS check name only, so one
+  # red commit produces one investigation instead of one per failing job.
+  ci-gate:
+    if: always()
+    needs: [verify, mobile, edge, supabase-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success") | .key')
+          if [ -n "$failed" ]; then
+            echo "::error::required jobs did not succeed: $failed"
+            exit 1
+          fi
