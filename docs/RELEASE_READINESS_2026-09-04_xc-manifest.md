@@ -102,6 +102,15 @@ HARD copy hits (the finding list):
 | google_play | `supabase/functions/api/legal.ts:639`               | Terms §A "charged to your Apple App Store or Google Play account"                              |
 | dupr        | `supabase/functions/api/legal.ts:533`               | Terms "…not an official league, tournament, DUPR, medical…"                                    |
 
+ATTRIBUTION note: `drillMedia.ts:103` `creatorName: "Selkirk TV"` IS rendered to
+users (`DrillLibraryScreen.tsx:421`, `DrillVideoPlayer.tsx:448`,
+`training/components.tsx:41`). The dossier sanctions creator names on
+attributed YouTube embeds (§71, §249 Content Rights, §878) and confines the
+competitor ban to keywords/metadata (§602-604); the knowledge-base hard rule
+reads "anywhere in user-facing copy". The scanner therefore reports it
+separately as ATTRIBUTION (not COPY) and the conflict is left to the owner
+(finding F7).
+
 `GET /privacy` and `GET /terms` are the URLs entered in App Store Connect and
 linked from the paywall and Settings, so they are both user-facing copy and
 store metadata. The in-app DUPR label is acknowledged in the dossier
@@ -146,14 +155,15 @@ throughout.
 
 ## 6. Findings
 
-| #   | Sev | Title                                                                                                                | Where                                                                      |
-| --- | --- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| F1  | P2  | "Google Play" ×3 and "DUPR" ×1 in the public Privacy Policy / Terms served at the ASC URLs                           | `supabase/functions/api/legal.ts:224,447,533,639`                          |
-| F2  | P3  | In-app "DUPR" estimate label/notes on six screens (dossier-acknowledged 5.2.1 risk; violates the stricter hard rule) | `apps/mobile/src/progress/duprEstimate.ts:26,31` and call sites            |
-| F3  | P3  | Checklist §1 claims `.env*` is gitignored; `.env.production` / `.env.staging` / `.env.development` are not           | `.gitignore:7-9`, `docs/PRELAUNCH_CHECKLIST.md:14`                         |
-| F4  | P3  | Checklist §7 QA sweep still lists "Live Court", a screen that does not exist                                         | `docs/PRELAUNCH_CHECKLIST.md:128`                                          |
-| F5  | P3  | Committed build number 1 (manifest + pbxproj) vs validated ASC build 3; no build tag                                 | `infra/release/release-manifest.json:6`, `docs/APP_STORE_SUBMISSION.md:52` |
-| F6  | P3  | `apps/mobile/package.json` version 0.0.1 is outside the release checker                                              | `apps/mobile/package.json:3`, `tools/release/check-release-manifest.mjs`   |
+| #   | Sev | Title                                                                                                                                                                                                      | Where                                                                                             |
+| --- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| F1  | P2  | "Google Play" ×3 and "DUPR" ×1 in the public Privacy Policy / Terms served at the ASC URLs                                                                                                                 | `supabase/functions/api/legal.ts:224,447,533,639`                                                 |
+| F2  | P3  | In-app "DUPR" estimate label/notes on six screens (dossier-acknowledged 5.2.1 risk; violates the stricter hard rule)                                                                                       | `apps/mobile/src/progress/duprEstimate.ts:26,31` and call sites                                   |
+| F3  | P3  | Checklist §1 claims `.env*` is gitignored; `.env.production` / `.env.staging` / `.env.development` are not                                                                                                 | `.gitignore:7-9`, `docs/PRELAUNCH_CHECKLIST.md:14`                                                |
+| F4  | P3  | Checklist §7 QA sweep still lists "Live Court", a screen that does not exist                                                                                                                               | `docs/PRELAUNCH_CHECKLIST.md:128`                                                                 |
+| F5  | P3  | Committed build number 1 (manifest + pbxproj) vs validated ASC build 3; no build tag                                                                                                                       | `infra/release/release-manifest.json:6`, `docs/APP_STORE_SUBMISSION.md:52`                        |
+| F6  | P3  | `apps/mobile/package.json` version 0.0.1 is outside the release checker                                                                                                                                    | `apps/mobile/package.json:3`, `tools/release/check-release-manifest.mjs`                          |
+| F7  | P3  | Competitor name "Selkirk TV" rendered as drill-video creator attribution — dossier §71/§249 permits attribution, knowledge-base hard rule forbids competitor names in any user-facing copy; owner decision | `supabase/functions/api/drillMedia.ts:103`, `apps/mobile/src/components/DrillVideoPlayer.tsx:448` |
 
 ## 7. Blocked / human-only (minimum actions)
 
