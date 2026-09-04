@@ -532,6 +532,103 @@ describe('FormReviewScreen', () => {
     expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
   });
 
+  it('the timeline is an adjustable control: swipe up/down (increment/decrement) moves the playhead without a drag', async () => {
+    const renderer = await renderScreen();
+    const timelineAt = () => hostByTestId(renderer, 'form-review-timeline')[0]!;
+    const clockText = () => allText(renderer).match(/\b\d+\.\d{2}s\b/g) ?? [];
+    const timeline = timelineAt();
+    expect(timeline.props.accessibilityRole).toBe('adjustable');
+    expect(timeline.props.accessibilityActions).toEqual(
+      expect.arrayContaining([{ name: 'increment' }, { name: 'decrement' }]),
+    );
+    expect(typeof timeline.props.onAccessibilityAction).toBe('function');
+    expect(timeline.props.accessibilityHint).toMatch(/swipe up (and|or) down/i);
+    // The value mirrors the playhead: 0 of the clip's 3400ms at open.
+    expect(timeline.props.accessibilityValue).toMatchObject({
+      min: 0,
+      max: 3400,
+      now: 0,
+      text: '0.00s',
+    });
+    expect(clockText()).toContain('0.00s');
+
+    // Swipe up: the playhead advances one step (1/20th of the clip = 170ms)
+    // and the rendered clock, the announced value and the label agree.
+    await act(async () => {
+      timelineAt().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'increment' },
+      });
+    });
+    expect(clockText()).toContain('0.17s');
+    expect(clockText()).not.toContain('0.00s');
+    expect(timelineAt().props.accessibilityValue).toMatchObject({
+      now: 170,
+      text: '0.17s',
+    });
+    await act(async () => {
+      timelineAt().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'increment' },
+      });
+    });
+    expect(clockText()).toContain('0.34s');
+    expect(timelineAt().props.accessibilityValue).toMatchObject({ now: 340 });
+
+    // Swipe down walks back; it never goes before the start of the clip.
+    await act(async () => {
+      timelineAt().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'decrement' },
+      });
+    });
+    expect(clockText()).toContain('0.17s');
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => {
+        timelineAt().props.onAccessibilityAction({
+          nativeEvent: { actionName: 'decrement' },
+        });
+      });
+    }
+    expect(clockText()).toContain('0.00s');
+    expect(timelineAt().props.accessibilityValue).toMatchObject({ now: 0 });
+
+    // And never past the end: 25 swipes up land on the clip's last moment.
+    for (let i = 0; i < 25; i += 1) {
+      await act(async () => {
+        timelineAt().props.onAccessibilityAction({
+          nativeEvent: { actionName: 'increment' },
+        });
+      });
+    }
+    expect(clockText()).toContain('3.40s');
+    expect(timelineAt().props.accessibilityValue).toMatchObject({
+      now: 3400,
+      text: '3.40s',
+    });
+
+    // A step while playing behaves like a drag: playback pauses on the
+    // new frame instead of racing away from it.
+    await press(renderer, 'form-review-play');
+    expect(
+      byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Pause replay');
+    await act(async () => {
+      timelineAt().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'decrement' },
+      });
+    });
+    expect(
+      byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
+
+    // Unknown actions are ignored.
+    const before = timelineAt().props.accessibilityValue.now;
+    await act(async () => {
+      timelineAt().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'magicTap' },
+      });
+    });
+    expect(timelineAt().props.accessibilityValue.now).toBe(before);
+  });
+
   it('fills the page: no ScrollView, the player and its stage are flex columns, CTAs stay pinned', async () => {
     const renderer = await renderScreen();
     expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
