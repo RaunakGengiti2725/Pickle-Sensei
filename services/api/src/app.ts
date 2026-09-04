@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
 import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
@@ -49,6 +49,12 @@ import { registerTrainingRoutes } from "./modules/training/routes.js";
  * in-process services, never HTTP. Honesty rule: anything not implemented
  * returns a typed 501 envelope — never a fake success (directive §5).
  */
+
+declare module "fastify" {
+  interface FastifyInstance {
+    appContext: AppContext;
+  }
+}
 
 const UUID_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -153,11 +159,14 @@ export interface BuildAppOptions {
   sloRecorder?: ApiSloRecorder;
   /** Security-monitoring event sink; defaults to structured warn log lines. */
   securityEvents?: ISecurityEventSink;
+  /** Fastify logger configuration; defaults to on outside `test`. Tests pass
+   * a capture stream to assert on process-level log lines. */
+  logger?: FastifyServerOptions["logger"];
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
-    logger: config.env !== "test",
+    logger: options.logger ?? config.env !== "test",
     genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
   });
 
