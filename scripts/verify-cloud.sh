@@ -30,8 +30,11 @@
 #   release    node tools/release/check-release-manifest.mjs when present
 #
 # Policy: a SKIPPED stage is never reported as passed. Skips are explicit
-# (--skip / --only) and appear in the summary; the exit code is non-zero if any
-# stage failed. No stage uses `|| true` to hide a failure.
+# (--skip / --only) and appear in the summary. The run is OK (exit 0,
+# summary.json ok:true) only when every recorded stage PASSED: a failed,
+# unavailable or skipped stage — or a selection in which no stage executed at
+# all — is a non-zero exit with the reason in summary.json. No stage uses
+# `|| true` to hide a failure.
 #
 # Usage:
 #   scripts/verify-cloud.sh                 # everything (PR gate + the rest)
@@ -62,7 +65,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,51p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -104,7 +107,6 @@ GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 GIT_DIRTY="$(git status --porcelain 2>/dev/null | grep -qv '^?? artifacts/' && echo true || echo false)"
 
 declare -a RESULT_NAMES=() RESULT_STATUS=() RESULT_SECONDS=() RESULT_NOTES=()
-FAILED=0
 
 is_skipped() {
   local s="$1"
@@ -137,12 +139,10 @@ run_stage() {
     # for the run (skipped != passed) but labelled so agents know what to install.
     echo "    [$name] UNAVAILABLE in $((end - start))s — $(tail -n 1 "$log")"
     record "$name" unavailable $((end - start)) "$(tail -n 1 "$log")"
-    FAILED=1
   else
     echo "    [$name] FAIL (exit $rc) in $((end - start))s — last lines:"
     tail -n 25 "$log" | sed 's/^/        /'
     record "$name" failed $((end - start)) "exit $rc"
-    FAILED=1
   fi
 }
 
@@ -301,6 +301,18 @@ for s in "${STAGES[@]}"; do
   run_stage "$s" "stage_$s"
 done
 
+# Verdict: computed from the recorded statuses, never from a side flag.
+declare -A STATUS_COUNT=([passed]=0 [failed]=0 [unavailable]=0 [skipped]=0)
+for st in "${RESULT_STATUS[@]}"; do STATUS_COUNT[$st]=$(( ${STATUS_COUNT[$st]:-0} + 1 )); done
+EXECUTED=$(( ${#RESULT_STATUS[@]} - STATUS_COUNT[skipped] ))
+REASON=""
+if [ "$EXECUTED" -eq 0 ]; then
+  REASON="no stages executed (${#RESULT_STATUS[@]} selected, all skipped)"
+elif [ "${STATUS_COUNT[passed]}" -ne "${#RESULT_STATUS[@]}" ]; then
+  REASON="${STATUS_COUNT[failed]} failed, ${STATUS_COUNT[unavailable]} unavailable, ${STATUS_COUNT[skipped]} skipped of ${#RESULT_STATUS[@]} stages (only passed counts)"
+fi
+if [ -z "$REASON" ]; then OK=true; else OK=false; fi
+
 # Machine-readable summary.
 json_escape() {
   local s=$1
@@ -318,7 +330,8 @@ json_escape() {
   echo "  \"started_utc\": \"$STAMP\","
   echo "  \"host\": \"$(uname -srm)\","
   echo "  \"node\": \"$(node --version 2>/dev/null || echo unknown)\","
-  echo "  \"ok\": $([ $FAILED -eq 0 ] && echo true || echo false),"
+  echo "  \"ok\": $OK,"
+  echo "  \"reason\": \"$(json_escape "$REASON")\","
   echo "  \"stages\": ["
   for i in "${!RESULT_NAMES[@]}"; do
     sep=","; [ "$i" -eq $((${#RESULT_NAMES[@]} - 1)) ] && sep=""
@@ -337,8 +350,8 @@ for i in "${!RESULT_NAMES[@]}"; do
 done
 echo "summary: $SUMMARY"
 
-if [ $FAILED -ne 0 ]; then
-  echo "verify-cloud: FAILED"
+if [ "$OK" != true ]; then
+  echo "verify-cloud: FAILED — $REASON"
   exit 1
 fi
 echo "verify-cloud: OK"
