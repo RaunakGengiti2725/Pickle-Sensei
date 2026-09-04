@@ -26,6 +26,13 @@ import { syntheticLoadedReviews } from "./syntheticFixtures";
  * so the append-only reviews/ directory is the single source of truth.
  */
 
+/** A persisted record file the dev API could not read/parse (repo-relative
+ * path + fixed phrase); surfaced in `problems` so it gets repaired. */
+interface InvalidFile {
+  file: string;
+  message: string;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`GET ${path} → HTTP ${response.status}`);
@@ -73,24 +80,34 @@ export async function loadCoachReviewData(): Promise<CoachReviewData> {
     getJson<CoachRegistry>("/datasets/coach-review/coaches.json"),
     getJson<{
       reviews: Array<{ file: string; review: CoachReview }>;
-      invalidFiles: Array<{ file: string; message: string }>;
+      invalidFiles: InvalidFile[];
     }>("/api/coach-reviews"),
     getJson<AssignmentsFile>("/api/coach-assignments").catch(() => EMPTY_ASSIGNMENTS),
-    getJson<AdjudicationRecord[]>("/api/coach-adjudications").catch(
-      () => [] as AdjudicationRecord[],
-    ),
-    getJson<ReviewAmendment[]>("/api/coach-review-amendments").catch(() => [] as ReviewAmendment[]),
-    getJson<DrillMappingProposal[]>("/api/drill-mapping-proposals").catch(
-      () => [] as DrillMappingProposal[],
-    ),
+    getJson<{ adjudications: AdjudicationRecord[]; invalidFiles: InvalidFile[] }>(
+      "/api/coach-adjudications",
+    ).catch(() => ({
+      adjudications: [] as AdjudicationRecord[],
+      invalidFiles: [] as InvalidFile[],
+    })),
+    getJson<{ amendments: ReviewAmendment[]; invalidFiles: InvalidFile[] }>(
+      "/api/coach-review-amendments",
+    ).catch(() => ({ amendments: [] as ReviewAmendment[], invalidFiles: [] as InvalidFile[] })),
+    getJson<{ proposals: DrillMappingProposal[]; invalidFiles: InvalidFile[] }>(
+      "/api/drill-mapping-proposals",
+    ).catch(() => ({ proposals: [] as DrillMappingProposal[], invalidFiles: [] as InvalidFile[] })),
   ]);
   if (queue.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
     problems.push(
       `queue.json schemaVersion ${queue.schemaVersion} ≠ UI's expected ${EXPECTED_SCHEMA_VERSION} — regenerate with \`pnpm lab:coach-queue\` or update the UI mirror.`,
     );
   }
-  for (const invalid of realReviews.invalidFiles) {
-    problems.push(`${invalid.file} ${invalid.message} — repair or remove it to list that review.`);
+  for (const invalid of [
+    ...realReviews.invalidFiles,
+    ...adjudications.invalidFiles,
+    ...amendments.invalidFiles,
+    ...mappingProposals.invalidFiles,
+  ]) {
+    problems.push(`${invalid.file} ${invalid.message} — repair or remove it to list that record.`);
   }
   const reviews: LoadedReview[] = realReviews.reviews.map((entry) => ({
     review: entry.review,
@@ -107,9 +124,9 @@ export async function loadCoachReviewData(): Promise<CoachReviewData> {
     registry,
     reviews,
     assignments,
-    adjudications,
-    amendments,
-    mappingProposals,
+    adjudications: adjudications.adjudications,
+    amendments: amendments.amendments,
+    mappingProposals: mappingProposals.proposals,
     syntheticMode,
     problems,
   };

@@ -7,7 +7,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, normalize } from "node:path";
+import { basename, dirname, join, normalize } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { validateReview, type ValidationContext } from "./validate";
 import {
@@ -122,6 +122,34 @@ function isJsonObject(value: unknown): value is object {
 }
 
 type JsonBodyResult<T> = { ok: true; value: T } | { ok: false };
+
+interface InvalidFile {
+  file: string;
+  message: string;
+}
+
+type JsonObjectFileResult<T extends object> =
+  { ok: true; value: T } | { ok: false; message: string };
+
+/** Reads one persisted JSON-object record. A failure yields a FIXED phrase
+ * (never the parser's or the filesystem's text) so callers can name the file
+ * to the client without leaking internals. */
+function readJsonObjectFile<T extends object>(path: string): JsonObjectFileResult<T> {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    return { ok: false, message: "could not be read" };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, message: "is not valid JSON" };
+  }
+  if (!isJsonObject(parsed)) return { ok: false, message: "is not a JSON object" };
+  return { ok: true, value: parsed as T };
+}
 
 /** Reads and parses a JSON OBJECT body. On any failure the response has
  * already been written (413 too large, 400 malformed / not an object) and
@@ -242,49 +270,49 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     };
   }
 
-  function readJsonDir<T>(dir: string): Array<{ file: string; record: T }> {
-    mkdirSync(dir, { recursive: true });
-    return readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
-      .map((name) => ({
-        file: join(dir, name),
-        record: JSON.parse(readFileSync(join(dir, name), "utf8")) as T,
-      }));
+  /** Repo-relative path of a persisted record file, as shown to clients. */
+  function publicPathOf(dir: string, name: string): string {
+    return `datasets/coach-review/${basename(dir)}/${name}`;
   }
 
-  /** Lists persisted reviews. A file that cannot be read or parsed is reported
-   * in `invalidFiles` (path only — never the parser's text) instead of failing
-   * the whole list, so one damaged file cannot hide every other review. */
+  /** Reads every `*.json` record in a persisted-record directory. A file that
+   * cannot be read, parsed, or is not a JSON object is reported in
+   * `invalidFiles` (repo-relative path + fixed phrase — never parser text)
+   * instead of failing the whole read, so one damaged file can neither hide
+   * every other record nor turn a request into a 500. */
+  function readJsonDir<T extends object>(
+    dir: string,
+  ): { records: Array<{ file: string; record: T }>; invalidFiles: InvalidFile[] } {
+    mkdirSync(dir, { recursive: true });
+    const records: Array<{ file: string; record: T }> = [];
+    const invalidFiles: InvalidFile[] = [];
+    for (const name of readdirSync(dir).filter((entry) => entry.endsWith(".json"))) {
+      const file = publicPathOf(dir, name);
+      const result = readJsonObjectFile<T>(join(dir, name));
+      if (result.ok) records.push({ file, record: result.value });
+      else invalidFiles.push({ file, message: `${result.message} — skipped` });
+    }
+    return { records, invalidFiles };
+  }
+
+  /** Record files are named `${id}.json` (or `${id}.<suffix>.json` for the
+   * revisions/actions of one id), so the damaged history OF ONE ENTITY is the
+   * set of invalid files whose name starts with `${id}.`. Write paths whose
+   * gating or sequencing depends on that history refuse while it is unreadable
+   * (an unrelated damaged file must not block them). */
+  function invalidFilesOf(invalidFiles: InvalidFile[], id: string): InvalidFile[] {
+    return invalidFiles.filter((entry) => basename(entry.file).startsWith(`${id}.`));
+  }
+
   function listReviews(): {
     reviews: Array<{ file: string; review: CoachReview }>;
-    invalidFiles: Array<{ file: string; message: string }>;
+    invalidFiles: InvalidFile[];
   } {
-    mkdirSync(REVIEWS_DIR, { recursive: true });
-    const reviews: Array<{ file: string; review: CoachReview }> = [];
-    const invalidFiles: Array<{ file: string; message: string }> = [];
-    for (const name of readdirSync(REVIEWS_DIR).filter((entry) => entry.endsWith(".json"))) {
-      const file = `datasets/coach-review/reviews/${name}`;
-      let raw: string;
-      try {
-        raw = readFileSync(join(REVIEWS_DIR, name), "utf8");
-      } catch {
-        invalidFiles.push({ file, message: "could not be read — skipped" });
-        continue;
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        invalidFiles.push({ file, message: "is not valid JSON — skipped" });
-        continue;
-      }
-      if (!isJsonObject(parsed)) {
-        invalidFiles.push({ file, message: "is not a JSON object — skipped" });
-        continue;
-      }
-      reviews.push({ file, review: parsed as CoachReview });
-    }
-    return { reviews, invalidFiles };
+    const { records, invalidFiles } = readJsonDir<CoachReview>(REVIEWS_DIR);
+    return {
+      reviews: records.map((entry) => ({ file: entry.file, review: entry.record })),
+      invalidFiles,
+    };
   }
 
   function loadRegistry(): CoachRegistry {
@@ -364,11 +392,8 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
 
   async function handleAdjudications(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === "GET") {
-      sendJson(
-        res,
-        200,
-        readJsonDir<AdjudicationRecord>(ADJUDICATIONS_DIR).map((entry) => entry.record),
-      );
+      const { records, invalidFiles } = readJsonDir<AdjudicationRecord>(ADJUDICATIONS_DIR);
+      sendJson(res, 200, { adjudications: records.map((entry) => entry.record), invalidFiles });
       return;
     }
     if (req.method !== "POST") {
@@ -379,9 +404,10 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     if (!body.ok) return;
     const record = body.value;
     if (!gateIdentity(res, record.adjudicatorId, record.adjudicatorCredentialRef)) return;
+    const reviews = readJsonDir<CoachReview>(REVIEWS_DIR);
     const reviewerCoachIdsByReviewId: Record<string, string> = {};
     const reviewQueueItemIdsByReviewId: Record<string, string> = {};
-    for (const entry of readJsonDir<CoachReview>(REVIEWS_DIR)) {
+    for (const entry of reviews.records) {
       reviewerCoachIdsByReviewId[entry.record.reviewId] = entry.record.coachId;
       reviewQueueItemIdsByReviewId[entry.record.reviewId] = entry.record.queueItemId;
     }
@@ -390,6 +416,22 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       reviewerCoachIdsByReviewId,
       reviewQueueItemIdsByReviewId,
     });
+    // An adjudication weighs EVERY review of its queue item; a damaged review
+    // file for that item (or one it names) must be repaired first, not ignored.
+    const relevantIds = [
+      record.queueItemId,
+      ...(Array.isArray(record.reviewedReviewIds) ? record.reviewedReviewIds : []),
+    ].filter((id): id is string => typeof id === "string");
+    const damagedReviews = new Map(
+      relevantIds
+        .flatMap((id) => invalidFilesOf(reviews.invalidFiles, id))
+        .map((invalid) => [invalid.file, invalid] as const),
+    );
+    for (const invalid of damagedReviews.values()) {
+      problems.push(
+        `review file ${invalid.file} ${invalid.message} — repair or remove it before adjudicating ${record.queueItemId}`,
+      );
+    }
     if (problems.length > 0) {
       sendJson(res, 422, { message: "adjudication failed schema validation", problems });
       return;
@@ -404,11 +446,8 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
 
   async function handleAmendments(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === "GET") {
-      sendJson(
-        res,
-        200,
-        readJsonDir<ReviewAmendment>(AMENDMENTS_DIR).map((entry) => entry.record),
-      );
+      const { records, invalidFiles } = readJsonDir<ReviewAmendment>(AMENDMENTS_DIR);
+      sendJson(res, 200, { amendments: records.map((entry) => entry.record), invalidFiles });
       return;
     }
     if (req.method !== "POST") {
@@ -445,12 +484,29 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       });
       return;
     }
-    const base = JSON.parse(readFileSync(basePath, "utf8")) as CoachReview;
-    if (base.coachId !== amendment.review.coachId) {
+    const base = readJsonObjectFile<CoachReview>(basePath);
+    if (!base.ok) {
+      const file = publicPathOf(REVIEWS_DIR, basename(basePath));
+      sendJson(res, 422, {
+        message: `base review file ${file} ${base.message} — repair it before amending ${amendment.reviewId}`,
+        invalidFiles: [{ file, message: base.message }],
+      });
+      return;
+    }
+    if (base.value.coachId !== amendment.review.coachId) {
       sendJson(res, 403, { message: "only the original reviewing coach can amend their review" });
       return;
     }
-    const existing = readJsonDir<ReviewAmendment>(AMENDMENTS_DIR)
+    const amendments = readJsonDir<ReviewAmendment>(AMENDMENTS_DIR);
+    const damagedHistory = invalidFilesOf(amendments.invalidFiles, amendment.reviewId);
+    if (damagedHistory.length > 0) {
+      sendJson(res, 409, {
+        message: `amendment history of ${amendment.reviewId} contains unreadable files — repair or remove them before appending a revision`,
+        invalidFiles: damagedHistory,
+      });
+      return;
+    }
+    const existing = amendments.records
       .map((entry) => entry.record)
       .filter((entry) => entry.reviewId === amendment.reviewId);
     const nextRevision = existing.reduce((max, entry) => Math.max(max, entry.revision), 1) + 1;
@@ -520,11 +576,8 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
 
   async function handleMappingProposals(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === "GET") {
-      sendJson(
-        res,
-        200,
-        readJsonDir<DrillMappingProposal>(DRILL_MAPPINGS_DIR).map((entry) => entry.record),
-      );
+      const { records, invalidFiles } = readJsonDir<DrillMappingProposal>(DRILL_MAPPINGS_DIR);
+      sendJson(res, 200, { proposals: records.map((entry) => entry.record), invalidFiles });
       return;
     }
     if (req.method !== "POST") {
@@ -550,9 +603,11 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
 
   async function handleProvisioning(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === "GET") {
+      const { records, invalidFiles } = readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR);
       sendJson(res, 200, {
         registry: loadRegistry(),
-        log: readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR).map((entry) => entry.record),
+        log: records.map((entry) => entry.record),
+        invalidFiles,
       });
       return;
     }
@@ -570,7 +625,19 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       });
       return;
     }
-    const log = readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR).map((entry) => entry.record);
+    const auditLog = readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR);
+    const damagedHistory =
+      typeof action.coachId === "string"
+        ? invalidFilesOf(auditLog.invalidFiles, action.coachId)
+        : [];
+    if (damagedHistory.length > 0) {
+      sendJson(res, 409, {
+        message: `provisioning audit log of ${action.coachId} contains unreadable files — repair or remove them before appending an action`,
+        invalidFiles: damagedHistory,
+      });
+      return;
+    }
+    const log = auditLog.records.map((entry) => entry.record);
     const existingSequencesByCoachId: Record<string, number[]> = {};
     for (const record of log) {
       const match = /\.a(\d+)$/.exec(record.actionId);

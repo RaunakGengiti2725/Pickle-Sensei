@@ -457,11 +457,15 @@ describe("ADJ-09 (d): one corrupt file beside every OTHER record reader", () => 
 
     const damaged = `${original.reviewId}.r3.json`;
     writeFileSync(join(labDir, "amendments", damaged), "{ broken");
-    const refused = await labPost("/api/coach-review-amendments", amendment(original, 4));
-    expect(refused.status, refused.body).toBe(409);
-    expect(refused.body).toContain(`datasets/coach-review/amendments/${damaged}`);
-    expect(refused.body).not.toMatch(RAW_PARSER_TEXT);
-    expect(existsSync(join(labDir, "amendments", `${original.reviewId}.r4.json`))).toBe(false);
+    try {
+      const refused = await labPost("/api/coach-review-amendments", amendment(original, 4));
+      expect(refused.status, refused.body).toBe(409);
+      expect(refused.body).toContain(`datasets/coach-review/amendments/${damaged}`);
+      expect(refused.body).not.toMatch(RAW_PARSER_TEXT);
+      expect(existsSync(join(labDir, "amendments", `${original.reviewId}.r4.json`))).toBe(false);
+    } finally {
+      rmSync(join(labDir, "amendments", damaged));
+    }
   });
 
   it("POST /api/coach-provisioning refuses (409, names the file) while the coach's own audit log is unreadable", async () => {
@@ -486,11 +490,15 @@ describe("ADJ-09 (d): one corrupt file beside every OTHER record reader", () => 
         qualification: testQualification(),
       },
     };
-    const result = await labPost("/api/coach-provisioning", action);
-    expect(result.status, result.body).toBe(409);
-    expect(result.body).toContain(`datasets/coach-review/provisioning-log/${damaged}`);
-    expect(result.body).not.toMatch(RAW_PARSER_TEXT);
-    expect(existsSync(join(labDir, "provisioning-log", "adj09-r2-coach-d.a2.json"))).toBe(false);
+    try {
+      const result = await labPost("/api/coach-provisioning", action);
+      expect(result.status, result.body).toBe(409);
+      expect(result.body).toContain(`datasets/coach-review/provisioning-log/${damaged}`);
+      expect(result.body).not.toMatch(RAW_PARSER_TEXT);
+      expect(existsSync(join(labDir, "provisioning-log", "adj09-r2-coach-d.a2.json"))).toBe(false);
+    } finally {
+      rmSync(join(labDir, "provisioning-log", damaged));
+    }
   });
 
   it("GET lists return 200 with the valid records and name the corrupt file (adjudications / amendments / drill mappings / provisioning log)", async () => {
