@@ -1663,6 +1663,165 @@ begin
 end $$;
 reset role;
 
+-- K1b/K2b: the per-user lock is TRANSACTION-scoped. K1/K2 only observe that
+-- some advisory lock on access_lock_key(uid) is granted, which a session-level
+-- pg_advisory_lock() also satisfies — and a session lock taken inside a pooled
+-- PostgREST connection is never released by COMMIT, so every later request of
+-- that user on another connection would block forever. A lock taken inside a
+-- rolled-back sub-transaction is released only when it is xact-scoped.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000012', 'ivy@example.com',
+        '{"full_name":"Ivy"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-ivy', '00000000-0000-4000-8000-000000000012',
+        '{"sub":"google-sub-ivy","email":"ivy@example.com"}');
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000b3',
+        '00000000-0000-4000-8000-000000000012', 'ivy-key-1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000012';
+do $$
+declare
+  k bigint := public.access_lock_key((select auth.uid()));
+  r record;
+  v text;
+begin
+  begin
+    select * into r from public.reserve_analysis_permit('ivy-key-2');
+    if r.result <> 'accepted' then
+      raise exception 'K1b: precondition — Ivy''s reserve must succeed (got %)', r.result;
+    end if;
+    if not exists (select 1 from pg_locks l
+                   where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+                     and l.granted and l.objsubid = 1
+                     and l.classid::bigint = ((k >> 32) & 4294967295)
+                     and l.objid::bigint = (k & 4294967295)) then
+      raise exception 'K1b: precondition — the lock must be held inside the sub-transaction';
+    end if;
+    raise exception using errcode = 'P0001', message = 'K1b-unwind';
+  exception when others then
+    if sqlerrm <> 'K1b-unwind' then raise; end if;
+  end;
+  if exists (select 1 from pg_locks l
+             where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+               and l.classid::bigint = ((k >> 32) & 4294967295)
+               and l.objid::bigint = (k & 4294967295)) then
+    raise exception
+      'K1b: reserve_analysis_permit must use pg_advisory_xact_lock — the per-user lock survived the sub-transaction unwind (session-level lock)';
+  end if;
+  begin
+    v := public.apply_synced_shot(jsonb_build_object(
+      'id', '00000000-0000-4000-8000-0000000000b4',
+      'analysisPermitId', '00000000-0000-4000-8000-0000000000b3',
+      'resultKind', 'scored',
+      'shotType', 'drive', 'cameraView', 'side',
+      'capturedAt', '2026-08-31T10:00:00Z',
+      'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+      'overallScore', 7.1, 'confidence', 0.9,
+      'versionVector', jsonb_build_object(
+        'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+        'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+        'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+        'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+    ));
+    if v <> 'accepted' then
+      raise exception 'K2b: precondition — Ivy''s scored sync must be accepted (got %)', v;
+    end if;
+    if not exists (select 1 from pg_locks l
+                   where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+                     and l.granted and l.objsubid = 1
+                     and l.classid::bigint = ((k >> 32) & 4294967295)
+                     and l.objid::bigint = (k & 4294967295)) then
+      raise exception 'K2b: precondition — the lock must be held inside the sub-transaction';
+    end if;
+    raise exception using errcode = 'P0001', message = 'K2b-unwind';
+  exception when others then
+    if sqlerrm <> 'K2b-unwind' then raise; end if;
+  end;
+  if exists (select 1 from pg_locks l
+             where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+               and l.classid::bigint = ((k >> 32) & 4294967295)
+               and l.objid::bigint = (k & 4294967295)) then
+    raise exception
+      'K2b: apply_synced_shot must use pg_advisory_xact_lock — the per-user lock survived the sub-transaction unwind (session-level lock)';
+  end if;
+end $$;
+reset role;
+
+-- K6b: the stale-reservation window is pinned from BELOW as well. K6 only
+-- proves a 30-hour-old reservation is ignored; a window shrunk to, say, one
+-- hour passes K6 while (a) access_state under-reports reserved, (b) the
+-- limit is bypassed by a stale-looking permit a player is still using, and
+-- (c) the sync refuses as expired a permit reserved before a long offline
+-- stretch — a rating the player has already been shown. Jill (1 scored) holds
+-- a 23-hour-old reservation: it still counts, still blocks the next reserve,
+-- and its scored sync is still accepted.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000013', 'jill@example.com',
+        '{"full_name":"Jill"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-jill', '00000000-0000-4000-8000-000000000013',
+        '{"sub":"apple-sub-jill","email":"jill@example.com"}');
+insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+values ('00000000-0000-4000-8000-0000000000b5',
+        '00000000-0000-4000-8000-000000000013', 'jill-fresh-key',
+        now() - interval '23 hours');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000013';
+do $$
+declare rec record; r record; v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('jill-key-1');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000b6',
+    'analysisPermitId', p,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'K6b: precondition — Jill''s first scored sync must be accepted (got %)', v;
+  end if;
+  select * into rec from public.access_state();
+  if rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception
+      'K6b: a 23-hour-old reservation must still count as reserved (scored %, reserved %)',
+      rec.scored_count, rec.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('jill-key-2');
+  if r.result <> 'access.paywall_required' then
+    raise exception
+      'K6b: 1 scored + a 23-hour-old reservation is the limit — the next reserve must be refused (got %)',
+      r.result;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000b7',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000b5',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception
+      'K6b: a 23-hour-old permit is inside the 24-hour window and its scored sync must be accepted (got %)', v;
+  end if;
+end $$;
+reset role;
+
 -- K7: the ledger's service-only posture is in the catalog, not just observed
 -- through J8's denials: RLS enabled, zero policies, zero client grants.
 do $$
