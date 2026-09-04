@@ -579,9 +579,28 @@ export function selectTargetEvent(
  *
  *  1. EVENT IDENTITY = stroke-event-2 (D-030, strokeEvents.ts). The engine
  *     never invents its own proposer: on every reconciliation it runs
- *     `proposeStrokeEventsV2` over the ACCUMULATED series (target BODY
+ *     `proposeStrokeEventsV2` over the RETAINED series (target BODY
  *     motion proposes; paddle only confirms/ranks/refines). Emitted events
  *     carry the canonical `StrokeEventProposalV2` — no second event type.
+ *
+ *     The retained series is the trailing `SESSION_PROPOSAL_HORIZON_MS` of
+ *     samples, so the work done per push is bounded by the horizon, not by
+ *     the session length (a live session pushes one sample per frame for
+ *     tens of minutes; re-proposing over everything since t=0 is O(N) per
+ *     frame and O(N²) per session — measured 18× per-push growth between
+ *     minute 1 and minute 5 at 30 fps). Everything the proposer needs about
+ *     a candidate is local: boundary walks and relaxation reach ±1200ms of
+ *     the peak, the prominence baseline ±1500ms, fragment glue 350ms, and
+ *     an open candidate is at most safetyMaxMs (2500ms) past its peak. The
+ *     one non-local input is the proposer's RELATIVE floor (30% of the
+ *     strongest smoothed peak it sees, likewise the paddle-confirmation
+ *     normalization): over a horizon it is relative to recent play rather
+ *     than to the strongest stroke of the whole session. That is the
+ *     intended live semantics — a session is not a clip, and one hard
+ *     drive in minute 2 must not raise the floor above every soft stroke
+ *     for the rest of the session — and it is the only way a horizon run
+ *     can differ from an unbounded one (recorded in SESSION_ENGINE_VERSION
+ *     and, per event, by the retro-suppression note below).
  *
  *  2. EVENT COMPLETION = D-029 adaptive settle-or-valley-or-safety
  *     (eventCompletionBench.ts, ADAPTIVE variant). Constants are mirrored
@@ -602,9 +621,10 @@ export function selectTargetEvent(
  *     and may close per D-029;
  *   - wrist samples at/before the frontier arriving late are DROPPED and
  *     counted (`droppedLateSamples`) — they may not rewrite history. Paddle
- *     samples are kept regardless: per D-030 paddle evidence can never
- *     create/delete/re-bound a proposal, so late paddle history only feeds
- *     the confirm-normalization of FUTURE candidates.
+ *     samples are kept regardless of the frontier: per D-030 paddle
+ *     evidence can never create/delete/re-bound a proposal, so late paddle
+ *     history only feeds the confirm-normalization of FUTURE candidates
+ *     (within the retained horizon — older paddle samples are discarded).
  *
  * BOUND-STABILITY WAIT (why emission is not instant on settle): proposal
  * boundaries walk outward while smoothed wrist speed stays above the
@@ -622,7 +642,16 @@ export function selectTargetEvent(
  */
 
 export const SESSION_ENGINE_VERSION =
-  "session-engine-1 (streaming reconcile over stroke-event-2 · D-029 completion · append-only)";
+  "session-engine-2 (streaming reconcile over stroke-event-2 within a bounded proposal horizon · D-029 completion · append-only)";
+
+/** Trailing span of wrist/paddle samples the proposer sees on each
+ * reconciliation. Far above every local reach the proposer has (boundary
+ * ±1200ms, baseline context ±1500ms, glue 350ms, safety close 2500ms) so
+ * candidate bounds/peaks are identical to an unbounded run; sized as the
+ * span the relative proposal floor normalizes against. Samples older than
+ * this are released; late samples older than this are dropped (paddle) or
+ * were already behind the frontier (wrist). */
+export const SESSION_PROPOSAL_HORIZON_MS = 20_000;
 
 /** D-029 ADAPTIVE completion constants, mirrored VERBATIM from
  * eventCompletionBench.ts (the promoted-candidate semantics). Every field
@@ -804,8 +833,12 @@ function adaptiveCompletion(
 }
 
 export class SessionEventEngine {
+  /** Retained (horizon) series — sorted, bounded by SESSION_PROPOSAL_HORIZON_MS. */
   private readonly wrist: SpeedSample[] = [];
   private readonly paddle: SpeedSample[] = [];
+  /** Accepted-sample totals for the whole session (retained + released). */
+  private wristSamplesAccepted = 0;
+  private paddleSamplesAccepted = 0;
   private readonly events: SessionStrokeEvent[] = [];
   private frontierMs = Number.NEGATIVE_INFINITY;
   private droppedLateSamples = 0;
@@ -832,7 +865,9 @@ export class SessionEventEngine {
   }): SessionStrokeEvent[] {
     for (const sample of input.paddle ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
+      if (this.isBeyondHorizon(sample.timestampMs)) continue;
       insertSorted(this.paddle, sample);
+      this.paddleSamplesAccepted += 1;
     }
     for (const sample of input.wrist ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
@@ -841,8 +876,16 @@ export class SessionEventEngine {
         this.droppedLateSamples += 1;
         continue;
       }
+      if (this.isBeyondHorizon(sample.timestampMs)) {
+        // Older than everything the proposer still looks at: it could not
+        // change any candidate, and there is no history left to insert into.
+        this.droppedLateSamples += 1;
+        continue;
+      }
       insertSorted(this.wrist, sample);
+      this.wristSamplesAccepted += 1;
     }
+    this.releaseBeyondHorizon();
     return this.reconcile(false);
   }
 
@@ -892,8 +935,8 @@ export class SessionEventEngine {
           "adaptive-completion (D-029 settle-or-valley-or-safety; constants mirrored from eventCompletionBench.ts)",
       },
       qualityState: {
-        wristSamples: this.wrist.length + this.droppedLateSamples,
-        paddleSamples: this.paddle.length,
+        wristSamples: this.wristSamplesAccepted + this.droppedLateSamples,
+        paddleSamples: this.paddleSamplesAccepted,
         droppedLateSamples: this.droppedLateSamples,
         lastSampleMs: this.lastSampleMs(),
         notes: [...this.notes],
@@ -949,10 +992,33 @@ export class SessionEventEngine {
     return last ?? null;
   }
 
-  /** Canonical proposals over the accumulated series (stroke-event-2). Clip
-   * bounds are the observed sample span — in proposeStrokeEventsV2 they only
+  /** Start of the retained horizon: everything the proposer can still see
+   * lies at/after this stream time. */
+  private horizonStartMs(): number {
+    const lastMs = this.lastSampleMs();
+    return lastMs === null ? Number.NEGATIVE_INFINITY : lastMs - SESSION_PROPOSAL_HORIZON_MS;
+  }
+
+  private isBeyondHorizon(timestampMs: number): boolean {
+    return timestampMs < this.horizonStartMs();
+  }
+
+  /** Release samples the proposer can no longer see. Both series are sorted,
+   * so the released prefix is contiguous. */
+  private releaseBeyondHorizon(): void {
+    const startMs = this.horizonStartMs();
+    if (!Number.isFinite(startMs)) return;
+    for (const series of [this.wrist, this.paddle]) {
+      let stale = 0;
+      while (stale < series.length && series[stale]!.timestampMs < startMs) stale += 1;
+      if (stale > 0) series.splice(0, stale);
+    }
+  }
+
+  /** Canonical proposals over the retained series (stroke-event-2). Clip
+   * bounds are the retained sample span — in proposeStrokeEventsV2 they only
    * gate coverage, so a live session (full coverage by construction) sees
-   * identical events to the offline batch run. */
+   * identical candidate bounds/peaks to the offline batch run. */
   private propose(): StrokeEventProposalV2[] {
     if (this.wrist.length < 4) return [];
     return proposeStrokeEventsV2({
@@ -1016,17 +1082,23 @@ export class SessionEventEngine {
 
   /**
    * CAUSAL vs ACAUSAL divergence, recorded — never silent. strokeEvents.ts
-   * only proposes peaks ≥ max(0.5, 30% of the GLOBAL smoothed peak); in a
-   * live stream the global peak only grows, so a weak early stroke that was
-   * a valid proposal when it closed can be retro-suppressed from later
-   * full-series batch runs by a much stronger stroke (measured on
-   * afn-sasebo-rally2: a 0.60 u/s movement at 67–1401ms vanishes once the
-   * 6.87 u/s stroke arrives). The emitted event stays (append-only; it was
-   * proposed over all evidence available at close time) and is flagged for
-   * downstream confidence handling.
+   * only proposes peaks ≥ max(0.5, 30% of the strongest smoothed peak it
+   * sees); a weak early stroke that was a valid proposal when it closed can
+   * be retro-suppressed from later batch runs over the horizon by a much
+   * stronger stroke (measured on afn-sasebo-rally2: a 0.60 u/s movement at
+   * 67–1401ms vanishes once the 6.87 u/s stroke arrives). The emitted event
+   * stays (append-only; it was proposed over all evidence available at
+   * close time) and is flagged for downstream confidence handling. Only
+   * events still wholly inside the retained horizon can be judged — an
+   * event the proposer can no longer see is not "no longer proposed".
    */
   private noteRetroSubthreshold(batch: readonly StrokeEventProposalV2[]): void {
-    for (const event of this.events) {
+    const horizonStartMs = this.wrist[0]?.timestampMs ?? Number.POSITIVE_INFINITY;
+    // Events are emitted in stream order: walk back from the newest and stop
+    // at the first one the horizon no longer covers.
+    for (let index = this.events.length - 1; index >= 0; index -= 1) {
+      const event = this.events[index]!;
+      if (event.proposal.startMs <= horizonStartMs) break;
       if (this.retroNoted.has(event.eventId)) continue;
       const stillProposed = batch.some(
         (proposal) =>
@@ -1037,7 +1109,7 @@ export class SessionEventEngine {
       this.retroNoted.add(event.eventId);
       this.notes.push(
         `SESSION_EVENT_RETRO_SUPPRESSED: ${event.eventId} (peak ${event.proposal.peakSpeed.toFixed(2)} u/s ` +
-          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the full-series batch ` +
+          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the batch over the retained horizon ` +
           `(a later stroke raised the relative proposal floor); kept append-only, flagged`,
       );
     }

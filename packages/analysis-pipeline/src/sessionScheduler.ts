@@ -2,6 +2,7 @@ import type { AnalysisRecord } from "@pickle/swing-domain";
 import type {
   SessionEventCloseReason,
   SessionEventEngine,
+  SessionEventState,
   SessionStrokeEvent,
   SpeedSample,
   StrokeEventProposalV2,
@@ -47,10 +48,33 @@ import type {
  *  5. METRICS are measured, per event and aggregate: queue wait, service
  *     time, close→terminal latency, attempts, backlog high-water mark.
  *     The clock is injectable so simulations can use a virtual clock.
+ *
+ *  6. LIVENESS. A concurrency slot is held only for a bounded time: every
+ *     attempt runs under `taskTimeoutMs` (finite by default); an executor
+ *     that has not settled by the deadline fails that attempt with
+ *     `EXECUTOR_TIMEOUT` (retryable — `maxAttempts` governs it), the event
+ *     reverts to 'pending', the slot is released and the queue continues.
+ *     A settlement arriving after its deadline is not a result and is
+ *     ignored (counted, never applied). The deadline is not a dispatch, so
+ *     it also fires while suspended.
+ *
+ *  7. EXTERNAL WRITERS. The engine is shared state; a recovery path or a
+ *     second writer may settle an event this scheduler holds or awaits a
+ *     lease on. Every engine transition the scheduler drives (processing,
+ *     ready, abstained, pending) is therefore guarded: a refused transition
+ *     is recorded on the task as an `ENGINE_TRANSITION` failure
+ *     (`failed_final`), the slot is released and the queue continues. No
+ *     transition error ever escapes into the sample-feeding path, `resume()`,
+ *     or the settle chain (which would reject `drained()`).
  */
 
 export const SESSION_SCHEDULER_VERSION =
-  "session-scheduler-1 (bounded-concurrency FIFO over SessionEventEngine closures · retryable-failure revert-to-pending · suspend/resume + recoverPending)";
+  "session-scheduler-2 (bounded-concurrency FIFO over SessionEventEngine closures · retryable-failure revert-to-pending · suspend/resume + recoverPending · per-attempt deadline (EXECUTOR_TIMEOUT) · guarded engine transitions (ENGINE_TRANSITION))";
+
+/** Default per-attempt deadline. On-device clip extraction + analysis for one
+ * stroke is expected to settle well inside this; a slot held longer is a hung
+ * executor, not a slow one. */
+export const DEFAULT_SESSION_TASK_TIMEOUT_MS = 120_000;
 
 /** Everything the executor gets for one closed event. Bounds come from the
  * frozen proposal verbatim; executors must never alter them. */
@@ -116,6 +140,15 @@ export interface SessionSchedulerMetrics {
   retryExhausted: number;
   /** Executor throws (counted as non-retryable failures) — never silent. */
   executorThrows: number;
+  /** Attempts that hit the per-attempt deadline (EXECUTOR_TIMEOUT). */
+  timedOut: number;
+  /** Executor settlements that arrived after their attempt's deadline and
+   * were therefore not applied. */
+  lateSettlementsIgnored: number;
+  /** Engine transitions the scheduler attempted that the engine refused
+   * (event settled by another writer) — each is a recorded task failure. */
+  engineTransitionRefusals: number;
+  taskTimeoutMs: number;
   queueDepth: number;
   inFlight: number;
   maxQueueDepth: number;
@@ -131,6 +164,10 @@ export interface SessionSchedulerOptions {
   concurrency?: number;
   /** Total tries per event including the first. Default 2. */
   maxAttempts?: number;
+  /** Per-attempt deadline in wall-clock milliseconds (see contract 6).
+   * Default DEFAULT_SESSION_TASK_TIMEOUT_MS. Must be a positive finite
+   * number; `Infinity` disables the deadline (explicit opt-out only). */
+  taskTimeoutMs?: number;
   /** Injectable clock for simulation; default Date.now. */
   now?: () => number;
 }
@@ -151,6 +188,7 @@ export class SessionAnalysisScheduler {
   private readonly sessionId: string;
   private readonly concurrency: number;
   private readonly maxAttempts: number;
+  private readonly taskTimeoutMs: number;
   private readonly now: () => number;
 
   private readonly queue: QueuedTask[] = [];
@@ -162,6 +200,9 @@ export class SessionAnalysisScheduler {
   private dispatched = 0;
   private retries = 0;
   private executorThrows = 0;
+  private timedOut = 0;
+  private lateSettlementsIgnored = 0;
+  private engineTransitionRefusals = 0;
   private maxQueueDepth = 0;
   private maxInFlight = 0;
 
@@ -171,6 +212,13 @@ export class SessionAnalysisScheduler {
     this.executor = options.executor;
     this.concurrency = Math.max(1, options.concurrency ?? 1);
     this.maxAttempts = Math.max(1, options.maxAttempts ?? 2);
+    const timeout = options.taskTimeoutMs ?? DEFAULT_SESSION_TASK_TIMEOUT_MS;
+    if (Number.isNaN(timeout) || timeout <= 0) {
+      throw new Error(
+        `SessionAnalysisScheduler: taskTimeoutMs must be a positive number of milliseconds (got ${String(timeout)})`,
+      );
+    }
+    this.taskTimeoutMs = timeout;
     this.now = options.now ?? Date.now;
   }
 
@@ -283,6 +331,10 @@ export class SessionAnalysisScheduler {
       failedFinal,
       retryExhausted,
       executorThrows: this.executorThrows,
+      timedOut: this.timedOut,
+      lateSettlementsIgnored: this.lateSettlementsIgnored,
+      engineTransitionRefusals: this.engineTransitionRefusals,
+      taskTimeoutMs: this.taskTimeoutMs,
       queueDepth: this.queue.length,
       inFlight: this.inFlightIds.size,
       maxQueueDepth: this.maxQueueDepth,
@@ -336,8 +388,6 @@ export class SessionAnalysisScheduler {
   private dispatch(task: QueuedTask): void {
     const { event, attempt } = task;
     const record = this.records.get(event.eventId)!;
-    this.inFlightIds.add(event.eventId);
-    this.maxInFlight = Math.max(this.maxInFlight, this.inFlightIds.size);
     this.dispatched += 1;
     if (attempt > 1) this.retries += 1;
     record.attempts = attempt;
@@ -346,7 +396,16 @@ export class SessionAnalysisScheduler {
     // Clamped at 0: a wall clock may step backwards (NTP correction, device
     // clock reset); measured durations are never negative.
     record.queueWaitMs ??= Math.max(0, startedAt - record.enqueuedAt);
-    this.engine.markEvent(event.eventId, "processing");
+    // The lease is taken BEFORE the slot: an event another writer settled
+    // while it sat in the queue never occupies a slot or reaches the executor.
+    const leaseRefused = this.transition(event.eventId, "processing");
+    if (leaseRefused !== null) {
+      record.failures.push(`attempt ${attempt}: ${leaseRefused}`);
+      this.finish(record, "failed_final");
+      return;
+    }
+    this.inFlightIds.add(event.eventId);
+    this.maxInFlight = Math.max(this.maxInFlight, this.inFlightIds.size);
     let executed: Promise<SessionAnalysisTaskOutcome>;
     try {
       // A misbehaving executor may throw synchronously instead of returning
@@ -363,24 +422,57 @@ export class SessionAnalysisScheduler {
     } catch (error) {
       executed = Promise.reject(error);
     }
-    const settle = executed
-      .then(
-        (outcome) => outcome,
-        (error): SessionAnalysisTaskOutcome => {
+    // First settlement wins: the executor's outcome or the deadline, never
+    // both. Whatever loses is not applied to the record or the engine.
+    const settle = new Promise<SessionAnalysisTaskOutcome>((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const settleOnce = (outcome: SessionAnalysisTaskOutcome): void => {
+        settled = true;
+        if (timer !== null) clearTimeout(timer);
+        resolve(outcome);
+      };
+      if (Number.isFinite(this.taskTimeoutMs)) {
+        timer = setTimeout(() => {
+          if (settled) return;
+          this.timedOut += 1;
+          settleOnce({
+            status: "failed",
+            reason: `EXECUTOR_TIMEOUT: attempt did not settle within ${this.taskTimeoutMs} ms`,
+            retryable: true,
+          });
+        }, this.taskTimeoutMs);
+      }
+      executed.then(
+        (outcome) => {
+          if (settled) {
+            this.lateSettlementsIgnored += 1;
+            return;
+          }
+          settleOnce(outcome);
+        },
+        (error: unknown) => {
+          if (settled) {
+            this.lateSettlementsIgnored += 1;
+            return;
+          }
           this.executorThrows += 1;
-          return {
+          settleOnce({
             status: "failed",
             reason: `EXECUTOR_THREW: ${error instanceof Error ? error.message : String(error)}`,
             retryable: false,
-          };
+          });
         },
-      )
-      .then((outcome) => {
-        record.serviceMs += Math.max(0, this.now() - startedAt);
-        this.inFlightIds.delete(event.eventId);
+      );
+    }).then((outcome) => {
+      record.serviceMs += Math.max(0, this.now() - startedAt);
+      this.inFlightIds.delete(event.eventId);
+      try {
         this.applyOutcome(task, outcome, record);
+      } finally {
         this.pump();
-      });
+      }
+    });
     const tracked: Promise<void> = settle.finally(() => {
       this.settlePromises.delete(tracked);
     });
@@ -394,27 +486,65 @@ export class SessionAnalysisScheduler {
   ): void {
     const { event, attempt } = task;
     if (outcome.status === "ready") {
-      this.engine.markEvent(event.eventId, "ready", { analysis: outcome.analysis });
+      const refused = this.transition(event.eventId, "ready", { analysis: outcome.analysis });
+      if (refused !== null) {
+        record.failures.push(`attempt ${attempt}: ${refused}`);
+        this.finish(record, "failed_final");
+        return;
+      }
       this.finish(record, "ready");
       return;
     }
     if (outcome.status === "abstained") {
-      this.engine.markEvent(event.eventId, "abstained", {
+      const refused = this.transition(event.eventId, "abstained", {
         abstainReason: outcome.abstainReason,
       });
+      if (refused !== null) {
+        record.failures.push(`attempt ${attempt}: ${refused}`);
+        this.finish(record, "failed_final");
+        return;
+      }
       this.finish(record, "abstained");
       return;
     }
     // Failure: honest revert to 'pending' (the engine's only allowed revert);
     // the reason is recorded on the task record — never silent.
     record.failures.push(`attempt ${attempt}: ${outcome.reason}`);
-    this.engine.markEvent(event.eventId, "pending");
+    const refused = this.transition(event.eventId, "pending");
+    if (refused !== null) {
+      // The event was settled by another writer while this attempt ran; there
+      // is nothing left to retry against.
+      record.failures.push(`attempt ${attempt}: ${refused}`);
+      this.finish(record, "failed_final");
+      return;
+    }
     if (outcome.retryable && attempt < task.attemptCeiling) {
       // Back of the queue: a flaky event may never starve newer events.
       this.enqueueExisting(event, attempt + 1, task.attemptCeiling);
       return;
     }
     this.finish(record, outcome.retryable ? "retry_exhausted" : "failed_final");
+  }
+
+  /** The single seam through which the scheduler writes engine state. The
+   * engine's honesty invariants (terminal append-only, ready needs an
+   * AnalysisRecord, only processing→pending reverts) may refuse a
+   * transition when another writer got there first; that refusal is a fact
+   * about the event, returned as an `ENGINE_TRANSITION` reason for the task
+   * record — never thrown into the feed path or the settle chain. */
+  private transition(
+    eventId: string,
+    state: SessionEventState,
+    outcome?: { analysis?: AnalysisRecord | null; abstainReason?: string | null },
+  ): string | null {
+    try {
+      this.engine.markEvent(eventId, state, outcome);
+      return null;
+    } catch (error) {
+      this.engineTransitionRefusals += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      return `ENGINE_TRANSITION(${state}): ${message}`;
+    }
   }
 
   private finish(record: SessionTaskRecord, outcome: SessionTaskTerminal): void {

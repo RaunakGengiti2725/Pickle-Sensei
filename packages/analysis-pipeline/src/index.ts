@@ -11,6 +11,7 @@ export {
   BOUND_STABILITY_MS,
   SESSION_COMPLETION,
   SESSION_ENGINE_VERSION,
+  SESSION_PROPOSAL_HORIZON_MS,
   SessionEventEngine,
   type Session,
   type SessionCaptureMeta,
@@ -27,6 +28,7 @@ export {
 // (Wave E / e16): bounded-concurrency FIFO dispatch of closed events while
 // recording continues, with honest failure/retry/recovery semantics.
 export {
+  DEFAULT_SESSION_TASK_TIMEOUT_MS,
   SESSION_SCHEDULER_VERSION,
   SessionAnalysisScheduler,
   type SessionAnalysisExecutor,

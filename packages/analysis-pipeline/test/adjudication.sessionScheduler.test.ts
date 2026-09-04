@@ -91,10 +91,18 @@ describe("ADJ-AP-003 a never-settling executor must not hold the concurrency slo
         return Promise.resolve({ status: "ready", analysis: fakeAnalysis });
       },
     };
-    // Expected contract: a per-task deadline option (none exists at the
-    // baseline — SessionSchedulerOptions has no timeout/deadline/signal
-    // field), after which the hung task fails and the slot is released.
-    const scheduler = new SessionAnalysisScheduler({ engine, executor, concurrency: 1 });
+    // Contract: a per-task deadline (`taskTimeoutMs`) after which the hung
+    // attempt fails with EXECUTOR_TIMEOUT and the slot is released. A timeout
+    // is retryable under `maxAttempts` (see attack.adjudication-AP-001-003
+    // "timeout is retryable per policy"); a single attempt keeps this repro's
+    // dispatch count at exactly one per event.
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 1,
+      maxAttempts: 1,
+      taskTimeoutMs: 200,
+    });
     scheduler.pushSamples({ wrist: threeStrokes() });
     scheduler.endOfStream();
     const drained = await withTimeout(
@@ -112,4 +120,3 @@ describe("ADJ-AP-003 a never-settling executor must not hold the concurrency slo
     expect(metrics.dispatched).toBe(3);
   });
 });
-

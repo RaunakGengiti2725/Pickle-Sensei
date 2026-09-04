@@ -321,3 +321,267 @@ describe("SessionAnalysisScheduler — progressive dispatch while recording cont
     expect(waits[waits.length - 1]).toBeGreaterThanOrEqual(500);
   });
 });
+
+describe("SessionAnalysisScheduler — per-attempt deadline (taskTimeoutMs)", () => {
+  it("a hung attempt fails with EXECUTOR_TIMEOUT, releases its slot, the queue continues and the event stays honestly pending", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-deadline" });
+    let hungCalls = 0;
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E2") {
+        hungCalls += 1;
+        return new Promise<never>(() => {});
+      }
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 1,
+      maxAttempts: 1,
+      taskTimeoutMs: 50,
+    });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    await scheduler.drained();
+    const metrics = scheduler.metrics();
+    expect(hungCalls).toBe(1);
+    expect(metrics.dispatched).toBe(3);
+    expect(metrics.inFlight).toBe(0);
+    expect(metrics.queueDepth).toBe(0);
+    expect(metrics.timedOut).toBe(1);
+    expect(metrics.taskTimeoutMs).toBe(50);
+    const e2 = metrics.tasks.find((task) => task.eventId === "E2")!;
+    expect(e2.outcome).toBe("retry_exhausted");
+    expect(e2.failures).toEqual([
+      "attempt 1: EXECUTOR_TIMEOUT: attempt did not settle within 50 ms",
+    ]);
+    expect(e2.finishedAt).not.toBeNull();
+    // A timed-out analysis is not a result: E2 is neither 'ready' nor
+    // 'abstained', and it is not left 'processing' with no worker attached.
+    expect(engine.eventState("E2")).toBe("pending");
+    expect(engine.snapshot().events.find((event) => event.eventId === "E2")!.analysis).toBeNull();
+    expect(engine.eventState("E1")).toBe("ready");
+    expect(engine.eventState("E3")).toBe("ready");
+  });
+
+  it("a timeout is retryable under maxAttempts; the retry goes to the BACK of the queue", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-deadline-retry" });
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E1" && task.attempt === 1) return new Promise<never>(() => {});
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 1,
+      maxAttempts: 2,
+      taskTimeoutMs: 50,
+    });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    await scheduler.drained();
+    expect(executor.calls.map((task) => `${task.eventId}#${task.attempt}`)).toEqual([
+      "E1#1",
+      "E2#1",
+      "E3#1",
+      "E1#2",
+    ]);
+    const metrics = scheduler.metrics();
+    expect(metrics.ready).toBe(3);
+    expect(metrics.retries).toBe(1);
+    expect(metrics.timedOut).toBe(1);
+    const e1 = metrics.tasks.find((task) => task.eventId === "E1")!;
+    expect(e1.outcome).toBe("ready");
+    expect(e1.attempts).toBe(2);
+    expect(e1.failures).toHaveLength(1);
+    expect(e1.failures[0]).toMatch(/^attempt 1: EXECUTOR_TIMEOUT/);
+    expect(engine.eventState("E1")).toBe("ready");
+  });
+
+  it("a settlement (resolve or reject) arriving after the deadline is counted and ignored — never applied, never thrown", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-deadline-late" });
+    const late = new Map<string, (outcome: SessionAnalysisTaskOutcome) => void>();
+    const lateReject = new Map<string, (error: Error) => void>();
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E1" || task.eventId === "E2") {
+        return new Promise<SessionAnalysisTaskOutcome>((resolve, reject) => {
+          late.set(task.eventId, resolve);
+          lateReject.set(task.eventId, reject);
+        });
+      }
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 2,
+      maxAttempts: 1,
+      taskTimeoutMs: 50,
+    });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    await scheduler.drained();
+    const before = scheduler.metrics();
+    expect(before.timedOut).toBe(2);
+    expect(before.lateSettlementsIgnored).toBe(0);
+    expect(before.executorThrows).toBe(0);
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      late.get("E1")!({ status: "ready", analysis: fakeAnalysis });
+      lateReject.get("E2")!(new Error("late crash"));
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    const after = scheduler.metrics();
+    expect(unhandled).toEqual([]);
+    expect(after.lateSettlementsIgnored).toBe(2);
+    // A late throw is not an executor failure of any attempt on record.
+    expect(after.executorThrows).toBe(0);
+    expect(after.tasks).toEqual(before.tasks);
+    expect(engine.eventState("E1")).toBe("pending");
+    expect(engine.eventState("E2")).toBe("pending");
+    expect(engine.snapshot().events.find((event) => event.eventId === "E1")!.analysis).toBeNull();
+  });
+
+  it("the deadline fires while suspended (a deadline is not a dispatch); resume() continues the queue", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-deadline-suspended" });
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E1") return new Promise<never>(() => {});
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 1,
+      maxAttempts: 1,
+      taskTimeoutMs: 50,
+    });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    scheduler.suspend();
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+    const suspended = scheduler.metrics();
+    expect(suspended.inFlight).toBe(0);
+    expect(suspended.dispatched).toBe(1);
+    expect(suspended.queueDepth).toBe(2);
+    expect(suspended.timedOut).toBe(1);
+    expect(engine.eventState("E1")).toBe("pending");
+    scheduler.resume();
+    await scheduler.drained();
+    expect(scheduler.metrics().dispatched).toBe(3);
+    expect(scheduler.metrics().ready).toBe(2);
+  });
+
+  it("the default deadline is finite; Infinity is an explicit opt-out; non-positive or NaN values are refused", () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-deadline-options" });
+    const executor = scriptedExecutor(() => ({ status: "ready", analysis: fakeAnalysis }));
+    const defaulted = new SessionAnalysisScheduler({ engine, executor });
+    expect(Number.isFinite(defaulted.metrics().taskTimeoutMs)).toBe(true);
+    expect(defaulted.metrics().taskTimeoutMs).toBeGreaterThan(0);
+    const unbounded = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      taskTimeoutMs: Number.POSITIVE_INFINITY,
+    });
+    expect(unbounded.metrics().taskTimeoutMs).toBe(Number.POSITIVE_INFINITY);
+    for (const bad of [0, -1, Number.NaN]) {
+      expect(() => new SessionAnalysisScheduler({ engine, executor, taskTimeoutMs: bad })).toThrow(
+        /taskTimeoutMs/,
+      );
+    }
+  });
+});
+
+describe("SessionAnalysisScheduler — every engine transition is guarded", () => {
+  it("dispatch lease refused (event settled by another writer while queued): failed_final with ENGINE_TRANSITION, no slot taken, no executor call", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-guard-dispatch" });
+    const executor = scriptedExecutor(() => ({ status: "ready", analysis: fakeAnalysis }));
+    const scheduler = new SessionAnalysisScheduler({ engine, executor, concurrency: 1 });
+    scheduler.suspend();
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    engine.markEvent("E2", "abstained", { abstainReason: "external_writer" });
+    expect(() => scheduler.resume()).not.toThrow();
+    await scheduler.drained();
+    const metrics = scheduler.metrics();
+    expect(executor.calls.map((task) => task.eventId)).toEqual(["E1", "E3"]);
+    expect(metrics.dispatched).toBe(3);
+    expect(metrics.maxInFlight).toBe(1);
+    expect(metrics.inFlight).toBe(0);
+    expect(metrics.engineTransitionRefusals).toBe(1);
+    const e2 = metrics.tasks.find((task) => task.eventId === "E2")!;
+    expect(e2.outcome).toBe("failed_final");
+    expect(e2.attempts).toBe(1);
+    expect(e2.serviceMs).toBe(0);
+    expect(e2.failures).toHaveLength(1);
+    expect(e2.failures[0]).toMatch(/^attempt 1: ENGINE_TRANSITION\(processing\): /);
+    expect(engine.eventState("E2")).toBe("abstained");
+    expect(metrics.ready).toBe(2);
+  });
+
+  it("terminal outcome refused (event settled externally while in flight): the executor's result is not applied, record is failed_final", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-guard-terminal" });
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E1") {
+        engine.markEvent("E1", "ready", { analysis: fakeAnalysis });
+        return { status: "abstained", abstainReason: "late_abstain" };
+      }
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({ engine, executor, concurrency: 1 });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    await scheduler.drained();
+    const metrics = scheduler.metrics();
+    const e1 = metrics.tasks.find((task) => task.eventId === "E1")!;
+    expect(e1.outcome).toBe("failed_final");
+    expect(e1.failures).toHaveLength(1);
+    expect(e1.failures[0]).toMatch(/^attempt 1: ENGINE_TRANSITION\(abstained\): /);
+    expect(metrics.abstained).toBe(0);
+    expect(metrics.failedFinal).toBe(1);
+    expect(metrics.ready).toBe(2);
+    expect(metrics.dispatched).toBe(3);
+    expect(engine.eventState("E1")).toBe("ready");
+  });
+
+  it("failure revert refused (event settled externally + retryable failure): no retry against a settled event, both reasons recorded", async () => {
+    const engine = new SessionEventEngine({ sessionId: "sched-guard-revert" });
+    const executor = scriptedExecutor((task) => {
+      if (task.eventId === "E1") {
+        engine.markEvent("E1", "abstained", { abstainReason: "external_writer" });
+        return { status: "failed", reason: "transient", retryable: true };
+      }
+      return { status: "ready", analysis: fakeAnalysis };
+    });
+    const scheduler = new SessionAnalysisScheduler({
+      engine,
+      executor,
+      concurrency: 1,
+      maxAttempts: 3,
+    });
+    scheduler.pushSamples({ wrist: threeStrokeStream() });
+    scheduler.endOfStream();
+    await scheduler.drained();
+    const metrics = scheduler.metrics();
+    expect(executor.calls.map((task) => `${task.eventId}#${task.attempt}`)).toEqual([
+      "E1#1",
+      "E2#1",
+      "E3#1",
+    ]);
+    const e1 = metrics.tasks.find((task) => task.eventId === "E1")!;
+    expect(e1.outcome).toBe("failed_final");
+    expect(e1.failures).toEqual([
+      "attempt 1: transient",
+      expect.stringMatching(/^attempt 1: ENGINE_TRANSITION\(pending\): /),
+    ]);
+    expect(metrics.retries).toBe(0);
+    expect(metrics.queueDepth).toBe(0);
+    expect(metrics.inFlight).toBe(0);
+  });
+});
