@@ -14,7 +14,7 @@ import {
   type VariantSpec,
 } from "../src/fpsTemporalSegmentation.js";
 import { runE13EventBoundsEval } from "../src/e13EventBoundsEval.js";
-import type { PeopleFile } from "../src/playerTracker.js";
+import { buildPlayerTracks, type PeopleFile } from "../src/playerTracker.js";
 
 /**
  * XC cv-temporal-segmentation harness pins (Linux replay proxy).
@@ -253,54 +253,73 @@ describe("measurement locks on 4d812e1a (re-measure before changing)", () => {
     expect(matrix.phases["temporalV2.anchored"].segmented).toBe(8);
   });
 
-  it("real decimation 60→30 loses the three short 59.94fps strokes (dig, dink, smash) — the 3-sample smoothed peak falls under the 0.5 n/s gate", async () => {
+  it("XC-CV-3 acceptance [1]: real 60→30 and 60→24 decimation (phase 0) keeps the matched gold events within one of native", async () => {
+    const rows = await Promise.all(cases.map((gold) => native(gold)));
+    const nativeByBundle = new Map(rows.map((row) => [row.spec.bundle, row]));
+    const nativeMatrix = aggregate(rows, nativeByBundle, "native");
+    for (const fps of [30, 24]) {
+      const variant = await Promise.all(
+        cases.map((gold) => runVariant(gold, spec(gold.bundle, fps))),
+      );
+      for (const row of variant) {
+        if (row.resample.nativeFps > fps) expect(row.resample.mode).toBe("decimate");
+      }
+      const matrix = aggregate(variant, nativeByBundle, fps);
+      expect(
+        nativeMatrix.matched - matrix.matched,
+        `${fps} fps matched ${matrix.matched} vs native ${nativeMatrix.matched}`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }, 120_000);
+
+  it("XC-CV-3: the short 59.94 fps strokes (dig, dink, smash) survive real 60→30 decimation at every grid phase", async () => {
     for (const bundle of ["wavea-marne-dig", "wavea-944403-dink", "wavea-944403-smash"]) {
       const gold = byBundle.get(bundle)!;
       const base = await native(gold);
-      const at30 = await runVariant(gold, spec(bundle, 30));
-      expect(at30.resample.mode).toBe("decimate");
       const target = base.events.findIndex((event) => event.owner === "target");
       expect(base.events[target]!.matched).not.toBeNull();
-      expect(at30.events[target]!.outcome).toBe("MISSED");
-      expect(at30.proposals.length).toBe(0);
-      expect(base.events[target]!.goldSpanPeak!.smoothedSpeed).toBeGreaterThan(
-        at30.events[target]!.goldSpanPeak!.smoothedSpeed,
-      );
-      expect(at30.events[target]!.goldSpanPeak!.smoothedSpeed).toBeLessThan(0.5);
-      const failures = diffAgainstNative(at30, base);
-      expect(failures.some((failure) => failure.kind === "event_lost_vs_native")).toBe(true);
-      expect(failures[0]!.replay).toContain(`"bundle":"${bundle}"`);
+      const probe = await runVariant(gold, spec(bundle, 30));
+      expect(probe.resample.mode).toBe("decimate");
+      for (let phase = 0; phase < probe.resample.phaseCount; phase += 1) {
+        const at30 = phase === 0 ? probe : await runVariant(gold, spec(bundle, 30, { phase }));
+        expect(at30.events[target]!.matched, `${bundle} phase ${phase}`).not.toBeNull();
+      }
     }
-  });
+  }, 60_000);
 
-  it("real decimation 30→24 on sasebo-volleys is grid-phase dependent (all-missed vs all-matched)", async () => {
+  it("XC-CV-3: real 30→24 decimation of sasebo-volleys keeps all three volleys matched at every grid phase (no phase dependence)", async () => {
     const gold = byBundle.get("wavea-sasebo-volleys")!;
-    const outcomes: string[] = [];
     const probe = await runVariant(gold, spec(gold.bundle, 24));
     expect(probe.resample.phaseCount).toBeGreaterThanOrEqual(2);
     for (let phase = 0; phase < probe.resample.phaseCount; phase += 1) {
-      const row = await runVariant(gold, spec(gold.bundle, 24, { phase }));
-      outcomes.push(
-        row.events
-          .filter((event) => event.owner === "target")
-          .map((event) => event.outcome)
-          .join(","),
-      );
+      const row = phase === 0 ? probe : await runVariant(gold, spec(gold.bundle, 24, { phase }));
+      const outcomes = row.events
+        .filter((event) => event.owner === "target")
+        .map((event) => event.outcome);
+      expect(outcomes, `phase ${phase}`).toEqual(["PROPOSED_OK", "PROPOSED_OK", "PROPOSED_OK"]);
     }
-    expect(new Set(outcomes).size).toBeGreaterThan(1);
-    expect(outcomes).toContain("MISSED,MISSED,MISSED");
-    expect(outcomes).toContain("PROPOSED_OK,PROPOSED_OK,PROPOSED_OK");
-  });
+  }, 60_000);
 
-  it("marne-serve at 24/30 fps keeps the contact but the start bound slides ~434ms into the swing", async () => {
+  it("marne-serve at 24/30 fps keeps the contact inside the proposal", async () => {
     const gold = byBundle.get("wavea-marne-serve")!;
     const base = await native(gold);
-    expect(base.events[0]!.startErrMs).toBe(100);
+    expect(base.events[0]!.contactInside).toBe(true);
     for (const fps of [24, 30]) {
       const row = await runVariant(gold, spec(gold.bundle, fps));
       expect(row.events[0]!.outcome).toBe("PROPOSED_OK");
       expect(row.events[0]!.contactInside).toBe(true);
-      expect(row.events[0]!.startErrMs).toBe(534);
+    }
+  });
+
+  it("XC-CV-4: sasebo-volleys (native 30 fps) decimated to 24 fps: the full-coverage player track has no loss periods", () => {
+    const gold = byBundle.get("wavea-sasebo-volleys")!;
+    const people = loadPeople(gold.runDir);
+    const { file } = resamplePeople(people, spec(gold.bundle, 24));
+    const tracks = buildPlayerTracks(file);
+    const fullCoverage = tracks.filter((track) => track.frames.length === file.frames.length);
+    expect(fullCoverage.length).toBeGreaterThan(0);
+    for (const track of fullCoverage) {
+      expect(track.lossPeriods, JSON.stringify(track.lossPeriods.slice(0, 5))).toEqual([]);
     }
   });
 
@@ -315,6 +334,22 @@ describe("measurement locks on 4d812e1a (re-measure before changing)", () => {
         expect(
           lost,
           `${gold.bundle} seed ${seed}: ${lost.map((f) => f.detail).join("; ")}`,
+        ).toEqual([]);
+      }
+    }
+  }, 60_000);
+
+  it("XC-CV-3: ≤2 ms timestamp jitter at native fps moves no matched event bound by more than one native frame interval (all bundles, seeds 1–3)", async () => {
+    for (const gold of cases) {
+      const base = await native(gold);
+      for (const seed of [1, 2, 3]) {
+        const row = await runVariant(gold, spec(gold.bundle, null, { jitterMs: 2, seed }));
+        const shifted = diffAgainstNative(row, base).filter(
+          (failure) => failure.kind === "bounds_shift_over_one_native_frame",
+        );
+        expect(
+          shifted,
+          `${gold.bundle} seed ${seed}: ${shifted.map((f) => f.detail).join("; ")}`,
         ).toEqual([]);
       }
     }

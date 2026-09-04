@@ -484,4 +484,77 @@ describe("XC-CV-4: playerTracker loss periods follow observed cadence, not decla
     expect(at24[0]!.lossPeriods.length).toBe(1);
     expect(at12[0]!.lossPeriods.length).toBe(1);
   });
+
+  /** 30 fps capture decimated to 24 fps by dropping every 5th frame (the
+   * fps-temporal harness's real, non-synthetic decimation; also what a
+   * throttled capture emits): timestamps advance 33,33,33,33,67 ms. One
+   * person, present in every frame. Adopted from the round-1 adversary
+   * (devin/attack-fix-5ee6b8ea). */
+  function decimated30to24(frameCount: number, extraHoleAfter: number | null): PeopleFile {
+    const frames: PeopleFile["frames"] = [];
+    let sourceIndex = 0;
+    for (let index = 0; index < frameCount; index += 1) {
+      const x = 0.4 + index * 0.001;
+      frames.push({
+        t: Math.round((sourceIndex * 1000) / 30),
+        p: [
+          {
+            c: 0.9,
+            l: [
+              { n: "left_shoulder", x: x - 0.05, y: 0.4, v: 0.9 },
+              { n: "right_shoulder", x: x + 0.05, y: 0.4, v: 0.9 },
+              { n: "left_hip", x: x - 0.04, y: 0.6, v: 0.9 },
+              { n: "right_hip", x: x + 0.04, y: 0.6, v: 0.9 },
+            ],
+          },
+        ],
+      });
+      sourceIndex += index % 4 === 3 ? 2 : 1;
+      if (extraHoleAfter !== null && index === extraHoleAfter) sourceIndex += 3;
+    }
+    return {
+      schemaVersion: 1,
+      poseModelVersion: "test",
+      video: { w: 1080, h: 1920, fps: 24 },
+      frames,
+    };
+  }
+
+  it("a person detected in every frame of a 30→24 fps decimated file (33,33,33,33,67 ms cadence) has no loss periods", () => {
+    const tracks = buildPlayerTracks(decimated30to24(96, null));
+    expect(tracks.length).toBe(1);
+    expect(tracks[0]!.frames.length).toBe(96);
+    expect(tracks[0]!.lossPeriods, JSON.stringify(tracks[0]!.lossPeriods.slice(0, 5))).toEqual([]);
+  });
+
+  it("on the same irregular cadence a genuine three-frame hole (≈133 ms) is still exactly one loss period", () => {
+    const file = decimated30to24(96, 50);
+    expect(file.frames[51]!.t - file.frames[50]!.t).toBeGreaterThanOrEqual(133);
+    const tracks = buildPlayerTracks(file);
+    expect(tracks.length).toBe(1);
+    expect(tracks[0]!.lossPeriods).toEqual([
+      { fromMs: file.frames[50]!.t, toMs: file.frames[51]!.t },
+    ]);
+  });
+
+  it("a person missing from a frame in which ANOTHER person was detected is a loss period even when the stamp gap looks like cadence", () => {
+    const file = decimated30to24(96, null);
+    // Replace the sole person in frame 41 by a far-away second person and keep
+    // the frame: the track skips a file frame — a real loss — although the
+    // 40→42 stamp gap (66 ms) equals the cadence's own long interval.
+    expect(file.frames[42]!.t - file.frames[40]!.t).toBeLessThanOrEqual(67);
+    const other = file.frames[41]!.p[0]!;
+    file.frames[41]!.p = [
+      {
+        c: 0.9,
+        l: other.l.map((joint) => ({ ...joint, x: joint.x + 0.4 })),
+      },
+    ];
+    const tracks = buildPlayerTracks(file);
+    const main = tracks.find((track) => track.frames.length === 95);
+    expect(main).toBeDefined();
+    expect(main!.lossPeriods.length).toBe(1);
+    expect(main!.lossPeriods[0]!.fromMs).toBe(file.frames[40]!.t);
+    expect(main!.lossPeriods[0]!.toMs).toBe(file.frames[42]!.t);
+  });
 });

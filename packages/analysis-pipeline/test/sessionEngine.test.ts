@@ -6,6 +6,7 @@ import {
   BOUND_STABILITY_MS,
   SESSION_COMPLETION,
   SessionEventEngine,
+  proposeStrokeEventsV2,
   type SessionStrokeEvent,
   type SpeedSample,
 } from "../src/sessionEngine.js";
@@ -159,5 +160,168 @@ describe("SessionEventEngine — D3-06 append-only outcome hardening", () => {
     expect(() => engine.markEvent(eventId, "pending")).toThrow(/cannot revert/);
     expect(engine.eventState(eventId)).toBe("pending");
     expect(engine.eventState("E99")).toBeNull();
+  });
+});
+
+/** Deterministic PRNG (mulberry32, same generator as the swing-lab harness). */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * XC-CV-3 streaming/batch parity under timestamp jitter and cadence change
+ * (adopted from the round-1 adversary, devin/attack-fix-5ee6b8ea).
+ *
+ * §EVENT IDENTITY: the live engine runs the canonical proposer over every
+ * growing PREFIX of the session, so any statistic the proposer takes over the
+ * WHOLE series (a global cadence estimate, a global de-jitter decision) makes
+ * a prefix and the final batch series disagree about the same samples. The
+ * fixtures below are fully deterministic — no I/O.
+ */
+describe("XC-CV-3: streaming/batch parity under jitter and a mid-session cadence change", () => {
+  const BUMPS = [
+    { peakMs: 1500, height: 2.2, halfWidthMs: 140 },
+    { peakMs: 4200, height: 0.9, halfWidthMs: 180 },
+    { peakMs: 7000, height: 1.6, halfWidthMs: 120 },
+  ];
+  const trueSpeed = (t: number) =>
+    BUMPS.reduce(
+      (total, bump) =>
+        total + bump.height * Math.exp(-0.5 * ((t - bump.peakMs) / bump.halfWidthMs) ** 2),
+      0.08,
+    );
+
+  /** Wrist speed as dominantWristSpeeds / SessionMotionStream compute it:
+   * displacement over the STAMPED interval. `fpsAt(trueMs)` is the capture
+   * cadence in effect at that moment; `jitterMs` is uniform integer-ms stamp
+   * wobble (Vision delivers integer-ms stamps). */
+  function series(options: {
+    seed: number;
+    jitterMs: number;
+    fpsAt: (trueMs: number) => number;
+    jitterUntilMs?: number;
+    endMs: number;
+  }): SpeedSample[] {
+    const random = mulberry32(options.seed);
+    const out: SpeedSample[] = [];
+    let prevTrue = 0;
+    let prevStamp = 0;
+    let trueMs = 0;
+    while (trueMs <= options.endMs) {
+      const jitterActive = options.jitterUntilMs === undefined || trueMs < options.jitterUntilMs;
+      const wobble =
+        jitterActive && options.jitterMs > 0 ? (random() * 2 - 1) * options.jitterMs : 0;
+      let stamp = Math.round(trueMs + wobble);
+      if (out.length > 0 && stamp <= prevStamp) stamp = prevStamp + 1;
+      if (out.length === 0) {
+        out.push({ timestampMs: stamp, value: trueSpeed(trueMs) });
+      } else {
+        const displacement = (trueSpeed(trueMs) * (trueMs - prevTrue)) / 1000;
+        out.push({ timestampMs: stamp, value: (displacement * 1000) / (stamp - prevStamp) });
+      }
+      prevTrue = trueMs;
+      prevStamp = stamp;
+      trueMs += 1000 / options.fpsAt(trueMs);
+    }
+    return out;
+  }
+
+  const bounds = (event: { startMs: number; peakMs: number; endMs: number }) =>
+    `${Math.round(event.startMs)}/${Math.round(event.peakMs)}/${Math.round(event.endMs)}`;
+
+  function batch(speeds: ReadonlyArray<SpeedSample>): string[] {
+    return proposeStrokeEventsV2({
+      paddleSpeeds: null,
+      wristSpeeds: speeds,
+      clipStartMs: speeds[0]!.timestampMs,
+      clipEndMs: speeds[speeds.length - 1]!.timestampMs,
+    }).events.map(bounds);
+  }
+
+  function streamed(speeds: ReadonlyArray<SpeedSample>): string[] {
+    const engine = new SessionEventEngine({
+      sessionId: "xc-cv-3-parity",
+      captureMeta: { source: "replay" },
+    });
+    const out: string[] = [];
+    for (const sample of speeds) {
+      for (const event of engine.pushWristSample(sample)) out.push(bounds(event.proposal));
+    }
+    for (const event of engine.flush()) out.push(bounds(event.proposal));
+    return out;
+  }
+
+  it("constant 60 fps with ±4 ms integer-ms jitter: identical bounds streamed vs batch (seeds 1–20)", () => {
+    const mismatches: string[] = [];
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const speeds = series({ seed, jitterMs: 4, fpsAt: () => 60, endMs: 9000 });
+      const b = batch(speeds);
+      const s = streamed(speeds);
+      if (b.join(" | ") !== s.join(" | ")) {
+        mismatches.push(`seed ${seed}: batch ${b.join(" | ")} ; streamed ${s.join(" | ")}`);
+      }
+    }
+    expect(mismatches, mismatches.join("\n")).toEqual([]);
+  });
+
+  it("constant 30 fps with ±4–5 ms integer-ms jitter: identical bounds streamed vs batch (seeds 1–20)", () => {
+    const mismatches: string[] = [];
+    for (const jitterMs of [4, 5]) {
+      for (let seed = 1; seed <= 20; seed += 1) {
+        const speeds = series({ seed, jitterMs, fpsAt: () => 30, endMs: 9000 });
+        const b = batch(speeds);
+        const s = streamed(speeds);
+        if (b.join(" | ") !== s.join(" | ")) {
+          mismatches.push(
+            `jitter ${jitterMs} seed ${seed}: batch ${b.join(" | ")} ; streamed ${s.join(" | ")}`,
+          );
+        }
+      }
+    }
+    expect(mismatches, mismatches.join("\n")).toEqual([]);
+  });
+
+  it("capture cadence drops 60 → 30 fps mid-session (thermal throttle): events closed BEFORE the drop equal the batch replay of the same samples (seeds 1–8)", () => {
+    const mismatches: string[] = [];
+    for (let seed = 1; seed <= 8; seed += 1) {
+      const speeds = series({
+        seed,
+        jitterMs: 2,
+        jitterUntilMs: 3000,
+        fpsAt: (t) => (t < 3000 ? 60 : 30),
+        endMs: 6000,
+      });
+      const b = batch(speeds);
+      const s = streamed(speeds);
+      if (b.join(" | ") !== s.join(" | ")) {
+        mismatches.push(`seed ${seed}: batch ${b.join(" | ")} ; streamed ${s.join(" | ")}`);
+      }
+    }
+    expect(mismatches, mismatches.join("\n")).toEqual([]);
+  });
+
+  it("capture cadence drops 60 → 30 fps mid-session with jitter on BOTH sides: identical bounds streamed vs batch (seeds 1–8)", () => {
+    const mismatches: string[] = [];
+    for (let seed = 1; seed <= 8; seed += 1) {
+      const speeds = series({
+        seed,
+        jitterMs: 2,
+        fpsAt: (t) => (t < 6000 ? 60 : 30),
+        endMs: 9000,
+      });
+      const b = batch(speeds);
+      const s = streamed(speeds);
+      if (b.join(" | ") !== s.join(" | ")) {
+        mismatches.push(`seed ${seed}: batch ${b.join(" | ")} ; streamed ${s.join(" | ")}`);
+      }
+    }
+    expect(mismatches, mismatches.join("\n")).toEqual([]);
   });
 });
