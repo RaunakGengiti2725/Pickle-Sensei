@@ -34,7 +34,8 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 PROBE_DIR="tmp_secscan_probe"
-SYNTHETIC='sb_secret_PROBE0000000000000000000000000000AAAA'
+# Assembled at runtime so this file itself never matches the rule it probes.
+SYNTHETIC="sb_secret_""PROBE0000000000000000000000000000AAAA"
 [ -n "$REPORT_DIR" ] && mkdir -p "$REPORT_DIR"
 
 cleanup() {
