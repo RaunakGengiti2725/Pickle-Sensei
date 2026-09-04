@@ -126,13 +126,38 @@ function Shimmer(props: { active: boolean }) {
   return <Animated.View pointerEvents="none" style={[styles.shimmer, style]} />;
 }
 
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Formats a YYYY-MM-DD engine day key in the device locale. The key is a
+ * calendar day, not an instant, so it is formatted as that day in UTC —
+ * never as an instant read back through the device zone, which names the
+ * neighbouring day at large offsets. Returns the key itself when it is not a
+ * valid day.
+ */
+export function formatDayKey(
+  day: string,
+  options: Pick<Intl.DateTimeFormatOptions, 'weekday' | 'month' | 'day'>,
+): string {
+  const match = DAY_KEY.exec(day);
+  if (!match) return day;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const dayOfMonth = Number(match[3]);
+  const utc = new Date(Date.UTC(year, month - 1, dayOfMonth));
+  if (
+    Number.isNaN(utc.getTime()) ||
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== dayOfMonth
+  ) {
+    return day;
+  }
+  return utc.toLocaleDateString(undefined, { ...options, timeZone: 'UTC' });
+}
+
 function formatEarnedDay(day: string): string {
-  const parsed = new Date(`${day}T12:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return day;
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDayKey(day, { month: 'short', day: 'numeric' });
 }
 
 export function AchievementsShowcase(props: {

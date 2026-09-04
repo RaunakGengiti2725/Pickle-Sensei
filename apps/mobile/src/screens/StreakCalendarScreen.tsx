@@ -22,7 +22,10 @@ import {
   type ConsistencySnapshot,
 } from '../consistency/engine';
 import { AnimatedFlame, FlameIcon } from '../consistency/FlameIcon';
-import { AchievementsShowcase } from '../consistency/AchievementsShowcase';
+import {
+  AchievementsShowcase,
+  formatDayKey,
+} from '../consistency/AchievementsShowcase';
 import {
   badgeArtFor,
   MilestoneBadge,
@@ -603,10 +606,11 @@ export function StreakCalendarScreen() {
             testID="streak-day-detail"
           >
             <Text style={[type.h3, { color: color.ink }]}>
-              {new Date(`${selectedDay}T12:00:00Z`).toLocaleDateString(
-                undefined,
-                { weekday: 'long', month: 'long', day: 'numeric' },
-              )}
+              {formatDayKey(selectedDay, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
             </Text>
             {selectedLog ? (
               selectedLog.shielded ? (
