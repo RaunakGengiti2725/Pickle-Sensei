@@ -324,10 +324,199 @@ function userScopedClient(accessToken: string): ReturnType<typeof createClient> 
   });
 }
 
-function anonAuthClient(): ReturnType<typeof createClient> {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
+// ── Supabase Auth (GoTrue) calls ─────────────────────────────────────────────
+//
+// The auth routes talk to GoTrue's REST API directly rather than through the
+// client SDK: the SDK folds every failure into one error shape (a network
+// error is status 0, a 429 looks like any other rejection) and its refresh
+// path retries 5xx/network errors with backoff for up to 30 s — longer than
+// the app waits. Here every call is ONE attempt under a deadline, and the
+// outcome separates the caller's credential (GoTrue examined it and refused —
+// the route's 401, charged to the auth-failure budget) from GoTrue's own
+// condition (rate limit, outage, unreachable — retryable, never charged, and
+// never a sign-out signal to the app).
+
+const GOTRUE_TIMEOUT_MS = 5_000;
+/** Retry-After for an upstream 429 that names no delay. */
+const GOTRUE_RATE_LIMIT_RETRY_AFTER_SECONDS = 30;
+
+type GoTrueOutcome =
+  | { kind: "ok"; body: Record<string, unknown> }
+  /** GoTrue examined the credential and refused it (invalid_grant,
+   * session_not_found, bad token, …). */
+  | { kind: "rejected"; status: number; detail: string }
+  /** GoTrue refused to look at the call at all (429). Its per-IP budget is
+   * shared by every edge isolate behind the same egress address. */
+  | { kind: "rate_limited"; retryAfterSeconds: number }
+  /** GoTrue answered 5xx, malformed, or not at all within the deadline. */
+  | { kind: "unavailable"; detail: string };
+
+type GoTrueFailure = Exclude<GoTrueOutcome, { kind: "ok" }>;
+
+function goTrueErrorDetail(status: number, body: Record<string, unknown> | null): string {
+  const code = body?.error_code ?? body?.error;
+  const message = body?.msg ?? body?.error_description;
+  return [
+    `status ${status}`,
+    typeof code === "string" ? code : null,
+    typeof message === "string" ? message : null,
+  ]
+    .filter((part) => part !== null)
+    .join(" ");
+}
+
+function retryAfterSecondsOf(header: string | null): number {
+  const seconds = Number(header);
+  return Number.isInteger(seconds) && seconds > 0 ? seconds : GOTRUE_RATE_LIMIT_RETRY_AFTER_SECONDS;
+}
+
+async function goTrue(
+  path: string,
+  init: { method: "GET" | "POST"; bearer: string; body?: Record<string, unknown> },
+): Promise<GoTrueOutcome> {
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), GOTRUE_TIMEOUT_MS);
+  let status: number;
+  let retryAfter: string | null;
+  let text: string;
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+      method: init.method,
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${init.bearer}`,
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: controller.signal,
+    });
+    status = response.status;
+    retryAfter = response.headers.get("Retry-After");
+    text = await response.text();
+  } catch (error) {
+    const detail = controller.signal.aborted
+      ? `no answer within ${GOTRUE_TIMEOUT_MS} ms`
+      : error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+    return { kind: "unavailable", detail };
+  } finally {
+    clearTimeout(deadline);
+  }
+  let body: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    body = isRecord(parsed) ? parsed : null;
+  } catch {
+    body = null;
+  }
+  if (status >= 200 && status < 300) return { kind: "ok", body: body ?? {} };
+  if (status === 429) {
+    return { kind: "rate_limited", retryAfterSeconds: retryAfterSecondsOf(retryAfter) };
+  }
+  const detail = goTrueErrorDetail(status, body);
+  if (status >= 400 && status < 500) return { kind: "rejected", status, detail };
+  return { kind: "unavailable", detail };
+}
+
+/** GoTrue rate-limited US (its per-IP budget is shared by every isolate
+ * behind this egress), so this is the fleet's condition, not the caller's
+ * credential: the same 429 + Retry-After the app already backs off on. */
+const upstreamRateLimited = (context: string, retryAfterSeconds: number): Response => {
+  console.error(`[api] ${context}: Supabase Auth rate limit, retry after ${retryAfterSeconds}s`);
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: "rate_limited",
+        message: "Too many requests. Please slow down and try again shortly.",
+      },
+    }),
+    {
+      status: 429,
+      headers: { ...JSON_SECURITY_HEADERS, "Retry-After": String(retryAfterSeconds) },
+    },
+  );
+};
+
+/** The edge answer for a failed GoTrue call. Only `rejected` is the caller's
+ * fault; the route words that 401 itself (the outer handler charges it to
+ * the auth-failure budget). The other two are ours and stay retryable. */
+function goTrueFailureResponse(
+  context: string,
+  failure: GoTrueFailure,
+  rejected: (failure: { status: number; detail: string }) => Response,
+): Response {
+  switch (failure.kind) {
+    case "rejected":
+      return rejected(failure);
+    case "rate_limited":
+      return upstreamRateLimited(context, failure.retryAfterSeconds);
+    case "unavailable":
+      return serviceUnavailable(context, failure.detail);
+  }
+}
+
+interface GoTrueUser {
+  id: string;
+  email: string | null;
+  app_metadata: Record<string, unknown>;
+}
+
+function goTrueUserOf(value: unknown): GoTrueUser | null {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id) return null;
+  return {
+    id: value.id,
+    email: typeof value.email === "string" ? value.email : null,
+    app_metadata: isRecord(value.app_metadata) ? value.app_metadata : {},
+  };
+}
+
+/** A /token grant's answer: the minted session plus the user it belongs to. */
+function goTrueSessionOf(
+  body: Record<string, unknown>,
+): { session: SupabaseSessionLike; user: GoTrueUser } | null {
+  const user = goTrueUserOf(body.user);
+  if (
+    !user ||
+    typeof body.access_token !== "string" ||
+    !body.access_token ||
+    typeof body.refresh_token !== "string" ||
+    !body.refresh_token
+  ) {
+    return null;
+  }
+  return {
+    session: {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token,
+      expires_at: typeof body.expires_at === "number" ? body.expires_at : undefined,
+      expires_in: typeof body.expires_in === "number" ? body.expires_in : undefined,
+    },
+    user,
+  };
+}
+
+/** signInWithIdToken: spend a Google/Apple ID token for a Supabase session. */
+function goTrueSignInWithIdToken(provider: "google" | "apple", idToken: string) {
+  return goTrue("/token?grant_type=id_token", {
+    method: "POST",
+    bearer: SUPABASE_ANON_KEY,
+    body: { provider, id_token: idToken },
   });
+}
+
+/** refreshSession: rotate a refresh token — one attempt, no SDK retry loop. */
+function goTrueRefreshSession(refreshToken: string) {
+  return goTrue("/token?grant_type=refresh_token", {
+    method: "POST",
+    bearer: SUPABASE_ANON_KEY,
+    body: { refresh_token: refreshToken },
+  });
+}
+
+/** getUser: verify an access token and confirm its session still exists. */
+function goTrueGetUser(accessToken: string) {
+  return goTrue("/user", { method: "GET", bearer: accessToken });
 }
 
 /** A bearer whose own `exp` has passed is dead whatever else is true of it:
@@ -448,18 +637,22 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(401, "The identity token could not be verified.");
+  const signIn = await goTrueSignInWithIdToken(provider, token);
+  if (signIn.kind !== "ok") {
+    return goTrueFailureResponse("Sign-in", signIn, () =>
+      errorJson(401, "The identity token could not be verified."),
+    );
   }
+  const minted = goTrueSessionOf(signIn.body);
+  if (!minted) return serviceUnavailable("Sign-in", "malformed session from Supabase Auth");
   return {
     authed: {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: minted.user.id,
+      email: minted.user.email,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(minted.session.access_token),
     },
-    session: signIn.data.session,
+    session: minted.session,
     providerSubject,
   };
 }
@@ -495,42 +688,50 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (cached) return cached;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
-      return errorJson(401, "The identity token could not be verified.");
+    const signIn = await goTrueSignInWithIdToken(provider, token);
+    if (signIn.kind !== "ok") {
+      return goTrueFailureResponse("Sign-in", signIn, () =>
+        errorJson(401, "The identity token could not be verified."),
+      );
     }
+    const minted = goTrueSessionOf(signIn.body);
+    if (!minted) return serviceUnavailable("Sign-in", "malformed session from Supabase Auth");
     await writeAuthCache(
       cacheKey,
       {
-        userId: signIn.data.user.id,
-        email: signIn.data.user.email ?? null,
+        userId: minted.user.id,
+        email: minted.user.email,
         provider,
-        accessToken: signIn.data.session.access_token,
+        accessToken: minted.session.access_token,
       },
       payload?.exp,
-      signIn.data.session.expires_at,
+      minted.session.expires_at,
     );
     return {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: minted.user.id,
+      email: minted.user.email,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(minted.session.access_token),
     };
   }
 
-  const verified = await anonAuthClient().auth.getUser(token);
-  if (verified.error || !verified.data.user) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+  const verified = await goTrueGetUser(token);
+  if (verified.kind !== "ok") {
+    return goTrueFailureResponse("Session verification", verified, () =>
+      errorJson(401, "The session is no longer valid. Sign in again."),
+    );
   }
-  const sessionProvider = providerOfUser(verified.data.user);
+  const user = goTrueUserOf(verified.body);
+  if (!user) return serviceUnavailable("Session verification", "malformed user from Supabase Auth");
+  const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
     return errorJson(401, "The session does not belong to a Google or Apple account.");
   }
   await writeAuthCache(
     cacheKey,
     {
-      userId: verified.data.user.id,
-      email: verified.data.user.email ?? null,
+      userId: user.id,
+      email: user.email,
       provider: sessionProvider,
       accessToken: token,
     },
@@ -538,33 +739,33 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     payload?.exp,
   );
   return {
-    id: verified.data.user.id,
-    email: verified.data.user.email ?? null,
+    id: user.id,
+    email: user.email,
     provider: sessionProvider,
     db: userScopedClient(token),
   };
 }
 
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
- * session. 401 means the refresh token was revoked or already rotated away:
- * the app must sign in again. Anything else is transient for the app. */
+ * session. 401 means GoTrue REFUSED the refresh token (revoked or already
+ * rotated away): the app must sign in again. Anything else — GoTrue rate
+ * limit, outage, unreachable — is transient for the app, which keeps its
+ * session and retries. */
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
   if (typeof refreshToken !== "string" || !refreshToken.trim()) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const refreshed = await anonAuthClient().auth.refreshSession({
-    refresh_token: refreshToken.trim(),
-  });
-  if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
-    }
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+  const refreshed = await goTrueRefreshSession(refreshToken.trim());
+  if (refreshed.kind !== "ok") {
+    return goTrueFailureResponse("Session refresh", refreshed, () =>
+      errorJson(401, "The session could not be refreshed. Sign in again."),
+    );
   }
-  return json(200, { session: sessionView(refreshed.data.session) });
+  const minted = goTrueSessionOf(refreshed.body);
+  if (!minted) return serviceUnavailable("Session refresh", "malformed session from Supabase Auth");
+  return json(200, { session: sessionView(minted.session) });
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
@@ -573,16 +774,12 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
   await cacheDel(await authCacheKey(token));
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
-    method: "POST",
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-  });
-  // 401/403/404 here mean the session is already gone — the outcome the
-  // caller wanted. Only a server-side failure is worth reporting.
-  if (!response.ok && response.status >= 500) {
-    return serviceUnavailable("Sign-out", `status ${response.status}`);
-  }
-  return noContent();
+  const revoked = await goTrue("/logout?scope=local", { method: "POST", bearer: token });
+  if (revoked.kind === "ok") return noContent();
+  // A rejected bearer (401/403/404) means the session is already gone — the
+  // outcome the caller wanted. GoTrue rate-limiting or being unavailable is
+  // reported as such, and is retryable.
+  return goTrueFailureResponse("Sign-out", revoked, noContent);
 }
 
 interface ProfileRow {
