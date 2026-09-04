@@ -88,7 +88,7 @@ export interface FrameAnalyzabilityReport {
   };
 }
 
-export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-3";
+export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-4";
 
 export const FRAME_THRESHOLDS = {
   /** Below two frames there is no motion signal at all. */
@@ -115,7 +115,7 @@ export const FRAME_THRESHOLDS = {
   overlayMinComponentLumaStd: 12,
   /** Source width/height ratio above this (or below its inverse) = no real capture device. */
   maxAspectRatio: 4,
-  /** With decoder errors present, decoding below this fraction of the declared frames = truncated/corrupt. */
+  /** Decoding below this fraction of the container-declared frames = truncated/corrupt, whether or not the decoder logged an error. */
   minDecodedFrameFraction: 0.9,
 } as const;
 
@@ -177,10 +177,12 @@ export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilit
       reasons.push("implausible_aspect_ratio");
     }
   }
-  if (stats.decode !== undefined && stats.decode.errorCount > 0) {
-    if (stats.frameCount === 0) {
+  if (stats.decode !== undefined) {
+    if (stats.decode.errorCount > 0 && stats.frameCount === 0) {
       reasons.push("undecodable_media");
     } else if (
+      // Independent of errorCount: Matroska/WebM demuxers deliver a cut-off
+      // file as a plain warning with exit 0, so the frame count is the evidence.
       stats.decode.expectedFrameCount !== null &&
       stats.decode.expectedFrameCount >= FRAME_THRESHOLDS.minFrames &&
       stats.frameCount < FRAME_THRESHOLDS.minDecodedFrameFraction * stats.decode.expectedFrameCount
