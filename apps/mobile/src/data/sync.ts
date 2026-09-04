@@ -61,9 +61,90 @@ export function toSyncPayload(
   };
 }
 
+/**
+ * A SQLite transaction belongs to the CONNECTION, not to the caller that
+ * opened it: while one `BEGIN IMMEDIATE` is open on the app's single
+ * connection (db.ts `getDb()`), a second one fails with "cannot start a
+ * transaction within a transaction" and the loser's ROLLBACK tears down the
+ * winner's work. The connection therefore has exactly ONE transaction slot,
+ * modelled below as a lease: a caller holds it from its BEGIN to its
+ * COMMIT/ROLLBACK, and on release ownership is handed directly to the
+ * longest-waiting caller (no idle gap another BEGIN could slip into).
+ * Non-transactional statements are never held up. Inside a transaction the
+ * caller receives a scoped handle; `withLocalTransaction` on that handle
+ * joins the open transaction instead of nesting a second BEGIN.
+ */
+let transactionSlotHeld = false;
+const transactionSlotWaiters: Array<() => void> = [];
+const transactionScopes = new WeakSet<LocalDb>();
+
+async function acquireTransactionSlot(): Promise<void> {
+  if (!transactionSlotHeld) {
+    transactionSlotHeld = true;
+    return;
+  }
+  await new Promise<void>(handOver => transactionSlotWaiters.push(handOver));
+}
+
+function releaseTransactionSlot(): void {
+  const next = transactionSlotWaiters.shift();
+  if (next) {
+    next();
+  } else {
+    transactionSlotHeld = false;
+  }
+}
+
+async function runTransaction<T>(
+  db: LocalDb,
+  operation: (tx: LocalDb) => Promise<T>,
+): Promise<T> {
+  const tx: LocalDb = {
+    execute: (sql, params) => db.execute(sql, params),
+    close: () => db.close(),
+  };
+  transactionScopes.add(tx);
+  await db.execute('BEGIN IMMEDIATE');
+  try {
+    const result = await operation(tx);
+    await db.execute('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await db.execute('ROLLBACK');
+    } catch {
+      // Preserve the original persistence error.
+    }
+    throw error;
+  }
+}
+
+/**
+ * Runs `operation` inside `BEGIN IMMEDIATE … COMMIT` (ROLLBACK on failure)
+ * while holding the connection's transaction slot, so two transactions can
+ * never overlap on the shared connection. Every transaction in the data layer
+ * goes through here; statements inside `operation` must use the scoped `tx`.
+ */
+export async function withLocalTransaction<T>(
+  db: LocalDb,
+  operation: (tx: LocalDb) => Promise<T>,
+): Promise<T> {
+  if (transactionScopes.has(db)) return operation(db);
+  await acquireTransactionSlot();
+  try {
+    return await runTransaction(db, operation);
+  } finally {
+    releaseTransactionSlot();
+  }
+}
+
 /** Bounded attempt budget for permanent failures; transient failures never
  * consume it (see isPermanentSyncFailure). */
 export const OUTBOX_MAX_ATTEMPTS = 8;
+
+/** Rows offered per kind per drain. Each kind gets its own window so a
+ * backlog of one kind can never hide the others. */
+const OUTBOX_WINDOW = 50;
 
 /** Server rejection code for a shot whose sessionId is not (yet) known —
  * mirrors `apply_synced_shot` / supabase/functions/api "shot.session_not_found". */
@@ -131,18 +212,68 @@ async function recordRowFailure(
   }
 }
 
+/**
+ * The rows one drain works from, read in ONE statement so the whole drain sees
+ * a single consistent view of the outbox (a row queued while the drain runs
+ * belongs to the next one). Every kind gets its own window of the
+ * `OUTBOX_WINDOW` oldest eligible rows — `row_number()` per kind group
+ * instead of one `ORDER BY id LIMIT 50`, which let 50 stuck shots starve
+ * every newer session, shot and evaluation trial for good.
+ *
+ * A shot is sendable only once its practice set exists server-side: while its
+ * `session.create` row is queued the server can only answer
+ * session_not_found, and once that row is exhausted the shot can never be
+ * accepted at all. Shots whose parent has already been refused
+ * (`attempts > 0`) are therefore excluded — they are reported through the
+ * parent's state (repository.getShotOutboxStatus) instead of holding a window
+ * slot forever — and the rest carry `pending_session_id` so the drain can
+ * offer them as soon as it creates that session itself. `json_extract` runs
+ * only behind `json_valid`, so one malformed row cannot fail the read.
+ */
+const OUTBOX_WINDOW_SQL = `SELECT id, kind, payload, attempts, pending_session_id
+  FROM (
+    SELECT id, kind, payload, attempts,
+      (SELECT CASE WHEN json_valid(parent.payload)
+                   THEN json_extract(parent.payload, '$.id') END
+         FROM outbox parent
+        WHERE parent.owner_key = outbox.owner_key
+          AND parent.kind = 'session.create'
+          AND CASE WHEN json_valid(parent.payload)
+                   THEN json_extract(parent.payload, '$.id') END
+            = CASE WHEN json_valid(outbox.payload)
+                   THEN json_extract(outbox.payload, '$.sessionId') END
+        ORDER BY parent.id DESC LIMIT 1) AS pending_session_id,
+      row_number() OVER (
+        PARTITION BY CASE WHEN kind IN ('shot.sync', 'evaluation.trial')
+                          THEN kind ELSE 'session' END
+        ORDER BY id ASC) AS kind_rank
+      FROM outbox
+     WHERE owner_key = ? AND attempts < ?
+       AND (kind <> 'shot.sync' OR NOT EXISTS (
+         SELECT 1 FROM outbox parent
+          WHERE parent.owner_key = outbox.owner_key
+            AND parent.kind = 'session.create'
+            AND parent.attempts > 0
+            AND CASE WHEN json_valid(parent.payload)
+                     THEN json_extract(parent.payload, '$.id') END
+              = CASE WHEN json_valid(outbox.payload)
+                     THEN json_extract(outbox.payload, '$.sessionId') END))
+  )
+ WHERE kind_rank <= ${OUTBOX_WINDOW}
+ ORDER BY id ASC`;
+
 export async function drainOutbox(
   db: LocalDb,
   transport: SyncTransport,
 ): Promise<{ synced: number; failed: number; remaining: number }> {
   const owner = getActiveDataOwner();
-  const { rows } = await db.execute(
-    `SELECT id, kind, payload, attempts FROM outbox
-     WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
-    [owner, OUTBOX_MAX_ATTEMPTS],
-  );
+  const { rows } = await db.execute(OUTBOX_WINDOW_SQL, [
+    owner,
+    OUTBOX_MAX_ATTEMPTS,
+  ]);
   let synced = 0;
   let failed = 0;
+  const createdSessionIds = new Set<string>();
 
   // Sessions FIRST: `apply_synced_shot` rejects a shot whose sessionId the
   // server has never seen ("shot.session_not_found"), and a practice set's
@@ -164,9 +295,10 @@ export async function drainOutbox(
       continue;
     }
     try {
-      if (r['kind'] === 'session.create')
+      if (r['kind'] === 'session.create') {
         await transport.createSession(payload);
-      else await transport.finalizeSession(String(payload['id']));
+        createdSessionIds.add(String(payload['id']));
+      } else await transport.finalizeSession(String(payload['id']));
       await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
         owner,
         r['id'],
@@ -184,7 +316,14 @@ export async function drainOutbox(
     }
   }
 
-  const shotRows = rows.filter(r => r['kind'] === 'shot.sync');
+  // A shot whose session.create row was still queued when the window was read
+  // is offered only if this drain just created that session.
+  const shotRows = rows.filter(
+    r =>
+      r['kind'] === 'shot.sync' &&
+      (r['pending_session_id'] == null ||
+        createdSessionIds.has(String(r['pending_session_id']))),
+  );
   // A row whose payload cannot become a sync request (corrupt JSON, missing
   // permit) fails alone and permanently; it never poisons the whole batch.
   const entries: Array<{
@@ -221,26 +360,17 @@ export async function drainOutbox(
       );
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
-          await db.execute('BEGIN IMMEDIATE');
-          try {
-            await db.execute(
+          await withLocalTransaction(db, async tx => {
+            await tx.execute(
               `INSERT OR REPLACE INTO sync_receipt
                (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
               [owner, entry.shotId],
             );
-            await db.execute(
+            await tx.execute(
               `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
               [owner, entry.row['id']],
             );
-            await db.execute('COMMIT');
-          } catch (error) {
-            try {
-              await db.execute('ROLLBACK');
-            } catch {
-              // Preserve the receipt/delete failure.
-            }
-            throw error;
-          }
+          });
           synced++;
           continue;
         }

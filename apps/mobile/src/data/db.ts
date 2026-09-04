@@ -91,8 +91,14 @@ const LOCAL_MIGRATIONS: string[] = [
      ON local_analysis_record (owner_key, capture_id, created_at DESC)`,
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
-  // into history, scores, trends, session summaries, or sync.
-  `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_extract(payload, '$.source') <> 'real'`,
+  // into history, scores, trends, session summaries, or sync. `json_extract`
+  // raises "malformed JSON" on a non-JSON payload, so it is only evaluated
+  // behind `json_valid`; a corrupt row is not a fixture and stays for the
+  // drain to record as failed.
+  `DELETE FROM outbox
+   WHERE kind = 'shot.sync'
+     AND CASE WHEN json_valid(payload)
+              THEN json_extract(payload, '$.source') END <> 'real'`,
   `DELETE FROM local_shot WHERE source <> 'real'`,
   `DELETE FROM local_session
    WHERE id NOT IN (SELECT DISTINCT session_id FROM local_shot WHERE session_id IS NOT NULL)
@@ -266,6 +272,11 @@ function openMigrated(): DB {
   return db;
 }
 
+/**
+ * The app's single local connection. Transactions on it must go through
+ * `withLocalTransaction` (sync.ts): SQLite allows one open transaction per
+ * connection, and that helper owns the connection's transaction slot.
+ */
 export function getDb(): LocalDb {
   if (!instance) {
     instance = openMigrated();

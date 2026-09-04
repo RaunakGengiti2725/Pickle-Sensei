@@ -8,7 +8,7 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, withLocalTransaction } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -73,24 +73,6 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
-async function inTransaction(
-  db: LocalDb,
-  operation: () => Promise<void>,
-): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
-}
-
 /** Every owner-partitioned local table. Kept in one place so account
  * deletion can never silently miss a store added later. */
 const OWNER_SCOPED_TABLES = [
@@ -128,12 +110,12 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  await withLocalTransaction(db, async tx => {
     for (const table of OWNER_SCOPED_TABLES) {
-      await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
+      await tx.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
     for (const namespace of OWNER_SCOPED_KV_NAMESPACES) {
-      await db.execute(`DELETE FROM kv WHERE key = ?`, [
+      await tx.execute(`DELETE FROM kv WHERE key = ?`, [
         `${namespace}:${owner}`,
       ]);
     }
@@ -154,8 +136,8 @@ export async function saveAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await withLocalTransaction(db, async tx => {
+    await tx.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -172,7 +154,7 @@ export async function saveAnalysis(
         JSON.stringify(analysis),
       ],
     );
-    await db.execute(
+    await tx.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'shot.sync', ?)`,
       [owner, JSON.stringify({ ...analysis, analysisPermitId })],
@@ -746,8 +728,8 @@ export async function saveSession(
   },
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await withLocalTransaction(db, async tx => {
+    await tx.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -760,7 +742,7 @@ export async function saveSession(
         session.startedAt,
       ],
     );
-    await db.execute(
+    await tx.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'session.create', ?)`,
       [owner, JSON.stringify(session)],
@@ -774,14 +756,14 @@ export async function finishSession(
   summary: Record<string, unknown>,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await withLocalTransaction(db, async tx => {
+    await tx.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?
        WHERE owner_key = ? AND id = ?`,
       [JSON.stringify(summary), owner, id],
     );
-    await db.execute(
+    await tx.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'session.finalize', ?)`,
       [owner, JSON.stringify({ id })],
@@ -850,6 +832,13 @@ export type ShotOutboxStatus =
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
  * have spent it and are excluded from every future drain (see sync.ts).
+ *
+ * A shot of a practice set is only ever accepted after its `session.create`
+ * row, so while that row is still queued the shot inherits its fate: a
+ * session the server refused for good (`session_attempts` at the budget)
+ * makes the shot exhausted too, with the session's verdict as the reason.
+ * Every `json_extract` is guarded by `json_valid` so one malformed sibling
+ * row cannot fail the read of a healthy shot.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -859,22 +848,49 @@ export async function getShotOutboxStatus(
   const { rows } = await db.execute(
     `SELECT attempts, last_error FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.id') END = ?
      ORDER BY id DESC LIMIT 1`,
     [owner, shotId],
   );
   const row = rows[0];
   if (!row) return { state: 'absent' };
   const attempts = Number(row['attempts'] ?? 0);
-  const lastError =
-    typeof row['last_error'] === 'string' && row['last_error'].length > 0
-      ? row['last_error']
-      : null;
+  const lastError = nonEmptyText(row['last_error']);
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
   }
+  const { rows: sessionRows } = await db.execute(
+    `SELECT attempts, last_error FROM outbox
+     WHERE owner_key = ? AND kind = 'session.create'
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.id') END
+         = (SELECT CASE WHEN json_valid(shot.payload)
+                        THEN json_extract(shot.payload, '$.sessionId') END
+              FROM outbox shot
+             WHERE shot.owner_key = outbox.owner_key
+               AND shot.kind = 'shot.sync'
+               AND CASE WHEN json_valid(shot.payload)
+                        THEN json_extract(shot.payload, '$.id') END = ?
+             ORDER BY shot.id DESC LIMIT 1)
+     ORDER BY id DESC LIMIT 1`,
+    [owner, shotId],
+  );
+  const sessionAttempts = Number(sessionRows[0]?.['attempts'] ?? 0);
+  if (sessionAttempts >= OUTBOX_MAX_ATTEMPTS) {
+    const sessionError = nonEmptyText(sessionRows[0]?.['last_error']);
+    return {
+      state: 'exhausted',
+      attempts: sessionAttempts,
+      lastError: sessionError ? `session.create: ${sessionError}` : lastError,
+    };
+  }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };
+}
+
+function nonEmptyText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 export async function getKv(db: LocalDb, key: string): Promise<string | null> {
