@@ -200,8 +200,10 @@ cat >"$FIX/devices.json" <<'JSON'
   "com.apple.CoreSimulator.SimRuntime.iOS-26-4":[
     {"udid":"UDID-CI-STALE-1","name":"PickleSensei-CI","state":"Shutdown","isAvailable":true,"deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro"},
     {"udid":"UDID-CI-BOOTED","name":"PickleSensei-CI","state":"Booted","isAvailable":true,"deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro"},
-    {"udid":"UDID-CI-STALE-2","name":"PickleSensei-CI","state":"Booted","isAvailable":true,"deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro"},
     {"udid":"UDID-IPAD","name":"iPad Pro 13-inch (M5)","state":"Shutdown","isAvailable":true,"deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5"}
+  ],
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-5":[
+    {"udid":"UDID-CI-STALE-2","name":"PickleSensei-CI","state":"Booted","isAvailable":true,"deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro"}
   ]
 }}
 JSON
@@ -310,10 +312,10 @@ begin_case "shell_syntax_and_embedded_python_compile"
 if bash -n "$SCRIPT"; then pass "bash -n"; else fail "bash -n failed"; fi
 # Every python program must be a quoted heredoc (python3 - <<'PY' … PY) so
 # shell quoting can never rewrite it; each body must compile on its own.
-if grep -nE "python3 -c '" "$SCRIPT" >"$FIX/inline.txt"; then
-  fail "inline python3 -c '…' programs remain (shell quoting hazard):"$'\n'"$(cat "$FIX/inline.txt")"
+if grep -nE "^[^#]*python3 -c " "$SCRIPT" >"$FIX/inline.txt"; then
+  fail "inline python3 -c programs remain (shell quoting hazard):"$'\n'"$(cat "$FIX/inline.txt")"
 else
-  pass "no inline python3 -c '…' programs"
+  pass "no inline python3 -c programs"
 fi
 set +e
 PY_REPORT="$(python3 - "$SCRIPT" <<'PY'
