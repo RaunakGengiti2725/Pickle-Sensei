@@ -80,8 +80,33 @@ const recordingDb: LocalDb = {
   },
   close() {},
 };
+let currentDb: LocalDb = recordingDb;
 function mockCurrentDb(): LocalDb {
-  return recordingDb;
+  return currentDb;
+}
+
+/**
+ * A db whose every statement is logged and whose `local_session` write fails
+ * `sessionWriteFailures` times before succeeding — the practice-set commit
+ * that runs AFTER the scored analysis is already durable.
+ */
+function sessionWriteFailingDb(sessionWriteFailures: number) {
+  const statements: Array<{ sql: string; params: unknown[] }> = [];
+  let failuresLeft = sessionWriteFailures;
+  const db: LocalDb = {
+    async execute(sql: string, params: unknown[] = []) {
+      statements.push({ sql, params });
+      if (sql.includes('INSERT OR REPLACE INTO local_session')) {
+        if (failuresLeft > 0) {
+          failuresLeft -= 1;
+          throw new Error('database is locked');
+        }
+      }
+      return { rows: [] };
+    },
+    close() {},
+  };
+  return { db, statements };
 }
 
 function freeAccess(used: number, reserved = 0): CanonicalAccessState {
@@ -248,8 +273,84 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  currentDb = recordingDb;
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+});
+
+describe('AnalyzeScreen practice-set commit after a scored run', () => {
+  const sessionWrites = (statements: Array<{ sql: string }>) =>
+    statements.filter(s =>
+      s.sql.includes('INSERT OR REPLACE INTO local_session'),
+    );
+  const detachWrites = (
+    statements: Array<{ sql: string; params: unknown[] }>,
+  ) =>
+    statements.filter(
+      s =>
+        /UPDATE local_shot\s+SET session_id = NULL/.test(s.sql) ||
+        (s.sql.includes('UPDATE outbox') &&
+          s.sql.includes("'shot.sync'") &&
+          s.sql.includes('sessionId')),
+    );
+
+  it('a transient saveSession failure is retried; the set is committed and the shot keeps its session', async () => {
+    const { db, statements } = sessionWriteFailingDb(1);
+    currentDb = db;
+    mockOutcome = async () => scoredOutcome(false);
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length > 0,
+      'Result navigation',
+    );
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'analysis-1',
+    });
+    expect(sessionWrites(statements)).toHaveLength(2);
+    expect(
+      statements.some(
+        s =>
+          s.sql.includes('INSERT INTO outbox') &&
+          s.sql.includes("'session.create'"),
+      ),
+    ).toBe(true);
+    expect(detachWrites(statements)).toHaveLength(0);
+    await act(async () => renderer.unmount());
+  });
+
+  it('a saveSession failure that survives the retry detaches the shot from the never-created session instead of being swallowed', async () => {
+    const { db, statements } = sessionWriteFailingDb(Number.POSITIVE_INFINITY);
+    currentDb = db;
+    mockOutcome = async () => scoredOutcome(false);
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length > 0,
+      'Result navigation',
+    );
+    // The score is durable: the player still reaches it.
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'analysis-1',
+    });
+    expect(sessionWrites(statements)).toHaveLength(2);
+    // The shot no longer references a session that will never exist — both
+    // the local row and its queued sync payload are repaired.
+    const detached = detachWrites(statements);
+    expect(detached).toHaveLength(2);
+    for (const write of detached) {
+      expect(write.params).toEqual([owner, 'analysis-1']);
+    }
+    // No kv activity stamp names a set that was never recorded.
+    expect(
+      statements.some(
+        s =>
+          s.sql.includes('INSERT OR REPLACE INTO kv') &&
+          String(s.params[0]).startsWith('practice.set:'),
+      ),
+    ).toBe(false);
+    await act(async () => renderer.unmount());
+  });
 });
 
 describe('AnalyzeScreen access re-read', () => {
