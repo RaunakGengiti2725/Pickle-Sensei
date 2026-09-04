@@ -19,10 +19,22 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   cleanup
 
   docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=pg postgres:16 >/dev/null
-  for _ in $(seq 1 30); do
-    docker exec "$CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && break
+  # The image's entrypoint first runs a bootstrap server that answers on the
+  # unix socket only, then restarts it for real; probe over TCP so we do not
+  # attach during that window.
+  ready=0
+  for _ in $(seq 1 60); do
+    if docker exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
     sleep 1
   done
+  if [ "$ready" -ne 1 ]; then
+    echo "postgres:16 container did not become ready within 60s" >&2
+    docker logs "$CONTAINER" 2>&1 | tail -20 >&2
+    exit 2
+  fi
 
   docker cp tests "$CONTAINER":/tests
   docker cp migrations "$CONTAINER":/migrations
