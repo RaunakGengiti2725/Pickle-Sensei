@@ -252,16 +252,18 @@ Deno.test({
             versionVector: { ...VERSION_VECTOR, appVersion: "a".repeat(100) },
           }),
         );
-        assertStringIncludes(tooLong, "shot.write_failed:");
-        assertStringIncludes(tooLong, "shots_text_bounds");
+        // The detail is the SQLSTATE class only (20260904000000): 23514 =
+        // check_violation (shots_text_bounds). Never sqlerrm, which would
+        // echo the client's value into the edge logs.
+        assertEquals(tooLong, "shot.write_failed:23514");
         // parseSyncShot's isMs accepts any non-negative integer
         // (index.ts:662); the RPC casts to int4.
         const tooBig = await apply(
           tx,
           shotPayload({ analysisPermitId: permitId, endMs: 2147483648 }),
         );
-        assertStringIncludes(tooBig, "shot.write_failed:");
-        assertStringIncludes(tooBig, "out of range for type integer");
+        // 22003 = numeric_value_out_of_range (int4 cast).
+        assertEquals(tooBig, "shot.write_failed:22003");
         // Nothing was written and the permit is still usable.
         const permit = await tx.unsafe(
           `select status from public.analysis_permits where id = '${permitId}'`,

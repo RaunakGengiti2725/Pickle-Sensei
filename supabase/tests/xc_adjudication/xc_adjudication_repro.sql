@@ -41,6 +41,11 @@ begin
     raise exception 'XC-SQL-1: expected the 5 MiB declared_stroke to be stored (defect); got length %', v_len;
   end if;
   raise notice 'XC-SQL-1 REPRODUCED: 5 MiB declared_stroke + 5 MiB recognized_shot_type stored in one captures row';
+exception
+  -- Either fix closes the defect: revoked client INSERT (42501) or
+  -- captures_text_bounds (23514). Both mean the row can no longer be stored.
+  when insufficient_privilege or check_violation then
+    raise exception 'XC-SQL-1: expected the 5 MiB declared_stroke to be stored (defect); insert refused with %', sqlstate;
 end $$;
 
 -- ── XC-SQL-2 (defect): apply_synced_shot() casts capturedAt inside the

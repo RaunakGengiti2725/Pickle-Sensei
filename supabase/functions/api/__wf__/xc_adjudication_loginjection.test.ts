@@ -135,7 +135,11 @@ Deno.test(
     );
 
     const writeFailed = logged.filter((line) => line.includes("shot sync write failed"));
-    assertEquals(writeFailed.length, 1, `exactly one write-failed log line; got ${JSON.stringify(logged)}`);
+    assertEquals(
+      writeFailed.length,
+      1,
+      `exactly one write-failed log line; got ${JSON.stringify(logged)}`,
+    );
     const line = writeFailed[0];
     assertEquals(line.includes("\n"), false, "no forged second log line");
     assertEquals(line.includes("\r"), false, "no carriage return");
