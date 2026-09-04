@@ -155,13 +155,21 @@ const errorJson = (status: number, message: string): Response =>
 /** 5xx responses NEVER carry internal detail (DB error strings, stack traces,
  * table names). The detail is logged server-side for operators; the client
  * gets a stable, generic, retryable message. */
-const serviceUnavailable = (context: string, detail?: unknown): Response => {
+const serviceUnavailable = (
+  context: string,
+  detail?: unknown,
+  retryAfterSeconds?: number,
+): Response => {
   console.error(`[api] ${context}:`, detail ?? "(no detail)");
-  return json(503, {
+  const response = json(503, {
     error: {
       message: `${context} is temporarily unavailable. Please try again.`,
     },
   });
+  if (retryAfterSeconds !== undefined) {
+    response.headers.set("Retry-After", String(retryAfterSeconds));
+  }
+  return response;
 };
 
 // Coded errors: the app's ApiError reads error.code (e.g. the feedback prompt
@@ -329,6 +337,186 @@ function anonAuthClient(): ReturnType<typeof createClient> {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+// ── Supabase Auth (GoTrue) gateway ──────────────────────────────────────────
+//
+// Session verification and refresh talk to GoTrue's REST API directly rather
+// than through the supabase-js auth client. The client folds every failure
+// into one `error` (an HTTP verdict, a network fault, a body it could not
+// parse, its own internal retry loop of ~25 s on a dead socket) and the
+// routes then had nothing but "failed" to hand the app — which reads a 401
+// as "the server refused your session" and signs the user out. The gateway
+// keeps the verdict typed: `refused` is the ONE outcome that may become a
+// 401 (and the one that charges the auth-failure budget); `unavailable` is
+// retryable for the app and says nothing about the credential.
+
+/** Deadline for one Auth round trip. The app gives a refresh 15 s
+ * (sessionLifecycle REQUEST_TIMEOUT_MS) and launch waits 8 s for it, so the
+ * edge answers — with a verdict or a retryable 503 — well inside that.
+ * `AUTH_UPSTREAM_TIMEOUT_MS` overrides it (positive integer, milliseconds). */
+const AUTH_UPSTREAM_TIMEOUT_MS_DEFAULT = 6_000;
+/** Retry hint on a retryable Auth answer when upstream named none. */
+const AUTH_RETRY_AFTER_SECONDS = 2;
+/** GoTrue statuses that are a verdict on the credential itself: bad/expired
+ * JWT (401), session or user gone / banned (403), refresh token not found or
+ * already rotated (400 invalid_grant). Everything else is the service, not
+ * the credential. */
+const AUTH_REFUSAL_STATUSES: ReadonlySet<number> = new Set([400, 401, 403]);
+
+function authUpstreamTimeoutMs(): number {
+  const configured = Number(Deno.env.get("AUTH_UPSTREAM_TIMEOUT_MS"));
+  return Number.isInteger(configured) && configured > 0
+    ? configured
+    : AUTH_UPSTREAM_TIMEOUT_MS_DEFAULT;
+}
+
+type AuthVerdict<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "refused"; status: number; detail: string }
+  | { kind: "unavailable"; detail: string; retryAfterSeconds: number };
+
+interface AuthUserLike {
+  id: string;
+  email?: string | null;
+  app_metadata?: Record<string, unknown>;
+}
+
+function authUserOf(payload: unknown): AuthUserLike | null {
+  if (!isRecord(payload) || typeof payload.id !== "string" || !payload.id) return null;
+  return {
+    id: payload.id,
+    email: typeof payload.email === "string" ? payload.email : null,
+    app_metadata: isRecord(payload.app_metadata) ? payload.app_metadata : undefined,
+  };
+}
+
+function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUserLike }) | null {
+  if (!isRecord(payload)) return null;
+  const user = authUserOf(payload.user);
+  if (
+    !user ||
+    typeof payload.access_token !== "string" ||
+    !payload.access_token ||
+    typeof payload.refresh_token !== "string" ||
+    !payload.refresh_token
+  ) {
+    return null;
+  }
+  return {
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+    expires_at: typeof payload.expires_at === "number" ? payload.expires_at : undefined,
+    expires_in: typeof payload.expires_in === "number" ? payload.expires_in : undefined,
+    user,
+  };
+}
+
+/** GoTrue error bodies come as `{code, error_code, msg}` or
+ * `{error, error_description}`; keep a short operator-facing summary. */
+function authErrorDetail(status: number, body: unknown): string {
+  if (isRecord(body)) {
+    const code = [body.error_code, body.error, body.code].find(
+      (candidate) => typeof candidate === "string" && candidate,
+    );
+    const message = [body.msg, body.error_description, body.message].find(
+      (candidate) => typeof candidate === "string" && candidate,
+    );
+    return `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`.slice(0, 200);
+  }
+  return `HTTP ${status}${typeof body === "string" && body ? " (non-JSON body)" : ""}`;
+}
+
+function retryAfterOf(header: string | null): number {
+  const seconds = Number(header);
+  return Number.isInteger(seconds) && seconds > 0 ? seconds : AUTH_RETRY_AFTER_SECONDS;
+}
+
+/** One bounded GoTrue call. `parse` turns a 2xx JSON body into the value the
+ * caller needs; a 2xx it cannot read is an outage (a gateway page, a
+ * half-written answer), never a verdict on the credential. */
+async function authRequest<T>(
+  path: string,
+  init: { method: "GET" | "POST"; bearer?: string; body?: Record<string, unknown> },
+  parse: (payload: unknown) => T | null,
+): Promise<AuthVerdict<T>> {
+  const headers: Record<string, string> = { apikey: SUPABASE_ANON_KEY, Accept: "application/json" };
+  if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
+  if (init.body) headers["Content-Type"] = "application/json";
+  const timeoutMs = authUpstreamTimeoutMs();
+  const controller = new AbortController();
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    deadlineTimer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`no answer within ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  let answer: { status: number; retryAfter: string | null; text: string };
+  try {
+    answer = await Promise.race([
+      (async () => {
+        const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+          method: init.method,
+          headers,
+          body: init.body ? JSON.stringify(init.body) : undefined,
+          signal: controller.signal,
+        });
+        return {
+          status: response.status,
+          retryAfter: response.headers.get("Retry-After"),
+          text: await response.text(),
+        };
+      })(),
+      deadline,
+    ]);
+  } catch (error) {
+    return {
+      kind: "unavailable",
+      detail: `Supabase Auth unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+    };
+  } finally {
+    clearTimeout(deadlineTimer);
+  }
+  let body: unknown = answer.text;
+  try {
+    body = JSON.parse(answer.text);
+  } catch {
+    // Non-JSON body: a verdict status still stands; a 2xx is malformed below.
+  }
+  if (AUTH_REFUSAL_STATUSES.has(answer.status)) {
+    return { kind: "refused", status: answer.status, detail: authErrorDetail(answer.status, body) };
+  }
+  if (answer.status >= 200 && answer.status < 300) {
+    const value = parse(body);
+    if (value !== null) return { kind: "ok", value };
+    return {
+      kind: "unavailable",
+      detail: `Supabase Auth answered HTTP ${answer.status} without a usable body`,
+      retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+    };
+  }
+  return {
+    kind: "unavailable",
+    detail: `Supabase Auth answered ${authErrorDetail(answer.status, body)}`,
+    retryAfterSeconds: retryAfterOf(answer.retryAfter),
+  };
+}
+
+/** GET /auth/v1/user — the user behind a Supabase access token, which also
+ * fails (refused) once the session was logged out or the account deleted. */
+const verifyAccessToken = (accessToken: string): Promise<AuthVerdict<AuthUserLike>> =>
+  authRequest("/user", { method: "GET", bearer: accessToken }, authUserOf);
+
+/** POST /auth/v1/token?grant_type=refresh_token — rotate a refresh token. */
+const rotateRefreshToken = (
+  refreshToken: string,
+): Promise<AuthVerdict<SupabaseSessionLike & { user: AuthUserLike }>> =>
+  authRequest(
+    "/token?grant_type=refresh_token",
+    { method: "POST", body: { refresh_token: refreshToken } },
+    authSessionOf,
+  );
 
 /** A bearer whose own `exp` has passed is dead whatever else is true of it:
  * refuse it before the auth cache or Supabase Auth is consulted (a cached
@@ -518,19 +706,23 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     };
   }
 
-  const verified = await anonAuthClient().auth.getUser(token);
-  if (verified.error || !verified.data.user) {
+  const verified = await verifyAccessToken(token);
+  if (verified.kind === "unavailable") {
+    return serviceUnavailable("Session verification", verified.detail, verified.retryAfterSeconds);
+  }
+  if (verified.kind === "refused") {
     return errorJson(401, "The session is no longer valid. Sign in again.");
   }
-  const sessionProvider = providerOfUser(verified.data.user);
+  const user = verified.value;
+  const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
     return errorJson(401, "The session does not belong to a Google or Apple account.");
   }
   await writeAuthCache(
     cacheKey,
     {
-      userId: verified.data.user.id,
-      email: verified.data.user.email ?? null,
+      userId: user.id,
+      email: user.email ?? null,
       provider: sessionProvider,
       accessToken: token,
     },
@@ -538,33 +730,32 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     payload?.exp,
   );
   return {
-    id: verified.data.user.id,
-    email: verified.data.user.email ?? null,
+    id: user.id,
+    email: user.email ?? null,
     provider: sessionProvider,
     db: userScopedClient(token),
   };
 }
 
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
- * session. 401 means the refresh token was revoked or already rotated away:
- * the app must sign in again. Anything else is transient for the app. */
+ * session. 401 means Supabase Auth REFUSED the refresh token (revoked or
+ * already rotated away): the app must sign in again. Anything else — Auth
+ * down, rate-limiting us, unreachable, answering nonsense — is 503 with a
+ * Retry-After, and the app keeps its session and tries again. */
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
   if (typeof refreshToken !== "string" || !refreshToken.trim()) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const refreshed = await anonAuthClient().auth.refreshSession({
-    refresh_token: refreshToken.trim(),
-  });
-  if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
-    }
+  const rotated = await rotateRefreshToken(refreshToken.trim());
+  if (rotated.kind === "unavailable") {
+    return serviceUnavailable("Session refresh", rotated.detail, rotated.retryAfterSeconds);
+  }
+  if (rotated.kind === "refused") {
     return errorJson(401, "The session could not be refreshed. Sign in again.");
   }
-  return json(200, { session: sessionView(refreshed.data.session) });
+  return json(200, { session: sessionView(rotated.value) });
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:

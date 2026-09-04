@@ -60,14 +60,18 @@ async function withAuthUpstream<T>(upstream: Upstream, run: () => Promise<T>): P
   }
 }
 
-const onUserEndpoint = (respond: () => Promise<Response> | Response): Upstream => (request) =>
-  request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`) ? respond() : null;
+const onUserEndpoint =
+  (respond: () => Promise<Response> | Response): Upstream =>
+  (request) =>
+    request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`) ? respond() : null;
 
-const onRefreshEndpoint = (respond: () => Promise<Response> | Response): Upstream => (request) =>
-  request.url.startsWith(`${SUPABASE_URL}/auth/v1/token`) &&
+const onRefreshEndpoint =
+  (respond: () => Promise<Response> | Response): Upstream =>
+  (request) =>
+    request.url.startsWith(`${SUPABASE_URL}/auth/v1/token`) &&
     request.url.includes("grant_type=refresh_token")
-    ? respond()
-    : null;
+      ? respond()
+      : null;
 
 async function getMe(
   handler: (request: Request) => Promise<Response>,
@@ -119,7 +123,7 @@ Deno.test(
         jsonResponse(401, {
           code: 401,
           msg: "invalid JWT: unable to parse or verify signature",
-        })
+        }),
       ),
       async () => {
         for (let i = 0; i < 31; i += 1) {
@@ -128,7 +132,8 @@ Deno.test(
           if (i === 30) {
             const retryAfter = Number(response.headers.get("Retry-After"));
             assert(
-              Number.isInteger(retryAfter) && retryAfter >= 1 &&
+              Number.isInteger(retryAfter) &&
+                retryAfter >= 1 &&
                 retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
               `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
             );
@@ -156,9 +161,8 @@ Deno.test(
       () => jsonResponse(200, { ok: true }),
     ];
     for (const [index, respond] of outages.entries()) {
-      const response = await withAuthUpstream(
-        onUserEndpoint(respond),
-        () => getMe(h.handler, ip, supabaseBearer(`outage-${index}`)),
+      const response = await withAuthUpstream(onUserEndpoint(respond), () =>
+        getMe(h.handler, ip, supabaseBearer(`outage-${index}`)),
       );
       assertEquals(response.status, 503, `outage ${index} must be retryable`);
     }
@@ -194,7 +198,7 @@ Deno.test(
         jsonResponse(400, {
           error: "invalid_grant",
           error_description: "Invalid Refresh Token: Refresh Token Not Found",
-        })
+        }),
       ),
       () => postRefresh(h.handler, ip),
     );
