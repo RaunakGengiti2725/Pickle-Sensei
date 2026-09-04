@@ -11,10 +11,18 @@ without torch/numpy.
 ffmpeg CLI semantics relied on here: `-ss`/`-to` input options are expressed
 relative to the stream start (ffmpeg adds the input start_time), and the first
 frame emitted after a seek is the first frame whose pts >= target.
+
+Legacy relative clock: labels written before this module (paddle-distill-v0.1,
+see its `clockCaveat`) put the first frame at tMs=0 even when the container
+start_time is nonzero, which the strict inversion names as frame -1.
+`frame_index_for_labelled_t_ms` tolerates exactly that — a label at most ONE
+frame period before the stream start is frame 0 and the caller warns once per
+clip — while anything earlier still raises.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import subprocess
@@ -22,6 +30,18 @@ import threading
 from typing import Callable, NamedTuple
 
 SEEK_EPS = 1e-6
+# A label may sit this many frame periods before the stream start and still
+# name frame 0 (the legacy relative clock's first frame). The epsilon absorbs
+# ffprobe's microsecond start_time rounding (33.367 ms vs 1000/29.97).
+LEGACY_PRE_START_TOLERANCE_FRAMES = 1.0
+LEGACY_PRE_START_EPS_FRAMES = 1e-3
+# ffmpeg exits 0 for truncated/partial media and only reports it on stderr.
+CORRUPT_MEDIA_MARKERS = ("partial file", "Invalid data", "Packet corrupt", "Error while decoding")
+STDERR_TAIL_CHARS = 400
+
+
+class LegacyClockWarning(UserWarning):
+    """A label timestamp before the stream start was mapped to frame 0."""
 
 
 class StreamMeta(NamedTuple):
@@ -58,6 +78,32 @@ def probe_stream(video: str) -> StreamMeta:
 def frame_index_for_t_ms(t_ms: float, fps: float, start_time_ms: float = 0.0) -> int:
     """Absolute source frame k whose pts is nearest to t_ms."""
     return int(round((t_ms - start_time_ms) * fps / 1000.0))
+
+
+def pre_start_frames(t_ms: float, fps: float, start_time_ms: float = 0.0) -> float:
+    """How many frame periods t_ms lies BEFORE the stream start (<= 0: at/after it)."""
+    return (start_time_ms - t_ms) * fps / 1000.0
+
+
+def frame_index_for_labelled_t_ms(t_ms: float, fps: float, start_time_ms: float = 0.0) -> tuple[int, bool]:
+    """(absolute frame index, legacy_tolerance_used) for a LABEL timestamp.
+
+    Same arithmetic as frame_index_for_t_ms, except that a timestamp at most
+    LEGACY_PRE_START_TOLERANCE_FRAMES frame periods before the stream start
+    (the legacy relative clock's tMs=0 on a container with nonzero start_time)
+    maps to frame 0 and the flag is set so the caller can warn once per clip.
+    Raises ValueError for anything earlier: it cannot name a real frame.
+    """
+    index = frame_index_for_t_ms(t_ms, fps, start_time_ms)
+    if index >= 0:
+        return index, False
+    early = pre_start_frames(t_ms, fps, start_time_ms)
+    if early > LEGACY_PRE_START_TOLERANCE_FRAMES + LEGACY_PRE_START_EPS_FRAMES:
+        raise ValueError(
+            f"tMs {t_ms:.3f} lies {early:.3f} frame periods before the stream start "
+            f"({start_time_ms:.3f} ms); only one frame period of legacy-clock tolerance is allowed"
+        )
+    return 0, True
 
 
 def t_ms_for_frame_index(index: int, fps: float, start_time_ms: float = 0.0) -> float:
@@ -131,9 +177,10 @@ def window_to_sec(last_exclusive: int, fps: float, seek_sec: float = 0.0) -> flo
     return max((last_exclusive - 0.5) / fps, seek_sec + 0.001)
 
 
-def stderr_tail_reader(proc: subprocess.Popen) -> Callable[[], str]:
+def stderr_reader(proc: subprocess.Popen) -> Callable[[], str]:
     """Drain `proc.stderr` on a thread (a chatty decoder must not deadlock the
-    frame pipe) and return a callable giving the last ~400 chars for messages."""
+    frame pipe) and return a callable giving the whole stderr text once the
+    process has finished (scan it with corruption_marker; show stderr_tail)."""
     chunks: list[bytes] = []
     stream = proc.stderr
     assert stream is not None
@@ -146,14 +193,72 @@ def stderr_tail_reader(proc: subprocess.Popen) -> Callable[[], str]:
     worker = threading.Thread(target=pump, daemon=True)
     worker.start()
 
-    def tail() -> str:
+    def text() -> str:
         worker.join(timeout=5.0)
-        return b"".join(chunks).decode("utf-8", "replace").strip()[-400:]
+        return b"".join(chunks).decode("utf-8", "replace").strip()
 
-    return tail
+    return text
 
 
-def min_decoded_frames(expected: int, stride: int = 1) -> int:
-    """Fewest frames a complete decode may yield: ffmpeg may drop the final
-    frame of a window on a -to boundary, so allow exactly one missing frame."""
-    return math.ceil(max(expected - 1, 0) / stride)
+def stderr_tail(stderr_text: str) -> str:
+    return stderr_text[-STDERR_TAIL_CHARS:]
+
+
+def corruption_marker(stderr_text: str) -> str | None:
+    """The CORRUPT_MEDIA_MARKERS phrase ffmpeg printed, or None for a clean decode."""
+    for marker in CORRUPT_MEDIA_MARKERS:
+        if marker in stderr_text:
+            return marker
+    return None
+
+
+def check_decode_health(returncode: int, stderr_text: str, video: str) -> None:
+    """Raise RuntimeError when ffmpeg exited non-zero or reported partial /
+    corrupt media on stderr (which it does with exit status 0)."""
+    tail = stderr_tail(stderr_text)
+    if returncode != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {returncode}) for {video}: {tail}")
+    marker = corruption_marker(stderr_text)
+    if marker is not None:
+        raise RuntimeError(f"ffmpeg reported corrupt or partial media ({marker!r}) in {video}: {tail}")
+
+
+def min_decoded_frames(expected: int, stride: int = 1, *, bounded_end: bool = False) -> int:
+    """Fewest frames a complete decode of `expected` window frames may yield.
+
+    With a `-to` bound (bounded_end) ffmpeg may drop the final frame on the
+    boundary, so exactly one missing frame is tolerated. Without one the decode
+    runs to the end of the media, so every frame the probe promised must arrive:
+    a clip missing only its last packet still probes as complete.
+    """
+    tolerated = expected - 1 if bounded_end else expected
+    return math.ceil(max(tolerated, 0) / stride)
+
+
+def finite_float(text: str) -> float:
+    """argparse type: a finite float (nan/inf/1e400 are refused with exit 2)."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"must be a finite number, got {text}")
+    return value
+
+
+def positive_float(text: str) -> float:
+    value = finite_float(text)
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {text}")
+    return value
+
+
+def non_negative_float(text: str) -> float:
+    value = finite_float(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {text}")
+    return value
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {text}")
+    return value

@@ -138,10 +138,11 @@ def frame_iter(
 
     Decode completeness is enforced: the window is validated up front
     (ValueError for end <= start or start at/after the clip end) and, after
-    the pipe drains, a RuntimeError is raised if ffmpeg exited non-zero or
-    yielded fewer frames than the window implies (truncated/partial media,
-    which ffmpeg reports on stderr but exits 0 for). `duration_ms` is probed
-    when the caller does not pass it.
+    the pipe drains, a RuntimeError is raised if ffmpeg exited non-zero,
+    reported partial/corrupt media on stderr (it exits 0 for that), or yielded
+    fewer frames than the window implies — every probed frame for a whole-clip
+    decode (no `-to`), one boundary frame tolerated when end_ms bounds it.
+    `duration_ms` is probed when the caller does not pass it.
 
     Default path: skipped frames are dropped inside ffmpeg (`select`), so only
     needed frames are rgb24-converted and piped; with `decode_size`, frames
@@ -152,7 +153,7 @@ def frame_iter(
     if duration_ms is None:
         duration_ms = ffprobe_meta(video)[3]
     first_index, last_exclusive = frame_clock.window_frame_range(start_ms, end_ms, fps, start_time_ms, duration_ms)
-    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index, stride)
+    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index, stride, bounded_end=end_ms > 0)
     seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
@@ -182,7 +183,7 @@ def frame_iter(
     # would otherwise consume queued serve-mode request lines off the shared
     # protocol stdin (losing the request and hanging its client).
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
-    stderr_tail = frame_clock.stderr_tail_reader(proc)
+    stderr_reader = frame_clock.stderr_reader(proc)
     frame_bytes = out_w * out_h * 3
     index = 0
     yielded = 0
@@ -214,17 +215,16 @@ def frame_iter(
             proc.kill()
         proc.stdout.close()
         proc.wait()
-    stderr_text = stderr_tail()
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}: {stderr_text}")
+    stderr_text = stderr_reader()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, video)
     if yielded < min_frames:
         raise RuntimeError(
             f"ffmpeg decoded {yielded} frames of window [{start_ms:.1f}, {end_ms:.1f}) ms in {video} "
             f"but the probed stream implies at least {min_frames} (frames {first_index}..{last_exclusive - 1}, "
-            f"stride {stride}) — truncated or partial media? ffmpeg stderr: {stderr_text}"
+            f"stride {stride}) — truncated or partial media? ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
         )
     if stderr_text:
-        print(f"ffmpeg: {stderr_text}", file=sys.stderr)
+        print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
 
 def load_model() -> tuple[object, object, float]:
@@ -403,7 +403,7 @@ def run_window(
         },
         "frames": frames_out,
     }
-    Path(out).write_text(json.dumps(payload))
+    Path(out).write_text(json.dumps(payload, allow_nan=False))
     return payload
 
 
@@ -461,7 +461,7 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
     # stdin=DEVNULL: see decode path above — never let ffmpeg read the
     # serve-mode protocol stdin.
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
-    stderr_tail = frame_clock.stderr_tail_reader(proc)
+    stderr_reader = frame_clock.stderr_reader(proc)
     frame_bytes = width * height * 3
     assert proc.stdout is not None
     position = 0
@@ -479,17 +479,16 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
             proc.kill()
         proc.stdout.close()
         proc.wait()
-    stderr_text = stderr_tail()
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}: {stderr_text}")
+    stderr_text = stderr_reader()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, video)
     if position < len(wanted):
         raise RuntimeError(
             f"ffmpeg decoded {position} of {len(wanted)} requested frames from {video}; "
             f"frames {wanted[position:]} are missing (past the end of the media, or truncated file). "
-            f"ffmpeg stderr: {stderr_text}"
+            f"ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
         )
     if stderr_text:
-        print(f"ffmpeg: {stderr_text}", file=sys.stderr)
+        print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
 
 def run_crops(
@@ -596,7 +595,7 @@ def run_crops(
         },
         "frames": frames_out,
     }
-    Path(out).write_text(json.dumps(payload))
+    Path(out).write_text(json.dumps(payload, allow_nan=False))
     return payload
 
 
@@ -678,10 +677,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=False)
     parser.add_argument("--out", required=False)
-    parser.add_argument("--start-ms", type=float, default=0)
-    parser.add_argument("--end-ms", type=float, default=0)
-    parser.add_argument("--stride", type=int, default=1)
-    parser.add_argument("--floor", type=float, default=0.08)
+    parser.add_argument("--start-ms", type=frame_clock.non_negative_float, default=0)
+    parser.add_argument("--end-ms", type=frame_clock.non_negative_float, default=0)
+    parser.add_argument("--stride", type=frame_clock.positive_int, default=1)
+    parser.add_argument("--floor", type=frame_clock.non_negative_float, default=0.08)
     parser.add_argument(
         "--roi",
         default=None,

@@ -21,10 +21,13 @@ detect_paddle.frame_iter stamps on paddle detections (frame_clock.py), so the
 TypeScript tracker's 60 ms association gate is not eaten by container
 start_time or a non-frame-aligned `-ss`.
 
-Exit codes: 2 for invalid arguments (rejected by argparse before ffmpeg is
-spawned); 1 for windows outside the clip, ffmpeg errors or truncated/partial
-media (fewer frames decoded than the window implies). The artifact is only
-written after a complete, successful decode.
+Exit codes: 2 for invalid arguments (non-finite or out-of-range numbers are
+rejected by argparse before ffmpeg is spawned); 1 for windows outside the clip,
+ffmpeg errors or truncated/partial media (ffmpeg stderr reports it, or fewer
+frames decode than the probe implies — exactly the probed count for a
+whole-clip decode, one frame of `-to` boundary tolerance with --end-ms). The
+artifact is only written after a complete, successful decode and is strict
+JSON (no NaN/Infinity literals).
 """
 
 from __future__ import annotations
@@ -71,14 +74,16 @@ def gray_frames(
     Seeks land exactly on frame k = ceil((start - start_time) * fps / 1000)
     (detect_paddle.plan_window_seek arithmetic) and every yielded frame is
     labelled with its own absolute pts. Raises ValueError for windows that
-    cannot contain a frame and RuntimeError when ffmpeg fails or decodes fewer
-    frames than the window implies (truncated / partial media).
+    cannot contain a frame and RuntimeError when ffmpeg fails, reports
+    partial/corrupt media, or decodes fewer frames than the window implies
+    (every probed frame without --end-ms; one `-to` boundary frame tolerated
+    with it).
     """
     if fps is None:
         meta = frame_clock.probe_stream(video)
         fps, start_time_ms, duration_ms = meta.fps, meta.start_time_ms, meta.duration_ms
     first_index, last_exclusive = frame_clock.window_frame_range(start_ms, end_ms, fps, start_time_ms, duration_ms)
-    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index)
+    min_frames = frame_clock.min_decoded_frames(last_exclusive - first_index, bounded_end=end_ms > 0)
     seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
@@ -88,7 +93,7 @@ def gray_frames(
     args += ["-i", video, "-vf", f"scale={out_w}:{out_h}", "-f", "rawvideo",
              "-pix_fmt", "gray", "-"]
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
-    stderr_tail = frame_clock.stderr_tail_reader(proc)
+    stderr_reader = frame_clock.stderr_reader(proc)
     size = out_w * out_h
     assert proc.stdout is not None
     piped = 0
@@ -108,17 +113,16 @@ def gray_frames(
             proc.kill()
         proc.stdout.close()
         proc.wait()
-    stderr_text = stderr_tail()
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}: {stderr_text}")
+    stderr_text = stderr_reader()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, video)
     if piped < min_frames:
         raise RuntimeError(
             f"ffmpeg decoded {piped} frames of window [{start_ms:.1f}, {end_ms:.1f}) ms in {video} "
             f"but the probed stream implies at least {min_frames} (frames {first_index}..{last_exclusive - 1}) "
-            f"— truncated or partial media? ffmpeg stderr: {stderr_text}"
+            f"— truncated or partial media? ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
         )
     if stderr_text:
-        print(f"ffmpeg: {stderr_text}", file=sys.stderr)
+        print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
 
 def select_candidates(candidates: list[dict], max_per_frame: int) -> list[dict]:
@@ -138,39 +142,19 @@ def select_candidates(candidates: list[dict], max_per_frame: int) -> list[dict]:
     return big_pool + small_pool
 
 
-def positive_float(text: str) -> float:
-    value = float(text)
-    if not value > 0:
-        raise argparse.ArgumentTypeError(f"must be > 0, got {text}")
-    return value
-
-
-def positive_int(text: str) -> int:
-    value = int(text)
-    if value <= 0:
-        raise argparse.ArgumentTypeError(f"must be >= 1, got {text}")
-    return value
-
-
-def non_negative_float(text: str) -> float:
-    value = float(text)
-    if value < 0:
-        raise argparse.ArgumentTypeError(f"must be >= 0, got {text}")
-    return value
-
-
 def build_parser() -> argparse.ArgumentParser:
+    # Numeric types are the shared finite validators: nan/inf/1e400 exit 2 here.
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--start-ms", type=non_negative_float, default=0)
-    parser.add_argument("--end-ms", type=non_negative_float, default=0, help="0 = to the end of the clip")
-    parser.add_argument("--scale", type=positive_float, default=0.5)
-    parser.add_argument("--max-per-frame", type=positive_int, default=40)
+    parser.add_argument("--start-ms", type=frame_clock.non_negative_float, default=0)
+    parser.add_argument("--end-ms", type=frame_clock.non_negative_float, default=0, help="0 = to the end of the clip")
+    parser.add_argument("--scale", type=frame_clock.positive_float, default=0.5)
+    parser.add_argument("--max-per-frame", type=frame_clock.positive_int, default=40)
     # Area bounds are in DOWNSCALED pixels; ball ≈ 5–15 px diameter at 0.5×1080p,
     # motion-blur streaks stretch that; players/paddles are far larger.
-    parser.add_argument("--min-area", type=positive_int, default=3)
-    parser.add_argument("--max-area", type=positive_int, default=700)
+    parser.add_argument("--min-area", type=frame_clock.positive_int, default=3)
+    parser.add_argument("--max-area", type=frame_clock.positive_int, default=700)
     return parser
 
 
@@ -234,7 +218,7 @@ def main() -> None:
         },
         "frames": frames_out,
     }
-    Path(args.out).write_text(json.dumps(payload))
+    Path(args.out).write_text(json.dumps(payload, allow_nan=False))
     mean_candidates = (
         sum(len(f["candidates"]) for f in frames_out) / total_frames if frames_out else 0
     )
