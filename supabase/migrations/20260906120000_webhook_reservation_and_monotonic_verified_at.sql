@@ -26,8 +26,10 @@
 --   affected → the PostgREST upsert reports no representation, which the
 --   edge function logs as superseded). Equal timestamps are an idempotent
 --   replay and newer ones win — last-writer-wins by verified_at, not by
---   arrival. The edge function takes verified_at BEFORE its RevenueCat
---   round trip so the timestamp orders the verdicts, not the responses.
+--   arrival. The edge function stamps verified_at from RevenueCat's own
+--   request_date_ms (one server clock across isolates), falling back to its
+--   local clock read BEFORE the round trip, so the timestamp orders the
+--   verdicts, not the responses.
 --
 -- Grants are unchanged: both tables stay service-role-only for writes and
 -- webhook_events unreadable by clients (security_regression.sql E8/E9).

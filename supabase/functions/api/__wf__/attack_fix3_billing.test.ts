@@ -70,7 +70,7 @@ Deno.test(
 // ── 1. concurrency ≥ 50 ──────────────────────────────────────────────────────
 
 Deno.test(
-  "ATK-1: 50 concurrent deliveries of one id → exactly 1 RC call, 1 upsert, 1×200 verified, 49×503 with Retry-After; replay is a duplicate ack",
+  "ATK-1: 50 concurrent deliveries of one id → exactly 1 RC call, 1 upsert, 1 audit row, 1×200 verified and 49×200 duplicate:true (losers wait for the owner, no 5xx); replay is a duplicate ack",
   async () => {
     const sim = await simulate();
     try {
@@ -84,18 +84,20 @@ Deno.test(
       const results = await drain(
         await Promise.all(Array.from({ length: 50 }, () => sim.h.handler(webhookRequest(event)))),
       );
-      const ok = results.filter((r) => r.status === 200);
-      const busy = results.filter((r) => r.status === 503);
-      assertEquals(ok.length, 1, "exactly one owner");
-      assertEquals(busy.length, 49);
-      assertEquals(ok[0].body, { received: true, verified: true });
       assert(
-        busy.every((r) => r.retryAfter !== null),
-        "every in-flight refusal carries Retry-After",
+        results.every((r) => r.status === 200),
+        `no 5xx in a burst: ${JSON.stringify(results.map((r) => r.status))}`,
       );
+      const owners = results.filter((r) => r.body.verified === true);
+      const duplicates = results.filter((r) => r.body.duplicate === true);
+      assertEquals(owners.length, 1, "exactly one owner");
+      assertEquals(owners[0].body, { received: true, verified: true });
+      assertEquals(duplicates.length, 49, "every loser acked only once the owner finalized");
+      assert(duplicates.every((r) => r.body.verified === undefined));
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
       assertEquals(sim.auditRows.size, 1);
+      assertEquals(sim.auditPatches(), 1, "one completion PATCH: losers never write the audit row");
       const replay = await sim.h.handler(webhookRequest(event));
       assertEquals(await replay.json(), { received: true, duplicate: true });
       assertEquals(sim.rcCalls(), 1);
@@ -230,6 +232,7 @@ Deno.test(
       assertEquals(row?.premium, lastPremium, "newest verified_at wins regardless of arrival");
       const verifiedAts = sim.h
         .callsTo(ENTITLEMENTS_URL)
+        .filter((c) => c.method === "POST")
         .map((c) => Date.parse(String((c.body as Record<string, unknown>).verified_at)));
       assertEquals(Date.parse(String(row?.verified_at)), Math.max(...verifiedAts));
       assertEquals(sim.auditRows.size, n);
@@ -536,7 +539,7 @@ Deno.test(
 // ── 5. leases / reclaim ─────────────────────────────────────────────────────
 
 Deno.test(
-  "ATK-13: two redeliveries racing on an orphaned (lease-lapsed) reservation → exactly one reclaims and verifies; the other is a retryable 503, never a false duplicate",
+  "ATK-13: redeliveries racing on an orphaned (lease-lapsed) reservation → exactly one reclaims and verifies; the others wait for it and ack duplicate:true only once the row is processed",
   async () => {
     const sim = await simulate();
     try {
@@ -561,13 +564,18 @@ Deno.test(
       const results = await drain(
         await Promise.all(Array.from({ length: 8 }, () => sim.h.handler(webhookRequest(event)))),
       );
-      const ok = results.filter((r) => r.status === 200);
-      assertEquals(ok.length, 1, JSON.stringify(results.map((r) => [r.status, r.body])));
-      assertEquals(ok[0].body, { received: true, verified: true });
-      assert(results.filter((r) => r.status === 503).length === 7);
-      assert(results.every((r) => r.body.duplicate !== true));
+      const detail = JSON.stringify(results.map((r) => [r.status, r.body]));
+      assert(
+        results.every((r) => r.status === 200),
+        detail,
+      );
+      const owners = results.filter((r) => r.body.verified === true);
+      assertEquals(owners.length, 1, detail);
+      assertEquals(owners[0].body, { received: true, verified: true });
+      assertEquals(results.filter((r) => r.body.duplicate === true).length, 7, detail);
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
+      assertEquals(sim.auditRows.size, 1);
       const row = sim.auditRows.get("atk-orphan-race");
       assert(row && typeof row.processed_at === "string");
     } finally {
@@ -577,9 +585,11 @@ Deno.test(
 );
 
 Deno.test(
-  "ATK-14: completion PATCH fails → 503; the in-lease redelivery is refused without RC traffic; once the lease lapses the reclaim re-verifies and marks the row processed",
+  "ATK-14: completion PATCH fails → 503; the in-lease redelivery waits out the bound and is refused without RC traffic; once the lease lapses the reclaim re-verifies and marks the row processed",
   async () => {
     const sim = await simulate();
+    Deno.env.set("WEBHOOK_DUPLICATE_WAIT_MS", "120");
+    Deno.env.set("WEBHOOK_DUPLICATE_POLL_MS", "20");
     try {
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
@@ -596,9 +606,12 @@ Deno.test(
       const row = sim.auditRows.get("atk-complete-fails");
       assert(row && row.processed_at === null);
 
+      const inLeaseStarted = Date.now();
       const inLease = await sim.h.handler(webhookRequest(event));
       assertEquals(inLease.status, 503);
+      assertEquals(inLease.headers.get("Retry-After"), "30");
       await inLease.text();
+      assert(Date.now() - inLeaseStarted >= 100, "the duplicate waited out the configured bound");
       assertEquals(sim.rcCalls(), 1);
 
       // lease lapses (the isolate is assumed dead by now)
@@ -614,6 +627,8 @@ Deno.test(
       );
       assert(typeof sim.auditRows.get("atk-complete-fails")?.processed_at === "string");
     } finally {
+      Deno.env.delete("WEBHOOK_DUPLICATE_WAIT_MS");
+      Deno.env.delete("WEBHOOK_DUPLICATE_POLL_MS");
       sim.restore();
     }
   },

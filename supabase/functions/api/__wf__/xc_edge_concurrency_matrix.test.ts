@@ -141,7 +141,12 @@ async function timed(
   i: number,
   op: string,
   fn: () => Promise<Response>,
-): Promise<{ status: number; body: Record<string, unknown>; row: Row }> {
+): Promise<{
+  status: number;
+  body: Record<string, unknown>;
+  row: Row;
+  retryAfter: string | null;
+}> {
   const startedAt = performance.now();
   const response = await fn();
   const body = await readJson(response);
@@ -161,7 +166,7 @@ async function timed(
     endedAt: Math.round(performance.now() * 100) / 100,
   };
   rows.push(row);
-  return { status: response.status, body, row };
+  return { status: response.status, body, row, retryAfter: response.headers.get("Retry-After") };
 }
 
 const no5xx = (rows: Row[]) => rows.filter((r) => r.status >= 500);
@@ -1347,7 +1352,7 @@ Deno.test(
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test(
-  "xc S6: duplicate RevenueCat deliveries — concurrent copies converge on RevenueCat's verdict with one audit row; a later replay short-circuits without re-verifying",
+  "xc S6: duplicate RevenueCat deliveries — the reservation winner is the ONLY verifier; every losing copy waits for it and is acked 200 duplicate:true (no 5xx), one audit row; a later replay short-circuits without re-verifying",
   async () => {
     const report = await scenario(
       "s6_duplicate_webhook_delivery",
@@ -1431,9 +1436,21 @@ Deno.test(
           });
           inv(
             invariants,
-            `round ${r}: every concurrent copy is acknowledged 200`,
-            burst.every((x) => x.status === 200),
-            JSON.stringify(histogram(burst.map((x) => x.status))),
+            `round ${r}: every concurrent copy is acknowledged 200 — exactly one verified:true, the rest duplicate:true`,
+            burst.every((x) => x.status === 200) &&
+              burst.filter((x) => x.body.verified === true).length === 1 &&
+              burst.filter((x) => x.body.duplicate === true).length === XC_BURST - 1,
+            JSON.stringify(
+              histogram(
+                burst.map((x) => `${x.status}:${x.body.duplicate ? "dup" : x.body.verified}`),
+              ),
+            ),
+          );
+          inv(
+            invariants,
+            `round ${r}: exactly ONE RevenueCat verification for ${XC_BURST} in-flight copies`,
+            rcDuring === 1,
+            `rc calls during burst=${rcDuring}`,
           );
           inv(
             invariants,
@@ -1464,12 +1481,153 @@ Deno.test(
         observations.revenuecatVerificationsDuringConcurrentBursts = concurrentVerifications;
         observations.copiesDelivered = XC_BURST * XC_ROUNDS;
         observations.note =
-          "Concurrent copies each verify against RevenueCat (the audit row is written after processing, so the seen-check cannot dedupe in-flight copies). Idempotent outcome; N verifications per N in-flight copies.";
+          "The event id is reserved in webhook_events BEFORE RevenueCat is consulted (INSERT … ON CONFLICT DO NOTHING); the single winner verifies + persists, every loser polls the reservation row and acks duplicate:true only once processed_at is set. One verification per event id, no 5xx while the winner completes within the wait bound.";
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
     for (const i of report.invariants) {
       assert(i.holds, `${i.name}: ${i.detail}`);
+    }
+  },
+);
+
+Deno.test(
+  "xc S6b: duplicate deliveries whose winner stalls past the wait bound — losers answer 503 + Retry-After (never a false duplicate, never a second verifier); the winner still finalizes and a redelivery after completion is duplicate:true",
+  async () => {
+    // The bound is injected small so the winner's RevenueCat round trip
+    // (rcDelayMs) outlasts it — the isolate-stall / lease-lapse shape.
+    const WAIT_MS = 120;
+    const STALL_MS = 450;
+    Deno.env.set("WEBHOOK_DUPLICATE_WAIT_MS", String(WAIT_MS));
+    Deno.env.set("WEBHOOK_DUPLICATE_POLL_MS", "20");
+    try {
+      const report = await scenario(
+        "s6b_duplicate_webhook_winner_stalls",
+        "xc S6b",
+        { burst: XC_BURST, rounds: XC_ROUNDS, waitMs: WAIT_MS, stallMs: STALL_MS },
+        async (h, prng, rows, invariants, inputs, observations) => {
+          const users: Array<Record<string, unknown>> = [];
+          let verifications = 0;
+          for (let r = 0; r < XC_ROUNDS; r++) {
+            const sub = prng.uuid();
+            const boot = await bootstrap(h, sub, ip(r, 0));
+            assertEquals(boot.status, 200);
+            const truthPremium = r % 2 === 1;
+            h.fake.overrides.subscriber = () =>
+              truthPremium
+                ? {
+                    entitlements: {
+                      pickle_sensei_pro: {
+                        expires_date: new Date(Date.now() + 86_400_000).toISOString(),
+                        product_identifier: "pickle_sensei_pro_monthly",
+                      },
+                    },
+                  }
+                : { entitlements: {} };
+            h.fake.overrides.rcDelayMs = () => STALL_MS;
+            const eventId = `evt-stall-${r}-${prng.uuid()}`;
+            const type = truthPremium ? "EXPIRATION" : "INITIAL_PURCHASE";
+            const rcBefore = h.fake.counters["rc.get_subscriber"] ?? 0;
+            const burst = await Promise.all(
+              Array.from({ length: XC_BURST }, (_, i) =>
+                timed(rows, r, i, "webhook.dup.stall", () =>
+                  h.handler(
+                    webhookRequest(
+                      {
+                        id: eventId,
+                        type,
+                        app_user_id: sub,
+                        product_id: "pickle_sensei_pro_monthly",
+                      },
+                      { ip: ip(r, 9) },
+                    ),
+                  ),
+                ),
+              ),
+            );
+            const rcDuring = (h.fake.counters["rc.get_subscriber"] ?? 0) - rcBefore;
+            verifications += rcDuring;
+            const winners = burst.filter((x) => x.status === 200);
+            const losers = burst.filter((x) => x.status === 503);
+            const billing = h.fake.tables.billing_entitlements.filter((b) => b.user_id === sub);
+            const audit = h.fake.tables.webhook_events.filter((e) => e.id === eventId);
+            h.fake.overrides.rcDelayMs = undefined;
+            const replay = await timed(rows, r, 0, "webhook.replay", () =>
+              h.handler(webhookRequest({ id: eventId, type, app_user_id: sub }, { ip: ip(r, 10) })),
+            );
+            const rcAfterReplay = (h.fake.counters["rc.get_subscriber"] ?? 0) - rcBefore;
+            users.push({
+              round: r,
+              user: sub,
+              eventId,
+              truthPremium,
+              rcCallsDuringBurst: rcDuring,
+              statuses: histogram(
+                burst.map((x) => `${x.status}:${x.body.duplicate ? "dup" : x.body.verified}`),
+              ),
+              loserWallMs: losers.map((x) => Math.round(x.row.endedAt - x.row.startedAt)),
+            });
+            inv(
+              invariants,
+              `round ${r}: exactly ONE copy is acknowledged (the winner, verified:true); every other copy is 503 + Retry-After`,
+              winners.length === 1 &&
+                winners[0].body.verified === true &&
+                losers.length === XC_BURST - 1 &&
+                losers.every((x) => x.retryAfter !== null) &&
+                burst.every((x) => x.body.duplicate !== true),
+              JSON.stringify(
+                histogram(
+                  burst.map((x) => `${x.status}:${x.body.duplicate ? "dup" : x.body.verified}`),
+                ),
+              ),
+            );
+            inv(
+              invariants,
+              `round ${r}: losers waited out the bound (≥ ${WAIT_MS} ms) but not the stall (< ${STALL_MS} ms) before refusing`,
+              losers.every((x) => {
+                const wall = x.row.endedAt - x.row.startedAt;
+                return wall >= WAIT_MS && wall < STALL_MS;
+              }),
+              `loser wall ms=${JSON.stringify(losers.map((x) => Math.round(x.row.endedAt - x.row.startedAt)))}`,
+            );
+            inv(
+              invariants,
+              `round ${r}: the winner is the ONLY verifier and its verdict is durable (premium=${truthPremium}, one audit row processed)`,
+              rcDuring === 1 &&
+                billing.length === 1 &&
+                Boolean(billing[0].premium) === truthPremium &&
+                audit.length === 1 &&
+                typeof audit[0].processed_at === "string",
+              `rc=${rcDuring} billing rows=${billing.length} premium=${billing[0]?.premium} audit rows=${audit.length} processed_at=${audit[0]?.processed_at}`,
+            );
+            inv(
+              invariants,
+              `round ${r}: RevenueCat's redelivery after completion → duplicate:true with NO RevenueCat call`,
+              replay.status === 200 && replay.body.duplicate === true && rcAfterReplay === rcDuring,
+              `replay=${replay.status} dup=${replay.body.duplicate} rc during burst=${rcDuring} after replay=${rcAfterReplay}`,
+            );
+          }
+          h.fake.overrides.subscriber = undefined;
+          h.fake.overrides.rcDelayMs = undefined;
+          inputs.rounds = users;
+          observations.revenuecatVerificationsDuringConcurrentBursts = verifications;
+          observations.copiesDelivered = XC_BURST * XC_ROUNDS;
+          observations.note =
+            "A loser never acks what is not durable: when the winner has not set processed_at within WEBHOOK_DUPLICATE_WAIT_MS it answers 503 + Retry-After so RevenueCat redelivers; the redelivery finds the processed row and is a duplicate. The 503s here are the contract, not a defect.";
+          inv(
+            invariants,
+            "the only 5xx are the bounded-wait refusals",
+            no5xx(rows).every((x) => x.op === "webhook.dup.stall" && x.status === 503),
+            JSON.stringify(histogram(no5xx(rows).map((x) => `${x.op}:${x.status}`))),
+          );
+        },
+      );
+      for (const i of report.invariants) {
+        assert(i.holds, `${i.name}: ${i.detail}`);
+      }
+    } finally {
+      Deno.env.delete("WEBHOOK_DUPLICATE_WAIT_MS");
+      Deno.env.delete("WEBHOOK_DUPLICATE_POLL_MS");
     }
   },
 );

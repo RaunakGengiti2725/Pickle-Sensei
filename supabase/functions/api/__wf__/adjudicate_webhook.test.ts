@@ -336,7 +336,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ADJ-B3: 5 concurrent deliveries of one id → exactly 1 RC call, 1 billing upsert, 1× verified:true and 4 retryable 503s (never 5× verified:true)",
+  "ADJ-B3: 5 concurrent deliveries of one id → exactly 1 RC call, 1 billing upsert, 1× verified:true and 4× duplicate:true acked only after the owner finalized (never 5× verified:true, no 5xx)",
   async () => {
     const sim = await simulate();
     try {
@@ -357,15 +357,16 @@ Deno.test(
       );
       const bodies = await Promise.all(responses.map((r) => r.json()));
       const statuses = responses.map((r) => r.status).sort();
-      assertEquals(statuses, [200, 503, 503, 503, 503]);
+      assertEquals(statuses, [200, 200, 200, 200, 200]);
       assertEquals(bodies.filter((b) => b.verified === true).length, 1);
-      assertEquals(bodies.filter((b) => b.duplicate === true).length, 0);
+      assertEquals(bodies.filter((b) => b.duplicate === true).length, 4);
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
+      assertEquals(sim.auditRows.size, 1, "losers never insert a second audit row");
       const row = sim.auditRows.get("adj-concurrent-1");
       assert(row && typeof row.processed_at === "string", "single processed row");
 
-      // Once processed, the retries RevenueCat issues for the 503s are duplicates.
+      // Once processed, any later redelivery is a duplicate.
       const replay = await sim.h.handler(webhookRequest(event));
       assertEquals(replay.status, 200);
       assertEquals(await replay.json(), { received: true, duplicate: true });

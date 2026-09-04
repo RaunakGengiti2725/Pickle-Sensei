@@ -18,9 +18,11 @@
 //   PATCH  …/webhook_events?…      filtered update, echoed under representation.
 //   DELETE …/webhook_events?…      filtered delete.
 //   POST   …/billing_entitlements  upsert on user_id under the trigger from
-//                                  20260905000200_webhook_reservation_and_verdict_order:
+//                                  20260906120000_webhook_reservation_and_monotonic_verified_at:
 //                                  a row whose verified_at is OLDER than the
 //                                  stored one is dropped ([]).
+//   GET    …/billing_entitlements  filters as above (the re-read after a
+//                                  dropped write).
 //
 // Faults are matched per request; `times` bounds how many requests a fault
 // eats (default 1). Every request is counted BEFORE fault evaluation, so
@@ -52,6 +54,11 @@ export interface Fault {
   times?: number;
   /** RevenueCat: answer 200 with this subscriber instead of `h.subscriber`. */
   subscriber?: Record<string, unknown>;
+  /** RevenueCat: the `request_date_ms` to answer with. Default: the moment
+   * the request ARRIVED — RevenueCat stamps when it evaluated the
+   * subscriber, so a `delayMs` models a slow answer carrying that older
+   * truth, not a later evaluation. `null` omits the field altogether. */
+  requestDateMs?: number | null;
 }
 
 export interface Sim {
@@ -206,6 +213,7 @@ export async function simulate(): Promise<Sim> {
     const fault = faults.find((f) => f.match(method, url) && (f.times ?? 1) > 0);
     if (fault) {
       fault.times = (fault.times ?? 1) - 1;
+      const requestDateMs = fault.requestDateMs === undefined ? Date.now() : fault.requestDateMs;
       if (fault.delayMs) {
         await new Promise<void>((resolve, reject) => {
           const t = setTimeout(resolve, fault.delayMs);
@@ -225,7 +233,7 @@ export async function simulate(): Promise<Sim> {
       if (fault.subscriber) {
         record(request, body);
         return jsonResponse(200, {
-          request_date_ms: Date.now(),
+          ...(requestDateMs === null ? {} : { request_date_ms: requestDateMs }),
           subscriber: fault.subscriber,
         });
       }
@@ -290,6 +298,13 @@ export async function simulate(): Promise<Sim> {
         }
         return rowsResponse(request.headers, removed, "mutate");
       }
+    }
+
+    if (path === ENTITLEMENTS_URL && method === "GET") {
+      record(request, body);
+      const filters = parseFilters(parsed);
+      const rows = [...entitlementRows.values()].filter((row) => matches(row, filters));
+      return rowsResponse(request.headers, rows, "read");
     }
 
     if (path === ENTITLEMENTS_URL && method === "POST") {

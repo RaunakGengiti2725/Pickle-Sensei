@@ -23,7 +23,7 @@ export const SUPABASE_URL = "http://supabase.xc.test";
 export const WEBHOOK_SECRET = "xc-webhook-secret";
 export const RC_URL = "https://api.revenuecat.com/v1/subscribers/";
 const ANON_KEY = "xc-anon-key";
-const SERVICE_ROLE_KEY = "xc-service-role-key";
+export const SERVICE_ROLE_KEY = "xc-service-role-key";
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -558,6 +558,9 @@ export class FakeSupabase {
       const userId = decodeURIComponent(request.url.slice(RC_URL.length));
       this.count("rc.get_subscriber");
       this.log("rc.get", `user=${userId}`);
+      // RevenueCat stamps request_date_ms when it evaluates the subscriber;
+      // the modelled latency is the answer travelling back with that truth.
+      const requestDateMs = Date.now();
       await this.latency();
       const extra = this.overrides.rcDelayMs?.(userId) ?? 0;
       if (extra > 0) await sleep(extra);
@@ -565,7 +568,7 @@ export class FakeSupabase {
         ? this.overrides.subscriber(userId)
         : { entitlements: {} };
       if (!subscriber) return new Response("upstream error", { status: 500 });
-      return jsonResponse(200, { request_date_ms: Date.now(), subscriber });
+      return jsonResponse(200, { request_date_ms: requestDateMs, subscriber });
     }
 
     // GoTrue
@@ -740,6 +743,10 @@ export class FakeSupabase {
           ? (body._array as Array<Record<string, unknown>>)
           : [body];
         const conflictCol = url.searchParams.get("on_conflict");
+        // What PostgREST's RETURNING carries: rows this statement inserted
+        // or (merge-duplicates) updated. ON CONFLICT DO NOTHING returns
+        // nothing for a row that already existed.
+        const affected: Array<Record<string, unknown>> = [];
         for (const row of incoming) {
           if (who.role === "user" && row.user_id !== undefined && row.user_id !== who.userId) {
             return jsonResponse(403, {
@@ -760,6 +767,7 @@ export class FakeSupabase {
             }
             if (prefer.includes("resolution=merge-duplicates")) {
               Object.assign(existing, row);
+              affected.push(existing);
               this.log(`rest.upsert.${table}`, `merged ${String(row[conflictCol ?? "id"])}`);
               continue;
             }
@@ -768,20 +776,25 @@ export class FakeSupabase {
               message: "duplicate key value",
             });
           }
-          this.tables[table].push({ ...row });
+          const stored = { ...row };
+          this.tables[table].push(stored);
+          affected.push(stored);
           this.log(`rest.insert.${table}`, `${String(row[conflictCol ?? "id"] ?? "")}`.trim());
         }
         return prefer.includes("return=representation")
-          ? jsonResponse(201, incoming)
+          ? jsonResponse(201, affected)
           : new Response(null, { status: 201 });
       }
       if (request.method === "PATCH") {
+        const prefer = request.headers.get("prefer") ?? "";
         const rows = this.filterRows(
           this.rlsScope(table, this.tables[table], who),
           url.searchParams,
         );
         for (const r of rows) Object.assign(r, body);
-        return new Response(null, { status: 204 });
+        return prefer.includes("return=representation")
+          ? jsonResponse(200, rows)
+          : new Response(null, { status: 204 });
       }
       if (request.method === "DELETE") {
         const rows = new Set(
