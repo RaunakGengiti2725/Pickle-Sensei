@@ -408,7 +408,10 @@ export class FakeSupabase {
       const reserved = this.reservedCount(userId);
       const remaining = 2 - Math.min(scored, 2);
       if (!premium && remaining <= reserved) {
-        this.log("rpc.reserve", `user=${userId} key=${key} → paywall_required`);
+        this.log(
+          "rpc.reserve",
+          `user=${userId} idempotency=${key} → paywall_required`,
+        );
         return [{ result: "access.paywall_required" }];
       }
       const row: PermitRow = {
@@ -422,7 +425,10 @@ export class FakeSupabase {
       this.tables.analysis_permits.push(
         row as unknown as Record<string, unknown>,
       );
-      this.log("rpc.reserve", `user=${userId} key=${key} → accepted ${row.id}`);
+      this.log(
+        "rpc.reserve",
+        `user=${userId} idempotency=${key} → accepted ${row.id}`,
+      );
       return [view(row as unknown as Record<string, unknown>)];
     });
   }

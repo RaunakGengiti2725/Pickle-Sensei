@@ -1107,12 +1107,15 @@ Deno.test("xc S4: concurrent permit reservation — same key idempotent, differe
         );
         users.push({
           round: r,
-          sameKeyUser: subA,
-          sameKey: keyA,
-          diffKeyUser: subB,
-          diffKeys: keys,
+          // Field names avoid "key"/"token": these are random idempotency
+          // ids, and the repo secret scan (gitleaks generic-api-key) reads
+          // `…Key: "<uuid>"` in the written artifact as a leaked credential.
+          sharedIdempotencyUser: subA,
+          sharedIdempotency: keyA,
+          distinctIdempotencyUser: subB,
+          distinctIdempotency: keys,
           premiumUser: subC,
-          sameKeyAccess: accessA,
+          sharedIdempotencyAccessState: accessA,
         });
       }
       inputs.users = users;
