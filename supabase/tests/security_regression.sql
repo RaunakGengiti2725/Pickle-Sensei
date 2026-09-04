@@ -27,6 +27,10 @@
 --   J. the free-rating limit follows the SIGN-IN IDENTITY across account
 --      deletion (delete → sign in again → still no free ratings), with no
 --      false positives for new identities and no client path to the ledger
+--   K. client roles hold no RLS-blind table privilege (TRUNCATE / TRIGGER /
+--      REFERENCES) on any public relation, present or future
+--   L. the analysis_permits lifecycle is one-way (reserved → finalized |
+--      released, never back) and outcome is confined to the known set
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -451,21 +455,96 @@ set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 insert into public.sessions (id, user_id, started_at)
 values ('00000000-0000-4000-8000-0000000000d2',
         '00000000-0000-4000-8000-00000000000a', now());
-insert into public.shots (
-  id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
-  overall_score, analysis_confidence, result_kind,
-  app_version, model_bundle_version, pose_model_version,
-  paddle_model_version, stroke_detector_version, phase_model_version,
-  scoring_model_version, shot_config_version
-) values (
-  '00000000-0000-4000-8000-0000000000e2',
-  '00000000-0000-4000-8000-00000000000a',
-  '00000000-0000-4000-8000-0000000000d2',
-  'drive', now(), 0, 1000,
-  5.5, 0.9, 'scored',
-  '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
-  'scoring-1', 'config-1'
-);
+-- The shot under test is created the only way a client session may create
+-- one: a reserved permit consumed by apply_synced_shot().
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000a3',
+        '00000000-0000-4000-8000-00000000000a', 'permit-e');
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e2',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000a3',
+    'sessionId', '00000000-0000-4000-8000-0000000000d2',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 5.5, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'E setup: apply_synced_shot must accept the owner sync (got %)', v;
+  end if;
+end $$;
+
+-- E0: shots are INSERT-only THROUGH apply_synced_shot(). A direct owner
+-- INSERT — PostgREST `POST /rest/v1/shots` with the user's own token — would
+-- record a scored shot with no permit, past the lifetime limit, with
+-- client-chosen score/version columns. It must be refused at the grant or
+-- guard layer, and neither the lifetime count nor access_state() may move.
+do $$
+declare before_lifetime int; before_access record; after_access record;
+begin
+  before_lifetime := public.lifetime_scored_count();
+  select * into before_access from public.access_state();
+  begin
+    insert into public.shots (
+      id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000e9',
+      '00000000-0000-4000-8000-00000000000a',
+      '00000000-0000-4000-8000-0000000000d2',
+      'drive', now(), 0, 1000,
+      10.0, 0.99, 'scored',
+      'forged', 'forged', 'forged', 'forged', 'forged', 'forged',
+      'forged', 'forged'
+    );
+    raise exception 'E0a: a direct client INSERT into shots must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000e8',
+      '00000000-0000-4000-8000-00000000000a',
+      'drive', now(), 0, 1000,
+      null, 0.2, 'low_confidence',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'E0b: a direct client INSERT of an unscored shot must be denied too';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots
+             where id in ('00000000-0000-4000-8000-0000000000e9',
+                          '00000000-0000-4000-8000-0000000000e8')) then
+    raise exception 'E0c: no directly inserted shot row may exist';
+  end if;
+  if public.lifetime_scored_count() <> before_lifetime then
+    raise exception 'E0d: lifetime_scored_count must be unchanged by the attempt (% -> %)',
+      before_lifetime, public.lifetime_scored_count();
+  end if;
+  select * into after_access from public.access_state();
+  if after_access.scored_count <> before_access.scored_count then
+    raise exception 'E0e: access_state().scored_count must be unchanged by the attempt (% -> %)',
+      before_access.scored_count, after_access.scored_count;
+  end if;
+end $$;
 
 -- E1: synced shots are fully immutable from a client session
 do $$
@@ -1319,6 +1398,354 @@ begin
         public.free_rating_identity_hash('apple', 'apple-sub-finn'))
         and scored_count = 1) <> 2 then
     raise exception 'J9: every identity of the account must carry the scored count';
+  end if;
+end $$;
+
+-- ──────── K: no RLS-blind table privileges for the client roles ─────────────
+--
+-- TRUNCATE is not subject to row-level security and fires no row-level
+-- trigger, so a TRUNCATE grant is a whole-table wipe of every user's rows —
+-- consent_records, shots, analysis_permits, billing_entitlements included —
+-- regardless of the policies above. TRIGGER lets a session attach its own
+-- functions to a table; REFERENCES lets it pin rows from elsewhere. Hosted
+-- default privileges hand all three to anon/authenticated on every new
+-- table, so the revoke (20260905000001) must cover every public relation
+-- AND the default privileges, or the next migration's table reopens it.
+
+reset role;
+
+-- K1: every public relation, for both client roles, for all three privileges
+-- (has_table_privilege follows role membership, so PUBLIC grants count too).
+do $$
+declare rel record; r text; p text; n int := 0;
+begin
+  for rel in
+    select c.relname
+    from pg_class c
+    join pg_namespace ns on ns.oid = c.relnamespace
+    where ns.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm')
+    order by c.relname
+  loop
+    n := n + 1;
+    foreach r in array array['anon', 'authenticated'] loop
+      foreach p in array array['TRUNCATE', 'TRIGGER', 'REFERENCES'] loop
+        if has_table_privilege(r, format('public.%I', rel.relname), p) then
+          raise exception 'K1: % must not hold % on public.%', r, p, rel.relname;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+  if n < 18 then
+    raise exception 'K1: expected the full public schema (>= 18 relations), saw %', n;
+  end if;
+  if (select count(*) from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee in ('anon', 'authenticated')
+        and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')) <> 0 then
+    raise exception 'K1: role_table_grants must list no TRUNCATE/TRIGGER/REFERENCES for client roles';
+  end if;
+end $$;
+
+-- K2: default privileges — a table added by a FUTURE migration inherits the
+-- same shape (the shim installs the hosted "grant all" defaults first, so
+-- this only passes if the migration altered them).
+create table public.k2_future_table_probe (id int primary key);
+do $$
+declare r text; p text;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach p in array array['TRUNCATE', 'TRIGGER', 'REFERENCES'] loop
+      if has_table_privilege(r, 'public.k2_future_table_probe', p) then
+        raise exception 'K2: default privileges still hand % to % on new tables', p, r;
+      end if;
+    end loop;
+  end loop;
+end $$;
+drop table public.k2_future_table_probe;
+
+-- K3: live denials as authenticated — TRUNCATE of the tables whose integrity
+-- rests on this (consent ledger, billing, shots, permits) and CREATE TRIGGER
+-- on shots all raise 42501.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000b';
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'consent_records', 'billing_entitlements', 'shots', 'analysis_permits',
+    'evaluation_trials', 'analysis_feedback', 'profiles', 'sessions'
+  ] loop
+    begin
+      execute format('truncate public.%I', t);
+      raise exception 'K3a: authenticated TRUNCATE of public.% must be denied', t;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+
+  execute 'create function pg_temp.k3_trg() returns trigger language plpgsql as '
+       || '$f$ begin return new; end $f$';
+  begin
+    execute 'create trigger k3_trg before insert on public.shots '
+         || 'for each row execute function pg_temp.k3_trg()';
+    raise exception 'K3b: authenticated CREATE TRIGGER on public.shots must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    execute 'create trigger k3_trg before update on public.analysis_permits '
+         || 'for each row execute function pg_temp.k3_trg()';
+    raise exception 'K3c: authenticated CREATE TRIGGER on public.analysis_permits must be denied';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- K4: anon holds none of it either (it never had a legitimate table grant).
+set local role anon;
+do $$
+begin
+  begin
+    execute 'truncate public.shots';
+    raise exception 'K4: anon TRUNCATE of public.shots must be denied';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- ──────── L: the analysis_permits lifecycle is one-way ──────────────────────
+--
+-- The client holds UPDATE (status, outcome) so the finalize route and the
+-- sync RPC can settle a permit. Without a transition guard that grant also
+-- lets PostgREST `PATCH /rest/v1/analysis_permits?id=eq.<p>` move a
+-- finalized/released permit BACK to reserved — consuming one permit twice,
+-- inflating reserved_count until reserve self-locks, and forging outcomes.
+-- 20260905000002 pins: reserved → finalized | released only, outcome from
+-- the known set and only with the terminal transition, and no edit at all
+-- to a settled permit — for every role.
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000010', 'gina@example.com',
+        '{"full_name":"Gina"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-gina', '00000000-0000-4000-8000-000000000010',
+        '{"sub":"apple-sub-gina","email":"gina@example.com"}');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000010';
+
+-- L1: reserved → finalized (by a scored sync) → reserved is rejected, the
+-- permit stays finalized, cannot be spent again, and reserved_count is
+-- unchanged by the attempt.
+do $$
+declare r record; v text; st text; before_access record; after_access record;
+begin
+  select * into r from public.reserve_analysis_permit('gina-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'L1 setup: first reserve must be accepted (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-000000000101',
+    'analysisPermitId', r.permit_id,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'L1 setup: the scored sync must be accepted (got %)', v;
+  end if;
+  select * into before_access from public.access_state();
+
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+     where id = r.permit_id;
+    raise exception 'L1a: finalized -> reserved must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  select status into st from public.analysis_permits where id = r.permit_id;
+  if st <> 'finalized' then
+    raise exception 'L1b: the permit must still be finalized (got %)', st;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-000000000102',
+    'analysisPermitId', r.permit_id,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'L1c: a settled permit must not be spendable again (got %)', v;
+  end if;
+  select * into after_access from public.access_state();
+  if after_access.reserved_count <> before_access.reserved_count
+     or after_access.scored_count <> before_access.scored_count then
+    raise exception 'L1d: access_state must be unchanged by the attempt (reserved % -> %, scored % -> %)',
+      before_access.reserved_count, after_access.reserved_count,
+      before_access.scored_count, after_access.scored_count;
+  end if;
+end $$;
+
+-- L2: reserved → released (by an abstention) → reserved is rejected too, so
+-- reserved_count cannot be inflated and a released permit stays released.
+do $$
+declare r record; v text; st text; before_access record; after_access record;
+begin
+  select * into r from public.reserve_analysis_permit('gina-key-2');
+  if r.result <> 'accepted' then
+    raise exception 'L2 setup: second reserve must be accepted (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-000000000103',
+    'analysisPermitId', r.permit_id,
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'L2 setup: the abstention must be accepted (got %)', v;
+  end if;
+  select * into before_access from public.access_state();
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+     where id = r.permit_id;
+    raise exception 'L2a: released -> reserved must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set status = 'finalized', outcome = 'scored'
+     where id = r.permit_id;
+    raise exception 'L2b: released -> finalized must be rejected (settled permits are immutable)';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set outcome = 'cancelled'
+     where id = r.permit_id;
+    raise exception 'L2c: rewriting the outcome of a settled permit must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  select status into st from public.analysis_permits where id = r.permit_id;
+  if st <> 'released' then
+    raise exception 'L2d: the permit must still be released (got %)', st;
+  end if;
+  select * into after_access from public.access_state();
+  if after_access.reserved_count <> before_access.reserved_count then
+    raise exception 'L2e: reserved_count must be unchanged by the attempt (% -> %)',
+      before_access.reserved_count, after_access.reserved_count;
+  end if;
+end $$;
+
+-- L3: outcome is confined to the known set and only travels with the
+-- terminal transition — while the edge-fn finalize shape (reserved →
+-- finalized|released with a releasable outcome, filtered on status =
+-- 'reserved') keeps working, including its idempotent zero-row replay.
+do $$
+declare p uuid; st text; oc text; n int;
+begin
+  -- A reserved permit outside the reserve RPC (the over-issued shape H3 uses;
+  -- the client INSERT grant on permits is unchanged by this work).
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000b1',
+          '00000000-0000-4000-8000-000000000010', 'gina-direct-1')
+  returning id into p;
+
+  begin
+    update public.analysis_permits set status = 'finalized', outcome = 'totally_made_up'
+     where id = p;
+    raise exception 'L3a: an outcome outside the known set must be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set status = 'finalized', outcome = null
+     where id = p;
+    raise exception 'L3b: a terminal status without an outcome must be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set outcome = 'scored' where id = p;
+    raise exception 'L3c: an outcome on a still-reserved permit must be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.analysis_permits set status = 'bogus' where id = p;
+    raise exception 'L3d: an unknown status must be rejected';
+  exception when check_violation then null;
+  end;
+  select status, outcome into st, oc from public.analysis_permits where id = p;
+  if st <> 'reserved' or oc is not null then
+    raise exception 'L3e: the rejected updates must leave the permit reserved/null (got %/%)', st, oc;
+  end if;
+
+  -- The finalize route's exact statement shape (index.ts finalizeAnalysisPermitRoute).
+  update public.analysis_permits set status = 'finalized', outcome = 'cancelled'
+   where id = p and user_id = (select auth.uid()) and status = 'reserved';
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'L3f: the finalize route shape must still settle a reserved permit (rows %)', n;
+  end if;
+  -- Idempotent replay: the status filter matches nothing and nothing raises.
+  update public.analysis_permits set status = 'finalized', outcome = 'cancelled'
+   where id = p and user_id = (select auth.uid()) and status = 'reserved';
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'L3g: the finalize replay must match zero rows (rows %)', n;
+  end if;
+
+  -- Release with a documented abstention outcome stays valid.
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000b2',
+          '00000000-0000-4000-8000-000000000010', 'gina-direct-2');
+  update public.analysis_permits set status = 'released', outcome = 'low_confidence'
+   where id = '00000000-0000-4000-8000-0000000000b2';
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000b2'
+                   and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'L3h: reserved -> released/low_confidence must remain a valid owner update';
+  end if;
+end $$;
+reset role;
+
+-- L4: the guard binds every role — a table-owner session cannot re-arm a
+-- settled permit either (same posture as the append-only ledgers in D2),
+-- while the pg_cron sweep shape (reserved → released/expired) still works.
+do $$
+declare n int;
+begin
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+     where id = '00000000-0000-4000-8000-0000000000b1';
+    raise exception 'L4a: even the table owner must not move a settled permit back to reserved';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+  values ('00000000-0000-4000-8000-0000000000b3',
+          '00000000-0000-4000-8000-000000000010', 'gina-stale',
+          now() - interval '2 days');
+  update public.analysis_permits set status = 'released', outcome = 'expired'
+   where status = 'reserved' and created_at < now() - interval '24 hours';
+  get diagnostics n = row_count;
+  if n < 1 or not exists (select 1 from public.analysis_permits
+                          where id = '00000000-0000-4000-8000-0000000000b3'
+                            and status = 'released' and outcome = 'expired') then
+    raise exception 'L4b: the stale-permit sweep must still release reserved permits';
   end if;
 end $$;
 
