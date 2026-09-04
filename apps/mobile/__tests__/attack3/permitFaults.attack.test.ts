@@ -13,9 +13,12 @@
  *
  * The real analysis pipeline, the real repository, and the real permit client
  * run; only SQLite (`LocalDb`), the sidecar reader and `fetch` are faked so
- * faults can be injected at exact statements. Every test records the
- * observed behaviour with explicit assertions; the `expect`s that describe
- * the HELD/BROKEN classification are annotated inline.
+ * faults can be injected at exact statements.
+ *
+ * MAC-01 contract (the pins below assert it): every exit after a successful
+ * `permits.reserve` either consumes the permit (scored path fully promoted)
+ * or finalizes it exactly once — a throw releases with outcome 'failed'
+ * BEFORE the exception escapes runCaptureAnalysis.
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
@@ -203,6 +206,11 @@ function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-a3') {
 
 const sqlOf = (calls: RecordedCall[]) => calls.map(c => c.sql.trim());
 
+const FAILED_RELEASE = {
+  permitId: 'permit-1',
+  body: { outcome: 'failed', ratingId: null },
+};
+
 describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
   beforeEach(() => setActiveDataOwner(owner));
   afterEach(() => {
@@ -211,7 +219,7 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     jest.restoreAllMocks();
   });
 
-  it('local_shot insert fails inside the promotion transaction → transaction rolled back, no outbox row; permit NEITHER consumed NOR released; exception escapes runCaptureAnalysis', async () => {
+  it('local_shot insert fails inside the promotion transaction → transaction rolled back, no outbox row; permit released once (failed) before the exception escapes runCaptureAnalysis', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -222,9 +230,9 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
 
     const run = runCaptureAnalysis(request(db, clip));
 
-    // OBSERVED: the exception propagates out of runCaptureAnalysis (the
-    // outer wrapper records analysis_failed and rethrows) — the caller
-    // (AnalyzeScreen catch → stage 'analysis' error) never sees an outcome.
+    // The exception propagates out of runCaptureAnalysis (the outer wrapper
+    // records analysis_failed and rethrows) — the caller (AnalyzeScreen catch
+    // → stage 'analysis' error) handles it; the permit is settled first.
     await expect(run).rejects.toThrow(/SQLITE_FULL/);
 
     const sql = sqlOf(calls);
@@ -242,14 +250,13 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
 
     // Permit state: reserved exactly once …
     expect(server.reserves).toBe(1);
-    // … and never finalized — the rating that would have consumed it via
-    // shot sync does not exist and no release is issued. The permit is
-    // orphaned until the server-side stale-permit sweep expires it.
-    // BROKEN if the contract is "abstentions/failures release the permit":
-    expect(server.finalized).toHaveLength(0);
+    // … and released exactly once with outcome 'failed' — the rating that
+    // would have consumed it via shot sync does not exist, so the reserve
+    // must not sit against the user's allowance until the server sweep.
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
   });
 
-  it('outbox insert fails (second statement of the promotion transaction) → rollback removes the local_shot write too; same orphaned-permit state', async () => {
+  it('outbox insert fails (second statement of the promotion transaction) → rollback removes the local_shot write too; permit released once (failed)', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -272,10 +279,10 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     ).toBeGreaterThan(begin);
     expect(sql.some(s => s === 'COMMIT')).toBe(false);
     expect(server.reserves).toBe(1);
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
   });
 
-  it('COMMIT itself fails → ROLLBACK is attempted, exception escapes, permit orphaned; analysis record already durable', async () => {
+  it('COMMIT itself fails → ROLLBACK is attempted, exception escapes after the permit is released once (failed); analysis record already durable', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -287,7 +294,7 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     );
     const sql = sqlOf(calls);
     expect(sql).toContain('ROLLBACK');
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
     expect(server.reserves).toBe(1);
   });
 });
@@ -300,7 +307,7 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
     jest.restoreAllMocks();
   });
 
-  it('exception escapes as a throw (NOT an `unavailable` outcome) and the reserved permit is never released', async () => {
+  it('exception escapes as a throw (NOT an `unavailable` outcome) only AFTER the reserved permit is released once (failed)', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -317,8 +324,9 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
       thrown = error;
     }
 
-    // Expected by the scenario: outcome.kind === 'unavailable'.
-    // Observed: a thrown exception; no outcome object at all.
+    // A persistence fault is not a typed inference outcome: it is rethrown
+    // (the outer wrapper records analysis_failed) — but never with the
+    // permit still reserved.
     expect(outcome).toBeNull();
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toMatch(/SQLITE_FULL/);
@@ -331,13 +339,20 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
       sql.some(s => s.startsWith('INSERT OR REPLACE INTO local_shot')),
     ).toBe(false);
     expect(sql.some(s => s.startsWith('INSERT INTO outbox'))).toBe(false);
-    // … but the permit reserved for this run is never finalized: no
-    // 'failed' release is sent (compare: an inference failure DOES release).
+    // … and the permit reserved for this run is finalized exactly once with
+    // 'failed' — the same release an inference failure issues.
     expect(server.reserves).toBe(1);
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
+    // The release is issued BEFORE the exception escapes: by the time the
+    // caller observes the throw, the finalize request has been sent.
+    expect(
+      server.fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes('/finalize'),
+      ),
+    ).toHaveLength(1);
   });
 
-  it('markCaptureAnalyzed rejects after the record insert → record durable, capture stays awaiting_model, permit orphaned, exception escapes', async () => {
+  it('markCaptureAnalyzed rejects after the record insert → record durable, capture stays awaiting_model, permit released once (failed), exception escapes', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -357,10 +372,10 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
       sql.some(s => s.startsWith('INSERT OR REPLACE INTO local_shot')),
     ).toBe(false);
     expect(server.reserves).toBe(1);
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
   });
 
-  it('CONTROL: an inference failure (frozen wrists) DOES release the permit with outcome "failed" and returns `unavailable` — the contract the persistence faults above violate', async () => {
+  it('CONTROL: an inference failure (frozen wrists) releases the permit with outcome "failed" and returns `unavailable` — the same contract the persistence faults above now honour', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     const frozen = JSON.parse(sidecarJson);
     for (const frame of frozen.frames) {
@@ -405,7 +420,7 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     jest.restoreAllMocks();
   });
 
-  it('permits.release is NOT called: the permit stays reserved server-side and the exception escapes', async () => {
+  it('permits.release(permitId, "failed") is called exactly once and the exception escapes after it', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -427,19 +442,18 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     );
     expect(analyzeSpy).toHaveBeenCalledTimes(1);
     expect(server.reserves).toBe(1);
-    // No durable write of any kind — good — …
+    // No durable write of any kind …
     expect(calls).toHaveLength(0);
-    // … but the reserve is never finalized. The scenario expects a
-    // permits.release(permitId, 'failed') here; observed: none.
-    expect(server.finalized).toHaveLength(0);
+    // … and the reserve is finalized exactly once with 'failed'.
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
     expect(
       server.fetchMock.mock.calls.filter(([url]) =>
         String(url).includes('/finalize'),
       ),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
-  it('analyzeCapture REJECTS asynchronously (returned promise) — same orphaned permit', async () => {
+  it('analyzeCapture REJECTS asynchronously (returned promise) — same single failed release', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -456,10 +470,10 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
       /pipeline crashed/,
     );
     expect(server.reserves).toBe(1);
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual([FAILED_RELEASE]);
   });
 
-  it('rapid repeat: five back-to-back runs whose analyzeCapture throws leak five reserved permits with zero releases', async () => {
+  it('rapid repeat: five back-to-back runs whose analyzeCapture throws release all five reserved permits (one failed release each)', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -475,6 +489,11 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
       ).rejects.toThrow('boom');
     }
     expect(server.reserves).toBe(5);
-    expect(server.finalized).toHaveLength(0);
+    expect(server.finalized).toEqual(
+      [1, 2, 3, 4, 5].map(n => ({
+        permitId: `permit-${n}`,
+        body: { outcome: 'failed', ratingId: null },
+      })),
+    );
   });
 });

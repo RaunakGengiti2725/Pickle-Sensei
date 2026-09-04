@@ -14,6 +14,7 @@
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
+import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../src/data/db';
 import {
   SIGNED_OUT_DATA_OWNER,
@@ -28,6 +29,13 @@ jest.mock('../src/camera/capture', () => {
     ...actual,
     readCaptureArtifact: (uri: string) => mockReadArtifact(uri),
   };
+});
+
+// analyzeCapture is re-exported from the pipeline index; a spy on the module
+// namespace proves inference never starts for a rejected reservation.
+jest.mock('@pickle/analysis-pipeline', () => {
+  const actual = jest.requireActual('@pickle/analysis-pipeline');
+  return { __esModule: true, ...actual };
 });
 
 let mockReadArtifact: (uri: string) => Promise<string> = async () => {
@@ -569,6 +577,48 @@ describe('extra — reserve failures', () => {
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.reason).toContain('no longer reserved');
     expect(calls).toHaveLength(0);
+  });
+
+  it('reserve 200 whose permit.id is "" is rejected before inference: no analyzeCapture call, no db write, no finalize, outcome unavailable', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const server = permitServer({ permitId: '' });
+    setFetch(server.fetchMock);
+    const analyzeSpy = jest.spyOn(pipeline, 'analyzeCapture');
+    try {
+      const outcome = await runCaptureAnalysis(request(db, clip));
+      expect(outcome.kind).toBe('unavailable');
+      if (outcome.kind !== 'unavailable') return;
+      expect(outcome.reason).toContain('invalid analysis permit');
+      expect(outcome.cause).toBeUndefined();
+      expect(analyzeSpy).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+      // Nothing to finalize: an id-less permit cannot be addressed.
+      expect(server.reserveBodies).toHaveLength(1);
+      expect(server.finalizeUrls).toHaveLength(0);
+      expect(server.fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      analyzeSpy.mockRestore();
+    }
+  });
+
+  it('reserve 200 whose permit.id is whitespace-only is rejected the same way', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const server = permitServer({ permitId: '   ' });
+    setFetch(server.fetchMock);
+    const analyzeSpy = jest.spyOn(pipeline, 'analyzeCapture');
+    try {
+      const outcome = await runCaptureAnalysis(request(db, clip));
+      expect(outcome.kind).toBe('unavailable');
+      expect(analyzeSpy).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+      expect(server.finalizeUrls).toHaveLength(0);
+    } finally {
+      analyzeSpy.mockRestore();
+    }
   });
 
   it('[HELD] a signed-out apiConfig (token null) never reaches the network and leaves nothing behind', async () => {
