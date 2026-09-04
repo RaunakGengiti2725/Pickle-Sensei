@@ -99,13 +99,19 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   Apple ID / Google account, Apple's even after the revocation deletion
   performs) → lifetime scored count, with NO FK anywhere, written by the
   definer trigger `shots_record_free_rating_ledger` on every scored shot
-  insert (every identity of the user is set to identity-max + 1). ALL THREE
+  insert (every identity of the user is set to identity-max + 1) and by the
+  definer trigger `identities_sync_free_rating_ledger` on every
+  auth.identities INSERT (`20260904140000_ledger_backfill_on_identity_link.sql`:
+  an identity linked AFTER the ratings were spent gets
+  greatest(its own row, the account's identity-max), so deletion + re-sign-in
+  with ANY identity ever linked keeps the count; migration backfills
+  existing links). ALL THREE
   decision points — `access_state()`, `reserve_analysis_permit()`,
   `apply_synced_shot()`'s backstop — count through
   `public.lifetime_scored_count()` = greatest(own scored shots,
   `identity_scored_count()`); never write `count(*) from public.shots` in
   any of them again (static pin: `__wf__/db_migrations_rls_indexes.test.ts`;
-  live: security_regression.sql J1–J9). The table is service-only (RLS on,
+  live: security_regression.sql J1–J11). The table is service-only (RLS on,
   no policies, no client grants); `identity_scored_count()` is the one
   definer reader and is auth.uid()-scoped with no parameters. Premium
   bypasses it exactly as before; abstentions never touch it. Retention past
@@ -138,6 +144,22 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   PostgREST upserts (`resolution=merge-duplicates`) put EVERY payload column
   in DO UPDATE — the grant must include them all (see
   account_deletion_requests).
+- The permit gate lives at the TABLE, not only in the RPC
+  (`20260904140100_shots_insert_requires_permit.sql`): BEFORE INSERT trigger
+  `shots_insert_requires_permit` refuses (42501, `access.permit_not_found` /
+  `access.paywall_required`) a `result_kind='scored'` row from any role RLS
+  applies to unless `user_id = auth.uid()`, the user holds a reserved
+  unexpired permit, and `lifetime_scored_count() < 2` or membership — under
+  the same `access_lock_key()` advisory lock as reserve/apply. The
+  reserve → `apply_synced_shot()` path satisfies it unchanged; direct
+  PostgREST inserts can no longer write a scored shot around it. Abstentions
+  (`low_confidence`) stay owner-writable and must have `overall_score IS NULL`
+  (CHECK `unscored_shots_have_no_score`). Permits are a one-way state machine
+  (`20260904140200_permit_status_transitions.sql`): BEFORE UPDATE trigger
+  `analysis_permits_terminal_lock` refuses any status/outcome change once
+  status has left `reserved` (finalized/released/expired are final), so a
+  finalized permit can never be reopened and reused. Live:
+  security_regression.sql K1–K6, L1–L3; static: `db_migrations_rls_indexes.test.ts`.
 - RLS/security regression matrix: `./supabase/tests/run_rls_tests.sh`
   (Docker postgres:16, or a throwaway local initdb cluster when Docker is
   absent; CI job `supabase-security`). It installs hosted-like default
