@@ -172,6 +172,46 @@ function scoredOutcome(freeLimitReached: boolean): CaptureAnalysisOutcome {
   };
 }
 
+function lowConfidenceOutcome(): CaptureAnalysisOutcome {
+  return {
+    kind: 'low_confidence',
+    analysisId: 'analysis-1',
+    record: {} as CaptureAnalysisOutcome extends { record: infer R }
+      ? R
+      : never,
+    guidance: null,
+  };
+}
+
+/**
+ * A run whose settlement the test controls: `runCaptureAnalysis` stays
+ * pending until `settle()` resolves it, mirroring a permit that is still
+ * reserved (server-side) while the network round trip is in flight.
+ */
+function deferredRun(): {
+  started: () => boolean;
+  settle: (outcome: CaptureAnalysisOutcome) => Promise<void>;
+} {
+  let resolve!: (outcome: CaptureAnalysisOutcome) => void;
+  const pending = new Promise<CaptureAnalysisOutcome>(r => {
+    resolve = r;
+  });
+  let started = false;
+  mockOutcome = () => {
+    started = true;
+    return pending;
+  };
+  return {
+    started: () => started,
+    async settle(outcome) {
+      await act(async () => {
+        resolve(outcome);
+      });
+      await flush();
+    },
+  };
+}
+
 async function renderScreen() {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
@@ -323,5 +363,100 @@ describe('AnalyzeScreen access re-read', () => {
     await flush();
     expect(clients.backend.getAccess).not.toHaveBeenCalled();
     expect(useAccessStore.getState().status).toBe('idle');
+  });
+});
+
+/**
+ * The permit a run reserves is consumed or released INSIDE
+ * `runCaptureAnalysis`; a re-read issued while that call is still in flight
+ * observes the reserved ledger, not the settled one. Leaving the screen
+ * mid-run (back gesture, tab switch, backgrounding that unmounts) must
+ * therefore defer the re-read until the run settles — and a re-read that
+ * fails must not throw away the snapshot the visit was admitted on.
+ */
+describe('AnalyzeScreen access re-read for a run abandoned mid-flight', () => {
+  /** Server-side permit ledger: reserved while the run is in flight. */
+  let permit: 'reserved' | 'released';
+
+  beforeEach(() => {
+    permit = 'reserved';
+    // The last free rating is the one this run reserves.
+    clearAccessStoreConfiguration();
+    clients = backendReturning(async () =>
+      permit === 'reserved' ? freeAccess(1, 1) : freeAccess(1, 0),
+    );
+    configureAccessStore(clients);
+    useAccessStore.setState({
+      status: 'ready',
+      canonicalAccess: freeAccess(1),
+    });
+  });
+
+  it('ends on the released ledger when an abandoned run settles as low confidence', async () => {
+    const run = deferredRun();
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(run.started, 'runCaptureAnalysis to start');
+
+    await act(async () => renderer.unmount());
+    await flush();
+
+    // The server releases the permit as part of the low-confidence outcome,
+    // then the in-flight call returns to the (gone) screen.
+    permit = 'released';
+    await run.settle(lowConfidenceOutcome());
+
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 0));
+    expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
+      true,
+    );
+  });
+
+  it('re-reads once, after the run settles, not at the moment of unmount', async () => {
+    const run = deferredRun();
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(run.started, 'runCaptureAnalysis to start');
+
+    await act(async () => renderer.unmount());
+    await flush();
+    expect(clients.backend.getAccess).not.toHaveBeenCalled();
+    // The reserve-time snapshot stays in place until the settled read lands.
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
+
+    permit = 'released';
+    await run.settle(scoredOutcome(true));
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+
+    // Nothing else re-fires the read for this run.
+    await flush();
+    await flush();
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the known-good snapshot when the post-run re-read fails', async () => {
+    clearAccessStoreConfiguration();
+    clients = backendReturning(async () => {
+      throw new Error('access read failed');
+    });
+    configureAccessStore(clients);
+    useAccessStore.setState({
+      status: 'ready',
+      canonicalAccess: freeAccess(1),
+    });
+
+    mockOutcome = async () => scoredOutcome(false);
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length > 0,
+      'Result navigation',
+    );
+
+    await act(async () => renderer.unmount());
+    await flush();
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
   });
 });
