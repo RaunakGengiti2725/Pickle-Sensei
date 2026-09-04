@@ -280,12 +280,12 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["server"],
       supportedStrokes: "all",
       notes:
-        "Frozen v5 baseline (strokeHeuristicV5Frozen.ts, exported suffix '(uncalibrated)'). Kept as the registered rollback predecessor of stroke-heuristic-7.",
+        "Frozen v5 baseline (strokeHeuristicV5Frozen.ts, exported suffix '(uncalibrated)'). Kept as the registered rollback predecessor of stroke-heuristic-8.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "stroke.heuristic-hierarchical",
-      version: "stroke-heuristic-7",
+      version: "stroke-heuristic-8",
       task: "stroke_classification",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -312,7 +312,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "phase.geometry",
-      version: "phase-geometry-1",
+      version: "phase-geometry-2",
       task: "phase_segmentation",
       runtime: "deterministic",
       executionTarget: "on_device",

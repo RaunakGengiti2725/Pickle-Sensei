@@ -138,6 +138,24 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * but keep both hands on ONE grip (same side of the midline) and keep
  * committing.
  *
+ * stroke-heuristic-8 hardens the INPUT contract (VG-1 / VG-2 adjudication):
+ *
+ * 13. WINDOW VALIDITY — the classification window must be a finite,
+ *     positive-length interval and the reference (contact or event peak)
+ *     must lie inside it; otherwise nothing ties the measurements to the
+ *     event and the classifier abstains (`invalid_classification_window`,
+ *     `contact_outside_window`). Intensity evidence is only reported from
+ *     MEASURED in-window speed samples — an empty window slice records
+ *     `no_speed_samples_in_window` instead of a fabricated 0.00 u/s peak.
+ * 14. PADDLE-CENTER VALIDITY — a paddle center that is not finite or lies
+ *     outside the normalized image is corrupt regardless of its track
+ *     confidence or the wrist's visibility. It never becomes the contact
+ *     point: with a measured wrist the wrist is used
+ *     (`paddle_center_not_finite` / `paddle_center_out_of_image` +
+ *     `paddle_point_implausible_used_wrist`); without one the classifier
+ *     abstains. A committed prediction therefore always carries a finite
+ *     confidence — a non-finite side offset abstains as well.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -161,7 +179,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -377,6 +395,17 @@ export function classifyStroke(input: {
 }): HeuristicStrokePrediction {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
+  const { startMs: windowStartMs, endMs: windowEndMs } = input.window;
+  if (
+    !Number.isFinite(windowStartMs) ||
+    !Number.isFinite(windowEndMs) ||
+    windowEndMs <= windowStartMs
+  ) {
+    evidence.push(
+      `classification window [${windowStartMs}, ${windowEndMs}] ms is not a finite, positive-length interval`,
+    );
+    return unknown("invalid_classification_window", evidence, limitingFactors);
+  }
   const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
   let contactMs: number;
   let referenceIsEventPeak = false;
@@ -388,6 +417,12 @@ export function classifyStroke(input: {
     limitingFactors.push("reference_is_event_peak_not_contact");
   } else {
     return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
+  }
+  if (!Number.isFinite(contactMs) || contactMs < windowStartMs || contactMs > windowEndMs) {
+    evidence.push(
+      `${referenceIsEventPeak ? "event peak" : "contact"} reference ${contactMs} ms lies outside the classification window [${windowStartMs}, ${windowEndMs}] ms`,
+    );
+    return unknown("contact_outside_window", evidence, limitingFactors);
   }
 
   const frame = nearestFrame(frames, contactMs);
@@ -516,8 +551,7 @@ export function classifyStroke(input: {
         : null;
   if (speeds) {
     const windowSamples = speeds.series.filter(
-      (sample) =>
-        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
+      (sample) => sample.timestampMs >= windowStartMs && sample.timestampMs <= windowEndMs,
     );
     const windowPeak = windowSamples.reduce((best, sample) => Math.max(best, sample.value), 0);
     if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < NON_SWING_SPEED_FLOOR) {
@@ -558,8 +592,40 @@ export function classifyStroke(input: {
   const paddleNearConfidence = paddleNear?.confidence ?? null;
   const paddleNearTrusted =
     paddleNearConfidence !== null && paddleNearConfidence >= PADDLE_POINT_CONFIDENCE_FLOOR;
+  const paddleCenterDefect = paddleNear ? paddleCenterDefectOf(paddleNear.center) : null;
 
-  if (paddleNear && wristInfo.point) {
+  if (paddleNear && paddleCenterDefect) {
+    // A corrupt center is implausible before any reach test: it is not a
+    // measurement of anything in the image, whatever its track confidence.
+    evidence.push(
+      `paddle center at contact (${paddleNear.center.x}, ${paddleNear.center.y}) is ${
+        paddleCenterDefect === "paddle_center_not_finite"
+          ? "not finite"
+          : "outside the normalized image [0,1]²"
+      } — rejected as the contact point`,
+    );
+    limitingFactors.push(paddleCenterDefect);
+    if (wristInfo.point) {
+      contactPoint = wristInfo.point;
+      contactPointSource = "wrist";
+      contactPointReliability =
+        wristInfo.visibility >= WRIST_RELIABLE_VISIBILITY ? "strong" : "degraded";
+      evidence.push(
+        `using wrist (${wristInfo.point.x.toFixed(2)}, ${wristInfo.point.y.toFixed(2)}) instead`,
+      );
+      limitingFactors.push("paddle_point_implausible_used_wrist");
+      if (contactPointReliability === "degraded") {
+        limitingFactors.push("wrist_low_visibility_at_contact");
+      }
+    } else {
+      limitingFactors.push("wrist_invisible_at_contact");
+      return unknown(
+        "contact_point_unreliable_paddle_implausible_wrist_invisible",
+        evidence,
+        limitingFactors,
+      );
+    }
+  } else if (paddleNear && wristInfo.point) {
     const wristDistance = Math.hypot(
       paddleNear.center.x - wristInfo.point.x,
       paddleNear.center.y - wristInfo.point.y,
@@ -869,6 +935,18 @@ export function classifyStroke(input: {
     );
   }
   const offset = ((contactPoint.x - midX) / shoulderWidth) * facing;
+  if (!Number.isFinite(offset)) {
+    evidence.push(
+      `contact offset from the midline is not finite (contact x ${contactPoint.x}, midline ${midX}, shoulder width ${shoulderWidth})`,
+    );
+    return unknown(
+      "contact_offset_not_finite",
+      evidence,
+      limitingFactors,
+      contactPointSource,
+      contactPointReliability,
+    );
+  }
   // offset > 0 = contact on the player's RIGHT side.
   const dominantRight = input.handedness === "right";
   const sameSide = dominantRight ? offset > 0 : offset < 0;
@@ -929,9 +1007,25 @@ export function classifyStroke(input: {
     };
   }
   const inWindow = speeds.series.filter(
-    (sample) =>
-      sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
+    (sample) => sample.timestampMs >= windowStartMs && sample.timestampMs <= windowEndMs,
   );
+  if (inWindow.length === 0) {
+    // An empty window slice of a measured series is absence, not a 0 u/s
+    // peak — no intensity claim can be read from it.
+    limitingFactors.push("no_speed_samples_in_window");
+    return {
+      taxonomyVersion: STROKE_TAXONOMY_V3.version,
+      classifierVersion: STROKE_HEURISTIC_VERSION,
+      label: side,
+      leaf: null,
+      taxonomyDepth: 2,
+      confidence: sideConfidence,
+      evidence,
+      limitingFactors,
+      contactPointSource,
+      contactPointReliability,
+    };
+  }
   const peak = inWindow.reduce((best, sample) => Math.max(best, sample.value), 0);
   const lowContact = contactPoint.y > hipY - 0.35 * torso;
   const intensity = peak < 0.9 ? "slow" : peak >= 1.4 ? "fast" : "medium";
@@ -954,6 +1048,19 @@ export function classifyStroke(input: {
     contactPointSource,
     contactPointReliability,
   };
+}
+
+/** Why a paddle center cannot be a measurement of anything in the image:
+ * non-finite coordinates, or coordinates outside the normalized [0,1]² image. */
+function paddleCenterDefectOf(center: {
+  x: number;
+  y: number;
+}): "paddle_center_not_finite" | "paddle_center_out_of_image" | null {
+  if (!Number.isFinite(center.x) || !Number.isFinite(center.y)) return "paddle_center_not_finite";
+  if (center.x < 0 || center.x > 1 || center.y < 0 || center.y > 1) {
+    return "paddle_center_out_of_image";
+  }
+  return null;
 }
 
 function unknown(

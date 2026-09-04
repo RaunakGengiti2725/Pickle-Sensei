@@ -75,7 +75,7 @@ describe("geometry providers through the full analysis pipeline", () => {
       modelBundleVersion: GEOMETRY_BUNDLE_VERSION,
       poseModelVersion: "apple-vision-bodypose-1",
       strokeDetectorVersion: "temporal-stroke-heuristic-2",
-      phaseModelVersion: "phase-geometry-1",
+      phaseModelVersion: "phase-geometry-2",
       scoringModelVersion: "sm-v1",
       shotConfigVersion: "forehand_drive@1",
     });

@@ -141,7 +141,11 @@ describe("strokeHeuristic ↔ strokeHeuristicLite parity (identical fixtures, id
   });
 
   it("no pose frame near contact", () => {
-    const prediction = expectParity(baseInput(swingFrames(), { contactMs: 9000 }));
+    // Contact inside the window (the window contract is checked first) but far
+    // past the last measured frame (2500 ms).
+    const prediction = expectParity(
+      baseInput(swingFrames(), { window: { startMs: 1700, endMs: 9500 }, contactMs: 9000 }),
+    );
     expect(prediction.limitingFactors).toContain("no_pose_frame_near_contact");
   });
 
@@ -279,6 +283,6 @@ describe("strokeHeuristic ↔ strokeHeuristicLite parity (identical fixtures, id
     const lite = classifyLite(baseInput(swingFrames()));
     const lab = classifyLab(baseInput(swingFrames()) as Parameters<typeof classifyLab>[0]);
     expect(lite.classifierVersion).toBe(lab.classifierVersion);
-    expect(lite.classifierVersion).toContain("stroke-heuristic-7");
+    expect(lite.classifierVersion).toContain("stroke-heuristic-8");
   });
 });
