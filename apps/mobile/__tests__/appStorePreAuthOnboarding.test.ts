@@ -33,17 +33,6 @@ jest.mock('../src/data/db', () => ({
   }),
 }));
 
-let mockApiSession: {
-  apiBaseUrl: string;
-  bearerToken: string;
-  canonicalAppUserId: string;
-  provider: 'apple';
-} | null = null;
-
-jest.mock('../src/account/apiSession', () => ({
-  getApiSession: () => mockApiSession,
-}));
-
 const mockFetchCanonical = jest.fn<Promise<Profile | null>, [unknown]>(
   async () => null,
 );
@@ -59,11 +48,25 @@ jest.mock('../src/account/onboarding', () => ({
 }));
 
 import {
+  CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../src/state/appStore';
+import {
+  clearApiSession,
+  establishApiSession,
+  type ApiSession,
+} from '../src/account/apiSession';
 
 const CANONICAL_OWNER = '33333333-3333-4333-8333-333333333333';
+const OTHER_OWNER = '44444444-4444-4444-8444-444444444444';
+
+const canonicalSession: ApiSession = {
+  apiBaseUrl: 'https://api.example.test',
+  bearerToken: 'token',
+  canonicalAppUserId: CANONICAL_OWNER,
+  provider: 'apple',
+};
 
 const answers: Profile = {
   firstName: 'Dana',
@@ -93,7 +96,7 @@ function stashAnswers(profile: Profile = answers) {
 
 beforeEach(() => {
   mockKvTable.clear();
-  mockApiSession = null;
+  clearApiSession();
   mockFetchCanonical.mockClear();
   mockFetchCanonical.mockResolvedValue(null);
   mockSaveCanonical.mockClear();
@@ -109,7 +112,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+afterEach(() => {
+  clearApiSession();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+});
 
 describe('completePreAuthOnboarding', () => {
   it('stashes the answers while signed out — the stash is the only device write', async () => {
@@ -153,12 +159,7 @@ describe('hydrate with a pre-auth stash', () => {
 
   it('adopts the stash into a fresh canonical account through the server save', async () => {
     stashAnswers();
-    mockApiSession = {
-      apiBaseUrl: 'https://api.example.test',
-      bearerToken: 'token',
-      canonicalAppUserId: CANONICAL_OWNER,
-      provider: 'apple',
-    };
+    establishApiSession(canonicalSession);
     const serverProfile: Profile = {
       ...answers,
       focusCheckpoint: 'preparation',
@@ -168,7 +169,7 @@ describe('hydrate with a pre-auth stash', () => {
 
     await useAppStore.getState().hydrate();
     const state = useAppStore.getState();
-    expect(mockSaveCanonical).toHaveBeenCalledWith(mockApiSession, answers);
+    expect(mockSaveCanonical).toHaveBeenCalledWith(canonicalSession, answers);
     // The server's focusCheckpoint wins, exactly like completeOnboarding.
     expect(state.profile).toEqual(serverProfile);
     expect(
@@ -179,12 +180,7 @@ describe('hydrate with a pre-auth stash', () => {
 
   it('replaces an existing canonical profile with the freshly answered stash (newest intent wins)', async () => {
     stashAnswers();
-    mockApiSession = {
-      apiBaseUrl: 'https://api.example.test',
-      bearerToken: 'token',
-      canonicalAppUserId: CANONICAL_OWNER,
-      provider: 'apple',
-    };
+    establishApiSession(canonicalSession);
     const existing: Profile = {
       skillLevel: '4.0',
       handedness: 'left',
@@ -198,7 +194,7 @@ describe('hydrate with a pre-auth stash', () => {
     await useAppStore.getState().hydrate();
     const state = useAppStore.getState();
     // Saved through the canonical endpoint like any onboarding completion…
-    expect(mockSaveCanonical).toHaveBeenCalledWith(mockApiSession, answers);
+    expect(mockSaveCanonical).toHaveBeenCalledWith(canonicalSession, answers);
     // …and the new answers, not the old profile, are what the owner now has.
     expect(state.profile).toEqual(answers);
     expect(
@@ -227,12 +223,7 @@ describe('hydrate with a pre-auth stash', () => {
 
   it('keeps the existing profile AND the stash when replacing it fails server-side', async () => {
     stashAnswers();
-    mockApiSession = {
-      apiBaseUrl: 'https://api.example.test',
-      bearerToken: 'token',
-      canonicalAppUserId: CANONICAL_OWNER,
-      provider: 'apple',
-    };
+    establishApiSession(canonicalSession);
     const existing: Profile = {
       skillLevel: '4.0',
       handedness: 'left',
@@ -255,12 +246,7 @@ describe('hydrate with a pre-auth stash', () => {
 
   it('keeps the stash when the adoption save fails, for the next hydrate', async () => {
     stashAnswers();
-    mockApiSession = {
-      apiBaseUrl: 'https://api.example.test',
-      bearerToken: 'token',
-      canonicalAppUserId: CANONICAL_OWNER,
-      provider: 'apple',
-    };
+    establishApiSession(canonicalSession);
     mockSaveCanonical.mockRejectedValue(new Error('offline'));
     setActiveDataOwner(CANONICAL_OWNER);
 
@@ -289,5 +275,118 @@ describe('hydrate with a pre-auth stash', () => {
     const state = useAppStore.getState();
     expect(state.profile).toBeNull();
     expect(mockKvTable.get(profileKeyFor(GUEST_DATA_OWNER))).toBeUndefined();
+  });
+});
+
+/**
+ * Canonical profile truth: for a signed-in (canonical) owner, "no profile"
+ * may only be concluded from the SERVER. Hydrating before the bearer exists
+ * (offline relaunch after a local wipe, a fresh device) must not send a
+ * fully onboarded account back into the questionnaire.
+ */
+describe('hydrate for a canonical owner before the API session exists', () => {
+  const serverProfile: Profile = {
+    ...answers,
+    focusCheckpoint: 'preparation',
+  };
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 20; i += 1) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+  }
+
+  it('reports the profile as unavailable (retryable), then fetches and persists the canonical profile once the session is configured — same owner throughout', async () => {
+    mockFetchCanonical.mockResolvedValue(serverProfile);
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+    const before = useAppStore.getState();
+    expect(before.hydrated).toBe(true);
+    expect(before.ownerKey).toBe(CANONICAL_OWNER);
+    expect(before.profile).toBeNull();
+    // Not "no profile" — unknown until the server answers.
+    expect(before.hydrateError).toBe(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
+    expect(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))).toBeUndefined();
+
+    establishApiSession(canonicalSession);
+    await settle();
+
+    const after = useAppStore.getState();
+    expect(mockFetchCanonical).toHaveBeenCalledTimes(1);
+    expect(mockFetchCanonical).toHaveBeenCalledWith(canonicalSession);
+    expect(after.hydrated).toBe(true);
+    expect(after.ownerKey).toBe(CANONICAL_OWNER);
+    expect(after.profile).toEqual(serverProfile);
+    expect(after.hydrateError).toBeNull();
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(serverProfile);
+  });
+
+  it('offers the questionnaire only after the server has answered "no profile"', async () => {
+    mockFetchCanonical.mockResolvedValue(null);
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toBeNull();
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+
+    establishApiSession(canonicalSession);
+    await settle();
+
+    const state = useAppStore.getState();
+    expect(mockFetchCanonical).toHaveBeenCalledTimes(1);
+    expect(state.hydrated).toBe(true);
+    expect(state.ownerKey).toBe(CANONICAL_OWNER);
+    expect(state.profile).toBeNull();
+    expect(state.hydrateError).toBeNull();
+  });
+
+  it('ignores a session for a different account and a session cleared again', async () => {
+    mockFetchCanonical.mockResolvedValue(serverProfile);
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().hydrate();
+
+    establishApiSession({
+      ...canonicalSession,
+      canonicalAppUserId: OTHER_OWNER,
+    });
+    await settle();
+    clearApiSession();
+    await settle();
+
+    const state = useAppStore.getState();
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
+    expect(state.ownerKey).toBe(CANONICAL_OWNER);
+    expect(state.profile).toBeNull();
+    expect(state.hydrateError).toBe(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
+  });
+
+  it('a locally persisted profile is truth enough: no wait, no fetch', async () => {
+    mockKvTable.set(profileKeyFor(CANONICAL_OWNER), JSON.stringify(answers));
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+    const state = useAppStore.getState();
+    expect(state.profile).toEqual(answers);
+    expect(state.hydrateError).toBeNull();
+
+    establishApiSession(canonicalSession);
+    await settle();
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
+    expect(useAppStore.getState().profile).toEqual(answers);
+  });
+
+  it('a signed-out or guest owner never waits for a session', async () => {
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().hydrateError).toBeNull();
+    setActiveDataOwner(GUEST_DATA_OWNER);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().hydrateError).toBeNull();
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
   });
 });

@@ -364,6 +364,94 @@ describe('relaunch (hydrate) with a persisted session', () => {
     expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
   });
 
+  it('applies a refresh whose answer lands after the launch deadline: the rotated token is persisted and the spent one is never presented again', async () => {
+    // The server rotates the refresh token the moment the request ARRIVES;
+    // only the answer is slow. Abandoning the exchange client-side and
+    // presenting the old token again would be reuse of a rotated token —
+    // which the server refuses (→ implicit sign-out of a healthy account).
+    jest.useFakeTimers();
+    try {
+      seedVault('refresh-1', 'apple');
+      const presented: string[] = [];
+      let rotation = 1;
+      installRoutes({
+        '/v1/auth/refresh': init => {
+          const { refreshToken } = JSON.parse(String(init?.body)) as {
+            refreshToken: string;
+          };
+          presented.push(refreshToken);
+          rotation += 1;
+          const body = {
+            session: {
+              accessToken: `access-${rotation}`,
+              refreshToken: `refresh-${rotation}`,
+              expiresAt: Math.floor(Date.now() / 1000) + 3600,
+            },
+          };
+          return new Promise<Response>((resolve, reject) => {
+            const answer = setTimeout(() => resolve(response(body)), 20_000);
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(answer);
+              reject(
+                Object.assign(new Error('Aborted'), { name: 'AbortError' }),
+              );
+            });
+          });
+        },
+      });
+
+      const hydration = useAuthStore.getState().hydrate();
+      await jest.advanceTimersByTimeAsync(8_000);
+      await hydration;
+
+      // Launch went ahead signed in with local data; nothing decided yet.
+      const launched = useAuthStore.getState();
+      expect(launched.hydrated).toBe(true);
+      expect(launched.session?.canonicalAppUserId).toBe(canonicalId);
+      expect(getActiveDataOwner()).toBe(canonicalId);
+      expect(getApiSession()).toBeNull();
+      expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
+      expect(presented).toEqual(['refresh-1']);
+
+      // The answer arrives 20s after the request — 5s after the client's old
+      // deadline. It must be adopted, not dropped.
+      await jest.advanceTimersByTimeAsync(12_001);
+      expect(presented).toEqual(['refresh-1']);
+      expect(getApiSession()).toMatchObject({
+        bearerToken: 'access-2',
+        refreshToken: 'refresh-2',
+        canonicalAppUserId: canonicalId,
+      });
+      expect(bearerTokenFor(canonicalId)).toBe('access-2');
+      expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+
+      // Hours later every rotation presented exactly the token the previous
+      // answer minted — the spent 'refresh-1' never went out a second time.
+      await jest.advanceTimersByTimeAsync(3 * 60 * 60_000);
+      await jest.advanceTimersByTimeAsync(20_001); // let an in-flight answer land
+      expect(presented.length).toBeGreaterThan(1);
+      expect(presented.filter(token => token === 'refresh-1')).toEqual([
+        'refresh-1',
+      ]);
+      expect(new Set(presented).size).toBe(presented.length);
+      presented.forEach((token, index) =>
+        expect(token).toBe(`refresh-${index + 1}`),
+      );
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(vaultRecord()).toMatchObject({
+        refreshToken: `refresh-${presented.length + 1}`,
+      });
+    } finally {
+      stopSessionKeeper();
+      jest.useRealTimers();
+    }
+  });
+
   it('stays signed in on a 5xx from refresh (server trouble is never a sign-out)', async () => {
     seedVault('refresh-1', 'google');
     installRoutes({

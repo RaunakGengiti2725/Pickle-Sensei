@@ -7,7 +7,10 @@
 //   * 401 semantics — expired / forged / unknown-issuer / revoked-at-launch
 //     bearers are always refused;
 //   * 429 semantics — per-IP, auth-failure, per-user and refresh budgets close
-//     at exactly `limit` hits and answer with the documented headers.
+//     at exactly `limit` hits and answer with the documented headers;
+//   * a Supabase Auth 5xx / fetch failure behind authenticate() is an outage
+//     (503 + Retry-After), never a 401 that charges the auth-failure budget
+//     (deterministic form: xc_rsm_c/repros/upstream_5xx_repro.ts).
 //
 // REVOKED_SESSION_REFUSED ("the cache never serves a logged-out bearer") is
 // NOT asserted here because index.ts currently violates it; the deterministic
@@ -33,6 +36,7 @@ const HARD_INVARIANTS: InvariantId[] = [
   "USER_BUDGET",
   "REFRESH_BUDGET",
   "REFRESH_ROTATION",
+  "UPSTREAM_5XX_NOT_AUTH_FAILURE",
 ];
 
 Deno.test({

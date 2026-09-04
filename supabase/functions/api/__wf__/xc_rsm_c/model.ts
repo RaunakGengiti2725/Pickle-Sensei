@@ -190,6 +190,7 @@ export type ExpectedReason =
   | "bearer_expired"
   | "bearer_no_subject"
   | "provider_verify_failed"
+  | "auth_upstream_5xx"
   | "session_invalid"
   | "session_provider_unknown"
   | "cache_hit"
@@ -338,9 +339,10 @@ export class EdgeModel {
         return unauthorized("bearer_no_subject");
       if (truth.kind !== "id_token") return unauthorized("bearer_not_jwt");
       const fault = this.fake.faults.get(req.bearer ?? "");
-      if ((fault && fault.kind === "signin") || !truth.knownSubject) {
-        return unauthorized("provider_verify_failed");
+      if (fault && fault.kind === "signin" && fault.status >= 500) {
+        return { ...base, status: 503, reason: "auth_upstream_5xx" };
       }
+      if (!truth.knownSubject) return unauthorized("provider_verify_failed");
       const user = this.fake.users.get(`${truth.provider}:${String(payload.sub)}`)!;
       const userRl = this.rate.incr(
         "user",
@@ -391,9 +393,10 @@ export class EdgeModel {
       fromCache = true;
     } else if (truth.kind === "id_token") {
       const fault = this.fake.faults.get(token);
-      if ((fault && fault.kind === "signin") || !truth.knownSubject) {
-        return unauthorized("provider_verify_failed");
+      if (fault && fault.kind === "signin" && fault.status >= 500) {
+        return { ...base, status: 503, reason: "auth_upstream_5xx" };
       }
+      if (!truth.knownSubject) return unauthorized("provider_verify_failed");
       const user = this.fake.users.get(`${truth.provider}:${String(payload?.sub)}`)!;
       userId = user.id;
       const sessionExp = Math.floor(now / 1000) + req.mintTtlSeconds;
@@ -406,7 +409,9 @@ export class EdgeModel {
       );
     } else {
       const fault = this.fake.faults.get(token);
-      if (fault && fault.kind === "getuser") return unauthorized("session_invalid");
+      if (fault && fault.kind === "getuser" && fault.status >= 500) {
+        return { ...base, status: 503, reason: "auth_upstream_5xx" };
+      }
       if (!truth.known || truth.revoked) return unauthorized("session_invalid");
       const record = this.fake.accessTokens.get(token)!;
       const user = this.fake.usersById.get(record.userId)!;
