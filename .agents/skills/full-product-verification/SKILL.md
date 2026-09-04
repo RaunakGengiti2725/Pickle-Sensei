@@ -14,7 +14,9 @@ claims are unverified).
 ```bash
 cd /home/ubuntu/repos/Pickle-Sensei
 git status --short            # must be clean: the Mac builds the pushed commit
-docker compose up -d postgres postgres-test
+docker compose up -d postgres postgres_test redis elasticmq
+# e2e stage: ports 3001/5173 must be free (stop `pnpm dev:api` / admin-web dev) and
+# Playwright Chromium installed once: pnpm --filter @pickle/admin-web exec playwright install chromium
 set -o pipefail
 scripts/verify-all.sh 2>&1 | tee /tmp/verify-all.log; echo "exit=${PIPESTATUS[0]}"
 ```
@@ -30,7 +32,9 @@ queue behind another run (single physical runner).
 ## Evidence to collect
 
 - `artifacts/verify-cloud/<UTC>/summary.json` — `ok: true`, all stages
-  `passed` (`deps format lint typecheck test db mobile ml edge rls security admin release`).
+  `passed` (`deps format lint typecheck test db mobile ml edge rls security admin e2e release`).
+  `e2e` = admin-web Playwright smoke (3 tests; the authenticated-panel test
+  runs only when the dev Postgres is up — a Playwright "skipped" is not a pass).
 - `artifacts/mac-full-verify/<run-id>/mac-full-verify-*/summary.json` —
   `ok: true`; plus `swift-native-xcresult-summary.txt` (test counts),
   `swing-lab-extract-summary.txt` (poses detected > 0),

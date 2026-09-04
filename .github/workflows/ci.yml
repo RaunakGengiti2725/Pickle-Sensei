@@ -33,6 +33,12 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      elasticmq:
+        # SQS-compatible broker so @pickle/queue's SQS integration tests run in CI
+        # instead of self-skipping (they gate on SQS_ENDPOINT_TEST).
+        image: softwaremill/elasticmq-native:1.7.1
+        ports:
+          - 9324:9324
     steps:
       - uses: actions/checkout@v7
 
@@ -54,6 +60,7 @@ jobs:
           # `test` and `db` share the single CI Postgres service (suites run sequentially).
           DATABASE_URL_TEST: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
           DATABASE_URL: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
+          SQS_ENDPOINT_TEST: http://localhost:9324
           VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
 
       - uses: actions/upload-artifact@v4

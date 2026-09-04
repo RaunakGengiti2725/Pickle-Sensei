@@ -12,7 +12,9 @@
 #   format     pnpm format:check
 #   lint       pnpm lint                     (root eslint also covers apps/mobile)
 #   typecheck  pnpm typecheck                (pnpm build == pnpm -r typecheck)
-#   test       pnpm test with DATABASE_URL_TEST (integration suites need Postgres)
+#   test       pnpm test with DATABASE_URL_TEST (integration suites need Postgres);
+#              @pickle/queue's 3 SQS tests run only when SQS_ENDPOINT_TEST
+#              (ElasticMQ) is reachable — the stage reports which it was
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
@@ -21,6 +23,9 @@
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
 #   security   scripts/security-scan.sh (secret/dependency scan) when present
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
+#   e2e        admin-web Playwright smoke (Chromium) against a self-started
+#              @pickle/api + vite; the authenticated panel test runs when
+#              DATABASE_URL is reachable (db stage migrates/seeds it first)
 #   release    node tools/release/check-release-manifest.mjs when present
 #
 # Policy: a SKIPPED stage is never reported as passed. Skips are explicit
@@ -38,13 +43,14 @@
 # Environment (defaults match docker-compose.yml / .env.example):
 #   DATABASE_URL_TEST  postgres://pickle:pickle_test_password@localhost:5433/pickle_test
 #   DATABASE_URL       postgres://pickle:pickle_dev_password@localhost:5432/pickle_dev
+#   SQS_ENDPOINT_TEST  http://localhost:9324 (docker compose elasticmq; CI service)
 #   VERIFY_ARTIFACTS   artifacts/verify-cloud/<UTC timestamp>  (logs + summary.json)
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin release)
+ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin e2e release)
 # What .github/workflows/ci.yml gates on every PR (verify + mobile + edge + supabase-security jobs).
 PR_STAGES=(deps format lint typecheck test db mobile ml edge rls)
 
@@ -55,7 +61,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -82,6 +88,7 @@ fi
 export DATABASE_URL_TEST="${DATABASE_URL_TEST:-postgres://pickle:pickle_test_password@localhost:5433/pickle_test}"
 export DATABASE_URL="${DATABASE_URL:-postgres://pickle:pickle_dev_password@localhost:5432/pickle_dev}"
 export CI="${CI:-true}"
+SQS_ENDPOINT_DEFAULT="http://localhost:9324"
 # Deno is installed per-user by the environment blueprint; make it visible to
 # non-login shells (CI runners, Devin exec).
 if [ -d "$HOME/.deno/bin" ]; then
@@ -186,6 +193,15 @@ stage_test() {
     echo "test database unreachable at DATABASE_URL_TEST — run: docker compose up -d postgres_test (or --start-services)"
     exit 75
   fi
+  local sqs="${SQS_ENDPOINT_TEST:-$SQS_ENDPOINT_DEFAULT}"
+  # ElasticMQ answers a bare GET with 400 — any HTTP response means it is up.
+  if curl -sS -m 3 -o /dev/null "$sqs/" 2>/dev/null; then
+    echo "SQS_ENDPOINT_TEST=$sqs reachable — @pickle/queue SQS integration tests WILL run"
+    export SQS_ENDPOINT_TEST="$sqs"
+  else
+    echo "SQS_ENDPOINT_TEST=$sqs unreachable — @pickle/queue skips its 3 SQS tests (docker compose up -d elasticmq, or --start-services)"
+    unset SQS_ENDPOINT_TEST
+  fi
   pnpm test
 }
 
@@ -233,6 +249,28 @@ stage_security() {
 
 stage_admin() { pnpm --filter @pickle/admin-web build; }
 
+stage_e2e() {
+  local browsers="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+  if ! ls -d "$browsers"/chromium-* >/dev/null 2>&1; then
+    echo "Playwright Chromium missing under $browsers — run: pnpm --filter @pickle/admin-web exec playwright install chromium"
+    exit 75
+  fi
+  # playwright.config.ts refuses to reuse stray servers under CI=true: :3001/:5173 must be free.
+  for port in 3001 5173; do
+    if curl -sS -m 2 -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+      echo "port $port already in use — stop the dev server (pnpm dev:api / admin-web dev) before the e2e stage"
+      exit 1
+    fi
+  done
+  if pg_ready "$DATABASE_URL" 2>/dev/null; then
+    echo "DATABASE_URL reachable — authenticated-panel e2e test WILL run"
+    export PICKLE_E2E_DATABASE_URL="$DATABASE_URL"
+  else
+    echo "DATABASE_URL unreachable — authenticated-panel e2e test is reported skipped by Playwright"
+  fi
+  pnpm --filter @pickle/admin-web e2e
+}
+
 stage_release() {
   if [ ! -f tools/release/check-release-manifest.mjs ]; then
     echo "tools/release/check-release-manifest.mjs not present"
@@ -248,7 +286,7 @@ echo "artifacts: $ARTIFACTS"
 
 if [ "$START_SERVICES" = 1 ]; then
   need docker
-  docker compose up -d postgres postgres_test redis
+  docker compose up -d postgres postgres_test redis elasticmq
   for url in "$DATABASE_URL" "$DATABASE_URL_TEST"; do
     for _ in $(seq 1 30); do pg_ready "$url" 2>/dev/null && break; sleep 1; done
   done

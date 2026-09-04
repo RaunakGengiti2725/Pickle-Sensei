@@ -14,7 +14,7 @@ right" or "the subset I touched passes".
 
 ```bash
 cd /home/ubuntu/repos/Pickle-Sensei
-docker compose up -d postgres postgres-test          # 5432 dev, 5433 test
+docker compose up -d postgres postgres_test redis elasticmq          # 5432 dev, 5433 test
 scripts/verify-cloud.sh --only deps                  # pnpm install --frozen-lockfile + apps/mobile npm ci
 ```
 
@@ -65,7 +65,7 @@ scripts/verify-cloud.sh --only mobile                  # apps/mobile tsc + jest
 - `format` failures: `pnpm format` (root prettier is the authority; apps/mobile
   pins the same version).
 - `test` failing with `ECONNREFUSED :5433`: the test Postgres is not up —
-  `docker compose up -d postgres-test`; do not skip the stage.
+  `docker compose up -d postgres_test`; do not skip the stage.
 - `rls` needing Docker: if Docker is genuinely absent the script falls back
   to a local `initdb` cluster; if neither exists the stage FAILS — that is
   correct, report it.
