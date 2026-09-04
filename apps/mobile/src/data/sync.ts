@@ -109,6 +109,11 @@ export function isTransientSyncRejection(code: string): boolean {
   return TRANSIENT_SYNC_REJECTION_CODES.has(code);
 }
 
+/**
+ * Every failed attempt — transient or permanent — stamps `last_attempt_at`
+ * so the drain window can rotate through the queue. A transient failure
+ * leaves `attempts` untouched: the row stays durable and retryable forever.
+ */
 async function recordRowFailure(
   db: LocalDb,
   owner: string,
@@ -118,13 +123,15 @@ async function recordRowFailure(
 ): Promise<void> {
   if (permanent) {
     await db.execute(
-      `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+      `UPDATE outbox SET attempts = attempts + 1, last_error = ?,
+              last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
        WHERE owner_key = ? AND id = ?`,
       [String(error), owner, rowId],
     );
   } else {
     await db.execute(
-      `UPDATE outbox SET last_error = ?
+      `UPDATE outbox SET last_error = ?,
+              last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
        WHERE owner_key = ? AND id = ?`,
       [String(error), owner, rowId],
     );
@@ -136,9 +143,15 @@ export async function drainOutbox(
   transport: SyncTransport,
 ): Promise<{ synced: number; failed: number; remaining: number }> {
   const owner = getActiveDataOwner();
+  // The 50-row window is not a fixed id-ascending head: never-attempted rows
+  // come first, then least-recently-attempted. Rows the server keeps
+  // rejecting transiently (attempts never advance) rotate out of the window
+  // instead of pinning every newer row behind them forever.
   const { rows } = await db.execute(
     `SELECT id, kind, payload, attempts FROM outbox
-     WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
+     WHERE owner_key = ? AND attempts < ?
+     ORDER BY last_attempt_at IS NOT NULL, last_attempt_at ASC, id ASC
+     LIMIT 50`,
     [owner, OUTBOX_MAX_ATTEMPTS],
   );
   let synced = 0;

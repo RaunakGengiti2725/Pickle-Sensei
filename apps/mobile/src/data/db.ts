@@ -65,7 +65,8 @@ const LOCAL_MIGRATIONS: string[] = [
      payload TEXT NOT NULL,
      attempts INTEGER NOT NULL DEFAULT 0,
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-     last_error TEXT
+     last_error TEXT,
+     last_attempt_at TEXT
    )`,
   `CREATE TABLE IF NOT EXISTS sync_receipt (
      owner_key TEXT NOT NULL,
@@ -221,6 +222,11 @@ function ensureAccountScopedSchema(db: DB): void {
       db.executeSync(
         `ALTER TABLE outbox ADD COLUMN owner_key TEXT NOT NULL DEFAULT '${GUEST_DATA_OWNER}'`,
       );
+    }
+    // Drain scheduling: the sync window rotates by least-recent attempt so a
+    // head of transiently-rejected rows cannot starve newer rows.
+    if (!hasColumn(db, 'outbox', 'last_attempt_at')) {
+      db.executeSync('ALTER TABLE outbox ADD COLUMN last_attempt_at TEXT');
     }
     db.executeSync(
       'CREATE INDEX IF NOT EXISTS idx_local_shot_owner_time ON local_shot (owner_key, captured_at DESC)',
