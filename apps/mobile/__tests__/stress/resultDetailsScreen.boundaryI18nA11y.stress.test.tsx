@@ -2067,6 +2067,12 @@ describe('STRESS ResultDetailsScreen · boundary/i18n/a11y (real navigator + pro
           path.join(outDir, `broken-${seed}.json`),
           JSON.stringify(record, null, 2),
         );
+      } else if (outDir && record.tree !== null) {
+        fs.mkdirSync(outDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(outDir, `tree-${seed}.json`),
+          JSON.stringify(record, null, 2),
+        );
       }
       expect({ seed, spec: record.spec, failures: record.failures }).toEqual({
         seed,
