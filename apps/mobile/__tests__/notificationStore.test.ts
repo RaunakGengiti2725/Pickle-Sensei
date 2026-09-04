@@ -21,11 +21,20 @@ import {
  */
 
 const mockKvTable = new Map<string, string>();
+/** Number of upcoming kv SELECTs that throw (a locked/unavailable db). */
+let mockKvReadFailures = 0;
+/** When set, every kv SELECT waits on it before answering. */
+let mockKvReadGate: Promise<void> | null = null;
 
 jest.mock('../src/data/db', () => ({
   getDb: () => ({
     async execute(sql: string, params: unknown[] = []) {
       if (sql.startsWith('SELECT value FROM kv')) {
+        if (mockKvReadGate) await mockKvReadGate;
+        if (mockKvReadFailures > 0) {
+          mockKvReadFailures -= 1;
+          throw new Error('database is locked');
+        }
         const value = mockKvTable.get(String(params[0]));
         return { rows: value === undefined ? [] : [{ value }] };
       }
@@ -85,14 +94,26 @@ function resetStore() {
     ownerKey: null,
     prefs: { ...DEFAULT_NOTIFICATION_PREFS },
     permission: 'unknown',
+    persistFailed: false,
+    scheduleFailed: false,
+    hydrateFailed: false,
+    pendingWrite: null,
   });
 }
 
 const owner = '33333333-3333-4333-8333-333333333333';
 const otherOwner = '44444444-4444-4444-8444-444444444444';
 
+function storedPrefs(forOwner: string) {
+  return JSON.parse(
+    mockKvTable.get(notificationPrefsKeyForOwner(forOwner))!,
+  ) as Record<string, unknown>;
+}
+
 beforeEach(() => {
   mockKvTable.clear();
+  mockKvReadFailures = 0;
+  mockKvReadGate = null;
   resetStore();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
@@ -301,5 +322,207 @@ describe('notification store', () => {
     expect(useNotificationStore.getState().prefs.promptDismissed).toBe(true);
     const stored = mockKvTable.get(notificationPrefsKeyForOwner(owner));
     expect(JSON.parse(stored!).promptDismissed).toBe(true);
+  });
+
+  it('re-reads prefs after an await so a concurrent opt-out wins over the captured plan', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        promptDismissed: true,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    const appliedBefore = scheduler.appliedPlans.length;
+    const cancelsBefore = scheduler.cancelAllCalls;
+
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const sync = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: async () => {
+        await gate;
+        return planContext;
+      },
+    });
+    await useNotificationStore
+      .getState()
+      .setPrefs({ enabled: false }, deps(scheduler));
+    release();
+    await sync;
+
+    expect(scheduler.appliedPlans.length).toBe(appliedBefore);
+    expect(scheduler.cancelAllCalls).toBeGreaterThan(cancelsBefore);
+    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+  });
+
+  it('resets to the new owner’s defaults the moment its hydrate starts', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        practiceReminderMinutes: 19 * 60,
+        promptDismissed: true,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState().prefs.enabled).toBe(true);
+
+    setActiveDataOwner(otherOwner);
+    const hydrating = useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: false,
+      ownerKey: otherOwner,
+      prefs: { ...DEFAULT_NOTIFICATION_PREFS },
+    });
+    // A write for the new owner during its hydrate merges onto ITS row.
+    await useNotificationStore
+      .getState()
+      .setPrefs({ promptDismissed: true }, deps(scheduler));
+    await hydrating;
+
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+      prefs: {
+        enabled: false,
+        practiceReminderMinutes:
+          DEFAULT_NOTIFICATION_PREFS.practiceReminderMinutes,
+        promptDismissed: true,
+      },
+    });
+    expect(storedPrefs(otherOwner)).toMatchObject({
+      enabled: false,
+      practiceReminderMinutes:
+        DEFAULT_NOTIFICATION_PREFS.practiceReminderMinutes,
+      promptDismissed: true,
+    });
+    expect(storedPrefs(owner)).toMatchObject({
+      enabled: true,
+      practiceReminderMinutes: 19 * 60,
+    });
+  });
+
+  it('a failed prefs read leaves the store un-hydrated, keeps reminders, and retries on the next sync', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        practiceReminderMinutes: 19 * 60,
+        promptDismissed: true,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    mockKvReadFailures = 1;
+
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: false,
+      hydrateFailed: true,
+      ownerKey: owner,
+    });
+    expect(scheduler.cancelAllCalls).toBe(0);
+    expect(scheduler.appliedPlans).toEqual([]);
+
+    // Tapping "Not now" on a card that should not be showing must not write
+    // defaults over the saved opt-in.
+    await useNotificationStore.getState().dismissPrompt(deps(scheduler));
+    expect(storedPrefs(owner)).toMatchObject({
+      enabled: true,
+      practiceReminderMinutes: 19 * 60,
+      promptDismissed: true,
+    });
+
+    // The next foreground sync retries the read and schedules the saved prefs.
+    const state = useNotificationStore.getState();
+    if (!state.hydrated) await state.syncNow(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      hydrateFailed: false,
+      prefs: { enabled: true, practiceReminderMinutes: 19 * 60 },
+    });
+    const lastPlan = scheduler.appliedPlans.at(-1)!;
+    const practice = lastPlan.find(item => item.id === 'ps.reminder.practice')!;
+    expect(new Date(practice.timestampMs).getHours()).toBe(19);
+  });
+
+  it('a write made before the row could be read is merged onto the row once it is', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        practiceReminderMinutes: 19 * 60,
+        promptDismissed: false,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    mockKvReadFailures = 1;
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState().hydrated).toBe(false);
+
+    // The read fails once more, so the choice stays pending in memory…
+    mockKvReadFailures = 1;
+    await useNotificationStore
+      .getState()
+      .setPrefs({ streakDefense: false }, deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: false,
+      persistFailed: true,
+      prefs: { streakDefense: false },
+    });
+    expect(storedPrefs(owner)).toMatchObject({ streakDefense: true });
+
+    // …and lands on top of the durable row on the next successful read.
+    await useNotificationStore.getState().syncNow(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      persistFailed: false,
+      prefs: {
+        enabled: true,
+        practiceReminderMinutes: 19 * 60,
+        streakDefense: false,
+      },
+    });
+    expect(storedPrefs(owner)).toMatchObject({
+      enabled: true,
+      practiceReminderMinutes: 19 * 60,
+      streakDefense: false,
+    });
+  });
+
+  it('a write that lands while the owner’s row is re-read is not undone by the stale row', async () => {
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+
+    let release!: () => void;
+    mockKvReadGate = new Promise<void>(resolve => (release = resolve));
+    const rehydrate = useNotificationStore.getState().hydrate(deps(scheduler));
+    mockKvReadGate = null;
+    await useNotificationStore
+      .getState()
+      .setPrefs({ enabled: true }, deps(scheduler));
+    expect(storedPrefs(owner)).toMatchObject({ enabled: true });
+    release();
+    await rehydrate;
+
+    expect(useNotificationStore.getState().prefs.enabled).toBe(true);
+    expect(storedPrefs(owner)).toMatchObject({ enabled: true });
   });
 });
