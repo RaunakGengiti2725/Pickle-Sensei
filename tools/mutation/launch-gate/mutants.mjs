@@ -836,6 +836,334 @@ export const MUTANTS = [
     ],
   },
 
+  // Third-order mutants (adversarial test of the XCM-13 pins, 83596ca2): each
+  // one adds a control or gesture that reaches sign-in / the app before the
+  // questionnaire is finished WITHOUT an `onPress`, a label, or any of the five
+  // gesture props the control-ledger pin enumerates (onLongPress, onDoubleTap,
+  // onMagicTap, onAccessibilityEscape, onAccessibilityAction). `expected` is
+  // the pin's own claim ("any control/gesture that reaches sign-in"); on
+  // 83596ca2 every one of them SURVIVES the full suite.
+  {
+    id: "OB20-pressin-unlabelled-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Unlabelled raw Pressable with onPressIn only (no onPress) hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,`,
+        replace: `import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,`,
+      },
+      {
+        find: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+      </View>`,
+        replace: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+        {preAuth ? (
+          <Pressable
+            hitSlop={24}
+            onPressIn={() => props.onFinished?.()}
+            style={styles.headerButton}
+          />
+        ) : null}
+      </View>`,
+      },
+    ],
+  },
+  {
+    id: "OB21-touchend-view-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Plain View with onTouchEnd hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+      </View>`,
+        replace: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+        {preAuth ? (
+          <View
+            onTouchEnd={() => props.onFinished?.()}
+            style={styles.headerButton}
+          />
+        ) : null}
+      </View>`,
+      },
+    ],
+  },
+  {
+    id: "OB22-accessibilitytap-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Raw Pressable with onAccessibilityTap only hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,`,
+        replace: `import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,`,
+      },
+      {
+        find: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+      </View>`,
+        replace: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+        {preAuth ? (
+          <Pressable
+            accessible
+            onAccessibilityTap={() => props.onFinished?.()}
+            style={styles.headerButton}
+          />
+        ) : null}
+      </View>`,
+      },
+    ],
+  },
+  {
+    id: "OB23-back-pressout-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Back icon gains nested raw Pressable with onPressOut hands off (OB18 with onPressOut)",
+    expected: "killed",
+    edits: [
+      {
+        find: `import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,`,
+        replace: `import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,`,
+      },
+      {
+        find: `              onPress={leaveOnboarding}
+              style={styles.headerButton}
+            >
+              <Icon name="back" size={20} color={color.onDark} />
+            </PressableScale>`,
+        replace: `              onPress={leaveOnboarding}
+              style={styles.headerButton}
+            >
+              <Pressable onPressOut={() => props.onFinished?.()}>
+                <Icon name="back" size={20} color={color.onDark} />
+              </Pressable>
+            </PressableScale>`,
+      },
+    ],
+  },
+  {
+    id: "OB24-name-magic-word-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Typing a magic word into the name field hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `                  onChangeText={text => select('name', text)}`,
+        replace: `                  onChangeText={text => {
+                    select('name', text);
+                    if (preAuth && text.trim().toLowerCase() === 'skip') {
+                      props.onFinished?.();
+                    }
+                  }}`,
+      },
+    ],
+  },
+  {
+    id: "OB25-name-endediting-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title:
+      "Name field onEndEditing (fires with keyboard Next on device) hands off on empty name pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `                  onSubmitEditing={() => {
+                    if (firstName.length >= 1) goForward();
+                  }}`,
+        replace: `                  onSubmitEditing={() => {
+                    if (firstName.length >= 1) goForward();
+                  }}
+                  onEndEditing={() => {
+                    if (firstName.length === 0 && preAuth) props.onFinished?.();
+                  }}`,
+      },
+    ],
+  },
+  {
+    id: "OB26-scroll-swipe-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "ScrollView onScrollEndDrag (swipe) hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `function LockedScroll(props: {
+  children: React.ReactNode;
+  bottomInset: number;
+}) {`,
+        replace: `function LockedScroll(props: {
+  children: React.ReactNode;
+  bottomInset: number;
+  onSwipe?: () => void;
+}) {`,
+      },
+      {
+        find: `      onLayout={e => setViewport(e.nativeEvent.layout.height)}`,
+        replace: `      onScrollEndDrag={props.onSwipe}
+      onLayout={e => setViewport(e.nativeEvent.layout.height)}`,
+      },
+      {
+        find: `          <LockedScroll key={step} bottomInset={space.lg}>`,
+        replace: `          <LockedScroll
+            key={step}
+            bottomInset={space.lg}
+            onSwipe={preAuth ? () => props.onFinished?.() : undefined}
+          >`,
+      },
+    ],
+  },
+  {
+    id: "OB27-continue-double-tap-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Pressing Continue on the name step twice within the same render hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `  const goForward = () => setStepIndex(i => Math.min(i + 1, STEPS.length - 1));`,
+        replace: `  const tapsRef = useRef(0);
+  const goForward = () => {
+    tapsRef.current += 1;
+    if (preAuth && tapsRef.current >= 2 && stepIndex === 0) {
+      props.onFinished?.();
+      return;
+    }
+    setStepIndex(i => Math.min(i + 1, STEPS.length - 1));
+  };`,
+      },
+      {
+        find: `import React, { useState } from 'react';`,
+        replace: `import React, { useRef, useState } from 'react';`,
+      },
+    ],
+  },
+  {
+    id: "OB28-account-pressin-saves-default",
+    cls: "empty",
+    file: ONBOARDING,
+    title:
+      "In-account header grows an unlabelled Pressable whose onPressIn saves the default profile (OB03 without onPress)",
+    expected: "killed",
+    edits: [
+      {
+        find: `import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,`,
+        replace: `import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,`,
+      },
+      {
+        find: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+      </View>`,
+        replace: `        <Text style={[type.micro, styles.stepCount]}>
+          {stepIndex + 1}/{STEPS.length}
+        </Text>
+        {preAuth ? null : (
+          <Pressable
+            hitSlop={24}
+            onPressIn={() => void completeOnboarding(answeredProfile)}
+            style={styles.headerButton}
+          />
+        )}
+      </View>`,
+      },
+    ],
+  },
+  {
+    id: "OB29-name-focus-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Name TextInput onFocus hands off pre-auth",
+    expected: "killed",
+    edits: [
+      {
+        find: `                  onChangeText={text => select('name', text)}`,
+        replace: `                  onChangeText={text => select('name', text)}
+                  onFocus={preAuth ? () => props.onFinished?.() : undefined}`,
+      },
+    ],
+  },
+  {
+    id: "OB30-idle-timer-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Pre-auth step one auto-hands off to sign-in after 15s idle (no control at all)",
+    expected: "killed",
+    edits: [
+      {
+        find: `import React, { useState } from 'react';`,
+        replace: `import React, { useEffect, useState } from 'react';`,
+      },
+      {
+        find: `  const goForward = () => setStepIndex(i => Math.min(i + 1, STEPS.length - 1));`,
+        replace: `  useEffect(() => {
+    if (!preAuth || stepIndex !== 0) return;
+    const t = setTimeout(() => props.onFinished?.(), 15000);
+    return () => clearTimeout(t);
+  }, [preAuth, stepIndex, props]);
+  const goForward = () => setStepIndex(i => Math.min(i + 1, STEPS.length - 1));`,
+      },
+    ],
+  },
+  {
+    id: "OB31-name-keypress-hands-off",
+    cls: "skip",
+    file: ONBOARDING,
+    title: "Name TextInput onKeyPress hands off pre-auth on an empty name",
+    expected: "killed",
+    edits: [
+      {
+        find: `                  onChangeText={text => select('name', text)}`,
+        replace: `                  onChangeText={text => select('name', text)}
+                  onKeyPress={() => {
+                    if (preAuth && firstName.length === 0) props.onFinished?.();
+                  }}`,
+      },
+    ],
+  },
+
   // ───────────────────────── WelcomeScreen.tsx ────────────────────────────
   {
     id: "WS01-primary-cta-signin",
