@@ -39,6 +39,15 @@ jobs:
         image: softwaremill/elasticmq-native:1.7.1
         ports:
           - 9324:9324
+        # The image ships BusyBox (wget), no curl. ListQueues answers 200 once the
+        # broker serves SQS; the job does not start until this passes, and
+        # verify-cloud.sh additionally fails the test stage if the endpoint set
+        # below is unreachable.
+        options: >-
+          --health-cmd "wget -q -O /dev/null 'http://localhost:9324/?Action=ListQueues'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 

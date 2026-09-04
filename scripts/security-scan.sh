@@ -1,23 +1,41 @@
 #!/usr/bin/env bash
 # Secret-scanning gate for Pickle Sensei (gitleaks, pinned, non-interactive).
 #
-#   scripts/security-scan.sh                 # working tree + full git history of HEAD
+#   scripts/security-scan.sh                 # working tree + git history reachable from HEAD
 #   scripts/security-scan.sh --tree          # working tree only (tracked, untracked, unignored)
-#   scripts/security-scan.sh --history       # git history only
+#   scripts/security-scan.sh --history       # git history reachable from HEAD (= --log-opts "HEAD")
 #   scripts/security-scan.sh --history --log-opts "origin/main..HEAD"   # only this branch's commits
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
 # with a justification). Findings are ALWAYS redacted in output and reports.
 #
-# Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
+# History scope: without --log-opts the scan covers exactly the ancestry of HEAD
+# (DEFAULT_LOG_OPTS), never every fetched ref, so the verdict for the commit
+# under test does not depend on unrelated branches. --log-opts is handed to
+# gitleaks verbatim (it appends the words to `git log -p -U0`). The scan fails
+# closed: the same range is resolved with `git log` first and an invalid range
+# or one selecting zero commits is a scanner error ("NO COMMITS SCANNED"), as
+# are gitleaks ERR lines or a "0 commits scanned" result after the fact. A
+# shallow repository (history coverage incomplete) is also a scanner error —
+# run `git fetch --unshallow`, or set SECURITY_SCAN_ALLOW_SHALLOW=1 to
+# downgrade it to a warning.
+#
+# Exit codes: 0 = no findings, 1 = findings, 2 = no verdict (setup or scanner
+#             error: no binary, invalid/empty history range, shallow repository,
+#             gitleaks error output). Only 0 is a PASS.
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary instead of the pinned download
 #   SECURITY_SCAN_CACHE     where the pinned binary is cached
 #                           (default: ${XDG_CACHE_HOME:-~/.cache}/pickle-sensei)
 #   SECURITY_SCAN_OFFLINE=1 never download; fail with exit 2 if no usable binary
+#   SECURITY_SCAN_ALLOW_SHALLOW=1  scan a shallow clone anyway (loud warning, PASS
+#                           is qualified as incomplete coverage)
 set -euo pipefail
+
+# `git log` range the history scan uses when --log-opts is not given.
+DEFAULT_LOG_OPTS="HEAD"
 
 GITLEAKS_VERSION="8.30.1"
 # sha256 of the official release tarballs for v${GITLEAKS_VERSION}
@@ -163,8 +181,11 @@ if [ -n "$REPORT_DIR" ]; then
   REPORT_DIR="$(cd "$REPORT_DIR" && pwd)"
 fi
 
-COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --config "$CONFIG")
+COMMON_ARGS=(--no-banner --no-color --exit-code 1 --redact=100 --config "$CONFIG")
 [ "$VERBOSE" = 1 ] && COMMON_ARGS+=(--verbose)
+
+SCANNER_LOG="$(mktemp)"
+trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"; rm -f "$SCANNER_LOG"' EXIT
 
 run_scan() {
   # $1 = label, $2 = gitleaks subcommand, remaining = extra args
@@ -178,10 +199,24 @@ run_scan() {
   # allowlists in .gitleaks.toml are anchored on them).
   args+=("$@" .)
   log "scanning ${label}…"
-  local start end rc=0
+  local start end rc=0 scanned
   start=$(date +%s)
-  "$GITLEAKS" "${args[@]}" || rc=$?
+  # gitleaks logs to stderr; keep streaming it while also capturing it so a
+  # scanner-side error can never be mistaken for a clean result.
+  : >"$SCANNER_LOG"
+  { "$GITLEAKS" "${args[@]}" 2>&1 1>&3 | tee "$SCANNER_LOG" >&2; } 3>&1 || rc=$?
   end=$(date +%s)
+  if [ "$rc" = 0 ] && grep -Eq '(^|[[:space:]])ERR[[:space:]]' "$SCANNER_LOG"; then
+    log "${label}: gitleaks reported an error (see ERR lines above) — a scan that could not run is not a PASS"
+    rc=2
+  fi
+  if [ "$rc" = 0 ] && [ "$sub" = git ]; then
+    scanned="$(sed -n 's/.* INF \([0-9][0-9]*\) commits scanned\..*/\1/p' "$SCANNER_LOG" | tail -n 1)"
+    if [ -z "$scanned" ] || [ "$scanned" = 0 ]; then
+      log "${label}: NO COMMITS SCANNED (gitleaks reported '${scanned:-no}' commits) — the requested range evaluated nothing"
+      rc=2
+    fi
+  fi
   case "$rc" in
     0) log "${label}: clean ($((end - start))s)" ;;
     1) log "${label}: FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
@@ -190,21 +225,69 @@ run_scan() {
   return "$rc"
 }
 
+# history_range_commits <log-opts words...>: resolve the range exactly as
+# gitleaks will (`git log <words>`); die on an invalid range or on zero commits.
+history_range_commits() {
+  local err count
+  err="$(mktemp)"
+  count="$(git log --no-color --format=%H "$@" 2>"$err" | awk '/^[0-9a-f]+$/ && length($0) >= 40 { n++ } END { print n + 0 }')" || count=0
+  if [ -s "$err" ]; then
+    log "ERROR: git rejected the history range '$*':"
+    sed 's/^/[security-scan]   /' "$err" >&2
+    rm -f "$err"
+    exit 2
+  fi
+  rm -f "$err"
+  if [ "$count" = 0 ]; then
+    die "NO COMMITS SCANNED: history range '$*' selects no commits — a vacuous scan is not a PASS (check the range; the default is 'HEAD')"
+  fi
+  printf '%s' "$count"
+}
+
+SHALLOW_WARNING=""
+check_history_coverage() {
+  [ "$(git rev-parse --is-shallow-repository)" = true ] || return 0
+  local msg="shallow repository — history coverage incomplete (only $(git rev-list --count HEAD) commit(s) present; run 'git fetch --unshallow' for the full history)"
+  if [ "${SECURITY_SCAN_ALLOW_SHALLOW:-0}" = 1 ]; then
+    log "WARNING: $msg — continuing because SECURITY_SCAN_ALLOW_SHALLOW=1"
+    SHALLOW_WARNING="$msg"
+  else
+    die "$msg; set SECURITY_SCAN_ALLOW_SHALLOW=1 to scan anyway"
+  fi
+}
+
+# exit 1 = findings in any scan; exit 2 = no findings but a scan could not run.
 overall=0
+record() {
+  local rc=$1
+  case "$rc" in
+    0) ;;
+    1) overall=1 ;;
+    *) [ "$overall" = 1 ] || overall=2 ;;
+  esac
+}
 if [ "$SCAN_TREE" = 1 ]; then
-  run_scan tree dir || overall=1
+  run_scan tree dir || record $?
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  if [ -n "$LOG_OPTS" ]; then
-    run_scan history git --log-opts "$LOG_OPTS" || overall=1
-  else
-    run_scan history git || overall=1
-  fi
+  check_history_coverage
+  history_opts="${LOG_OPTS:-$DEFAULT_LOG_OPTS}"
+  # gitleaks splits --log-opts on single spaces before handing them to git log.
+  IFS=' ' read -r -a history_words <<<"$history_opts"
+  commit_count="$(history_range_commits "${history_words[@]}")" || exit $?
+  log "history: $commit_count commits in range (git log $history_opts; gitleaks --log-opts \"$history_opts\" — it counts only commits with a diff, so merges are not in its total)"
+  run_scan history git --log-opts "$history_opts" || record $?
 fi
 
 if [ "$overall" = 0 ]; then
-  log "PASS: no secrets detected"
+  if [ -n "$SHALLOW_WARNING" ]; then
+    log "PASS (history coverage incomplete): no secrets detected in the scanned range, but $SHALLOW_WARNING"
+  else
+    log "PASS: no secrets detected"
+  fi
+elif [ "$overall" = 1 ]; then
+  log "FAIL: secrets detected. Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
 else
-  log "FAIL: secrets detected (or scanner error). Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
+  log "FAIL: scanner error — the scan could not evaluate the requested scope (see above); no verdict on secrets"
 fi
 exit "$overall"

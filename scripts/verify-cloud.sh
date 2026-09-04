@@ -13,8 +13,10 @@
 #   lint       pnpm lint                     (root eslint also covers apps/mobile)
 #   typecheck  pnpm typecheck                (pnpm build == pnpm -r typecheck)
 #   test       pnpm test with DATABASE_URL_TEST (integration suites need Postgres);
-#              @pickle/queue's 3 SQS tests run only when SQS_ENDPOINT_TEST
-#              (ElasticMQ) is reachable — the stage reports which it was
+#              @pickle/queue's 3 SQS tests need an ElasticMQ broker: with
+#              SQS_ENDPOINT_TEST set (CI, --start-services) it MUST be reachable
+#              or the stage is UNAVAILABLE; unset, the suites are skipped only
+#              when nothing answers on the default port and the stage note says so
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
@@ -43,7 +45,8 @@
 # Environment (defaults match docker-compose.yml / .env.example):
 #   DATABASE_URL_TEST  postgres://pickle:pickle_test_password@localhost:5433/pickle_test
 #   DATABASE_URL       postgres://pickle:pickle_dev_password@localhost:5432/pickle_dev
-#   SQS_ENDPOINT_TEST  http://localhost:9324 (docker compose elasticmq; CI service)
+#   SQS_ENDPOINT_TEST  unset: use http://localhost:9324 if it answers, else skip the
+#                      SQS suites (noted); set: the broker must be reachable
 #   VERIFY_ARTIFACTS   artifacts/verify-cloud/<UTC timestamp>  (logs + summary.json)
 set -uo pipefail
 
@@ -61,7 +64,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -124,13 +127,18 @@ run_stage() {
   fi
   echo "==> [$name] start $(date -u +%H:%M:%S)"
   start=$(date +%s)
+  rm -f "$ARTIFACTS/$name.note"
   # Each stage runs in a subshell with errexit so any failing command fails the stage.
   ( set -e; "$fn" ) >"$log" 2>&1
   rc=$?
   end=$(date +%s)
   if [ $rc -eq 0 ]; then
-    echo "    [$name] PASS in $((end - start))s (log: $log)"
-    record "$name" passed $((end - start)) ""
+    # A passing stage may qualify its result (e.g. which optional suites ran)
+    # by writing $ARTIFACTS/<stage>.note (see stage_note); it lands in the summary.
+    local note=""
+    [ ! -f "$ARTIFACTS/$name.note" ] || note="$(cat "$ARTIFACTS/$name.note")"
+    echo "    [$name] PASS in $((end - start))s (log: $log)${note:+ — $note}"
+    record "$name" passed $((end - start)) "$note"
   elif [ $rc -eq 75 ]; then
     # EX_TEMPFAIL: the stage's prerequisite tool/fixture is absent. Still a failure
     # for the run (skipped != passed) but labelled so agents know what to install.
@@ -148,6 +156,12 @@ run_stage() {
 need() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required tool: $1"; exit 75; }
 }
+
+# stage_note <stage> <text>: record a qualification for a PASSING stage in summary.json.
+stage_note() { printf '%s' "$2" >"$ARTIFACTS/$1.note"; }
+
+# sqs_ready <endpoint>: ElasticMQ answers ListQueues with 200 (a bare GET is a 400).
+sqs_ready() { curl -sSf -m 3 -o /dev/null "$1/?Action=ListQueues" 2>/dev/null; }
 
 pg_ready() {
   # Verify a Postgres URL is reachable using @pickle/database's own pg driver — no psql needed.
@@ -193,16 +207,32 @@ stage_test() {
     echo "test database unreachable at DATABASE_URL_TEST — run: docker compose up -d postgres_test (or --start-services)"
     exit 75
   fi
-  local sqs="${SQS_ENDPOINT_TEST:-$SQS_ENDPOINT_DEFAULT}"
-  # ElasticMQ answers a bare GET with 400 — any HTTP response means it is up.
-  if curl -sS -m 3 -o /dev/null "$sqs/" 2>/dev/null; then
-    echo "SQS_ENDPOINT_TEST=$sqs reachable — @pickle/queue SQS integration tests WILL run"
-    export SQS_ENDPOINT_TEST="$sqs"
+  if [ -n "${SQS_ENDPOINT_TEST:-}" ]; then
+    # Explicitly configured (CI, --start-services): the caller expects the SQS
+    # suites to run, so an unreachable broker is a missing fixture, not a skip.
+    if ! sqs_ready "$SQS_ENDPOINT_TEST"; then
+      echo "SQS_ENDPOINT_TEST=$SQS_ENDPOINT_TEST is set but unreachable — @pickle/queue's 3 SQS tests cannot run (start the broker: docker compose up -d elasticmq / --start-services, or unset SQS_ENDPOINT_TEST to skip them deliberately)"
+      exit 75
+    fi
+    echo "SQS_ENDPOINT_TEST=$SQS_ENDPOINT_TEST reachable — @pickle/queue SQS integration tests WILL run"
+  elif sqs_ready "$SQS_ENDPOINT_DEFAULT"; then
+    echo "SQS_ENDPOINT_TEST unset; broker reachable at $SQS_ENDPOINT_DEFAULT — @pickle/queue SQS integration tests WILL run"
+    export SQS_ENDPOINT_TEST="$SQS_ENDPOINT_DEFAULT"
   else
-    echo "SQS_ENDPOINT_TEST=$sqs unreachable — @pickle/queue skips its 3 SQS tests (docker compose up -d elasticmq, or --start-services)"
-    unset SQS_ENDPOINT_TEST
+    echo "SQS_ENDPOINT_TEST unset and no broker at $SQS_ENDPOINT_DEFAULT — @pickle/queue's 3 SQS tests are SKIPPED (docker compose up -d elasticmq, or --start-services, to run them)"
+    stage_note test "SQS suites skipped: SQS_ENDPOINT_TEST unset and no broker at $SQS_ENDPOINT_DEFAULT (3 @pickle/queue SQS integration tests not run)"
   fi
   pnpm test
+  if [ -n "${SQS_ENDPOINT_TEST:-}" ]; then
+    # The suites gate on the variable themselves; skipped tests with a reachable
+    # broker mean the run did not exercise it — never a PASS. (This stage's
+    # output is $ARTIFACTS/test.log, see run_stage.)
+    if grep -Eq 'sqs\.integration\.test\.ts.*skipped' "$ARTIFACTS/test.log"; then
+      echo "SQS_ENDPOINT_TEST=$SQS_ENDPOINT_TEST was reachable but test/sqs.integration.test.ts reported skipped tests"
+      exit 1
+    fi
+    stage_note test "SQS suites ran against $SQS_ENDPOINT_TEST"
+  fi
 }
 
 stage_db() {
@@ -290,6 +320,9 @@ if [ "$START_SERVICES" = 1 ]; then
   for url in "$DATABASE_URL" "$DATABASE_URL_TEST"; do
     for _ in $(seq 1 30); do pg_ready "$url" 2>/dev/null && break; sleep 1; done
   done
+  # The broker was asked for, so the test stage must use it (or fail if it never came up).
+  export SQS_ENDPOINT_TEST="${SQS_ENDPOINT_TEST:-$SQS_ENDPOINT_DEFAULT}"
+  for _ in $(seq 1 30); do sqs_ready "$SQS_ENDPOINT_TEST" && break; sleep 1; done
 fi
 
 for s in "${STAGES[@]}"; do
