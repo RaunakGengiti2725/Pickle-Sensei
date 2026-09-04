@@ -489,9 +489,13 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     }
     expect(server.reserves).toBe(5);
     expect(server.finalized).toHaveLength(5);
-    expect(server.finalized.map(f => f.permitId).sort()).toEqual(
-      ['permit-1', 'permit-2', 'permit-3', 'permit-4', 'permit-5'],
-    );
+    expect(server.finalized.map(f => f.permitId).sort()).toEqual([
+      'permit-1',
+      'permit-2',
+      'permit-3',
+      'permit-4',
+      'permit-5',
+    ]);
     for (const { body } of server.finalized) {
       expect(body).toEqual({ outcome: 'failed', ratingId: null });
     }

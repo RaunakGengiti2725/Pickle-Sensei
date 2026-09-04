@@ -233,11 +233,13 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
     expect(backend.getAccess).not.toHaveBeenCalled();
 
     // The player leaves the screen while runCaptureAnalysis is still in
-    // flight (permit reserved on the server).
+    // flight (permit reserved on the server). The re-read must NOT race the
+    // reservation: no GET /v1/me/access until the run settles, so the store
+    // never captures the transient "reserved" ledger.
     await act(async () => renderer.unmount());
     await flush();
-    expect(backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 1));
+    expect(backend.getAccess).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
 
     // The abandoned run now ends without a score; its permit is released.
     permitHeld = false;
@@ -247,7 +249,9 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
     await flush();
     await flush();
 
-    // Expected: the ledger the rest of the app reads reflects the release.
+    // Expected: exactly one deferred re-read, and the ledger the rest of the
+    // app reads reflects the release.
+    expect(backend.getAccess).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
       true,
     );

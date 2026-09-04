@@ -503,6 +503,27 @@ export function strokeIntentPresentation(
   }
 }
 
+/** The machine-readable code a native bridge rejection carries (`''` when
+ * the rejection has none). Classification decisions read THIS, never the
+ * localized message text. */
+function nativeErrorCode(error: unknown): string {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+}
+
+/**
+ * The native camera/importer rejects a voluntary user cancel with exactly
+ * this code (iOS PickleVideoCapture.swift, Android GuidedCaptureActivity.kt).
+ * Every other rejection is a failure — including AVFoundation/Vision errors
+ * whose localized description happens to say "cancelled".
+ */
+const NATIVE_USER_CANCEL_CODE = 'camera.cancelled';
+
+export function isUserCancellation(error: unknown): boolean {
+  return nativeErrorCode(error) === NATIVE_USER_CANCEL_CODE;
+}
+
 /**
  * Honest copy for a failed imported-video pose extraction. The two frozen
  * native rejection codes get actionable product copy; anything else surfaces
@@ -510,10 +531,7 @@ export function strokeIntentPresentation(
  * these paths.
  */
 export function importedPoseExtractionFailureMessage(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code ?? '')
-      : '';
+  const code = nativeErrorCode(error);
   if (code === 'camera.import_too_long') {
     return (
       'This video is too long to analyze. Trim it to the single stroke — ' +
@@ -620,11 +638,22 @@ export function AnalyzeScreen() {
   // canStartRating flips false, and the "last free analysis" prompt has to
   // finish on top of the saved score first.
   const ratingLedgerTouched = useRef(false);
+  // The scoring run whose permit is still being reserved/consumed/released
+  // when the screen goes away. The unmount re-read waits for it to settle
+  // so the snapshot reflects the server ledger AFTER the permit is
+  // accounted for, not a transient reserved state.
+  const inFlightAnalysis = useRef<Promise<unknown> | null>(null);
   useEffect(
     () => () => {
-      const access = useAccessStore.getState();
-      if (!ratingLedgerTouched.current || access.status === 'idle') return;
-      void access.refreshAccess();
+      if (!ratingLedgerTouched.current) return;
+      const refresh = () => {
+        const access = useAccessStore.getState();
+        if (access.status === 'idle') return;
+        void access.refreshAccess();
+      };
+      const pending = inFlightAnalysis.current;
+      if (pending) void pending.then(refresh, refresh);
+      else refresh();
     },
     [],
   );
@@ -854,7 +883,7 @@ export function AnalyzeScreen() {
         }
         const sessionId = practiceSet?.sessionId ?? null;
         ratingLedgerTouched.current = true;
-        const outcome = await runCaptureAnalysis({
+        const analysis = runCaptureAnalysis({
           db: getDb(),
           captureId,
           clip: analysisClip,
@@ -879,6 +908,13 @@ export function AnalyzeScreen() {
                 )
               : null,
         });
+        inFlightAnalysis.current = analysis;
+        let outcome: Awaited<typeof analysis>;
+        try {
+          outcome = await analysis;
+        } finally {
+          inFlightAnalysis.current = null;
+        }
         // The measured/saved boundary lives inside runCaptureAnalysis (no
         // incremental signal is exposed); once it returns, the remaining
         // work is routing the already-persisted outcome.
@@ -988,11 +1024,15 @@ export function AnalyzeScreen() {
       message:
         source === 'library' ? 'Opening video library…' : 'Opening camera…',
     });
+    // Whether the native capture/import itself completed: failures after
+    // this point (persisting the clip) are not camera startup failures.
+    let captured = false;
     try {
       const clip =
         source === 'library'
           ? await importStrokeVideo()
           : await captureStrokeVideo();
+      captured = true;
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
@@ -1033,13 +1073,13 @@ export function AnalyzeScreen() {
       setPhase({ kind: 'saved', clip, captureId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.toLowerCase().includes('cancel')) {
+      if (isUserCancellation(error)) {
         // User cancel is not a startup failure.
         usabilityFunnel.log('attempt_abandoned');
         if (source === 'library') navigation.goBack();
         else setPhase({ kind: 'ready' });
       } else {
-        if (source === 'camera') {
+        if (source === 'camera' && !captured) {
           stabilitySlo.record({
             kind: 'camera_startup_failed',
             reason: 'guided_capture_error',

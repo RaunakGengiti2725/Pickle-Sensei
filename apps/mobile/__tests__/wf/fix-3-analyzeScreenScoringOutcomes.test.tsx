@@ -401,9 +401,9 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
       renderer.unmount();
     });
     // The ledger was touched the moment the run started (a permit is
-    // reserved before any outcome exists), so leaving re-reads it once —
-    // even though this run's outcome has not landed yet.
-    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
+    // reserved before any outcome exists), but the re-read waits for the
+    // run to settle: a read now would capture the transient reserved permit.
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     await act(async () => {
       resolveAnalysis({
         kind: 'scored',
@@ -415,7 +415,7 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
-    // The late outcome does not trigger a second re-read on a gone screen.
+    // Exactly one deferred re-read once the late outcome has consumed the permit.
     expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 });

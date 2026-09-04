@@ -258,6 +258,19 @@ async function runCaptureAnalysisCore(
   let freeLimitReached = false;
   try {
     const reserved = await permits.reserve(makeUuid());
+    // A reservation without an addressable id cannot be consumed by the
+    // sync transaction nor released: refuse it before any inference or
+    // local write instead of promoting a rating bound to nothing.
+    if (
+      typeof reserved.permit.id !== 'string' ||
+      reserved.permit.id.trim().length === 0
+    ) {
+      throw new ApiError(
+        502,
+        'access.permit_invalid',
+        'The rating service returned an invalid analysis permit. Your capture is saved and can be scored later.',
+      );
+    }
     permitId = reserved.permit.id;
     freeLimitReached =
       reserved.permit.accessSource === 'free' &&
@@ -312,75 +325,91 @@ async function runCaptureAnalysisCore(
           },
         };
 
-  const analysisId = makeUuid();
-  const result = await analyzeCapture(
-    fusion.providers,
-    {
-      captureId: request.captureId,
-      pose: parsed.value,
-      paddle: unavailable('paddle_detector_not_installed'),
-      ball: unavailable('ball_tracker_not_installed'),
-      trigger,
-      // declared may be null (AUTO DETECT); predicted is filled downstream
-      // by the classifier providers, never here.
-      stroke: { declared: request.declaredStroke, predicted: null },
-      declaredCanonical: request.declaredCanonical ?? null,
-      handedness: request.handedness,
-      cameraView: request.cameraView,
-      capturedAtIso: clip.capturedAtIso,
-    },
-    {
+  // Permit accounting from here on: the reservation is settled EXACTLY
+  // once — consumed by the shot-sync transaction of a fully persisted score,
+  // or released with a reason. A lost release is not a lost rating (the
+  // permit expires server-side), so release failures are never surfaced.
+  let permitSettled = false;
+  const releasePermit = async (outcome: 'failed' | 'low_confidence') => {
+    if (permitSettled) return;
+    permitSettled = true;
+    await permits.release(permitId, outcome).catch(() => {});
+  };
+
+  try {
+    const analysisId = makeUuid();
+    const result = await analyzeCapture(
+      fusion.providers,
+      {
+        captureId: request.captureId,
+        pose: parsed.value,
+        paddle: unavailable('paddle_detector_not_installed'),
+        ball: unavailable('ball_tracker_not_installed'),
+        trigger,
+        // declared may be null (AUTO DETECT); predicted is filled downstream
+        // by the classifier providers, never here.
+        stroke: { declared: request.declaredStroke, predicted: null },
+        declaredCanonical: request.declaredCanonical ?? null,
+        handedness: request.handedness,
+        cameraView: request.cameraView,
+        capturedAtIso: clip.capturedAtIso,
+      },
+      {
+        analysisId,
+        sessionId: request.sessionId ?? null,
+        appVersion: request.appVersion,
+        modelBundleVersion: 'on-device-fusion-1',
+        nowIso: () => new Date().toISOString(),
+        makeId: makeUuid,
+        captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
+        ...(request.focusCheckpoint
+          ? { focusCheckpoint: request.focusCheckpoint }
+          : {}),
+      },
+    );
+
+    if (!result.ok) {
+      await releasePermit('failed');
+      return { kind: 'unavailable', reason: result.failure.message };
+    }
+    // Attach the measured envelope so downstream Result can explain
+    // quality-related abstentions (additive; old records simply lack it).
+    const record: CaptureAnalysisRecord = {
+      ...result.value,
+      captureEnvelope: envelope,
+    };
+
+    // Every run is durably recorded, scored or not — reprocessing history.
+    await saveAnalysisRecord(request.db, record);
+    await markCaptureAnalyzed(request.db, request.captureId);
+
+    if (record.result && record.result.resultKind === 'scored') {
+      // Promote to the product rating; the sync transaction consumes the
+      // permit once the promotion is durable.
+      await saveAnalysis(request.db, record.result, permitId);
+      permitSettled = true;
+      return { kind: 'scored', analysisId, record, freeLimitReached };
+    }
+
+    // EVERY non-scored outcome releases the reservation. This branch also
+    // carries the AUTO DETECT abstained partial records — an abstained run
+    // has result:null and must never burn the user's rating allowance.
+    await releasePermit('low_confidence');
+    if (record.result) {
+      // Local display only — abstentions are never synced as ratings.
+      await saveLocalOnlyAnalysis(request.db, record.result);
+    }
+    return {
+      kind: 'low_confidence',
       analysisId,
-      sessionId: request.sessionId ?? null,
-      appVersion: request.appVersion,
-      modelBundleVersion: 'on-device-fusion-1',
-      nowIso: () => new Date().toISOString(),
-      makeId: makeUuid,
-      captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
-      ...(request.focusCheckpoint
-        ? { focusCheckpoint: request.focusCheckpoint }
-        : {}),
-    },
-  );
-
-  if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
-    });
-    return { kind: 'unavailable', reason: result.failure.message };
+      record,
+      guidance: record.result?.guidance ?? null,
+    };
+  } catch (error) {
+    // Inference or local persistence threw after the reservation: the
+    // permit must not stay counted against the account until the
+    // server-side sweep. Release first, then let the failure surface.
+    await releasePermit('failed');
+    throw error;
   }
-  // Attach the measured envelope so downstream Result can explain
-  // quality-related abstentions (additive; old records simply lack it).
-  const record: CaptureAnalysisRecord = {
-    ...result.value,
-    captureEnvelope: envelope,
-  };
-
-  // Every run is durably recorded, scored or not — reprocessing history.
-  await saveAnalysisRecord(request.db, record);
-  await markCaptureAnalyzed(request.db, request.captureId);
-
-  if (record.result && record.result.resultKind === 'scored') {
-    // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record, freeLimitReached };
-  }
-
-  // Permit accounting: EVERY non-scored outcome releases the reservation.
-  // This branch also carries the AUTO DETECT abstained partial records — an
-  // abstained run has result:null and must never burn the user's rating
-  // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
-  });
-  if (record.result) {
-    // Local display only — abstentions are never synced as ratings.
-    await saveLocalOnlyAnalysis(request.db, record.result);
-  }
-  return {
-    kind: 'low_confidence',
-    analysisId,
-    record,
-    guidance: record.result?.guidance ?? null,
-  };
 }
