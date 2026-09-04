@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "types": ["node"],
+    "isolatedModules": false,
+    "allowImportingTsExtensions": false,
+    "outDir": "../../build/static-health",
+    "rootDir": "."
+  },
+  "include": ["./*.ts"]
+}
