@@ -5,12 +5,15 @@ import Foundation
 /// Computes the SAME per-frame wrist-speed sampling the guided-capture
 /// instruments use (the D-029 `StrokeCompletionMonitor` shadow, and the
 /// sampling of `TemporalStrokeDetector.ingest`): per pose frame, each wrist
-/// with visibility ≥ 0.35 is compared against its own prior observation
-/// (elapsed > 0 and ≤ 250 ms), speed is normalized-image units/second, the
-/// fastest wrist wins the frame, and frames with pose confidence < 0.5 yield
-/// nothing. (The live trigger itself has since moved to HIP-RELATIVE wrist
-/// speed in body-heights/second — temporal-stroke-heuristic-4; this stream's
-/// schema stays in absolute image units.) State is two prior wrist points — bounded by construction; the
+/// with visibility ≥ 0.35 and finite x/y/visibility is compared against its
+/// own prior observation (elapsed > 0 and ≤ 250 ms), speed is
+/// normalized-image units/second, the fastest wrist wins the frame, and
+/// frames with pose confidence < 0.5 yield nothing. A wrist carrying ±inf /
+/// NaN is treated like a hidden one — neither measured nor remembered — so
+/// the series never contains a non-finite value. (The live trigger itself has
+/// since moved to HIP-RELATIVE wrist speed in body-heights/second —
+/// temporal-stroke-heuristic-4; this stream's schema stays in absolute image
+/// units.) State is two prior wrist points — bounded by construction; the
 /// stream never buffers, so a session of any length is safe to run through it.
 ///
 /// The value is camera-relative image-space motion. It is never a physical
@@ -43,9 +46,10 @@ public final class SessionMotionStream {
   /// Feed one pose frame; returns a sample when at least one wrist produced a
   /// measurable displacement. Not thread-safe — call from one queue.
   public func ingest(pose: PoseFrame) -> Sample? {
-    guard pose.confidence >= Self.minPoseConfidence else { return nil }
+    guard pose.confidence.isFinite, pose.confidence >= Self.minPoseConfidence else { return nil }
     let wrists = pose.landmarks.filter {
       ($0.name == "right_wrist" || $0.name == "left_wrist")
+        && $0.x.isFinite && $0.y.isFinite && $0.visibility.isFinite
         && $0.visibility >= Self.minWristVisibility
     }
     guard !wrists.isEmpty else { return nil }

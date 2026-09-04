@@ -113,8 +113,8 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     }
   }
 
-  /// Landmarks below this visibility do not contribute to speed, anchor or
-  /// scale.
+  /// Landmarks below this visibility, or with a non-finite x/y/visibility, do
+  /// not contribute to speed, anchor or scale (see `trustedLandmarks`).
   public static let minimumLandmarkVisibility = 0.35
   /// Consecutive samples of one point further apart than this yield no speed
   /// (a dropped pose stream must never manufacture a giant velocity).
@@ -223,25 +223,24 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   }
 
   public func ingest(pose: PoseFrame, paddle: PaddleFrame?) -> StrokeEvent? {
-    guard pose.confidence >= config.minPoseConfidence else { return nil }
+    guard pose.confidence.isFinite, pose.confidence >= config.minPoseConfidence else { return nil }
     // Scale is scene information: refresh it from every trusted pose frame,
     // even one whose wrists or hips are hidden, so a later sample divides by
     // the freshest estimate.
-    let bodyScale = updateBodyScale(with: pose)
+    let landmarks = Self.trustedLandmarks(pose)
+    let bodyScale = updateBodyScale(with: landmarks)
 
     // Prefer a validated paddle center when available. Until then, evaluate
     // each wrist against its own prior location and use the faster wrist. This
     // avoids assuming handedness and avoids false speed spikes when the chosen
     // point switches sides.
     let points: [(key: String, x: Double, y: Double)]
-    if let center = paddle?.center, (paddle?.confidence ?? 0) > 0.5 {
+    if let center = paddle?.center, (paddle?.confidence ?? 0) > 0.5,
+       center.x.isFinite, center.y.isFinite {
       points = [("paddle", Double(center.x), Double(center.y))]
     } else {
-      points = pose.landmarks
-        .filter {
-          ($0.name == "right_wrist" || $0.name == "left_wrist")
-            && $0.visibility >= Self.minimumLandmarkVisibility
-        }
+      points = landmarks
+        .filter { $0.name == "right_wrist" || $0.name == "left_wrist" }
         .map { ($0.name, $0.x, $0.y) }
     }
     guard !points.isEmpty else { return nil }
@@ -249,7 +248,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     // this frame observes nothing (the next anchored frame measures against
     // the last anchored one, subject to the gap rule). Absolute image motion
     // is never a fallback — it is exactly what walking looked like.
-    guard let hips = Self.hipAnchor(pose) else { return nil }
+    guard let hips = Self.hipAnchor(landmarks) else { return nil }
 
     var samples: [Sample] = []
     for point in points {
@@ -404,10 +403,20 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     onsetMs = nil
   }
 
-  /// The hips visible on this frame (visibility ≥ 0.35); nil when neither is.
-  private static func hipAnchor(_ pose: PoseFrame) -> HipAnchor? {
+  /// The landmarks of one frame this detector may measure: finite x, y and
+  /// visibility, with visibility ≥ 0.35. Everything else on the frame is
+  /// treated exactly like a hidden landmark.
+  private static func trustedLandmarks(_ pose: PoseFrame) -> [PoseLandmark] {
+    pose.landmarks.filter {
+      $0.x.isFinite && $0.y.isFinite && $0.visibility.isFinite
+        && $0.visibility >= minimumLandmarkVisibility
+    }
+  }
+
+  /// The hips among the trusted landmarks; nil when neither is present.
+  private static func hipAnchor(_ landmarks: [PoseLandmark]) -> HipAnchor? {
     var anchor = HipAnchor()
-    for landmark in pose.landmarks where landmark.visibility >= minimumLandmarkVisibility {
+    for landmark in landmarks {
       if landmark.name == "left_hip" {
         anchor.left = (landmark.x, landmark.y)
       } else if landmark.name == "right_hip" {
@@ -421,8 +430,8 @@ public final class TemporalStrokeDetector: StrokeDetecting {
 
   /// Folds this frame's body-scale measurement (if any) into the EMA and
   /// returns the scale to normalize this frame's speeds by.
-  private func updateBodyScale(with pose: PoseFrame) -> Double {
-    if let measured = Self.measureBodyScale(pose) {
+  private func updateBodyScale(with landmarks: [PoseLandmark]) -> Double {
+    if let measured = Self.measureBodyScale(landmarks) {
       if let smoothed = lastBodyScale {
         lastBodyScale = smoothed + Self.bodyScaleSmoothing * (measured - smoothed)
       } else {
@@ -435,14 +444,14 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   }
 
   /// Raw body scale for one frame: the vertical span from the shoulder
-  /// midpoint to the ankle midpoint (landmarks with visibility ≥ 0.35; one
-  /// visible shoulder/ankle is enough for its midpoint). When the ankles are
-  /// missing, shoulder-mid → hip-mid × `hipSpanToBodyScale`. nil when neither
-  /// span is measurable.
-  private static func measureBodyScale(_ pose: PoseFrame) -> Double? {
+  /// midpoint to the ankle midpoint over the trusted landmarks (one
+  /// shoulder/ankle is enough for its midpoint). When the ankles are missing,
+  /// shoulder-mid → hip-mid × `hipSpanToBodyScale`. nil when neither span is
+  /// measurable.
+  private static func measureBodyScale(_ landmarks: [PoseLandmark]) -> Double? {
     func midY(_ names: Set<String>) -> Double? {
-      let ys = pose.landmarks
-        .filter { names.contains($0.name) && $0.visibility >= minimumLandmarkVisibility }
+      let ys = landmarks
+        .filter { names.contains($0.name) }
         .map(\.y)
       guard !ys.isEmpty else { return nil }
       return ys.reduce(0, +) / Double(ys.count)
