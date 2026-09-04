@@ -39,7 +39,11 @@ The committed reference is `datasets/reports/regression/baseline.json`
 (produced from a clean `origin/main` worktree — see §1.5 and
 `datasets/reports/regression/README.md`). Relative paths given to
 `bench:compare` / `--out-dir` resolve against the directory `pnpm` was invoked
-from (pnpm's `INIT_CWD`), so repo-relative paths work.
+from (pnpm's `INIT_CWD`), so repo-relative paths work. Do not put `--`
+between the script name and its flags (pnpm 10 forwards it literally and the
+CLI rejects it), and use `pnpm -s` when redirecting `--json` output so pnpm's
+banner stays out of the file. `--run-id` must be a single filename component
+(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`).
 
 ### 1.1 What `bench:regression` runs
 
@@ -94,13 +98,13 @@ Design constraints the runner enforces (`src/regression/run.ts`, `benches.ts`):
   "provenance": {
     "gitSha": "<40 hex>",
     "gitBranch": "main" | null,
-    "gitDirty": false,
+    "gitDirty": false,   // tracked modifications, or untracked files under datasets/ outside reports/
     "datasetsTreeSha": "<sha1 of the datasets/ listing at HEAD minus reports/>",
     "datasetReleases": [{ "releaseDir", "releaseId", "datasetId", "manifestSha256" }],
     "modelVersions": { "contactEstimator": "contact-evidence-4.4", "strokeHeuristic": "stroke-heuristic-7 (uncalibrated)", … },
     "evidenceClass": "linux_replay_proxy"
   },
-  "benches": [{ "id", "title", "kind", "command", "cwd", "status", "exitCode", "wallClockMs", "inputs", "caveats", "error", "metrics", "labels" }],
+  "benches": [{ "id", "title", "kind", "command", "cwd" /* repo-relative */, "status", "exitCode", "wallClockMs", "inputs", "caveats", "error", "metrics", "labels" }],
   "metrics": { "<benchId>.<metric>": number | null },   // flattened, must equal the union of benches[].metrics
   "caveats": [ … ],
   "totalWallClockMs": 1166
@@ -142,12 +146,14 @@ Per-metric statuses:
 | `unlisted`             | present in both but not in the tolerance file                                  | per policy        |
 
 Bench-level: a bench `failed` or `missing` in the candidate fails the
-comparison; a bench that failed in the baseline but recovered does not.
+comparison, including one that also failed in the baseline
+(`failed_in_both` — a persistent failure never reads as clean); a bench that
+failed in the baseline but recovered does not.
 
 Identity checks: contract id/version, schema version and `evidenceClass`
 mismatches make the pair **non-comparable** (exit 3, no metric table).
 Differences in `datasetsTreeSha`, `datasetReleases`, `runner.*` or a dirty
-candidate tree are printed as **CONFOUND** warnings (the comparison still runs
+tree on either side are printed as **CONFOUND** warnings (the comparison still runs
 — you decide whether the delta is the code or the data). Different `gitSha`
 and different `modelVersions.*` are the expected kind of change and are
 listed for the record.
@@ -159,10 +165,12 @@ or invalid input (either document fails schema validation), `3` non-comparable.
 
 `packages/evaluation/test/regressionSummary.test.ts`,
 `regressionCompare.test.ts`, `regressionRun.test.ts` (VERIFIED:
-`pnpm --filter @pickle/evaluation test` → 5 files, 54 tests passed). They pin:
+`pnpm --filter @pickle/evaluation test` → 5 files, 61 tests passed). They pin:
 every schema failure code (missing/malformed provenance, non-hex SHAs, bench
 kind ↔ exitCode coupling, failed-bench-with-metrics, flattened-view mismatch),
-the JSON Schema staying in lock-step with the validator's key/enum lists, the
+the JSON Schema staying in lock-step with the validator's key/enum lists
+(unknown keys rejected at every closed object), run-id validation, untracked
+dataset inputs marking the tree dirty, the
 committed tolerance file validating, tolerance boundary behaviour in both
 directions, lost/new measurements, unlisted policy, bench failure handling,
 non-comparability, confound classification, report formatting, and an

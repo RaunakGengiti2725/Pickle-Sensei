@@ -54,10 +54,10 @@ and forbidden shortcuts) in `.agents/skills/`:
 `packages/evaluation` is the bench harness (`docs/EVALUATION.md`):
 
 ```bash
-# no `--` before the flags: pnpm forwards it literally and the CLI rejects it
+# no `--` before the flags (pnpm forwards it literally); `-s` keeps pnpm's banner out of the JSON
 pnpm --filter @pickle/evaluation bench:regression --out-dir /tmp/cand --run-id cand   # 9 benches, ~200 metrics
-pnpm --filter @pickle/evaluation bench:compare \
-  datasets/reports/regression/baseline.json /tmp/cand/cand.json --json
+pnpm -s --filter @pickle/evaluation bench:compare \
+  datasets/reports/regression/baseline.json /tmp/cand/cand.json --json > /tmp/cand/compare.json
 ```
 
 `bench:compare` exits non-zero on any regression beyond
