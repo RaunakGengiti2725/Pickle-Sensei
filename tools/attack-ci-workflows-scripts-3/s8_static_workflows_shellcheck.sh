@@ -118,4 +118,31 @@ out=$(cd "$WORK/c" && "$REPO_ROOT/$APC" "$APPLE_SHA" "$JS_SHA" 2>"$OUT/apc_mobil
 printf 'apps/mobile JS-only change → %s (exit %s)\n' "$out" "$rc" >"$OUT/apc_mobile_js.txt"
 record HELD s8.apc_mobile_js "$rc" "$OUT/apc_mobile_js.txt" "apps/mobile JS-only change → '$out' (documented: Linux CI gates tsc/jest; recorded for the coordinator, not a break)"
 
+# --- security-scan --tree: does it honour .gitignore as its header claims? -----
+# Header: "--tree  # working tree only (tracked, untracked, unignored)". verify-cloud
+# writes every stage log under the ignored artifacts/ tree and runs security LAST,
+# so the run's own artifacts are in scope if ignored files are scanned.
+SEED=20260904
+PLANT="AKIA$(node -e '
+let s = Number(process.argv[1]) >>> 0; const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const next = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s; };
+let o = ""; for (let i = 0; i < 16; i++) o += A[next() % A.length]; process.stdout.write(o);' "$SEED")"
+leaks_in() { sed 's/\x1b\[[0-9;]*m//g' "$1" | grep -o 'leaks found: [0-9]*' | head -1 | tr -dc 0-9; }
+IGN="$OUT/ignored_probe.log"
+git check-ignore -q "$IGN" || { echo "s8: $IGN is not gitignored — cannot test" >&2; exit 3; }
+rm -f "$IGN"
+run_capture "$OUT/tree_baseline.log" scripts/security-scan.sh --tree >/dev/null # other artifacts may already trip it
+base=$(leaks_in "$OUT/tree_baseline.log"); base=${base:-0}
+printf 'aws_access_key_id = %s\n' "$PLANT" >"$IGN"
+rc=$(run_capture "$OUT/tree_ignored.log" scripts/security-scan.sh --tree)
+rm -f "$IGN"
+with=$(leaks_in "$OUT/tree_ignored.log"); with=${with:-0}
+printf 'tree leaks without plant=%s  with plant in gitignored file=%s  exit=%s\n' "$base" "$with" "$rc" >"$OUT/tree_ignored_counts.txt"
+if [ "$with" -le "$base" ]; then
+  record HELD s8.tree_honours_gitignore "$rc" "$OUT/tree_ignored_counts.txt" "--tree skips gitignored files as documented ($base → $with leaks)"
+else
+  record BROKEN s8.tree_honours_gitignore "$rc" "$OUT/tree_ignored_counts.txt" \
+    "--tree (documented 'unignored') flags a token in a .gitignore'd artifacts/ file ($base → $with leaks, exit $rc): verify-cloud's own stage logs are inside its security gate"
+fi
+
 verdict
