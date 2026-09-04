@@ -41,6 +41,14 @@
 --      swept to released/expired) and finalized once; the free limit is still
 --      capped by the lifetime scored count; every other permit state keeps its
 --      verdict; the direct-INSERT gate is not widened
+--   O. (adversary, round 6) a released/NULL permit — client-reachable before
+--      20260906140000 — is refused by apply_synced_shot() with
+--      access.permit_not_reserved and never backs a shot, with or without an
+--      unrelated live reservation
+--   P. the permit lifecycle is a table invariant (released/NULL cannot be
+--      written, settled permits are terminal for every role, every legal
+--      product transition still works), backing is NULL-safe/default-deny,
+--      and the shots gate never falls back to a permit the sync did not name
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -2531,14 +2539,21 @@ values
   ('00000000-0000-4000-8000-0000000000f5', '00000000-0000-4000-8000-000000000018', 'pia-late-1', 'reserved', null, now() - interval '25 hours'),
   ('00000000-0000-4000-8000-0000000000f6', '00000000-0000-4000-8000-000000000018', 'pia-late-2', 'reserved', null, now() - interval '25 hours');
 
-set local role authenticated;
-set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000018';
-
--- What a client can do through PostgREST with its own bearer.
+-- What a client COULD do through PostgREST with its own bearer before
+-- 20260906140000 closed the lifecycle at the table (P1 below pins that the
+-- same UPDATE is now refused). Rows in this state may still exist from before
+-- the fix, so the fixture writes them the only way left — as the table owner
+-- with the lifecycle guard switched off — and the assertions below are the
+-- adversary's, unchanged: the RPC must refuse them on its own.
+alter table public.analysis_permits disable trigger analysis_permits_guard_lifecycle;
 update public.analysis_permits set status = 'released', outcome = null
  where id = '00000000-0000-4000-8000-0000000000f5';
 update public.analysis_permits set status = 'released', outcome = null
  where id = '00000000-0000-4000-8000-0000000000f6';
+alter table public.analysis_permits enable trigger analysis_permits_guard_lifecycle;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000018';
 
 -- O1: released/NULL, no other permit → must be access.permit_not_reserved
 -- (the verdict 1fb0efd7 gave and the migration promises). Anything else is a
@@ -2598,6 +2613,349 @@ begin
   end if;
 end $$;
 reset role;
+
+-- ============================================================================
+-- P. the permit lifecycle is closed at the table, backing is NULL-safe and
+-- default-deny, and the sync gate never falls back to an unrelated permit
+-- (20260906140000_permit_lifecycle_null_safe.sql, OFF-24H-02)
+-- ============================================================================
+--
+-- P1  a client cannot manufacture released/NULL, finalized/NULL, an unknown
+--     outcome, or a reserved row with an outcome — 23514, permit untouched
+-- P2  every legal transition still works: edge finalize (reserved →
+--     finalized/cancelled), the pg_cron sweep statement (reserved →
+--     released/expired), the RPC consuming a fresh permit (→ finalized/scored),
+--     an abstention (→ released/low_confidence) and a swept permit (→
+--     finalized/scored, round-6 late acceptance preserved)
+-- P3  both free slots spent → access.paywall_required and the permit ends
+--     released/free_limit_exceeded (legal transition)
+-- P4  settled permits are terminal for every role: consumed / free-limit /
+--     cancelled permits cannot be revived to reserved or re-labelled to
+--     released/expired (23514), and the RPC keeps refusing them
+-- P5  a pre-existing released/NULL permit (written before the guard) is
+--     refused by the direct-INSERT gate, by the RPC (with and without an
+--     unrelated live reservation), and by the gate even when it is the
+--     vouched permit beside a live reservation — and cannot be re-labelled
+--     into acceptable backing by anyone
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000019', 'quinn@example.com',
+   '{"full_name":"Quinn"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000020', 'rosa@example.com',
+   '{"full_name":"Rosa"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-quinn', '00000000-0000-4000-8000-000000000019',
+   '{"sub":"google-sub-quinn","email":"quinn@example.com"}'),
+  ('apple', 'apple-sub-rosa', '00000000-0000-4000-8000-000000000020',
+   '{"sub":"apple-sub-rosa","email":"rosa@example.com"}');
+-- Both are free accounts: the allowance is live here on purpose.
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000019', 'quinn-p1', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000019', 'quinn-p2', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000019', 'quinn-p3', 'reserved', null, now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000019', 'quinn-p4', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000105', '00000000-0000-4000-8000-000000000019', 'quinn-p5', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000106', '00000000-0000-4000-8000-000000000019', 'quinn-p6', 'finalized', 'scored', now()),
+  ('00000000-0000-4000-8000-000000000107', '00000000-0000-4000-8000-000000000019', 'quinn-p7', 'released', 'free_limit_exceeded', now()),
+  ('00000000-0000-4000-8000-000000000108', '00000000-0000-4000-8000-000000000020', 'rosa-p8', 'reserved', null, now() - interval '25 hours');
+-- rosa-p8 as a pre-fix client left it: released/NULL (guard bypassed as owner).
+alter table public.analysis_permits disable trigger analysis_permits_guard_lifecycle;
+update public.analysis_permits set status = 'released', outcome = null
+ where id = '00000000-0000-4000-8000-000000000108';
+alter table public.analysis_permits enable trigger analysis_permits_guard_lifecycle;
+
+-- Attempts an UPDATE on the caller's own permit and returns the SQLSTATE /
+-- hint the table answered with ('' when it was allowed).
+create function pg_temp.p_move(p_id uuid, p_status text, p_outcome text)
+returns text language plpgsql as $$
+declare v_state text; v_hint text;
+begin
+  update public.analysis_permits set status = p_status, outcome = p_outcome where id = p_id;
+  return '';
+exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  return v_state || ':' || coalesce(v_hint, '');
+end $$;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000019';
+
+-- P1: the client PostgREST-style forge paths are refused at the table with a
+-- 4xx-class SQLSTATE (23514 → PostgREST 400 / edge 409), never a 503.
+do $$
+declare r text; p record;
+begin
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000101', 'released', null);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P1: reserved → released/NULL must be refused with 23514 (got %)', r;
+  end if;
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000101', 'finalized', null);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P1: reserved → finalized/NULL must be refused with 23514 (got %)', r;
+  end if;
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000101', 'released', 'bogus');
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P1: an unknown outcome must be refused with 23514 (got %)', r;
+  end if;
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000101', 'reserved', 'scored');
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P1: a reserved permit cannot carry an outcome (got %)', r;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000101';
+  if p.status <> 'reserved' or p.outcome is not null then
+    raise exception 'P1: the refused permit must be untouched (got %/%)', p.status, p.outcome;
+  end if;
+end $$;
+
+-- P2: every legal transition the product performs still goes through.
+do $$
+declare r text; v text; p record;
+begin
+  -- edge POST /v1/analysis-permits/:id/finalize {outcome:'cancelled'}
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000102', 'finalized', 'cancelled');
+  if r <> '' then
+    raise exception 'P2: reserved → finalized/cancelled (edge finalize) must be allowed (got %)', r;
+  end if;
+  -- idempotent replay of the same finalize is a no-op, not a transition
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000102', 'finalized', 'cancelled');
+  if r <> '' then
+    raise exception 'P2: a no-op lifecycle UPDATE must be allowed (got %)', r;
+  end if;
+  -- the sync RPC consuming a fresh permit → finalized/scored
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000111',
+    '00000000-0000-4000-8000-000000000104', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'P2: a fresh reserved permit must back its shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000104';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'P2: the consumed permit must be finalized/scored (got %/%)', p.status, p.outcome;
+  end if;
+  -- an abstention → released/low_confidence
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000112',
+    '00000000-0000-4000-8000-000000000105', 'low_confidence'));
+  if v <> 'accepted' then
+    raise exception 'P2: an abstention must be accepted (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000105';
+  if p.status <> 'released' or p.outcome <> 'low_confidence' then
+    raise exception 'P2: the abstention permit must be released/low_confidence (got %/%)', p.status, p.outcome;
+  end if;
+end $$;
+reset role;
+-- the pg_cron sweep (expire-stale-analysis-permits, 20260831000000) — the
+-- exact statement it runs, as the job owner
+update public.analysis_permits set status = 'released', outcome = 'expired' where status = 'reserved' and created_at < now() - interval '24 hours';
+do $$
+declare p record;
+begin
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000103';
+  if p.status <> 'released' or p.outcome <> 'expired' then
+    raise exception 'P2: the sweep must still move a stale reservation to released/expired (got %/%)', p.status, p.outcome;
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000019';
+do $$
+declare v text; p record;
+begin
+  -- the swept permit backs its late shot and ends finalized/scored (round 6)
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000113',
+    '00000000-0000-4000-8000-000000000103', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'P2: a swept (released/expired) permit must still back its late shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000103';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'P2: the swept permit must be finalized/scored (got %/%)', p.status, p.outcome;
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'P2: both ratings must count toward the lifetime limit (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- P3: both free slots are spent — a further fresh permit hits the backstop and
+-- the permit ends released/free_limit_exceeded (a legal transition).
+do $$
+declare v text; p record;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000114',
+    '00000000-0000-4000-8000-000000000101', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'P3: a third free rating must hit the backstop (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000101';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded' then
+    raise exception 'P3: the refused permit must be released/free_limit_exceeded (got %/%)', p.status, p.outcome;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000114') then
+    raise exception 'P3: the refused shot must not persist';
+  end if;
+end $$;
+
+-- P4: settled permits are terminal — no revival, no re-labelling into
+-- acceptable backing — and the RPC keeps refusing them.
+do $$
+declare r text; v text;
+begin
+  foreach r in array array[
+    pg_temp.p_move('00000000-0000-4000-8000-000000000106', 'reserved', null),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000106', 'released', 'expired'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000107', 'reserved', null),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000107', 'released', 'expired'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000102', 'reserved', null),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000102', 'released', 'expired'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000104', 'released', 'low_confidence')]
+  loop
+    if r <> '23514:access.permit_transition_rejected' then
+      raise exception 'P4: a settled permit must be terminal (got %)', r;
+    end if;
+  end loop;
+  foreach v in array array[
+    public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000115', '00000000-0000-4000-8000-000000000106', 'scored')),
+    public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000116', '00000000-0000-4000-8000-000000000107', 'scored')),
+    public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000117', '00000000-0000-4000-8000-000000000102', 'scored'))]
+  loop
+    if v <> 'access.permit_not_reserved' then
+      raise exception 'P4: a consumed/free-limit/cancelled permit must keep its verdict (got %)', v;
+    end if;
+  end loop;
+  if exists (select 1 from public.shots where id in (
+      '00000000-0000-4000-8000-000000000115',
+      '00000000-0000-4000-8000-000000000116',
+      '00000000-0000-4000-8000-000000000117')) then
+    raise exception 'P4: refused writes must leave no row';
+  end if;
+end $$;
+reset role;
+-- ... for every role: the table owner cannot revive a consumed permit either
+do $$
+declare r text;
+begin
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000106', 'reserved', null);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P4: the lifecycle guard must bind every role (owner got %)', r;
+  end if;
+end $$;
+
+-- P5: a released/NULL permit that pre-dates the guard.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000020';
+do $$
+declare v text; r record; v_state text; v_hint text;
+begin
+  -- direct scored INSERT: the BEFORE INSERT gate refuses (only permit is
+  -- released/NULL), 42501 with the verdict in the hint
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-000000000121',
+      '00000000-0000-4000-8000-000000000020',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'P5: a direct scored INSERT backed only by a released/NULL permit must be refused';
+  exception when insufficient_privilege then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    if v_hint <> 'access.permit_not_reserved' then
+      raise exception 'P5: the gate refusal must carry the contract verdict (got hint %)', v_hint;
+    end if;
+  end;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000121') then
+    raise exception 'P5: the refused direct row must not persist';
+  end if;
+
+  -- RPC, no other permit: the verdict, never shot.write_failed:42501
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000122',
+    '00000000-0000-4000-8000-000000000108', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'P5: released/NULL must be refused by the RPC (got %)', v;
+  end if;
+
+  -- RPC beside an unrelated LIVE reservation: still the named permit's verdict
+  select * into r from public.reserve_analysis_permit('rosa-live');
+  if r.result <> 'accepted' then
+    raise exception 'P5 precondition: fresh reserve must succeed (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000123',
+    '00000000-0000-4000-8000-000000000108', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'P5: released/NULL must be refused even beside a live reservation (got %)', v;
+  end if;
+
+  -- the gate itself, white-box: vouch for the released/NULL permit while the
+  -- live reservation exists — the vouched permit alone decides, no fallback
+  perform set_config('pickle.sync_permit_id', '00000000-0000-4000-8000-000000000108', true);
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-000000000124',
+      '00000000-0000-4000-8000-000000000020',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'P5: the gate must not fall back to an unrelated live reservation when the vouched permit is unacceptable';
+  exception when insufficient_privilege then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    if v_hint <> 'access.permit_not_reserved' then
+      raise exception 'P5: the vouched-permit refusal must carry the contract verdict (got hint %)', v_hint;
+    end if;
+  end;
+  perform set_config('pickle.sync_permit_id', '', true);
+
+  -- the live reservation itself still works exactly as before
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000125', r.permit_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'P5: the unrelated live reservation must still back its own shot (got %)', v;
+  end if;
+
+  if (select count(*) from public.shots where user_id = '00000000-0000-4000-8000-000000000020') <> 1 then
+    raise exception 'P5: exactly one shot (the live permit''s) may persist (got %)',
+      (select count(*) from public.shots where user_id = '00000000-0000-4000-8000-000000000020');
+  end if;
+
+  -- and nobody can re-label the released/NULL row into acceptable backing
+  v_state := pg_temp.p_move('00000000-0000-4000-8000-000000000108', 'released', 'expired');
+  if v_state <> '23514:access.permit_transition_rejected' then
+    raise exception 'P5: released/NULL → released/expired must be refused (got %)', v_state;
+  end if;
+  v_state := pg_temp.p_move('00000000-0000-4000-8000-000000000108', 'reserved', null);
+  if v_state <> '23514:access.permit_transition_rejected' then
+    raise exception 'P5: released/NULL → reserved must be refused (got %)', v_state;
+  end if;
+end $$;
+reset role;
+do $$
+declare r text;
+begin
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000108', 'released', 'expired');
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'P5: the owner cannot re-label released/NULL into acceptable backing either (got %)', r;
+  end if;
+end $$;
 
 rollback;
 
