@@ -82,10 +82,12 @@ import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import {
   cacheDel,
+  cacheFence,
   cacheGet,
   cacheGetUnlessRevoked,
   cacheIsRevoked,
   cacheSet,
+  cacheSetFenced,
   L1_READTHROUGH_TTL_SECONDS,
   redisConfigured,
   sha256Hex,
@@ -2091,6 +2093,10 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  // Taken before the reads: an accepted sync that busts the key while the
+  // build is in flight turns the cacheSetFenced below into a no-op instead of
+  // re-caching the pre-sync payload.
+  const fence = await cacheFence(cacheKey);
   const [seriesQ, daysQ] = await Promise.all([
     readAllRows((from, to) =>
       authed.db
@@ -2133,7 +2139,7 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
     new Date().toISOString().slice(0, 10),
   );
   const payload = { series, improving: [], needsAttention: [], streak };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetFenced(fence, JSON.stringify(payload), 60);
   return json(200, payload);
 }
 
@@ -2200,6 +2206,7 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  const fence = await cacheFence(cacheKey);
   const [techniquesQ, stateQ] = await Promise.all([
     authed.db
       .from("player_technique_rating")
@@ -2230,7 +2237,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   if (techniqueRows.length === 0) {
     // No scored evidence → honestly unranked, never a fabricated Bronze.
     const empty = { rank: null };
-    await cacheSet(cacheKey, JSON.stringify(empty), 60);
+    await cacheSetFenced(fence, JSON.stringify(empty), 60);
     return json(200, empty);
   }
 
@@ -2296,7 +2303,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
       techniques,
     },
   };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetFenced(fence, JSON.stringify(payload), 60);
   return json(200, payload);
 }
 
