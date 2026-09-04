@@ -43,6 +43,7 @@ import {
   type Outcome,
   Prng,
   type RestBackend,
+  restoreStressEnv,
   type StressHarness,
   writeJson,
 } from "./stress_billing_sync_harness.ts";
@@ -1170,5 +1171,6 @@ Deno.test({
       await shared.sql.end({ timeout: 5 });
       console.log(`[stress-pg] executed=${executed}`);
     }
+    restoreStressEnv();
   },
 });

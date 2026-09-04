@@ -40,6 +40,7 @@ import {
   latencySummary,
   type Outcome,
   Prng,
+  restoreStressEnv,
   STRESS_ITER,
   STRESS_SEED,
   STRESS_SLOW,
@@ -1879,4 +1880,10 @@ Deno.test("STRESS billing/sync — access read after sync is 1 Supabase round tr
     read: access.body,
     supabaseRoundTripsRead: rt.supabase,
   });
+});
+
+// Last: hand the process-wide env back to the files that run after this one.
+Deno.test("STRESS billing/sync — teardown restores Deno.env", () => {
+  restoreStressEnv();
+  assertEquals(Deno.env.get("AUTH_UPSTREAM_TIMEOUT_MS"), undefined);
 });

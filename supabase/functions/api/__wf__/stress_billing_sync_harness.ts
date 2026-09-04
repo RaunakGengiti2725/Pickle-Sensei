@@ -718,30 +718,48 @@ export interface StressHarness {
 
 let booted: StressHarness | null = null;
 
+/** `Deno.env` is process-wide and `deno test` runs every module of a run in
+ * ONE process, so the values this harness sets would leak into test files
+ * that run later (e.g. `AUTH_UPSTREAM_TIMEOUT_MS`, which xc_* files expect at
+ * its default). Boot snapshots the previous values; the last test of every
+ * stress file calls `restoreStressEnv()`. */
+const STRESS_ENV: Record<string, string | null> = {
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY: ANON_KEY,
+  SB_PUBLISHABLE_KEY: null,
+  SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
+  REVENUECAT_SECRET_API_KEY: RC_KEY,
+  REVENUECAT_PUBLIC_SDK_KEY: null,
+  REVENUECAT_WEBHOOK_AUTH: "stress-webhook-secret",
+  UPSTASH_REDIS_REST_URL: REDIS_URL,
+  UPSTASH_REDIS_REST_TOKEN: "redis-stress-token",
+  AUTH_UPSTREAM_TIMEOUT_MS: String(AUTH_TIMEOUT_MS),
+  APPLE_SIGN_IN_CLIENT_ID: null,
+  APPLE_SIGN_IN_TEAM_ID: null,
+  APPLE_SIGN_IN_KEY_ID: null,
+  APPLE_SIGN_IN_PRIVATE_KEY: null,
+  APPLE_TOKEN_ENCRYPTION_KEY: null,
+};
+let previousEnv: Record<string, string | undefined> | null = null;
+
+export function restoreStressEnv(): void {
+  if (!previousEnv) return;
+  for (const [key, value] of Object.entries(previousEnv)) {
+    if (value === undefined) Deno.env.delete(key);
+    else Deno.env.set(key, value);
+  }
+  previousEnv = null;
+}
+
 export async function bootStressHarness(
   backend?: RestBackend,
 ): Promise<StressHarness> {
   if (booted) return booted;
-  Deno.env.set("SUPABASE_URL", SUPABASE_URL);
-  Deno.env.set("SUPABASE_ANON_KEY", ANON_KEY);
-  Deno.env.delete("SB_PUBLISHABLE_KEY");
-  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_KEY);
-  Deno.env.set("REVENUECAT_SECRET_API_KEY", RC_KEY);
-  Deno.env.delete("REVENUECAT_PUBLIC_SDK_KEY");
-  Deno.env.set("REVENUECAT_WEBHOOK_AUTH", "stress-webhook-secret");
-  Deno.env.set("UPSTASH_REDIS_REST_URL", REDIS_URL);
-  Deno.env.set("UPSTASH_REDIS_REST_TOKEN", "redis-stress-token");
-  Deno.env.set("AUTH_UPSTREAM_TIMEOUT_MS", String(AUTH_TIMEOUT_MS));
-  for (
-    const key of [
-      "APPLE_SIGN_IN_CLIENT_ID",
-      "APPLE_SIGN_IN_TEAM_ID",
-      "APPLE_SIGN_IN_KEY_ID",
-      "APPLE_SIGN_IN_PRIVATE_KEY",
-      "APPLE_TOKEN_ENCRYPTION_KEY",
-    ]
-  ) {
-    Deno.env.delete(key);
+  previousEnv = {};
+  for (const [key, value] of Object.entries(STRESS_ENV)) {
+    previousEnv[key] = Deno.env.get(key);
+    if (value === null) Deno.env.delete(key);
+    else Deno.env.set(key, value);
   }
 
   const world = new FakeWorld(backend);
