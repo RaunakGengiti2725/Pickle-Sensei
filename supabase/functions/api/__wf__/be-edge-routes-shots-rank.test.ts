@@ -26,6 +26,7 @@ import {
   computePlayerRank,
   type PlayerRankAnalysisInput,
 } from "../../../../packages/shared-types/src/playerRank.ts";
+import { fakeGoogleIdToken, loadHarness, userRequest } from "./routesHarness.ts";
 
 const PG_URL = Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
 const ignore = PG_URL === "";
@@ -474,3 +475,189 @@ Deno.test({
     }
   },
 });
+
+// ─── Rank/progress cache vs accepted shots:sync (EDR-3) ─────────────────────
+// These cases drive the REAL edge handler through routesHarness (PostgREST /
+// GoTrue stubbed at fetch level) and therefore run without PICKLE_AUDIT_PG_URL.
+//
+// AGENTS.md "Scale & security": rank/progress responses cache 60 s and are
+// invalidated by accepted shot syncs. A build that read the database BEFORE a
+// sync landed must not write its pre-sync payload back over that invalidation.
+
+const h = await loadHarness();
+
+type FetchFn = typeof fetch;
+
+/** Wrap the harness fetch for one test: `intercept` may return a Response for
+ * requests it wants to own; anything else falls through (and is recorded). */
+async function withFetchIntercept<T>(
+  intercept: (request: Request) => Promise<Response | null>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const inner = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const owned = await intercept(request.clone());
+    if (owned) return owned;
+    return inner(input, init);
+  }) as FetchFn;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = inner;
+  }
+}
+
+const jsonResponse = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+function syncShotBody(id = crypto.randomUUID()) {
+  return {
+    shots: [
+      {
+        id,
+        source: "real",
+        analysisPermitId: crypto.randomUUID(),
+        sessionId: null,
+        shotType: "dink",
+        cameraView: "side",
+        capturedAt: new Date().toISOString(),
+        timestamps: { startMs: 0, contactMs: 500, endMs: 1000 },
+        resultKind: "scored",
+        overallScore: 7.5,
+        confidence: 0.9,
+        phases: [],
+        checkpoints: [],
+        versionVector: VERSION_VECTOR,
+      },
+    ],
+  };
+}
+
+/** Rank/progress cache keys are per user and the harness never clears the
+ * cache module, so every scenario signs in as its own subject. */
+function cacheUser(userId: string) {
+  h.reset();
+  h.tables.profiles = [{ id: userId, email: "u@example.com", provider: "google" }];
+  h.tables.shots = [];
+  h.rpcs.apply_synced_shot = "accepted";
+  return { token: fakeGoogleIdToken(userId) };
+}
+
+Deno.test(
+  "GET /v1/progress: a build that read before an accepted shots:sync must not re-cache the pre-sync payload",
+  async () => {
+    const auth = cacheUser("dddddddd-0001-4ddd-8ddd-dddddddddddd");
+    const ip = "203.0.113.61";
+    h.tables.progress_daily = [];
+    h.tables.practice_days = [];
+
+    let releaseRead!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseRead = resolve));
+    let readReached!: () => void;
+    const reached = new Promise<void>((resolve) => (readReached = resolve));
+    let gated = false;
+
+    await withFetchIntercept(
+      async (request) => {
+        if (!gated && request.url.includes("/rest/v1/progress_daily")) {
+          gated = true;
+          readReached();
+          await gate;
+          // Pre-sync snapshot: no daily aggregates yet.
+          return jsonResponse(200, []);
+        }
+        return null;
+      },
+      async () => {
+        // 1. Cache miss → build starts and blocks inside its DB read.
+        const inflight = h.handler(userRequest("GET", "/v1/progress", { ...auth, ip }));
+        await reached;
+
+        // 2. Accepted sync → invalidates rank:/progress: for this user.
+        const synced = await h.handler(
+          userRequest("POST", "/v1/shots:sync", { ...auth, ip, body: syncShotBody() }),
+        );
+        assertEquals(synced.status, 200);
+        assertEquals(((await synced.json()) as { acceptedIds: string[] }).acceptedIds.length, 1);
+
+        // 3. Post-sync truth: one aggregated day now exists.
+        const today = new Date().toISOString().slice(0, 10);
+        h.tables.progress_daily = [
+          {
+            day: today,
+            shot_type: "dink",
+            scoring_model_version: "scoring-1",
+            shot_count: 1,
+            avg_score: 7.5,
+            best_score: 7.5,
+          },
+        ];
+        h.tables.practice_days = [{ day: today }];
+
+        // 4. The stale build completes with the pre-sync rows.
+        releaseRead();
+        const stale = await inflight;
+        assertEquals(stale.status, 200);
+        assertEquals(((await stale.json()) as { series: unknown[] }).series, []);
+
+        // 5. The next read must be a DB-backed build, not a cache hit.
+        const readsBefore = h.callsTo("/rest/v1/progress_daily").length;
+        const after = await h.handler(userRequest("GET", "/v1/progress", { ...auth, ip }));
+        assertEquals(after.status, 200);
+        assertEquals(
+          h.callsTo("/rest/v1/progress_daily").length,
+          readsBefore + 1,
+          "post-sync GET /v1/progress was served from the re-cached pre-sync payload",
+        );
+        const payload = (await after.json()) as {
+          series: unknown[];
+          streak: { practicedToday: boolean };
+        };
+        assertEquals(payload.series.length, 1);
+        assertEquals(payload.streak.practicedToday, true);
+      },
+    );
+  },
+);
+
+Deno.test(
+  "GET /v1/rank: back-to-back reads with no intervening sync make exactly one PostgREST read (60 s cache + coalesce)",
+  async () => {
+    const auth = cacheUser("dddddddd-0002-4ddd-8ddd-dddddddddddd");
+    const ip = "203.0.113.62";
+    h.tables.player_technique_rating = [
+      {
+        shot_type: "dink",
+        score: 7.5,
+        captured_at: new Date().toISOString(),
+        sampled_count: 1,
+        confidence_weight: 1,
+      },
+    ];
+    h.tables.player_rank_state = [];
+
+    const first = await h.handler(userRequest("GET", "/v1/rank", { ...auth, ip }));
+    assertEquals(first.status, 200);
+    const firstBody = await first.json();
+    const second = await h.handler(userRequest("GET", "/v1/rank", { ...auth, ip }));
+    assertEquals(second.status, 200);
+    assertEquals(await second.json(), firstBody);
+    assertEquals(h.callsTo("/rest/v1/player_technique_rating").length, 1);
+
+    // Concurrent misses coalesce into the single in-flight build.
+    const coalescedUser = cacheUser("dddddddd-0003-4ddd-8ddd-dddddddddddd");
+    h.tables.player_technique_rating = [];
+    const [a, b] = await Promise.all([
+      h.handler(userRequest("GET", "/v1/rank", { ...coalescedUser, ip })),
+      h.handler(userRequest("GET", "/v1/rank", { ...coalescedUser, ip })),
+    ]);
+    assertEquals([a.status, b.status], [200, 200]);
+    assertEquals(await a.json(), { rank: null });
+    assertEquals(await b.json(), { rank: null });
+    assertEquals(h.callsTo("/rest/v1/player_technique_rating").length, 1);
+  },
+);

@@ -21,15 +21,33 @@ export interface AppleTokenGrant {
   subject: string;
 }
 
+/** `kind` sorts failures by what a retry can do about them:
+ *  - configuration / unavailable — retryable once the operator or the
+ *    provider recovers (missing secret, transport failure, 5xx, 429);
+ *  - invalid_grant / rejected / invalid_response — the provider (or our own
+ *    decryption) refused THIS credential deterministically; the same call
+ *    fails the same way forever. */
 export class ExternalAccountError extends Error {
   constructor(
-    readonly kind: "configuration" | "invalid_grant" | "invalid_response" | "unavailable",
+    readonly kind:
+      "configuration" | "invalid_grant" | "invalid_response" | "rejected" | "unavailable",
     readonly provider: "apple" | "revenuecat",
     message: string,
   ) {
     super(message);
     this.name = "ExternalAccountError";
   }
+}
+
+/** True when retrying the failed call with the same stored credential can
+ * never succeed. Unknown errors are treated as retryable (fail closed). */
+export function isPermanentExternalAccountError(error: unknown): boolean {
+  return (
+    error instanceof ExternalAccountError &&
+    (error.kind === "invalid_grant" ||
+      error.kind === "rejected" ||
+      error.kind === "invalid_response")
+  );
 }
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -275,8 +293,12 @@ export async function revokeAppleRefreshToken(
   );
   if (!response.ok) {
     const code = await appleErrorCode(response);
+    // Apple answers a refused revocation with 400 (invalid_grant for a token
+    // it no longer recognises, invalid_client / invalid_request otherwise);
+    // none of those change on retry. 429 and 5xx are the provider's problem.
+    const permanent = response.status >= 400 && response.status < 500 && response.status !== 429;
     throw new ExternalAccountError(
-      "unavailable",
+      permanent ? (code === "invalid_grant" ? "invalid_grant" : "rejected") : "unavailable",
       "apple",
       `Apple token revocation failed (${response.status}${code ? ` ${code}` : ""}).`,
     );
