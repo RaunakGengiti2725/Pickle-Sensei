@@ -337,6 +337,30 @@ Deno.test("healthz: 200 {ok:true} with no-store/nosniff, no auth, no DB", async 
   assertEquals(h.calls.length, 0);
 });
 
+// ── legal routes ─────────────────────────────────────────────────────────────
+
+Deno.test(
+  "GET /privacy and GET /terms: served bodies never mention Android, Google Play, guest mode, or Live Court (iPhone-only copy rules)",
+  async () => {
+    const h = await loadHarness();
+    const forbidden = ["Google Play", "Android", "guest mode", "Live Court"];
+    for (const path of ["privacy", "terms"]) {
+      const res = await h.handler(
+        new Request(`http://edge.test/functions/v1/api/${path}`, {
+          headers: { "x-forwarded-for": "198.51.100.14" },
+        }),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("content-type"), "text/plain; charset=utf-8");
+      const body = await res.text();
+      assert(body.length > 10_000, `${path}: body too short (${body.length})`);
+      const hits = forbidden.filter((term) => body.toLowerCase().includes(term.toLowerCase()));
+      assertEquals(hits, [], `${path}: forbidden terms in served legal copy: ${hits.join(", ")}`);
+    }
+    assertEquals(h.calls.length, 0);
+  },
+);
+
 Deno.test("healthz: 60/min per IP, then 429 + Retry-After", async () => {
   const h = await loadHarness();
   let last: Response | null = null;
