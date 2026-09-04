@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findRepoRoot, generateReleaseRecord } from "../src/generateManifest.js";
 import {
@@ -10,6 +12,14 @@ import {
 } from "../src/releaseRecord.js";
 
 const REPO_ROOT = findRepoRoot(process.cwd());
+
+function readVersionScheme(): { marketingVersion: string; buildNumber: number } {
+  const raw = readFileSync(join(REPO_ROOT, "infra/release/release-manifest.json"), "utf8");
+  const parsed = JSON.parse(raw) as {
+    versionScheme: { marketingVersion: string; buildNumber: number };
+  };
+  return parsed.versionScheme;
+}
 
 function completeRecord(): ReleaseRecord {
   return generateReleaseRecord({
@@ -182,7 +192,7 @@ describe("generateReleaseRecord", () => {
     const record = completeRecord();
     expect(record.commitSha).toBe("a".repeat(40));
     expect(record.mobileBuild.appVersion.length).toBeGreaterThan(0);
-    expect(record.backendRelease.serviceName).toBe("@pickle/api");
+    expect(record.backendRelease.serviceName).toBe("supabase/functions/api");
     expect(record.databaseSchema.latestMigration).toMatch(/^\d{4}_[a-z0-9_]+\.sql$/);
     expect(record.databaseSchema.migrationCount).toBeGreaterThan(0);
     expect(record.modelVersions.length).toBeGreaterThan(0);
@@ -197,5 +207,19 @@ describe("generateReleaseRecord", () => {
   it("reads the real HEAD commit when no sha is injected", () => {
     const record = generateReleaseRecord({ repoRoot: REPO_ROOT });
     expect(record.commitSha).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("reports the shipping marketing version and build number, never the RN template version", () => {
+    const record = generateReleaseRecord({ repoRoot: REPO_ROOT });
+    const scheme = readVersionScheme();
+    expect(record.mobileBuild.appVersion).not.toBe("0.0.1");
+    expect(record.mobileBuild.appVersion).toBe(scheme.marketingVersion);
+    expect(record.mobileBuild.buildNumber).toBe(String(scheme.buildNumber));
+  });
+
+  it("identifies the Supabase Edge Function as the backend release, pinned to the record's commit", () => {
+    const record = generateReleaseRecord({ repoRoot: REPO_ROOT });
+    expect(record.backendRelease.serviceName).toBe("supabase/functions/api");
+    expect(record.backendRelease.version).toBe(record.commitSha);
   });
 });
