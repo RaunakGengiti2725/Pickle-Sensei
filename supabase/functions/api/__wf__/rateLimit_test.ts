@@ -98,17 +98,15 @@ Deno.test(
     const b64url = (value: string): string =>
       btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const forgedBearer = (): string =>
-      `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${
-        b64url(
-          JSON.stringify({
-            iss: `${SUPABASE_URL}/auth/v1`,
-            sub: crypto.randomUUID(),
-            role: "authenticated",
-            exp: Math.floor(Date.now() / 1000) + 3600,
-            jti: crypto.randomUUID(),
-          }),
-        )
-      }.forged-signature`;
+      `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(
+        JSON.stringify({
+          iss: `${SUPABASE_URL}/auth/v1`,
+          sub: crypto.randomUUID(),
+          role: "authenticated",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          jti: crypto.randomUUID(),
+        }),
+      )}.forged-signature`;
 
     const harnessFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

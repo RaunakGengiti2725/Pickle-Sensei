@@ -105,46 +105,61 @@ Deno.test("xc-auth-refresh: GoTrue network TypeError on refresh → edge 503, no
   assert(Number(response.headers.get("Retry-After")) >= 1);
 });
 
-Deno.test("xc-auth-refresh: GoTrue invalid_grant on refresh → edge 401 (the one implicit sign-out)", async () => {
-  const h = await loadHarness();
-  const response = await withAuthFault(gotrueInvalidGrant, () =>
-    h.handler(refreshRequest("10.4.0.13")),
-  );
-  assertEquals(response.status, 401);
-  await response.body?.cancel();
-});
+Deno.test(
+  "xc-auth-refresh: GoTrue invalid_grant on refresh → edge 401 (the one implicit sign-out)",
+  async () => {
+    const h = await loadHarness();
+    const response = await withAuthFault(gotrueInvalidGrant, () =>
+      h.handler(refreshRequest("10.4.0.13")),
+    );
+    assertEquals(response.status, 401);
+    await response.body?.cancel();
+  },
+);
 
-Deno.test("xc-auth-refresh: GoTrue 429 on refresh is NOT charged to the per-IP auth-failure budget", async () => {
-  const h = await loadHarness();
-  h.tables.profiles = [
-    { id: TEST_USER_ID, email: "user@example.com", onboarding_state: "complete", provider: "google" },
-  ];
-  const ip = "10.4.0.20";
-  // AUTH_FAILURE_LIMIT is 30/300s; the refresh route's own budget is 30/60s,
-  // so 30 rate-limited refreshes fit inside it and would exhaust the
-  // auth-failure budget exactly if each were (wrongly) charged as a failure.
-  const statuses: number[] = [];
-  await withAuthFault(gotrue429, async () => {
-    for (let i = 0; i < 30; i += 1) {
-      const response = await h.handler(refreshRequest(ip));
-      statuses.push(response.status);
-      await response.body?.cancel();
-    }
-  });
-  assertEquals(statuses.filter((status) => status === 503).length, 30, JSON.stringify(statuses));
-
-  const healthyUser: AuthFault = () =>
-    jsonResponse(200, {
-      id: TEST_USER_ID,
-      aud: "authenticated",
-      role: "authenticated",
-      email: "user@example.com",
-      app_metadata: { provider: "google", providers: ["google"] },
-      user_metadata: {},
+Deno.test(
+  "xc-auth-refresh: GoTrue 429 on refresh is NOT charged to the per-IP auth-failure budget",
+  async () => {
+    const h = await loadHarness();
+    h.tables.profiles = [
+      {
+        id: TEST_USER_ID,
+        email: "user@example.com",
+        onboarding_state: "complete",
+        provider: "google",
+      },
+    ];
+    const ip = "10.4.0.20";
+    // AUTH_FAILURE_LIMIT is 30/300s; the refresh route's own budget is 30/60s,
+    // so 30 rate-limited refreshes fit inside it and would exhaust the
+    // auth-failure budget exactly if each were (wrongly) charged as a failure.
+    const statuses: number[] = [];
+    await withAuthFault(gotrue429, async () => {
+      for (let i = 0; i < 30; i += 1) {
+        const response = await h.handler(refreshRequest(ip));
+        statuses.push(response.status);
+        await response.body?.cancel();
+      }
     });
-  const served = await withAuthFault(healthyUser, () =>
-    h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip })),
-  );
-  assertStrictEquals(served.status, 200, `same IP after 30 rate-limited refreshes: ${served.status}`);
-  await served.body?.cancel();
-});
+    assertEquals(statuses.filter((status) => status === 503).length, 30, JSON.stringify(statuses));
+
+    const healthyUser: AuthFault = () =>
+      jsonResponse(200, {
+        id: TEST_USER_ID,
+        aud: "authenticated",
+        role: "authenticated",
+        email: "user@example.com",
+        app_metadata: { provider: "google", providers: ["google"] },
+        user_metadata: {},
+      });
+    const served = await withAuthFault(healthyUser, () =>
+      h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip })),
+    );
+    assertStrictEquals(
+      served.status,
+      200,
+      `same IP after 30 rate-limited refreshes: ${served.status}`,
+    );
+    await served.body?.cancel();
+  },
+);

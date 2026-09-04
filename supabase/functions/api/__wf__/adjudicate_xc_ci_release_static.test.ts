@@ -107,7 +107,11 @@ function refreshRequest(ip: string, refreshToken = "refresh-token-under-test"): 
 
 async function expectRetryable503(response: Response, label: string): Promise<void> {
   const body = await response.json();
-  assertNotEquals(response.status, 401, `${label}: an Auth outage must never read as sign-in required`);
+  assertNotEquals(
+    response.status,
+    401,
+    `${label}: an Auth outage must never read as sign-in required`,
+  );
   assertEquals(response.status, 503, `${label}: expected 503, got ${response.status}`);
   assertEquals(typeof body?.error?.message, "string", `${label}: generic error body`);
   assert(
@@ -118,7 +122,14 @@ async function expectRetryable503(response: Response, label: string): Promise<vo
 
 Deno.test("AUTH-OUTAGE-1: authenticate() maps Auth 5xx/429/network to 503, never 401", async () => {
   const h = await loadHarness();
-  h.tables.profiles = [{ id: TEST_USER_ID, email: "user@example.com", onboarding_state: "complete", provider: "google" }];
+  h.tables.profiles = [
+    {
+      id: TEST_USER_ID,
+      email: "user@example.com",
+      onboarding_state: "complete",
+      provider: "google",
+    },
+  ];
   const cases: Array<{ name: string; fault: AuthFault }> = [
     {
       name: "getUser → 503 JSON",
@@ -166,128 +177,157 @@ Deno.test("AUTH-OUTAGE-1: authenticate() maps Auth 5xx/429/network to 503, never
   await refused.body?.cancel();
 });
 
-Deno.test("AUTH-OUTAGE-2: /v1/auth/refresh maps Auth 429/malformed/network to 503; a refused refresh token stays 401", async () => {
-  const h = await loadHarness();
-  const cases: Array<{ name: string; fault: AuthFault }> = [
-    {
-      name: "refresh → 429 over_request_rate_limit",
-      fault: () =>
-        jsonResponse(429, {
-          code: 429,
-          error_code: "over_request_rate_limit",
-          msg: "Request rate limit reached",
+Deno.test(
+  "AUTH-OUTAGE-2: /v1/auth/refresh maps Auth 429/malformed/network to 503; a refused refresh token stays 401",
+  async () => {
+    const h = await loadHarness();
+    const cases: Array<{ name: string; fault: AuthFault }> = [
+      {
+        name: "refresh → 429 over_request_rate_limit",
+        fault: () =>
+          jsonResponse(429, {
+            code: 429,
+            error_code: "over_request_rate_limit",
+            msg: "Request rate limit reached",
+          }),
+      },
+      {
+        name: "refresh → 200 non-JSON body",
+        fault: () =>
+          new Response("<html>ok</html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          }),
+      },
+      {
+        name: "refresh → 200 JSON without a session",
+        fault: () => jsonResponse(200, { message: "ok" }),
+      },
+      { name: "refresh → network failure", fault: networkFailure },
+    ];
+    let octet = 10;
+    for (const testCase of cases) {
+      octet += 1;
+      const response = await withAuthFault(testCase.fault, () =>
+        h.handler(refreshRequest(`10.2.0.${octet}`)),
+      );
+      await expectRetryable503(response, testCase.name);
+    }
+
+    // Controls: GoTrue REFUSING the refresh token (400 invalid_grant, or a 401)
+    // is the one implicit sign-out and must remain 401.
+    const invalidGrant = await withAuthFault(
+      () =>
+        jsonResponse(400, {
+          error: "invalid_grant",
+          error_description: "Invalid Refresh Token: Refresh Token Not Found",
         }),
-    },
-    {
-      name: "refresh → 200 non-JSON body",
-      fault: () => new Response("<html>ok</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
-    },
-    {
-      name: "refresh → 200 JSON without a session",
-      fault: () => jsonResponse(200, { message: "ok" }),
-    },
-    { name: "refresh → network failure", fault: networkFailure },
-  ];
-  let octet = 10;
-  for (const testCase of cases) {
-    octet += 1;
-    const response = await withAuthFault(testCase.fault, () =>
-      h.handler(refreshRequest(`10.2.0.${octet}`)),
+      () => h.handler(refreshRequest("10.2.0.98")),
     );
-    await expectRetryable503(response, testCase.name);
-  }
+    assertEquals(invalidGrant.status, 401);
+    await invalidGrant.body?.cancel();
 
-  // Controls: GoTrue REFUSING the refresh token (400 invalid_grant, or a 401)
-  // is the one implicit sign-out and must remain 401.
-  const invalidGrant = await withAuthFault(
-    () =>
-      jsonResponse(400, {
-        error: "invalid_grant",
-        error_description: "Invalid Refresh Token: Refresh Token Not Found",
-      }),
-    () => h.handler(refreshRequest("10.2.0.98")),
-  );
-  assertEquals(invalidGrant.status, 401);
-  await invalidGrant.body?.cancel();
+    const unauthorized = await withAuthFault(
+      () => jsonResponse(401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" }),
+      () => h.handler(refreshRequest("10.2.0.97")),
+    );
+    assertEquals(unauthorized.status, 401);
+    await unauthorized.body?.cancel();
 
-  const unauthorized = await withAuthFault(
-    () => jsonResponse(401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" }),
-    () => h.handler(refreshRequest("10.2.0.97")),
-  );
-  assertEquals(unauthorized.status, 401);
-  await unauthorized.body?.cancel();
+    // And a healthy Auth still rotates the pair.
+    const rotated = await withAuthFault(
+      () => jsonResponse(200, gotrueSession()),
+      () => h.handler(refreshRequest("10.2.0.96")),
+    );
+    assertEquals(rotated.status, 200);
+    const rotatedBody = await rotated.json();
+    assertEquals(rotatedBody.session.accessToken, `rotated-session-for-${TEST_USER_ID}`);
+    assertEquals(rotatedBody.session.refreshToken, "rotated-refresh");
+  },
+);
 
-  // And a healthy Auth still rotates the pair.
-  const rotated = await withAuthFault(
-    () => jsonResponse(200, gotrueSession()),
-    () => h.handler(refreshRequest("10.2.0.96")),
-  );
-  assertEquals(rotated.status, 200);
-  const rotatedBody = await rotated.json();
-  assertEquals(rotatedBody.session.accessToken, `rotated-session-for-${TEST_USER_ID}`);
-  assertEquals(rotatedBody.session.refreshToken, "rotated-refresh");
-});
+Deno.test(
+  "AUTH-OUTAGE-2b: refresh against a failing or hung Auth answers in < 10s (bounded upstream timeout)",
+  async () => {
+    const h = await loadHarness();
 
-Deno.test("AUTH-OUTAGE-2b: refresh against a failing or hung Auth answers in < 10s (bounded upstream timeout)", async () => {
-  const h = await loadHarness();
+    const startedNetwork = performance.now();
+    const network = await withAuthFault(networkFailure, () =>
+      h.handler(refreshRequest("10.2.1.11")),
+    );
+    const networkMs = performance.now() - startedNetwork;
+    await expectRetryable503(network, "refresh → network failure");
+    assert(
+      networkMs < 10_000,
+      `network failure answered after ${Math.round(networkMs)}ms (limit 10000ms)`,
+    );
 
-  const startedNetwork = performance.now();
-  const network = await withAuthFault(networkFailure, () => h.handler(refreshRequest("10.2.1.11")));
-  const networkMs = performance.now() - startedNetwork;
-  await expectRetryable503(network, "refresh → network failure");
-  assert(networkMs < 10_000, `network failure answered after ${Math.round(networkMs)}ms (limit 10000ms)`);
+    const startedHung = performance.now();
+    const hung = await withAuthFault(hungUpstream, () => h.handler(refreshRequest("10.2.1.12")));
+    const hungMs = performance.now() - startedHung;
+    await expectRetryable503(hung, "refresh → hung upstream");
+    assert(hungMs < 10_000, `hung upstream answered after ${Math.round(hungMs)}ms (limit 10000ms)`);
 
-  const startedHung = performance.now();
-  const hung = await withAuthFault(hungUpstream, () => h.handler(refreshRequest("10.2.1.12")));
-  const hungMs = performance.now() - startedHung;
-  await expectRetryable503(hung, "refresh → hung upstream");
-  assert(hungMs < 10_000, `hung upstream answered after ${Math.round(hungMs)}ms (limit 10000ms)`);
+    const startedUser = performance.now();
+    const hungUser = await withAuthFault(hungUpstream, () =>
+      h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: "10.2.1.13" })),
+    );
+    const userMs = performance.now() - startedUser;
+    await expectRetryable503(hungUser, "getUser → hung upstream");
+    assert(userMs < 10_000, `hung getUser answered after ${Math.round(userMs)}ms (limit 10000ms)`);
+  },
+);
 
-  const startedUser = performance.now();
-  const hungUser = await withAuthFault(hungUpstream, () =>
-    h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: "10.2.1.13" })),
-  );
-  const userMs = performance.now() - startedUser;
-  await expectRetryable503(hungUser, "getUser → hung upstream");
-  assert(userMs < 10_000, `hung getUser answered after ${Math.round(userMs)}ms (limit 10000ms)`);
-});
+Deno.test(
+  "AUTH-OUTAGE-3: an Auth outage does not charge the per-IP auth-failure budget",
+  async () => {
+    const h = await loadHarness();
+    h.tables.profiles = [
+      {
+        id: TEST_USER_ID,
+        email: "user@example.com",
+        onboarding_state: "complete",
+        provider: "google",
+      },
+    ];
+    const venueIp = "10.3.0.7";
+    const controlIp = "10.3.0.8";
 
-Deno.test("AUTH-OUTAGE-3: an Auth outage does not charge the per-IP auth-failure budget", async () => {
-  const h = await loadHarness();
-  h.tables.profiles = [{ id: TEST_USER_ID, email: "user@example.com", onboarding_state: "complete", provider: "google" }];
-  const venueIp = "10.3.0.7";
-  const controlIp = "10.3.0.8";
+    const outageStatuses: number[] = [];
+    await withAuthFault(
+      () => jsonResponse(503, { code: 503, msg: "service unavailable" }),
+      async () => {
+        for (let i = 0; i < 31; i += 1) {
+          const response = await h.handler(
+            userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: venueIp }),
+          );
+          outageStatuses.push(response.status);
+          await response.body?.cancel();
+        }
+      },
+    );
+    assertEquals(
+      outageStatuses.filter((status) => status === 503).length,
+      31,
+      `outage-time statuses: ${JSON.stringify(outageStatuses)}`,
+    );
 
-  const outageStatuses: number[] = [];
-  await withAuthFault(
-    () => jsonResponse(503, { code: 503, msg: "service unavailable" }),
-    async () => {
-      for (let i = 0; i < 31; i += 1) {
-        const response = await h.handler(
-          userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: venueIp }),
-        );
-        outageStatuses.push(response.status);
-        await response.body?.cancel();
-      }
-    },
-  );
-  assertEquals(
-    outageStatuses.filter((status) => status === 503).length,
-    31,
-    `outage-time statuses: ${JSON.stringify(outageStatuses)}`,
-  );
+    // Auth recovers: the very next valid request from the same IP must be served.
+    const healthy: AuthFault = () => jsonResponse(200, gotrueUser());
+    const recovered = await withAuthFault(healthy, () =>
+      h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: venueIp })),
+    );
+    assertStrictEquals(
+      recovered.status,
+      200,
+      `post-recovery status ${recovered.status} from ${venueIp}`,
+    );
+    await recovered.body?.cancel();
 
-  // Auth recovers: the very next valid request from the same IP must be served.
-  const healthy: AuthFault = () => jsonResponse(200, gotrueUser());
-  const recovered = await withAuthFault(healthy, () =>
-    h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: venueIp })),
-  );
-  assertStrictEquals(recovered.status, 200, `post-recovery status ${recovered.status} from ${venueIp}`);
-  await recovered.body?.cancel();
-
-  const control = await withAuthFault(healthy, () =>
-    h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: controlIp })),
-  );
-  assertStrictEquals(control.status, 200);
-  await control.body?.cancel();
-});
+    const control = await withAuthFault(healthy, () =>
+      h.handler(userRequest("GET", "/v1/me", { token: supabaseBearer(), ip: controlIp })),
+    );
+    assertStrictEquals(control.status, 200);
+    await control.body?.cancel();
+  },
+);
