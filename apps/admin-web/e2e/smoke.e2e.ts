@@ -121,13 +121,36 @@ test.describe("admin-web smoke", () => {
     expect(bootstrap.status(), "POST /v1/account/bootstrap").toBeLessThan(300);
 
     await page.goto("/#/");
+    const tokenInput = page.getByPlaceholder("paste OIDC (or local dev) admin token");
+
+    // A rejected token surfaces the API error in the panels (negative control). The
+    // 401s it provokes are the only faults this test tolerates; everything after
+    // this point must be clean, so the collector is drained once they are checked.
+    await tokenInput.fill("not-a-valid-token");
+    await expect(page.getByText(/Token verification failed/).first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(faults.pageErrors, "uncaught page errors").toEqual([]);
+    expect(faults.failedRequests, "rejected-token requests").not.toEqual([]);
+    for (const fault of faults.failedRequests) expect(fault).toMatch(/ → HTTP 401$/);
+    for (const fault of faults.consoleErrors) expect(fault).toMatch(/401/);
+    faults.failedRequests.length = 0;
+    faults.consoleErrors.length = 0;
+
+    // A later successful load must clear the error — a stale error above a
+    // correctly loaded table is what an operator typing a token keystroke-by-
+    // keystroke sees otherwise.
     const flagsResponse = page.waitForResponse(
-      (response) => response.url().endsWith("/v1/flags") && response.request().method() === "GET",
+      (response) =>
+        response.url().endsWith("/v1/flags") &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
     );
-    await page.getByPlaceholder("paste OIDC (or local dev) admin token").fill(token);
+    await tokenInput.fill(token);
 
     expect((await flagsResponse).status(), "GET /v1/flags through the vite proxy").toBe(200);
     await expect(page.getByRole("heading", { level: 2, name: "Feature flags" })).toBeVisible();
+    await expect(page.locator("table").first().locator("tbody tr")).not.toHaveCount(0);
+    await expect(page.getByText(/Token verification failed/)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 2, name: /Quality dashboard/ })).toBeVisible();
     await expect(
       page.getByRole("heading", { level: 2, name: "Model bundle release" }),
@@ -135,8 +158,6 @@ test.describe("admin-web smoke", () => {
     await expect(
       page.getByRole("heading", { level: 2, name: "User lookup (audited)" }),
     ).toBeVisible();
-    // Seeded flags render as table rows (packages/database seed).
-    await expect(page.locator("table").first().locator("tbody tr")).not.toHaveCount(0);
 
     await saveScreenshot(page, "admin-console-authenticated");
     expectNoFaults(faults);

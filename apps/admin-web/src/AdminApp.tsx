@@ -106,7 +106,10 @@ function QualityDashboardPanel({ token }: { token: string }) {
 
   const load = useCallback(() => {
     api("GET", `/v1/admin/quality-dashboard?windowDays=${windowDays}`)
-      .then((json) => setData(json as unknown as QualityDashboard))
+      .then((json) => {
+        setData(json as unknown as QualityDashboard);
+        setError(null);
+      })
       .catch((e) => setError(String(e)));
   }, [api, windowDays]);
   useEffect(load, [load]);
@@ -252,7 +255,10 @@ function FlagsPanel({ token }: { token: string }) {
 
   const load = useCallback(() => {
     api("GET", "/v1/flags")
-      .then((json) => setFlags((json as { flags: Record<string, boolean> }).flags))
+      .then((json) => {
+        setFlags((json as { flags: Record<string, boolean> }).flags);
+        setError(null);
+      })
       .catch((e) => setError(String(e)));
   }, [api]);
   useEffect(load, [load]);

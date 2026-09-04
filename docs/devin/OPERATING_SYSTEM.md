@@ -46,7 +46,8 @@ sessions never deploy to it, push migrations to it, or mutate its data.
 Skills (procedures, each with exact commands, artifacts, failure conditions
 and forbidden shortcuts) in `.agents/skills/`:
 `pre-pr-verification` · `full-product-verification` · `macos-verification` ·
-`release-verification` · `test-authentication`. Repository workflow skill:
+`release-verification` · `test-authentication` · `admin-web-manual-smoke`.
+Repository workflow skill:
 `.devin/skills/ultra-coordinator/` (§8).
 
 ## 3. Objective evaluation ("did this make Pickle Sensei smarter?")
