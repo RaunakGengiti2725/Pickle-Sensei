@@ -100,12 +100,11 @@ Deno.test(
 );
 
 Deno.test(
-  "[defect] memory fallback: 20 000 distinct ids wipe EVERY live window, un-blocking a limited client",
+  "memory fallback: 20 000 distinct ids never release a limited client (locked windows are not evicted)",
   async () => {
-    // rateLimit.ts memoryIncr(): when the map is full and nothing has expired it
-    // calls windows.clear(). Any client that can present >= 20 000 distinct
-    // ids (spoofed X-Forwarded-For — clientIp() trusts the first hop) resets
-    // all in-flight budgets on that isolate, including its own.
+    // rateLimit.ts memoryIncr(): when the map is full it evicts expired, then
+    // least-recently-used UNLOCKED windows. A client presenting >= 20 000
+    // distinct ids must not be able to reset in-flight lockouts on that isolate.
     configureRedis(false);
     const redis = fakeUpstash();
     try {
@@ -121,8 +120,8 @@ Deno.test(
         await iso.rateLimit.enforceRateLimit("ip", `flood-${i}`, 300, 60);
       }
       const after = await iso.rateLimit.enforceRateLimit("ip", "victim-limited-me", 3, 60);
-      assertEquals(after.allowed, true, "window was cleared: the limited client is allowed again");
-      assertEquals(after.remaining, 2, "counter restarted from 1");
+      assertEquals(after.allowed, false, "the limited client stayed limited");
+      assertEquals(after.remaining, 0, "its counter was not reset");
     } finally {
       redis.restore();
     }

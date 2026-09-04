@@ -45,7 +45,7 @@ Deno.test("sanitizeUserText keeps ZWNJ (U+200C) and ZWJ (U+200D) inside words", 
   for (const { label, text } of PRESERVED) {
     const out = sanitizeUserText(text, MAX);
     if (!EXPECTED_MODE) {
-      console.log(`[characterization] ${label}: ${codePoints(text)} -> ${codePoints(out)}`);
+      console.warn(`[characterization] ${label}: ${codePoints(text)} -> ${codePoints(out)}`);
       continue;
     }
     assertEquals(out, text, `${label}: ${codePoints(text)} -> ${codePoints(out)}`);
@@ -56,7 +56,7 @@ Deno.test("sanitizeUserText keeps an emoji ZWJ sequence as ONE grapheme", () => 
   const family = `👨${ZWJ}👩${ZWJ}👧${ZWJ}👦`;
   const out = sanitizeUserText(family, MAX);
   if (!EXPECTED_MODE) {
-    console.log(`[characterization] family graphemes: ${graphemes(family)} -> ${graphemes(out)}`);
+    console.warn(`[characterization] family graphemes: ${graphemes(family)} -> ${graphemes(out)}`);
     return;
   }
   assertEquals(graphemes(out), 1, `got ${graphemes(out)} graphemes: ${codePoints(out)}`);
@@ -75,7 +75,7 @@ Deno.test(
   "joiners with no join context (leading, trailing, next to whitespace, alone) are dropped",
   () => {
     if (!EXPECTED_MODE) {
-      console.log(
+      console.warn(
         `[characterization] "${codePoints(`${ZWJ}Ali${ZWNJ}`)}" -> "${codePoints(sanitizeUserText(`${ZWJ}Ali${ZWNJ}`, MAX))}"`,
       );
       return;
@@ -93,7 +93,7 @@ Deno.test("the code-point cap still counts kept joiners (matches the DB char_len
   assertEquals(Array.from(name).length, 7);
   const out = sanitizeUserText(name, 7);
   if (!EXPECTED_MODE) {
-    console.log(`[characterization] cap 7: ${codePoints(name)} -> ${codePoints(out)}`);
+    console.warn(`[characterization] cap 7: ${codePoints(name)} -> ${codePoints(out)}`);
   } else {
     assertEquals(out, name);
   }

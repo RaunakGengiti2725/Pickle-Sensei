@@ -5,6 +5,14 @@
 // Windows are aligned buckets (floor(now / window)), so a limit of 60/min
 // means at most 60 requests inside each clock minute per key. Limits fail
 // OPEN on backend errors: a Redis outage must never lock users out.
+//
+// The memory fallback is bounded in BOTH dimensions: identities longer than
+// MEMORY_ID_MAX_CHARS are replaced by their SHA-256 before they become part
+// of a key, and the map never holds more than MEMORY_WINDOW_MAX windows.
+// Under pressure it evicts expired windows first, then the least recently
+// used windows that have NOT reached their limit — a window whose budget is
+// exhausted (an active lockout) is never evicted, so no volume of unrelated
+// identities can release it.
 
 import { redisConfigured, redisWindowGet, redisWindowIncr } from "./cache.ts";
 
@@ -17,26 +25,58 @@ export interface RateLimitResult {
 
 interface MemoryWindow {
   count: number;
+  limit: number;
   resetAtMs: number;
 }
 
-const MEMORY_WINDOW_MAX = 20_000;
+export const MEMORY_WINDOW_MAX = 20_000;
+const MEMORY_EVICT_BATCH = MEMORY_WINDOW_MAX / 20;
+const MEMORY_ID_MAX_CHARS = 128;
+// Insertion order doubles as LRU order: every counted hit re-inserts its
+// window at the tail, so iteration starts at the least recently used one.
 const windows = new Map<string, MemoryWindow>();
 
-function memoryIncr(key: string, windowSeconds: number): number {
+/** Number of live + not-yet-swept windows held by this isolate (tests). */
+export function memoryWindowCount(): number {
+  return windows.size;
+}
+
+function isLocked(window: MemoryWindow): boolean {
+  return window.count >= window.limit;
+}
+
+function memoryEvict(now: number): void {
+  for (const [k, v] of windows) {
+    if (v.resetAtMs <= now) windows.delete(k);
+  }
+  if (windows.size < MEMORY_WINDOW_MAX) return;
+  let evicted = 0;
+  for (const [k, v] of windows) {
+    if (isLocked(v)) continue;
+    windows.delete(k);
+    evicted += 1;
+    if (evicted >= MEMORY_EVICT_BATCH) break;
+  }
+}
+
+function memoryIncr(key: string, limit: number, windowSeconds: number): number {
   const now = Date.now();
   const existing = windows.get(key);
   if (existing && existing.resetAtMs > now) {
     existing.count += 1;
+    existing.limit = limit;
+    windows.delete(key);
+    windows.set(key, existing);
     return existing.count;
   }
-  if (windows.size >= MEMORY_WINDOW_MAX) {
-    for (const [k, v] of windows) {
-      if (v.resetAtMs <= now) windows.delete(k);
-    }
-    if (windows.size >= MEMORY_WINDOW_MAX) windows.clear();
+  if (existing) windows.delete(key);
+  if (windows.size >= MEMORY_WINDOW_MAX) memoryEvict(now);
+  if (windows.size < MEMORY_WINDOW_MAX) {
+    windows.set(key, { count: 1, limit, resetAtMs: now + windowSeconds * 1_000 });
   }
-  windows.set(key, { count: 1, resetAtMs: now + windowSeconds * 1_000 });
+  // Otherwise every retained window is an active lockout: this first hit is
+  // reported but not retained (fail open, as on a backend outage) rather
+  // than releasing someone else's lockout to make room.
   return 1;
 }
 
@@ -45,9 +85,22 @@ function memoryGet(key: string): number {
   return existing && existing.resetAtMs > Date.now() ? existing.count : 0;
 }
 
-function windowKey(scope: string, id: string, windowSeconds: number) {
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Identity as it appears in a key: verbatim when short, otherwise a
+ * fixed-size digest so a hostile identity cannot grow keys without bound
+ * (in memory or in Redis). */
+async function boundedId(id: string): Promise<string> {
+  if (id.length <= MEMORY_ID_MAX_CHARS) return id;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+  return `sha256:${hex(digest)}`;
+}
+
+async function windowKey(scope: string, id: string, windowSeconds: number) {
   const bucket = Math.floor(Date.now() / (windowSeconds * 1_000));
-  return { bucket, key: `rl:${scope}:${bucket}:${id}` };
+  return { bucket, key: `rl:${scope}:${bucket}:${await boundedId(id)}` };
 }
 
 function toResult(
@@ -77,13 +130,13 @@ export async function enforceRateLimit(
   limit: number,
   windowSeconds: number,
 ): Promise<RateLimitResult> {
-  const { bucket, key } = windowKey(scope, id, windowSeconds);
+  const { bucket, key } = await windowKey(scope, id, windowSeconds);
   let count: number | null = null;
   if (redisConfigured()) {
     count = await redisWindowIncr(key, windowSeconds);
   }
   if (count === null) {
-    count = memoryIncr(key, windowSeconds);
+    count = memoryIncr(key, limit, windowSeconds);
   }
   return toResult(count, limit, bucket, windowSeconds, count <= limit);
 }
@@ -100,7 +153,7 @@ export async function peekRateLimit(
   limit: number,
   windowSeconds: number,
 ): Promise<RateLimitResult> {
-  const { bucket, key } = windowKey(scope, id, windowSeconds);
+  const { bucket, key } = await windowKey(scope, id, windowSeconds);
   let count: number | null = null;
   if (redisConfigured()) {
     count = await redisWindowGet(key);
