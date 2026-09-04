@@ -1,0 +1,317 @@
+{
+  "frozenNowMs": 1788523200123,
+  "frozenNowIso": "2026-09-04T12:00:00.123Z",
+  "rateLimited": {
+    "status": 429,
+    "headers": {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+      "ratelimit-limit": "10",
+      "ratelimit-remaining": "0",
+      "retry-after": "49",
+      "x-content-type-options": "nosniff",
+      "x-request-id": "6593e35b-38f1-452c-b3c7-1d379c7ee144"
+    },
+    "body": {
+      "error": {
+        "code": "rate_limited",
+        "message": "Too many requests. Please slow down and try again shortly."
+      }
+    }
+  },
+  "firstTenVerdicts": [
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    },
+    {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_annual",
+        "expiresAt": "2099-01-01T00:00:00.000Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    }
+  ],
+  "expiresExactlyNow": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-request-id": "8540c12f-c2f4-473d-94ac-9aa04ec5748b"
+    },
+    "body": {
+      "billing": {
+        "premium": false,
+        "productKey": null,
+        "expiresAt": null,
+        "verifiedAt": "2026-09-04T11:53:11.119Z"
+      },
+      "access": {
+        "premium": false,
+        "entitlements": [],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    }
+  },
+  "expiresNotADate": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-request-id": "d62cf5a6-d355-4a6c-912c-cd47fbeb6d1b"
+    },
+    "body": {
+      "billing": {
+        "premium": false,
+        "productKey": null,
+        "expiresAt": null,
+        "verifiedAt": "2026-09-04T11:53:11.120Z"
+      },
+      "access": {
+        "premium": false,
+        "entitlements": [],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    }
+  },
+  "expiresNowPlusOneMs": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-request-id": "ec5e2a24-1fc9-4a78-8b54-bbc375463a90"
+    },
+    "body": {
+      "billing": {
+        "premium": true,
+        "productKey": "pickle_sensei_pro_monthly",
+        "expiresAt": "2026-09-04T12:00:00.124Z",
+        "verifiedAt": "2026-09-04T11:53:11.121Z"
+      },
+      "access": {
+        "premium": true,
+        "entitlements": ["premium", "pickle_sensei_pro"],
+        "freeRatings": {
+          "limit": 2,
+          "used": 0,
+          "reserved": 0,
+          "remaining": 2,
+          "availableToReserve": 2
+        },
+        "canStartRating": true,
+        "paywallRequired": false
+      }
+    }
+  }
+}
