@@ -64,6 +64,110 @@ describe("proposeStrokeEvents", () => {
   });
 });
 
+describe("proposeStrokeEvents — degenerate windows and non-finite samples (ADJ-08)", () => {
+  const swing = speedBumps([{ peakMs: 1500, height: 2.0, halfWidthMs: 120 }], 0, 4000);
+
+  it("abstains with degenerate_window on inverted or zero-length clip bounds", () => {
+    for (const [clipStartMs, clipEndMs] of [
+      [4000, 0],
+      [1500, 1500],
+    ] as const) {
+      const v1 = proposeStrokeEvents({
+        paddleSpeeds: swing,
+        wristSpeeds: null,
+        clipStartMs,
+        clipEndMs,
+      });
+      expect(v1).toEqual({ events: [], source: "none", reason: "degenerate_window" });
+      const v2 = proposeStrokeEventsV2({
+        paddleSpeeds: swing,
+        wristSpeeds: swing,
+        clipStartMs,
+        clipEndMs,
+      });
+      expect(v2).toEqual({ events: [], source: "none", reason: "degenerate_window" });
+    }
+  });
+
+  it("drops non-finite samples before smoothing; emitted events stay finite and in-clip", () => {
+    const poisoned = swing.map((sample, index) =>
+      index % 6 === 2
+        ? { ...sample, value: Number.NaN }
+        : index % 6 === 4
+          ? { ...sample, timestampMs: Number.NaN }
+          : sample,
+    );
+    const { events, source } = proposeStrokeEvents({
+      paddleSpeeds: null,
+      wristSpeeds: poisoned,
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(source).toBe("wrist");
+    expect(events.length).toBe(1);
+    const event = events[0]!;
+    for (const value of [
+      event.startMs,
+      event.peakMs,
+      event.endMs,
+      event.peakSpeed,
+      event.prominence,
+    ]) {
+      expect(Number.isFinite(value)).toBe(true);
+    }
+    expect(event.startMs).toBeGreaterThanOrEqual(0);
+    expect(event.endMs).toBeLessThanOrEqual(4000);
+    expect(Math.abs(event.peakMs - 1500)).toBeLessThanOrEqual(60);
+  });
+
+  it("property: for random finite inputs every event satisfies clipStart <= start < end <= clipEnd", () => {
+    // Deterministic LCG so a failure replays from its seed.
+    let state = 0x9e3779b9;
+    const rand = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x1_0000_0000;
+    };
+    const randomSeries = (fromMs: number, toMs: number) => {
+      const stepMs = 20 + Math.floor(rand() * 30);
+      const series: Array<{ timestampMs: number; value: number }> = [];
+      let value = rand() * 0.4;
+      for (let t = fromMs; t <= toMs; t += stepMs) {
+        value = Math.max(0, value + (rand() - 0.5) * 0.4);
+        if (rand() < 0.05) value += rand() * 4;
+        series.push({ timestampMs: t, value });
+      }
+      return series;
+    };
+    let emitted = 0;
+    for (let seed = 1; seed <= 400; seed += 1) {
+      // Series deliberately extend PAST both clip edges: proposals must still be
+      // confined to the clip.
+      const clipStartMs = Math.floor(rand() * 3000);
+      const clipEndMs = clipStartMs + 800 + Math.floor(rand() * 8000);
+      const seriesFrom = clipStartMs - Math.floor(rand() * 2000);
+      const seriesTo = clipEndMs + Math.floor(rand() * 2000);
+      const paddle = rand() < 0.3 ? null : randomSeries(seriesFrom, seriesTo);
+      const wrist = rand() < 0.2 ? null : randomSeries(seriesFrom, seriesTo);
+      for (const proposal of [
+        proposeStrokeEvents({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs, clipEndMs }),
+        proposeStrokeEventsV2({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs, clipEndMs }),
+      ]) {
+        for (const event of proposal.events) {
+          emitted += 1;
+          const label = `seed ${seed} ${JSON.stringify(event)} clip ${clipStartMs}..${clipEndMs}`;
+          expect(event.startMs, label).toBeGreaterThanOrEqual(clipStartMs);
+          expect(event.startMs, label).toBeLessThan(event.endMs);
+          expect(event.endMs, label).toBeLessThanOrEqual(clipEndMs);
+          expect(event.peakMs, label).toBeGreaterThanOrEqual(event.startMs);
+          expect(event.peakMs, label).toBeLessThanOrEqual(event.endMs);
+          expect(Number.isFinite(event.peakSpeed), label).toBe(true);
+        }
+      }
+    }
+    expect(emitted).toBeGreaterThan(50); // the property must actually be exercised
+  });
+});
+
 describe("low-amplitude tier (wrist-only compact strokes)", () => {
   it("admits a sub-floor compact stroke only from wrist, flagged and confidence-penalized", () => {
     const compact = speedBumps([{ peakMs: 2000, height: 0.28, halfWidthMs: 130 }], 0, 4000);
