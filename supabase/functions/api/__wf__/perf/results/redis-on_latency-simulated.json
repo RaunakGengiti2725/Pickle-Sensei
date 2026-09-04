@@ -1,0 +1,7163 @@
+{
+  "meta": {
+    "tool": "supabase/functions/api/__wf__/perf/perf_edge_latency_bench.ts",
+    "seed": "perf-edge-latency-n1",
+    "redis": true,
+    "latencyMode": "simulated",
+    "latencyMs": {
+      "supabase_auth": 60,
+      "supabase_rest": 20,
+      "redis": 3,
+      "revenuecat": 150,
+      "other": 50
+    },
+    "requestsPerScenario": 1000,
+    "heavyRequestsPerScenario": 100,
+    "concurrency": 25,
+    "deno": "2.9.6",
+    "v8": "15.0.245.2-rusty",
+    "startedAt": "2026-09-04T06:32:28.027Z",
+    "durationMs": 257463,
+    "simulated": true
+  },
+  "scenarios": [
+    {
+      "id": "healthz",
+      "route": "GET /healthz",
+      "variant": "public",
+      "hotPath": false,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 235.844,
+      "throughputRps": 4240.096,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 3.592,
+        "p50": 5.664,
+        "p95": 6.774,
+        "p99": 9.405,
+        "max": 9.995,
+        "mean": 5.71
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 11,
+          "p50": 11,
+          "p95": 11,
+          "p99": 11,
+          "max": 11,
+          "mean": 11
+        },
+        "upstreamRequest": {
+          "min": 91,
+          "p50": 95,
+          "p95": 95,
+          "p99": 95,
+          "max": 95,
+          "mean": 94.12
+        },
+        "upstreamResponse": {
+          "min": 27,
+          "p50": 27,
+          "p95": 27,
+          "p99": 27,
+          "max": 27,
+          "mean": 27
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 7559776,
+        "afterHeapUsed": 10280768,
+        "deltaHeapUsed": 2720992,
+        "rssBefore": 54554624,
+        "rssAfter": 81702912,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "privacy",
+      "route": "GET /privacy",
+      "variant": "public legal text",
+      "hotPath": false,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 258.934,
+      "throughputRps": 3861.988,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 4.309,
+        "p50": 6.035,
+        "p95": 7.837,
+        "p99": 8.074,
+        "max": 8.2,
+        "mean": 6.333
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 20141,
+          "p50": 20141,
+          "p95": 20141,
+          "p99": 20141,
+          "max": 20141,
+          "mean": 20141
+        },
+        "upstreamRequest": {
+          "min": 87,
+          "p50": 91,
+          "p95": 91,
+          "p99": 91,
+          "max": 91,
+          "mean": 90.12
+        },
+        "upstreamResponse": {
+          "min": 27,
+          "p50": 27,
+          "p95": 27,
+          "p99": 27,
+          "max": 27,
+          "mean": 27
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 9328504,
+        "afterHeapUsed": 10583024,
+        "deltaHeapUsed": 1254520,
+        "rssBefore": 81768448,
+        "rssAfter": 90492928,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "account-bootstrap",
+      "route": "POST /v1/account/bootstrap",
+      "variant": "google id token, profile exists",
+      "hotPath": true,
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 3988.023,
+      "throughputRps": 250.751,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 93.137,
+        "p50": 98.379,
+        "p95": 103.106,
+        "p99": 104.669,
+        "max": 106.969,
+        "mean": 98.719
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST auth/token?grant_type=id_token": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/profiles": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "response": {
+          "min": 511,
+          "p50": 520,
+          "p95": 520,
+          "p99": 520,
+          "max": 520,
+          "mean": 519.507
+        },
+        "upstreamRequest": {
+          "min": 560,
+          "p50": 569,
+          "p95": 569,
+          "p99": 569,
+          "max": 569,
+          "mean": 567.47
+        },
+        "upstreamResponse": {
+          "min": 1179,
+          "p50": 1188,
+          "p95": 1188,
+          "p99": 1188,
+          "max": 1188,
+          "mean": 1187.507
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 9869656,
+        "afterHeapUsed": 14032152,
+        "deltaHeapUsed": 4162496,
+        "rssBefore": 90492928,
+        "rssAfter": 138948608,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "auth-refresh",
+      "route": "POST /v1/auth/refresh",
+      "variant": "rotate refresh token",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 3123.225,
+      "throughputRps": 320.182,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 71.274,
+        "p50": 77.391,
+        "p95": 80.23,
+        "p99": 82.406,
+        "max": 82.97,
+        "mean": 77.353
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST auth/token?grant_type=refresh_token": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 44,
+          "p50": 46,
+          "p95": 46,
+          "p99": 46,
+          "max": 46,
+          "mean": 45.89
+        },
+        "response": {
+          "min": 398,
+          "p50": 405,
+          "p95": 405,
+          "p99": 405,
+          "max": 405,
+          "mean": 404.637
+        },
+        "upstreamRequest": {
+          "min": 267,
+          "p50": 279,
+          "p95": 279,
+          "p99": 279,
+          "max": 279,
+          "mean": 276.69
+        },
+        "upstreamResponse": {
+          "min": 748,
+          "p50": 755,
+          "p95": 755,
+          "p99": 755,
+          "max": 755,
+          "mean": 754.637
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 10223888,
+        "afterHeapUsed": 12853920,
+        "deltaHeapUsed": 2630032,
+        "rssBefore": 138948608,
+        "rssAfter": 139812864,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "auth-logout",
+      "route": "POST /v1/auth/logout",
+      "variant": "auth warm",
+      "hotPath": false,
+      "notes": "Logout evicts the auth cache, so request N+1 for the same user re-verifies.",
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 5429.209,
+      "throughputRps": 184.189,
+      "statuses": {
+        "204": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 79.015,
+        "p50": 151.267,
+        "p95": 156.188,
+        "p99": 159.136,
+        "max": 159.158,
+        "mean": 134.71
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 1.75
+        },
+        "total": {
+          "min": 5,
+          "p50": 8,
+          "p95": 8,
+          "p99": 8,
+          "max": 8,
+          "mean": 7.25
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 1.75
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 6,
+            "p95": 6,
+            "p99": 6,
+            "max": 6,
+            "mean": 5.5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST auth/logout": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 0.75,
+            "total": 750
+          },
+          "GET auth/user": {
+            "perRequest": 0.75,
+            "total": 750
+          },
+          "REDIS SET": {
+            "perRequest": 0.75,
+            "total": 750
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "upstreamRequest": {
+          "min": 343,
+          "p50": 1107,
+          "p95": 1110,
+          "p99": 1110,
+          "max": 1110,
+          "mean": 918.43
+        },
+        "upstreamResponse": {
+          "min": 85,
+          "p50": 373,
+          "p95": 373,
+          "p99": 373,
+          "max": 373,
+          "mean": 301
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11133064,
+        "afterHeapUsed": 13877296,
+        "deltaHeapUsed": 2744232,
+        "rssBefore": 140726272,
+        "rssAfter": 141578240,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "me",
+      "route": "GET /v1/me",
+      "variant": "auth warm, profile exists",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1547.231,
+      "throughputRps": 646.316,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 32.874,
+        "p50": 37.992,
+        "p95": 40.621,
+        "p99": 41.489,
+        "max": 43.547,
+        "mean": 38.046
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/profiles": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 303,
+          "p50": 303,
+          "p95": 303,
+          "p99": 303,
+          "max": 303,
+          "mean": 303
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 502,
+          "p50": 502,
+          "p95": 502,
+          "p99": 502,
+          "max": 502,
+          "mean": 502
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11221800,
+        "afterHeapUsed": 14258672,
+        "deltaHeapUsed": 3036872,
+        "rssBefore": 141701120,
+        "rssAfter": 141705216,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "me-missing-profile",
+      "route": "GET /v1/me",
+      "variant": "profile row missing (trigger lag path)",
+      "hotPath": false,
+      "notes": "Degraded path: retries after a fixed sleep, then 503.",
+      "users": 250,
+      "requests": 100,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1853.748,
+      "throughputRps": 53.945,
+      "statuses": {
+        "503": 100
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 457.277,
+        "p50": 462.19,
+        "p95": 464.426,
+        "p99": 464.506,
+        "max": 464.512,
+        "mean": 461.689
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "GET rest/profiles": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 100
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 82,
+          "p50": 82,
+          "p95": 82,
+          "p99": 82,
+          "max": 82,
+          "mean": 82
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 265,
+          "p95": 265,
+          "p99": 265,
+          "max": 265,
+          "mean": 264.7
+        },
+        "upstreamResponse": {
+          "min": 75,
+          "p50": 75,
+          "p95": 75,
+          "p99": 75,
+          "max": 75,
+          "mean": 75
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11603640,
+        "afterHeapUsed": 10799568,
+        "deltaHeapUsed": -804072,
+        "rssBefore": 142475264,
+        "rssAfter": 142475264,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 100,
+        "warn": 0,
+        "log": 100
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "onboarding",
+      "route": "PUT /v1/me/onboarding",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1555.841,
+      "throughputRps": 642.739,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 33.617,
+        "p50": 38.675,
+        "p95": 41.264,
+        "p99": 42.011,
+        "max": 42.468,
+        "mean": 38.547
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "PATCH rest/profiles": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 188,
+          "p50": 188,
+          "p95": 188,
+          "p99": 188,
+          "max": 188,
+          "mean": 188
+        },
+        "response": {
+          "min": 294,
+          "p50": 294,
+          "p95": 294,
+          "p99": 294,
+          "max": 294,
+          "mean": 294
+        },
+        "upstreamRequest": {
+          "min": 485,
+          "p50": 491,
+          "p95": 491,
+          "p99": 491,
+          "max": 491,
+          "mean": 489.68
+        },
+        "upstreamResponse": {
+          "min": 517,
+          "p50": 517,
+          "p95": 517,
+          "p99": 517,
+          "max": 517,
+          "mean": 517
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 10918984,
+        "afterHeapUsed": 14271936,
+        "deltaHeapUsed": 3352952,
+        "rssBefore": 143163392,
+        "rssAfter": 144048128,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "access",
+      "route": "GET /v1/me/access",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1531.55,
+      "throughputRps": 652.933,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 32.548,
+        "p50": 37.865,
+        "p95": 40.126,
+        "p99": 41.111,
+        "max": 41.154,
+        "mean": 37.832
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 166,
+          "p50": 166,
+          "p95": 166,
+          "p99": 166,
+          "max": 166,
+          "mean": 166
+        },
+        "upstreamRequest": {
+          "min": 264,
+          "p50": 270,
+          "p95": 270,
+          "p99": 270,
+          "max": 270,
+          "mean": 268.68
+        },
+        "upstreamResponse": {
+          "min": 126,
+          "p50": 126,
+          "p95": 126,
+          "p99": 126,
+          "max": 126,
+          "mean": 126
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11687672,
+        "afterHeapUsed": 14018960,
+        "deltaHeapUsed": 2331288,
+        "rssBefore": 144048128,
+        "rssAfter": 144318464,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "access-auth-cold-session",
+      "route": "GET /v1/me/access",
+      "variant": "auth cache MISS, Supabase session token (getUser)",
+      "hotPath": true,
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 4422.018,
+      "throughputRps": 226.141,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 101.047,
+        "p50": 109.352,
+        "p95": 113.309,
+        "p99": 114.386,
+        "max": 114.909,
+        "mean": 109.41
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 7,
+          "p50": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 5,
+            "p50": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET auth/user": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS SET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 166,
+          "p50": 166,
+          "p95": 166,
+          "p99": 166,
+          "max": 166,
+          "mean": 166
+        },
+        "upstreamRequest": {
+          "min": 985,
+          "p50": 993,
+          "p95": 993,
+          "p99": 993,
+          "max": 993,
+          "mean": 991.57
+        },
+        "upstreamResponse": {
+          "min": 414,
+          "p50": 414,
+          "p95": 414,
+          "p99": 414,
+          "max": 414,
+          "mean": 414
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11577096,
+        "afterHeapUsed": 15720208,
+        "deltaHeapUsed": 4143112,
+        "rssBefore": 144318464,
+        "rssAfter": 145829888,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "access-auth-cold-google",
+      "route": "GET /v1/me/access",
+      "variant": "auth cache MISS, transitional Google id token (signInWithIdToken)",
+      "hotPath": true,
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 4415.286,
+      "throughputRps": 226.486,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 101.926,
+        "p50": 109.382,
+        "p95": 113.602,
+        "p99": 114.899,
+        "max": 115.164,
+        "mean": 109.397
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 7,
+          "p50": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 5,
+            "p50": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST auth/token?grant_type=id_token": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS SET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 166,
+          "p50": 166,
+          "p95": 166,
+          "p99": 166,
+          "max": 166,
+          "mean": 166
+        },
+        "upstreamRequest": {
+          "min": 1291,
+          "p50": 1301,
+          "p95": 1302,
+          "p99": 1302,
+          "max": 1302,
+          "mean": 1300.191
+        },
+        "upstreamResponse": {
+          "min": 853,
+          "p50": 860,
+          "p95": 860,
+          "p99": 860,
+          "max": 860,
+          "mean": 859.446
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 11763072,
+        "afterHeapUsed": 16565704,
+        "deltaHeapUsed": 4802632,
+        "rssBefore": 145829888,
+        "rssAfter": 146280448,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "billing-sync",
+      "route": "POST /v1/billing/sync",
+      "variant": "auth warm, RevenueCat verified",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 8421.115,
+      "throughputRps": 118.749,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 205.042,
+        "p50": 209.622,
+        "p95": 214.057,
+        "p99": 215.203,
+        "max": 216.004,
+        "mean": 209.864
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET revenuecat/subscribers/:id": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/billing_entitlements": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "response": {
+          "min": 352,
+          "p50": 352,
+          "p95": 352,
+          "p99": 352,
+          "max": 352,
+          "mean": 352
+        },
+        "upstreamRequest": {
+          "min": 468,
+          "p50": 474,
+          "p95": 474,
+          "p99": 474,
+          "max": 474,
+          "mean": 472.68
+        },
+        "upstreamResponse": {
+          "min": 304,
+          "p50": 304,
+          "p95": 304,
+          "p99": 304,
+          "max": 304,
+          "mean": 304
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12723568,
+        "afterHeapUsed": 15783936,
+        "deltaHeapUsed": 3060368,
+        "rssBefore": 147021824,
+        "rssAfter": 147378176,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "permits-reserve",
+      "route": "POST /v1/analysis-permits",
+      "variant": "auth warm, accepted",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2383.251,
+      "throughputRps": 419.595,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 53.678,
+        "p50": 59.016,
+        "p95": 61.273,
+        "p99": 62.405,
+        "max": 62.725,
+        "mean": 58.919
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/reserve_analysis_permit": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 48,
+          "p50": 50,
+          "p95": 50,
+          "p99": 50,
+          "max": 50,
+          "mean": 49.89
+        },
+        "response": {
+          "min": 368,
+          "p50": 368,
+          "p95": 368,
+          "p99": 368,
+          "max": 368,
+          "mean": 368
+        },
+        "upstreamRequest": {
+          "min": 321,
+          "p50": 329,
+          "p95": 329,
+          "p99": 329,
+          "max": 329,
+          "mean": 327.57
+        },
+        "upstreamResponse": {
+          "min": 296,
+          "p50": 296,
+          "p95": 296,
+          "p99": 296,
+          "max": 296,
+          "mean": 296
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12973120,
+        "afterHeapUsed": 15949208,
+        "deltaHeapUsed": 2976088,
+        "rssBefore": 147382272,
+        "rssAfter": 147402752,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "permits-finalize",
+      "route": "POST /v1/analysis-permits/:id/finalize",
+      "variant": "auth warm, reserved → cancelled",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 3273.744,
+      "throughputRps": 305.461,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 75.261,
+        "p50": 80.746,
+        "p95": 84.749,
+        "p99": 87.218,
+        "max": 96.908,
+        "mean": 81.018
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/analysis_permits": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "PATCH rest/analysis_permits": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 39,
+          "p50": 39,
+          "p95": 39,
+          "p99": 39,
+          "max": 39,
+          "mean": 39
+        },
+        "response": {
+          "min": 376,
+          "p50": 376,
+          "p95": 376,
+          "p99": 376,
+          "max": 376,
+          "mean": 376
+        },
+        "upstreamRequest": {
+          "min": 308,
+          "p50": 314,
+          "p95": 314,
+          "p99": 314,
+          "max": 314,
+          "mean": 312.68
+        },
+        "upstreamResponse": {
+          "min": 378,
+          "p50": 378,
+          "p95": 378,
+          "p99": 378,
+          "max": 378,
+          "mean": 378
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13322504,
+        "afterHeapUsed": 16363712,
+        "deltaHeapUsed": 3041208,
+        "rssBefore": 147402752,
+        "rssAfter": 148299776,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "shots-sync-1",
+      "route": "POST /v1/shots:sync",
+      "variant": "1 new shot",
+      "hotPath": true,
+      "notes": "1 batched replay SELECT + 1 sequential apply_synced_shot RPC per new shot.",
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2629.079,
+      "throughputRps": 380.361,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 57.895,
+        "p50": 64.695,
+        "p95": 69.072,
+        "p99": 72.429,
+        "max": 78.5,
+        "mean": 65.002
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/apply_synced_shot": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 1379,
+          "p50": 1379,
+          "p95": 1379,
+          "p99": 1379,
+          "max": 1379,
+          "mean": 1379
+        },
+        "response": {
+          "min": 70,
+          "p50": 70,
+          "p95": 70,
+          "p99": 70,
+          "max": 70,
+          "mean": 70
+        },
+        "upstreamRequest": {
+          "min": 1720,
+          "p50": 1726,
+          "p95": 1726,
+          "p99": 1726,
+          "max": 1726,
+          "mean": 1724.68
+        },
+        "upstreamResponse": {
+          "min": 97,
+          "p50": 97,
+          "p95": 97,
+          "p99": 97,
+          "max": 97,
+          "mean": 97
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13158168,
+        "afterHeapUsed": 17316648,
+        "deltaHeapUsed": 4158480,
+        "rssBefore": 148303872,
+        "rssAfter": 147210240,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "shots-sync-10",
+      "route": "POST /v1/shots:sync",
+      "variant": "10 new shots",
+      "hotPath": true,
+      "notes": "1 batched replay SELECT + 1 sequential apply_synced_shot RPC per new shot.",
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 10327.905,
+      "throughputRps": 96.825,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 249.055,
+        "p50": 256.855,
+        "p95": 261.701,
+        "p99": 264.3,
+        "max": 269.384,
+        "mean": 257
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 11,
+          "p50": 11,
+          "p95": 11,
+          "p99": 11,
+          "max": 11,
+          "mean": 11
+        },
+        "total": {
+          "min": 15,
+          "p50": 15,
+          "p95": 15,
+          "p99": 15,
+          "max": 15,
+          "mean": 15
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 11,
+            "p50": 11,
+            "p95": 11,
+            "p99": 11,
+            "max": 11,
+            "mean": 11
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/rpc/apply_synced_shot": {
+            "perRequest": 10,
+            "total": 10000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 13691,
+          "p50": 13691,
+          "p95": 13691,
+          "p99": 13691,
+          "max": 13691,
+          "mean": 13691
+        },
+        "response": {
+          "min": 421,
+          "p50": 421,
+          "p95": 421,
+          "p99": 421,
+          "max": 421,
+          "mean": 421
+        },
+        "upstreamRequest": {
+          "min": 13825,
+          "p50": 13831,
+          "p95": 13831,
+          "p99": 13831,
+          "max": 13831,
+          "mean": 13829.68
+        },
+        "upstreamResponse": {
+          "min": 187,
+          "p50": 187,
+          "p95": 187,
+          "p99": 187,
+          "max": 187,
+          "mean": 187
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13380520,
+        "afterHeapUsed": 30362688,
+        "deltaHeapUsed": 16982168,
+        "rssBefore": 147177472,
+        "rssAfter": 160456704,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "shots-sync-50",
+      "route": "POST /v1/shots:sync",
+      "variant": "50 new shots",
+      "hotPath": true,
+      "notes": "1 batched replay SELECT + 1 sequential apply_synced_shot RPC per new shot.",
+      "users": 250,
+      "requests": 100,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 4498.232,
+      "throughputRps": 22.231,
+      "statuses": {
+        "200": 100
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 1108.853,
+        "p50": 1120.156,
+        "p95": 1129.362,
+        "p99": 1129.469,
+        "max": 1132.404,
+        "mean": 1120.294
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 51,
+          "p50": 51,
+          "p95": 51,
+          "p99": 51,
+          "max": 51,
+          "mean": 51
+        },
+        "total": {
+          "min": 55,
+          "p50": 55,
+          "p95": 55,
+          "p99": 55,
+          "max": 55,
+          "mean": 55
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 51,
+            "p50": 51,
+            "p95": 51,
+            "p99": 51,
+            "max": 51,
+            "mean": 51
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/rpc/apply_synced_shot": {
+            "perRequest": 50,
+            "total": 5000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 100
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 68411,
+          "p50": 68411,
+          "p95": 68411,
+          "p99": 68411,
+          "max": 68411,
+          "mean": 68411
+        },
+        "response": {
+          "min": 1981,
+          "p50": 1981,
+          "p95": 1981,
+          "p99": 1981,
+          "max": 1981,
+          "mean": 1981
+        },
+        "upstreamRequest": {
+          "min": 67625,
+          "p50": 67628,
+          "p95": 67628,
+          "p99": 67628,
+          "max": 67628,
+          "mean": 67627.7
+        },
+        "upstreamResponse": {
+          "min": 587,
+          "p50": 587,
+          "p95": 587,
+          "p99": 587,
+          "max": 587,
+          "mean": 587
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12955360,
+        "afterHeapUsed": 20653360,
+        "deltaHeapUsed": 7698000,
+        "rssBefore": 160456704,
+        "rssAfter": 156553216,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 100
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "shots-sync-200",
+      "route": "POST /v1/shots:sync",
+      "variant": "200 new shots",
+      "hotPath": true,
+      "notes": "1 batched replay SELECT + 1 sequential apply_synced_shot RPC per new shot.",
+      "users": 250,
+      "requests": 100,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 17380.853,
+      "throughputRps": 5.753,
+      "statuses": {
+        "200": 100
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 4264.661,
+        "p50": 4342.887,
+        "p95": 4353.112,
+        "p99": 4355.649,
+        "max": 4366.721,
+        "mean": 4333.271
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 201,
+          "p50": 201,
+          "p95": 201,
+          "p99": 201,
+          "max": 201,
+          "mean": 201
+        },
+        "total": {
+          "min": 205,
+          "p50": 205,
+          "p95": 205,
+          "p99": 205,
+          "max": 205,
+          "mean": 205
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 201,
+            "p50": 201,
+            "p95": 201,
+            "p99": 201,
+            "max": 201,
+            "mean": 201
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/rpc/apply_synced_shot": {
+            "perRequest": 200,
+            "total": 20000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 100
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 273611,
+          "p50": 273611,
+          "p95": 273611,
+          "p99": 273611,
+          "max": 273611,
+          "mean": 273611
+        },
+        "response": {
+          "min": 7831,
+          "p50": 7831,
+          "p95": 7831,
+          "p99": 7831,
+          "max": 7831,
+          "mean": 7831
+        },
+        "upstreamRequest": {
+          "min": 269375,
+          "p50": 269378,
+          "p95": 269378,
+          "p99": 269378,
+          "max": 269378,
+          "mean": 269377.7
+        },
+        "upstreamResponse": {
+          "min": 2087,
+          "p50": 2087,
+          "p95": 2087,
+          "p99": 2087,
+          "max": 2087,
+          "mean": 2087
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12842432,
+        "afterHeapUsed": 43799520,
+        "deltaHeapUsed": 30957088,
+        "rssBefore": 156553216,
+        "rssAfter": 244011008,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 100
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "shots-sync-replay-10",
+      "route": "POST /v1/shots:sync",
+      "variant": "10 shots, all already synced (replay)",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1599.967,
+      "throughputRps": 625.013,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 33.297,
+        "p50": 39.316,
+        "p95": 42.308,
+        "p99": 43.461,
+        "max": 45.437,
+        "mean": 39.401
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 13691,
+          "p50": 13691,
+          "p95": 13691,
+          "p99": 13691,
+          "max": 13691,
+          "mean": 13691
+        },
+        "response": {
+          "min": 421,
+          "p50": 421,
+          "p95": 421,
+          "p99": 421,
+          "max": 421,
+          "mean": 421
+        },
+        "upstreamRequest": {
+          "min": 274,
+          "p50": 280,
+          "p95": 280,
+          "p99": 280,
+          "max": 280,
+          "mean": 278.68
+        },
+        "upstreamResponse": {
+          "min": 532,
+          "p50": 532,
+          "p95": 532,
+          "p99": 532,
+          "max": 532,
+          "mean": 532
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12863592,
+        "afterHeapUsed": 28344504,
+        "deltaHeapUsed": 15480912,
+        "rssBefore": 227848192,
+        "rssAfter": 229052416,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "sessions-create",
+      "route": "POST /v1/sessions",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2402.468,
+      "throughputRps": 416.239,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 54.736,
+        "p50": 59.416,
+        "p95": 62.599,
+        "p99": 64.037,
+        "max": 64.882,
+        "mean": 59.513
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/sessions": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/sessions": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 102,
+          "p50": 102,
+          "p95": 102,
+          "p99": 102,
+          "max": 102,
+          "mean": 102
+        },
+        "response": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "upstreamRequest": {
+          "min": 396,
+          "p50": 402,
+          "p95": 402,
+          "p99": 402,
+          "max": 402,
+          "mean": 400.68
+        },
+        "upstreamResponse": {
+          "min": 193,
+          "p50": 193,
+          "p95": 193,
+          "p99": 193,
+          "max": 193,
+          "mean": 193
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13554304,
+        "afterHeapUsed": 15729136,
+        "deltaHeapUsed": 2174832,
+        "rssBefore": 228990976,
+        "rssAfter": 228818944,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "sessions-finalize",
+      "route": "POST /v1/sessions/:id/finalize",
+      "variant": "auth warm, open session",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2391.898,
+      "throughputRps": 418.078,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 54.23,
+        "p50": 59.107,
+        "p95": 61.799,
+        "p99": 62.44,
+        "max": 63.813,
+        "mean": 59.033
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/sessions": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "PATCH rest/sessions": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 38,
+          "p50": 38,
+          "p95": 38,
+          "p99": 38,
+          "max": 38,
+          "mean": 38
+        },
+        "response": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "upstreamRequest": {
+          "min": 301,
+          "p50": 307,
+          "p95": 307,
+          "p99": 307,
+          "max": 307,
+          "mean": 305.68
+        },
+        "upstreamResponse": {
+          "min": 193,
+          "p50": 193,
+          "p95": 193,
+          "p99": 193,
+          "max": 193,
+          "mean": 193
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13337592,
+        "afterHeapUsed": 15714280,
+        "deltaHeapUsed": 2376688,
+        "rssBefore": 229105664,
+        "rssAfter": 229130240,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "evaluation-trials-1",
+      "route": "POST /v1/me/evaluation/trials",
+      "variant": "1 trial",
+      "hotPath": true,
+      "notes": "1 consent read + sequential (upsert + ownership SELECT) per trial.",
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 3255.244,
+      "throughputRps": 307.197,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 75.582,
+        "p50": 81.03,
+        "p95": 84.055,
+        "p99": 86.13,
+        "max": 87.215,
+        "mean": 80.95
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/evaluation_trials": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/evaluation_trials": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 230,
+          "p50": 230,
+          "p95": 230,
+          "p99": 230,
+          "max": 230,
+          "mean": 230
+        },
+        "response": {
+          "min": 75,
+          "p50": 75,
+          "p95": 75,
+          "p99": 75,
+          "max": 75,
+          "mean": 75
+        },
+        "upstreamRequest": {
+          "min": 588,
+          "p50": 594,
+          "p95": 594,
+          "p99": 594,
+          "max": 594,
+          "mean": 592.68
+        },
+        "upstreamResponse": {
+          "min": 284,
+          "p50": 284,
+          "p95": 284,
+          "p99": 284,
+          "max": 284,
+          "mean": 284
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13365840,
+        "afterHeapUsed": 16356384,
+        "deltaHeapUsed": 2990544,
+        "rssBefore": 229150720,
+        "rssAfter": 170123264,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "evaluation-trials-10",
+      "route": "POST /v1/me/evaluation/trials",
+      "variant": "10 trials",
+      "hotPath": true,
+      "notes": "1 consent read + sequential (upsert + ownership SELECT) per trial.",
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 18579.521,
+      "throughputRps": 53.823,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 455.197,
+        "p50": 463.616,
+        "p95": 469.636,
+        "p99": 472.152,
+        "max": 473.437,
+        "mean": 463.684
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 21,
+          "p50": 21,
+          "p95": 21,
+          "p99": 21,
+          "max": 21,
+          "mean": 21
+        },
+        "total": {
+          "min": 24,
+          "p50": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "mean": 24
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 21,
+            "p50": 21,
+            "p95": 21,
+            "p99": 21,
+            "max": 21,
+            "mean": 21
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/evaluation_trials": {
+            "perRequest": 10,
+            "total": 10000
+          },
+          "GET rest/evaluation_trials": {
+            "perRequest": 10,
+            "total": 10000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 2192,
+          "p50": 2192,
+          "p95": 2192,
+          "p99": 2192,
+          "max": 2192,
+          "mean": 2192
+        },
+        "response": {
+          "min": 426,
+          "p50": 426,
+          "p95": 426,
+          "p99": 426,
+          "max": 426,
+          "mean": 426
+        },
+        "upstreamRequest": {
+          "min": 3486,
+          "p50": 3492,
+          "p95": 3492,
+          "p99": 3492,
+          "max": 3492,
+          "mean": 3490.68
+        },
+        "upstreamResponse": {
+          "min": 707,
+          "p50": 707,
+          "p95": 707,
+          "p99": 707,
+          "max": 707,
+          "mean": 707
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13327352,
+        "afterHeapUsed": 24633464,
+        "deltaHeapUsed": 11306112,
+        "rssBefore": 170020864,
+        "rssAfter": 158466048,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "evaluation-trials-50",
+      "route": "POST /v1/me/evaluation/trials",
+      "variant": "50 trials",
+      "hotPath": true,
+      "notes": "1 consent read + sequential (upsert + ownership SELECT) per trial.",
+      "users": 250,
+      "requests": 100,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 8677.597,
+      "throughputRps": 11.524,
+      "statuses": {
+        "200": 100
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 2143.466,
+        "p50": 2167.354,
+        "p95": 2189.551,
+        "p99": 2189.752,
+        "max": 2189.823,
+        "mean": 2166.392
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 101,
+          "p50": 101,
+          "p95": 101,
+          "p99": 101,
+          "max": 101,
+          "mean": 101
+        },
+        "total": {
+          "min": 104,
+          "p50": 104,
+          "p95": 104,
+          "p99": 104,
+          "max": 104,
+          "mean": 104
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 101,
+            "p50": 101,
+            "p95": 101,
+            "p99": 101,
+            "max": 101,
+            "mean": 101
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/evaluation_trials": {
+            "perRequest": 50,
+            "total": 5000
+          },
+          "GET rest/evaluation_trials": {
+            "perRequest": 50,
+            "total": 5000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 100
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 10912,
+          "p50": 10912,
+          "p95": 10912,
+          "p99": 10912,
+          "max": 10912,
+          "mean": 10912
+        },
+        "response": {
+          "min": 1986,
+          "p50": 1986,
+          "p95": 1986,
+          "p99": 1986,
+          "max": 1986,
+          "mean": 1986
+        },
+        "upstreamRequest": {
+          "min": 16366,
+          "p50": 16369,
+          "p95": 16369,
+          "p99": 16369,
+          "max": 16369,
+          "mean": 16368.7
+        },
+        "upstreamResponse": {
+          "min": 2587,
+          "p50": 2587,
+          "p95": 2587,
+          "p99": 2587,
+          "max": 2587,
+          "mean": 2587
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13028080,
+        "afterHeapUsed": 17703848,
+        "deltaHeapUsed": 4675768,
+        "rssBefore": 158191616,
+        "rssAfter": 158199808,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 100
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "evaluation-trials-200",
+      "route": "POST /v1/me/evaluation/trials",
+      "variant": "200 trials",
+      "hotPath": true,
+      "notes": "1 consent read + sequential (upsert + ownership SELECT) per trial.",
+      "users": 250,
+      "requests": 100,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 34138.561,
+      "throughputRps": 2.929,
+      "statuses": {
+        "200": 100
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 8518.637,
+        "p50": 8526.833,
+        "p95": 8545.855,
+        "p99": 8545.974,
+        "max": 8545.976,
+        "mean": 8529.727
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 401,
+          "p50": 401,
+          "p95": 401,
+          "p99": 401,
+          "max": 401,
+          "mean": 401
+        },
+        "total": {
+          "min": 404,
+          "p50": 404,
+          "p95": 404,
+          "p99": 404,
+          "max": 404,
+          "mean": 404
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 401,
+            "p50": 401,
+            "p95": 401,
+            "p99": 401,
+            "max": 401,
+            "mean": 401
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "POST rest/evaluation_trials": {
+            "perRequest": 200,
+            "total": 20000
+          },
+          "GET rest/evaluation_trials": {
+            "perRequest": 200,
+            "total": 20000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 200
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 100
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 100
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 43612,
+          "p50": 43612,
+          "p95": 43612,
+          "p99": 43612,
+          "max": 43612,
+          "mean": 43612
+        },
+        "response": {
+          "min": 7836,
+          "p50": 7836,
+          "p95": 7836,
+          "p99": 7836,
+          "max": 7836,
+          "mean": 7836
+        },
+        "upstreamRequest": {
+          "min": 64666,
+          "p50": 64669,
+          "p95": 64669,
+          "p99": 64669,
+          "max": 64669,
+          "mean": 64668.7
+        },
+        "upstreamResponse": {
+          "min": 9637,
+          "p50": 9637,
+          "p95": 9637,
+          "p99": 9637,
+          "max": 9637,
+          "mean": 9637
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12914920,
+        "afterHeapUsed": 32432608,
+        "deltaHeapUsed": 19517688,
+        "rssBefore": 158208000,
+        "rssAfter": 167800832,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 100
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "analysis-feedback",
+      "route": "POST /v1/analyses/:id/feedback",
+      "variant": "auth warm, consent active",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 3259.242,
+      "throughputRps": 306.82,
+      "statuses": {
+        "201": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 75.237,
+        "p50": 81.037,
+        "p95": 84.619,
+        "p99": 85.302,
+        "max": 86.001,
+        "mean": 81.065
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/shots": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/analysis_feedback": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 46,
+          "p50": 46,
+          "p95": 46,
+          "p99": 46,
+          "max": 46,
+          "mean": 46
+        },
+        "response": {
+          "min": 208,
+          "p50": 208,
+          "p95": 208,
+          "p99": 208,
+          "max": 208,
+          "mean": 208
+        },
+        "upstreamRequest": {
+          "min": 401,
+          "p50": 407,
+          "p95": 407,
+          "p99": 407,
+          "max": 407,
+          "mean": 405.68
+        },
+        "upstreamResponse": {
+          "min": 507,
+          "p50": 507,
+          "p95": 507,
+          "p99": 507,
+          "max": 507,
+          "mean": 507
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 12951952,
+        "afterHeapUsed": 16115584,
+        "deltaHeapUsed": 3163632,
+        "rssBefore": 167395328,
+        "rssAfter": 167317504,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "progress-cache-hit",
+      "route": "GET /v1/progress",
+      "variant": "auth warm, progress cache HIT",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 500,
+      "concurrency": 25,
+      "wallMs": 673.418,
+      "throughputRps": 1484.962,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 12.899,
+        "p50": 16.622,
+        "p95": 18.666,
+        "p99": 19.398,
+        "max": 20.574,
+        "mean": 16.604
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 3821,
+          "p50": 3821,
+          "p95": 3821,
+          "p99": 3821,
+          "max": 3821,
+          "mean": 3821
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 71,
+          "p50": 71,
+          "p95": 71,
+          "p99": 71,
+          "max": 71,
+          "mean": 71
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15666032,
+        "afterHeapUsed": 22090496,
+        "deltaHeapUsed": 6424464,
+        "rssBefore": 150597632,
+        "rssAfter": 151359488,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "progress-cache-miss",
+      "route": "GET /v1/progress",
+      "variant": "auth warm, progress cache MISS, 30 days (1 page each)",
+      "hotPath": true,
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 2083.972,
+      "throughputRps": 479.853,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 44.548,
+        "p50": 50.772,
+        "p95": 60.377,
+        "p99": 66.943,
+        "max": 86.018,
+        "mean": 51.578
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 7,
+          "p50": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 5,
+            "p50": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/progress_daily": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/practice_days": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS SET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 3821,
+          "p50": 3821,
+          "p95": 3821,
+          "p99": 3821,
+          "max": 3821,
+          "mean": 3821
+        },
+        "upstreamRequest": {
+          "min": 4822,
+          "p50": 4828,
+          "p95": 4828,
+          "p99": 4828,
+          "max": 4828,
+          "mean": 4826.68
+        },
+        "upstreamResponse": {
+          "min": 4474,
+          "p50": 4474,
+          "p95": 4474,
+          "p99": 4474,
+          "max": 4474,
+          "mean": 4474
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15917304,
+        "afterHeapUsed": 31457424,
+        "deltaHeapUsed": 15540120,
+        "rssBefore": 180424704,
+        "rssAfter": 180842496,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "progress-cache-miss-2500",
+      "route": "GET /v1/progress",
+      "variant": "auth warm, progress cache MISS, 2500 progress_daily rows (3 pages)",
+      "hotPath": true,
+      "notes": "readAllRows pages in 1000-row units; row count grows the sequential page chain.",
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 8873.658,
+      "throughputRps": 112.693,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 121.31,
+        "p50": 213.118,
+        "p95": 275.824,
+        "p99": 319.809,
+        "max": 381.497,
+        "mean": 220.057
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "total": {
+          "min": 9,
+          "p50": 9,
+          "p95": 9,
+          "p99": 9,
+          "max": 9,
+          "mean": 9
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 5,
+            "p50": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "GET rest/progress_daily": {
+            "perRequest": 3,
+            "total": 3000
+          },
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/practice_days": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS SET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 306398,
+          "p50": 306398,
+          "p95": 306398,
+          "p99": 306398,
+          "max": 306398,
+          "mean": 306398
+        },
+        "upstreamRequest": {
+          "min": 351859,
+          "p50": 351865,
+          "p95": 351865,
+          "p99": 351865,
+          "max": 351865,
+          "mean": 351863.68
+        },
+        "upstreamResponse": {
+          "min": 318773,
+          "p50": 318773,
+          "p95": 318773,
+          "p99": 318773,
+          "max": 318773,
+          "mean": 318773
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 20140656,
+        "afterHeapUsed": 943156464,
+        "deltaHeapUsed": 923015808,
+        "rssBefore": 179920896,
+        "rssAfter": 1652281344,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": true
+    },
+    {
+      "id": "rank-cache-hit",
+      "route": "GET /v1/rank",
+      "variant": "auth warm, rank cache HIT",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 500,
+      "concurrency": 25,
+      "wallMs": 654.376,
+      "throughputRps": 1528.174,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 13.546,
+        "p50": 16.056,
+        "p95": 18.234,
+        "p99": 18.777,
+        "max": 18.816,
+        "mean": 16.23
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 319,
+          "p50": 319,
+          "p95": 319,
+          "p99": 319,
+          "max": 319,
+          "mean": 319
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 71,
+          "p50": 71,
+          "p95": 71,
+          "p99": 71,
+          "max": 71,
+          "mean": 71
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 324313088,
+        "afterHeapUsed": 327149440,
+        "deltaHeapUsed": 2836352,
+        "rssBefore": 1028042752,
+        "rssAfter": 1028042752,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "rank-cache-miss",
+      "route": "GET /v1/rank",
+      "variant": "auth warm, rank cache MISS",
+      "hotPath": true,
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 2015.653,
+      "throughputRps": 496.117,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 43.822,
+        "p50": 49.726,
+        "p95": 52.836,
+        "p99": 53.864,
+        "max": 55.815,
+        "mean": 49.694
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 7,
+          "p50": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 5,
+            "p50": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/player_technique_rating": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/player_rank_state": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS SET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 319,
+          "p50": 319,
+          "p95": 319,
+          "p99": 319,
+          "max": 319,
+          "mean": 319
+        },
+        "upstreamRequest": {
+          "min": 792,
+          "p50": 798,
+          "p95": 798,
+          "p99": 798,
+          "max": 798,
+          "mean": 796.68
+        },
+        "upstreamResponse": {
+          "min": 469,
+          "p50": 469,
+          "p95": 469,
+          "p99": 469,
+          "max": 469,
+          "mean": 469
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 325346272,
+        "afterHeapUsed": 325876488,
+        "deltaHeapUsed": 530216,
+        "rssBefore": 673193984,
+        "rssAfter": 673468416,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "progress-cache-l2-hit",
+      "route": "GET /v1/progress",
+      "variant": "auth warm, L1 MISS, Redis (L2) HIT — degrades to a DB miss with Redis off",
+      "hotPath": true,
+      "notes": "Seeded L2 body is a stand-in; response bytes here are not representative.",
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 851.48,
+      "throughputRps": 1174.426,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 17.721,
+        "p50": 21.296,
+        "p95": 23.1,
+        "p99": 24.108,
+        "max": 24.682,
+        "mean": 21.142
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 61,
+          "p50": 61,
+          "p95": 61,
+          "p99": 61,
+          "max": 61,
+          "mean": 61
+        },
+        "upstreamRequest": {
+          "min": 375,
+          "p50": 381,
+          "p95": 381,
+          "p99": 381,
+          "max": 381,
+          "mean": 379.68
+        },
+        "upstreamResponse": {
+          "min": 169,
+          "p50": 169,
+          "p95": 169,
+          "p99": 169,
+          "max": 169,
+          "mean": 169
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 322253896,
+        "afterHeapUsed": 18651624,
+        "deltaHeapUsed": -303602272,
+        "rssBefore": 673796096,
+        "rssAfter": 366596096,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "rank-cache-l2-hit",
+      "route": "GET /v1/rank",
+      "variant": "auth warm, L1 MISS, Redis (L2) HIT — degrades to a DB miss with Redis off",
+      "hotPath": true,
+      "notes": "Seeded L2 body is a stand-in; response bytes here are not representative.",
+      "users": "unique",
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 883.881,
+      "throughputRps": 1131.374,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 17.741,
+        "p50": 22.055,
+        "p95": 23.847,
+        "p99": 24.021,
+        "max": 24.367,
+        "mean": 21.958
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 29,
+          "p50": 29,
+          "p95": 29,
+          "p99": 29,
+          "max": 29,
+          "mean": 29
+        },
+        "upstreamRequest": {
+          "min": 367,
+          "p50": 373,
+          "p95": 373,
+          "p99": 373,
+          "max": 373,
+          "mean": 371.68
+        },
+        "upstreamResponse": {
+          "min": 133,
+          "p50": 133,
+          "p95": 133,
+          "p99": 133,
+          "max": 133,
+          "mean": 133
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15094296,
+        "afterHeapUsed": 18347952,
+        "deltaHeapUsed": 3253656,
+        "rssBefore": 341905408,
+        "rssAfter": 341905408,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "consent-status",
+      "route": "GET /v1/me/consent/status",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1526.966,
+      "throughputRps": 654.893,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 33.772,
+        "p50": 37.793,
+        "p95": 41.002,
+        "p99": 42.514,
+        "max": 42.619,
+        "mean": 37.869
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 382,
+          "p50": 382,
+          "p95": 382,
+          "p99": 382,
+          "max": 382,
+          "mean": 382
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 237,
+          "p50": 237,
+          "p95": 237,
+          "p99": 237,
+          "max": 237,
+          "mean": 237
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14592992,
+        "afterHeapUsed": 17382080,
+        "deltaHeapUsed": 2789088,
+        "rssBefore": 341905408,
+        "rssAfter": 341905408,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "consent-grant",
+      "route": "POST /v1/me/consent/grant",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2394.544,
+      "throughputRps": 417.616,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 54.092,
+        "p50": 59.027,
+        "p95": 62.079,
+        "p99": 63.483,
+        "max": 64.493,
+        "mean": 59.089
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 62,
+          "p50": 62,
+          "p95": 62,
+          "p99": 62,
+          "max": 62,
+          "mean": 62
+        },
+        "response": {
+          "min": 382,
+          "p50": 382,
+          "p95": 382,
+          "p99": 382,
+          "max": 382,
+          "mean": 382
+        },
+        "upstreamRequest": {
+          "min": 445,
+          "p50": 451,
+          "p95": 451,
+          "p99": 451,
+          "max": 451,
+          "mean": 449.68
+        },
+        "upstreamResponse": {
+          "min": 237,
+          "p50": 237,
+          "p95": 237,
+          "p99": 237,
+          "max": 237,
+          "mean": 237
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14855080,
+        "afterHeapUsed": 17404024,
+        "deltaHeapUsed": 2548944,
+        "rssBefore": 344879104,
+        "rssAfter": 344879104,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "consent-withdraw",
+      "route": "POST /v1/me/consent/withdraw",
+      "variant": "auth warm, scope active",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 3289.771,
+      "throughputRps": 303.972,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 75.548,
+        "p50": 81.356,
+        "p95": 84.36,
+        "p99": 87.913,
+        "max": 88.305,
+        "mean": 81.291
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "total": {
+          "min": 6,
+          "p50": 6,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "GET rest/consent_records": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/consent_records": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 32,
+          "p50": 32,
+          "p95": 32,
+          "p99": 32,
+          "max": 32,
+          "mean": 32
+        },
+        "response": {
+          "min": 382,
+          "p50": 382,
+          "p95": 382,
+          "p99": 382,
+          "max": 382,
+          "mean": 382
+        },
+        "upstreamRequest": {
+          "min": 428,
+          "p50": 434,
+          "p95": 434,
+          "p99": 434,
+          "max": 434,
+          "mean": 432.68
+        },
+        "upstreamResponse": {
+          "min": 403,
+          "p50": 403,
+          "p95": 403,
+          "p99": 403,
+          "max": 403,
+          "mean": 403
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14659272,
+        "afterHeapUsed": 17559840,
+        "deltaHeapUsed": 2900568,
+        "rssBefore": 344879104,
+        "rssAfter": 337203200,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "catalog-drills",
+      "route": "GET /v1/catalog/drills",
+      "variant": "auth warm, no filters",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1616.128,
+      "throughputRps": 618.763,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 35.921,
+        "p50": 40.077,
+        "p95": 43.505,
+        "p99": 48.775,
+        "max": 50.828,
+        "mean": 40.192
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 31447,
+          "p50": 31447,
+          "p95": 31447,
+          "p99": 31447,
+          "max": 31447,
+          "mean": 31447
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 73,
+          "p50": 73,
+          "p95": 73,
+          "p99": 73,
+          "max": 73,
+          "mean": 73
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14538840,
+        "afterHeapUsed": 79719248,
+        "deltaHeapUsed": 65180408,
+        "rssBefore": 337203200,
+        "rssAfter": 386981888,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "catalog-drill-detail",
+      "route": "GET /v1/catalog/drills/:slug",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1538.275,
+      "throughputRps": 650.079,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 32.817,
+        "p50": 37.882,
+        "p95": 40.892,
+        "p99": 41.474,
+        "max": 43.69,
+        "mean": 37.873
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 2077,
+          "p50": 2077,
+          "p95": 2077,
+          "p99": 2077,
+          "max": 2077,
+          "mean": 2077
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 168,
+          "p50": 168,
+          "p95": 168,
+          "p99": 168,
+          "max": 168,
+          "mean": 168
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14993504,
+        "afterHeapUsed": 21221016,
+        "deltaHeapUsed": 6227512,
+        "rssBefore": 387010560,
+        "rssAfter": 387825664,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "saved-drills-list-0",
+      "route": "GET /v1/me/saved-drills",
+      "variant": "auth warm, none saved",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1533.486,
+      "throughputRps": 652.109,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 31.04,
+        "p50": 37.857,
+        "p95": 40.517,
+        "p99": 41.044,
+        "max": 41.652,
+        "mean": 37.746
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 12,
+          "p50": 12,
+          "p95": 12,
+          "p99": 12,
+          "max": 12,
+          "mean": 12
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 73,
+          "p50": 73,
+          "p95": 73,
+          "p99": 73,
+          "max": 73,
+          "mean": 73
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15038408,
+        "afterHeapUsed": 17232656,
+        "deltaHeapUsed": 2194248,
+        "rssBefore": 387825664,
+        "rssAfter": 388104192,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "saved-drills-list-20",
+      "route": "GET /v1/me/saved-drills",
+      "variant": "auth warm, 20 saved",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1569.938,
+      "throughputRps": 636.968,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 32.097,
+        "p50": 38.97,
+        "p95": 42.024,
+        "p99": 42.84,
+        "max": 43.422,
+        "mean": 38.979
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 14071,
+          "p50": 14071,
+          "p95": 14071,
+          "p99": 14071,
+          "max": 14071,
+          "mean": 14071
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 2032,
+          "p50": 2032,
+          "p95": 2032,
+          "p99": 2032,
+          "max": 2032,
+          "mean": 2032
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15082488,
+        "afterHeapUsed": 45169472,
+        "deltaHeapUsed": 30086984,
+        "rssBefore": 388108288,
+        "rssAfter": 389107712,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "saved-drill-put",
+      "route": "PUT /v1/me/saved-drills/:slug",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 2400.424,
+      "throughputRps": 416.593,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 54.562,
+        "p50": 59.289,
+        "p95": 62.165,
+        "p99": 63.26,
+        "max": 64.727,
+        "mean": 59.262
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 2
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 76,
+          "p50": 76,
+          "p95": 76,
+          "p99": 76,
+          "max": 76,
+          "mean": 76
+        },
+        "upstreamRequest": {
+          "min": 337,
+          "p50": 343,
+          "p95": 343,
+          "p99": 343,
+          "max": 343,
+          "mean": 341.68
+        },
+        "upstreamResponse": {
+          "min": 168,
+          "p50": 168,
+          "p95": 168,
+          "p99": 168,
+          "max": 168,
+          "mean": 168
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15099064,
+        "afterHeapUsed": 17125448,
+        "deltaHeapUsed": 2026384,
+        "rssBefore": 389115904,
+        "rssAfter": 389234688,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "saved-drill-delete",
+      "route": "DELETE /v1/me/saved-drills/:slug",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 1509.439,
+      "throughputRps": 662.498,
+      "statuses": {
+        "204": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 33.357,
+        "p50": 37.364,
+        "p95": 39.855,
+        "p99": 42.461,
+        "max": 42.731,
+        "mean": 37.345
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "DELETE rest/user_saved_drills": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 71,
+          "p50": 71,
+          "p95": 71,
+          "p99": 71,
+          "max": 71,
+          "mean": 71
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14837928,
+        "afterHeapUsed": 17132952,
+        "deltaHeapUsed": 2295024,
+        "rssBefore": 389234688,
+        "rssAfter": 324313088,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "training-plan-current",
+      "route": "GET /v1/training-plans/current",
+      "variant": "auth warm",
+      "hotPath": true,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 250,
+      "concurrency": 25,
+      "wallMs": 638.317,
+      "throughputRps": 1566.619,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 12.872,
+        "p50": 15.959,
+        "p95": 17.481,
+        "p99": 18.178,
+        "max": 18.197,
+        "mean": 15.89
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "total": {
+          "min": 3,
+          "p50": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "response": {
+          "min": 13,
+          "p50": 13,
+          "p95": 13,
+          "p99": 13,
+          "max": 13,
+          "mean": 13
+        },
+        "upstreamRequest": {
+          "min": 262,
+          "p50": 268,
+          "p95": 268,
+          "p99": 268,
+          "max": 268,
+          "mean": 266.68
+        },
+        "upstreamResponse": {
+          "min": 71,
+          "p50": 71,
+          "p95": 71,
+          "p99": 71,
+          "max": 71,
+          "mean": 71
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 15162808,
+        "afterHeapUsed": 17587296,
+        "deltaHeapUsed": 2424488,
+        "rssBefore": 324313088,
+        "rssAfter": 324345856,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "delete-request",
+      "route": "POST /v1/me/delete-request",
+      "variant": "auth warm, no survey",
+      "hotPath": false,
+      "users": 1000,
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 1534.684,
+      "throughputRps": 651.6,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 32.449,
+        "p50": 38.056,
+        "p95": 40.411,
+        "p99": 41.118,
+        "max": 41.412,
+        "mean": 37.994
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 1,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "total": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/account_deletion_requests": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 2,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "response": {
+          "min": 91,
+          "p50": 91,
+          "p95": 91,
+          "p99": 91,
+          "max": 91,
+          "mean": 91
+        },
+        "upstreamRequest": {
+          "min": 461,
+          "p50": 467,
+          "p95": 467,
+          "p99": 467,
+          "max": 467,
+          "mean": 465.68
+        },
+        "upstreamResponse": {
+          "min": 71,
+          "p50": 71,
+          "p95": 71,
+          "p99": 71,
+          "max": 71,
+          "mean": 71
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14955000,
+        "afterHeapUsed": 17680016,
+        "deltaHeapUsed": 2725016,
+        "rssBefore": 327983104,
+        "rssAfter": 328036352,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "delete-request-survey",
+      "route": "POST /v1/me/delete-request",
+      "variant": "auth warm, with exit survey",
+      "hotPath": false,
+      "users": 1000,
+      "requests": 1000,
+      "warmRequests": 1000,
+      "concurrency": 25,
+      "wallMs": 3284.314,
+      "throughputRps": 304.478,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 75.199,
+        "p50": 81.285,
+        "p95": 84.999,
+        "p99": 87.798,
+        "max": 88.034,
+        "mean": 81.377
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "total": {
+          "min": 7,
+          "p50": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 4,
+            "p50": 4,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "mean": 4
+          },
+          "revenuecat": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "redis": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/account_deletion_requests": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/profiles": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/rpc/access_state": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/account_deletion_feedback": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 55,
+          "p50": 55,
+          "p95": 55,
+          "p99": 55,
+          "max": 55,
+          "mean": 55
+        },
+        "response": {
+          "min": 91,
+          "p50": 91,
+          "p95": 91,
+          "p99": 91,
+          "max": 91,
+          "mean": 91
+        },
+        "upstreamRequest": {
+          "min": 685,
+          "p50": 691,
+          "p95": 691,
+          "p99": 691,
+          "max": 691,
+          "mean": 689.68
+        },
+        "upstreamResponse": {
+          "min": 557,
+          "p50": 557,
+          "p95": 557,
+          "p99": 557,
+          "max": 557,
+          "mean": 557
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14954112,
+        "afterHeapUsed": 17558576,
+        "deltaHeapUsed": 2604464,
+        "rssBefore": 328413184,
+        "rssAfter": 328413184,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "delete-confirm",
+      "route": "POST /v1/me/delete-confirm",
+      "variant": "auth warm, google account, RevenueCat cleanup",
+      "hotPath": false,
+      "users": 500,
+      "requests": 1000,
+      "warmRequests": 500,
+      "concurrency": 25,
+      "wallMs": 13380.183,
+      "throughputRps": 74.737,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 291.065,
+        "p50": 305.939,
+        "p95": 371.33,
+        "p99": 373.644,
+        "max": 375.196,
+        "mean": 333.074
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 5,
+          "p50": 5,
+          "p95": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 5.5
+        },
+        "total": {
+          "min": 9,
+          "p50": 9,
+          "p95": 12,
+          "p99": 12,
+          "max": 12,
+          "mean": 10.5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 1,
+            "p50": 1,
+            "p95": 2,
+            "p99": 2,
+            "max": 2,
+            "mean": 1.5
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "redis": {
+            "min": 4,
+            "p50": 4,
+            "p95": 6,
+            "p99": 6,
+            "max": 6,
+            "mean": 5
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 2,
+            "total": 2000
+          },
+          "REDIS GET": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/account_deletion_requests": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/account_external_credentials": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "DELETE revenuecat/subscribers/:id": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/account_external_credentials": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "DELETE auth/admin/users/:id": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS DEL": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "REDIS GET+TTL": {
+            "perRequest": 0.5,
+            "total": 500
+          },
+          "GET auth/user": {
+            "perRequest": 0.5,
+            "total": 500
+          },
+          "REDIS SET": {
+            "perRequest": 0.5,
+            "total": 500
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 52,
+          "p50": 52,
+          "p95": 52,
+          "p99": 52,
+          "max": 52,
+          "mean": 52
+        },
+        "response": {
+          "min": 64,
+          "p50": 64,
+          "p95": 64,
+          "p99": 64,
+          "max": 64,
+          "mean": 64
+        },
+        "upstreamRequest": {
+          "min": 622,
+          "p50": 628,
+          "p95": 1389,
+          "p99": 1389,
+          "max": 1389,
+          "mean": 1007.18
+        },
+        "upstreamResponse": {
+          "min": 302,
+          "p50": 302,
+          "p95": 590,
+          "p99": 590,
+          "max": 590,
+          "mean": 446
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 14612464,
+        "afterHeapUsed": 17809288,
+        "deltaHeapUsed": 3196824,
+        "rssBefore": 325828608,
+        "rssAfter": 327049216,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 1000,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    },
+    {
+      "id": "webhook-revenuecat",
+      "route": "POST /webhooks/revenuecat",
+      "variant": "secret-gated, RENEWAL, one subject",
+      "hotPath": false,
+      "users": 250,
+      "requests": 1000,
+      "warmRequests": 0,
+      "concurrency": 25,
+      "wallMs": 8835.364,
+      "throughputRps": 113.182,
+      "statuses": {
+        "200": 1000
+      },
+      "failureCount": 0,
+      "failures": [],
+      "latencyMs": {
+        "min": 216.293,
+        "p50": 220.408,
+        "p95": 222.807,
+        "p99": 225.758,
+        "max": 226.017,
+        "mean": 220.444
+      },
+      "roundTrips": {
+        "hot": {
+          "min": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "total": {
+          "min": 5,
+          "p50": 5,
+          "p95": 5,
+          "p99": 5,
+          "max": 5,
+          "mean": 5
+        },
+        "byClass": {
+          "supabase_auth": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "supabase_rest": {
+            "min": 3,
+            "p50": 3,
+            "p95": 3,
+            "p99": 3,
+            "max": 3,
+            "mean": 3
+          },
+          "revenuecat": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "redis": {
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "other": {
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "labels": {
+          "REDIS INCR+EXPIRE": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET rest/webhook_events": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "GET revenuecat/subscribers/:id": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/billing_entitlements": {
+            "perRequest": 1,
+            "total": 1000
+          },
+          "POST rest/webhook_events": {
+            "perRequest": 1,
+            "total": 1000
+          }
+        }
+      },
+      "bytes": {
+        "request": {
+          "min": 222,
+          "p50": 222,
+          "p95": 222,
+          "p99": 222,
+          "max": 222,
+          "mean": 222
+        },
+        "response": {
+          "min": 33,
+          "p50": 33,
+          "p95": 33,
+          "p99": 33,
+          "max": 33,
+          "mean": 33
+        },
+        "upstreamRequest": {
+          "min": 657,
+          "p50": 661,
+          "p95": 661,
+          "p99": 661,
+          "max": 661,
+          "mean": 660.12
+        },
+        "upstreamResponse": {
+          "min": 207,
+          "p50": 207,
+          "p95": 207,
+          "p99": 207,
+          "max": 207,
+          "mean": 207
+        }
+      },
+      "heap": {
+        "beforeHeapUsed": 13421336,
+        "afterHeapUsed": 16147568,
+        "deltaHeapUsed": 2726232,
+        "rssBefore": 327049216,
+        "rssAfter": 327536640,
+        "gcForced": true
+      },
+      "consoleLines": {
+        "error": 0,
+        "warn": 0,
+        "log": 1000
+      },
+      "exceedsThreshold": false
+    }
+  ]
+}
