@@ -257,9 +257,7 @@ describe('accessStore', () => {
     (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
       async () => lapsedAccess,
     );
-    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(
-      true,
-    );
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
     expect(state.canonicalAccess).toEqual(lapsedAccess);

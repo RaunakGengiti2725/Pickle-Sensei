@@ -260,9 +260,34 @@ export function PaywallScreen(props: PaywallScreenProps) {
     [pageOpacity, pageShift],
   );
 
+  // Store pricing is loaded once per visit. A Settings-first `refreshAccess()`
+  // leaves the store 'ready' with no plans, so the trigger is "pricing never
+  // loaded", not "status is idle"; while any load is in flight we wait for it.
+  // Failures are not retried automatically — that is the Try again button.
+  const pricingRequested = useRef(false);
   useEffect(() => {
-    if (status === 'idle') void initialize();
-  }, [initialize, status]);
+    if (pricingRequested.current || status === 'loading') return;
+    pricingRequested.current = true;
+    if (status === 'idle' || (status === 'ready' && plans === null)) {
+      void initialize();
+    }
+  }, [initialize, plans, status]);
+
+  // Async purchase/restore work may outlive this screen (the user dismissed
+  // it, or the navigator replaced it). The store still records the verified
+  // access; only the navigation callback is suppressed, otherwise
+  // RootNavigator would run a second goBack() against whatever is on top.
+  const dismissed = useRef(false);
+  useEffect(
+    () => () => {
+      dismissed.current = true;
+    },
+    [],
+  );
+  const close = () => {
+    dismissed.current = true;
+    props.onClose();
+  };
 
   // Hardware back on the pricing page returns to the value page instead of
   // dismissing the paywall (predictable step-back navigation).
@@ -271,7 +296,9 @@ export function PaywallScreen(props: PaywallScreenProps) {
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        transitionTo('value');
+        if (useAccessStore.getState().operation === 'idle') {
+          transitionTo('value');
+        }
         return true;
       },
     );
@@ -305,12 +332,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
   const purchase = async () => {
     const verified = await purchaseSelected();
-    if (verified) props.onPurchased?.();
+    if (verified && !dismissed.current) props.onPurchased?.();
   };
 
   const restore = async () => {
     const verified = await restorePurchases();
-    if (verified) props.onPurchased?.();
+    if (verified && !dismissed.current) props.onPurchased?.();
   };
 
   if (premium) {
@@ -328,7 +355,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             ]}
           >
             <PressableScale
-              onPress={props.onClose}
+              onPress={close}
               accessibilityLabel="Close membership"
               style={styles.closeButton}
             >
@@ -349,7 +376,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
               reviewed coaching stays tied to it.
             </Text>
             <PressableScale
-              onPress={props.onClose}
+              onPress={close}
               accessibilityLabel="Continue coaching"
               style={styles.primaryButton}
             >
@@ -385,6 +412,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
               onPress={() => transitionTo('value')}
               accessibilityLabel="Back to membership benefits"
               style={styles.closeButton}
+              disabled={busy}
             >
               <Icon name="back" size={20} color={color.onDark} />
             </PressableScale>
@@ -395,9 +423,10 @@ export function PaywallScreen(props: PaywallScreenProps) {
             </View>
           )}
           <PressableScale
-            onPress={props.onClose}
+            onPress={close}
             accessibilityLabel="Close membership offer"
             style={styles.closeButton}
+            disabled={busy}
           >
             <Icon name="close" size={22} color={color.onDark} />
           </PressableScale>

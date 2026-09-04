@@ -35,6 +35,39 @@ export interface AccessStoreState {
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
 
+/**
+ * `GET /v1/me/access` reads are ordered by when they STARTED, not by when they
+ * answer: a read that began before a newer snapshot landed describes an older
+ * server state and is dropped. The billing sync (purchase/restore) verifies
+ * against RevenueCat and writes the ledger, so its snapshot supersedes every
+ * GET still in flight; only a read started after it can change access again.
+ */
+let accessReadSequence = 0;
+let appliedAccessRead = 0;
+
+function beginAccessRead(): number {
+  return ++accessReadSequence;
+}
+
+function isNewestAccessRead(ticket: number): boolean {
+  if (ticket <= appliedAccessRead) return false;
+  appliedAccessRead = ticket;
+  return true;
+}
+
+/** Every read in flight is now stale (billing sync, sign-out, reset). */
+function supersedeAccessReads(): void {
+  appliedAccessRead = accessReadSequence;
+}
+
+/**
+ * Configuration version whose `initialize()` is in flight, if any. A re-entrant
+ * call for the same configuration (route gate + paywall) is a no-op, so
+ * RevenueCat is configured and the offerings loaded exactly once; an unrelated
+ * `refreshAccess()` no longer counts as "already initializing".
+ */
+let initializingVersion: number | null = null;
+
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
   operation: 'idle' as AccessOperation,
@@ -101,7 +134,6 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
   ...dataDefaults(),
 
   initialize: async () => {
-    if (get().status === 'loading') return;
     const clients = dependencies;
     if (!clients) {
       const error = missingDependenciesError();
@@ -113,71 +145,89 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return;
     }
     const version = configurationVersion;
-    set({ status: 'loading', error: null });
-    let storeConfigurationError: BillingError | null = null;
+    if (initializingVersion === version) return;
+    initializingVersion = version;
     try {
-      await clients.store.configure();
-    } catch (cause) {
+      set({ status: 'loading', error: null });
+      let storeConfigurationError: BillingError | null = null;
+      try {
+        await clients.store.configure();
+      } catch (cause) {
+        if (!isCurrentConfiguration(clients, version)) return;
+        storeConfigurationError = billingError(
+          cause,
+          'billing.unconfigured',
+          'RevenueCat could not start in this build.',
+          false,
+        );
+      }
       if (!isCurrentConfiguration(clients, version)) return;
-      storeConfigurationError = billingError(
-        cause,
-        'billing.unconfigured',
-        'RevenueCat could not start in this build.',
-        false,
-      );
-    }
-    if (!isCurrentConfiguration(clients, version)) return;
 
-    const [accessResult, plansResult] = await Promise.all([
-      clients.backend
-        .getAccess()
-        .then(value => ({ value, error: null as unknown }))
-        .catch(error => ({ value: null, error })),
-      storeConfigurationError
-        ? Promise.resolve({
-            value: null,
-            error: storeConfigurationError as unknown,
-          })
-        : clients.store
-            .loadPlans()
-            .then(value => ({ value, error: null as unknown }))
-            .catch(error => ({ value: null, error })),
-    ]);
-    if (!isCurrentConfiguration(clients, version)) return;
+      const accessTicket = beginAccessRead();
+      const [accessResult, plansResult] = await Promise.all([
+        clients.backend
+          .getAccess()
+          .then(value => ({ value, error: null as unknown }))
+          .catch(error => ({ value: null, error })),
+        storeConfigurationError
+          ? Promise.resolve({
+              value: null,
+              error: storeConfigurationError as unknown,
+            })
+          : clients.store
+              .loadPlans()
+              .then(value => ({ value, error: null as unknown }))
+              .catch(error => ({ value: null, error })),
+      ]);
+      if (!isCurrentConfiguration(clients, version)) return;
 
-    const accessError = accessResult.error
-      ? billingError(
-          accessResult.error,
-          'billing.backend_unavailable',
-          'Membership verification is temporarily unavailable.',
-        )
-      : null;
-    const plansError = plansResult.error
-      ? billingError(
-          plansResult.error,
-          'billing.offerings_unavailable',
-          'Membership pricing is unavailable from the app store right now.',
-        )
-      : null;
-    // Free-rating access is server-authoritative and must remain available even
-    // when the store SDK or offerings are not configured. Store failure blocks
-    // purchase presentation; it never erases a verified free allowance.
-    const error = accessError ?? plansError;
-    const plans = plansResult.value;
-    set({
-      status: error ? statusFor(error) : 'ready',
-      operation: 'idle',
-      plans,
-      selectedPeriod: plans?.annual
+      const accessError = accessResult.error
+        ? billingError(
+            accessResult.error,
+            'billing.backend_unavailable',
+            'Membership verification is temporarily unavailable.',
+          )
+        : null;
+      const plansError = plansResult.error
+        ? billingError(
+            plansResult.error,
+            'billing.offerings_unavailable',
+            'Membership pricing is unavailable from the app store right now.',
+          )
+        : null;
+      // Free-rating access is server-authoritative and must remain available
+      // even when the store SDK or offerings are not configured. Store failure
+      // blocks purchase presentation; it never erases a verified allowance.
+      const error = accessError ?? plansError;
+      const plans = plansResult.value;
+      const selectedPeriod: BillingPeriod = plans?.annual
         ? 'annual'
         : plans?.lifetime
           ? 'lifetime'
           : plans?.monthly
             ? 'monthly'
-            : 'annual',
-      canonicalAccess: accessResult.value,
-      error: error?.toState() ?? null,
-    });
+            : 'annual';
+      if (!isNewestAccessRead(accessTicket)) {
+        // A newer server read already decided the access snapshot; only the
+        // store pricing this call fetched is still news.
+        set(state => ({
+          plans,
+          selectedPeriod,
+          error: state.error ?? plansError?.toState() ?? null,
+        }));
+        return;
+      }
+      set({
+        status: error ? statusFor(error) : 'ready',
+        operation: 'idle',
+        plans,
+        selectedPeriod,
+        canonicalAccess: accessResult.value,
+        error: error?.toState() ?? null,
+      });
+    } finally {
+      if (initializingVersion === version) initializingVersion = null;
+    }
   },
 
   refreshAccess: async () => {
@@ -192,14 +242,19 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const ticket = beginAccessRead();
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
       if (!isCurrentConfiguration(clients, version)) return false;
+      // A read that started later already answered: this response describes an
+      // older server state and must not replace it.
+      if (!isNewestAccessRead(ticket)) return true;
       set({ status: 'ready', canonicalAccess, error: null });
       return true;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!isNewestAccessRead(ticket)) return false;
       const error = billingError(
         cause,
         'billing.backend_unavailable',
@@ -231,6 +286,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       set({
         status: 'ready',
         operation: 'idle',
@@ -240,6 +296,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return synced.access.premium;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const source = billingError(
         cause,
         'billing.backend_unavailable',
@@ -312,6 +369,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.backend_verification_pending',
@@ -335,6 +393,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
@@ -377,6 +436,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.restore_failed',
@@ -400,6 +460,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'Restored purchases could not be verified yet. Please try again.',
@@ -421,6 +482,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   reset: () => {
     configurationVersion += 1;
+    supersedeAccessReads();
     set(dataDefaults());
   },
 }));
@@ -434,6 +496,7 @@ export function configureAccessStore(
 ): void {
   dependencies = nextDependencies;
   configurationVersion += 1;
+  supersedeAccessReads();
   useAccessStore.setState(dataDefaults());
 }
 
@@ -441,5 +504,6 @@ export function configureAccessStore(
 export function clearAccessStoreConfiguration(): void {
   dependencies = null;
   configurationVersion += 1;
+  supersedeAccessReads();
   useAccessStore.setState(dataDefaults());
 }
