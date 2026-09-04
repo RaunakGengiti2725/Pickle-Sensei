@@ -271,7 +271,14 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
     [movePlayhead, pauseAt, stops],
   );
 
+  /**
+   * The pass ran out while still playing: park at the end and re-arm every
+   * stop for the next pass. An END that lands after a pause (the final tick
+   * also crossed a checkpoint, a late native event) is ignored like a late
+   * progress tick, so the checkpoint frame stays put.
+   */
   const finish = useCallback(() => {
+    if (!playingRef.current) return;
     setPlayingState(false);
     visitedRef.current.clear();
     movePlayhead(durationMs);
@@ -293,12 +300,17 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
     return () => clearInterval(timer);
   }, [advanceTo, durationMs, finish, nativeDriven, playing, rate]);
 
+  /** Play from a finished pass restarts; play from a frozen checkpoint
+   * resumes there, however close to the end it sits. */
   const togglePlay = () => {
     if (playingRef.current) {
       setPlayingState(false);
       return;
     }
-    if (playheadRef.current >= durationMs - END_TOLERANCE_MS) {
+    if (
+      activeStopId === null &&
+      playheadRef.current >= durationMs - END_TOLERANCE_MS
+    ) {
       visitedRef.current.clear();
       movePlayhead(0);
       requestSeek(0);
