@@ -25,6 +25,30 @@ export type HealthMetricId = (typeof HEALTH_METRIC_IDS)[number];
 
 export type MetricDirection = "at_most" | "at_least";
 
+/**
+ * The closed interval of physically possible values for a metric. A value
+ * outside it is a measurement defect, not a health signal: it is
+ * NOT_EVALUABLE, never HEALTHY and never UNHEALTHY.
+ */
+export interface MetricDomain {
+  min: number;
+  max: number;
+}
+
+/** A rate is a fraction of events. */
+const RATE_DOMAIN: MetricDomain = { min: 0, max: 1 };
+/** A duration cannot be negative. */
+const DURATION_DOMAIN: MetricDomain = { min: 0, max: Number.POSITIVE_INFINITY };
+
+export const HEALTH_METRIC_DOMAINS: Readonly<Record<HealthMetricId, MetricDomain>> = {
+  crash_rate: RATE_DOMAIN,
+  analysis_completion_rate: RATE_DOMAIN,
+  analysis_latency_p95_ms: DURATION_DOMAIN,
+  capture_success_rate: RATE_DOMAIN,
+  abstention_rate: RATE_DOMAIN,
+  silent_failure_rate: RATE_DOMAIN,
+};
+
 export interface HealthMetricCriterion {
   id: HealthMetricId;
   title: string;
@@ -136,7 +160,11 @@ export interface MetricObservation {
   sampleCount: number;
 }
 
-/** Absent (null) means "we have no measurement" — that is NOT_EVALUABLE. */
+/**
+ * Absent (null) means "we have no measurement" — that is NOT_EVALUABLE. A
+ * key that is missing altogether at runtime (deserialized state, an exporter
+ * that skipped a metric) is treated exactly like null.
+ */
 export type HealthInputs = Readonly<Record<HealthMetricId, MetricObservation | null>>;
 
 export interface MetricResult {
@@ -155,20 +183,34 @@ export interface HealthReport {
 
 function evaluateMetric(
   criterion: HealthMetricCriterion,
-  observation: MetricObservation | null,
+  observation: MetricObservation | null | undefined,
 ): MetricResult {
-  if (observation === null) {
+  if (observation === null || observation === undefined) {
     return {
       id: criterion.id,
       verdict: "NOT_EVALUABLE",
       detail: "No measurement available for this window.",
     };
   }
-  if (!Number.isFinite(observation.value) || !Number.isInteger(observation.sampleCount)) {
+  if (
+    !Number.isFinite(observation.value) ||
+    !Number.isInteger(observation.sampleCount) ||
+    observation.sampleCount < 0
+  ) {
     return {
       id: criterion.id,
       verdict: "NOT_EVALUABLE",
       detail: `Malformed observation (value=${String(observation.value)}, samples=${String(observation.sampleCount)}).`,
+    };
+  }
+  const domain = HEALTH_METRIC_DOMAINS[criterion.id];
+  if (observation.value < domain.min || observation.value > domain.max) {
+    return {
+      id: criterion.id,
+      verdict: "NOT_EVALUABLE",
+      detail:
+        `Impossible observation (value=${String(observation.value)} outside ` +
+        `[${String(domain.min)}, ${String(domain.max)}]).`,
     };
   }
   if (observation.sampleCount < criterion.minSampleCount) {
