@@ -27,6 +27,9 @@
  *   noSessionInKv       kv never holds session material afterwards
  *   vaultShape          a re-persisted record has exactly the allowed keys
  *   ownerConsistent     active data owner matches the resulting session
+ *   localDataFlagHonest `localDataUnavailable` is set exactly when a launch
+ *                       statement against SQLite failed (and never decides
+ *                       the sign-in state)
  *
  * Every executed row (inputs + observations + per-invariant verdict) goes to
  * artifacts/xc-lifecycle-persistence/auth-hydrate-matrix.rows.json; the
@@ -447,6 +450,7 @@ function resetRuntime(): void {
     session: null,
     busy: false,
     error: null,
+    localDataUnavailable: false,
   });
 }
 
@@ -487,15 +491,30 @@ function expectedProfile(scenario: AuthScenario) {
   const legacyValue =
     KV_LEGACY_SESSION_VARIANTS[scenario.kvLegacySession] ?? null;
   const legacyTruthy = legacyValue !== null && legacyValue !== '';
-  // A SQLite statement the auth store issues BEFORE it consults the Keychain
-  // fails: the store's outer catch lands signed-out (see finding XC-LP-1).
-  const dbFatal =
-    scenario.db === 'open-throws' ||
-    scenario.db === 'all-throw' ||
+  // SQLite is only consulted for the launch FLAGS (guest mode, legacy Google
+  // provider). The Keychain vault decides sign-in independently, so a local
+  // database failure can at most hide a flag — never the durable session.
+  const dbUnopenable =
+    scenario.db === 'open-throws' || scenario.db === 'all-throw';
+  const guestFlagUnreadable =
+    dbUnopenable || scenario.db === 'kv-get-local-mode-throws';
+  const guestKv = scenario.kvLocalMode === 'valid-guest';
+  // A guest flag SQLite could not hand over cannot take precedence.
+  const guestWins = guestKv && !guestFlagUnreadable;
+  const lastProviderUnreadable =
+    dbUnopenable || scenario.db === 'kv-get-last-provider-throws';
+  // The legacy provider flag is only consulted once the vault has NOT kept
+  // the user signed in (no usable record, or the server refused it).
+  const lastProviderConsulted = !guestWins && !(vaultUuidOk && !revoked);
+  // Every launch statement the store issues against SQLite that this
+  // scenario makes fail (the legacy kv wipe only runs when the key holds
+  // something).
+  const localDataFails =
+    dbUnopenable ||
     scenario.db === 'kv-get-legacy-throws' ||
     scenario.db === 'kv-get-local-mode-throws' ||
+    (scenario.db === 'kv-get-last-provider-throws' && lastProviderConsulted) ||
     (scenario.db === 'kv-set-legacy-throws' && legacyTruthy);
-  const guestKv = scenario.kvLocalMode === 'valid-guest';
   return {
     vaultPresent,
     keychainReadable,
@@ -503,8 +522,12 @@ function expectedProfile(scenario: AuthScenario) {
     vaultUuidOk,
     vaultAccountId,
     revoked,
-    dbFatal,
+    dbUnopenable,
+    guestFlagUnreadable,
+    lastProviderUnreadable,
+    localDataFails,
     guestKv,
+    guestWins,
   };
 }
 
@@ -515,8 +538,6 @@ function expectedProfile(scenario: AuthScenario) {
  * of them is still reproduced, so a fix flips the row back to strict.
  */
 const KNOWN_DEVIATIONS = {
-  'XC-LP-1':
-    'SQLite failure before the Keychain read (open, legacy/local-mode kv read, legacy kv wipe) signs a valid durable session out for this launch',
   'XC-LP-2':
     'Vault record with a non-UUID canonicalAppUserId passes parsePersistedSession, throws in canonicalDataOwner, lands signed-out and is never discarded',
 } as const;
@@ -527,7 +548,6 @@ function classifyDeviation(
   invariant: string,
   exp: ReturnType<typeof expectedProfile>,
 ): DeviationId | null {
-  if (invariant === 'noImplicitSignOut' && exp.dbFatal) return 'XC-LP-1';
   if (
     invariant === 'unusableRecordDiscarded' &&
     VAULT_ACCEPTED_NON_UUID.has(scenario.vault)
@@ -614,13 +634,14 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
     sessionId !== null &&
     sessionId.trim().toLowerCase() === exp.vaultAccountId &&
     owner === exp.vaultAccountId;
+  const guestWins = exp.guestWins;
 
   const invariants: Record<string, boolean> = {};
   invariants['noThrow'] = threw === null && state.hydrated === true;
-  if (exp.vaultUuidOk && !exp.revoked && !exp.guestKv) {
+  if (exp.vaultUuidOk && !exp.revoked && !guestWins) {
     invariants['noImplicitSignOut'] = signedInAsCanonical;
   }
-  if (exp.vaultUuidOk && exp.revoked && !exp.dbFatal && !exp.guestKv) {
+  if (exp.vaultUuidOk && exp.revoked && !guestWins) {
     invariants['revokedSignsOut'] =
       state.session === null &&
       owner === SIGNED_OUT_DATA_OWNER &&
@@ -630,8 +651,7 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
     exp.vaultPresent &&
     exp.keychainReadable &&
     !exp.vaultParsed &&
-    !exp.dbFatal &&
-    !exp.guestKv
+    !guestWins
   ) {
     invariants['malformedDiscarded'] =
       mockKeychain.log.includes('reset') &&
@@ -643,8 +663,7 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
     exp.vaultPresent &&
     exp.keychainReadable &&
     VAULT_ACCEPTED_NON_UUID.has(scenario.vault) &&
-    !exp.dbFatal &&
-    !exp.guestKv
+    !guestWins
   ) {
     // Accepted by the parser but unusable as a data owner: the record must
     // still not survive as a launch-after-launch dead weight.
@@ -667,8 +686,7 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
     vaultAfter !== 'unparseable' &&
     scenario.refresh === 'rotate' &&
     exp.vaultUuidOk &&
-    !exp.dbFatal &&
-    !exp.guestKv
+    !guestWins
   ) {
     invariants['vaultShape'] =
       JSON.stringify(Object.keys(vaultAfter).sort()) ===
@@ -695,16 +713,19 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
         ? owner === GUEST_DATA_OWNER
         : owner ===
           (state.session.canonicalAppUserId ?? '').trim().toLowerCase();
-  if (exp.guestKv && !exp.dbFatal) {
+  if (guestWins) {
     invariants['guestKvHonoured'] =
       state.session?.provider === 'guest' && owner === GUEST_DATA_OWNER;
   }
+  // A local-storage failure is reported beside the sign-in decision, never
+  // instead of it.
+  invariants['localDataFlagHonest'] =
+    state.localDataUnavailable === exp.localDataFails;
   const legacyGooglePath =
     !exp.vaultParsed &&
     scenario.kvLastProvider === 'valid-google' &&
-    !exp.dbFatal &&
-    scenario.db !== 'kv-get-last-provider-throws' &&
-    !exp.guestKv;
+    !exp.lastProviderUnreadable &&
+    !guestWins;
   if (legacyGooglePath && scenario.google === 'silent-throws') {
     invariants['transientGoogleKeepsFlag'] =
       db.kv.get('auth.last-provider') === LAST_PROVIDER_GOOGLE_VALUE &&
@@ -875,6 +896,31 @@ describe('authStore.hydrate() persisted-state matrix', () => {
   const existingOffline = sweep('existing-offline', EXISTING_OFFLINE);
   const fresh = sweep('fresh-install', FRESH_INSTALL);
   const legacyGoogle = sweep('legacy-google', LEGACY_GOOGLE);
+
+  it('pin XC-LP-1: getDb() throwing on open with a valid vault record still lands signed in and hydrated (online and offline refresh)', async () => {
+    for (const refresh of ['rotate', 'network-error', '503'] as const) {
+      const row = await runScenario({
+        ...EXISTING_ONLINE,
+        db: 'open-throws',
+        refresh,
+        name: `pin/xc-lp-1/${refresh}`,
+        seed: null,
+      });
+      rows.push(row);
+      expect(row.observed['threw']).toBeNull();
+      expect(row.observed['hydrated']).toBe(true);
+      expect(row.observed['session']).toEqual(
+        expect.objectContaining({
+          provider: 'apple',
+          canonicalAppUserId: CANONICAL_ID,
+        }),
+      );
+      expect(row.observed['owner']).toBe(CANONICAL_ID);
+      expect(row.invariants['noImplicitSignOut']).toBe(true);
+      expect(row.invariants['localDataFlagHonest']).toBe(true);
+      expect(failuresOf([row])).toEqual([]);
+    }
+  });
 
   it('existing install, refresh online: every single-factor corruption', async () => {
     const batch = await runBatch(existingOnline);

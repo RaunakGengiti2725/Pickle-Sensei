@@ -1,22 +1,17 @@
 /**
- * xc-matrix adjudication pin (XC-ADJ-VIS-1).
+ * xc-matrix adjudication pin (XC-ADJ-VIS-1), now positive.
  *
  * docs/PERCEPTION.md §2 says the capture-quality gate
  * (`evaluateCaptureQuality`, reasons such as `tracking_dropout_gap`,
  * `player_too_small_in_frame`) is "decided BEFORE scoring". The phone's
- * scoring path (`src/analysis/runCaptureAnalysis.ts`) applies the
- * capture-envelope gate and the sidecar integrity checks, then hands the
- * parsed pose sequence straight to `analyzeCapture`; neither
- * `evaluateCaptureQuality` nor `evaluatePreAnalysisGate` is consulted. The
- * only consumer of the gate is the desktop lab (`packages/swing-lab`).
+ * scoring path (`src/analysis/runCaptureAnalysis.ts`) must therefore run
+ * `evaluateCaptureQuality` → `evaluatePreAnalysisGate` on the parsed pose
+ * sequence and withhold `analyzeCapture` when the stream is not analyzable.
  *
- * `packages/analysis-pipeline/test/visibilityMatrix.knownGaps.test.ts` pins
- * (it.fails) that `analyzeCapture` scores dropout-gap / far-camera streams
- * with presentation "normal", so on the phone those streams are rated.
- *
- * `test.failing`: this file goes red (remove it) once the phone path consumes
- * the gate. It reads the production source rather than driving the pipeline
- * so the pin cannot be satisfied by a synthetic fixture.
+ * It reads the production source rather than driving the pipeline so the
+ * pin cannot be satisfied by a synthetic fixture; the behavioural half lives
+ * in `__tests__/xcBehavioral/permitLifecycleMatrix.test.ts` (dropout-gap
+ * sidecar ⇒ not scored, permit released, no local shot).
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -34,12 +29,14 @@ describe('XC-ADJ-VIS-1: pose-quality gate on the phone scoring path', () => {
     expect(source).toMatch(/from '@pickle\/analysis-pipeline'/);
   });
 
-  test.failing(
-    'runCaptureAnalysis consults evaluateCaptureQuality / evaluatePreAnalysisGate before analyzeCapture',
-    () => {
-      expect(source).toMatch(
-        /\b(evaluateCaptureQuality|evaluatePreAnalysisGate)\(/,
-      );
-    },
-  );
+  it('runCaptureAnalysis consults evaluateCaptureQuality and evaluatePreAnalysisGate before analyzeCapture', () => {
+    const quality = source.search(/\bevaluateCaptureQuality\(/);
+    const gate = source.search(/\bevaluatePreAnalysisGate\(/);
+    const analyze = source.search(/\bawait analyzeCapture\(/);
+    expect(quality).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(-1);
+    expect(analyze).toBeGreaterThan(-1);
+    expect(quality).toBeLessThan(analyze);
+    expect(gate).toBeLessThan(analyze);
+  });
 });

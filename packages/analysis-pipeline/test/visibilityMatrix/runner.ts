@@ -23,14 +23,15 @@ import type { ScenarioCase } from "./scenarios.js";
 
 /**
  * Runs one synthesized case through the SAME stages the shipping app runs
- * (apps/mobile/src/analysis/runCaptureAnalysis.ts → analyzeCapture with the
- * on-device provider bundle from apps/mobile/src/vision/providers.ts) and,
- * beside it, through the committed pose-quality gates the app does NOT call
- * today (evaluateCaptureQuality → evaluatePreAnalysisGate), so the matrix
- * can show where the gates and the scoring path disagree.
+ * (apps/mobile/src/analysis/runCaptureAnalysis.ts: evaluateCaptureQuality →
+ * evaluatePreAnalysisGate on the parsed sequence, then analyzeCapture with
+ * the on-device provider bundle from apps/mobile/src/vision/providers.ts
+ * only when the gate passes). A gated stream is reported as `gated` with the
+ * gate's reasons — it never reaches the scorer, exactly as on the phone.
  */
 
 export type FusionOutcome =
+  | { kind: "gated"; reasons: string[] }
   | { kind: "failed"; failureKind: string; code: string; message: string }
   | { kind: "abstained_partial"; strokeResolution: string }
   | {
@@ -129,6 +130,14 @@ async function runFusion(
   sequence: PoseSequence,
   scenario: ScenarioCase,
 ): Promise<{ outcome: FusionOutcome; record: CaptureAnalysisRecord | null }> {
+  const gate = evaluatePreAnalysisGate({
+    frame: null,
+    pose: sequence,
+    poseQuality: evaluateCaptureQuality(sequence),
+  });
+  if (!gate.analyzable) {
+    return { outcome: { kind: "gated", reasons: [...gate.reasons] }, record: null };
+  }
   const result = await analyzeCapture(
     shippingProviders(),
     {

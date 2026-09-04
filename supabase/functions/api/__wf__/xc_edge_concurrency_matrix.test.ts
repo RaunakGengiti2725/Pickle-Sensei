@@ -584,15 +584,15 @@ Deno.test("xc S2b: duplicate refresh with the SAME refresh token — exactly one
   for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
 });
 
-Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / network error) is answered 401 — the code the app treats as 'refresh token revoked → sign out'", async () => {
+Deno.test("xc S2c: a TRANSIENT GoTrue refresh failure (429 / network error / 5xx) is answered 429 or 503 — never the 401 the app treats as 'refresh token revoked → sign out'", async () => {
   // Contract (AGENTS.md "Auth sessions"): "The ONE implicit sign-out is the
-  // server refusing the refresh token (401/403)"; sessionLifecycle.ts:89-91
-  // throws a NON-retryable SessionRefreshError on 401/403 and sessionKeeper.ts
-  // :120-122 then calls onRevoked() (sign-out). refreshSessionRoute
-  // (index.ts:548-568) maps every upstream failure whose status is < 500 to
-  // 401 — including 429 rate limiting and status 0 (AuthRetryableFetchError on
-  // a network failure inside supabase-js). Expected: 503 (serviceUnavailable)
-  // so the app retries with backoff and stays signed in.
+  // server refusing the refresh token (401/403)"; sessionLifecycle.ts throws a
+  // NON-retryable SessionRefreshError on 401/403 and sessionKeeper.ts then
+  // calls onRevoked() (sign-out). refreshSessionRoute must therefore keep
+  // upstream 429 as 429 (with Retry-After) and answer status 0
+  // (AuthRetryableFetchError on a network failure inside supabase-js) and
+  // upstream 5xx with a generic 503, so the app retries with backoff and
+  // stays signed in.
   const report = await scenario(
     "s2c_refresh_transient_upstream_failure",
     "xc S2c",
@@ -634,6 +634,8 @@ Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / netw
         },
       ];
       const observed: Record<string, number> = {};
+      const observedBodies: Record<string, string> = {};
+      const observedRetryAfter: Record<string, string | null> = {};
       for (const [k, c] of cases.entries()) {
         h.fake.overrides.refresh = c.force;
         const res = await timed(
@@ -641,15 +643,19 @@ Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / netw
           0,
           k,
           `refresh.${c.name}`,
-          () =>
-            h.handler(
+          async () => {
+            const response = await h.handler(
               edgeRequest("POST", "/v1/auth/refresh", {
                 ip: ip(0, 10 + k),
                 body: { refreshToken: boot.refreshToken },
               }),
-            ),
+            );
+            observedRetryAfter[c.name] = response.headers.get("Retry-After");
+            return response;
+          },
         );
         observed[c.name] = res.status;
+        observedBodies[c.name] = JSON.stringify(res.body);
       }
       h.fake.overrides.refresh = undefined;
       // the refresh token is still perfectly valid upstream:
@@ -669,23 +675,35 @@ Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / netw
       inputs.user = sub;
       observations.statusByUpstreamFailure = observed;
       observations.refreshStillValidUpstream = real.status;
+      observations.retryAfterByUpstreamFailure = observedRetryAfter;
       inv(
         invariants,
-        "OBSERVED: GoTrue 429 → edge 401 (contract expects 5xx/retryable)",
-        observed.gotrue_429 === 401,
-        `→ ${observed.gotrue_429}`,
+        "GoTrue 429 → edge 429 with Retry-After (retryable, never 401)",
+        observed.gotrue_429 === 429 && observedRetryAfter.gotrue_429 === "5",
+        `→ ${observed.gotrue_429} Retry-After=${observedRetryAfter.gotrue_429}`,
       );
       inv(
         invariants,
-        "OBSERVED: GoTrue network failure → edge 401 (contract expects 5xx/retryable)",
-        observed.gotrue_network_failure === 401,
+        "GoTrue network failure → edge 503 (retryable, never 401)",
+        observed.gotrue_network_failure === 503,
         `→ ${observed.gotrue_network_failure}`,
       );
       inv(
         invariants,
-        "GoTrue 502 → edge 503 (correct)",
+        "GoTrue 502 → edge 503",
         observed.gotrue_502 === 503,
         `→ ${observed.gotrue_502}`,
+      );
+      inv(
+        invariants,
+        "5xx bodies stay generic (no upstream detail leaks)",
+        ["gotrue_network_failure", "gotrue_502"].every(
+          (name) =>
+            observed[name] !== 503 ||
+            (!/bad gateway|fetch|ECONN|TypeError|stack/i.test(observedBodies[name]) &&
+              /temporarily unavailable/i.test(observedBodies[name])),
+        ),
+        `→ ${JSON.stringify(observedBodies)}`,
       );
       inv(
         invariants,

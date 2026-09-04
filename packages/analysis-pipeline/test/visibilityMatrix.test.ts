@@ -10,8 +10,9 @@ import { SCENARIOS, buildCase } from "./visibilityMatrix/scenarios.js";
  *
  * Seeded keypoint streams derived from the committed synthetic swing fixture
  * are pushed through the shipping composition (capture quality → pre-analysis
- * gate → analyzeCapture). This file pins the abstention / uncertainty paths
- * that DO fire today. Reproduced gaps live in visibilityMatrix.knownGaps.test.ts.
+ * gate → analyzeCapture, the scorer only when the gate passes). This file
+ * pins the abstention / uncertainty paths that DO fire today. Reproduced gaps
+ * live in visibilityMatrix.knownGaps.test.ts.
  *
  *   VISIBILITY_MATRIX_SEEDS=200 VISIBILITY_MATRIX_OUT=/tmp/vis npx vitest run test/visibilityMatrix.test.ts
  */
@@ -69,28 +70,34 @@ describe("player visibility matrix", () => {
     expect(control.violations).toEqual({});
   });
 
-  it("no player / no tracked wrist / spectator gesture: fusion abstains on every seed", async () => {
+  it("no player / no tracked wrist: the pre-analysis gate abstains on every seed before the scorer runs", async () => {
     const value = await report();
     for (const id of [
       "no_player_no_frames",
       "no_player_empty_frames",
       "no_player_subthreshold_visibility",
       "arms_missing_both",
-      "spectator_gesture",
     ]) {
       const summary = scenario(value, id);
       expect(summary.outcomes.scored ?? 0, id).toBe(0);
-      expect(summary.outcomes.failed, id).toBe(SEEDS);
+      expect(summary.outcomes.gated, id).toBe(SEEDS);
+      expect(summary.preGateRejects, id).toBe(SEEDS);
+      expect(summary.failureCodes, id).toEqual({});
     }
-    expect(scenario(value, "no_player_no_frames").failureCodes).toEqual({
-      "fusion.empty_pose_sequence": SEEDS,
-    });
     expect(scenario(value, "no_player_no_frames").preGateReasons).toEqual({
       no_person_found: SEEDS,
     });
-    expect(scenario(value, "arms_missing_both").failureCodes).toEqual({
-      "phase.wrist_not_tracked": SEEDS,
-    });
+    for (const id of ["no_player_empty_frames", "no_player_subthreshold_visibility"]) {
+      expect(scenario(value, id).preGateReasons.low_pose_confidence, id).toBe(SEEDS);
+    }
+    expect(scenario(value, "arms_missing_both").preGateReasons.body_not_fully_visible).toBe(SEEDS);
+  });
+
+  it("spectator gesture: a body that never swings passes the gate and fusion abstains on every seed", async () => {
+    const summary = scenario(await report(), "spectator_gesture");
+    expect(summary.outcomes.scored ?? 0).toBe(0);
+    expect(summary.outcomes.failed).toBe(SEEDS);
+    expect(summary.failureCodes).toEqual({ "phase.no_distinct_stroke": SEEDS });
   });
 
   it("dominant arm missing / upper body only: never produces a score", async () => {
@@ -98,10 +105,9 @@ describe("player visibility matrix", () => {
     for (const id of ["arms_missing_dominant", "partial_body_upper_only"]) {
       expect(scenario(value, id).outcomes.scored ?? 0, id).toBe(0);
       expect(scenario(value, id).poseQualityRejects, id).toBe(SEEDS);
+      expect(scenario(value, id).outcomes.gated, id).toBe(SEEDS);
+      expect(scenario(value, id).preGateReasons.body_not_fully_visible, id).toBe(SEEDS);
     }
-    expect(scenario(value, "partial_body_upper_only").failureCodes).toEqual({
-      "features.torso_not_measured": SEEDS,
-    });
   });
 
   it("legs missing, legs cropped, too close: the pose-quality gate rejects and no seed presents as normal", async () => {
@@ -115,16 +121,18 @@ describe("player visibility matrix", () => {
     expect(scenario(value, "legs_missing").poseQualityReasons.body_not_fully_visible).toBe(SEEDS);
   });
 
-  it("far camera: the committed pose-quality gate and pre-analysis gate reject every seed", async () => {
+  it("far camera: the committed pose-quality gate and pre-analysis gate reject every seed, and none is scored", async () => {
     const value = await report();
     for (const id of ["far_camera", "far_camera_noiseless"]) {
       const summary = scenario(value, id);
       expect(summary.poseQualityReasons.player_too_small_in_frame, id).toBe(SEEDS);
       expect(summary.preGateReasons.person_implausible_scale, id).toBe(SEEDS);
+      expect(summary.outcomes.gated, id).toBe(SEEDS);
+      expect(summary.violations, id).toEqual({});
     }
   });
 
-  it("exit/re-enter through contact: the pose-quality gate flags the dropout gap whenever it exceeds 700 ms", async () => {
+  it("exit/re-enter through contact: the pose-quality gate flags the dropout gap whenever it exceeds 700 ms and the stream is never scored", async () => {
     const value = await report();
     const gapCases = value.cases.filter(
       (entry) =>
@@ -133,6 +141,33 @@ describe("player visibility matrix", () => {
     expect(gapCases.length).toBeGreaterThan(0);
     for (const entry of gapCases) {
       expect(entry.quality.reasons, `seed ${entry.seed}`).toContain("tracking_dropout_gap");
+      expect(entry.preGate.reasons, `seed ${entry.seed}`).toContain("tracking_dropout_gap");
+      expect(entry.fusion.kind, `seed ${entry.seed}`).toBe("gated");
+    }
+    const summary = scenario(value, "exit_reenter_through_contact");
+    expect(summary.outcomes.scored ?? 0).toBe(0);
+    expect(summary.violations).toEqual({});
+  });
+
+  it("occlusion through contact: torso + swinging arm hidden across contact is a torso tracking gap on every seed", async () => {
+    const summary = scenario(await report(), "occlusion_through_contact");
+    expect(summary.preGateReasons.torso_tracking_gap).toBe(SEEDS);
+    expect(summary.outcomes.gated).toBe(SEEDS);
+    expect(summary.presentations.normal ?? 0).toBe(0);
+    expect(summary.violations).toEqual({});
+  });
+
+  it("every gated case carries the reasons the gate decided on (never an empty abstention)", async () => {
+    const value = await report();
+    const gated = value.cases.filter((entry) => entry.fusion.kind === "gated");
+    expect(gated.length).toBeGreaterThan(0);
+    for (const entry of gated) {
+      expect(entry.preGate.analyzable, `${entry.scenarioId}#${entry.seed}`).toBe(false);
+      if (entry.fusion.kind === "gated") {
+        expect(entry.fusion.reasons, `${entry.scenarioId}#${entry.seed}`).toEqual(
+          entry.preGate.reasons,
+        );
+      }
     }
   });
 

@@ -11,6 +11,9 @@
  *     payload carries the reserved permit id (no rating without a permit);
  *   - every non-scored run that DID reserve releases exactly once with the
  *     matching outcome, or is a reserve failure that never touched the db;
+ *   - a sidecar the pose-quality gate rejects (tracking dropout gap through
+ *     the stroke) is never scored: one reserve, one `unsupported` release,
+ *     zero local_shot rows, outcome `quality_blocked` carrying the reason;
  *   - concurrent runs never share a permit id (no duplicate shots) and leave
  *     no open transaction behind.
  *
@@ -19,7 +22,11 @@
  */
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { generateSwingSequence } from '@pickle/evaluation';
-import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
+import {
+  serializePoseSequence,
+  sha256Hex,
+  type PoseSequence,
+} from '@pickle/swing-domain';
 import type { CapturedClip } from '../../src/camera/capture';
 import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
@@ -52,8 +59,40 @@ const API = { baseUrl: 'https://api.test', token: 'bearer-token' };
 
 // ─── Fixture: real generated swing + real sidecar ──────────────────────────
 
-function fixture(id: string, handed: 'right' | 'left') {
-  const { sequence, window } = generateSwingSequence({ handed });
+/**
+ * Player leaves the frame across the stroke: frames inside the window are
+ * NOT measured (a real gap in the canonical record, never filled). The gap
+ * is wider than the pose-quality gate's 700 ms dropout threshold.
+ */
+function dropFramesThroughContact(
+  sequence: PoseSequence,
+  window: { startMs: number; endMs: number; peakMs: number },
+  gapMs: number,
+): PoseSequence {
+  const from = window.peakMs - gapMs / 2;
+  const to = window.peakMs + gapMs / 2;
+  return {
+    ...sequence,
+    frames: sequence.frames.filter(
+      frame => frame.timestampMs < from || frame.timestampMs > to,
+    ),
+  };
+}
+
+function fixture(
+  id: string,
+  handed: 'right' | 'left',
+  degrade: { dropoutGapMs: number } | null = null,
+) {
+  const generated = generateSwingSequence({ handed });
+  const { window } = generated;
+  const sequence = degrade
+    ? dropFramesThroughContact(
+        generated.sequence,
+        window,
+        degrade.dropoutGapMs,
+      )
+    : generated.sequence;
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
     uri: `file:///captures/${id}.mov`,
@@ -385,6 +424,61 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
             return {
               kind: outcome!.kind,
               reason: (outcome as { reason?: string }).reason,
+            };
+          },
+        );
+      });
+    }
+  });
+
+  describe('pose-quality gate AFTER reserve: a dropout gap through the stroke is never scored', () => {
+    for (const seed of scenarioSeeds('permitPoseQualityGate')) {
+      it(`seed ${seed}`, async () => {
+        const random = seededRandom(seed);
+        const declared = random() < 0.6 ? 'forehand_drive' : null;
+        const handed = random() < 0.5 ? 'right' : 'left';
+        // Strictly above the 700 ms gate threshold, up to a 1.5 s hole.
+        const dropoutGapMs = randomInt(random, 800, 1500);
+        const releaseMode = (['ok', 'server_500', 'network_throw'] as const)[
+          randomInt(random, 0, 2)
+        ]!;
+        await recordScenario(
+          SUITE,
+          'permitPoseQualityGate',
+          seed,
+          { declared, handed, dropoutGapMs, releaseMode },
+          async () => {
+            const fake = createFakeLocalDb();
+            const { clip, sidecarJson } = fixture(`gap-${seed}`, handed, {
+              dropoutGapMs,
+            });
+            mockReadArtifact = async () => sidecarJson;
+            server.releaseMode = releaseMode;
+            const { outcome, error } = await runOnce(fake, clip, declared);
+            expect(error).toBeNull();
+            expect(outcome).not.toBeNull();
+            expect(outcome!.kind).not.toBe('scored');
+            expect(outcome!.kind).toBe('quality_blocked');
+            const reason =
+              outcome!.kind === 'quality_blocked' ? outcome!.reason : '';
+            expect(reason).toMatch(/tracking_dropout_gap/);
+            // Exactly one reserve and exactly one release: the rating was
+            // reserved, found unmeasurable, and handed back as unsupported.
+            expect(server.reserves).toBe(1);
+            expect(server.releases).toEqual([
+              { permitId: 'permit-1', outcome: 'unsupported' },
+            ]);
+            // Nothing was rated: no local shot, no sync row, no record.
+            expect(fake.shots).toHaveLength(0);
+            expect(fake.outbox).toHaveLength(0);
+            expect(fake.analysisRecords).toHaveLength(0);
+            expect(fake.openTransactions()).toBe(0);
+            return {
+              kind: outcome!.kind,
+              reason,
+              reserves: server.reserves,
+              releases: server.releases,
+              shots: fake.shots.length,
             };
           },
         );

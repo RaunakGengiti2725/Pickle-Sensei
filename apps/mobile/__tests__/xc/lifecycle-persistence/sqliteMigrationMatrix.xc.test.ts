@@ -840,11 +840,11 @@ const EXPECTED_CAPTURE_COLUMNS = [
 
 // ─── Known deviations ────────────────────────────────────────────────────────
 
-const KNOWN_DEVIATIONS = {
-  'XC-LP-5':
-    "db.ts LOCAL_MIGRATIONS runs `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_extract(payload, '$.source') <> 'real'` on EVERY launch; one outbox row whose payload is not valid JSON makes json_extract raise `malformed JSON`, so getDb() throws on every launch, every store's hydrate() fails, authStore signs the durable session out (XC-LP-1) and the player's intact local_shot rows are unreachable until reinstall — no in-app repair path exists",
-} as const;
-type DeviationId = keyof typeof KNOWN_DEVIATIONS;
+/** Triaged contract deviations still reproduced by this matrix. Empty since
+ * XC-LP-5 (a non-JSON outbox payload made LOCAL_MIGRATIONS' json_extract
+ * DELETE raise `malformed JSON` on every launch) was fixed: the cleanup now
+ * guards every row with json_valid(payload). */
+const KNOWN_DEVIATIONS: Record<string, string> = {};
 
 // ─── Scenario ────────────────────────────────────────────────────────────────
 
@@ -976,15 +976,9 @@ async function runScenario(scenario: MigrationScenario): Promise<MatrixRow> {
   observed['coldStatements'] = mockSqlite.statements.length;
   invariants['coldLaunchOpens'] = handle !== null;
 
-  const expectThrow =
-    scenario.schema === 'garbage' ||
-    readonlyApplied ||
-    (scenario.fault === 'malformed-outbox-payload' && shape.hasTables);
+  const expectThrow = scenario.schema === 'garbage' || readonlyApplied;
   if (!invariants['coldLaunchOpens']) {
-    if (scenario.fault === 'malformed-outbox-payload' && shape.hasTables) {
-      knownDeviations.push('XC-LP-5:coldLaunchOpens');
-      invariants['coldLaunchOpens'] = true;
-    } else if (scenario.schema === 'garbage' || readonlyApplied) {
+    if (scenario.schema === 'garbage' || readonlyApplied) {
       // Not a database / not writable: nothing the app could have done. The
       // contract we check is that it fails the same way every time and the
       // fix-27 retry path does not cache the dead handle.
@@ -1080,7 +1074,15 @@ async function runScenario(scenario: MigrationScenario): Promise<MatrixRow> {
     invariants[`${label}SessionsPreserved`] =
       JSON.stringify(sessionsAfter) === JSON.stringify(sessionsExpected);
 
-    const outboxAfter = (snap['outbox']?.rows ?? [])
+    const outboxRows = snap['outbox']?.rows ?? [];
+    if (scenario.fault === 'malformed-outbox-payload' && shape.hasTables) {
+      // The torn row is not the migration's to judge: it is left in place
+      // (json_valid guard) — never a reason for the launch to fail.
+      invariants[`${label}MalformedOutboxRowTolerated`] = outboxRows.some(
+        r => String(r['payload']) === '{"id":"torn-write","source":"re',
+      );
+    }
+    const outboxAfter = outboxRows
       .filter(r => String(r['payload']) !== '{"id":"torn-write","source":"re')
       .map(r =>
         JSON.stringify([
@@ -1271,29 +1273,6 @@ async function runScenario(scenario: MigrationScenario): Promise<MatrixRow> {
         mockSqlite.statements.length === statementsBeforeThird;
       await third.execute('SELECT 1');
       warm.close();
-    }
-  } else if (
-    scenario.fault === 'malformed-outbox-payload' &&
-    shape.hasTables &&
-    fs.existsSync(file)
-  ) {
-    // External repair (what the app cannot do): remove the torn row, then
-    // prove every shot was still there underneath.
-    const repair = new sqlite.DatabaseSync(file);
-    repair
-      .prepare(`DELETE FROM outbox WHERE payload = ?`)
-      .run('{"id":"torn-write","source":"re');
-    repair.close();
-    let repaired: LocalDb | null = null;
-    try {
-      repaired = getDb();
-    } catch (error) {
-      observed['repairError'] = errorText(error);
-    }
-    invariants['repairedLaunchOpens'] = repaired !== null;
-    if (repaired) {
-      await checkData(repaired, 'repaired');
-      repaired.close();
     }
   }
 
@@ -1492,6 +1471,53 @@ if (sqlite === null) {
       );
     });
 
+    it("pin XC-LP-5: an outbox row whose payload is 'not json' never stops getDb(); the row is left alone and every other launch statement still runs", () => {
+      const dir = scenarioDir('pin-xc-lp-5');
+      const file = path.join(dir, DB_FILE);
+      const seed = new sqlite.DatabaseSync(file);
+      createSchema(seed, 'v2-current');
+      seed
+        .prepare(
+          `INSERT INTO outbox (owner_key, kind, payload) VALUES (?, 'shot.sync', ?)`,
+        )
+        .run(GUEST_DATA_OWNER, 'not json');
+      seed
+        .prepare(
+          `INSERT INTO outbox (owner_key, kind, payload) VALUES (?, 'shot.sync', ?)`,
+        )
+        .run(GUEST_DATA_OWNER, '{"id":"fixture-1","source":"fixture"}');
+      seed
+        .prepare(
+          `INSERT INTO outbox (owner_key, kind, payload) VALUES (?, 'shot.sync', ?)`,
+        )
+        .run(GUEST_DATA_OWNER, '{"id":"real-1","source":"real"}');
+      seed.close();
+      mockSqlite.dir = dir;
+      mockSqlite.opens = 0;
+      mockSqlite.statements = [];
+      const getDb = loadGetDb();
+      let handle: LocalDb | null = null;
+      let error: string | null = null;
+      try {
+        handle = getDb();
+      } catch (e) {
+        error = errorText(e);
+      }
+      expect(error).toBeNull();
+      expect(handle).not.toBeNull();
+      const check = new sqlite.DatabaseSync(file);
+      const payloads = (
+        check
+          .prepare(`SELECT payload FROM outbox ORDER BY payload`)
+          .all() as Array<{ payload: string }>
+      ).map(r => r.payload);
+      check.close();
+      handle?.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+      // fixture sync rows are still swept; the real row and the torn row stay.
+      expect(payloads).toEqual(['not json', '{"id":"real-1","source":"real"}']);
+    });
+
     it('every schema × fault, three fixed seeds each', async () => {
       const batch = await runBatch(singleFactor());
       expect(failuresOf(batch)).toEqual([]);
@@ -1514,11 +1540,11 @@ if (sqlite === null) {
 
     it('every triaged deviation is still reproduced (remove it from KNOWN_DEVIATIONS once fixed)', () => {
       if (only) return;
-      const seen = new Set<DeviationId>();
+      const seen = new Set<string>();
       for (const row of allRows) {
         for (const d of (row.observed as { knownDeviations: string[] })
           .knownDeviations) {
-          seen.add(d.split(':')[0] as DeviationId);
+          seen.add(d.split(':')[0] as string);
         }
       }
       expect([...seen].sort()).toEqual(Object.keys(KNOWN_DEVIATIONS).sort());
