@@ -119,6 +119,7 @@ function Gate() {
   const appOwnerKey = useAppStore(s => s.ownerKey);
   const profile = useAppStore(s => s.profile);
   const hydrateError = useAppStore(s => s.hydrateError);
+  const canonicalProfilePending = useAppStore(s => s.canonicalProfilePending);
   const hydrateApp = useAppStore(s => s.hydrate);
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
@@ -221,6 +222,11 @@ function Gate() {
       detail={hydrateError}
       onRetry={() => void hydrateApp()}
     />
+  ) : !profile && canonicalProfilePending ? (
+    // Signed in, no local profile, canonical profile not known yet (the
+    // launch continued past its budget, or the refresh has not landed): the
+    // store adopts it when it arrives — never re-ask the questionnaire here.
+    <LoadingState dark label="Loading your coaching profile" />
   ) : !profile ? (
     <OnboardingScreen />
   ) : (

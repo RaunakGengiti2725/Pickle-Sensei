@@ -120,6 +120,44 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   await redisPipeline([["DEL", ...keys]]);
 }
 
+// ─── Revocation markers ──────────────────────────────────────────────────────
+//
+// Cached auth entries are keyed by token hash, so a logout cannot enumerate
+// the entries it must kill (the same bearer in other isolates' L1, the
+// session's earlier bearers, a verification that raced it). Instead the
+// revocation is recorded under a marker for the session/user, and every read
+// of an auth entry asks `cacheRevoked` before trusting it.
+
+/** Records `marker` as revoked. Markers are only ever set, never lifted: they
+ * age out after `ttlSeconds`, which the caller sizes to outlive every cache
+ * entry the marker covers. */
+export async function cacheRevoke(marker: string, ttlSeconds: number): Promise<void> {
+  memorySet(marker, "1", ttlSeconds);
+  await redisPipeline([["SET", marker, "1", "EX", Math.ceil(ttlSeconds)]]);
+}
+
+/** Whether any of `markers` has been revoked. A marker held in L1 is
+ * authoritative (they never lift); otherwise L2 is consulted on EVERY call —
+ * an L1 miss alone cannot see a revocation recorded by another isolate.
+ * Returns null when Redis is configured but unreachable: the caller cannot
+ * know and must fall back to a real verification. */
+export async function cacheRevoked(markers: string[]): Promise<boolean | null> {
+  if (markers.length === 0) return false;
+  if (markers.some((marker) => memoryGet(marker) !== null)) return true;
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline(markers.map((marker) => ["GET", marker]));
+  if (!results) return null;
+  let revoked = false;
+  markers.forEach((marker, index) => {
+    const value = results[index]?.result;
+    if (typeof value === "string") {
+      memorySet(marker, value, 60);
+      revoked = true;
+    }
+  });
+  return revoked;
+}
+
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */

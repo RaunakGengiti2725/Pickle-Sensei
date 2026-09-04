@@ -80,7 +80,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
-import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
+import { cacheDel, cacheGet, cacheRevoke, cacheRevoked, cacheSet, sha256Hex } from "./cache.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
@@ -312,10 +312,36 @@ interface CachedAuthSession {
   email: string | null;
   provider: "google" | "apple";
   accessToken: string;
+  /** Supabase session (`session_id` claim) the access token belongs to; null
+   * for a bearer without one. Revocation is per session (logout) or per user
+   * (account deletion), never per token — see `authRevocationMarkers`. */
+  sessionId: string | null;
   expiresAtMs: number;
 }
 
 const AUTH_CACHE_MAX_TTL_SECONDS = 600;
+/** A revocation marker must outlive every cache entry it covers (entries
+ * live at most AUTH_CACHE_MAX_TTL_SECONDS, minus the 30 s write margin). */
+const AUTH_REVOCATION_TTL_SECONDS = AUTH_CACHE_MAX_TTL_SECONDS + 60;
+
+const sessionRevokedKey = (sessionId: string): string => `auth-revoked:session:${sessionId}`;
+const userRevokedKey = (userId: string): string => `auth-revoked:user:${userId}`;
+
+function sessionIdOf(payload: Record<string, unknown> | null): string | null {
+  const sessionId = payload?.session_id;
+  return typeof sessionId === "string" && sessionId ? sessionId : null;
+}
+
+/** The markers whose presence revokes a cached verification: the user (account
+ * deleted) and, when the bearer belongs to one, its Supabase session (logged
+ * out). Cache entries are keyed by token hash, so this is the only way a
+ * logout reaches the same bearer in other isolates' L1, the session's earlier
+ * bearers, and a verification racing the logout. */
+function authRevocationMarkers(entry: { userId: string; sessionId: string | null }): string[] {
+  const markers = [userRevokedKey(entry.userId)];
+  if (entry.sessionId) markers.push(sessionRevokedKey(entry.sessionId));
+  return markers;
+}
 
 function userScopedClient(accessToken: string): ReturnType<typeof createClient> {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -351,23 +377,35 @@ async function readAuthCache(
 ): Promise<AuthedUser | null> {
   const cachedRaw = await cacheGet(cacheKey);
   if (!cachedRaw) return null;
+  let cached: CachedAuthSession;
   try {
-    const cached = JSON.parse(cachedRaw) as CachedAuthSession;
-    if (
-      (provider === null || cached.provider === provider) &&
-      cached.expiresAtMs > Date.now() + 5_000
-    ) {
-      return {
-        id: cached.userId,
-        email: cached.email,
-        provider: cached.provider,
-        db: userScopedClient(cached.accessToken),
-      };
-    }
+    cached = JSON.parse(cachedRaw) as CachedAuthSession;
   } catch {
     // Corrupt cache entry — fall through to a real verification.
+    return null;
   }
-  return null;
+  if (
+    typeof cached.userId !== "string" ||
+    (cached.sessionId !== null && typeof cached.sessionId !== "string") ||
+    (provider !== null && cached.provider !== provider) ||
+    !(cached.expiresAtMs > Date.now() + 5_000)
+  ) {
+    return null;
+  }
+  // An entry is only as good as the session behind it. `null` means the
+  // revocation store is unreachable: unknown is not "still valid" — verify
+  // with Supabase Auth instead of trusting the copy.
+  const revoked = await cacheRevoked(authRevocationMarkers(cached));
+  if (revoked !== false) {
+    if (revoked) await cacheDel(cacheKey);
+    return null;
+  }
+  return {
+    id: cached.userId,
+    email: cached.email,
+    provider: cached.provider,
+    db: userScopedClient(cached.accessToken),
+  };
 }
 
 /** Cache lifetime: bounded by the bearer's own exp (the credential the
@@ -387,9 +425,12 @@ async function writeAuthCache(
     Date.now() + AUTH_CACHE_MAX_TTL_SECONDS * 1_000,
   );
   const ttlSeconds = Math.floor((expiresAtMs - Date.now()) / 1_000) - 30;
-  if (ttlSeconds >= 60) {
-    await cacheSet(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
-  }
+  if (ttlSeconds < 60) return;
+  // The verification that produced `entry` may have been answered before a
+  // logout/deletion that has since landed; never store what is already dead
+  // (or what cannot be checked because the revocation store is unreachable).
+  if ((await cacheRevoked(authRevocationMarkers(entry))) !== false) return;
+  await cacheSet(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
 }
 
 interface SupabaseSessionLike {
@@ -506,6 +547,7 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
         email: signIn.data.user.email ?? null,
         provider,
         accessToken: signIn.data.session.access_token,
+        sessionId: sessionIdOf(decodeJwtPayload(signIn.data.session.access_token)),
       },
       payload?.exp,
       signIn.data.session.expires_at,
@@ -533,6 +575,7 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
       email: verified.data.user.email ?? null,
       provider: sessionProvider,
       accessToken: token,
+      sessionId: sessionIdOf(payload),
     },
     payload?.exp,
     payload?.exp,
@@ -568,11 +611,17 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
- * its refresh token dies now; other devices stay signed in) and drop this
- * bearer from the auth cache so it stops working at this edge immediately. */
+ * its refresh token dies now; other devices stay signed in) and revoke it in
+ * the auth cache so every bearer of that session — this one on any isolate,
+ * its pre-rotation siblings, and one whose verification is still in flight —
+ * stops working at this edge immediately. */
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
+  const sessionId = sessionIdOf(decodeJwtPayload(token));
   await cacheDel(await authCacheKey(token));
+  if (sessionId) {
+    await cacheRevoke(sessionRevokedKey(sessionId), AUTH_REVOCATION_TTL_SECONDS);
+  }
   const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
     method: "POST",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
@@ -1508,8 +1557,11 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
   for (const trial of trials) {
     const trialId = isRecord(trial) ? trial.trialId : undefined;
     if (!isUuid(trialId)) {
+      // Only a string is ever echoed back; any other shape is client-controlled
+      // and never coerced (String() on a deeply nested array recurses until the
+      // stack overflows).
       rejected.push({
-        trialId: String(trialId ?? "unknown"),
+        trialId: typeof trialId === "string" ? trialId : "unknown",
         code: "evaluation.trial_invalid",
         message: "trialId must be a UUID.",
       });
@@ -2098,6 +2150,9 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
  * (lines 427-432): body ignored, request() maps 204 to null → respond 204.
  * Deleting an absent bookmark is a no-op (idempotent). */
 async function unsaveDrill(authed: AuthedUser, slug: string): Promise<Response> {
+  if (!DRILL_SLUG_RE.test(slug)) {
+    return codedError(400, "validation.saved_drill", "Invalid drill slug.");
+  }
   const deleted = await authed.db
     .from("user_saved_drills")
     .delete()
@@ -2623,14 +2678,14 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   }
 
   // Drop this user's cached derived state AND this bearer's verified-auth
-  // entry, so the bearer that just deleted the account cannot keep
-  // authenticating (any other cached bearer ages out within ≤10 min, and
-  // every query behind it hits RLS-empty rows).
+  // entry, then revoke the user so no other cached bearer of the deleted
+  // account (other isolates, other sessions) keeps authenticating either.
   await cacheDel(
     rankCacheKey(authed.id),
     progressCacheKey(authed.id),
     await authCacheKey(bearerOf(request)),
   );
+  await cacheRevoke(userRevokedKey(authed.id), AUTH_REVOCATION_TTL_SECONDS);
   console.warn(`[api] account deleted: ${authed.id}`);
   return json(200, { deleted: true, appleAuthorizationRevocation });
 }

@@ -106,10 +106,34 @@ export interface CacheEntryModel {
   writtenAtMs: number;
 }
 
+/** index.ts AUTH_REVOCATION_TTL_SECONDS — a session revocation marker
+ * outlives every cache entry it covers. */
+export const AUTH_REVOCATION_TTL_SECONDS = AUTH_CACHE_MAX_TTL_SECONDS + 60;
+
 /** index.ts readAuthCache/writeAuthCache + cache.ts L1 memory, keyed by the
- * raw bearer (the edge keys by sha256(bearer); the mapping is 1:1). */
+ * raw bearer (the edge keys by sha256(bearer); the mapping is 1:1), plus the
+ * per-session revocation markers logout writes (`auth-revoked:session:<id>`):
+ * a cached entry is served only while its session carries no marker, and a
+ * verification of a revoked session is never stored. */
 export class AuthCacheModel {
   entries = new Map<string, CacheEntryModel>();
+  /** sessionId → marker expiry (ms). */
+  revokedSessions = new Map<string, number>();
+
+  sessionRevoked(sessionId: string | null, now: number): boolean {
+    if (!sessionId) return false;
+    const until = this.revokedSessions.get(sessionId);
+    if (until === undefined) return false;
+    if (until <= now) {
+      this.revokedSessions.delete(sessionId);
+      return false;
+    }
+    return true;
+  }
+
+  revokeSession(sessionId: string, now: number): void {
+    this.revokedSessions.set(sessionId, now + AUTH_REVOCATION_TTL_SECONDS * 1_000);
+  }
 
   read(token: string, provider: Provider | null, now: number): CacheEntryModel | null {
     const entry = this.entries.get(token);
@@ -122,6 +146,10 @@ export class AuthCacheModel {
       (provider === null || entry.provider === provider) &&
       entry.expiresAtMs > now + AUTH_CACHE_READ_GUARD_MS
     ) {
+      if (this.sessionRevoked(entry.sessionId, now)) {
+        this.entries.delete(token);
+        return null;
+      }
       return entry;
     }
     return null;
@@ -143,6 +171,7 @@ export class AuthCacheModel {
     );
     const ttlSeconds = Math.floor((expiresAtMs - now) / 1_000) - 30;
     if (ttlSeconds < 60) return null;
+    if (this.sessionRevoked(entry.sessionId, now)) return null;
     const written: CacheEntryModel = {
       ...entry,
       expiresAtMs,
@@ -447,6 +476,10 @@ export class EdgeModel {
         return { ...authed, status: 404, reason: "route_ok" };
       case "logout": {
         this.cache.del(token);
+        const sessionId = payload?.session_id;
+        if (typeof sessionId === "string" && sessionId) {
+          this.cache.revokeSession(sessionId, now);
+        }
         const fault = this.fake.faults.get(token);
         if (fault && fault.kind === "logout" && fault.status >= 500) {
           return { ...authed, status: 503, reason: "logout_upstream_5xx" };

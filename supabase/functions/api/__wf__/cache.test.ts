@@ -188,9 +188,7 @@ Deno.test(
     const redis = fakeUpstash();
     try {
       const iso = await loadIsolate();
-      for (let i = 0; i < 5_000; i += 1) {
-        await iso.cache.cacheSet(`k${i}`, "v", 600);
-      }
+      for (let i = 0; i < 5_000; i += 1) await iso.cache.cacheSet(`k${i}`, "v", 600);
       assertEquals(await iso.cache.cacheGet("k0"), "v");
       await iso.cache.cacheSet("overflow", "v", 600);
       assertEquals(await iso.cache.cacheGet("k0"), null, "oldest entries evicted");
