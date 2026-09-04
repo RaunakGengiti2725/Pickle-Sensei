@@ -1,0 +1,29 @@
+{
+  "devices": {
+    "com.apple.CoreSimulator.SimRuntime.iOS-26-4": [
+      {
+        "dataPath": "/tmp/fixture",
+        "isAvailable": true,
+        "name": "iPhone 17 Pro",
+        "state": "Booted",
+        "udid": "FIXTURE-BOOTED-IPHONE-17-PRO"
+      },
+      {
+        "dataPath": "/tmp/fixture",
+        "isAvailable": true,
+        "name": "iPhone 17",
+        "state": "Shutdown",
+        "udid": "FIXTURE-SHUTDOWN-IPHONE-17"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [
+      {
+        "dataPath": "/tmp/fixture",
+        "isAvailable": true,
+        "name": "iPhone 16 Pro",
+        "state": "Shutdown",
+        "udid": "FIXTURE-OLDER-RUNTIME-IPHONE-16-PRO"
+      }
+    ]
+  }
+}
