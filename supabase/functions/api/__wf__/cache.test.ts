@@ -156,6 +156,39 @@ Deno.test(
 );
 
 Deno.test(
+  "without Redis L1 IS the store: entries keep the caller's full TTL (the cap only applies when L2 exists)",
+  async () => {
+    configureRedis(false);
+    const redis = fakeUpstash();
+    const clock = withClock(1_800_000_000_000);
+    try {
+      const iso = await loadIsolate();
+      await iso.cache.cacheSet("authfail:203.0.113.7", "30", 300);
+      await iso.cache.cacheSet(`auth:${await iso.cache.sha256Hex("t")}`, "verified", 570);
+      clock.advance((L1_BOUND_SECONDS + 1) * 1_000);
+      assertEquals(
+        await iso.cache.cacheGet("authfail:203.0.113.7"),
+        "30",
+        "authfail window intact",
+      );
+      clock.advance(238_000); // t = 299 s
+      assertEquals(await iso.cache.cacheGet("authfail:203.0.113.7"), "30");
+      assertEquals(await iso.cache.cacheGet(`auth:${await iso.cache.sha256Hex("t")}`), "verified");
+      clock.advance(1_000); // t = 300 s
+      assertEquals(
+        await iso.cache.cacheGet("authfail:203.0.113.7"),
+        null,
+        "expires at its own TTL",
+      );
+      assertEquals(redis.calls, 0, "no Redis traffic when unconfigured");
+    } finally {
+      clock.restore();
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
   "[defect] auth-failure counter: concurrent failures in one isolate collapse to a single increment",
   async () => {
     // Attackers do not fail serially. 40 concurrent bad-token requests all read

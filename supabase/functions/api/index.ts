@@ -569,7 +569,8 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
  * its refresh token dies now; other devices stay signed in) and drop this
- * bearer from the auth cache so it stops working at this edge immediately. */
+ * bearer from the auth cache so it stops working at this edge immediately
+ * (other isolates within cache.ts L1_MAX_TTL_SECONDS — see AGENTS.md). */
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
   await cacheDel(await authCacheKey(token));
@@ -2624,7 +2625,8 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
 
   // Drop this user's cached derived state AND this bearer's verified-auth
   // entry, so the bearer that just deleted the account cannot keep
-  // authenticating (any other cached bearer ages out within ≤10 min, and
+  // authenticating (other isolates drop their L1 shadow within
+  // L1_MAX_TTL_SECONDS; any other cached bearer ages out within ≤10 min, and
   // every query behind it hits RLS-empty rows).
   await cacheDel(
     rankCacheKey(authed.id),

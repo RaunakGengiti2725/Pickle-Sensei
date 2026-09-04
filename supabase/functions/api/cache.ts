@@ -12,6 +12,16 @@
 // here are short-lived derived state (verified session material, computed
 // rank/progress payloads, rate-limit counters) — the database remains the
 // only source of truth.
+//
+// With Redis configured, L1 is a SHADOW of L2, never an authority of its
+// own: an L1 entry lives at most L1_MAX_TTL_SECONDS whatever TTL the caller
+// asked for, after which the isolate re-reads L2. cacheDel() can only reach
+// the caller's own L1 map and Redis, so this cap is what bounds how long
+// another isolate can keep serving a deleted key (a revoked bearer, a busted
+// rank payload): ≤ L1_MAX_TTL_SECONDS after the DEL, on every isolate.
+// Without Redis there is no shared layer to re-read and L1 IS the store, so
+// entries keep the caller's full TTL (an authfail window must still last its
+// 300 s) — and no cross-isolate invalidation exists at all in that mode.
 
 const REDIS_URL = Deno.env.get("UPSTASH_REDIS_REST_URL") ?? null;
 const REDIS_TOKEN = Deno.env.get("UPSTASH_REDIS_REST_TOKEN") ?? null;
@@ -59,6 +69,10 @@ interface MemoryEntry {
 }
 
 const MEMORY_MAX_ENTRIES = 5_000;
+/** Upper bound on an L1 entry's lifetime while L2 (Redis) is configured,
+ * hence on cross-isolate staleness after a cacheDel(). Pinned by
+ * __wf__/cache.test.ts and AGENTS.md. */
+export const L1_MAX_TTL_SECONDS = 60;
 const memory = new Map<string, MemoryEntry>();
 
 function memoryGet(key: string): string | null {
@@ -87,7 +101,8 @@ function memorySet(key: string, value: string, ttlSeconds: number): void {
       }
     }
   }
-  memory.set(key, { value, expiresAtMs: Date.now() + ttlSeconds * 1_000 });
+  const l1TtlSeconds = redisConfigured() ? Math.min(ttlSeconds, L1_MAX_TTL_SECONDS) : ttlSeconds;
+  memory.set(key, { value, expiresAtMs: Date.now() + l1TtlSeconds * 1_000 });
 }
 
 // ─── Public cache API ────────────────────────────────────────────────────────
@@ -103,7 +118,7 @@ export async function cacheGet(key: string): Promise<string | null> {
   if (typeof value !== "string") return null;
   const ttl = Number(results?.[1]?.result);
   if (Number.isFinite(ttl) && ttl > 0) {
-    memorySet(key, value, Math.min(ttl, 60));
+    memorySet(key, value, ttl);
   }
   return value;
 }

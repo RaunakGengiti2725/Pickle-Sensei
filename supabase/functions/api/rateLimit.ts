@@ -5,6 +5,12 @@
 // Windows are aligned buckets (floor(now / window)), so a limit of 60/min
 // means at most 60 requests inside each clock minute per key. Limits fail
 // OPEN on backend errors: a Redis outage must never lock users out.
+//
+// The memory map is capped at MEMORY_WINDOW_MAX live windows. At the cap a
+// new key evicts the LEAST-USED live window (fewest hits, then soonest
+// reset) — never the whole map — so a flood of fresh ids can only ever
+// evict its own single-hit windows; a budget that is already exhausted stays
+// exhausted until its own reset.
 
 import { redisConfigured, redisWindowGet, redisWindowIncr } from "./cache.ts";
 
@@ -20,8 +26,29 @@ interface MemoryWindow {
   resetAtMs: number;
 }
 
-const MEMORY_WINDOW_MAX = 20_000;
+export const MEMORY_WINDOW_MAX = 20_000;
 const windows = new Map<string, MemoryWindow>();
+
+/** Live windows currently held by this isolate (diagnostics/tests). */
+export function memoryWindowCount(): number {
+  return windows.size;
+}
+
+function evictLeastUsedWindow(): void {
+  let victimKey: string | undefined;
+  let victim: MemoryWindow | undefined;
+  for (const [k, v] of windows) {
+    if (
+      victim === undefined ||
+      v.count < victim.count ||
+      (v.count === victim.count && v.resetAtMs < victim.resetAtMs)
+    ) {
+      victimKey = k;
+      victim = v;
+    }
+  }
+  if (victimKey !== undefined) windows.delete(victimKey);
+}
 
 function memoryIncr(key: string, windowSeconds: number): number {
   const now = Date.now();
@@ -30,11 +57,12 @@ function memoryIncr(key: string, windowSeconds: number): number {
     existing.count += 1;
     return existing.count;
   }
+  if (existing) windows.delete(key);
   if (windows.size >= MEMORY_WINDOW_MAX) {
     for (const [k, v] of windows) {
       if (v.resetAtMs <= now) windows.delete(k);
     }
-    if (windows.size >= MEMORY_WINDOW_MAX) windows.clear();
+    if (windows.size >= MEMORY_WINDOW_MAX) evictLeastUsedWindow();
   }
   windows.set(key, { count: 1, resetAtMs: now + windowSeconds * 1_000 });
   return 1;

@@ -55,6 +55,17 @@ refreshToken, expiresAt}` beside the account. Every other route takes the
   rotates it (per-IP budget, 401 counts as an auth failure);
   `POST /v1/auth/logout` revokes THIS device's session (`scope=local` — other
   devices stay signed in) and drops the bearer from the auth cache.
+  Cross-isolate revocation bound (2026-09-04): `cacheDel()` reaches Redis and
+  the CALLER's L1 only, so an isolate that verified the bearer keeps its own
+  L1 shadow — with Redis configured every L1 entry is capped at `cache.ts
+L1_MAX_TTL_SECONDS` (60 s) regardless of the caller's TTL (Redis keeps the
+  full ≤ 570 s auth TTL). A logged-out / deleted-account bearer is therefore
+  refused on every isolate ≤ 60 s after the DEL; pinned by
+  `__wf__/cache.test.ts` ("revoked on another isolate") and
+  `adjudicate_edge_auth_cache_ratelimit_repro.ts` D. Without Redis L1 is the
+  only store and keeps full TTLs (authfail windows must last 300 s), and no
+  cross-isolate invalidation exists — production must run with Upstash set.
+  Do not raise the cap without moving to a shared revocation marker.
   `authenticate()` still accepts a raw provider ID token TRANSITIONALLY for
   app builds that predate the contract — remove that branch once none are in
   the field. Deploy the edge fn BEFORE shipping the app build (an old server
@@ -85,7 +96,11 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   sessions ~10 min keyed by token hash — Supabase Auth is consulted once per
   user per window, not per request. `rateLimit.ts` enforces per-IP pre-auth,
   auth-failure, and per-user route budgets (429 + Retry-After; the mobile
-  outbox already treats 429 as retryable).
+  outbox already treats 429 as retryable). Its memory fallback holds at most
+  `MEMORY_WINDOW_MAX` (20 000) live windows; at the cap a new key evicts ONE
+  least-used window (fewest hits, then soonest reset) — never the whole map,
+  so a flood of fresh ids cannot reset an exhausted budget (pinned by
+  `__wf__/rateLimit.test.ts`).
 - Hot paths are RPCs from `20260831000000_scale_and_security.sql`:
   `access_state()` (1 round trip) and `apply_synced_shot(jsonb)` (atomic
   shot+details+permit write, SECURITY INVOKER so RLS applies). Rank/progress
