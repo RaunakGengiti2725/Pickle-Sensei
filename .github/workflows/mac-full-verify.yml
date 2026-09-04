@@ -1,7 +1,16 @@
 # Canonical Apple verification on the self-hosted Apple Silicon (M4) runner.
 # All logic lives in scripts/mac-full-verify.sh — this file only schedules it
-# and uploads the artifacts. From Linux, dispatch it with:
-#   scripts/mac-full-verify.sh --remote [--ref <branch>]
+# and uploads the artifacts.
+#
+# How it is triggered:
+#   * push to main            -> runs only when Apple-relevant paths changed
+#                                (decided by the `changes` job below)
+#   * push to ci/mac-**       -> ALWAYS runs. These branches are trigger
+#                                vehicles: `scripts/mac-full-verify.sh --remote`
+#                                pushes the commit under test there. Devin's
+#                                GitHub App token cannot call workflow_dispatch
+#                                (403), so this is the on-demand path.
+#   * workflow_dispatch       -> humans, from the Actions tab.
 #
 # No pull_request trigger on purpose: this is a PUBLIC repository and the
 # runner is a personal machine; fork PRs must never execute on it.
@@ -28,15 +37,6 @@ on:
         default: false
   push:
     branches: [main, "ci/mac-**"]
-    paths:
-      - "native/**"
-      - "apps/mobile/ios/**"
-      - "apps/mobile/package.json"
-      - "apps/mobile/package-lock.json"
-      - "apps/mobile/Gemfile*"
-      - "scripts/mac-full-verify.sh"
-      - "tools/macos-ci/**"
-      - ".github/workflows/mac-full-verify.yml"
 
 # One physical runner: never let two runs of the same ref fight over it.
 concurrency:
@@ -47,8 +47,38 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Apple-relevant change?
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: decide
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || [[ "${{ github.ref }}" == refs/heads/ci/mac-* ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "on-demand run"; exit 0
+          fi
+          if ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "no base commit ($BEFORE); running"; exit 0
+          fi
+          changed="$(git diff --name-only "$BEFORE" "$AFTER")"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(native/|apps/mobile/ios/|apps/mobile/package(-lock)?\.json$|apps/mobile/Gemfile|scripts/mac-full-verify\.sh$|tools/macos-ci/|\.github/workflows/mac-full-verify\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "no Apple-relevant paths changed; skipping the Mac"
+          fi
+
   mac-full-verify:
     name: scripts/mac-full-verify.sh
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 150
     env:

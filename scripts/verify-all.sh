@@ -2,13 +2,14 @@
 # Full cross-platform verification: Linux gates + real Apple verification.
 #
 #   scripts/verify-all.sh                  # verify-cloud.sh, then mac-full-verify.sh
-#   scripts/verify-all.sh --cloud-args "--tier pr" --mac-args "--skip-launch"
+#   scripts/verify-all.sh --cloud-args "--tier pr" --mac-args "--skip-launch"   # (--mac-args apply on macOS only)
 #   scripts/verify-all.sh --no-mac         # Linux only (same as verify-cloud.sh)
 #
-# On Linux the Mac half is dispatched to the self-hosted M4 runner through
-# GitHub Actions (scripts/mac-full-verify.sh --remote), so the current branch
-# must be pushed first; on macOS it runs locally. Both halves must pass for a
-# zero exit code; neither is ever silently skipped — use --no-mac explicitly.
+# On Linux the Mac half runs on the self-hosted M4 runner through GitHub
+# Actions (scripts/mac-full-verify.sh --remote pushes HEAD to a ci/mac-*
+# trigger branch), so HEAD must be committed; on macOS it runs locally. Both
+# halves must pass for a zero exit code; neither is ever silently skipped —
+# use --no-mac explicitly.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,7 +23,7 @@ while [ $# -gt 0 ]; do
     --cloud-args) CLOUD_ARGS="$2"; shift 2 ;;
     --mac-args) MAC_ARGS="$2"; shift 2 ;;
     --no-mac) RUN_MAC=0; shift ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n "2,13p" "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -38,15 +39,8 @@ if [ "$RUN_MAC" = 1 ]; then
     # shellcheck disable=SC2086
     scripts/mac-full-verify.sh $MAC_ARGS || STATUS=1
   else
-    BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-    if ! git diff --quiet HEAD -- . ':!artifacts' 2>/dev/null || [ -z "$(git ls-remote --heads origin "$BRANCH")" ] \
-       || [ "$(git rev-parse HEAD)" != "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" ]; then
-      echo "the M4 runner builds what is on origin/$BRANCH — commit and push first (HEAD differs or branch not pushed)" >&2
-      STATUS=1
-    else
-      # shellcheck disable=SC2086
-      scripts/mac-full-verify.sh --remote --ref "$BRANCH" $MAC_ARGS || STATUS=1
-    fi
+    # shellcheck disable=SC2086
+    scripts/mac-full-verify.sh --remote $MAC_ARGS || STATUS=1
   fi
 else
   echo "########## 2/2 Apple verification SKIPPED (--no-mac) — Apple-specific claims are unverified"

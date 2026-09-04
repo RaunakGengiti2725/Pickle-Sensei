@@ -34,8 +34,10 @@
 #   scripts/mac-full-verify.sh --skip-js             # skip tsc/jest on the Mac (Linux gate covers them)
 #   scripts/mac-full-verify.sh --clean               # wipe DerivedData / SwiftPM caches first
 # Usage (from Linux / a Devin Cloud session):
-#   scripts/mac-full-verify.sh --remote [--ref <branch>] [--skip-launch] [--clean]
-#     needs the GitHub CLI authenticated for RaunakGengiti2725/Pickle-Sensei.
+#   scripts/mac-full-verify.sh --remote [--ref <branch>]
+#     pushes HEAD to the trigger branch ci/mac-<branch>, waits for the "Mac Full
+#     Verify" run and downloads its artifacts to artifacts/mac-full-verify/<run>.
+#     Needs the GitHub CLI authenticated for RaunakGengiti2725/Pickle-Sensei.
 #
 # Never reads Keychain items, signing identities, or files outside the checkout
 # and the per-machine build cache ($PICKLE_CI_CACHE).
@@ -53,7 +55,7 @@ CLEAN=0
 REMOTE=0
 REF=""
 
-usage() { sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,43p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,24 +71,50 @@ while [ $# -gt 0 ]; do
 done
 
 # ------------------------------------------------------------- remote mode ----
+# Devin's GitHub App token cannot create workflow_dispatch events (HTTP 403),
+# so the on-demand path is a PUSH: the commit under test is pushed to a
+# `ci/mac-<slug>` trigger branch, which the workflow always runs for. The
+# trigger branch is a throwaway vehicle (never merged, force-updated freely).
 if [ "$REMOTE" = 1 ]; then
   command -v gh >/dev/null || { echo "gh (GitHub CLI) is required for --remote" >&2; exit 2; }
-  REF="${REF:-$(git rev-parse --abbrev-ref HEAD)}"
-  ARGS=(-f "clean_build=$([ $CLEAN = 1 ] && echo true || echo false)"
-        -f "launch_check=$([ $SKIP_LAUNCH = 1 ] && echo false || echo true)"
-        -f "js_checks=$([ $SKIP_JS = 1 ] && echo false || echo true)")
-  [ -n "$ONLY" ] && ARGS+=(-f "only=$ONLY")
-  echo "dispatching $WORKFLOW_FILE on ref $REF (self-hosted M4 runner)…"
-  gh workflow run "$WORKFLOW_FILE" --ref "$REF" "${ARGS[@]}" || exit 1
-  sleep 8
-  RUN_ID="$(gh run list --workflow "$WORKFLOW_FILE" --branch "$REF" --limit 1 --json databaseId --jq '.[0].databaseId')"
-  [ -n "$RUN_ID" ] || { echo "could not find the dispatched run" >&2; exit 1; }
+  if [ -n "$ONLY" ] || [ "$SKIP_LAUNCH" = 1 ] || [ "$SKIP_JS" = 1 ] || [ "$CLEAN" = 1 ]; then
+    echo "--remote always runs the full default set (all stages, launch check on, JS checks off);" >&2
+    echo "--only/--skip-launch/--skip-js/--clean are for local runs or the Actions UI." >&2
+    exit 2
+  fi
+  if ! git diff --quiet HEAD -- . ':!artifacts' 2>/dev/null; then
+    echo "working tree has uncommitted changes — the Mac builds a pushed commit; commit first" >&2
+    exit 2
+  fi
+  SHA="$(git rev-parse HEAD)"
+  SRC="${REF:-$(git rev-parse --abbrev-ref HEAD)}"
+  case "$SRC" in
+    ci/mac-*) TRIGGER="$SRC" ;;
+    *) TRIGGER="ci/mac-$(printf '%s' "$SRC" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-60)" ;;
+  esac
+  echo "pushing $SHA to trigger branch $TRIGGER (self-hosted M4 runner)…"
+  # A push that CREATES a branch does not evaluate as a change GitHub will run
+  # on reliably; create it at main's merge-base first, then move it to HEAD.
+  if [ -z "$(git ls-remote --heads origin "$TRIGGER")" ]; then
+    git fetch -q origin main
+    git push -q origin "$(git merge-base HEAD origin/main):refs/heads/$TRIGGER"
+  fi
+  git push -q --force-with-lease origin "HEAD:refs/heads/$TRIGGER" || exit 1
+  RUN_ID=""
+  for _ in $(seq 1 24); do
+    sleep 5
+    RUN_ID="$(gh run list --workflow "$WORKFLOW_FILE" --branch "$TRIGGER" --limit 5 \
+      --json databaseId,headSha --jq ".[] | select(.headSha==\"$SHA\") | .databaseId" | head -1)"
+    [ -n "$RUN_ID" ] && break
+  done
+  [ -n "$RUN_ID" ] || { echo "no $WORKFLOW_FILE run appeared for $SHA on $TRIGGER within 2 minutes" >&2; exit 1; }
   echo "run: $(gh run view "$RUN_ID" --json url --jq .url)"
-  gh run watch "$RUN_ID" --exit-status
+  gh run watch "$RUN_ID" --exit-status --interval 30
   RC=$?
   OUT="${MAC_ARTIFACTS:-artifacts/mac-full-verify/$RUN_ID}"
   mkdir -p "$OUT"
   gh run download "$RUN_ID" --dir "$OUT" && echo "artifacts downloaded to $OUT"
+  gh run view "$RUN_ID" --json databaseId,status,conclusion,url,headSha >"$OUT/run.json"
   exit $RC
 fi
 
