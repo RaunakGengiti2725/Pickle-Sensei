@@ -1,0 +1,332 @@
+[
+  {
+    "iteration": 50,
+    "gc": true,
+    "heapUsed": 105456976,
+    "heapTotal": 143646720,
+    "rss": 380538880,
+    "external": 14193111,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 73.75779323993251,
+    "meanMountMsLast50": 27.701317959977313,
+    "meanSettleMsLast50": 0.22330753998830916
+  },
+  {
+    "iteration": 100,
+    "gc": true,
+    "heapUsed": 103903096,
+    "heapTotal": 143384576,
+    "rss": 380637184,
+    "external": 14186643,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 67.59163666002452,
+    "meanMountMsLast50": 22.216177520034833,
+    "meanSettleMsLast50": 0.21800979995168746
+  },
+  {
+    "iteration": 150,
+    "gc": true,
+    "heapUsed": 100466648,
+    "heapTotal": 143122432,
+    "rss": 379809792,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 65.12729561996646,
+    "meanMountMsLast50": 20.417775339996442,
+    "meanSettleMsLast50": 0.19781549996696413
+  },
+  {
+    "iteration": 200,
+    "gc": true,
+    "heapUsed": 100710112,
+    "heapTotal": 143646720,
+    "rss": 381382656,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 69.53231527999043,
+    "meanMountMsLast50": 24.60554457996972,
+    "meanSettleMsLast50": 0.2443406199850142
+  },
+  {
+    "iteration": 250,
+    "gc": true,
+    "heapUsed": 100984312,
+    "heapTotal": 143646720,
+    "rss": 381382656,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 68.93465098000132,
+    "meanMountMsLast50": 23.056755760014056,
+    "meanSettleMsLast50": 0.22553921999409796
+  },
+  {
+    "iteration": 300,
+    "gc": true,
+    "heapUsed": 101031888,
+    "heapTotal": 143908864,
+    "rss": 382119936,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 67.79861043999902,
+    "meanMountMsLast50": 22.671138319969177,
+    "meanSettleMsLast50": 0.20662523998878896
+  },
+  {
+    "iteration": 350,
+    "gc": true,
+    "heapUsed": 101239840,
+    "heapTotal": 143908864,
+    "rss": 382386176,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 68.96840415995568,
+    "meanMountMsLast50": 23.524470879975706,
+    "meanSettleMsLast50": 0.2259499199874699
+  },
+  {
+    "iteration": 400,
+    "gc": true,
+    "heapUsed": 101396512,
+    "heapTotal": 144433152,
+    "rss": 382373888,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 73.69094460002147,
+    "meanMountMsLast50": 27.66093620000407,
+    "meanSettleMsLast50": 0.27853137996047733
+  },
+  {
+    "iteration": 450,
+    "gc": true,
+    "heapUsed": 101571624,
+    "heapTotal": 144695296,
+    "rss": 382726144,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 66.06541795996017,
+    "meanMountMsLast50": 21.023287019990384,
+    "meanSettleMsLast50": 0.18941848002374173
+  },
+  {
+    "iteration": 500,
+    "gc": true,
+    "heapUsed": 101674528,
+    "heapTotal": 144171008,
+    "rss": 382668800,
+    "external": 14184646,
+    "arrayBuffers": 10499967,
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 1
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "Timeout": 2
+      }
+    },
+    "meanTotalMsLast50": 67.6381564800255,
+    "meanMountMsLast50": 22.42347486000508,
+    "meanSettleMsLast50": 0.19748081999830902
+  }
+]

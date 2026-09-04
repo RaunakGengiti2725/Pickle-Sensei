@@ -1,0 +1,242 @@
+[
+  {
+    "seed": 119,
+    "iteration": 1,
+    "scenario": {
+      "seed": 119,
+      "analysisId": "db4f5db6-8545-4829-bdc1-c140c97c1b8a",
+      "captureId": "5d94f9e8-5e86-44d9-a70b-ddafdafb17a2",
+      "sessionId": "d782d073-1b6c-4d07-89fa-a95b6858c92d",
+      "owner": "92228a18-ff16-4120-b432-bd1ac811265e",
+      "capturedAtIso": "2026-09-01T10:00:00.000Z",
+      "evidence": "scored_no_sidecar",
+      "sync": "synced",
+      "training": "unconfigured",
+      "session": true,
+      "interaction": "feedback",
+      "unmount": "settled",
+      "stackDepth": 1,
+      "overallScore": 7.1,
+      "siblings": 2
+    },
+    "outcome": "HELD",
+    "failures": [],
+    "timings": {
+      "seedMs": 1.2593360003083944,
+      "mountMs": 158.37807599967346,
+      "settleMs": 0.7457769997417927,
+      "settleRounds": 0,
+      "interactionMs": 9.009440999943763,
+      "unmountMs": 1.7996559999883175,
+      "totalMs": 221.88835800020024
+    },
+    "rendered": {
+      "loaded": true,
+      "breakdown": true,
+      "missing": false,
+      "textLength": 2024,
+      "trainingStatus": "idle"
+    },
+    "residual": {
+      "timers": 0,
+      "storeSubscriptions": 0,
+      "eventSubscriptions": 1,
+      "statusBarStack": 0
+    },
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "replay": "cd apps/mobile && STRESS_SEED=119 node --expose-gc node_modules/jest/bin/jest.js --ci -i __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx"
+  },
+  {
+    "seed": 255,
+    "iteration": 2,
+    "scenario": {
+      "seed": 255,
+      "analysisId": "5f5259e6-4573-47ce-8041-90ae585201f9",
+      "captureId": "640a13b8-472d-4fa7-80a6-5420aeb37884",
+      "sessionId": null,
+      "owner": "b529de67-02d2-44d5-a9b4-76d293a3bbb9",
+      "capturedAtIso": "2026-09-01T10:00:00.000Z",
+      "evidence": "scored_no_session",
+      "sync": "synced",
+      "training": "configured_no_plan",
+      "session": true,
+      "interaction": "feedback",
+      "unmount": "settled",
+      "stackDepth": 2,
+      "overallScore": 8.7,
+      "siblings": 0
+    },
+    "outcome": "HELD",
+    "failures": [],
+    "timings": {
+      "seedMs": 0.4586350000463426,
+      "mountMs": 62.55900300014764,
+      "settleMs": 0.4142720000818372,
+      "settleRounds": 0,
+      "interactionMs": 5.331766999792308,
+      "unmountMs": 1.0599929997697473,
+      "totalMs": 115.77184200007468
+    },
+    "rendered": {
+      "loaded": true,
+      "breakdown": true,
+      "missing": false,
+      "textLength": 2090,
+      "trainingStatus": "idle"
+    },
+    "residual": {
+      "timers": 0,
+      "storeSubscriptions": 0,
+      "eventSubscriptions": 0,
+      "statusBarStack": 0
+    },
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "replay": "cd apps/mobile && STRESS_SEED=255 node --expose-gc node_modules/jest/bin/jest.js --ci -i __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx"
+  },
+  {
+    "seed": 330,
+    "iteration": 3,
+    "scenario": {
+      "seed": 330,
+      "analysisId": "6885b982-2227-494c-92cc-45fa45f8785a",
+      "captureId": "89699944-1436-476b-8137-ffbf7d7d8585",
+      "sessionId": "d1c44597-e0d8-40dd-8336-cd8a915c5cd4",
+      "owner": "99382282-e7f2-4fcb-9f57-4cb2c611d65c",
+      "capturedAtIso": "2026-09-01T10:00:00.000Z",
+      "evidence": "scored_no_sidecar",
+      "sync": "synced",
+      "training": "unconfigured",
+      "session": true,
+      "interaction": "feedback",
+      "unmount": "settled",
+      "stackDepth": 1,
+      "overallScore": 4.7,
+      "siblings": 0
+    },
+    "outcome": "HELD",
+    "failures": [],
+    "timings": {
+      "seedMs": 0.2569490000605583,
+      "mountMs": 46.726236999966204,
+      "settleMs": 0.3441189997829497,
+      "settleRounds": 0,
+      "interactionMs": 2.375351999886334,
+      "unmountMs": 0.6121539999730885,
+      "totalMs": 95.6932810000144
+    },
+    "rendered": {
+      "loaded": true,
+      "breakdown": true,
+      "missing": false,
+      "textLength": 1994,
+      "trainingStatus": "idle"
+    },
+    "residual": {
+      "timers": 0,
+      "storeSubscriptions": 0,
+      "eventSubscriptions": 0,
+      "statusBarStack": 0
+    },
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "replay": "cd apps/mobile && STRESS_SEED=330 node --expose-gc node_modules/jest/bin/jest.js --ci -i __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx"
+  },
+  {
+    "seed": 396,
+    "iteration": 4,
+    "scenario": {
+      "seed": 396,
+      "analysisId": "3f12d592-62c2-4e51-a83d-1ec4af25e8bf",
+      "captureId": "e6e0efa5-95ad-4441-9308-3035e2fc9e6a",
+      "sessionId": null,
+      "owner": "e1ef3d70-0835-410f-9b22-17f6105d4c75",
+      "capturedAtIso": "2026-09-01T10:00:00.000Z",
+      "evidence": "scored_no_session",
+      "sync": "synced",
+      "training": "unconfigured",
+      "session": true,
+      "interaction": "feedback",
+      "unmount": "settled",
+      "stackDepth": 3,
+      "overallScore": 6.9,
+      "siblings": 0
+    },
+    "outcome": "HELD",
+    "failures": [],
+    "timings": {
+      "seedMs": 0.26281500002369285,
+      "mountMs": 53.697391000110656,
+      "settleMs": 0.35077500017359853,
+      "settleRounds": 0,
+      "interactionMs": 2.4658920001238585,
+      "unmountMs": 0.7876049997285008,
+      "totalMs": 103.16286600008607
+    },
+    "rendered": {
+      "loaded": true,
+      "breakdown": true,
+      "missing": false,
+      "textLength": 1994,
+      "trainingStatus": "idle"
+    },
+    "residual": {
+      "timers": 0,
+      "storeSubscriptions": 0,
+      "eventSubscriptions": 0,
+      "statusBarStack": 0
+    },
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "replay": "cd apps/mobile && STRESS_SEED=396 node --expose-gc node_modules/jest/bin/jest.js --ci -i __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx"
+  },
+  {
+    "seed": 495,
+    "iteration": 5,
+    "scenario": {
+      "seed": 495,
+      "analysisId": "ca193260-af9f-4084-a189-447bed456b29",
+      "captureId": "24f16297-2bf3-46fa-8024-fc76353a50ca",
+      "sessionId": null,
+      "owner": "1f28f4dc-444e-4251-8b0e-56d6132d179d",
+      "capturedAtIso": "2026-09-01T10:00:00.000Z",
+      "evidence": "scored_no_session",
+      "sync": "synced",
+      "training": "configured_no_plan",
+      "session": true,
+      "interaction": "feedback",
+      "unmount": "settled",
+      "stackDepth": 3,
+      "overallScore": 6.3,
+      "siblings": 0
+    },
+    "outcome": "HELD",
+    "failures": [],
+    "timings": {
+      "seedMs": 0.31650499999523163,
+      "mountMs": 52.20538499997929,
+      "settleMs": 0.33218300016596913,
+      "settleRounds": 0,
+      "interactionMs": 2.292730000335723,
+      "unmountMs": 0.6522829998284578,
+      "totalMs": 101.44165099970996
+    },
+    "rendered": {
+      "loaded": true,
+      "breakdown": true,
+      "missing": false,
+      "textLength": 2090,
+      "trainingStatus": "idle"
+    },
+    "residual": {
+      "timers": 0,
+      "storeSubscriptions": 0,
+      "eventSubscriptions": 0,
+      "statusBarStack": 0
+    },
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "replay": "cd apps/mobile && STRESS_SEED=495 node --expose-gc node_modules/jest/bin/jest.js --ci -i __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx"
+  }
+]

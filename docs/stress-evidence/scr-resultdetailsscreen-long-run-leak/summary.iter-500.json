@@ -1,0 +1,242 @@
+{
+  "unit": "scr-resultdetailsscreen",
+  "lens": "long-run-leak",
+  "generatedAt": "2026-09-04T23:56:07.307Z",
+  "iterationsRequested": 500,
+  "seedStart": 1,
+  "onlySeeds": null,
+  "executed": 500,
+  "held": 500,
+  "broken": 0,
+  "brokenSeeds": [],
+  "byInvariant": {},
+  "wallMs": 34810,
+  "gcExposed": true,
+  "checkpointEvery": 50,
+  "baseline": {
+    "resources": {
+      "timers": 0,
+      "timeouts": 0,
+      "intervals": 0,
+      "storeSubscriptions": {
+        "training": 0,
+        "consistency": 0,
+        "apiSession": 0,
+        "access": 0,
+        "auth": 0,
+        "app": 0
+      },
+      "eventSubscriptions": {
+        "AppState": 0,
+        "AccessibilityInfo": 0
+      },
+      "statusBarStack": 0,
+      "activeResources": {
+        "FSReqCallback": 1,
+        "PipeWrap": 1,
+        "ProcessWrap": 1,
+        "Timeout": 3
+      }
+    },
+    "heap": {
+      "rss": 207691776,
+      "heapTotal": 131411968,
+      "heapUsed": 92036968,
+      "external": 14077258,
+      "arrayBuffers": 10319299
+    }
+  },
+  "heapSlope": {
+    "bytesPerIteration": -5342.576484848485,
+    "percentPer100": -0.5066119556517992,
+    "monotoneShare": 0.7777777777777778,
+    "first": 105456976,
+    "last": 101674528,
+    "points": 10
+  },
+  "heapSlopeLimitPercentPer100": 5,
+  "drift": {
+    "firstWindowMeanTotalMs": 70.67471494997852,
+    "lastWindowMeanTotalMs": 66.85178721999284,
+    "firstWindowMeanMountMs": 24.958747740006075,
+    "lastWindowMeanMountMs": 21.723380939997732,
+    "firstWindowMeanSettleMs": 0.2206586699699983,
+    "lastWindowMeanSettleMs": 0.19344965001102538,
+    "p50TotalMs": 66.83309400035068,
+    "p95TotalMs": 97.14714200003073,
+    "maxTotalMs": 153.11586900008842
+  },
+  "byEvidence": {
+    "scored_no_session": {
+      "executed": 79,
+      "broken": 0
+    },
+    "missing": {
+      "executed": 96,
+      "broken": 0
+    },
+    "scored_no_sidecar": {
+      "executed": 94,
+      "broken": 0
+    },
+    "scored_full": {
+      "executed": 78,
+      "broken": 0
+    },
+    "scored_sidecar_mismatch": {
+      "executed": 90,
+      "broken": 0
+    },
+    "abstained": {
+      "executed": 63,
+      "broken": 0
+    }
+  },
+  "bySync": {
+    "synced": {
+      "executed": 116,
+      "broken": 0
+    },
+    "rejected": {
+      "executed": 139,
+      "broken": 0
+    },
+    "exhausted": {
+      "executed": 104,
+      "broken": 0
+    },
+    "queued": {
+      "executed": 141,
+      "broken": 0
+    }
+  },
+  "byTraining": {
+    "unconfigured": {
+      "executed": 166,
+      "broken": 0
+    },
+    "configured_no_plan": {
+      "executed": 191,
+      "broken": 0
+    },
+    "configured_offline": {
+      "executed": 143,
+      "broken": 0
+    }
+  },
+  "byInteraction": {
+    "none": {
+      "executed": 302,
+      "broken": 0
+    },
+    "open_form_review": {
+      "executed": 36,
+      "broken": 0
+    },
+    "toggle_replay": {
+      "executed": 27,
+      "broken": 0
+    },
+    "open_attempt": {
+      "executed": 17,
+      "broken": 0
+    },
+    "back": {
+      "executed": 53,
+      "broken": 0
+    },
+    "start_replay": {
+      "executed": 31,
+      "broken": 0
+    },
+    "expand_rows": {
+      "executed": 29,
+      "broken": 0
+    },
+    "feedback": {
+      "executed": 5,
+      "broken": 0
+    }
+  },
+  "byUnmount": {
+    "during_load": {
+      "executed": 103,
+      "broken": 0
+    },
+    "settled": {
+      "executed": 397,
+      "broken": 0
+    }
+  },
+  "bySession": {
+    "true": {
+      "executed": 259,
+      "broken": 0
+    },
+    "false": {
+      "executed": 241,
+      "broken": 0
+    }
+  },
+  "byStackDepth": {
+    "1": {
+      "executed": 176,
+      "broken": 0
+    },
+    "2": {
+      "executed": 174,
+      "broken": 0
+    },
+    "3": {
+      "executed": 150,
+      "broken": 0
+    }
+  },
+  "finalResources": {
+    "timers": 0,
+    "timeouts": 0,
+    "intervals": 0,
+    "storeSubscriptions": {
+      "training": 0,
+      "consistency": 0,
+      "apiSession": 0,
+      "access": 0,
+      "auth": 0,
+      "app": 0
+    },
+    "eventSubscriptions": {
+      "AppState": 0,
+      "AccessibilityInfo": 1
+    },
+    "statusBarStack": 0,
+    "activeResources": {
+      "Timeout": 2
+    }
+  },
+  "nativeMockCallTotals": {
+    "performance.now": 3974956,
+    "NativeModules.NativeAnimatedModule.createAnimatedNode": 10540,
+    "NativeModules.NativeAnimatedModule.addListener": 7544,
+    "NativeModules.NativeAnimatedModule.removeListeners": 7544,
+    "NativeModules.NativeAnimatedModule.startListeningToAnimatedNodeValue": 7044,
+    "NativeModules.NativeAnimatedModule.stopListeningToAnimatedNodeValue": 7044,
+    "NativeModules.NativeAnimatedModule.addAnimatedEventToView": 7044,
+    "NativeModules.NativeAnimatedModule.removeAnimatedEventFromView": 7044,
+    "NativeModules.NativeAnimatedModule.dropAnimatedNode": 4500,
+    "NativeModules.NativeAnimatedModule.connectAnimatedNodes": 4000,
+    "NativeModules.NativeAnimatedModule.disconnectAnimatedNodes": 4000,
+    "NativeModules.NativeAnimatedModule.connectAnimatedNodeToView": 1000
+  },
+  "storeSubscriptionTotals": {
+    "training": 4328,
+    "consistency": 0,
+    "apiSession": 0,
+    "access": 0,
+    "auth": 0,
+    "app": 0
+  },
+  "eventSubscriptionTotals": {
+    "AppState": 0,
+    "AccessibilityInfo": 1
+  }
+}

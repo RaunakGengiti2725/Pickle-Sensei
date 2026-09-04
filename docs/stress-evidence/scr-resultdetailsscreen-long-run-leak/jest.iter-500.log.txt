@@ -1,0 +1,10 @@
+PASS __tests__/stress/resultDetailsScreen.longRunLeak.stress.test.tsx (35.575 s)
+  ResultDetailsScreen — long-run leak campaign (real navigator + providers + SQLite)
+    ✓ holds every per-mount resource at baseline across the seeded mount/unmount campaign (34792 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       1 passed, 1 total
+Snapshots:   0 total
+Time:        35.679 s
+Ran all test suites matching /__tests__\/stress\/resultDetailsScreen.longRunLeak.stress.test.tsx/i.
+EXIT 0
