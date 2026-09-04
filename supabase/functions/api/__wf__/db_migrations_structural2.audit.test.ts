@@ -332,7 +332,7 @@ Deno.test({
       };
 
       await t.step(
-        "DEFECT (P2): a concurrent retry of the SAME shot sync must replay-accept, not be rejected as access.permit_not_reserved",
+        "DEFECT (P3): a concurrent retry of the SAME shot sync must replay-accept, not be rejected as access.permit_not_reserved",
         async () => {
           await seedConcurrent(ALICE, "g-c1", ["k1"]);
           const shot = "00000000-0000-4000-8000-00000000ee01";
@@ -357,7 +357,9 @@ Deno.test({
           // 20260902150000_free_rating_identity_ledger.sql:400 — "Lock the permit
           // so a concurrent retry of the same sync serializes here" — and the
           // unique_violation handler promise "ours → replay-accept". The retry
-          // serializes, then hits the status check first and is refused.
+          // serializes, then hits the status check first and is refused. The
+          // edge's batched replay lookup (index.ts syncShots) heals this on the
+          // NEXT drain, but the mobile outbox counts the verdict as permanent.
           assertEquals(
             b.find((l) => l.startsWith("B:")),
             "B:accepted",
