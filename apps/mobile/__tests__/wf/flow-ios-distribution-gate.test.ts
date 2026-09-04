@@ -11,6 +11,8 @@
  * externally or submit for review; the ASC key comes from the environment.
  */
 
+export {};
+
 // The mobile tsconfig has no Node types (matches flow-app-store-compliance).
 declare const require: (id: string) => unknown;
 declare const __dirname: string;
