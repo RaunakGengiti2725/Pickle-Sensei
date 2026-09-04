@@ -2,6 +2,12 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PaddleFrameLabel } from "./annotationSchema.js";
+import {
+  benchExcludedCaseIds,
+  HOLDOUT_LEDGER_PATH,
+  loadHoldoutLedger,
+  type HoldoutLedger,
+} from "./holdoutRotation.js";
 
 /**
  * REAL paddle benchmark scoring: human center-point labels vs the tracker's
@@ -114,7 +120,7 @@ function nearestPrediction(
 
 // ── CLI ────────────────────────────────────────────────────────────────────
 
-interface BenchManifest {
+export interface BenchManifest {
   schemaVersion: 1;
   provenance: string;
   coverageGaps?: string[];
@@ -126,6 +132,32 @@ interface BenchManifest {
     sourceKey?: string;
     sessionKey?: string;
   }>;
+}
+
+/**
+ * Manifest cases the holdout ledger forbids scoring: designated SHADOW_HOLDOUT
+ * successors (and any zero-budget ACTIVE holdout). Returns one message per
+ * offending case, naming the case and the ledger; empty when the manifest is
+ * clean. The CLI refuses the whole manifest on any hit — a successor scored
+ * once as a dev case is contaminated for good.
+ */
+export function ledgerExclusionViolations(
+  manifest: Pick<BenchManifest, "cases">,
+  ledger: HoldoutLedger,
+): string[] {
+  const excluded = new Set(benchExcludedCaseIds(ledger));
+  const successors = new Set(ledger.successors.map((designated) => designated.caseId));
+  const violations: string[] = [];
+  for (const benchCase of manifest.cases) {
+    if (!excluded.has(benchCase.id)) continue;
+    const role = successors.has(benchCase.id)
+      ? "a designated SHADOW_HOLDOUT successor"
+      : "a zero-budget ACTIVE holdout";
+    violations.push(
+      `case ${benchCase.id} is ${role} in ${HOLDOUT_LEDGER_PATH} — inspection budget 0, it must not be scored by paddle-bench`,
+    );
+  }
+  return violations;
 }
 
 const isMain = process.argv[1]?.endsWith("paddleBench.ts");
@@ -141,6 +173,14 @@ if (isMain) {
   const baseDir = dirname(manifestPath);
   if (manifest.provenance === "synthetic") {
     console.error("paddle-bench refuses synthetic provenance; this benchmark is for REAL footage.");
+    process.exit(1);
+  }
+  const exclusionViolations = ledgerExclusionViolations(manifest, loadHoldoutLedger());
+  if (exclusionViolations.length > 0) {
+    console.error(
+      `paddle-bench refuses ${manifestPath}: ${exclusionViolations.length} case(s) are excluded by ${HOLDOUT_LEDGER_PATH}`,
+    );
+    for (const violation of exclusionViolations) console.error(`  ${violation}`);
     process.exit(1);
   }
   const results: PaddleBenchCaseResult[] = [];

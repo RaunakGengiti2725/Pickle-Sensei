@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { benchExcludedCaseIds, heldOutCaseIds, loadHoldoutLedger } from "./holdoutRotation.js";
 
 /**
  * F10 speed-gap experiment: measures pose-free TEMPORAL signals over the
@@ -16,13 +17,16 @@ import { fileURLToPath } from "node:url";
  *  - inter-frame timing: container frame-timestamp delta statistics
  *  - optical-flow proxy: block-matching velocity distribution (128x72 gray)
  *
- * Held-out cases (wm-dink-01, afn-vic-rally1) are never read. Fresh
+ * Held-out cases (per datasets/holdouts/ledger.json — the governed holdouts
+ * and their designated SHADOW_HOLDOUT successors) are never read. Fresh
  * candidates are measured for verification only (would a candidate signal
  * falsely reject them) — no thresholds are fit to them.
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const HELD_OUT = new Set(["wm-dink-01", "afn-vic-rally1"]);
+const HOLDOUT_LEDGER = loadHoldoutLedger(repoRoot);
+const HELD_OUT = new Set(heldOutCaseIds(HOLDOUT_LEDGER));
+const LEDGER_EXCLUDED = new Set(benchExcludedCaseIds(HOLDOUT_LEDGER));
 const TUNE_POSITIVES = ["afn-sasebo-rally1", "wm-volley-02"];
 const SPEED_FACTORS = [1.5, 2, 3];
 /** Bound decode work on long fresh candidates; deterministic prefix. */
@@ -316,6 +320,7 @@ export function runSpeedGapExperiment(): SpeedGapMeasurement[] {
     }
     const freshDir = join(repoRoot, "datasets", "pickleball", "fresh-candidates");
     for (const file of readdirSync(freshDir).filter((f) => f.endsWith(".mp4"))) {
+      if (LEDGER_EXCLUDED.has(file.replace(/\.mp4$/, ""))) continue;
       measurements.push(
         measureClip(
           file.replace(/\.mp4$/, ""),

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
 import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
+import { benchExcludedCaseIds, loadHoldoutLedger } from "../src/holdoutRotation.js";
 
 /**
  * D3-11 red team: adversarial NEAR-MISS fixtures for the OOD gate — inputs
@@ -186,7 +187,12 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
     { timeout: 360_000 },
     async () => {
       const fresh = join(root, "datasets", "pickleball", "fresh-candidates");
-      const files = readdirSync(fresh).filter((f) => f.endsWith(".mp4"));
+      // Designated SHADOW_HOLDOUT successors (inspection budget 0) are never
+      // decoded here — the ledger, not this suite, decides what is fresh.
+      const ledgerExcluded = new Set(benchExcludedCaseIds(loadHoldoutLedger(root)));
+      const files = readdirSync(fresh)
+        .filter((f) => f.endsWith(".mp4"))
+        .filter((f) => !ledgerExcluded.has(f.replace(/\.mp4$/, "")));
       expect(files.length).toBeGreaterThanOrEqual(6);
       const rejected: string[] = [];
       for (const f of files) {

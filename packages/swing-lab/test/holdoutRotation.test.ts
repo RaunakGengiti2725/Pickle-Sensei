@@ -490,7 +490,7 @@ describe("fail-closed: loadHoldoutLedger surfaces typed governance errors", () =
   it("a ledger whose entries lack an inspections array is rejected at load time", () => {
     const broken = { ...entry(), inspections: undefined };
     const error = loadError(
-      tempRoot(JSON.stringify(ledger({ holdouts: [broken as HoldoutEntry] }))),
+      tempRoot(JSON.stringify(ledger({ holdouts: [broken as unknown as HoldoutEntry] }))),
     );
     expect(error.code).toBe("LEDGER_MALFORMED");
     expect(error.problems.join(" ")).toContain("inspections");

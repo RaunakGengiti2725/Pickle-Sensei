@@ -9,6 +9,7 @@ import {
 } from "@pickle/shared-types";
 import { REPO_ROOT } from "./engine/corpus.js";
 import { DRILL_LIBRARY_V0, validateCoachReview, type CoachReview } from "./coachReview.js";
+import { heldOutCaseIds, loadHoldoutLedger } from "./holdoutRotation.js";
 
 /**
  * COACH GATES — machine checker over the FROZEN release-criteria spec
@@ -27,7 +28,26 @@ export const COACH_GATES_SPEC_PATH = "datasets/coach-review/gates/coach-gates.v1
 export const COACH_GATES_V1_SHA256 =
   "087bfe467e6fb56c2246c21f94a7a46a1ef81031ba6f0b7de6f0828093a63759" as const;
 
-export const HELD_OUT_CASE_IDS = ["wm-dink-01", "afn-vic-rally1"] as const;
+const HOLDOUT_LEDGER = loadHoldoutLedger();
+
+/**
+ * Governed holdout case ids, read from datasets/holdouts/ledger.json (ledger
+ * order). These are the cases whose coach reviews must never count toward a
+ * gate. A missing or malformed ledger throws a typed `HoldoutLedgerError`
+ * at import — a static fallback list would silently un-govern the cases.
+ */
+export const HELD_OUT_CASE_IDS: readonly string[] = Object.freeze(
+  HOLDOUT_LEDGER.holdouts.map((holdout) => holdout.caseId),
+);
+
+/**
+ * Full ledger-derived exclusion set: the governed holdouts unioned with every
+ * designated zero-budget (SHADOW_HOLDOUT) successor. Consulted for coach
+ * review exclusion so a successor cannot be scored as development data.
+ */
+export const HELD_OUT_EXCLUSION_IDS: readonly string[] = Object.freeze(
+  heldOutCaseIds(HOLDOUT_LEDGER),
+);
 
 export type GateVerdict = "PASS" | "FAIL" | "NOT_EVALUABLE";
 
@@ -110,8 +130,8 @@ export interface CoachEvidence {
   reviewFileCount: number;
 }
 
-function isHeldOutQueueItem(queueItemId: string): boolean {
-  return HELD_OUT_CASE_IDS.some((caseId) => queueItemId.startsWith(`${caseId}-E`));
+export function isHeldOutQueueItem(queueItemId: string): boolean {
+  return HELD_OUT_EXCLUSION_IDS.some((caseId) => queueItemId.startsWith(`${caseId}-E`));
 }
 
 /** Collect the only evidence that counts: valid, provisioned, non-held-out reviews. */
