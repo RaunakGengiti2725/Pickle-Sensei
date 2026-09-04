@@ -22,6 +22,8 @@ import {
   collectDatasetReleases,
   collectProvenance,
   datasetsInputTreeSha,
+  describeTreeDirt,
+  dirtyTreeCaveats,
   executeBench,
   isTreeDirty,
   runRegression,
@@ -95,6 +97,26 @@ describe("provenance", () => {
     expect(untrackedDatasetInputs(repo)).toEqual(["datasets/gold/extra.json"]);
     expect(isTreeDirty(repo)).toBe(true);
     expect(datasetsInputTreeSha(repo)).toBe(datasetsInputTreeSha(repo));
+
+    // The caveat names the kind of dirt that is actually present.
+    const untrackedOnly = describeTreeDirt(repo);
+    expect(untrackedOnly).toEqual({
+      trackedChanges: [],
+      untrackedDatasetInputs: ["datasets/gold/extra.json"],
+    });
+    const untrackedCaveats = dirtyTreeCaveats(untrackedOnly);
+    expect(untrackedCaveats).toHaveLength(1);
+    expect(untrackedCaveats[0]).toContain("untracked dataset inputs (1: datasets/gold/extra.json)");
+    expect(untrackedCaveats[0]).not.toContain("uncommitted tracked changes");
+
+    writeFileSync(join(repo, "datasets/gold/a.json"), "4");
+    const both = describeTreeDirt(repo);
+    expect(both.trackedChanges).toEqual(["datasets/gold/a.json"]);
+    const bothCaveats = dirtyTreeCaveats(both);
+    expect(bothCaveats).toHaveLength(2);
+    expect(bothCaveats[0]).toContain("uncommitted tracked changes (1: datasets/gold/a.json)");
+    expect(bothCaveats[1]).toContain("untracked dataset inputs (1: datasets/gold/extra.json)");
+    expect(dirtyTreeCaveats({ trackedChanges: [], untrackedDatasetInputs: [] })).toEqual([]);
   });
 
   it("accepts only single-component run ids", () => {
@@ -137,8 +159,8 @@ describe("executeBench", () => {
     caveats: [],
   };
 
-  it("records ok in-process results with a null exit code and a wall clock", () => {
-    const record = executeBench(
+  it("records ok in-process results with a null exit code and a wall clock", async () => {
+    const record = await executeBench(
       {
         ...definition,
         kind: "in_process",
@@ -153,8 +175,8 @@ describe("executeBench", () => {
     expect(record.error).toBeNull();
   });
 
-  it("turns a throwing bench into a failed record carrying the subprocess exit code", () => {
-    const record = executeBench(
+  it("turns a throwing bench into a failed record carrying the subprocess exit code", async () => {
+    const record = await executeBench(
       {
         ...definition,
         kind: "subprocess",
@@ -170,8 +192,8 @@ describe("executeBench", () => {
     expect(record.error).toContain("exited 1");
   });
 
-  it("uses -1 when a subprocess bench failed before spawning anything", () => {
-    const record = executeBench(
+  it("uses -1 when a subprocess bench failed before spawning anything", async () => {
+    const record = await executeBench(
       {
         ...definition,
         kind: "subprocess",
@@ -257,8 +279,8 @@ describe("resolveUserPath", () => {
 describe("runRegression (real in-process bench, isolated out dir)", () => {
   const outDir = join(scratch, "reports");
 
-  it("writes exactly one validated summary and refuses to overwrite it", () => {
-    const result = runRegression({
+  it("writes exactly one validated summary and refuses to overwrite it", async () => {
+    const result = await runRegression({
       outDir,
       only: ["contact_replay"],
       runId: "test-run",
@@ -277,27 +299,27 @@ describe("runRegression (real in-process bench, isolated out dir)", () => {
     expect(result.summary.totalWallClockMs).toBeGreaterThanOrEqual(
       result.summary.benches[0]!.wallClockMs,
     );
-    expect(() =>
+    await expect(
       runRegression({ outDir, only: ["contact_replay"], runId: "test-run", log: () => {} }),
-    ).toThrow(/refusing to overwrite/);
+    ).rejects.toThrow(/refusing to overwrite/);
   });
 
-  it("rejects unknown bench ids before running anything", () => {
-    expect(() =>
+  it("rejects unknown bench ids before running anything", async () => {
+    await expect(
       runRegression({ outDir, only: ["not_a_bench"], runId: "never", log: () => {} }),
-    ).toThrow(/unknown bench id "not_a_bench"/);
+    ).rejects.toThrow(/unknown bench id "not_a_bench"/);
     expect(existsSync(join(outDir, "never.json"))).toBe(false);
   });
 
-  it("rejects a run id that would escape the out dir before running anything", () => {
-    expect(() =>
+  it("rejects a run id that would escape the out dir before running anything", async () => {
+    await expect(
       runRegression({ outDir, only: ["contact_replay"], runId: "../escape", log: () => {} }),
-    ).toThrow(/invalid run id/);
+    ).rejects.toThrow(/invalid run id/);
     expect(existsSync(join(scratch, "escape.json"))).toBe(false);
   });
 
-  it("compares two summaries of the same run as clean via the CLI", () => {
-    const second = runRegression({
+  it("compares two summaries of the same run as clean via the CLI", async () => {
+    const second = await runRegression({
       outDir,
       only: ["contact_replay"],
       runId: "test-run-2",

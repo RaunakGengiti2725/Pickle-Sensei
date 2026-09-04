@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import { dominantWristSpeeds } from "./engine/minerCore.js";
 import { buildPlayerTracks, targetPoseSequence, type PeopleFile } from "./playerTracker.js";
@@ -8,7 +8,11 @@ import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
 /**
  * EVENT COMPLETION BENCH — FIXED 1.5s post-roll vs ADAPTIVE settle detection.
  *
- *   pnpm lab:completion-bench
+ *   pnpm lab:completion-bench [-- out.json]
+ *
+ * Without `out.json` the report lands in datasets/completion-bench/ as
+ * completion-<ts>.json; with it, the report is written to that path only
+ * (the regression runner passes a scratch path).
  *
  * The live capture finalizes a stroke clip a FIXED 1.5s after the motion
  * trigger. That is a guess, not movement understanding. This bench replays
@@ -264,9 +268,10 @@ if (isMain) {
     summary: { FIXED: summarize("fixed"), ADAPTIVE: summarize("adaptive") },
     rows,
   };
-  const outDir = join(REPO_ROOT, "datasets/completion-bench");
-  mkdirSync(outDir, { recursive: true });
-  const outPath = join(outDir, `completion-${Date.now()}.json`);
+  const outPath = process.argv[2]
+    ? resolve(process.argv[2])
+    : join(REPO_ROOT, "datasets/completion-bench", `completion-${Date.now()}.json`);
+  mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify(report, null, 2));
   console.log("═".repeat(74));
   console.log(`EVENT COMPLETION: FIXED 1.5s vs ADAPTIVE settle (n=${usable.length} gold events)`);
