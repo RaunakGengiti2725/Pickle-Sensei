@@ -1,0 +1,1 @@
+../../../../../native/vision-core/Sources/TemporalStrokeDetector.swift
