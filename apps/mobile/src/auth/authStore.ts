@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 import { create } from 'zustand';
 import {
   AccountBootstrapError,
@@ -60,8 +60,9 @@ import {
  * UUID—not an Apple user identifier or Google subject. Bearer material lives
  * in the in-memory ApiSession store; the only durable credential is the
  * refresh token in the device Keychain (sessionVault.ts), which is what lets a
- * relaunch come back signed in. Nothing about a synced account is ever
- * persisted in SQLite.
+ * relaunch come back signed in. No credential of a synced account is ever
+ * persisted in SQLite (the sign-out tombstone below names a Keychain record
+ * by account id and a one-way digest — nothing that can be used).
  */
 export type AuthProvider = 'apple' | 'google' | 'guest';
 
@@ -114,6 +115,13 @@ interface AuthState {
   error: AuthError | null;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
+  /**
+   * True while the signed-in session's refresh token could NOT be written to
+   * the Keychain: the user is signed in for this run, but a relaunch would
+   * not find the session. The write is retried on every return to the
+   * foreground and on the next token rotation; false again once it lands.
+   */
+  vaultWritePending: boolean;
   hydrate: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -142,6 +150,22 @@ const LAST_PROVIDER_GOOGLE_VALUE = JSON.stringify({
   version: 1,
   provider: 'google',
 });
+/**
+ * Names ONE Keychain record that an explicit sign-out could not remove (the
+ * Keychain refused both the delete and the overwrite), so hydrate() ignores
+ * exactly that record instead of restoring the signed-out account. Holds the
+ * account id plus a one-way digest of the refresh token — never the token
+ * itself — so a genuinely new sign-in of the same account (a different
+ * token) is never mistaken for the signed-out one. Blanked ('') once the
+ * record is finally gone.
+ */
+const VAULT_TOMBSTONE_KV_KEY = 'auth.vault-tombstone';
+
+interface VaultTombstone {
+  version: 1;
+  canonicalAppUserId: string;
+  refreshTokenDigest: string;
+}
 
 function localGuestSession(): AuthSession {
   return {
@@ -195,12 +219,175 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
   }
 }
 
+/** FNV-1a (32-bit) of a refresh token: enough to recognise the one record a
+ * tombstone names, and useless for reconstructing or using the token. */
+function refreshTokenDigest(refreshToken: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < refreshToken.length; i += 1) {
+    hash ^= refreshToken.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+/** Best-effort like the other kv flags: with the database down the
+ * Keychain-side sign-out (delete, else tombstone overwrite) already covered
+ * every case except a Keychain that refused both. */
+async function persistVaultTombstone(
+  record: Pick<PersistedSession, 'canonicalAppUserId' | 'refreshToken'> | null,
+): Promise<void> {
+  const tombstone: VaultTombstone | null = record
+    ? {
+        version: 1,
+        canonicalAppUserId: record.canonicalAppUserId,
+        refreshTokenDigest: refreshTokenDigest(record.refreshToken),
+      }
+    : null;
+  try {
+    await setKv(
+      getDb(),
+      VAULT_TOMBSTONE_KV_KEY,
+      tombstone ? JSON.stringify(tombstone) : '',
+    );
+  } catch {
+    // See above.
+  }
+}
+
+function parseVaultTombstone(raw: string | null): VaultTombstone | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const record = parsed as Record<string, unknown>;
+    const canonicalAppUserId = record['canonicalAppUserId'];
+    const refreshTokenDigest = record['refreshTokenDigest'];
+    if (
+      record['version'] !== 1 ||
+      typeof canonicalAppUserId !== 'string' ||
+      typeof refreshTokenDigest !== 'string'
+    ) {
+      return null;
+    }
+    return { version: 1, canonicalAppUserId, refreshTokenDigest };
+  } catch {
+    return null;
+  }
+}
+
+function tombstoneNames(
+  tombstone: VaultTombstone | null,
+  persisted: PersistedSession,
+): boolean {
+  return (
+    tombstone !== null &&
+    tombstone.canonicalAppUserId === persisted.canonicalAppUserId &&
+    tombstone.refreshTokenDigest === refreshTokenDigest(persisted.refreshToken)
+  );
+}
+
+/**
+ * Keychain mutations run one at a time, in call order. That is what makes a
+ * late retry safe: a rotation that persists refresh-N+1 is always enqueued
+ * after any earlier attempt for refresh-N, so the LAST write is the newest
+ * token, and a sign-out's clear runs after every write that preceded it.
+ */
+let vaultQueue: Promise<unknown> = Promise.resolve();
+
+function runVaultOp<T>(operation: () => Promise<T>): Promise<T> {
+  const run = vaultQueue.then(operation);
+  vaultQueue = run.catch(() => undefined);
+  return run;
+}
+
+/** The record the Keychain refused to store, awaiting a retry (see
+ * AuthState.vaultWritePending). */
+let pendingVaultWrite: PersistedSession | null = null;
+let removeVaultRetryListener: (() => void) | null = null;
+
+function isCurrentApiSession(record: PersistedSession): boolean {
+  const api = getApiSession();
+  return (
+    api !== null &&
+    api.canonicalAppUserId === record.canonicalAppUserId &&
+    api.refreshToken === record.refreshToken
+  );
+}
+
+function setPendingVaultWrite(record: PersistedSession | null): void {
+  pendingVaultWrite = record;
+  const pending = record !== null;
+  if (useAuthStore.getState().vaultWritePending !== pending) {
+    useAuthStore.setState({ vaultWritePending: pending });
+  }
+  if (record && !removeVaultRetryListener) {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') void retryPendingVaultWrite();
+    });
+    removeVaultRetryListener = () => subscription.remove();
+  } else if (!record && removeVaultRetryListener) {
+    removeVaultRetryListener();
+    removeVaultRetryListener = null;
+  }
+}
+
+async function retryPendingVaultWrite(): Promise<void> {
+  const record = pendingVaultWrite;
+  if (!record) return;
+  if (!isCurrentApiSession(record)) {
+    // Rotated or signed out since: the newer state took care of itself.
+    setPendingVaultWrite(null);
+    return;
+  }
+  await persistRecord(record);
+}
+
+type VaultWriteOutcome = 'saved' | 'failed' | 'superseded';
+
+/**
+ * Writes one record and reports honestly. On failure, whatever the Keychain
+ * held before (at best an older refresh token the server has since rotated
+ * away, at worst a spent one) is removed so the next launch never presents
+ * it; the record stays pending until a retry lands.
+ */
+async function persistRecord(record: PersistedSession): Promise<void> {
+  const outcome = await runVaultOp<VaultWriteOutcome>(async () => {
+    if (!isCurrentApiSession(record)) return 'superseded';
+    if (await savePersistedSession(record)) return 'saved';
+    await clearPersistedSession();
+    return 'failed';
+  });
+  if (outcome === 'saved') setPendingVaultWrite(null);
+  else if (outcome === 'failed') setPendingVaultWrite(record);
+}
+
+/**
+ * Ends the durable session for good. The Keychain record is deleted (or,
+ * failing that, overwritten with a tombstone the parser rejects) — and if
+ * the Keychain refuses even that, the record is named in SQLite so
+ * hydrate() ignores it. `hint` identifies the record when it cannot be read
+ * back (the in-memory session's refresh token, if one was obtained).
+ */
+async function forgetPersistedSession(
+  hint: Pick<PersistedSession, 'canonicalAppUserId' | 'refreshToken'> | null,
+): Promise<void> {
+  setPendingVaultWrite(null);
+  await runVaultOp(async () => {
+    const record = (await loadPersistedSession()) ?? hint;
+    if (await clearPersistedSession()) return;
+    if (record) await persistVaultTombstone(record);
+  });
+}
+
 function clearSyncedRuntime(): void {
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+  setPendingVaultWrite(null);
 }
 
 /**
@@ -238,13 +425,14 @@ function installApiSession(apiSession: ApiSession): void {
 }
 
 /** The Keychain record for a synced session — only when the server minted a
- * refresh token (a legacy provider-token session has nothing durable). */
+ * refresh token (a legacy provider-token session has nothing durable). The
+ * api session must already be the live one (see persistRecord). */
 async function persistSession(
   session: AuthSession,
   apiSession: ApiSession,
 ): Promise<void> {
   if (!apiSession.refreshToken || !session.canonicalAppUserId) return;
-  await savePersistedSession({
+  await persistRecord({
     version: 1,
     provider: apiSession.provider,
     canonicalAppUserId: session.canonicalAppUserId,
@@ -264,7 +452,7 @@ async function dropRevokedSession(): Promise<void> {
   clearSyncedRuntime();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   useAuthStore.setState({ session: null, error: null, busy: false });
-  await clearPersistedSession();
+  await forgetPersistedSession(null);
   await persistLocalGuest(false);
   await persistLastProvider(null);
 }
@@ -272,14 +460,16 @@ async function dropRevokedSession(): Promise<void> {
 /**
  * Applies rotated tokens for the signed-in account: updates the live
  * ApiSession (or installs the first one of this run when the launch refresh
- * only landed later), then re-persists the rotated refresh token. Ignored if
- * the account is no longer the signed-in one.
+ * only landed later), then re-persists the rotated refresh token — awaited,
+ * so the keeper's rotation is complete only once the vault has caught up (or
+ * the write is honestly pending). Ignored if the account is no longer the
+ * signed-in one.
  */
-function adoptRotatedTokens(
+async function adoptRotatedTokens(
   session: AuthSession,
   apiBaseUrl: string,
   tokens: RefreshedTokens,
-): void {
+): Promise<void> {
   const canonicalAppUserId = session.canonicalAppUserId;
   if (
     !canonicalAppUserId ||
@@ -301,7 +491,7 @@ function adoptRotatedTokens(
   } else {
     installApiSession(next);
   }
-  void persistSession(session, next);
+  await persistSession(session, next);
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
@@ -322,8 +512,8 @@ function keepSessionAlive(
     apiBaseUrl: apiSession.apiBaseUrl,
     refreshToken: apiSession.refreshToken,
     bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
-    onRotated: tokens => {
-      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+    onRotated: async tokens => {
+      await adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
       onOutcome?.('online');
     },
     onRevoked: async () => {
@@ -362,6 +552,41 @@ async function establishSyncedAccount(input: {
   await persistSession(session, result.apiSession);
   keepSessionAlive(session, result.apiSession);
   return session;
+}
+
+interface LocalAuthFlags {
+  guest: boolean;
+  lastProvider: 'google' | null;
+  vaultTombstone: VaultTombstone | null;
+}
+
+/**
+ * The device-local (SQLite) auth flags for hydrate(). Never throws: with the
+ * database unavailable every flag reads as unset, which is the right
+ * degradation for each of them — no guest mode, no legacy silent restore,
+ * no tombstone — and none of them decides whether the Keychain session is
+ * restored.
+ */
+async function readLocalAuthFlags(): Promise<LocalAuthFlags> {
+  try {
+    const db = getDb();
+    // Earlier builds wrote provider subjects to SQLite. Blank that legacy
+    // value during migration instead of hydrating it into a trusted session.
+    if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
+      await setKv(db, LEGACY_SESSION_KV_KEY, '');
+    }
+    const mode = await getKv(db, LOCAL_MODE_KV_KEY);
+    const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+    const tombstone = await getKv(db, VAULT_TOMBSTONE_KV_KEY);
+    return {
+      guest: mode === LOCAL_GUEST_VALUE,
+      lastProvider:
+        lastProvider === LAST_PROVIDER_GOOGLE_VALUE ? 'google' : null,
+      vaultTombstone: parseVaultTombstone(tombstone),
+    };
+  } catch {
+    return { guest: false, lastProvider: null, vaultTombstone: null };
+  }
 }
 
 function sessionFromPersisted(persisted: PersistedSession): AuthSession {
@@ -533,9 +758,67 @@ function handleApiUnauthorized(expired: ApiSession): void {
       busy: false,
       error: { code: 'auth.session_expired', message: SESSION_EXPIRED_MESSAGE },
     });
-    await clearPersistedSession();
+    await forgetPersistedSession(null);
     await persistLocalGuest(false);
   })();
+}
+
+/**
+ * hydrate()'s body. The Keychain and the local database are consulted
+ * independently: the durable session lives in the Keychain alone, so a
+ * database that will not open degrades local product data (guest flag, legacy
+ * restore flag, sign-out tombstone all read as unset) — never the sign-in.
+ */
+async function restoreSessionAtLaunch(): Promise<void> {
+  const set = useAuthStore.setState;
+  clearSyncedRuntime();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  const persisted = await runVaultOp(loadPersistedSession);
+  const local = await readLocalAuthFlags();
+  if (local.guest) {
+    setActiveDataOwner(GUEST_DATA_OWNER);
+    set({ session: localGuestSession(), hydrated: true });
+    return;
+  }
+  if (persisted && tombstoneNames(local.vaultTombstone, persisted)) {
+    // An explicit sign-out the Keychain refused to complete: finish it now
+    // instead of restoring the signed-out account.
+    if (await runVaultOp(clearPersistedSession)) {
+      await persistVaultTombstone(null);
+    }
+  } else if (persisted) {
+    // The durable session: whoever signed in on this device last stays
+    // signed in across relaunches, backgrounding and reboots, for any
+    // provider, until they sign out or the server refuses the refresh
+    // token. No provider SDK is consulted for this.
+    const outcome = await restorePersistedSession(persisted);
+    if (outcome !== 'revoked') {
+      set({ hydrated: true });
+      return;
+    }
+  }
+  // Legacy fallback for devices that signed in before sessions were
+  // persisted: silent restore is Google-only (see
+  // restoreGoogleSessionSilently for why Apple cannot have one) and only
+  // worth attempting when the web client id needed for a
+  // backend-verifiable token is configured. A success bootstraps a new
+  // session, which IS persisted — so this path runs at most once.
+  if (local.lastProvider === 'google' && GOOGLE_WEB_CLIENT_ID) {
+    try {
+      const session = await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
+      if (session) {
+        set({ session, hydrated: true });
+        return;
+      }
+    } catch {
+      // Opportunistic restore only: offline bootstrap or SDK failures
+      // land signed-out with no surfaced error. The last-provider flag is
+      // kept so the next launch retries silently.
+      clearSyncedRuntime();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    }
+  }
+  set({ session: null, hydrated: true });
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -544,63 +827,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   busy: false,
   error: null,
   deletionCleanup: null,
+  vaultWritePending: false,
 
   hydrate: async () => {
-    clearSyncedRuntime();
     try {
-      const db = getDb();
-      // Earlier builds wrote provider subjects to SQLite. Blank that legacy
-      // value during migration instead of hydrating it into a trusted session.
-      if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
-        await setKv(db, LEGACY_SESSION_KV_KEY, '');
-      }
-      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      if (raw === LOCAL_GUEST_VALUE) {
-        setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
-        return;
-      }
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      // The durable session: whoever signed in on this device last stays
-      // signed in across relaunches, backgrounding and reboots, for any
-      // provider, until they sign out or the server refuses the refresh
-      // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
-      if (persisted) {
-        const outcome = await restorePersistedSession(persisted);
-        if (outcome !== 'revoked') {
-          set({ hydrated: true });
-          return;
-        }
-      }
-      // Legacy fallback for devices that signed in before sessions were
-      // persisted: silent restore is Google-only (see
-      // restoreGoogleSessionSilently for why Apple cannot have one) and only
-      // worth attempting when the web client id needed for a
-      // backend-verifiable token is configured. A success bootstraps a new
-      // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
-      if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
-        try {
-          const session =
-            await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
-          if (session) {
-            set({ session, hydrated: true });
-            return;
-          }
-        } catch {
-          // Opportunistic restore only: offline bootstrap or SDK failures
-          // land signed-out with no surfaced error. The last-provider flag is
-          // kept so the next launch retries silently.
-          clearSyncedRuntime();
-          setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-        }
-      }
-      set({ session: null, hydrated: true });
+      await restoreSessionAtLaunch();
     } catch {
-      clearSyncedRuntime();
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ session: null, hydrated: true });
+      // Neither the Keychain nor the database gets here (both fail soft in
+      // restoreSessionAtLaunch); this is the last resort for anything else,
+      // and the launch must still finish. The Keychain record is untouched
+      // — the next launch retries — and a session already restored from it
+      // is kept: an unexpected local error is not the server refusing it.
+      if (!get().session) {
+        clearSyncedRuntime();
+        setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      }
+      set({ hydrated: true });
     }
   },
 
@@ -710,9 +952,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false });
-    // The persisted session goes first: whatever else fails below, the next
-    // launch must not restore an account the user just signed out of.
-    await clearPersistedSession();
+    // The persisted session goes first: whatever else fails below — the
+    // Keychain included — the next launch must not restore an account the
+    // user just signed out of.
+    await forgetPersistedSession(
+      apiSession?.refreshToken
+        ? {
+            canonicalAppUserId: apiSession.canonicalAppUserId,
+            refreshToken: apiSession.refreshToken,
+          }
+        : null,
+    );
     await persistLocalGuest(false);
     // Explicit sign-out always disarms the silent restore on the next launch.
     await persistLastProvider(null);
@@ -742,7 +992,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // The account (and every server-side session) is already gone; the
     // Keychain record must go with it or the next launch would try — and
     // fail — to refresh a deleted account.
-    await clearPersistedSession();
+    await forgetPersistedSession(null);
     await persistLocalGuest(false);
     await persistLastProvider(null);
     let localPurge: AccountDeletionCleanup['localPurge'] = 'not_needed';
