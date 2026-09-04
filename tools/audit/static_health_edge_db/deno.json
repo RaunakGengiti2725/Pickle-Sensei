@@ -1,0 +1,16 @@
+{
+  "nodeModulesDir": "none",
+  "lock": false,
+  "imports": {
+    "postgres": "npm:postgres@3.4.5",
+    "typescript": "npm:typescript@5.6.3",
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "tasks": {
+    "inventory": "deno run -A --no-check --config deno.json write_inventory.ts",
+    "static": "deno run -A --no-check --config deno.json static_scan.ts",
+    "grants": "deno run -A --no-check --config deno.json grant_matrix.ts",
+    "probe": "deno run -A --no-check --config deno.json adversarial_probe.ts",
+    "test": "deno test -A --no-check --config deno.json ."
+  }
+}
