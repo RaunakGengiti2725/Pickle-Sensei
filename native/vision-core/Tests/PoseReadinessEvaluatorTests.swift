@@ -73,6 +73,103 @@ final class PoseReadinessEvaluatorTests: XCTestCase {
     XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 750, xOffset: 0.06)).state, .ready)
   }
 
+  // MARK: - Readiness must not depend on the frame cadence
+
+  /// A still athlete must become `.ready` on the first sample at or after
+  /// 450 ms of stillness, whatever the frame interval. Real cameras never
+  /// deliver a sample exactly 450 ms after another one: 25 fps is a 40 ms
+  /// step, 30 fps rounds to 33/33/34, Apple Vision's 24 fps grid is 42/41,
+  /// and back-pressure at 60 fps processes every other frame.
+  func testStillPoseAt25fpsBecomesReadyOnFirstSampleAfterWindow() {
+    let run = readinessRun(timestamps: grid(cadence: [40]))
+    assertReadyExactlyOnceWindowElapsed(run, maxStepMs: 40)
+    XCTAssertEqual(run.firstReadyMs, 480)
+  }
+
+  func testStillPoseOn30fpsMillisecondGridBecomesReadyOnFirstSampleAfterWindow() {
+    let run = readinessRun(timestamps: grid(cadence: [33, 33, 34]))
+    assertReadyExactlyOnceWindowElapsed(run, maxStepMs: 34)
+    XCTAssertEqual(run.firstReadyMs, 466)
+  }
+
+  func testStillPoseOnRealVisionGridBecomesReadyOnFirstSampleAfterWindow() {
+    // 42/41 ms steps: the timestamp grid observed in Apple Vision output on
+    // the M4 runner (swing-lab-extract/pose.json).
+    let run = readinessRun(timestamps: grid(cadence: [42, 41]))
+    assertReadyExactlyOnceWindowElapsed(run, maxStepMs: 42)
+    XCTAssertEqual(run.firstReadyMs, 457)
+  }
+
+  func testStillPoseOn60fpsGridProcessedEveryOtherFrameBecomesReady() {
+    // Camera PTS at 60 fps rounded to integer milliseconds, with Vision
+    // back-pressure dropping every other frame (retained samples 2 frames
+    // apart, 27 frames = 450 ms is odd, so none sits exactly 450 ms back).
+    let timestamps = stride(from: 0, to: 180, by: 2).map { k in
+      Int((Double(k) * 1000 / 60).rounded())
+    }
+    let run = readinessRun(timestamps: timestamps)
+    assertReadyExactlyOnceWindowElapsed(run, maxStepMs: 34)
+    XCTAssertEqual(run.firstReadyMs, 467)
+  }
+
+  func testStillPoseStaysReadyOnEveryLaterSampleOnAnyCadence() {
+    for cadence in [[40], [33, 33, 34], [42, 41]] {
+      let run = readinessRun(timestamps: grid(cadence: cadence, untilMs: 3_000))
+      guard let firstReady = run.firstReadyMs else {
+        XCTFail("never ready on cadence \(cadence)")
+        continue
+      }
+      let after = run.snapshots.filter { $0.timestampMs >= firstReady }
+      XCTAssertTrue(after.allSatisfy(\.isReady), "readiness dropped out on cadence \(cadence)")
+      XCTAssertTrue(
+        after.allSatisfy { $0.stableForMs >= 450 && $0.stableForMs <= $0.timestampMs },
+        "stableForMs must report the real held duration on cadence \(cadence)"
+      )
+    }
+  }
+
+  private struct ReadinessRun {
+    let snapshots: [PoseReadinessEvaluator.Snapshot]
+    var firstReadyMs: Int? { snapshots.first(where: \.isReady)?.timestampMs }
+  }
+
+  private func grid(cadence: [Int], untilMs: Int = 1_000) -> [Int] {
+    var timestamps = [0]
+    var i = 0
+    while let last = timestamps.last, last + cadence[i % cadence.count] <= untilMs {
+      timestamps.append(last + cadence[i % cadence.count])
+      i += 1
+    }
+    return timestamps
+  }
+
+  private func readinessRun(timestamps: [Int]) -> ReadinessRun {
+    let evaluator = PoseReadinessEvaluator()
+    return ReadinessRun(snapshots: timestamps.map { evaluator.ingest(pose: pose(timestampMs: $0)) })
+  }
+
+  private func assertReadyExactlyOnceWindowElapsed(
+    _ run: ReadinessRun,
+    maxStepMs: Int,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let window = PoseReadinessEvaluator.Config().stableDurationMs
+    for snapshot in run.snapshots where snapshot.timestampMs < window {
+      XCTAssertFalse(snapshot.isReady, "ready at \(snapshot.timestampMs) ms, before \(window) ms of stillness", file: file, line: line)
+      XCTAssertEqual(snapshot.state, .holdStill, file: file, line: line)
+    }
+    guard let first = run.snapshots.first(where: \.isReady) else {
+      let maxStable = run.snapshots.map(\.stableForMs).max() ?? 0
+      XCTFail("never ready; max stableForMs=\(maxStable)", file: file, line: line)
+      return
+    }
+    XCTAssertGreaterThanOrEqual(first.timestampMs, window, file: file, line: line)
+    XCTAssertLessThanOrEqual(first.timestampMs, window + maxStepMs, file: file, line: line)
+    XCTAssertGreaterThanOrEqual(first.stableForMs, window, file: file, line: line)
+    XCTAssertEqual(first.stableForMs, first.timestampMs, "stableForMs must be the real held duration", file: file, line: line)
+  }
+
   private func pose(
     timestampMs: Int,
     xOffset: Double = 0,
