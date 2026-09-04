@@ -1,10 +1,13 @@
 /**
- * STRUCTURAL AUDIT #2 (mobile-analyze-capture) — AnalyzeScreen lifecycle,
- * cancellation classification and attempt-evidence correlation.
+ * STRUCTURAL AUDIT #2 (mobile-analyze-capture) — AnalyzeScreen lifecycle:
+ * cancellation classification (MAC-04) and the unmount ledger re-read
+ * timing (MAC-03). The adjudicator's imported-pose-cancel and
+ * attempt-evidence cases belong to other cluster items and live on the
+ * adjudication branch.
  *
  * Mounted-flow reproductions on the typed camera seam (native execution is
- * BLOCKED_EXTERNAL on Linux). runCaptureAnalysis is replaced so the envelope
- * the screen hands it can be inspected; everything above it runs for real.
+ * BLOCKED_EXTERNAL on Linux). runCaptureAnalysis is replaced; everything
+ * above it runs for real.
  */
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 jest.mock('../src/data/repository', () => ({
@@ -84,15 +87,9 @@ import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
-import { TargetSelector } from '../src/camera/TargetSelector';
 import {
-  assertCapturedClip,
-  cancelCameraOperation,
   captureStrokeVideo,
-  extractImportedPoseSequence,
-  importStrokeVideo,
   type CameraEvent,
-  type CameraReadinessState,
   type CapturedClip,
 } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
@@ -109,21 +106,8 @@ import type {
   BillingAccessDependencies,
   CanonicalAccessState,
 } from '../src/billing/types';
-import type { EnvelopeVerdict } from '@pickle/shared-types';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
-
-const importedClip = assertCapturedClip({
-  uri: 'file:///private/var/mobile/import.mov',
-  durationMs: 4200,
-  fps: 30,
-  width: 1920,
-  height: 1080,
-  capturedAtIso: '2026-08-29T18:00:00.000Z',
-  captureMode: 'imported_video',
-  recognition: { status: 'unknown', reason: 'analysis_not_run' },
-  ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
-});
 
 function guidedClip(): CapturedClip {
   return {
@@ -189,51 +173,10 @@ function guidedClip(): CapturedClip {
   };
 }
 
-const eventBase = () => ({ emittedAtIso: '2026-08-29T18:00:00.000Z' });
-
-function readinessEvent(
-  state: CameraReadinessState,
-  jointCoverage: number,
-): CameraEvent {
-  return {
-    ...eventBase(),
-    type: 'readiness',
-    state,
-    poseConfidence: 0.9,
-    jointCoverage,
-    stableForMs: 300,
-    missingJoints: [],
-    source: 'apple_vision_body_pose',
-    modelVersion: 'apple-vision-bodypose-1',
-  };
-}
-
-function strokeDetectedEvent(): CameraEvent {
-  return {
-    ...eventBase(),
-    type: 'stroke_detected',
-    startTimestampMs: 2000,
-    endTimestampMs: 2700,
-    peakMotionTimestampMs: 2400,
-    confidence: 0.86,
-    detectionModelVersion: 'temporal-stroke-heuristic-2',
-    recognition: {
-      status: 'unknown',
-      reason: 'validated_classifier_unavailable',
-    },
-  };
-}
-
 // ─── Driving helpers ─────────────────────────────────────────────────────────
 
 function textOf(renderer: ReactTestRenderer): string {
   return JSON.stringify(renderer.toJSON());
-}
-
-function emit(event: CameraEvent) {
-  act(() => {
-    for (const listener of mockCameraListeners) listener(event);
-  });
 }
 
 function pressByLabel(renderer: ReactTestRenderer, label: string) {
@@ -353,74 +296,6 @@ afterEach(() => {
   clearApiSession();
 });
 
-// ─── Unmount during the imported pose pass ───────────────────────────────────
-
-describe('unmount while the imported pose extraction is in flight', () => {
-  it('cancels the active native work (REVIEW.md: async work a screen starts is cancelled on unmount)', async () => {
-    (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
-    const extraction = deferred<unknown>(
-      extractImportedPoseSequence as jest.Mock,
-    );
-    const renderer = await renderScreen('library');
-    pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
-    await act(async () => {
-      selector.props.onSkip();
-    });
-    expect(extractImportedPoseSequence).toHaveBeenCalledTimes(1);
-    expect(textOf(renderer)).toContain('Reading player movement');
-
-    // Backgrounding / navigation tears the screen down mid-pass.
-    await act(async () => renderer.unmount());
-
-    // Contract under test: the native pass started by this screen is
-    // cancelled when the screen goes away, exactly like the capture path.
-    expect(cancelCameraOperation).toHaveBeenCalled();
-
-    // Late settle must stay silent (no routing after unmount).
-    await extraction.resolve({
-      poseSequence: {
-        schemaVersion: 1,
-        format: 'pickle.pose-sequence.v1',
-        uri: 'file:///private/var/mobile/import.pose.json',
-        frameCount: 126,
-        sha256: 'ab'.repeat(32),
-        coordinateSystem: 'normalized_image_top_left',
-        poseModelVersion: 'apple-vision-bodypose-1',
-      },
-    });
-    expect(runCaptureAnalysis).not.toHaveBeenCalled();
-    expect(mockNavigation.replace).not.toHaveBeenCalled();
-  });
-
-  it('VERIFY: after unmount a late extraction result never starts an analysis or navigates', async () => {
-    (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
-    const extraction = deferred<unknown>(
-      extractImportedPoseSequence as jest.Mock,
-    );
-    const renderer = await renderScreen('library');
-    pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
-    await act(async () => {
-      selector.props.onSkip();
-    });
-    await act(async () => renderer.unmount());
-    await extraction.resolve({
-      poseSequence: {
-        schemaVersion: 1,
-        format: 'pickle.pose-sequence.v1',
-        uri: 'file:///private/var/mobile/import.pose.json',
-        frameCount: 126,
-        sha256: 'ab'.repeat(32),
-        coordinateSystem: 'normalized_image_top_left',
-        poseModelVersion: 'apple-vision-bodypose-1',
-      },
-    });
-    expect(runCaptureAnalysis).not.toHaveBeenCalled();
-    expect(mockNavigation.replace).not.toHaveBeenCalled();
-  });
-});
-
 // ─── Cancellation classification ────────────────────────────────────────────
 
 describe('capture failure vs user cancellation', () => {
@@ -452,62 +327,6 @@ describe('capture failure vs user cancellation', () => {
     // Expected: the error surface with this message and a retry affordance.
     expect(text).toContain('cancelled by the system');
     expect(text).toContain('Try again');
-  });
-});
-
-// ─── Attempt evidence correlation ───────────────────────────────────────────
-
-describe('attempt envelope evidence after the stroke was detected', () => {
-  it('a readiness read arriving AFTER stroke_detected must not overwrite the swing-time visibility handed to the analysis', async () => {
-    const capture = deferred<CapturedClip>(captureStrokeVideo as jest.Mock);
-    (runCaptureAnalysis as jest.Mock).mockResolvedValue({
-      kind: 'unavailable',
-      reason: 'stubbed',
-    });
-    const renderer = await renderScreen('camera');
-    pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
-    emit(readinessEvent('ready', 0.92));
-    emit(strokeDetectedEvent());
-    // The player walks toward the phone while the clip finalizes.
-    emit(readinessEvent('no_person', 0));
-    await capture.resolve(guidedClip());
-    await act(async () => {});
-
-    expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
-    const request = (runCaptureAnalysis as jest.Mock).mock.calls[0]![0] as {
-      captureEnvelope: EnvelopeVerdict | null;
-    };
-    const visibility = request.captureEnvelope?.dimensions.find(
-      d => d.dimension === 'player_visibility',
-    );
-    expect(visibility).toBeDefined();
-    // The swing itself was recorded at 0.92 coverage (and the clip's own
-    // captureEvidence says meanJointCoverage 0.9); the post-swing no_person
-    // read is not evidence about the swing.
-    expect(visibility?.status).not.toBe('UNSUPPORTED');
-  });
-
-  it('VERIFY control: readiness before the stroke feeds the attempt envelope (ready 0.92 → SUPPORTED visibility)', async () => {
-    const capture = deferred<CapturedClip>(captureStrokeVideo as jest.Mock);
-    (runCaptureAnalysis as jest.Mock).mockResolvedValue({
-      kind: 'unavailable',
-      reason: 'stubbed',
-    });
-    const renderer = await renderScreen('camera');
-    pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
-    emit(readinessEvent('ready', 0.92));
-    emit(strokeDetectedEvent());
-    await capture.resolve(guidedClip());
-    await act(async () => {});
-    const request = (runCaptureAnalysis as jest.Mock).mock.calls[0]![0] as {
-      captureEnvelope: EnvelopeVerdict | null;
-    };
-    const visibility = request.captureEnvelope?.dimensions.find(
-      d => d.dimension === 'player_visibility',
-    );
-    expect(visibility?.status).toBe('SUPPORTED');
   });
 });
 
