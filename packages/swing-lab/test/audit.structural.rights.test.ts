@@ -146,9 +146,48 @@ describe("SL-01: negated, hedged, or unknown-element strings are all-unclear", (
     "CC BY-SA-ND 4.0",
     "All rights reserved © 2026",
     "",
+    // A restriction stated after the designation is still a restriction.
+    "Creative Commons Attribution 4.0 International — no derivatives",
+    "CC BY 3.0 NonCommercial",
+    "CC BY 4.0 — commercial use prohibited",
+    "CC BY 4.0, personal use only",
+    "CC BY 4.0 for research purposes only",
+    "CC BY 4.0 (dual-licensed under Standard YouTube License)",
+    // A reviewer's verdict against the mark, or a territorial hedge, wins.
+    "Public Domain Mark 1.0 (licenseurl reads verbatim: https://creativecommons.org/publicdomain/mark/1.0/) — assessed FALSE",
+    "Public domain in the United States; may be copyrighted elsewhere",
+    "Mixed: VOA policy makes exclusively-VOA material public domain, but this video contains AFP-watermarked footage",
+    "Unverified; plausible PD-USGov for VA-shot footage",
+    // Two letters are not a public-domain designation.
+    "PD",
+    "pdf",
   ]) {
     it(`${JSON.stringify(license)}`, () => allUnclear(license));
   }
+});
+
+describe("SL-01: restating the designation's own elements is not a stray restriction", () => {
+  it("CC BY-SA with its licenseurl keeps the ShareAlike profile", () => {
+    const rights = rightsForLicense(
+      "CC BY-SA 4.0 (item licenseurl field reads verbatim: https://creativecommons.org/licenses/by-sa/4.0/)",
+      REVIEWER,
+    );
+    expect(rights.train).toBe("yes_with_attribution");
+    expect(rights.redistributeDerivatives).toBe("sharealike");
+  });
+  it("CC BY-NC-SA with its licenseurl keeps NC and SA", () => {
+    const rights = rightsForLicense(
+      "CC BY-NC-SA 4.0 (item licenseurl field reads verbatim: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
+      REVIEWER,
+    );
+    expect(rights.commercial).toBe("no");
+    expect(rights.train).toBe("unclear");
+    expect(rights.redistributeDerivatives).toBe("sharealike");
+  });
+  it("PD-USGov is a public-domain designation; bare PD is not", () => {
+    expect(parseLicense("PD-USGov").kind).toBe("public_domain");
+    expect(parseLicense("PD").kind).toBe("unrecognized");
+  });
 });
 
 describe("SL-01: permissive controls keep their full profiles (corpus strings)", () => {
@@ -237,6 +276,9 @@ describe("SL-01 mechanism: parseLicense yields a structured designation", () => 
       ["Standard YouTube License", "no known license designation"],
       ["CC BY-SA-ND 4.0", "never appear together"],
       ["CC BY-XYZ 4.0", "no known license designation"],
+      ["CC BY 4.0 International — no derivatives", 'element "nd" appears outside'],
+      ["CC BY 3.0 NonCommercial", 'element "nc" appears outside'],
+      ["Public Domain Mark 1.0 — assessed FALSE", "hedge marker"],
       ["", "empty"],
     ] as const) {
       const parsed = parseLicense(license);

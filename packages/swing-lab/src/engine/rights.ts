@@ -79,7 +79,25 @@ export type ParsedLicense =
  * "NonCommercial" / "NoDerivatives" are not mistaken for negations.
  */
 const HEDGE_MARKERS =
-  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined)|disputed|pending|possibly|maybe|probably|likely|except|unless|proprietary|claimed|alleged)\b|all rights reserved|©|\(c\)/;
+  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined)|disputed|pending|possibly|maybe|probably|likely|plausibl[ey]|except|unless|proprietary|claimed|alleged|assessed|false|incorrect|invalid|mixed|partial(?:ly)?|prohibited|forbidden|restrict(?:ed|ions?)|only|exclusive(?:ly)?|may|revoked|reverted|withdrawn|expired|editorial|research|educational|personal|dual)\b|all rights reserved|©|\(c\)/;
+
+/**
+ * A Creative Commons element token that appears AFTER the parsed designation
+ * ("CC BY 4.0 — no derivatives", "CC BY 3.0 NonCommercial") restricts the
+ * grant but is not part of the identifier; the composition rules cannot see it,
+ * so the string must go to a human rather than inherit the CC BY profile.
+ * Restating the designation's own elements (a licenseurl `/by-nc-sa/4.0/`) is
+ * not stray.
+ */
+const CC_ELEMENT_TOKENS = /(?:^|[^a-z0-9])(sa|nc|nd)(?![a-z0-9])/g;
+
+function strayCcElement(rest: string, elements: ReadonlySet<CcElement>): CcElement | null {
+  for (const match of rest.matchAll(CC_ELEMENT_TOKENS)) {
+    const token = match[1] ?? "";
+    if (isCcElement(token) && !elements.has(token)) return token;
+  }
+  return null;
+}
 
 const LONG_FORM_ELEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bcreative commons\b/g, "cc"],
@@ -91,7 +109,7 @@ const LONG_FORM_ELEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 const PUBLIC_DOMAIN_DESIGNATION =
-  /^(?:public domain|pd(?:-[a-z0-9]+)*|cc0(?:[ -]v?\d+(?:\.\d+)?)?)(?![a-z0-9-])/;
+  /^(?:public domain|pd(?:-[a-z0-9]+)+|cc0(?:[ -]v?\d+(?:\.\d+)?)?)(?![a-z0-9-])/;
 
 const CREATIVE_COMMONS_DESIGNATION =
   /^cc[ -]by((?:[ -](?:sa|nc|nd))*)(?:[ -]v?(\d+(?:\.\d+)?))?(?![a-z0-9.-])/;
@@ -134,6 +152,13 @@ export function parseLicense(license: string): ParsedLicense {
       return {
         kind: "unrecognized",
         reason: "ShareAlike and NoDerivatives never appear together in a Creative Commons license",
+      };
+    }
+    const stray = strayCcElement(text.slice(cc[0].length), elements);
+    if (stray) {
+      return {
+        kind: "unrecognized",
+        reason: `Creative Commons element "${stray}" appears outside the license designation`,
       };
     }
     return { kind: "creative_commons", elements, version: cc[2] ?? null };
