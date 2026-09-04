@@ -41,7 +41,10 @@ on:
         type: boolean
         default: true
   push:
-    branches: [main]
+    # `ci/macos-**` branches let workflow changes be exercised on the runner
+    # before they land on main (workflow_dispatch only sees the default branch).
+    # Only collaborators can push branches here; forks cannot reach this trigger.
+    branches: [main, "ci/macos-**"]
     paths:
       - "native/**"
       - "apps/mobile/ios/**"
