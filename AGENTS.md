@@ -102,10 +102,14 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   insert (every identity of the user is set to identity-max + 1) and by the
   definer trigger `identities_sync_free_rating_ledger` on every
   auth.identities INSERT (`20260904140000_ledger_backfill_on_identity_link.sql`:
-  an identity linked AFTER the ratings were spent gets
-  greatest(its own row, the account's identity-max), so deletion + re-sign-in
-  with ANY identity ever linked keeps the count; migration backfills
-  existing links). ALL THREE
+  it first takes the SAME `pg_advisory_xact_lock(access_lock_key(user_id))`
+  that reserve/apply/the shots gate hold — an identity linked while a
+  scored sync is still open would otherwise read the ledger before that
+  write commits and inherit nothing — then raises EVERY identity of the
+  user to greatest(its own row, the account's identity-max), so deletion +
+  re-sign-in with ANY identity ever linked keeps the count; migration
+  backfills existing links; two-session proof:
+  `./supabase/tests/run_identity_link_race_test.sh`). ALL THREE
   decision points — `access_state()`, `reserve_analysis_permit()`,
   `apply_synced_shot()`'s backstop — count through
   `public.lifetime_scored_count()` = greatest(own scored shots,
@@ -157,9 +161,15 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   (CHECK `unscored_shots_have_no_score`). Permits are a one-way state machine
   (`20260904140200_permit_status_transitions.sql`): BEFORE UPDATE trigger
   `analysis_permits_terminal_lock` refuses any status/outcome change once
-  status has left `reserved` (finalized/released/expired are final), so a
-  finalized permit can never be reopened and reused. Live:
-  security_regression.sql K1–K6, L1–L3; static: `db_migrations_rls_indexes.test.ts`.
+  status has left `reserved` (finalized/released/expired are final), and the
+  row cannot be replaced around it: clients hold NO DELETE on
+  analysis_permits (policy `analysis_permits_delete_own` dropped — a permit
+  is never product-deleted, the sweep and account cascade own removal) and
+  INSERT only on `(id, user_id, idempotency_key)`, so every client-minted
+  permit is born `reserved`/null outcome/`created_at = now()` and a
+  finalized permit can never be reopened, rewritten or reused (DELETE +
+  re-INSERT of the same id included). Live: security_regression.sql K1–K6,
+  L1–L3, M1–M3; static: `db_migrations_rls_indexes.test.ts`.
 - RLS/security regression matrix: `./supabase/tests/run_rls_tests.sh`
   (Docker postgres:16, or a throwaway local initdb cluster when Docker is
   absent; CI job `supabase-security`). It installs hosted-like default

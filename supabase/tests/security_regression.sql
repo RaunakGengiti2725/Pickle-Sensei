@@ -1443,6 +1443,30 @@ begin
       where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-pat')) <> 2 then
     raise exception 'J11b: linking must never lower an identity''s ledger count';
   end if;
+  -- Every identity of the user carries the identity-max: Quinn's own Google
+  -- identity is raised to 2 at link time, so deleting the account and signing
+  -- in again with Google alone cannot mint fresh ratings either.
+  if (select scored_count from public.free_rating_ledger
+      where identity_hash = public.free_rating_identity_hash('google', 'google-sub-quinn')) is distinct from 2 then
+    raise exception
+      'J11c: linking a higher-history identity must raise the account''s other identities to the identity-max (got %)',
+      coalesce((select scored_count::text from public.free_rating_ledger
+                where identity_hash = public.free_rating_identity_hash('google', 'google-sub-quinn')), 'NONE');
+  end if;
+end $$;
+-- J11d: the identity-link trigger serializes on the same per-user advisory
+-- lock as reserve/apply/the shots gate (the two-session proof is
+-- supabase/tests/run_identity_link_race_test.sh; this pins the lock call so
+-- the function body cannot silently lose it).
+do $$
+declare src text;
+begin
+  select p.prosrc into src
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'sync_free_rating_ledger_on_identity_link';
+  if src is null or src not like '%pg_advisory_xact_lock(public.access_lock_key(new.user_id))%' then
+    raise exception 'J11d: sync_free_rating_ledger_on_identity_link must take pg_advisory_xact_lock(access_lock_key(new.user_id))';
+  end if;
 end $$;
 
 -- ────────── K: a scored shot cannot be written around the permit gate ──────
@@ -1807,14 +1831,17 @@ reset role;
 
 -- ──────── M: the terminal lock must also hold against DELETE + re-INSERT ────
 --
--- 20260904140200_permit_status_transitions only guards UPDATE. The owner still
--- holds DELETE (analysis_permits_delete_own, 20260829140000) and INSERT on
--- every column including id/status/outcome, so "reopen" is one statement pair
--- away: delete the finalized row, re-insert the same permit id as reserved,
--- hand it to apply_synced_shot() again. DB-03's acceptance ("a permit never
--- leaves a terminal status and its outcome is fixed"; "apply_synced_shot with
--- a reopened permit is impossible to construct") requires the same identity to
--- stay finalized/scored whatever the owner does to the row.
+-- A BEFORE UPDATE trigger is only a state machine if the row cannot be
+-- replaced. 20260829140000 handed the owner DELETE (analysis_permits_delete_own)
+-- and INSERT on every column including id/status/outcome, so "reopen" was one
+-- statement pair away: delete the finalized row, re-insert the same permit id
+-- as reserved, hand it to apply_synced_shot() again. DB-03's acceptance ("a
+-- permit never leaves a terminal status and its outcome is fixed";
+-- "apply_synced_shot with a reopened permit is impossible to construct")
+-- requires the same identity to stay finalized/scored whatever the owner does
+-- to the row. 20260904140200 closes both doors at the privilege boundary:
+-- DELETE revoked + policy dropped, INSERT narrowed to (id, user_id,
+-- idempotency_key) so a client-minted permit is born reserved/null/now().
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000102';
 
@@ -1884,6 +1911,62 @@ begin
       p,
       (select status from public.analysis_permits where id = p),
       coalesce((select outcome from public.analysis_permits where id = p), 'null');
+  end if;
+end $$;
+
+-- M3: the client holds neither DELETE nor a full-column INSERT on permits any
+-- more — status, outcome and created_at are server-owned from birth. A permit
+-- minted with an explicit terminal status, or back-/forward-dated, is refused
+-- (42501); a plain mint (id, user_id, idempotency_key) still works and is
+-- born reserved/null.
+do $$
+declare n int;
+begin
+  if has_table_privilege('authenticated', 'public.analysis_permits', 'DELETE') then
+    raise exception 'M3a: authenticated must not hold DELETE on public.analysis_permits';
+  end if;
+  if has_table_privilege('anon', 'public.analysis_permits', 'DELETE') then
+    raise exception 'M3a: anon must not hold DELETE on public.analysis_permits';
+  end if;
+  if exists (select 1 from pg_policies
+             where schemaname = 'public' and tablename = 'analysis_permits'
+               and cmd = 'DELETE') then
+    raise exception 'M3a: no DELETE policy may remain on public.analysis_permits';
+  end if;
+  begin
+    delete from public.analysis_permits where idempotency_key = 'lena-key-1';
+    raise exception 'M3b: owner DELETE on a permit must be refused';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+    values ('00000000-0000-4000-8000-00000000102b',
+            '00000000-0000-4000-8000-000000000102', 'lena-key-minted-terminal',
+            'finalized', 'scored');
+    raise exception 'M3c: a client must not mint a permit with an explicit status/outcome';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+    values ('00000000-0000-4000-8000-00000000102c',
+            '00000000-0000-4000-8000-000000000102', 'lena-key-minted-eternal',
+            now() + interval '10 years');
+    raise exception 'M3d: a client must not mint a permit with an explicit created_at';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.analysis_permits
+             where idempotency_key in ('lena-key-minted-terminal', 'lena-key-minted-eternal')) then
+    raise exception 'M3: refused mints must leave no row behind';
+  end if;
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-00000000102d',
+          '00000000-0000-4000-8000-000000000102', 'lena-key-minted-plain');
+  select count(*) into n from public.analysis_permits
+  where id = '00000000-0000-4000-8000-00000000102d'
+    and status = 'reserved' and outcome is null
+    and created_at between now() - interval '1 minute' and now() + interval '1 minute';
+  if n <> 1 then
+    raise exception 'M3e: a plain client mint must still work and be born reserved/null/now()';
   end if;
 end $$;
 reset role;

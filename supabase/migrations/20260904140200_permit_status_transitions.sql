@@ -27,7 +27,30 @@
 -- apply_synced_shot() / reserve_analysis_permit() do the same, so no
 -- legitimate writer is affected. Not client-executable.
 --
--- Pinned live by security_regression.sql L1–L3 and statically by
+-- THE OTHER TWO DOORS. A row-level UPDATE trigger is only a state machine if
+-- the row cannot be replaced. 20260829140000 handed authenticated DELETE (RLS
+-- `analysis_permits_delete_own`) and INSERT on every column, so the owner
+-- could `delete` the finalized row and re-insert the SAME id as
+-- reserved/null (one permit id → a second scored shot; a member could reuse
+-- one id indefinitely) or as released/cancelled (rewriting a terminal
+-- outcome the trigger above promised was fixed). Both are closed at the
+-- privilege boundary, the way every other client write in this schema is
+-- sized (20260831160000):
+--
+--   * DELETE is REVOKED from the client roles and the owner DELETE policy is
+--     dropped. No product path deletes a permit: the Edge routes reserve via
+--     reserve_analysis_permit(), finalize/release via column UPDATE, the
+--     sweep UPDATEs stale rows to released/expired, and account deletion
+--     cascades from auth.users (the cascade is the referencing table's RI
+--     action, not a client DELETE). A permit row, once minted, exists forever.
+--   * INSERT is narrowed to (id, user_id, idempotency_key): a client-minted
+--     permit is born reserved / outcome null / created_at now() — status,
+--     outcome and created_at are server-owned from birth. reserve_analysis_permit()
+--     (SECURITY INVOKER) inserts exactly (user_id, idempotency_key), the RLS
+--     tests mint fixtures with (id, user_id, idempotency_key), and PostgREST
+--     never inserts permits from the app at all.
+--
+-- Pinned live by security_regression.sql L1–L3, M1–M3 and statically by
 -- __wf__/db_migrations_rls_indexes.test.ts.
 -- ============================================================================
 
@@ -61,3 +84,12 @@ drop trigger if exists analysis_permits_terminal_lock on public.analysis_permits
 create trigger analysis_permits_terminal_lock
   before update of status, outcome on public.analysis_permits
   for each row execute function public.reject_terminal_permit_transition();
+
+-- ---------------------------------------------------------------------------
+-- A permit row is never deleted by a client, and is born reserved.
+-- ---------------------------------------------------------------------------
+drop policy if exists "analysis_permits_delete_own" on public.analysis_permits;
+revoke delete on public.analysis_permits from public, anon, authenticated;
+
+revoke insert on public.analysis_permits from public, anon, authenticated;
+grant insert (id, user_id, idempotency_key) on public.analysis_permits to authenticated;

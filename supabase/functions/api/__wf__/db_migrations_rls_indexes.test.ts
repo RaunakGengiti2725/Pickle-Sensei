@@ -1,10 +1,12 @@
 // Static pins over the migration chain in supabase/migrations. The live
 // behaviour (grant layer, quota, planner, identity ledger) is asserted by
-// supabase/tests/security_regression.sql cases H7, I1–I3, J1–J11, K1–K6 and
-// L1–L3 against a real Postgres; this suite guards the chain itself so a
-// later migration cannot quietly reopen a closed path, drop a load-bearing
-// index, recreate a free-rating decision point on the raw per-account count,
-// or drop the table-level permit gate / permit state machine.
+// supabase/tests/security_regression.sql cases H7, I1–I3, J1–J11, K1–K6,
+// L1–L3 and M1–M3 against a real Postgres (and the two-session
+// supabase/tests/run_identity_link_race_test.sh); this suite guards the chain
+// itself so a later migration cannot quietly reopen a closed path, drop a
+// load-bearing index, recreate a free-rating decision point on the raw
+// per-account count, drop the table-level permit gate / permit state machine,
+// or hand a client DELETE / full-column INSERT on permits back.
 //
 //   deno test --no-config --allow-read supabase/functions/api/__wf__/
 
@@ -24,14 +26,19 @@ const SHOTS_INSERT_REQUIRES_PERMIT = "20260904140100_shots_insert_requires_permi
 const PERMIT_STATUS_TRANSITIONS = "20260904140200_permit_status_transitions.sql";
 
 /** Every trigger that writes public.free_rating_ledger. The scored-shot writer
- * covers the identities linked at the moment a rating is spent; the identity-
- * link writer covers an identity linked afterwards (otherwise delete +
- * re-sign-in with the late-linked provider starts the free ratings over). */
+ * covers the identities linked at the moment a rating is spent (it runs inside
+ * apply_synced_shot() / the shots gate, which already hold the per-user
+ * advisory lock); the identity-link writer covers an identity linked
+ * afterwards (otherwise delete + re-sign-in with the late-linked provider
+ * starts the free ratings over) and must take that same lock itself before it
+ * reads the ledger, or a link that lands during an open scored sync inherits
+ * nothing (`lockOn` names the lock argument to pin). */
 const LEDGER_WRITING_TRIGGERS: ReadonlyArray<{
   trigger: string;
   create: string;
   fn: string;
   migration: string;
+  lockOn?: string;
 }> = [
   {
     trigger: "shots_record_free_rating_ledger",
@@ -45,6 +52,7 @@ const LEDGER_WRITING_TRIGGERS: ReadonlyArray<{
     create: "create trigger identities_sync_free_rating_ledger after insert on auth.identities",
     fn: "sync_free_rating_ledger_on_identity_link",
     migration: IDENTITY_LINK_LEDGER,
+    lockOn: "new.user_id",
   },
 ];
 
@@ -142,21 +150,29 @@ function statementsOf(chain: Migration[], file: string): string[] {
   return migration.statements;
 }
 
-function grantsDeleteOnShots(statement: string): boolean {
+function grantsOnTable(statement: string, table: string, privilege: RegExp): boolean {
   if (!statement.startsWith("grant ")) return false;
   const [privileges, objects = ""] = statement.split(" on ", 2);
-  if (!/\bdelete\b/.test(privileges) && !/\ball\b/.test(privileges)) {
+  if (!privilege.test(privileges) && !/\ball\b/.test(privileges)) {
     return false;
   }
-  return /\bpublic\.shots\b/.test(objects);
+  return new RegExp(`\\bpublic\\.${table}\\b`).test(objects);
+}
+
+function grantsDeleteOnShots(statement: string): boolean {
+  return grantsOnTable(statement, "shots", /\bdelete\b/);
+}
+
+function createsPolicyOnTable(statement: string, table: string, cmd: string): boolean {
+  return (
+    statement.startsWith("create policy") &&
+    new RegExp(`\\bon public\\.${table}\\b`).test(statement) &&
+    new RegExp(`\\bfor ${cmd}\\b`).test(statement)
+  );
 }
 
 function createsDeletePolicyOnShots(statement: string): boolean {
-  return (
-    statement.startsWith("create policy") &&
-    /\bon public\.shots\b/.test(statement) &&
-    /\bfor delete\b/.test(statement)
-  );
+  return createsPolicyOnTable(statement, "shots", "delete");
 }
 
 Deno.test("shots: the client DELETE path is closed and never reopened", async () => {
@@ -406,6 +422,77 @@ Deno.test("permits: terminal statuses are locked by a BEFORE UPDATE trigger", as
 });
 
 Deno.test(
+  "permits: a row cannot be replaced around the state machine — no client DELETE, INSERT sized to (id, user_id, idempotency_key)",
+  async () => {
+    const chain = await loadChain();
+    const lock = statementsOf(chain, PERMIT_STATUS_TRANSITIONS);
+    ok(
+      lock.includes(
+        'drop policy if exists "analysis_permits_delete_own" on public.analysis_permits',
+      ),
+      "the transitions migration must drop the owner DELETE policy on permits",
+    );
+    ok(
+      lock.some(
+        (s) =>
+          s.startsWith("revoke delete on public.analysis_permits from ") &&
+          /\banon\b/.test(s) &&
+          /\bauthenticated\b/.test(s),
+      ),
+      "the transitions migration must revoke DELETE on permits from the client roles",
+    );
+    ok(
+      lock.some(
+        (s) =>
+          s.startsWith("revoke insert on public.analysis_permits from ") &&
+          /\banon\b/.test(s) &&
+          /\bauthenticated\b/.test(s),
+      ),
+      "the transitions migration must revoke the table-level INSERT on permits",
+    );
+    ok(
+      lock.includes(
+        "grant insert (id, user_id, idempotency_key) on public.analysis_permits to authenticated",
+      ),
+      "a client-minted permit may only carry id/user_id/idempotency_key (born reserved/null/now())",
+    );
+
+    // The pre-fix chain is the one the revokes were written against.
+    const before = chain.slice(
+      0,
+      chain.findIndex((m) => m.file === PERMIT_STATUS_TRANSITIONS),
+    );
+    ok(
+      before.some((m) =>
+        m.statements.some((s) => grantsOnTable(s, "analysis_permits", /\bdelete\b/)),
+      ),
+      "20260829140000 grants DELETE on analysis_permits",
+    );
+
+    for (const migration of after(chain, PERMIT_STATUS_TRANSITIONS)) {
+      for (const statement of migration.statements) {
+        ok(
+          !grantsOnTable(statement, "analysis_permits", /\bdelete\b/),
+          `${migration.file} re-grants DELETE on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !createsPolicyOnTable(statement, "analysis_permits", "delete"),
+          `${migration.file} recreates a DELETE policy on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !(
+            grantsOnTable(statement, "analysis_permits", /\binsert\b/) &&
+            !statement.startsWith("grant insert (id, user_id, idempotency_key) on ") &&
+            /\b(anon|authenticated|public)\b/.test(statement.split(" to ").pop() ?? "")
+          ),
+          `${migration.file} widens the client INSERT on public.analysis_permits: ${statement}`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
   "free ratings: every decision point counts through the identity ledger, from the ledger migration on",
   async () => {
     const chain = await loadChain();
@@ -446,6 +533,18 @@ Deno.test(
         ),
         `public.${writer.fn} must upsert the ledger with greatest(...) (never lower a count)`,
       );
+      if (writer.lockOn) {
+        const lockAt = bodies[0].indexOf(
+          `pg_advisory_xact_lock(public.access_lock_key(${writer.lockOn}))`,
+        );
+        const readAt = bodies[0].indexOf("from public.free_rating_ledger");
+        const readJoinAt = bodies[0].indexOf("join public.free_rating_ledger");
+        const firstRead = [readAt, readJoinAt].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+        ok(
+          lockAt >= 0 && firstRead !== undefined && lockAt < firstRead,
+          `public.${writer.fn} must take pg_advisory_xact_lock(access_lock_key(${writer.lockOn})) BEFORE reading the ledger (link-vs-sync race)`,
+        );
+      }
       ok(
         migration.statements.includes(
           `revoke execute on function public.${writer.fn}() from public, anon, authenticated`,
