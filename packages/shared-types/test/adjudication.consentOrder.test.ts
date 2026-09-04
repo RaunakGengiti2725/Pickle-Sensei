@@ -83,6 +83,14 @@ describe("adjudication: deriveConsentStatus orders seq-less rows by instant, not
     expect(compareConsentRecords(withdrawal, grant)).toBeGreaterThan(0);
   });
 
+  it("an unparseable seq-less timestamp never becomes the authorizing latest action", () => {
+    const garbageGrant = row("granted", "not-a-timestamp");
+    const withdrawal = row("withdrawn", "2026-01-01T11:00:00Z");
+    expect(training([withdrawal, garbageGrant]).active).toBe(false);
+    expect(training([garbageGrant, withdrawal]).active).toBe(false);
+    expect(compareConsentRecords(garbageGrant, garbageGrant)).toBe(0);
+  });
+
   it("comparator is antisymmetric and consistent over every permutation of a 3-row ledger", () => {
     const rows = [
       row("granted", "2026-01-01T12:00:00+02:00"), // 10:00Z
@@ -104,7 +112,10 @@ describe("adjudication: deriveConsentStatus orders seq-less rows by instant, not
     }
     for (const a of rows) {
       for (const b of rows) {
-        expect(Math.sign(compareConsentRecords(a, b))).toBe(-Math.sign(compareConsentRecords(b, a)));
+        expect(
+          Math.sign(compareConsentRecords(a, b)) + Math.sign(compareConsentRecords(b, a)),
+        ).toBe(0);
+        expect(compareConsentRecords(a, b) === 0).toBe(a === b);
       }
     }
   });

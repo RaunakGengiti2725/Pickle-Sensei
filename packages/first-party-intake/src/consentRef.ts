@@ -62,6 +62,9 @@ function isConsentRecord(row: unknown, index: number, errors: string[]): row is 
   if (typeof r.recordedAtIso !== "string" || Number.isNaN(Date.parse(r.recordedAtIso))) {
     problems.push("recordedAtIso");
   }
+  if (r.seq !== undefined && (typeof r.seq !== "number" || !Number.isInteger(r.seq))) {
+    problems.push("seq");
+  }
   if (problems.length > 0) {
     errors.push(`ledger[${index}]: invalid or missing field(s): ${problems.join(", ")}`);
     return false;

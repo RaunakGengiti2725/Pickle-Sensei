@@ -143,15 +143,53 @@ export interface ConsentScopeStatus {
   lastActionAtIso: string | null;
 }
 
+function hasSeq(r: ConsentRecord): r is ConsentRecord & { seq: number } {
+  return typeof r.seq === "number" && Number.isFinite(r.seq);
+}
+
+/**
+ * Instant a record was written, as epoch milliseconds. Unparseable
+ * timestamps map to -Infinity so they sort BEFORE every real instant and can
+ * never be the "latest" action that authorizes a scope.
+ */
+function consentRecordInstant(r: ConsentRecord): number {
+  const ms = Date.parse(r.recordedAtIso);
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+}
+
+const CONSENT_ACTION_TIE_RANK: Record<ConsentAction, number> = { granted: 0, withdrawn: 1 };
+
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Ledger order for status derivation. Authoritative when both rows carry a
+ * seq (DB identity). Otherwise rows are ordered by the INSTANT their
+ * `recordedAtIso` denotes — never by the string itself, whose code points
+ * say nothing about time once offsets (`+02:00` vs `Z`) or precision
+ * (`:00Z` vs `:00.001Z`) differ. Ties at the same instant have no ground
+ * truth without seq, so they resolve conservatively: a withdrawal sorts after
+ * a grant (default-deny), then the spelling and the id break the remaining
+ * tie so the order is total and deterministic for any input order.
+ */
+export function compareConsentRecords(a: ConsentRecord, b: ConsentRecord): number {
+  if (hasSeq(a) && hasSeq(b) && a.seq !== b.seq) return a.seq - b.seq;
+  const instantDelta = consentRecordInstant(a) - consentRecordInstant(b);
+  if (instantDelta !== 0 && !Number.isNaN(instantDelta)) return instantDelta;
+  const actionDelta = CONSENT_ACTION_TIE_RANK[a.action] - CONSENT_ACTION_TIE_RANK[b.action];
+  if (actionDelta !== 0) return actionDelta;
+  const spellingDelta = compareStrings(a.recordedAtIso, b.recordedAtIso);
+  if (spellingDelta !== 0) return spellingDelta;
+  return compareStrings(a.id, b.id);
+}
+
 /**
  * Fold the append-only ledger into per-scope status. Absence of any record
  * means NOT consented — the default is always off.
  */
 export function deriveConsentStatus(records: readonly ConsentRecord[]): ConsentScopeStatus[] {
-  const ordered = [...records].sort((a, b) => {
-    if (a.seq !== undefined && b.seq !== undefined && a.seq !== b.seq) return a.seq - b.seq;
-    return a.recordedAtIso.localeCompare(b.recordedAtIso);
-  });
+  const ordered = [...records].sort(compareConsentRecords);
   return CONSENT_SCOPES.map((scope) => {
     const last = ordered.filter((r) => r.scope === scope).at(-1) ?? null;
     return {
