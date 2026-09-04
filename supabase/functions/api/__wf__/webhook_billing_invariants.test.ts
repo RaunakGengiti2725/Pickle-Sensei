@@ -16,7 +16,13 @@
 //   deno test -A --no-check --config deno.json webhook_billing_invariants.test.ts
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { loadAttackHarness, pgError, withEnvUnset, type AttackHarness } from "./attackHarness.ts";
+import {
+  loadAttackHarness,
+  pgError,
+  withEnvUnset,
+  withFrozenRateLimitWindow,
+  type AttackHarness,
+} from "./attackHarness.ts";
 import {
   OTHER_USER_ID,
   RC_URL,
@@ -143,27 +149,31 @@ Deno.test(
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
     const ip = "198.51.100.77";
-    let last: Response | null = null;
-    for (let i = 0; i < 241; i += 1) {
-      last = await h.handler(
-        webhookRequest({ id: `evt-rl-${i}`, type: "RENEWAL", app_user_id: TEST_USER_ID }, { ip }),
+    // WEBHOOK_LIMIT is 240 per aligned 60 s window (index.ts); pin the clock
+    // to the start of one window so the burst cannot straddle a boundary.
+    await withFrozenRateLimitWindow(60, async () => {
+      let last: Response | null = null;
+      for (let i = 0; i < 241; i += 1) {
+        last = await h.handler(
+          webhookRequest({ id: `evt-rl-${i}`, type: "RENEWAL", app_user_id: TEST_USER_ID }, { ip }),
+        );
+        if (i < 240) assertEquals(last.status, 200, `delivery ${i + 1}`);
+        await last.text();
+      }
+      assertEquals(last!.status, 429);
+      assertEquals(last!.headers.get("retry-after"), "60");
+      assertEquals(h.callsTo(RC_URL).length, 240);
+      // A different source address is unaffected.
+      const other = await h.handler(
+        webhookRequest(
+          { id: "evt-rl-other", type: "RENEWAL", app_user_id: TEST_USER_ID },
+          {
+            ip: "198.51.100.78",
+          },
+        ),
       );
-      if (i < 240) assertEquals(last.status, 200, `delivery ${i + 1}`);
-      await last.text();
-    }
-    assertEquals(last!.status, 429);
-    assert(Number(last!.headers.get("retry-after")) > 0);
-    assertEquals(h.callsTo(RC_URL).length, 240);
-    // A different source address is unaffected.
-    const other = await h.handler(
-      webhookRequest(
-        { id: "evt-rl-other", type: "RENEWAL", app_user_id: TEST_USER_ID },
-        {
-          ip: "198.51.100.78",
-        },
-      ),
-    );
-    assertEquals(other.status, 200);
+      assertEquals(other.status, 200);
+    });
   },
 );
 

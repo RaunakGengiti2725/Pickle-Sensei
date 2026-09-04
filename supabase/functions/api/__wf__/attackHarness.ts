@@ -78,6 +78,27 @@ export function pgError(status: number, code: string, message: string): Response
   });
 }
 
+/**
+ * Run `fn` with `Date.now()` pinned to the first millisecond of a
+ * `windowSeconds` rate-limit bucket (rateLimit.ts aligns windows to
+ * floor(now / window)), so a burst of requests can never straddle a window
+ * boundary and see its count reset half-way. `new Date()` is untouched.
+ */
+export async function withFrozenRateLimitWindow(
+  windowSeconds: number,
+  fn: (nowMs: number) => Promise<void>,
+): Promise<void> {
+  const realNow = Date.now;
+  const windowMs = windowSeconds * 1_000;
+  const nowMs = Math.floor(realNow() / windowMs) * windowMs;
+  Date.now = () => nowMs;
+  try {
+    await fn(nowMs);
+  } finally {
+    Date.now = realNow;
+  }
+}
+
 /** Run `fn` with an environment variable temporarily unset, restoring it after. */
 export async function withEnvUnset(names: string[], fn: () => Promise<void>): Promise<void> {
   const saved = names.map((name) => [name, Deno.env.get(name)] as const);
