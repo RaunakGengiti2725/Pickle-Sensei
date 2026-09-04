@@ -15,7 +15,31 @@ import type { VideoClipRef, VisionProviderSet } from "@pickle/vision-contracts";
  *   stroke detection → pose + paddle → phases → features → scoring → priority.
  * Pure orchestration over injected providers; the provider's declared source
  * propagates into the persisted result and is never laundered.
+ *
+ * Every provider call sits behind a Result boundary: a provider that throws or
+ * rejects (a native bridge crash, an adapter bug) becomes a typed permanent
+ * `<stage>.provider_crash` failure — the pipeline never leaks a raw rejection
+ * to its caller. Typed failures the provider returns pass through unchanged.
  */
+
+type ProviderStage = "stroke" | "pose" | "paddle" | "phase" | "features";
+
+async function guarded<T>(
+  stage: ProviderStage,
+  execute: () => Promise<Result<T>>,
+): Promise<Result<T>> {
+  try {
+    return await execute();
+  } catch (error: unknown) {
+    return fail(
+      failure(
+        "permanent",
+        `${stage}.provider_crash`,
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  }
+}
 
 export interface AnalyzeClipOptions {
   analysisId: string;
@@ -34,7 +58,7 @@ export async function analyzeClip(
   clip: VideoClipRef,
   options: AnalyzeClipOptions,
 ): Promise<Result<ShotAnalysis>> {
-  const strokes = await providers.stroke.detectStrokes(clip);
+  const strokes = await guarded("stroke", () => providers.stroke.detectStrokes(clip));
   if (!strokes.ok) return strokes;
   const stroke = strokes.value[0];
   if (!stroke) {
@@ -49,23 +73,27 @@ export async function analyzeClip(
 
   const window = { startMs: stroke.startMs, endMs: stroke.endMs };
   const [pose, paddle] = await Promise.all([
-    providers.pose.extractPose(clip, window),
-    providers.paddle.detectPaddle(clip, window),
+    guarded("pose", () => providers.pose.extractPose(clip, window)),
+    guarded("paddle", () => providers.paddle.detectPaddle(clip, window)),
   ]);
   if (!pose.ok) return pose;
   if (!paddle.ok) return paddle;
 
-  const phases = await providers.phase.segmentPhases(pose.value, paddle.value, stroke);
+  const phases = await guarded("phase", () =>
+    providers.phase.segmentPhases(pose.value, paddle.value, stroke),
+  );
   if (!phases.ok) return phases;
 
-  const measurements = await providers.features.extractMeasurements({
-    poseFrames: pose.value,
-    paddleFrames: paddle.value,
-    phases: phases.value,
-    shotType: options.shotType,
-    handedness: options.handedness,
-    cameraView: options.cameraView,
-  });
+  const measurements = await guarded("features", () =>
+    providers.features.extractMeasurements({
+      poseFrames: pose.value,
+      paddleFrames: paddle.value,
+      phases: phases.value,
+      shotType: options.shotType,
+      handedness: options.handedness,
+      cameraView: options.cameraView,
+    }),
+  );
   if (!measurements.ok) return measurements;
 
   const config = getShotScoringConfig(options.shotType);

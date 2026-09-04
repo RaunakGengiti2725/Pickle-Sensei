@@ -103,7 +103,7 @@ describe("ADJ-AP-007: analyzeClip converts provider crashes into typed failures"
     ["phase", "segmentPhases", "phase.provider_crash"],
     ["features", "extractMeasurements", "features.provider_crash"],
   ] as const)(
-    "a rejecting %s provider surfaces as %s.provider_crash",
+    "a rejecting %s provider (%s) surfaces as %s",
     async (stage, method, expectedCode) => {
       const providers = withStage(stage, method, rejecting(`${stage}_crashed`));
       const settled = await settle(analyzeClip(providers, clip, options));
