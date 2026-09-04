@@ -147,6 +147,9 @@ export function createMemoryDb(): HarnessDb {
         owner_key: str(params[0]),
         id: str(params[1]),
         mode: str(params[2]),
+        shot_type: nullableStr(params[3]),
+        focus_checkpoint: nullableStr(params[4]),
+        started_at: str(params[5]),
         completed: 0,
         summary: null,
       };
@@ -204,6 +207,38 @@ export function createMemoryDb(): HarnessDb {
           kind: r.kind,
           payload: r.payload,
           attempts: r.attempts,
+        }));
+      return { rows };
+    }
+
+    if (
+      sql.startsWith(
+        "SELECT id, attempts, payload FROM outbox WHERE owner_key = ? AND kind = 'session.create' ORDER BY id ASC",
+      )
+    ) {
+      const owner = str(params[0]);
+      const rows = tables.outbox
+        .filter(r => r.owner_key === owner && r.kind === 'session.create')
+        .sort((x, y) => x.id - y.id)
+        .map(r => ({ id: r.id, attempts: r.attempts, payload: r.payload }));
+      return { rows };
+    }
+
+    if (
+      sql.startsWith(
+        'SELECT id, mode, shot_type, focus_checkpoint, started_at FROM local_session WHERE owner_key = ? AND id = ?',
+      )
+    ) {
+      const owner = str(params[0]);
+      const id = str(params[1]);
+      const rows = tables.sessions
+        .filter(s => s.owner_key === owner && s.id === id)
+        .map(s => ({
+          id: s.id,
+          mode: s.mode,
+          shot_type: s.shot_type,
+          focus_checkpoint: s.focus_checkpoint,
+          started_at: s.started_at,
         }));
       return { rows };
     }

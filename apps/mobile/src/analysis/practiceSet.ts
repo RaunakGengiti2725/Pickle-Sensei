@@ -4,7 +4,12 @@ import {
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
-import { getKv, saveSession, setKv } from '../data/repository';
+import {
+  detachShotFromSession,
+  getKv,
+  saveSession,
+  setKv,
+} from '../data/repository';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -234,10 +239,84 @@ export async function commitPracticeSet(
   });
 }
 
+export type PracticeSetCommitOutcome =
+  | { kind: 'committed' }
+  | {
+      /** The new set's session could not be written; the scored shot was
+       * detached from it and syncs on its own, and no set was recorded. */
+      kind: 'detached';
+      error: string;
+    };
+
+/** Number of times a new set's session write is attempted before the shot
+ * is detached from the session that will never exist. */
+export const PRACTICE_SET_SESSION_WRITE_ATTEMPTS = 2;
+
+async function saveSessionWithRetry(
+  db: LocalDb,
+  plan: PracticeSetPlan,
+): Promise<unknown | null> {
+  let lastError: unknown = null;
+  for (let n = 0; n < PRACTICE_SET_SESSION_WRITE_ATTEMPTS; n++) {
+    try {
+      await saveSession(db, {
+        id: plan.sessionId,
+        mode: PRACTICE_SET_MODE,
+        shotType: plan.shotType,
+        focusCheckpoint: null,
+        startedAt: plan.startedAtIso,
+      });
+      return null;
+    } catch (error) {
+      lastError = error ?? new Error('saveSession failed');
+    }
+  }
+  return lastError;
+}
+
+/**
+ * Commits a plan for the scored analysis `shotId` that was ALREADY saved
+ * with the plan's sessionId. The set's session row + session.create entry
+ * are what let the server accept that shot, so a new set's session write is
+ * retried, and when it still fails the shot is detached from the session
+ * instead of waiting forever on one the server will never see: it syncs as
+ * a standalone rating and the sitting simply is not recorded. A failure to
+ * write the kv activity stamp propagates — nothing about the shot depends
+ * on it, and the caller decides how to surface it.
+ */
+export async function commitPracticeSetForShot(
+  db: LocalDb,
+  plan: PracticeSetPlan,
+  shotId: string,
+  nowIso?: string,
+): Promise<PracticeSetCommitOutcome> {
+  const now = resolveNow(nowIso ?? plan.nowIso);
+  if (!plan.resumed) {
+    const sessionError = await saveSessionWithRetry(db, plan);
+    if (sessionError !== null) {
+      await detachShotFromSession(db, shotId);
+      return {
+        kind: 'detached',
+        error:
+          sessionError instanceof Error
+            ? sessionError.message
+            : String(sessionError),
+      };
+    }
+  }
+  await writeStoredSet(db, plan.owner, {
+    sessionId: plan.sessionId,
+    shotType: plan.shotType,
+    startedAtIso: plan.startedAtIso,
+    lastActivityAtIso: now.iso,
+  });
+  return { kind: 'committed' };
+}
+
 /**
  * Plan + commit in one step, for callers that already know an analysis will
  * be recorded in the set (the capture flow itself defers the commit until a
- * score exists — see planPracticeSet / commitPracticeSet).
+ * score exists — see planPracticeSet / commitPracticeSetForShot).
  */
 export async function resumeOrStartPracticeSet(
   db: LocalDb,

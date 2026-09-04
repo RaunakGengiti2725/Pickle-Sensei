@@ -318,8 +318,20 @@ const TRANSIENT_CODES = [
   'shot.write_failed',
   'evaluation.trial_write_failed',
   'auth.required',
-  'shot.session_not_found',
 ];
+
+/**
+ * `shot.session_not_found` is resolved per row from the local state at the
+ * moment of the rejection (the drain has already processed the session rows
+ * of the same window):
+ *  - a RETRYABLE session.create row for the shot's session is queued →
+ *    ordering artifact, no attempt spent;
+ *  - no session.create row but the local_session row exists → one attempt
+ *    spent AND a fresh session.create row for that session is appended;
+ *  - otherwise (session.create exhausted / session never committed / no
+ *    sessionId) → one attempt spent, the row ends terminal at the cap.
+ */
+const SESSION_NOT_FOUND_CODE = 'shot.session_not_found';
 
 function isJson(text: string): boolean {
   try {
@@ -781,6 +793,44 @@ export async function runSequence(
       }
     }
 
+    // Session rows as the shot phase of this drain sees them: the session
+    // phase above already charged / deleted them.
+    const maxBeforeId = Math.max(0, ...before.outbox.map(r => r.id));
+    const sessionRowsAtShotPhase = before.outbox
+      .filter(r => r.owner_key === owner && r.kind === 'session.create')
+      .flatMap(r => {
+        const expectation = expectations.get(r.id);
+        if (expectation?.deleted) return [];
+        return [{ ...r, attempts: r.attempts + (expectation?.delta ?? 0) }];
+      });
+    const requeuedSessions = new Set<string>();
+    const sessionNotFoundDelta = (
+      row: OutboxRowSnapshot,
+      sessionId: string | null,
+    ): number => {
+      if (sessionId === null) return 1;
+      const matching = sessionRowsAtShotPhase.filter(
+        r => parse(r.payload)?.['id'] === sessionId,
+      );
+      if (matching.some(r => r.attempts < OUTBOX_MAX_ATTEMPTS)) return 0;
+      if (matching.length > 0) return 1;
+      const local = before.sessions.some(
+        s => s.owner_key === owner && s.id === sessionId,
+      );
+      if (local && !requeuedSessions.has(sessionId)) {
+        requeuedSessions.add(sessionId);
+        // The re-queued row is visible to later shots of the same drain.
+        sessionRowsAtShotPhase.push({
+          ...row,
+          id: Number.MAX_SAFE_INTEGER,
+          kind: 'session.create',
+          payload: JSON.stringify({ id: sessionId }),
+          attempts: 0,
+        });
+      }
+      return 1;
+    };
+
     // Shots: one request for every parseable row.
     const shotRows = window.filter(r => r.kind === 'shot.sync');
     const sendable = shotRows.filter(r => {
@@ -846,6 +896,20 @@ export async function runSequence(
             continue;
           }
           const rejection = entry.rejected.find(r => r.id === shotId);
+          if (
+            rejection !== undefined &&
+            rejection.code === SESSION_NOT_FOUND_CODE
+          ) {
+            const rawSessionId = parse(row.payload)?.['sessionId'];
+            const sessionId =
+              typeof rawSessionId === 'string' ? rawSessionId : null;
+            expectations.set(row.id, {
+              deleted: false,
+              delta: sessionNotFoundDelta(row, sessionId),
+              receipt: null,
+            });
+            continue;
+          }
           const transient =
             rejection !== undefined && TRANSIENT_CODES.includes(rejection.code);
           expectations.set(row.id, {
@@ -855,6 +919,38 @@ export async function runSequence(
           });
         }
       }
+    }
+    for (const sessionId of requeuedSessions) {
+      const fresh = after.outbox.filter(
+        r =>
+          r.owner_key === owner &&
+          r.kind === 'session.create' &&
+          r.id > maxBeforeId &&
+          parse(r.payload)?.['id'] === sessionId,
+      );
+      if (fresh.length !== 1) {
+        violate(
+          step,
+          'I-DRAIN-EFFECT',
+          `session ${sessionId} has a local row but no sync entry; expected exactly one re-queued session.create row, found ${fresh.length}`,
+        );
+      }
+    }
+    const unexpectedNew = after.outbox.filter(
+      r =>
+        r.owner_key === owner &&
+        r.id > maxBeforeId &&
+        !(
+          r.kind === 'session.create' &&
+          requeuedSessions.has(String(parse(r.payload)?.['id']))
+        ),
+    );
+    if (unexpectedNew.length > 0) {
+      violate(
+        step,
+        'I-DRAIN-EFFECT',
+        `drain appended unexpected rows ${unexpectedNew.map(r => `${r.id}(${r.kind})`).join(',')}`,
+      );
     }
 
     // Trials: one request when the transport supports them.

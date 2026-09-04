@@ -55,7 +55,7 @@ import {
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import {
-  commitPracticeSet,
+  commitPracticeSetForShot,
   planPracticeSet,
   type PracticeSetPlan,
 } from '../analysis/practiceSet';
@@ -842,7 +842,8 @@ export function AnalyzeScreen() {
         // joins the set it came from; otherwise the live set is resumed or a
         // new one starts. The plan is only READ here — it is committed
         // (session row + outbox + kv) after a score exists, so an abstained
-        // or failed run bookkeeps nothing. Set errors never fail an analysis.
+        // or failed run bookkeeps nothing. A plan that cannot be read never
+        // fails an analysis — the run simply proceeds without a set.
         let practiceSet: PracticeSetPlan | null = null;
         try {
           practiceSet = await planPracticeSet(getDb(), {
@@ -915,10 +916,16 @@ export function AnalyzeScreen() {
         if (outcome.kind === 'scored') {
           // The scored analysis is saved with the plan's sessionId: commit
           // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
+          // kv activity stamp keeps the set alive). The score is already
+          // durable; a session write that fails past its retry detaches the
+          // shot from the set so it syncs on its own, and anything else that
+          // fails here is surfaced like every other analysis error.
           if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+            await commitPracticeSetForShot(
+              getDb(),
+              practiceSet,
+              outcome.analysisId,
+            );
           }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free

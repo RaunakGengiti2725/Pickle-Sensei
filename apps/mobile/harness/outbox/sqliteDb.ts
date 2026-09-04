@@ -126,7 +126,7 @@ export function createSqliteDb(): HarnessDb {
           `SELECT owner_key, id, session_id, result_kind, source, payload FROM local_shot`,
         ),
         sessions: all<LocalSessionSnapshot>(
-          `SELECT owner_key, id, mode, completed, summary FROM local_session`,
+          `SELECT owner_key, id, mode, shot_type, focus_checkpoint, started_at, completed, summary FROM local_session`,
         ),
         kv: all<{ key: string; value: string }>(`SELECT key, value FROM kv`),
         outboxSequence: seq[0]?.seq ?? 0,

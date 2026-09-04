@@ -181,6 +181,33 @@ export async function saveAnalysis(
 }
 
 /**
+ * Turns a saved shot into a standalone one (no session): used when the
+ * practice-set session it was saved under could not be committed, so the
+ * shot never waits on a session the server will not know. The local row and
+ * its queued sync payload change together; the score itself is untouched.
+ */
+export async function detachShotFromSession(
+  db: LocalDb,
+  shotId: string,
+): Promise<void> {
+  const owner = requireWritableDataOwner();
+  await inTransaction(db, async () => {
+    await db.execute(
+      `UPDATE local_shot
+       SET session_id = NULL, payload = json_set(payload, '$.sessionId', NULL)
+       WHERE owner_key = ? AND id = ?`,
+      [owner, shotId],
+    );
+    await db.execute(
+      `UPDATE outbox SET payload = json_set(payload, '$.sessionId', NULL)
+       WHERE owner_key = ? AND kind = 'shot.sync'
+         AND json_extract(payload, '$.id') = ?`,
+      [owner, shotId],
+    );
+  });
+}
+
+/**
  * Persists a low-confidence (unscored) analysis for local display only. It
  * never enters the sync outbox: abstentions are not ratings, consume no
  * permit, and must not masquerade as scored shots anywhere downstream.

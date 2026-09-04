@@ -35,6 +35,9 @@ export interface LocalSessionSnapshot {
   owner_key: string;
   id: string;
   mode: string;
+  shot_type: string | null;
+  focus_checkpoint: string | null;
+  started_at: string;
   completed: number;
   summary: string | null;
 }
