@@ -3,7 +3,7 @@
 #
 #   scripts/security-scan.sh                 # working tree + git history reachable from HEAD
 #   scripts/security-scan.sh --tree          # working tree only (tracked, untracked, unignored)
-#   scripts/security-scan.sh --history       # git history reachable from HEAD (= --log-opts "HEAD")
+#   scripts/security-scan.sh --history       # git history reachable from HEAD (= --log-opts "HEAD --")
 #   scripts/security-scan.sh --history --log-opts "origin/main..HEAD"   # only this branch's commits
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
@@ -11,19 +11,26 @@
 # with a justification). Findings are ALWAYS redacted in output and reports.
 #
 # History scope: without --log-opts the scan covers exactly the ancestry of HEAD
-# (DEFAULT_LOG_OPTS), never every fetched ref, so the verdict for the commit
-# under test does not depend on unrelated branches. --log-opts is handed to
-# gitleaks verbatim (it appends the words to `git log -p -U0`). The scan fails
-# closed: the same range is resolved with `git log` first and an invalid range
-# or one selecting zero commits is a scanner error ("NO COMMITS SCANNED"), as
-# are gitleaks ERR lines or a "0 commits scanned" result after the fact. A
-# shallow repository (history coverage incomplete) is also a scanner error —
+# (DEFAULT_LOG_OPTS, spelled "HEAD --" so a tracked file named HEAD cannot make
+# the revision ambiguous), never every fetched ref, so the verdict for the
+# commit under test does not depend on unrelated branches. --log-opts is handed
+# to gitleaks verbatim: it splits the value on single spaces and appends the
+# words to `git log -p -U0`, so the value must be single-space separated (no
+# leading/trailing/double spaces). The scan fails closed: the same range is
+# resolved with `git log` first and an invalid range or one selecting zero
+# commits is a scanner error ("NO COMMITS SCANNED"), as are gitleaks ERR lines,
+# a missing commit count, or gitleaks counting 0 commits in a range whose
+# `git log -p` output contains textual hunks. gitleaks counts only commits that
+# produce text hunks, so a non-empty range made solely of merges, --allow-empty
+# commits, renames, mode changes or binary files legitimately scans 0 commits
+# and PASSES (git already proved the range is non-empty; there is no text to
+# scan). A shallow repository (history coverage incomplete) is a scanner error —
 # run `git fetch --unshallow`, or set SECURITY_SCAN_ALLOW_SHALLOW=1 to
 # downgrade it to a warning.
 #
 # Exit codes: 0 = no findings, 1 = findings, 2 = no verdict (setup or scanner
-#             error: no binary, invalid/empty history range, shallow repository,
-#             gitleaks error output). Only 0 is a PASS.
+#             error: no binary, invalid/empty/malformed history range, shallow
+#             repository, gitleaks error output). Only 0 is a PASS.
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary instead of the pinned download
@@ -34,8 +41,9 @@
 #                           is qualified as incomplete coverage)
 set -euo pipefail
 
-# `git log` range the history scan uses when --log-opts is not given.
-DEFAULT_LOG_OPTS="HEAD"
+# `git log` range the history scan uses when --log-opts is not given. The `--`
+# keeps HEAD a revision even when the repository tracks a file named HEAD.
+DEFAULT_LOG_OPTS="HEAD --"
 
 GITLEAKS_VERSION="8.30.1"
 # sha256 of the official release tarballs for v${GITLEAKS_VERSION}
@@ -91,6 +99,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$SCAN_TREE" = 1 ] || [ "$SCAN_HISTORY" = 1 ] || die "--tree and --history are mutually exclusive"
+if [ -n "$LOG_OPTS" ] && [[ "$LOG_OPTS" =~ (^\ |\ $|\ \ |[[:cntrl:]]) ]]; then
+  die "--log-opts must be single-space separated words with no leading, trailing or double spaces (gitleaks splits it on single spaces and git rejects the resulting empty argument): '$LOG_OPTS'"
+fi
 
 [ -f "$CONFIG" ] || die "missing $CONFIG"
 cd "$REPO_ROOT"
@@ -212,9 +223,23 @@ run_scan() {
   fi
   if [ "$rc" = 0 ] && [ "$sub" = git ]; then
     scanned="$(sed -n 's/.* INF \([0-9][0-9]*\) commits scanned\..*/\1/p' "$SCANNER_LOG" | tail -n 1)"
-    if [ -z "$scanned" ] || [ "$scanned" = 0 ]; then
-      log "${label}: NO COMMITS SCANNED (gitleaks reported '${scanned:-no}' commits) — the requested range evaluated nothing"
+    if [ -z "$scanned" ]; then
+      log "${label}: gitleaks did not report a commit count — cannot confirm the scan ran"
       rc=2
+    elif [ "$scanned" = 0 ]; then
+      # gitleaks counts only commits whose `git log -p -U0` output has text
+      # hunks. git already proved the range selects HISTORY_COMMITS commits;
+      # 0 scanned is only wrong if git can show hunks gitleaks did not see.
+      local hunks
+      if ! hunks="$(history_range_hunks "${HISTORY_WORDS[@]}")"; then
+        log "${label}: gitleaks scanned 0 commits and git could not re-read the range — no verdict"
+        rc=2
+      elif [ "$hunks" != 0 ]; then
+        log "${label}: gitleaks scanned 0 commits but the range has ${hunks} textual hunk(s) over ${HISTORY_COMMITS} commit(s) — the scanner evaluated nothing it should have"
+        rc=2
+      else
+        log "${label}: ${HISTORY_COMMITS} commit(s) in range, none with a textual diff (merge/empty/rename/mode/binary-only) — nothing for gitleaks to scan; range verified non-empty by git"
+      fi
     fi
   fi
   case "$rc" in
@@ -239,9 +264,16 @@ history_range_commits() {
   fi
   rm -f "$err"
   if [ "$count" = 0 ]; then
-    die "NO COMMITS SCANNED: history range '$*' selects no commits — a vacuous scan is not a PASS (check the range; the default is 'HEAD')"
+    die "NO COMMITS SCANNED: history range '$*' selects no commits — a vacuous scan is not a PASS (check the range; the default is '$DEFAULT_LOG_OPTS')"
   fi
   printf '%s' "$count"
+}
+
+# history_range_hunks <log-opts words...>: number of textual diff hunks in the
+# exact `git log -p -U0` stream gitleaks consumes for this range (headers
+# suppressed; hunk lines start with '@@', content lines never do).
+history_range_hunks() {
+  git log --no-color -p -U0 --format= "$@" | awk '/^@@/ { n++ } END { print n + 0 }'
 }
 
 SHALLOW_WARNING=""
@@ -273,9 +305,9 @@ if [ "$SCAN_HISTORY" = 1 ]; then
   check_history_coverage
   history_opts="${LOG_OPTS:-$DEFAULT_LOG_OPTS}"
   # gitleaks splits --log-opts on single spaces before handing them to git log.
-  IFS=' ' read -r -a history_words <<<"$history_opts"
-  commit_count="$(history_range_commits "${history_words[@]}")" || exit $?
-  log "history: $commit_count commits in range (git log $history_opts; gitleaks --log-opts \"$history_opts\" — it counts only commits with a diff, so merges are not in its total)"
+  IFS=' ' read -r -a HISTORY_WORDS <<<"$history_opts"
+  HISTORY_COMMITS="$(history_range_commits "${HISTORY_WORDS[@]}")" || exit $?
+  log "history: $HISTORY_COMMITS commits in range (git log $history_opts; gitleaks --log-opts \"$history_opts\" — it counts only commits with a textual diff, so merges are not in its total)"
   run_scan history git --log-opts "$history_opts" || record $?
 fi
 
