@@ -1405,10 +1405,16 @@ begin
 end $$;
 
 -- K3: the far-future bound binds too (year 9999 is not a capture instant).
+-- K2's permit stayed reserved (a failed write never consumes it), so the
+-- idempotent reserve replays it — a third reservation would exceed the
+-- two-slot free allowance.
 do $$
 declare v text; p uuid;
 begin
-  select permit_id into p from public.reserve_analysis_permit('kim-k3-key');
+  select permit_id into p from public.reserve_analysis_permit('kim-k2-key');
+  if p is null then
+    raise exception 'K3: the reserved permit from K2 must be replayable';
+  end if;
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000c3',
     'analysisPermitId', p,

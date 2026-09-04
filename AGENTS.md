@@ -31,6 +31,17 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   `YYYYMMDDHHMMSS_description.sql`; remote history is tracked — never edit an
   applied migration, add a new one)
 - API: `supabase functions deploy api --no-verify-jwt`
+- Edge dependencies are pinned EXACTLY: `index.ts` imports
+  `npm:@supabase/supabase-js@2.112.4` and the function-local
+  `supabase/functions/api/deno.json` + `deno.lock` fix the resolution the
+  deploy bundles (a bare `@2` would resolve the latest 2.x, unreviewed, on
+  every deploy). Static pin: `__wf__/db_migrations_rls_indexes.test.ts`
+  ("edge deps"). To bump: change the version in the `index.ts` import, then
+  `cd supabase/functions/api && rm deno.lock && deno install --entrypoint
+index.ts` (regenerates `deno.lock`), update the `SUPABASE_JS_PIN` constant
+  in that test, run `(cd supabase/functions/api/__wf__ && deno task test)`
+  and `deno check cache.ts rateLimit.ts http.ts legal.ts`, and commit the
+  import, the lockfile and the test together.
 - Secrets: `supabase secrets set REVENUECAT_SECRET_API_KEY=…` (billing sync falls
   back to `REVENUECAT_PUBLIC_SDK_KEY`, currently set to the Test Store key),
   `REVENUECAT_WEBHOOK_AUTH=…` (shared secret the RevenueCat webhook must send

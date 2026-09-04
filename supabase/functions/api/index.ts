@@ -77,7 +77,7 @@
 // TypeScript is Deno-targeted (not part of the pnpm workspace typecheck).
 // Verify with `supabase functions serve api` + a real Google ID token.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
@@ -180,8 +180,46 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const isUuid = (value: unknown): value is string =>
   typeof value === "string" && UUID_RE.test(value);
 
-const isIsoDate = (value: unknown): value is string =>
-  typeof value === "string" && !Number.isNaN(Date.parse(value));
+/** The wire shape every client timestamp has (`Date#toISOString`, the
+ * api-contracts `z.iso.datetime()`): UTC, `Z`-suffixed, optional fraction.
+ * `Date.parse` is deliberately NOT the gate — V8's legacy parser accepts
+ * free-form text such as `Jan 1 2026 (anything)`, which would then travel
+ * verbatim into the database error path and the function logs. */
+const ISO_UTC_INSTANT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?Z$/;
+/** Sane range for a capture/session instant; mirrors the DB CHECKs
+ * `shots_captured_at_bounds` / `captures_captured_at_bounds`. */
+const ISO_INSTANT_MIN_MS = Date.UTC(2000, 0, 1);
+const ISO_INSTANT_MAX_MS = Date.UTC(2100, 0, 1);
+
+const isIsoDate = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const match = ISO_UTC_INSTANT_RE.exec(value);
+  if (!match) return false;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return false;
+  // A calendar round-trip catches rollovers Date.parse silently accepts
+  // (2026-02-30 → March 2).
+  const parsed = new Date(ms);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return false;
+  }
+  return ms >= ISO_INSTANT_MIN_MS && ms < ISO_INSTANT_MAX_MS;
+};
+
+/** Log-safe rendering of an RPC status string: one line, control and
+ * spoofing characters stripped, length-capped. Statuses are server-generated
+ * (SQLSTATE-only since 20260904000000) but the log line must stay categorical
+ * even if a future RPC ever echoed input. */
+const RPC_STATUS_LOG_MAX = 120;
+const logSafeStatus = (status: string): string => sanitizeUserText(status, RPC_STATUS_LOG_MAX);
 
 /** Largest JSON body any route accepts. Shot batches are ~2 KB per shot ×
  * 200; evaluation trials are the biggest legitimate payload and get the
@@ -982,7 +1020,9 @@ function parseSyncShot(
   if (typeof value.cameraView !== "string" || !CAMERA_VIEWS.has(value.cameraView)) {
     return invalid("cameraView must be side|rear_oblique.");
   }
-  if (!isIsoDate(value.capturedAt)) return invalid("capturedAt must be ISO.");
+  if (!isIsoDate(value.capturedAt)) {
+    return invalid("capturedAt must be an ISO-8601 UTC instant (e.g. 2026-08-31T10:00:00.000Z).");
+  }
   const ts = value.timestamps;
   if (
     !isRecord(ts) ||
@@ -1263,9 +1303,10 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       reject(shot.id, status, SYNC_STATUS_MESSAGES[status]);
       continue;
     }
-    // shot.write_failed:<detail> and anything unexpected: log the detail,
-    // reject with the stable code and a generic message.
-    console.error("[api] shot sync write failed:", status);
+    // shot.write_failed:<SQLSTATE> and anything unexpected: log the status
+    // (sanitized to one capped line), reject with the stable code and a
+    // generic message.
+    console.error("[api] shot sync write failed:", logSafeStatus(status));
     reject(
       shot.id,
       "shot.write_failed",

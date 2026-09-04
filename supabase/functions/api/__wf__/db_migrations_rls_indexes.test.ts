@@ -311,6 +311,13 @@ Deno.test(
 const PROGRESS_DATA = "20260829120000_progress_data.sql";
 const ERROR_HYGIENE = "20260904000000_apply_synced_shot_error_hygiene.sql";
 
+function stripSqlComments(raw: string): string {
+  return raw
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+}
+
 /** Column names declared `text` inside `create table if not exists public.<table> (…)`. */
 function textColumnsOf(raw: string, table: string): string[] {
   const start = raw.search(new RegExp(`create table if not exists public\\.${table}\\s*\\(`, "i"));
@@ -350,7 +357,7 @@ Deno.test(
     const chain = await loadChain();
     const hygiene = chain.find((m) => m.file === ERROR_HYGIENE);
     ok(hygiene, `${ERROR_HYGIENE} must exist in the migration chain`);
-    const hygieneBodies = functionBodies(hygiene.raw, "apply_synced_shot");
+    const hygieneBodies = functionBodies(stripSqlComments(hygiene.raw), "apply_synced_shot");
     ok(hygieneBodies.length === 1, `${ERROR_HYGIENE} must recreate public.apply_synced_shot`);
     ok(
       /when others then\s+return 'shot\.write_failed:' \|\| sqlstate;/.test(hygieneBodies[0]),
@@ -361,7 +368,7 @@ Deno.test(
     // client's input) and no message text in any return value.
     const index = chain.findIndex((m) => m.file === ERROR_HYGIENE);
     for (const migration of chain.slice(index)) {
-      for (const body of functionBodies(migration.raw, "apply_synced_shot")) {
+      for (const body of functionBodies(stripSqlComments(migration.raw), "apply_synced_shot")) {
         ok(!/\bsqlerrm\b/.test(body), `${migration.file}: apply_synced_shot must not use sqlerrm`);
         ok(
           !/\bpg_exception_detail\b|\bpg_exception_hint\b|\bmessage_text\b/.test(body),
@@ -403,7 +410,9 @@ Deno.test("captured_at: shots and captures carry a finite, sane-range check", as
   const hygiene = statementsOf(chain, ERROR_HYGIENE);
   for (const table of ["shots", "captures"]) {
     const check = hygiene.find((s) =>
-      new RegExp(`^alter table public\\.${table} add constraint ${table}_captured_at_bounds check \\(`).test(s),
+      new RegExp(
+        `alter table public\\.${table} add constraint ${table}_captured_at_bounds check \\(`,
+      ).test(s),
     );
     ok(check, `${ERROR_HYGIENE} must add ${table}_captured_at_bounds`);
     ok(
@@ -427,7 +436,10 @@ Deno.test("captures: no client write grant survives the error-hygiene migration"
       if (!/\bpublic\.captures\b/.test(rest.split(" to ")[0] ?? "")) continue;
       const grantees = rest.split(" to ").pop() ?? "";
       ok(
-        !(/\b(insert|update|delete|all)\b/.test(privileges) && /\b(anon|authenticated|public)\b/.test(grantees)),
+        !(
+          /\b(insert|update|delete|all)\b/.test(privileges) &&
+          /\b(anon|authenticated|public)\b/.test(grantees)
+        ),
         `${migration.file} re-grants client writes on public.captures: ${statement}`,
       );
     }
@@ -448,43 +460,51 @@ async function productionModules(): Promise<string[]> {
   return files.sort();
 }
 
-Deno.test("edge deps: every npm:/jsr: specifier in supabase/functions/api/*.ts is an exact x.y.z", async () => {
-  const specifiers: Array<{ file: string; specifier: string }> = [];
-  for (const file of await productionModules()) {
-    const source = await Deno.readTextFile(new URL(file, FUNCTION_DIR));
-    for (const match of source.matchAll(/["']((?:npm|jsr):[^"']+)["']/g)) {
-      specifiers.push({ file, specifier: match[1] });
+Deno.test(
+  "edge deps: every npm:/jsr: specifier in supabase/functions/api/*.ts is an exact x.y.z",
+  async () => {
+    const specifiers: Array<{ file: string; specifier: string }> = [];
+    for (const file of await productionModules()) {
+      const source = await Deno.readTextFile(new URL(file, FUNCTION_DIR));
+      for (const match of source.matchAll(/["']((?:npm|jsr):[^"']+)["']/g)) {
+        specifiers.push({ file, specifier: match[1] });
+      }
     }
-  }
-  ok(
-    specifiers.some((s) => s.file === "index.ts" && s.specifier.startsWith("npm:@supabase/supabase-js@")),
-    "index.ts must import supabase-js through an npm: specifier",
-  );
-  for (const { file, specifier } of specifiers) {
     ok(
-      EXACT_SEMVER_SPECIFIER.test(specifier),
-      `${file}: ${specifier} must carry an exact x.y.z version (a bare major floats every deploy)`,
+      specifiers.some(
+        (s) => s.file === "index.ts" && s.specifier.startsWith("npm:@supabase/supabase-js@"),
+      ),
+      "index.ts must import supabase-js through an npm: specifier",
     );
-  }
-  ok(
-    specifiers.some((s) => s.specifier === SUPABASE_JS_PIN),
-    `index.ts must pin ${SUPABASE_JS_PIN} (bump the pin AND deno.lock together — see AGENTS.md Deploy)`,
-  );
-});
+    for (const { file, specifier } of specifiers) {
+      ok(
+        EXACT_SEMVER_SPECIFIER.test(specifier),
+        `${file}: ${specifier} must carry an exact x.y.z version (a bare major floats every deploy)`,
+      );
+    }
+    ok(
+      specifiers.some((s) => s.specifier === SUPABASE_JS_PIN),
+      `index.ts must pin ${SUPABASE_JS_PIN} (bump the pin AND deno.lock together — see AGENTS.md Deploy)`,
+    );
+  },
+);
 
-Deno.test("edge deps: supabase/functions/api/deno.json + deno.lock pin the deploy-time resolution", async () => {
-  const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", FUNCTION_DIR)));
-  ok(config.lock !== false, "supabase/functions/api/deno.json must not disable the lockfile");
-  const lock = JSON.parse(await Deno.readTextFile(new URL("deno.lock", FUNCTION_DIR)));
-  const specifiers = lock.specifiers ?? {};
-  ok(
-    specifiers[SUPABASE_JS_PIN] === SUPABASE_JS_PIN.split("@").pop(),
-    `deno.lock must resolve ${SUPABASE_JS_PIN} to itself; got ${JSON.stringify(specifiers)}`,
-  );
-  for (const key of Object.keys(specifiers)) {
+Deno.test(
+  "edge deps: supabase/functions/api/deno.json + deno.lock pin the deploy-time resolution",
+  async () => {
+    const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", FUNCTION_DIR)));
+    ok(config.lock !== false, "supabase/functions/api/deno.json must not disable the lockfile");
+    const lock = JSON.parse(await Deno.readTextFile(new URL("deno.lock", FUNCTION_DIR)));
+    const specifiers = lock.specifiers ?? {};
     ok(
-      !/^npm:@supabase\/supabase-js@(\d+|\^|~)/.test(key) || key === SUPABASE_JS_PIN,
-      `deno.lock records a floating supabase-js specifier: ${key}`,
+      specifiers[SUPABASE_JS_PIN] === SUPABASE_JS_PIN.split("@").pop(),
+      `deno.lock must resolve ${SUPABASE_JS_PIN} to itself; got ${JSON.stringify(specifiers)}`,
     );
-  }
-});
+    for (const key of Object.keys(specifiers)) {
+      ok(
+        !/^npm:@supabase\/supabase-js@(\d+|\^|~)/.test(key) || key === SUPABASE_JS_PIN,
+        `deno.lock records a floating supabase-js specifier: ${key}`,
+      );
+    }
+  },
+);
