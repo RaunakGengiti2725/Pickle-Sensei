@@ -1,0 +1,14 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -200,9 +200,9 @@
+       label={session ? 'Loading your account' : 'Getting things ready'}
+     />
+   ) : !session ? (
+-    preAuthStage === 'signin' ? (
++    preAuthStage === 'onboarding' ? (
+       <SignInScreen onBack={() => setPreAuthStage('welcome')} />
+-    ) : preAuthStage === 'onboarding' ? (
++    ) : preAuthStage === 'signin' ? (
+       <OnboardingScreen
+         mode="preauth"
+         onFinished={() => setPreAuthStage(stageAfterOnboarding())}

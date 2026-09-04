@@ -1,0 +1,16 @@
+{
+  "runId": "final-full-with-pins-4d812e1a",
+  "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "suite": "full",
+  "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json",
+  "node": "v22.12.0",
+  "startedAt": "2026-09-04T06:40:19.680Z",
+  "finishedAt": "2026-09-04T06:55:46.631Z",
+  "wallMs": 926951,
+  "only": null,
+  "skipTsc": false,
+  "extraTests": [],
+  "totals": {
+    "killed": 51
+  }
+}

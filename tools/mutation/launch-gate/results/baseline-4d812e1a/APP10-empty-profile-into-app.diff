@@ -1,0 +1,11 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -221,8 +221,6 @@
+       detail={hydrateError}
+       onRetry={() => void hydrateApp()}
+     />
+-  ) : !profile ? (
+-    <OnboardingScreen />
+   ) : (
+     <RootNavigator />
+   );

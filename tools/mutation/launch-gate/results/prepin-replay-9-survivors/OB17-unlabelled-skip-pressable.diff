@@ -1,0 +1,24 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -2,6 +2,7 @@
+ import {
+   KeyboardAvoidingView,
+   Platform,
++  Pressable,
+   ScrollView,
+   StatusBar,
+   StyleSheet,
+@@ -491,6 +492,13 @@
+         <Text style={[type.micro, styles.stepCount]}>
+           {stepIndex + 1}/{STEPS.length}
+         </Text>
++        {preAuth ? (
++          <Pressable
++            hitSlop={24}
++            onPress={() => props.onFinished?.()}
++            style={styles.headerButton}
++          />
++        ) : null}
+       </View>
+ 
+       {step !== 'reveal' && step !== 'notifications' ? (

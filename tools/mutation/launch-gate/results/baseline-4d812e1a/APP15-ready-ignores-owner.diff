@@ -1,0 +1,12 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -174,8 +174,7 @@
+   const ready =
+     authHydrated &&
+     Boolean(desiredOwner) &&
+-    appHydrated &&
+-    appOwnerKey === desiredOwner;
++    appHydrated;
+ 
+   // First-run walkthrough: raised the first time this DEVICE lands on the
+   // main app (session + profile both present — the moment the tab bar and

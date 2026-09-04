@@ -1,0 +1,21 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -491,6 +491,18 @@
+         <Text style={[type.micro, styles.stepCount]}>
+           {stepIndex + 1}/{STEPS.length}
+         </Text>
++        {preAuth ? (
++          <PressableScale
++            accessibilityRole="button"
++            accessibilityLabel="Later"
++            accessibilityHint="Finish setup another time"
++            hitSlop={12}
++            onPress={() => props.onFinished?.()}
++            style={styles.headerButton}
++          >
++            <Text style={[type.micro, styles.stepCount]}>Later</Text>
++          </PressableScale>
++        ) : null}
+       </View>
+ 
+       {step !== 'reveal' && step !== 'notifications' ? (

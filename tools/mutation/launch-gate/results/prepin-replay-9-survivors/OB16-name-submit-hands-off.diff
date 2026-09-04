@@ -1,0 +1,10 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -530,6 +530,7 @@
+                   // never past an empty name.
+                   onSubmitEditing={() => {
+                     if (firstName.length >= 1) goForward();
++                    else if (preAuth) props.onFinished?.();
+                   }}
+                   style={styles.nameInput}
+                 />

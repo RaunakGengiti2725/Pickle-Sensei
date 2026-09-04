@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -463,7 +463,7 @@
+             >
+               <Icon name="back" size={20} color={color.onDark} />
+             </PressableScale>
+-          ) : preAuth ? (
++          ) : !preAuth ? (
+             <PressableScale
+               accessibilityLabel="Back"
+               accessibilityHint="Return to the welcome screen"

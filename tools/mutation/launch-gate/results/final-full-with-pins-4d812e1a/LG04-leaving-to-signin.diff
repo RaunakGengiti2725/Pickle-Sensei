@@ -1,0 +1,9 @@
+--- a/apps/mobile/src/flow/launchGate.ts
++++ b/apps/mobile/src/flow/launchGate.ts
+@@ -30,5 +30,5 @@
+ /** Step one's back control returns to the screen the questionnaire was
+  * entered from — never to sign-in, so setup can't be skipped. */
+ export function stageWhenLeavingOnboarding(): PreAuthStage {
+-  return 'welcome';
++  return 'signin';
+ }

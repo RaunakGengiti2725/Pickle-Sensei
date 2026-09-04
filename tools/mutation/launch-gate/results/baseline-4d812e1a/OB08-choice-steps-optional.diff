@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -403,7 +403,7 @@
+       ? true
+       : step === 'name'
+         ? firstName.length >= 1
+-        : answers[step] !== undefined;
++        : true;
+ 
+   // Selection never auto-advances; the user confirms with Continue so a
+   // mis-tap is recoverable and the pace belongs to them.

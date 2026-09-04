@@ -1,0 +1,11 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -222,7 +222,7 @@
+       onRetry={() => void hydrateApp()}
+     />
+   ) : !profile ? (
+-    <OnboardingScreen />
++    <OnboardingScreen mode="preauth" onFinished={() => {}} onBack={() => {}} />
+   ) : (
+     <RootNavigator />
+   );

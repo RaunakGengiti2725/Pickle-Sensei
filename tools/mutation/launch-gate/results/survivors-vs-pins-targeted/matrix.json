@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "runId": "survivors-vs-pins-targeted",
+    "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+    "suite": "targeted",
+    "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json __tests__/launchGate.test.ts __tests__/onboardingScreen.test.tsx __tests__/appStorePreAuthOnboarding.test.ts __tests__/onboardingAccount.test.ts __tests__/wf/flow-launch-onboarding-gate.test.tsx __tests__/wf/flow-launch-onboarding-screen.test.tsx __tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx __tests__/wf/App.buttons.test.tsx __tests__/wf/WelcomeScreen.buttons.test.tsx __tests__/wf/OnboardingScreen.buttons.test.tsx __tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx __tests__/mutation",
+    "node": "v22.12.0",
+    "startedAt": "2026-09-04T06:24:33.673Z",
+    "finishedAt": "2026-09-04T06:24:52.686Z",
+    "wallMs": 19013,
+    "only": [
+      "LG06-device-history-default-arg",
+      "APP16-getstarted-consults-profile",
+      "OB02-skip-button-euphemism",
+      "OB03-account-continue-without-setup",
+      "AS05-stash-validation-dropped"
+    ],
+    "skipTsc": true,
+    "extraTests": ["__tests__/mutation"],
+    "totals": {
+      "killed": 5
+    }
+  },
+  "mutants": [
+    {
+      "id": "LG06-device-history-default-arg",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "stageAfterGetStarted grows a DEFAULTED device-history parameter (Function.length stays 0)",
+      "expected": "unknown",
+      "result": "killed",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 1,
+      "jestMs": 3886,
+      "jest": {
+        "numTotalTests": 224,
+        "numPassedTests": 222,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 15,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/mutation/launchGate.inputs.pins.test.ts"],
+        "failingTests": [
+          "__tests__/mutation/launchGate.inputs.pins.test.ts :: launchGate — no input can change the route stageAfterGetStarted ignores every argument (defaulted params included)",
+          "__tests__/mutation/launchGate.inputs.pins.test.ts :: launchGate — no input can change the route none of the stage functions declares a parameter or reads `arguments`"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/LG06-device-history-default-arg.diff",
+        "jestJson": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/LG06-device-history-default-arg.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/LG06-device-history-default-arg.jest.log"
+      }
+    },
+    {
+      "id": "APP16-getstarted-consults-profile",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Primary CTA short-circuits to sign-in whenever the store holds any profile",
+      "expected": "unknown",
+      "result": "killed",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 1,
+      "jestMs": 3703,
+      "jest": {
+        "numTotalTests": 224,
+        "numPassedTests": 222,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 15,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/mutation/gate.primaryCtaIgnoresStoreProfile.pins.test.tsx"],
+        "failingTests": [
+          "__tests__/mutation/gate.primaryCtaIgnoresStoreProfile.pins.test.tsx :: Gate — the primary CTA never consults the store profile a stale profile row under the signed-out owner is hydrated — and \"Start your first read\" still enters step one",
+          "__tests__/mutation/gate.primaryCtaIgnoresStoreProfile.pins.test.tsx :: Gate — the primary CTA never consults the store profile a profile injected into the store after Welcome painted does not reroute the primary CTA"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/APP16-getstarted-consults-profile.diff",
+        "jestJson": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/APP16-getstarted-consults-profile.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/APP16-getstarted-consults-profile.jest.log"
+      }
+    },
+    {
+      "id": "OB02-skip-button-euphemism",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth header grows a \"Later\" pressable (no \"skip\" wording anywhere) that hands off to sign-in",
+      "expected": "unknown",
+      "result": "killed",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 1,
+      "jestMs": 3903,
+      "jest": {
+        "numTotalTests": 224,
+        "numPassedTests": 221,
+        "numFailedTests": 3,
+        "numTotalTestSuites": 15,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx"],
+        "failingTests": [
+          "__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx :: OnboardingScreen — exact tap-target ledger (no hidden escape hatch) pre-auth: every step exposes exactly the questionnaire controls; step one has only Back + Continue",
+          "__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx :: OnboardingScreen — exact tap-target ledger (no hidden escape hatch) pre-auth step one: the ONLY non-Continue control is Back, and it hands to onBack — never onFinished",
+          "__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx :: OnboardingScreen — exact tap-target ledger (no hidden escape hatch) the two finish buttons are the only path to a completion, and pre-auth completes through the stash only"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB02-skip-button-euphemism.diff",
+        "jestJson": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB02-skip-button-euphemism.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB02-skip-button-euphemism.jest.log"
+      }
+    },
+    {
+      "id": "OB03-account-continue-without-setup",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "In-account header grows a \"Later\" pressable that saves the default profile (enters the app unanswered)",
+      "expected": "unknown",
+      "result": "killed",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 1,
+      "jestMs": 3558,
+      "jest": {
+        "numTotalTests": 224,
+        "numPassedTests": 222,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 15,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx"],
+        "failingTests": [
+          "__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx :: OnboardingScreen — exact tap-target ledger (no hidden escape hatch) in-account: every step exposes exactly the questionnaire controls; step one has only Leave setup + Continue",
+          "__tests__/mutation/onboardingScreen.controlLedger.pins.test.tsx :: OnboardingScreen — exact tap-target ledger (no hidden escape hatch) in-account step one: the ONLY non-Continue control is Leave setup; its dialog offers exactly Keep setting up / Sign out and never saves a profile"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB03-account-continue-without-setup.diff",
+        "jestJson": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB03-account-continue-without-setup.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/OB03-account-continue-without-setup.jest.log"
+      }
+    },
+    {
+      "id": "AS05-stash-validation-dropped",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "parsePendingProfile accepts any object as a profile (no required-field check)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 1,
+      "jestMs": 3916,
+      "jest": {
+        "numTotalTests": 224,
+        "numPassedTests": 158,
+        "numFailedTests": 66,
+        "numTotalTestSuites": 15,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/mutation/appStorePendingProfileValidation.pins.test.ts"],
+        "failingTests": [
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: empty profile object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: name only → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: missing skillLevel → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: missing handedness → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: missing goal → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: missing biggestProblem → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: missing focusCheckpoint → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: skillLevel is null → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: handedness is null → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: goal is null → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: biggestProblem is null → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: focusCheckpoint is null → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: skillLevel is a number → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: handedness is a number → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: goal is a number → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: biggestProblem is a number → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: focusCheckpoint is a number → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: skillLevel is an object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: handedness is an object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: goal is an object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: biggestProblem is an object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused guest owner: focusCheckpoint is an object → no profile, no owner write, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: empty profile object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: name only → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: missing skillLevel → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: missing handedness → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: missing goal → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: missing biggestProblem → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: missing focusCheckpoint → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: skillLevel is null → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: handedness is null → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: goal is null → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: biggestProblem is null → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: focusCheckpoint is null → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: skillLevel is a number → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: handedness is a number → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: goal is a number → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: biggestProblem is a number → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: focusCheckpoint is a number → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: skillLevel is an object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: handedness is an object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: goal is an object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: biggestProblem is an object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused canonical owner: focusCheckpoint is an object → no profile, no owner write, no server save, stash untouched",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (empty profile object)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (name only)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (missing skillLevel)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (missing handedness)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (missing goal)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (missing biggestProblem)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (missing focusCheckpoint)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (skillLevel is null)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (handedness is null)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (goal is null)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (biggestProblem is null)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (focusCheckpoint is null)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (skillLevel is a number)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (handedness is a number)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (goal is a number)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (biggestProblem is a number)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (focusCheckpoint is a number)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (skillLevel is an object)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (handedness is an object)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (goal is an object)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (biggestProblem is an object)",
+          "__tests__/mutation/appStorePendingProfileValidation.pins.test.ts :: pending-profile stash: every incomplete or ill-typed payload is refused an existing profile is never replaced by a rejected stash (focusCheckpoint is an object)"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/AS05-stash-validation-dropped.diff",
+        "jestJson": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/AS05-stash-validation-dropped.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/survivors-vs-pins-targeted/AS05-stash-validation-dropped.jest.log"
+      }
+    }
+  ]
+}

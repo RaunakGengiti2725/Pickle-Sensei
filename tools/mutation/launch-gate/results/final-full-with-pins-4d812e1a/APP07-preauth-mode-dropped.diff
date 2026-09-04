@@ -1,0 +1,10 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -204,7 +204,6 @@
+       <SignInScreen onBack={() => setPreAuthStage('welcome')} />
+     ) : preAuthStage === 'onboarding' ? (
+       <OnboardingScreen
+-        mode="preauth"
+         onFinished={() => setPreAuthStage(stageAfterOnboarding())}
+         onBack={() => setPreAuthStage(stageWhenLeavingOnboarding())}
+       />

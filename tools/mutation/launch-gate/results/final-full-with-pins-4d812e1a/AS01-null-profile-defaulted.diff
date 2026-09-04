@@ -1,0 +1,19 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -179,7 +179,15 @@
+       }
+       if (getActiveDataOwner() !== owner) return;
+       set({
+-        profile: raw ? (JSON.parse(raw) as Profile) : null,
++        profile: raw
++          ? (JSON.parse(raw) as Profile)
++          : {
++              skillLevel: '3.0',
++              handedness: 'right',
++              goal: 'all-around',
++              biggestProblem: 'not sure',
++              focusCheckpoint: 'contact_position',
++            },
+         hydrated: true,
+         ownerKey: owner,
+         hydrateError: null,

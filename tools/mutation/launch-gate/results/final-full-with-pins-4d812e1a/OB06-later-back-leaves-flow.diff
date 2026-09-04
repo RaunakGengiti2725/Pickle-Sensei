@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -458,7 +458,7 @@
+               accessibilityLabel="Back"
+               accessibilityHint="Return to the previous question"
+               hitSlop={12}
+-              onPress={goBack}
++              onPress={preAuth ? () => props.onBack?.() : goBack}
+               style={styles.headerButton}
+             >
+               <Icon name="back" size={20} color={color.onDark} />

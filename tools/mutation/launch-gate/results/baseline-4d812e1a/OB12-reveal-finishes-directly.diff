@@ -1,0 +1,15 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -685,7 +685,11 @@
+           <View
+             style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
+           >
+-            <Button label="Continue" variant="dark" onPress={goForward} />
++            <Button
++              label="Continue"
++              variant="dark"
++              onPress={() => void finishOnboarding('not_now')}
++            />
+           </View>
+         </>
+       ) : (

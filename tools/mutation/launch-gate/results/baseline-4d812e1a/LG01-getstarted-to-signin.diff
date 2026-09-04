@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/flow/launchGate.ts
++++ b/apps/mobile/src/flow/launchGate.ts
+@@ -18,7 +18,7 @@
+ 
+ /** Welcome's primary CTA ("Start your first read"): always the questionnaire. */
+ export function stageAfterGetStarted(): PreAuthStage {
+-  return 'onboarding';
++  return 'signin';
+ }
+ 
+ /** Finishing the pre-auth questionnaire hands off to sign-in — never back to

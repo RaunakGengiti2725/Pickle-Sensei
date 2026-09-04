@@ -1,0 +1,20 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -402,7 +402,7 @@
+     step === 'reveal' || step === 'notifications'
+       ? true
+       : step === 'name'
+-        ? firstName.length >= 1
++        ? true
+         : answers[step] !== undefined;
+ 
+   // Selection never auto-advances; the user confirms with Continue so a
+@@ -529,7 +529,7 @@
+                   // The keyboard's Next key mirrors the Continue button, but
+                   // never past an empty name.
+                   onSubmitEditing={() => {
+-                    if (firstName.length >= 1) goForward();
++                    goForward();
+                   }}
+                   style={styles.nameInput}
+                 />

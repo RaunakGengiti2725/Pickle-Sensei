@@ -1,0 +1,15 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -164,11 +164,7 @@
+         getActiveDataOwner() === owner
+       ) {
+         try {
+-          const adopted =
+-            apiSession &&
+-            canonicalDataOwner(apiSession.canonicalAppUserId) === owner
+-              ? await saveCanonicalOnboardingProfile(apiSession, pending)
+-              : pending;
++          const adopted = pending;
+           raw = JSON.stringify(adopted);
+           await setKv(db, profileKeyForOwner(owner), raw);
+           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');

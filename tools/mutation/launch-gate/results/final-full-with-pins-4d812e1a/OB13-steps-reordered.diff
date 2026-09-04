@@ -1,0 +1,14 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -36,9 +36,9 @@
+ const STEPS = [
+   'name',
+   'gender',
+-  'level',
+-  'handedness',
+   'goal',
++  'handedness',
++  'level',
+   'problem',
+   'reveal',
+   'notifications',

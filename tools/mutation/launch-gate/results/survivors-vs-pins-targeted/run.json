@@ -1,0 +1,22 @@
+{
+  "runId": "survivors-vs-pins-targeted",
+  "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "suite": "targeted",
+  "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json __tests__/launchGate.test.ts __tests__/onboardingScreen.test.tsx __tests__/appStorePreAuthOnboarding.test.ts __tests__/onboardingAccount.test.ts __tests__/wf/flow-launch-onboarding-gate.test.tsx __tests__/wf/flow-launch-onboarding-screen.test.tsx __tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx __tests__/wf/App.buttons.test.tsx __tests__/wf/WelcomeScreen.buttons.test.tsx __tests__/wf/OnboardingScreen.buttons.test.tsx __tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx __tests__/mutation",
+  "node": "v22.12.0",
+  "startedAt": "2026-09-04T06:24:33.673Z",
+  "finishedAt": "2026-09-04T06:24:52.686Z",
+  "wallMs": 19013,
+  "only": [
+    "LG06-device-history-default-arg",
+    "APP16-getstarted-consults-profile",
+    "OB02-skip-button-euphemism",
+    "OB03-account-continue-without-setup",
+    "AS05-stash-validation-dropped"
+  ],
+  "skipTsc": true,
+  "extraTests": ["__tests__/mutation"],
+  "totals": {
+    "killed": 5
+  }
+}

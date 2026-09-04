@@ -1,0 +1,14 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -488,7 +488,10 @@
+         <View style={styles.progressWrap}>
+           <ProgressBar step={stepIndex} total={STEPS.length} />
+         </View>
+-        <Text style={[type.micro, styles.stepCount]}>
++        <Text
++          style={[type.micro, styles.stepCount]}
++          onPress={preAuth ? () => props.onFinished?.() : undefined}
++        >
+           {stepIndex + 1}/{STEPS.length}
+         </Text>
+       </View>

@@ -1,0 +1,11 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -123,7 +123,7 @@
+   const authHydrated = useAuthStore(s => s.hydrated);
+   const session = useAuthStore(s => s.session);
+   const hydrateAuth = useAuthStore(s => s.hydrate);
+-  const [preAuthStage, setPreAuthStage] = useState<PreAuthStage>('welcome');
++  const [preAuthStage, setPreAuthStage] = useState<PreAuthStage>('onboarding');
+   const [splashDone, setSplashDone] = useState(false);
+   const handleSplashFinished = useCallback(() => setSplashDone(true), []);
+ 

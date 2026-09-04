@@ -1,0 +1,26 @@
+{
+  "runId": "prepin-replay-9-survivors",
+  "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "suite": "full",
+  "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json --testPathIgnorePatterns __tests__/mutation",
+  "node": "v22.12.0",
+  "startedAt": "2026-09-04T06:38:32.779Z",
+  "finishedAt": "2026-09-04T06:40:19.649Z",
+  "wallMs": 106870,
+  "only": [
+    "LG06-device-history-default-arg",
+    "APP16-getstarted-consults-profile",
+    "OB02-skip-button-euphemism",
+    "OB03-account-continue-without-setup",
+    "AS05-stash-validation-dropped",
+    "OB16-name-submit-hands-off",
+    "OB17-unlabelled-skip-pressable",
+    "OB18-back-longpress-hands-off",
+    "OB19-progress-tap-hands-off"
+  ],
+  "skipTsc": true,
+  "extraTests": [],
+  "totals": {
+    "survived": 9
+  }
+}

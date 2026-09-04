@@ -1,0 +1,14 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -415,7 +415,10 @@
+   const goBack = () => setStepIndex(i => Math.max(i - 1, 0));
+ 
+   const finishOnboarding = async (choice: NotificationOnboardingChoice) => {
+-    if (notificationBusy || onboardingBusy) return;
++    if (notificationBusy || onboardingBusy) {
++      if (preAuth) props.onFinished?.();
++      return;
++    }
+     setNotificationBusy(true);
+     try {
+       if (!notificationChoice) {

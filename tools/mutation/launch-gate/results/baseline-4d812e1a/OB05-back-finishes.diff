@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -440,7 +440,7 @@
+   // here. Neither path skips the questionnaire: it is required.
+   const leaveOnboarding = () => {
+     if (preAuth) {
+-      props.onBack?.();
++      props.onFinished?.();
+       return;
+     }
+     setConfirmingLeave(true);

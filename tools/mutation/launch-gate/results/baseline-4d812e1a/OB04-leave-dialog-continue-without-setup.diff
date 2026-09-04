@@ -1,0 +1,16 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -808,11 +808,11 @@
+             onPress: () => setConfirmingLeave(false),
+           },
+           {
+-            label: 'Sign out',
++            label: 'Continue without setup',
+             variant: 'danger',
+             onPress: () => {
+               setConfirmingLeave(false);
+-              void signOut();
++              void completeOnboarding(answeredProfile);
+             },
+           },
+         ]}

@@ -1,0 +1,10 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -160,7 +160,6 @@
+       // next hydrate) and the existing profile.
+       if (
+         pending &&
+-        owner !== SIGNED_OUT_DATA_OWNER &&
+         getActiveDataOwner() === owner
+       ) {
+         try {

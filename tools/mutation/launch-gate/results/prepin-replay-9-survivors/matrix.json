@@ -1,0 +1,282 @@
+{
+  "meta": {
+    "runId": "prepin-replay-9-survivors",
+    "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+    "suite": "full",
+    "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json --testPathIgnorePatterns __tests__/mutation",
+    "node": "v22.12.0",
+    "startedAt": "2026-09-04T06:38:32.779Z",
+    "finishedAt": "2026-09-04T06:40:19.649Z",
+    "wallMs": 106870,
+    "only": [
+      "LG06-device-history-default-arg",
+      "APP16-getstarted-consults-profile",
+      "OB02-skip-button-euphemism",
+      "OB03-account-continue-without-setup",
+      "AS05-stash-validation-dropped",
+      "OB16-name-submit-hands-off",
+      "OB17-unlabelled-skip-pressable",
+      "OB18-back-longpress-hands-off",
+      "OB19-progress-tap-hands-off"
+    ],
+    "skipTsc": true,
+    "extraTests": [],
+    "totals": {
+      "survived": 9
+    }
+  },
+  "mutants": [
+    {
+      "id": "LG06-device-history-default-arg",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "stageAfterGetStarted grows a DEFAULTED device-history parameter (Function.length stays 0)",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 17139,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/LG06-device-history-default-arg.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/LG06-device-history-default-arg.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/LG06-device-history-default-arg.jest.log"
+      }
+    },
+    {
+      "id": "APP16-getstarted-consults-profile",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Primary CTA short-circuits to sign-in whenever the store holds any profile",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11148,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/APP16-getstarted-consults-profile.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/APP16-getstarted-consults-profile.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/APP16-getstarted-consults-profile.jest.log"
+      }
+    },
+    {
+      "id": "OB02-skip-button-euphemism",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth header grows a \"Later\" pressable (no \"skip\" wording anywhere) that hands off to sign-in",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11210,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB02-skip-button-euphemism.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB02-skip-button-euphemism.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB02-skip-button-euphemism.jest.log"
+      }
+    },
+    {
+      "id": "OB03-account-continue-without-setup",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "In-account header grows a \"Later\" pressable that saves the default profile (enters the app unanswered)",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11353,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB03-account-continue-without-setup.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB03-account-continue-without-setup.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB03-account-continue-without-setup.jest.log"
+      }
+    },
+    {
+      "id": "OB16-name-submit-hands-off",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Keyboard Next on an EMPTY name hands off to sign-in pre-auth (skip with no pressable at all; Next with a name still advances)",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11144,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB16-name-submit-hands-off.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB16-name-submit-hands-off.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB16-name-submit-hands-off.jest.log"
+      }
+    },
+    {
+      "id": "OB17-unlabelled-skip-pressable",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth header grows an UNLABELLED raw Pressable (no accessibilityLabel, no text) that hands off to sign-in",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11333,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB17-unlabelled-skip-pressable.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB17-unlabelled-skip-pressable.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB17-unlabelled-skip-pressable.jest.log"
+      }
+    },
+    {
+      "id": "OB18-back-longpress-hands-off",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth step-one Back keeps its PressableScale but its icon gains a LONG-press-only raw Pressable that hands off to sign-in",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11220,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB18-back-longpress-hands-off.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB18-back-longpress-hands-off.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB18-back-longpress-hands-off.jest.log"
+      }
+    },
+    {
+      "id": "OB19-progress-tap-hands-off",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "The step counter text becomes tappable (Text onPress, no label) and hands off to sign-in pre-auth",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11068,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB19-progress-tap-hands-off.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB19-progress-tap-hands-off.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/OB19-progress-tap-hands-off.jest.log"
+      }
+    },
+    {
+      "id": "AS05-stash-validation-dropped",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "parsePendingProfile accepts any object as a profile (no required-field check)",
+      "expected": "killed",
+      "result": "survived",
+      "reason": null,
+      "tscExit": null,
+      "tscMs": null,
+      "jestExit": 0,
+      "jestMs": 11095,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/AS05-stash-validation-dropped.diff",
+        "jestJson": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/AS05-stash-validation-dropped.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/prepin-replay-9-survivors/AS05-stash-validation-dropped.jest.log"
+      }
+    }
+  ]
+}

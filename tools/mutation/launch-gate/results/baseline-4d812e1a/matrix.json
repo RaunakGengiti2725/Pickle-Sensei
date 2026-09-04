@@ -1,0 +1,2077 @@
+{
+  "meta": {
+    "runId": "baseline-4d812e1a",
+    "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+    "suite": "full",
+    "jestCommand": "npx jest --ci --silent --json --outputFile=<out>/<ID>.jest.json",
+    "node": "v22.12.0",
+    "startedAt": "2026-09-04T06:07:10.673Z",
+    "finishedAt": "2026-09-04T06:23:01.816Z",
+    "wallMs": 951143,
+    "only": null,
+    "skipTsc": false,
+    "extraTests": [],
+    "totals": {
+      "killed": 42,
+      "survived": 5
+    },
+    "rebuiltAt": "2026-09-04T06:23:11.418Z"
+  },
+  "mutants": [
+    {
+      "id": "LG01-getstarted-to-signin",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "Primary CTA routes straight to sign-in (questionnaire skipped)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6717,
+      "jestExit": 1,
+      "jestMs": 10981,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2879,
+        "numFailedTests": 21,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/launchGate.test.ts"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate Start -> onboarding questionnaire, always",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate the primary CTA cannot consult device history: stageAfterGetStarted takes no argument",
+          "__tests__/launchGate.test.ts :: launch gate ordering sends the primary CTA into onboarding before any sign-in"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG01-getstarted-to-signin.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG01-getstarted-to-signin.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG01-getstarted-to-signin.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG01-getstarted-to-signin.jest.log"
+      }
+    },
+    {
+      "id": "LG02-after-onboarding-to-welcome",
+      "cls": "reorder",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "Finishing the questionnaire returns to Welcome instead of sign-in",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6877,
+      "jestExit": 1,
+      "jestMs": 11372,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2886,
+        "numFailedTests": 14,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/launchGate.test.ts",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/launchGate.test.ts :: launch gate ordering hands off to sign-in only after onboarding is finished",
+          "__tests__/launchGate.test.ts :: launch gate ordering leaving step one returns to Welcome — never to sign-in, so setup cannot be skipped",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate Start -> onboarding questionnaire, always",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG02-after-onboarding-to-welcome.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG02-after-onboarding-to-welcome.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG02-after-onboarding-to-welcome.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG02-after-onboarding-to-welcome.jest.log"
+      }
+    },
+    {
+      "id": "LG03-after-onboarding-loops",
+      "cls": "reorder",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "Finishing the questionnaire re-enters onboarding (never reaches sign-in)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6807,
+      "jestExit": 1,
+      "jestMs": 11052,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2887,
+        "numFailedTests": 13,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/launchGate.test.ts",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/launchGate.test.ts :: launch gate ordering hands off to sign-in only after onboarding is finished",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate Start -> onboarding questionnaire, always",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG03-after-onboarding-loops.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG03-after-onboarding-loops.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG03-after-onboarding-loops.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG03-after-onboarding-loops.jest.log"
+      }
+    },
+    {
+      "id": "LG04-leaving-to-signin",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "Step-one Back hands off to sign-in (the removed \"Skip to sign-in\" escape)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6667,
+      "jestExit": 1,
+      "jestMs": 11096,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2894,
+        "numFailedTests": 6,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/launchGate.test.ts",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/launchGate.test.ts :: launch gate ordering leaving step one returns to Welcome — never to sign-in, so setup cannot be skipped",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate Start -> onboarding questionnaire, always",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG04-leaving-to-signin.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG04-leaving-to-signin.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG04-leaving-to-signin.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG04-leaving-to-signin.jest.log"
+      }
+    },
+    {
+      "id": "LG05-device-history-optional-arg",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "stageAfterGetStarted grows an optional device-history parameter (alreadyOnboarded?)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6766,
+      "jestExit": 1,
+      "jestMs": 11175,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2898,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/launchGate.test.ts",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/launchGate.test.ts :: launch gate ordering takes no device-history input — the route cannot silently skip to sign-in",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate the primary CTA cannot consult device history: stageAfterGetStarted takes no argument"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG05-device-history-optional-arg.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG05-device-history-optional-arg.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG05-device-history-optional-arg.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG05-device-history-optional-arg.jest.log"
+      }
+    },
+    {
+      "id": "LG06-device-history-default-arg",
+      "cls": "skip",
+      "file": "apps/mobile/src/flow/launchGate.ts",
+      "title": "stageAfterGetStarted grows a DEFAULTED device-history parameter (Function.length stays 0)",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6660,
+      "jestExit": 0,
+      "jestMs": 11032,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG06-device-history-default-arg.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG06-device-history-default-arg.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG06-device-history-default-arg.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/LG06-device-history-default-arg.jest.log"
+      }
+    },
+    {
+      "id": "APP01-getstarted-bypasses-gate",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Welcome primary CTA sets sign-in directly, bypassing stageAfterGetStarted",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6723,
+      "jestExit": 1,
+      "jestMs": 11003,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2882,
+        "numFailedTests": 18,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP01-getstarted-bypasses-gate.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP01-getstarted-bypasses-gate.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP01-getstarted-bypasses-gate.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP01-getstarted-bypasses-gate.jest.log"
+      }
+    },
+    {
+      "id": "APP02-back-bypasses-gate",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Pre-auth step-one Back sets sign-in directly, bypassing stageWhenLeavingOnboarding",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6773,
+      "jestExit": 1,
+      "jestMs": 11316,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2896,
+        "numFailedTests": 4,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP02-back-bypasses-gate.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP02-back-bypasses-gate.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP02-back-bypasses-gate.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP02-back-bypasses-gate.jest.log"
+      }
+    },
+    {
+      "id": "APP03-finished-to-welcome",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Pre-auth onFinished returns to Welcome, bypassing stageAfterOnboarding",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6802,
+      "jestExit": 1,
+      "jestMs": 11143,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2889,
+        "numFailedTests": 11,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP03-finished-to-welcome.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP03-finished-to-welcome.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP03-finished-to-welcome.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP03-finished-to-welcome.jest.log"
+      }
+    },
+    {
+      "id": "APP04-initial-stage-signin",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Gate boots into sign-in (Welcome and questionnaire skipped)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6687,
+      "jestExit": 1,
+      "jestMs": 11009,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2872,
+        "numFailedTests": 28,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash signed-out hydration: resolves the signed-out owner, hydrates the app store, tags telemetry and renders Welcome under a ready splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash SplashScreen onFinished -> handleSplashFinished removes the overlay for the rest of the run",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash a hydrate() that lands in its catch path (hydrated with no profile) still readies the gate — no infinite splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"I already have an account\" -> onSignIn: the explicit returning-player route goes straight to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing session + profile: mounts RootNavigator and raises the first-run walkthrough exactly once",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx :: Gate loading affordance after the splash paints a loading state while the signed-out owner re-hydrates after sign-out"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP04-initial-stage-signin.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP04-initial-stage-signin.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP04-initial-stage-signin.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP04-initial-stage-signin.jest.log"
+      }
+    },
+    {
+      "id": "APP05-initial-stage-onboarding",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Gate boots into the questionnaire (Welcome skipped)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6739,
+      "jestExit": 1,
+      "jestMs": 11014,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2872,
+        "numFailedTests": 28,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx :: Gate loading affordance after the splash paints a loading state while the signed-out owner re-hydrates after sign-out",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash signed-out hydration: resolves the signed-out owner, hydrates the app store, tags telemetry and renders Welcome under a ready splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash SplashScreen onFinished -> handleSplashFinished removes the overlay for the rest of the run",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash a hydrate() that lands in its catch path (hydrated with no profile) still readies the gate — no infinite splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"I already have an account\" -> onSignIn: the explicit returning-player route goes straight to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing session + profile: mounts RootNavigator and raises the first-run walkthrough exactly once"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP05-initial-stage-onboarding.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP05-initial-stage-onboarding.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP05-initial-stage-onboarding.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP05-initial-stage-onboarding.jest.log"
+      }
+    },
+    {
+      "id": "APP06-signin-before-onboarding-swap",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Stages swapped: \"onboarding\" renders SignInScreen, \"signin\" renders the questionnaire",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6800,
+      "jestExit": 1,
+      "jestMs": 12645,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2878,
+        "numFailedTests": 22,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"I already have an account\" -> onSignIn: the explicit returning-player route goes straight to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP06-signin-before-onboarding-swap.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP06-signin-before-onboarding-swap.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP06-signin-before-onboarding-swap.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP06-signin-before-onboarding-swap.jest.log"
+      }
+    },
+    {
+      "id": "APP07-preauth-mode-dropped",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Pre-auth questionnaire mounts in account mode (Leave setup / sign-out escape appears)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6692,
+      "jestExit": 1,
+      "jestMs": 12006,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2882,
+        "numFailedTests": 18,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP07-preauth-mode-dropped.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP07-preauth-mode-dropped.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP07-preauth-mode-dropped.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP07-preauth-mode-dropped.jest.log"
+      }
+    },
+    {
+      "id": "APP08-account-link-enters-questionnaire",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "\"I already have an account\" enters the questionnaire instead of sign-in",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6825,
+      "jestExit": 1,
+      "jestMs": 11847,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2892,
+        "numFailedTests": 8,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"I already have an account\" -> onSignIn: the explicit returning-player route goes straight to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP08-account-link-enters-questionnaire.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP08-account-link-enters-questionnaire.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP08-account-link-enters-questionnaire.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP08-account-link-enters-questionnaire.jest.log"
+      }
+    },
+    {
+      "id": "APP09-no-account-link",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Welcome loses the returning-player link (no route to sign-in but the questionnaire)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6755,
+      "jestExit": 1,
+      "jestMs": 11650,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2886,
+        "numFailedTests": 14,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash signed-out hydration: resolves the signed-out owner, hydrates the app store, tags telemetry and renders Welcome under a ready splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash SplashScreen onFinished -> handleSplashFinished removes the overlay for the rest of the run",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash a hydrate() that lands in its catch path (hydrated with no profile) still readies the gate — no infinite splash",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"I already have an account\" -> onSignIn: the explicit returning-player route goes straight to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP09-no-account-link.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP09-no-account-link.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP09-no-account-link.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP09-no-account-link.jest.log"
+      }
+    },
+    {
+      "id": "APP10-empty-profile-into-app",
+      "cls": "empty",
+      "file": "apps/mobile/App.tsx",
+      "title": "Signed-in with no profile renders RootNavigator (in-account questionnaire removed)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6763,
+      "jestExit": 1,
+      "jestMs": 11725,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2895,
+        "numFailedTests": 5,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing guest session resolves the device-guest owner",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx :: Gate hydrate failure still offers the in-account questionnaire when there is no profile and no error"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP10-empty-profile-into-app.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP10-empty-profile-into-app.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP10-empty-profile-into-app.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP10-empty-profile-into-app.jest.log"
+      }
+    },
+    {
+      "id": "APP11-guest-empty-profile-into-app",
+      "cls": "empty",
+      "file": "apps/mobile/App.tsx",
+      "title": "Only canonical accounts are gated on a profile; a guest owner with none enters the app",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7103,
+      "jestExit": 1,
+      "jestMs": 13166,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2898,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing guest session resolves the device-guest owner",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP11-guest-empty-profile-into-app.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP11-guest-empty-profile-into-app.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP11-guest-empty-profile-into-app.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP11-guest-empty-profile-into-app.jest.log"
+      }
+    },
+    {
+      "id": "APP12-canonical-empty-profile-into-app",
+      "cls": "empty",
+      "file": "apps/mobile/App.tsx",
+      "title": "Only guests are gated on a profile; a canonical account with none enters the app",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7055,
+      "jestExit": 1,
+      "jestMs": 12438,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2897,
+        "numFailedTests": 3,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire",
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx :: Gate hydrate failure still offers the in-account questionnaire when there is no profile and no error"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP12-canonical-empty-profile-into-app.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP12-canonical-empty-profile-into-app.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP12-canonical-empty-profile-into-app.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP12-canonical-empty-profile-into-app.jest.log"
+      }
+    },
+    {
+      "id": "APP13-hydrate-error-into-app",
+      "cls": "empty",
+      "file": "apps/mobile/App.tsx",
+      "title": "A failed profile load renders RootNavigator with profile=null instead of the retry state",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7268,
+      "jestExit": 1,
+      "jestMs": 12675,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2897,
+        "numFailedTests": 3,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/fix-6-gateLoadingAndErrorBoundary.test.tsx :: Gate hydrate failure shows a retry state instead of the account questionnaire, and retry re-runs hydrate",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP13-hydrate-error-into-app.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP13-hydrate-error-into-app.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP13-hydrate-error-into-app.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP13-hydrate-error-into-app.jest.log"
+      }
+    },
+    {
+      "id": "APP14-account-questionnaire-preauth-mode",
+      "cls": "empty",
+      "file": "apps/mobile/App.tsx",
+      "title": "In-account questionnaire mounts in pre-auth mode (answers stashed, profile never saved, onFinished no-op)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7230,
+      "jestExit": 1,
+      "jestMs": 12639,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2898,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP14-account-questionnaire-preauth-mode.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP14-account-questionnaire-preauth-mode.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP14-account-questionnaire-preauth-mode.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP14-account-questionnaire-preauth-mode.jest.log"
+      }
+    },
+    {
+      "id": "APP15-ready-ignores-owner",
+      "cls": "reorder",
+      "file": "apps/mobile/App.tsx",
+      "title": "Gate readiness ignores the app-store owner (stale owner profile can route the gate)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6861,
+      "jestExit": 1,
+      "jestMs": 11834,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2899,
+        "numFailedTests": 1,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/wf/App.buttons.test.tsx"],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — launch gate and splash splash stays unready (no first screen) while the app store still belongs to a stale owner"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP15-ready-ignores-owner.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP15-ready-ignores-owner.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP15-ready-ignores-owner.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP15-ready-ignores-owner.jest.log"
+      }
+    },
+    {
+      "id": "APP16-getstarted-consults-profile",
+      "cls": "skip",
+      "file": "apps/mobile/App.tsx",
+      "title": "Primary CTA short-circuits to sign-in whenever the store holds any profile",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6869,
+      "jestExit": 0,
+      "jestMs": 11575,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP16-getstarted-consults-profile.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP16-getstarted-consults-profile.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP16-getstarted-consults-profile.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/APP16-getstarted-consults-profile.jest.log"
+      }
+    },
+    {
+      "id": "OB01-skip-button-literal",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth header grows a \"Skip\" pressable that hands off to sign-in",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6781,
+      "jestExit": 1,
+      "jestMs": 11673,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2887,
+        "numFailedTests": 13,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/onboardingScreen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: step one has no Leave setup — a plain \"Back\" calls onBack once, with no alert and no sign-out",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: past step one, Back returns to the previous question and never calls onBack",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) step one only goes BACK to Welcome — no alert, no skip to sign-in, session untouched",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) offers no skip on any later step either: Back always returns to the previous question"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB01-skip-button-literal.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB01-skip-button-literal.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB01-skip-button-literal.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB01-skip-button-literal.jest.log"
+      }
+    },
+    {
+      "id": "OB02-skip-button-euphemism",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth header grows a \"Later\" pressable (no \"skip\" wording anywhere) that hands off to sign-in",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6722,
+      "jestExit": 0,
+      "jestMs": 11842,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB02-skip-button-euphemism.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB02-skip-button-euphemism.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB02-skip-button-euphemism.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB02-skip-button-euphemism.jest.log"
+      }
+    },
+    {
+      "id": "OB03-account-continue-without-setup",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "In-account header grows a \"Later\" pressable that saves the default profile (enters the app unanswered)",
+      "expected": "unknown",
+      "result": "survived",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6840,
+      "jestExit": 0,
+      "jestMs": 11883,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB03-account-continue-without-setup.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB03-account-continue-without-setup.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB03-account-continue-without-setup.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB03-account-continue-without-setup.jest.log"
+      }
+    },
+    {
+      "id": "OB04-leave-dialog-continue-without-setup",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "In-account Leave dialog's \"Sign out\" becomes \"Continue without setup\" (saves the default profile)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7787,
+      "jestExit": 1,
+      "jestMs": 11868,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2897,
+        "numFailedTests": 3,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls account-mode Leave setup alert offers a destructive Sign out and a cancel; only Sign out calls signOut",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen in-account mode keeps sign-out as the only exit and never offers a skip",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) account mode: confirms, then \"Sign out\" calls signOut and \"Keep setting up\" does nothing"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB04-leave-dialog-continue-without-setup.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB04-leave-dialog-continue-without-setup.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB04-leave-dialog-continue-without-setup.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB04-leave-dialog-continue-without-setup.jest.log"
+      }
+    },
+    {
+      "id": "OB05-back-finishes",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth step-one Back calls onFinished (Back becomes a skip to sign-in)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7574,
+      "jestExit": 1,
+      "jestMs": 13575,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2892,
+        "numFailedTests": 8,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx",
+          "__tests__/onboardingScreen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) Back on step one calls onBack once — no alert, no sign-out, nothing written to kv",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: step one has no Leave setup — a plain \"Back\" calls onBack once, with no alert and no sign-out",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) step one only goes BACK to Welcome — no alert, no skip to sign-in, session untouched"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB05-back-finishes.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB05-back-finishes.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB05-back-finishes.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB05-back-finishes.jest.log"
+      }
+    },
+    {
+      "id": "OB06-later-back-leaves-flow",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Back past step one leaves the questionnaire (calls onBack) instead of stepping back",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7226,
+      "jestExit": 1,
+      "jestMs": 14446,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2892,
+        "numFailedTests": 8,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) offers no skip on any later step either: Back always returns to the previous question",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back returns to the previous step keeping the earlier answer; pre-auth step one shows a Back to Welcome (never a Leave setup / skip)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back from the notification step returns to the reveal, and from the reveal to the last question",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls the reveal reflects the chosen goal and name; a different goal changes the focus",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: past step one, Back returns to the previous question and never calls onBack"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB06-later-back-leaves-flow.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB06-later-back-leaves-flow.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB06-later-back-leaves-flow.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB06-later-back-leaves-flow.jest.log"
+      }
+    },
+    {
+      "id": "OB07-continue-never-locked",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Continue is never locked (unanswered steps fall through to the default profile)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7138,
+      "jestExit": 1,
+      "jestMs": 14788,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2892,
+        "numFailedTests": 8,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen starts on the name step with Continue locked until a real name is typed",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls every question step renders every option as a radio with hint + selected state, and Continue stays locked until one is chosen",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger name step: First name input + Continue Continue stays disabled for empty/whitespace names and advances once a real name is typed",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue gender",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue level",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue handedness",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue goal",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue problem"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB07-continue-never-locked.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB07-continue-never-locked.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB07-continue-never-locked.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB07-continue-never-locked.jest.log"
+      }
+    },
+    {
+      "id": "OB08-choice-steps-optional",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Only the name is required; choice steps continue unanswered (default answers saved)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6970,
+      "jestExit": 1,
+      "jestMs": 12066,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2894,
+        "numFailedTests": 6,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls every question step renders every option as a radio with hint + selected state, and Continue stays locked until one is chosen",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue gender",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue level",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue handedness",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue goal",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue problem"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB08-choice-steps-optional.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB08-choice-steps-optional.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB08-choice-steps-optional.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB08-choice-steps-optional.jest.log"
+      }
+    },
+    {
+      "id": "OB09-name-optional",
+      "cls": "empty",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Name step continues on an empty name (Continue + keyboard Next)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6966,
+      "jestExit": 1,
+      "jestMs": 15727,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2894,
+        "numFailedTests": 6,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen starts on the name step with Continue locked until a real name is typed",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen advances from the keyboard only when the trimmed name is non-empty",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger name step: First name input + Continue Continue stays disabled for empty/whitespace names and advances once a real name is typed",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger name step: First name input + Continue keyboard Next (onSubmitEditing) mirrors Continue but never past an empty name",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls every question step renders every option as a radio with hint + selected state, and Continue stays locked until one is chosen",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls keyboard Next mirrors Continue but never past an empty name"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB09-name-optional.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB09-name-optional.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB09-name-optional.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB09-name-optional.jest.log"
+      }
+    },
+    {
+      "id": "OB10-finish-despite-failed-stash",
+      "cls": "stash",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth finish hands off to sign-in even when the stash write failed",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7056,
+      "jestExit": 1,
+      "jestMs": 14740,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2896,
+        "numFailedTests": 4,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) does not advance to sign-in when the stash write fails",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) stash-write failure shows the error copy, clears busy, keeps the user on the step, and a retry succeeds without re-asking permission",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a failed stash shows the store error, does not hand off, and re-enables both buttons"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB10-finish-despite-failed-stash.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB10-finish-despite-failed-stash.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB10-finish-despite-failed-stash.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB10-finish-despite-failed-stash.jest.log"
+      }
+    },
+    {
+      "id": "OB11-preauth-saves-instead-of-stash",
+      "cls": "stash",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth finish calls completeOnboarding (owner write) instead of the stash",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7094,
+      "jestExit": 1,
+      "jestMs": 17023,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2878,
+        "numFailedTests": 22,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) stashes the answers and hands off to sign-in instead of saving to an account",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) finishes onboarding with reminders off when permission is denied",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) does not advance to sign-in when the stash write fails",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: both buttons stash via completePreAuthOnboarding and hand off through onFinished",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a denied permission still finishes with reminders off",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a failed stash shows the store error, does not hand off, and re-enables both buttons",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Not now\" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash (and nothing else — no device marker), then hands off once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Turn on reminders\" requests OS permission exactly once and stashes {enabled:true} on grant",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) OS denial still completes setup with reminders off (no dead end)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) a throwing OS permission call is swallowed: setup still completes with reminders off",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) double-tap guard: while finishing, both actions are disabled, the label reads \"Finishing setup…\", and permission is asked once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) stash-write failure shows the error copy, clears busy, keeps the user on the step, and a retry succeeds without re-asking permission"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB11-preauth-saves-instead-of-stash.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB11-preauth-saves-instead-of-stash.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB11-preauth-saves-instead-of-stash.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB11-preauth-saves-instead-of-stash.jest.log"
+      }
+    },
+    {
+      "id": "OB12-reveal-finishes-directly",
+      "cls": "reorder",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Reveal's Continue finishes setup immediately (notification step removed from the flow)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7084,
+      "jestExit": 1,
+      "jestMs": 14299,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2861,
+        "numFailedTests": 39,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen walks name → gender → level → handedness → goal → problem → reveal → notifications and completes with the new fields",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) stashes the answers and hands off to sign-in instead of saving to an account",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) finishes onboarding with reminders off when permission is denied",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) does not advance to sign-in when the stash write fails",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls every question step renders every option as a radio with hint + selected state, and Continue stays locked until one is chosen",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back from the notification step returns to the reveal, and from the reveal to the last question",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Not now\" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash (and nothing else — no device marker), then hands off once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Turn on reminders\" requests OS permission exactly once and stashes {enabled:true} on grant",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) OS denial still completes setup with reminders off (no dead end)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) a throwing OS permission call is swallowed: setup still completes with reminders off",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) double-tap guard: while finishing, both actions are disabled, the label reads \"Finishing setup…\", and permission is asked once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) stash-write failure shows the error copy, clears busy, keeps the user on the step, and a retry succeeds without re-asking permission",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) \"Not now\" saves the profile to the owner and owner-scoped prefs with reminders off, never asking permission",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) \"Turn on reminders\" + grant enables owner prefs and schedules a plan",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) a failed profile save shows the failure copy and stays recoverable",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Back (steps 2–8) walks back from notifications to the reveal and from the reveal to the last question with the selection intact",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue every choice value reaches completeOnboarding, and the goal drives the reveal focus",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger reveal step: Continue moves to the notification step without touching any store",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now exposes both as buttons with descriptive labels",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode: Turn on reminders → completeOnboardingStep(\"enable\") then completeOnboarding(profile)",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode: Not now → completeOnboardingStep(\"not_now\") then completeOnboarding(profile)",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: both buttons stash via completePreAuthOnboarding and hand off through onFinished",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a denied permission still finishes with reminders off",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a failed stash shows the store error, does not hand off, and re-enables both buttons",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now guards double taps: while pending both buttons disable, the label reads \"Finishing setup…\", and the second tap is ignored",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode failure: shows onboardingError copy, re-enables the buttons, and a retry saves without re-asking for permission",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now store busy flag from outside the screen disables both finish buttons"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB12-reveal-finishes-directly.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB12-reveal-finishes-directly.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB12-reveal-finishes-directly.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB12-reveal-finishes-directly.jest.log"
+      }
+    },
+    {
+      "id": "OB13-steps-reordered",
+      "cls": "reorder",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Question order changed (goal asked before level)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7769,
+      "jestExit": 1,
+      "jestMs": 18472,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2855,
+        "numFailedTests": 45,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen walks name → gender → level → handedness → goal → problem → reveal → notifications and completes with the new fields",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) stashes the answers and hands off to sign-in instead of saving to an account",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) finishes onboarding with reminders off when permission is denied",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) does not advance to sign-in when the stash write fails",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Back (steps 2–8) walks back from notifications to the reveal and from the reveal to the last question with the selection intact",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue level",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue handedness",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue goal",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue problem",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger choice steps: every ChoiceCard selects (no auto-advance) and unlocks Continue every choice value reaches completeOnboarding, and the goal drives the reveal focus",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger reveal step: Continue moves to the notification step without touching any store",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now exposes both as buttons with descriptive labels",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode: Turn on reminders → completeOnboardingStep(\"enable\") then completeOnboarding(profile)",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode: Not now → completeOnboardingStep(\"not_now\") then completeOnboarding(profile)",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: both buttons stash via completePreAuthOnboarding and hand off through onFinished",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a denied permission still finishes with reminders off",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now preauth mode: a failed stash shows the store error, does not hand off, and re-enables both buttons",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now guards double taps: while pending both buttons disable, the label reads \"Finishing setup…\", and the second tap is ignored",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now account mode failure: shows onboardingError copy, re-enables the buttons, and a retry saves without re-asking for permission",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger notification step: Turn on reminders / Not now store busy flag from outside the screen disables both finish buttons",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls every question step renders every option as a radio with hint + selected state, and Continue stays locked until one is chosen",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back returns to the previous step keeping the earlier answer; pre-auth step one shows a Back to Welcome (never a Leave setup / skip)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back from the notification step returns to the reveal, and from the reveal to the last question",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls the reveal reflects the chosen goal and name; a different goal changes the focus",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Not now\" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash (and nothing else — no device marker), then hands off once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Turn on reminders\" requests OS permission exactly once and stashes {enabled:true} on grant",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) OS denial still completes setup with reminders off (no dead end)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) a throwing OS permission call is swallowed: setup still completes with reminders off",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) double-tap guard: while finishing, both actions are disabled, the label reads \"Finishing setup…\", and permission is asked once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) stash-write failure shows the error copy, clears busy, keeps the user on the step, and a retry succeeds without re-asking permission",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) \"Not now\" saves the profile to the owner and owner-scoped prefs with reminders off, never asking permission",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) \"Turn on reminders\" + grant enables owner prefs and schedules a plan",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (account mode, guest owner) a failed profile save shows the failure copy and stays recoverable"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB13-steps-reordered.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB13-steps-reordered.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB13-steps-reordered.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB13-steps-reordered.jest.log"
+      }
+    },
+    {
+      "id": "OB14-preauth-leave-setup-too",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "Pre-auth step one renders the account-mode \"Leave setup\" close control instead of Back",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7324,
+      "jestExit": 1,
+      "jestMs": 18622,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2880,
+        "numFailedTests": 20,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 5,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/onboardingScreen.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen preauth mode (questionnaire before the login flow) step one only goes BACK to Welcome — no alert, no skip to sign-in, session untouched",
+          "__tests__/onboardingScreen.test.tsx :: OnboardingScreen in-account mode keeps sign-out as the only exit and never offers a skip",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — signed-in routing canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls Back returns to the previous step keeping the earlier answer; pre-auth step one shows a Back to Welcome (never a Leave setup / skip)",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) Back on step one calls onBack once — no alert, no sign-out, nothing written to kv",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls pre-auth step-one Back (no skip to sign-in) offers no skip on any step: nothing reads \"skip\", \"Leave setup\" never renders, and Back past step one stays inside the flow",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls account-mode Leave setup alert offers a destructive Sign out and a cancel; only Sign out calls signOut",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) is a 44pt-class button with a hit slop, and Back is not offered on step 1",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) account mode: confirms, then \"Sign out\" calls signOut and \"Keep setting up\" does nothing",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: step one has no Leave setup — a plain \"Back\" calls onBack once, with no alert and no sign-out",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Leave setup (step 1 only) preauth mode: past step one, Back returns to the previous question and never calls onBack",
+          "__tests__/wf/OnboardingScreen.buttons.test.tsx :: OnboardingScreen button ledger header: Back (steps 2–8) returns one step and keeps earlier answers; on step 1 it yields to Leave setup"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB14-preauth-leave-setup-too.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB14-preauth-leave-setup-too.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB14-preauth-leave-setup-too.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB14-preauth-leave-setup-too.jest.log"
+      }
+    },
+    {
+      "id": "OB15-double-tap-hands-off",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/OnboardingScreen.tsx",
+      "title": "A second tap while finishing hands off to sign-in although the stash is still pending",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7027,
+      "jestExit": 1,
+      "jestMs": 18379,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2899,
+        "numFailedTests": 1,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 1,
+        "success": false,
+        "failingSuites": ["__tests__/wf/flow-launch-onboarding-screen.test.tsx"],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) double-tap guard: while finishing, both actions are disabled, the label reads \"Finishing setup…\", and permission is asked once"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB15-double-tap-hands-off.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB15-double-tap-hands-off.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB15-double-tap-hands-off.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/OB15-double-tap-hands-off.jest.log"
+      }
+    },
+    {
+      "id": "WS01-primary-cta-signin",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/WelcomeScreen.tsx",
+      "title": "Welcome primary CTA fires onSignIn when available (skips the questionnaire)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7722,
+      "jestExit": 1,
+      "jestMs": 17557,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2878,
+        "numFailedTests": 22,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/App.buttons.test.tsx",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: fresh device goes to the pre-auth questionnaire",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — WelcomeScreen callbacks \"Start your first read\" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — SignInScreen callback \"Back\" -> onBack: returns to Welcome from sign-in (both entry paths)",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks step-one \"Back\" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Back\" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Not now\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks \"Turn on reminders\" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in",
+          "__tests__/wf/App.buttons.test.tsx :: App.tsx — pre-auth OnboardingScreen callbacks failure path: a failed stash keeps the questionnaire on screen with the error copy and re-enabled buttons",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger \"Start your first read\" -> onGetStarted (once per tap)",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate Start -> onboarding questionnaire, always",
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger wired through the App.tsx launch gate the primary CTA cannot consult device history: stageAfterGetStarted takes no argument",
+          "__tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx :: flow: launch-onboarding — WelcomeScreen exposes exactly two wired controls, each a labelled button, and never renders a placeholder"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS01-primary-cta-signin.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS01-primary-cta-signin.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS01-primary-cta-signin.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS01-primary-cta-signin.jest.log"
+      }
+    },
+    {
+      "id": "WS02-third-cta",
+      "cls": "skip",
+      "file": "apps/mobile/src/screens/WelcomeScreen.tsx",
+      "title": "Welcome grows a third \"Look around first\" pressable routed to sign-in",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7574,
+      "jestExit": 1,
+      "jestMs": 12859,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2898,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/wf/WelcomeScreen.buttons.test.tsx :: WelcomeScreen button ledger renders exactly the two pressables, both in the ledger",
+          "__tests__/wf/flow-launch-onboarding-splash-welcome.test.tsx :: flow: launch-onboarding — WelcomeScreen exposes exactly two wired controls, each a labelled button, and never renders a placeholder"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS02-third-cta.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS02-third-cta.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS02-third-cta.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/WS02-third-cta.jest.log"
+      }
+    },
+    {
+      "id": "AS01-null-profile-defaulted",
+      "cls": "empty",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "hydrate() substitutes a default profile when the owner has none (gate sees a profile)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6728,
+      "jestExit": 1,
+      "jestMs": 11541,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2889,
+        "numFailedTests": 11,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts",
+          "__tests__/appStorePreAuthOnboarding.test.ts"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end returning player (no stash): \"Start your first read\" still enters the questionnaire; only \"I already have an account\" reaches sign-in, and a guest with no profile lands in the in-account questionnaire",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts :: guest data: legacy/pre-auth adoption and isolation from canonical owners the signed-out owner cannot read a profile and cannot write",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"{not json\" is ignored and never adopted as a profile",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"[]\" is ignored and never adopted as a profile",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"null\" is ignored and never adopted as a profile",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"\\\"string\\\"\" is ignored and never adopted as a profile",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"42\" is ignored and never adopted as a profile",
+          "__tests__/wf/flow-crash-safety-error-boundaries-parsing.test.ts :: appStore.hydrate() survives corrupt persisted JSON corrupt pre-auth stash \"{\\\"version\\\":\\\"1\\\",\\\"profile\\\":7}\" is ignored and never adopted as a profile",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the stash while signed out",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the stash when the adoption save fails, for the next hydrate",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash ignores a malformed stash instead of adopting garbage"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS01-null-profile-defaulted.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS01-null-profile-defaulted.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS01-null-profile-defaulted.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS01-null-profile-defaulted.jest.log"
+      }
+    },
+    {
+      "id": "AS02-stash-adopted-signed-out",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "Pre-auth stash is adopted by the signed-out owner (profile appears before any sign-in)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7058,
+      "jestExit": 1,
+      "jestMs": 11627,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2898,
+        "numFailedTests": 2,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the stash while signed out",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS02-stash-adopted-signed-out.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS02-stash-adopted-signed-out.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS02-stash-adopted-signed-out.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS02-stash-adopted-signed-out.jest.log"
+      }
+    },
+    {
+      "id": "AS03-stash-not-cleared",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "Adopted stash is never cleared (re-adopted on every hydrate, overwriting later edits)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6842,
+      "jestExit": 1,
+      "jestMs": 12323,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2888,
+        "numFailedTests": 12,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 4,
+        "success": false,
+        "failingSuites": [
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts",
+          "__tests__/wf/fix-6-appStoreHydrateError.test.ts"
+        ],
+        "failingTests": [
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash adopts the stash into the guest bucket without any server call",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash adopts the stash into a fresh canonical account through the server save",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash replaces an existing canonical profile with the freshly answered stash (newest intent wins)",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash replaces an existing guest profile with the freshly answered stash",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts :: guest data: legacy/pre-auth adoption and isolation from canonical owners the guest adopts the pre-auth questionnaire once; the stash is consumed and no device-level marker is left behind",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts :: guest data: legacy/pre-auth adoption and isolation from canonical owners a freshly answered stash replaces an existing guest profile (newest intent wins)",
+          "__tests__/wf/fix-6-appStoreHydrateError.test.ts :: appStore.hydrate — canonical profile fetch failure retry adopts the stash once the account is reachable and clears hydrateError"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS03-stash-not-cleared.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS03-stash-not-cleared.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS03-stash-not-cleared.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS03-stash-not-cleared.jest.log"
+      }
+    },
+    {
+      "id": "AS04-stash-write-skipped",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "completePreAuthOnboarding reports success without writing the stash",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7524,
+      "jestExit": 1,
+      "jestMs": 13853,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2889,
+        "numFailedTests": 11,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/appStorePreAuthOnboarding.test.ts :: completePreAuthOnboarding stashes the answers while signed out — the stash is the only device write",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: Welcome → questionnaire → \"Not now\" → sign-in → guest adopts the stash and lands in the app",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end fresh device: \"Turn on reminders\" asks the OS once and the guest owner inherits enabled prefs and a schedule",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Not now\" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash (and nothing else — no device marker), then hands off once",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) \"Turn on reminders\" requests OS permission exactly once and stashes {enabled:true} on grant",
+          "__tests__/wf/flow-launch-onboarding-screen.test.tsx :: flow: launch-onboarding — OnboardingScreen controls notification step (pre-auth) stash-write failure shows the error copy, clears busy, keeps the user on the step, and a retry succeeds without re-asking permission"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS04-stash-write-skipped.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS04-stash-write-skipped.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS04-stash-write-skipped.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS04-stash-write-skipped.jest.log"
+      }
+    },
+    {
+      "id": "AS05-stash-validation-dropped",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "parsePendingProfile accepts any object as a profile (no required-field check)",
+      "expected": "killed",
+      "result": "survived",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 8195,
+      "jestExit": 0,
+      "jestMs": 15972,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2900,
+        "numFailedTests": 0,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 0,
+        "success": true,
+        "failingSuites": [],
+        "failingTests": []
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS05-stash-validation-dropped.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS05-stash-validation-dropped.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS05-stash-validation-dropped.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS05-stash-validation-dropped.jest.log"
+      }
+    },
+    {
+      "id": "AS06-existing-profile-wins",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "An existing owner profile is kept over a fresh stash (newest intent loses)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 6902,
+      "jestExit": 1,
+      "jestMs": 14961,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2895,
+        "numFailedTests": 5,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts"
+        ],
+        "failingTests": [
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash replaces an existing canonical profile with the freshly answered stash (newest intent wins)",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash replaces an existing guest profile with the freshly answered stash",
+          "__tests__/wf/flow-guest-local-only.stores.test.ts :: guest data: legacy/pre-auth adoption and isolation from canonical owners a freshly answered stash replaces an existing guest profile (newest intent wins)"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS06-existing-profile-wins.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS06-existing-profile-wins.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS06-existing-profile-wins.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS06-existing-profile-wins.jest.log"
+      }
+    },
+    {
+      "id": "AS07-canonical-adopts-locally",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "Canonical accounts adopt the stash locally without the server save",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7424,
+      "jestExit": 1,
+      "jestMs": 18309,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2891,
+        "numFailedTests": 9,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 3,
+        "success": false,
+        "failingSuites": [
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx",
+          "__tests__/wf/fix-6-appStoreHydrateError.test.ts"
+        ],
+        "failingTests": [
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash adopts the stash into a fresh canonical account through the server save",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash replaces an existing canonical profile with the freshly answered stash (newest intent wins)",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the existing profile AND the stash when replacing it fails server-side",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the stash when the adoption save fails, for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in no server profile: the stash is saved through the canonical endpoint and the server focus wins",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry",
+          "__tests__/wf/fix-6-appStoreHydrateError.test.ts :: appStore.hydrate — canonical profile fetch failure retry adopts the stash once the account is reachable and clears hydrateError"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS07-canonical-adopts-locally.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS07-canonical-adopts-locally.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS07-canonical-adopts-locally.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS07-canonical-adopts-locally.jest.log"
+      }
+    },
+    {
+      "id": "AS08-failed-save-clears-stash",
+      "cls": "stash",
+      "file": "apps/mobile/src/state/appStore.ts",
+      "title": "A failed canonical save still clears the stash (answers lost)",
+      "expected": "killed",
+      "result": "killed",
+      "reason": null,
+      "tscExit": 0,
+      "tscMs": 7837,
+      "jestExit": 1,
+      "jestMs": 13880,
+      "jest": {
+        "numTotalTests": 2901,
+        "numPassedTests": 2897,
+        "numFailedTests": 3,
+        "numTotalTestSuites": 248,
+        "numFailedTestSuites": 2,
+        "success": false,
+        "failingSuites": [
+          "__tests__/appStorePreAuthOnboarding.test.ts",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx"
+        ],
+        "failingTests": [
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the existing profile AND the stash when replacing it fails server-side",
+          "__tests__/appStorePreAuthOnboarding.test.ts :: hydrate with a pre-auth stash keeps the stash when the adoption save fails, for the next hydrate",
+          "__tests__/wf/flow-launch-onboarding-gate.test.tsx :: flow: launch-onboarding — App Gate end-to-end canonical (Apple) first sign-in when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate"
+        ]
+      },
+      "artifacts": {
+        "diff": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS08-failed-save-clears-stash.diff",
+        "tscLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS08-failed-save-clears-stash.tsc.log",
+        "jestJson": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS08-failed-save-clears-stash.jest.json",
+        "jestLog": "artifacts/mutation/launch-gate/baseline-4d812e1a/AS08-failed-save-clears-stash.jest.log"
+      }
+    }
+  ]
+}

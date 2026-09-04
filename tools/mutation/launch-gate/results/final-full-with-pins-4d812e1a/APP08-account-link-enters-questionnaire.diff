@@ -1,0 +1,11 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -211,7 +211,7 @@
+     ) : (
+       <WelcomeScreen
+         onGetStarted={() => setPreAuthStage(stageAfterGetStarted())}
+-        onSignIn={() => setPreAuthStage('signin')}
++        onSignIn={() => setPreAuthStage(stageAfterGetStarted())}
+       />
+     )
+   ) : !profile && hydrateError ? (

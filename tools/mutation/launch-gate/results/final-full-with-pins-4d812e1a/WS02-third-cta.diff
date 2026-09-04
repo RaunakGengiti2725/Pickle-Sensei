@@ -1,0 +1,22 @@
+--- a/apps/mobile/src/screens/WelcomeScreen.tsx
++++ b/apps/mobile/src/screens/WelcomeScreen.tsx
+@@ -115,6 +115,19 @@
+             </Text>
+           </PressableScale>
+         ) : null}
++        {props.onSignIn ? (
++          <PressableScale
++            accessibilityRole="button"
++            accessibilityLabel="Look around first"
++            accessibilityHint="Sign in without setup"
++            onPress={props.onSignIn}
++            style={styles.signInLink}
++          >
++            <Text style={[type.bodyBold, { color: color.onDarkMuted }]}>
++              Look around first
++            </Text>
++          </PressableScale>
++        ) : null}
+         <Text style={styles.privacy}>
+           Two successful validated ratings free · Unscored attempts don’t count
+         </Text>

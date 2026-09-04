@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/screens/WelcomeScreen.tsx
++++ b/apps/mobile/src/screens/WelcomeScreen.tsx
+@@ -100,7 +100,7 @@
+         <Button
+           label="Start your first read"
+           variant="volt"
+-          onPress={props.onGetStarted}
++          onPress={props.onSignIn ?? props.onGetStarted}
+         />
+         {props.onSignIn ? (
+           <PressableScale

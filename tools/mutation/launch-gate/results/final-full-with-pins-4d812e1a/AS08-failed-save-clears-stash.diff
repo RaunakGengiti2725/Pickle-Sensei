@@ -1,0 +1,12 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -174,7 +174,8 @@
+           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+           pending = null;
+         } catch {
+-          // Stash and existing profile both survive for the next attempt.
++          await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
++          pending = null;
+         }
+       }
+       if (getActiveDataOwner() !== owner) return;

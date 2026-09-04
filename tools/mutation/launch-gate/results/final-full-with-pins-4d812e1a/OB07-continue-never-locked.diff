@@ -1,0 +1,16 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -398,12 +398,7 @@
+     biggestProblem: answers['problem'] ?? 'not sure',
+     focusCheckpoint: focus,
+   };
+-  const stepComplete =
+-    step === 'reveal' || step === 'notifications'
+-      ? true
+-      : step === 'name'
+-        ? firstName.length >= 1
+-        : answers[step] !== undefined;
++  const stepComplete = true;
+ 
+   // Selection never auto-advances; the user confirms with Continue so a
+   // mis-tap is recoverable and the pace belongs to them.

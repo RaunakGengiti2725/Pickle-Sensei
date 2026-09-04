@@ -1,0 +1,13 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -423,8 +423,8 @@
+         setNotificationChoice(choice);
+       }
+       if (preAuth) {
+-        const ok = await completePreAuthOnboarding(answeredProfile);
+-        if (ok) props.onFinished?.();
++        await completeOnboarding(answeredProfile);
++        props.onFinished?.();
+         return;
+       }
+       await completeOnboarding(answeredProfile);

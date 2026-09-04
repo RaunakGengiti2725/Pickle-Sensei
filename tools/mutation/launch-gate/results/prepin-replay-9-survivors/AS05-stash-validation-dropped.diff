@@ -1,0 +1,14 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -56,9 +56,8 @@
+       'biggestProblem',
+       'focusCheckpoint',
+     ] as const;
+-    for (const key of requiredStrings) {
+-      if (typeof candidate[key] !== 'string') return null;
+-    }
++    void candidate;
++    void requiredStrings;
+     return profile as Profile;
+   } catch {
+     return null;

@@ -1,0 +1,14 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -239,11 +239,6 @@
+   completePreAuthOnboarding: async profile => {
+     set({ onboardingBusy: true, onboardingError: null });
+     try {
+-      await setKv(
+-        getDb(),
+-        PENDING_ONBOARDING_PROFILE_KV_KEY,
+-        JSON.stringify({ version: 1, profile }),
+-      );
+       set({ onboardingBusy: false, onboardingError: null });
+       return true;
+     } catch (error) {

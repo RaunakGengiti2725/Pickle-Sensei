@@ -1,0 +1,11 @@
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -210,7 +210,7 @@
+       />
+     ) : (
+       <WelcomeScreen
+-        onGetStarted={() => setPreAuthStage(stageAfterGetStarted())}
++        onGetStarted={() => setPreAuthStage('signin')}
+         onSignIn={() => setPreAuthStage('signin')}
+       />
+     )

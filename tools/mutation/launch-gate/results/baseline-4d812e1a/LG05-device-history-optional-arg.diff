@@ -1,0 +1,15 @@
+--- a/apps/mobile/src/flow/launchGate.ts
++++ b/apps/mobile/src/flow/launchGate.ts
+@@ -17,8 +17,10 @@
+ export type PreAuthStage = 'welcome' | 'onboarding' | 'signin';
+ 
+ /** Welcome's primary CTA ("Start your first read"): always the questionnaire. */
+-export function stageAfterGetStarted(): PreAuthStage {
+-  return 'onboarding';
++export function stageAfterGetStarted(
++  alreadyOnboarded?: boolean,
++): PreAuthStage {
++  return alreadyOnboarded ? 'signin' : 'onboarding';
+ }
+ 
+ /** Finishing the pre-auth questionnaire hands off to sign-in — never back to

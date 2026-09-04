@@ -1,0 +1,21 @@
+--- a/apps/mobile/src/screens/OnboardingScreen.tsx
++++ b/apps/mobile/src/screens/OnboardingScreen.tsx
+@@ -2,6 +2,7 @@
+ import {
+   KeyboardAvoidingView,
+   Platform,
++  Pressable,
+   ScrollView,
+   StatusBar,
+   StyleSheet,
+@@ -471,7 +472,9 @@
+               onPress={leaveOnboarding}
+               style={styles.headerButton}
+             >
+-              <Icon name="back" size={20} color={color.onDark} />
++              <Pressable onLongPress={() => props.onFinished?.()}>
++                <Icon name="back" size={20} color={color.onDark} />
++              </Pressable>
+             </PressableScale>
+           ) : (
+             <PressableScale

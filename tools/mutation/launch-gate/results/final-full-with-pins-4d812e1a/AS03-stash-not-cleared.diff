@@ -1,0 +1,10 @@
+--- a/apps/mobile/src/state/appStore.ts
++++ b/apps/mobile/src/state/appStore.ts
+@@ -171,7 +171,6 @@
+               : pending;
+           raw = JSON.stringify(adopted);
+           await setKv(db, profileKeyForOwner(owner), raw);
+-          await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+           pending = null;
+         } catch {
+           // Stash and existing profile both survive for the next attempt.

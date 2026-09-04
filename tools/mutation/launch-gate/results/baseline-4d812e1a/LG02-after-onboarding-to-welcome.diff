@@ -1,0 +1,11 @@
+--- a/apps/mobile/src/flow/launchGate.ts
++++ b/apps/mobile/src/flow/launchGate.ts
+@@ -24,7 +24,7 @@
+ /** Finishing the pre-auth questionnaire hands off to sign-in — never back to
+  * Welcome, never into the app (no session yet). */
+ export function stageAfterOnboarding(): PreAuthStage {
+-  return 'signin';
++  return 'welcome';
+ }
+ 
+ /** Step one's back control returns to the screen the questionnaire was
