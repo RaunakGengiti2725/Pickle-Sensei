@@ -25,10 +25,15 @@ export interface FakeSession {
 }
 
 export interface FakeUser {
+  /** The Supabase auth.users uuid — the ONLY identity the edge function may use. */
   id: string;
   email: string;
   /** app_metadata.provider as GoTrue reports it (google | apple | email…). */
   provider: string;
+  /** The provider's own subject (`sub` of the Google/Apple ID token). In
+   * production this is never the Supabase uuid (Google: a 21-digit number,
+   * Apple: `001234.<hex>.1234`); defaults to `id` for the legacy fixtures. */
+  providerSubject?: string;
 }
 
 export interface FakeRedisEntry {
@@ -71,6 +76,15 @@ export const REDIS_URL = "http://upstash.session.test";
 export const GOOGLE_USER_ID = "33333333-3333-4333-8333-333333333333";
 export const APPLE_USER_ID = "44444444-4444-4444-8444-444444444444";
 export const EMAIL_USER_ID = "55555555-5555-4555-8555-555555555555";
+/** Google account whose provider subject differs from its Supabase uuid (as
+ * every real account does). */
+export const DISTINCT_GOOGLE_USER_ID = "66666666-6666-4666-8666-666666666666";
+export const DISTINCT_GOOGLE_SUBJECT = "108234567890123456789";
+/** Apple account whose provider subject differs from its Supabase uuid. */
+export const DISTINCT_APPLE_USER_ID = "77777777-7777-4777-8777-777777777777";
+export const DISTINCT_APPLE_SUBJECT = "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.1234";
+
+export const providerSubjectOf = (user: FakeUser): string => user.providerSubject ?? user.id;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -230,6 +244,18 @@ export async function loadSessionHarness(
       state.registerUser({ id: GOOGLE_USER_ID, email: "google@example.com", provider: "google" });
       state.registerUser({ id: APPLE_USER_ID, email: "apple@example.com", provider: "apple" });
       state.registerUser({ id: EMAIL_USER_ID, email: "email@example.com", provider: "email" });
+      state.registerUser({
+        id: DISTINCT_GOOGLE_USER_ID,
+        email: "distinct-google@example.com",
+        provider: "google",
+        providerSubject: DISTINCT_GOOGLE_SUBJECT,
+      });
+      state.registerUser({
+        id: DISTINCT_APPLE_USER_ID,
+        email: "distinct-apple@example.com",
+        provider: "apple",
+        providerSubject: DISTINCT_APPLE_SUBJECT,
+      });
     },
     registerUser(user: FakeUser) {
       state.users.set(user.id, user);
@@ -301,8 +327,13 @@ export async function loadSessionHarness(
         const idToken = typeof payload.id_token === "string" ? payload.id_token : "";
         const claims = jwtPayload(idToken);
         const sub = typeof claims?.sub === "string" ? claims.sub : "";
-        const user = state.users.get(sub);
-        if (!user || user.provider !== payload.provider) {
+        // GoTrue resolves (provider, subject) → auth.users row; the subject is
+        // NOT the user id.
+        const user = [...state.users.values()].find(
+          (candidate) =>
+            candidate.provider === payload.provider && providerSubjectOf(candidate) === sub,
+        );
+        if (!user) {
           return jsonResponse(400, {
             error: "invalid_grant",
             error_description: "Bad ID token",
@@ -388,6 +419,13 @@ export async function loadSessionHarness(
           rows = user ? [profileRow(user)] : [];
         }
         rows ??= [];
+        // PostgREST honours `id=eq.<value>` (RLS then hides everyone else's row):
+        // a lookup by any id other than the session's user finds nothing.
+        const idFilter = parsed.searchParams.get("id");
+        if (idFilter?.startsWith("eq.")) {
+          const wanted = idFilter.slice("eq.".length);
+          rows = rows.filter((row) => isRecord(row) && row.id === wanted);
+        }
         const accept = headers["accept"] ?? "";
         if (accept.includes("application/vnd.pgrst.object+json")) {
           if (rows.length === 0) {
