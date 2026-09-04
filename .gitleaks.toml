@@ -89,6 +89,15 @@ paths = ['''(?:^|/)apps/mobile/__tests__/wf/be-mobile-security-secrets\.test\.ts
 regexes = ['''header\.eyJ[A-Za-z0-9_-]+\.sig''']
 
 [[allowlists]]
+# first-party-intake consent-ledger tests sign synthetic export envelopes with
+# HMAC keys spelled out as labeled fixtures ("SYNTHETIC-TEST-FIXTURE.<name>");
+# the label is the whole value, and no real ledger is signed with it.
+description = "labeled synthetic HMAC fixture keys in first-party-intake tests"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)packages/first-party-intake/test/.*\.test\.ts$''']
+regexes = ['''SYNTHETIC-TEST-FIXTURE\.[A-Za-z0-9.-]+''']
+
+[[allowlists]]
 # App Store Connect API *Issuer ID* and *Key ID* are team/key identifiers, not
 # credentials: nothing can be signed or uploaded without the .p8 private key,
 # which is never committed (docs/DISTRIBUTION.md documents the identifiers).
