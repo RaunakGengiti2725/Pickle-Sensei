@@ -93,6 +93,14 @@ function timerDelays(spy: jest.SpyInstance): number[] {
   return spy.mock.calls.map(call => Number(call[1] ?? 0));
 }
 
+/** Node's process object (the mobile tsconfig carries no node types); it
+ * emits TimeoutOverflowWarning when a delay above 2^31-1 is clamped. */
+const nodeProcess = (
+  globalThis as unknown as {
+    process: { emitWarning: (...args: unknown[]) => void };
+  }
+).process;
+
 afterEach(() => {
   stopSessionKeeper();
   jest.useRealTimers();
@@ -215,7 +223,7 @@ describe('timer delays stay inside the signed 32-bit range setTimeout accepts', 
   it('an epoch-MILLISECOND expiresAt on refresh never schedules a delay above 2^31-1 and triggers no TimeoutOverflowWarning', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
-    const emitWarning = jest.spyOn(process, 'emitWarning');
+    const emitWarning = jest.spyOn(nodeProcess, 'emitWarning');
     const millisecondExpiry = Date.now() + HOUR_MS;
     let calls = 0;
     const fetchFn = jest.fn(async () => {

@@ -20,6 +20,11 @@ import {
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
  * out; they just schedule another try.
+ *
+ * Timers are defensive about the expiry they are given: a wait longer than
+ * `setTimeout` can hold is taken in chunks, and a successful rotation never
+ * re-arms itself sooner than `ROTATION_SPACING_MS` later — so an expiry the
+ * keeper cannot trust costs at most one extra exchange, never a loop.
  */
 
 export interface SessionKeeperInput {
@@ -40,6 +45,11 @@ const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
 const MIN_DELAY_MS = 1_000;
+/** Two self-scheduled rotations are never closer than this. */
+const ROTATION_SPACING_MS = 60_000;
+/** Largest delay setTimeout honours (signed 32-bit ms); longer waits are
+ * chunked. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
 
@@ -82,23 +92,45 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   let bearerExpiresAtMs = input.bearerExpiresAtMs;
   let failedAttempts = 0;
   let inflight = false;
+  let lastRotationAtMs: number | null = null;
 
   const live = () => myGeneration === generation;
 
-  const schedule = (delayMs: number) => {
+  const arm = (delayMs: number, fire: () => void) => {
     if (!live()) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(
       () => {
         timer = null;
-        void refresh();
+        fire();
       },
-      Math.max(MIN_DELAY_MS, delayMs),
+      Math.min(
+        MAX_TIMER_DELAY_MS,
+        Math.max(MIN_DELAY_MS, Number.isFinite(delayMs) ? delayMs : 0),
+      ),
     );
   };
 
+  const schedule = (delayMs: number) => arm(delayMs, () => void refresh());
+
+  /** Refreshes at `atMs` on the device clock, however far away that is:
+   * a wait beyond the timer range sleeps one full chunk and re-measures. */
+  const scheduleAt = (atMs: number) => {
+    const delayMs = atMs - now();
+    if (delayMs > MAX_TIMER_DELAY_MS) {
+      arm(MAX_TIMER_DELAY_MS, () => scheduleAt(atMs));
+    } else {
+      schedule(delayMs);
+    }
+  };
+
   const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+    const aheadOfExpiryMs = (bearerExpiresAtMs ?? now()) - REFRESH_LEAD_MS;
+    scheduleAt(
+      lastRotationAtMs === null
+        ? aheadOfExpiryMs
+        : Math.max(aheadOfExpiryMs, lastRotationAtMs + ROTATION_SPACING_MS),
+    );
   };
 
   const refresh = async () => {
@@ -107,11 +139,12 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     try {
       const tokens = await refreshApiSession(
         { apiBaseUrl: input.apiBaseUrl, refreshToken },
-        { fetchFn: input.fetchFn },
+        { fetchFn: input.fetchFn, now },
       );
       if (!live()) return;
       refreshToken = tokens.refreshToken;
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
+      lastRotationAtMs = now();
       failedAttempts = 0;
       await input.onRotated(tokens);
       if (live()) scheduleAheadOfExpiry();

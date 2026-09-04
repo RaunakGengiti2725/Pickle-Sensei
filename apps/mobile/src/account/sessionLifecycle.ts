@@ -8,9 +8,72 @@ import type { ApiSession } from './apiSession';
  * bearer alive); `revokeApiSession` asks the server to kill this device's
  * session on explicit sign-out. Tokens never touch storage or logs here —
  * the caller decides what to persist (see sessionVault.ts).
+ *
+ * The bearer expiry the server reports is normalised HERE, at the HTTP
+ * boundary, before anything schedules a timer from it (see
+ * `normalizeBearerExpiry`): downstream code may trust `bearerExpiresAtMs`
+ * to lie a plausible lifetime ahead of the device clock.
  */
 
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/** Shortest bearer lifetime the server may legitimately report. */
+export const MIN_BEARER_LIFETIME_MS = 5 * 60_000;
+/** Assumed lifetime when the reported expiry cannot be trusted (Supabase's
+ * default JWT lifetime). */
+export const DEFAULT_BEARER_LIFETIME_MS = 60 * 60_000;
+/** Longest bearer lifetime the server may legitimately report. Well below
+ * the 2^31-1 ms a timer can wait. */
+export const MAX_BEARER_LIFETIME_MS = 24 * 60 * 60_000;
+/** An epoch value at or above this can only be milliseconds: as seconds it
+ * would be the year 5138, as milliseconds it is March 1973. */
+const EPOCH_MILLISECONDS_FROM = 1e11;
+
+/**
+ * Turns the `expiresAt` a session response carries into an absolute device
+ * time the bearer can be trusted until.
+ *
+ * The bearer's LIFETIME is what the server actually knows, so it is measured
+ * against the server's own clock (`serverNowMs`, from the response `Date`
+ * header) when available, and only against the device clock otherwise; the
+ * result is then anchored to the device clock, which is the clock every
+ * timer runs on. A device clock hours off the server therefore no longer
+ * turns a healthy one-hour bearer into an already-expired or three-hour one.
+ *
+ * `expiresAt` is epoch seconds per the API contract, but an epoch value in
+ * milliseconds is recognised rather than multiplied by 1000 again. Any
+ * lifetime outside [MIN, MAX] — already past, inside the refresh lead,
+ * negative, centuries away — is not a schedule anybody should act on and is
+ * replaced by the default lifetime. This never fails: an untrusted expiry
+ * is never a reason to drop the session.
+ */
+export function normalizeBearerExpiry(input: {
+  expiresAt: number;
+  serverNowMs: number | null;
+  clientNowMs: number;
+}): number {
+  const expiresAtMs =
+    Math.abs(input.expiresAt) >= EPOCH_MILLISECONDS_FROM
+      ? input.expiresAt
+      : input.expiresAt * 1000;
+  const lifetimeMs = expiresAtMs - (input.serverNowMs ?? input.clientNowMs);
+  const plausible =
+    Number.isFinite(lifetimeMs) &&
+    lifetimeMs >= MIN_BEARER_LIFETIME_MS &&
+    lifetimeMs <= MAX_BEARER_LIFETIME_MS;
+  return (
+    input.clientNowMs + (plausible ? lifetimeMs : DEFAULT_BEARER_LIFETIME_MS)
+  );
+}
+
+/** The server's clock at the time of the response, or null when the `Date`
+ * header is absent or unparseable. */
+function serverNowMsFrom(response: Response): number | null {
+  const header = response.headers?.get('date');
+  if (!header) return null;
+  const parsed = Date.parse(header);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 export class SessionRefreshError extends Error {
   constructor(
@@ -53,6 +116,8 @@ async function post(
 export interface RefreshedTokens {
   bearerToken: string;
   refreshToken: string;
+  /** Device-clock time the bearer is trusted until; always a plausible
+   * lifetime ahead of now (see `normalizeBearerExpiry`). */
   bearerExpiresAtMs: number;
 }
 
@@ -63,9 +128,14 @@ export interface RefreshedTokens {
  */
 export async function refreshApiSession(
   input: { apiBaseUrl: string; refreshToken: string },
-  options: { fetchFn?: SessionFetch; timeoutMs?: number } = {},
+  options: {
+    fetchFn?: SessionFetch;
+    timeoutMs?: number;
+    now?: () => number;
+  } = {},
 ): Promise<RefreshedTokens> {
   const fetchFn = options.fetchFn ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
   let response: Response;
   try {
     response = await post(
@@ -114,7 +184,11 @@ export async function refreshApiSession(
   return {
     bearerToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
-    bearerExpiresAtMs: tokens.expiresAt * 1000,
+    bearerExpiresAtMs: normalizeBearerExpiry({
+      expiresAt: tokens.expiresAt,
+      serverNowMs: serverNowMsFrom(response),
+      clientNowMs: now(),
+    }),
   };
 }
 
