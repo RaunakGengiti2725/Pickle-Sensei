@@ -125,12 +125,13 @@ environment needs to the Blueprint. Session-specific detail goes nowhere.
 
 ## 7. Enterprise control plane
 
-- **Devin Review** — on-demand review works for this repo
-  (`devin_review_manage` `trigger` / `get_status`); `REVIEW.md` is picked up
-  automatically. Automatic review on every PR and CI status posting are
-  org settings (Settings → Review: _Repositories_, _Post GitHub CI checks_,
-  _Auto-fix review findings_). Keep Auto-fix limited to Devin-tracked PRs and
-  never auto-merge on a green review — CI/test evidence is authoritative.
+- **Devin Review** — active for this repo: every push to a PR gets a review
+  and a `Devin Review` check (proven on PR #9, findings on the runner, the
+  verifier, the Mac workflow and the admin console were each fixed with a
+  regression test); on-demand runs via `devin_review_manage`
+  `trigger` / `get_status`; `REVIEW.md` is picked up automatically. Auto-fix
+  is an org setting (Settings → Review) — keep it limited to Devin-tracked
+  PRs and never auto-merge on a green review; CI/test evidence is authoritative.
 - **Automations** (`devin_automation_manage`; every create/update is
   approval-gated) — designed set: CI-failure investigator (triggers only on
   `ci-gate` / Mac Full Verify failures, skips `ci/mac-*`, Devin-authored
@@ -183,7 +184,7 @@ shapes.
 | Item                                | Exact action                                                                                                                                                        | Why                                                                                          |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Knowledge / Playbooks / Automations | approve the pending Devin-management requests raised by the bootstrap session (or re-run them)                                                                      | management mutations are approval-gated; drafts are validated but not applied until approved |
-| Devin Review auto-review            | Settings → Review → Repositories: enrol `Pickle-Sensei`; enable _Post GitHub CI checks_                                                                             | on-demand review is proven; automatic review is a settings toggle                            |
+| Repo Blueprint                      | approve the pending repo-level blueprint suggestion (Deno, ffmpeg, Playwright Chromium, gitleaks, DB images, canonical commands) so the snapshot is rebuilt from it | until approved, sessions start from the enterprise blueprint only and re-install these tools |
 | Service user                        | Settings → Devin API → Service users → create org-scoped `pickle-sensei-automation` with the minimal role in §7; store the key as a Devin secret, never in the repo | API-driven session creation / automation management                                          |
 | Supabase staging + read-only MCP    | create a staging project (or read replica) and connect a read-only Supabase MCP / DB credential                                                                     | DANA analytics and runtime diagnosis without production risk                                 |
 | Branch protection                   | require `ci-gate` (and `Mac Full Verify` for Apple paths) on `main`                                                                                                 | makes the aggregate gate binding                                                             |
