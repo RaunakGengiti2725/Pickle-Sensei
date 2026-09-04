@@ -1,0 +1,1010 @@
+{
+  "$comment": "Committed regression tolerances for the Linux replay benches. Every bench is a deterministic replay of committed artifacts, so tolerances are 0: any metric moving in the worse direction is a regression that must be reviewed, and any metric moving in the better direction is reported as an improvement. `informational` metrics describe corpus size or honest abstention and never fail a comparison. Metrics not listed here are treated per `unlistedMetricPolicy`.",
+  "configVersion": 1,
+  "contract": "pickle-sensei-linux-regression",
+  "contractVersion": 1,
+  "unlistedMetricPolicy": "fail",
+  "lostMeasurementIsRegression": true,
+  "metrics": {
+    "stroke_heuristic.gold_labels_total": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.evaluable_labels": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.l1_correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more gold stroke labels classified correctly (L1 overhead/swing, L2 taxonomy family); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "stroke_heuristic.l1_wrong": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a wrong stroke label is worse than an abstention; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "stroke_heuristic.l1_abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention is an honest outcome; abstain->correct shows up in *_correct, abstain->wrong in *_wrong"
+    },
+    "stroke_heuristic.l1_gold_unknown": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.l2_correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more gold stroke labels classified correctly (L1 overhead/swing, L2 taxonomy family); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "stroke_heuristic.l2_wrong": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a wrong stroke label is worse than an abstention; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "stroke_heuristic.l2_abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention is an honest outcome; abstain->correct shows up in *_correct, abstain->wrong in *_wrong"
+    },
+    "stroke_heuristic.l2_gold_unknown": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.l2_not_applicable": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "stroke_heuristic.confidently_wrong": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "high-confidence wrong labels are the most damaging failure for a coaching product; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.gold_events": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "contact_replay.rows_replayed": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "contact_replay.target_events": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "contact_replay.estimated": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more target contacts estimated within 66ms (strict) / 132ms (acceptable); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "complement of coverage; abstention is honest and `estimated` / `coverage` carry the signal"
+    },
+    "contact_replay.coverage": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more target contacts estimated within 66ms (strict) / 132ms (acceptable); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.abstention_rate": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "complement of coverage; abstention is honest and `estimated` / `coverage` carry the signal"
+    },
+    "contact_replay.wrong_markers": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a contact marker beyond 132ms is a wrong marker; confident wrong markers are worse; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.wrong_marker_rate_of_estimated": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a contact marker beyond 132ms is a wrong marker; confident wrong markers are worse; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.strict_hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more target contacts estimated within 66ms (strict) / 132ms (acceptable); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.acceptable_hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "more target contacts estimated within 66ms (strict) / 132ms (acceptable); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.median_error_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "timing error of estimated contacts in ms; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.p75_error_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "timing error of estimated contacts in ms; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.p90_error_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "timing error of estimated contacts in ms; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "contact_replay.high_confidence_violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a contact marker beyond 132ms is a wrong marker; confident wrong markers are worse; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.bundles": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_bounds_e13.target_n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_bounds_e13.target_proposed_ok": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "target stroke events bounded correctly (overlap>=0.5 or contact inside +/-60ms); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_mis_bounded": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed / mis-bounded target events and proposals inside labeled non-event spans; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_missed": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed / mis-bounded target events and proposals inside labeled non-event spans; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_median_start_err_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "segment boundary error vs gold in ms; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_median_end_err_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "segment boundary error vs gold in ms; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_contact_inside": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "target stroke events bounded correctly (overlap>=0.5 or contact inside +/-60ms); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.target_contact_inside_denominator": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_bounds_e13.other_n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_bounds_e13.other_proposed_ok": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "other-owner rows replay the TARGET wrist; misses are expected and are not an opponent-detection metric"
+    },
+    "event_bounds_e13.other_missed": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "other-owner rows replay the TARGET wrist; misses are expected and are not an opponent-detection metric"
+    },
+    "event_bounds_e13.non_events": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_bounds_e13.false_positive_non_events": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed / mis-bounded target events and proposals inside labeled non-event spans; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_bounds_e13.total_proposals": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_recall.gold_target_events": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_recall.proposed_ok": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold target events recovered by proposeStrokeEventsV2 and how tightly; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.mis_bounded": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed/mis-bounded gold events and proposals with no gold support (unmatched is an upper bound on false proposals); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.missed": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed/mis-bounded gold events and proposals with no gold support (unmatched is an upper bound on false proposals); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.recall": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold target events recovered by proposeStrokeEventsV2 and how tightly; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.mean_best_overlap_of_proposed_ok": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold target events recovered by proposeStrokeEventsV2 and how tightly; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.contact_inside_rate": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold target events recovered by proposeStrokeEventsV2 and how tightly; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.contact_inside_denominator": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_recall.total_proposals": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_recall.low_amplitude_proposals": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed/mis-bounded gold events and proposals with no gold support (unmatched is an upper bound on false proposals); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.false_in_non_event": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed/mis-bounded gold events and proposals with no gold support (unmatched is an upper bound on false proposals); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "event_recall.non_event_spans": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "event_recall.unmatched_proposals": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed/mis-bounded gold events and proposals with no gold support (unmatched is an upper bound on false proposals); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "completion_bench.fixed.median_abs_end_error_ms": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.median_abs_recovery_error_ms": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.early_stops": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.contact_lost": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.follow_through_lost": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.recovery_lost": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.mean_trailing_excess_ms": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.fixed.mean_post_trigger_ms": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "FIXED is the shipped constant 1.5s post-roll policy and serves as the reference row, not the candidate"
+    },
+    "completion_bench.adaptive.median_abs_end_error_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "adaptive stop error vs gold event end / recovery, and wasted trailing capture; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.median_abs_recovery_error_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "adaptive stop error vs gold event end / recovery, and wasted trailing capture; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.early_stops": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "an early stop that drops contact / follow-through / recovery is lost analysis; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.contact_lost": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "an early stop that drops contact / follow-through / recovery is lost analysis; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.follow_through_lost": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "an early stop that drops contact / follow-through / recovery is lost analysis; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.recovery_lost": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "an early stop that drops contact / follow-through / recovery is lost analysis; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.mean_trailing_excess_ms": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "adaptive stop error vs gold event end / recovery, and wasted trailing capture; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "completion_bench.adaptive.mean_post_trigger_ms": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "how long adaptive keeps recording after trigger; shorter is only good if nothing is lost, which *_lost / early_stops measure"
+    },
+    "ownership_dual_frame.dual_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ownership_dual_frame.frames_with_pose": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.incumbent_wrist_ratio.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b1_wrist_distance_only.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b2_target_geometry.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b2_target_geometry.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b2_target_geometry.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b2_target_geometry.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b2_target_geometry.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b2_target_geometry.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.b3_temporal_continuity.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.incumbent_wrist_ratio.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b1_wrist_distance_only.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b2_target_geometry.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.scored_frames": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.correct": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.accuracy": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.accuracy_when_answering": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "paddle ownership (target vs other) attribution on human-labeled dual frames; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ownership_dual_frame.pose_subset.b3_temporal_continuity.coverage": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "frames answered; abstention is honest and answering more only counts when *_correct / *_accuracy move"
+    },
+    "ball_hard_slice.bucket.observed.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.bucket.observed.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.observed.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.observed.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.observed.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.bucket.observed.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.bucket.entering_occlusion.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.occluded.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.bucket.occluded.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.occluded.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.occluded.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.occluded.abstained": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "abstaining while the ball is occluded/not visible is the correct behaviour; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.occluded.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.reacquired.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.bucket.reacquired.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.reacquired.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.reacquired.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.reacquired.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.bucket.reacquired.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.hits": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "UNCERTAIN_EXCLUDED labels are reported but excluded from quality by the bench"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.misses": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "UNCERTAIN_EXCLUDED labels are reported but excluded from quality by the bench"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.wrong_location": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "UNCERTAIN_EXCLUDED labels are reported but excluded from quality by the bench"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "UNCERTAIN_EXCLUDED labels are reported but excluded from quality by the bench"
+    },
+    "ball_hard_slice.bucket.uncertain_excluded.violations": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "UNCERTAIN_EXCLUDED labels are reported but excluded from quality by the bench"
+    },
+    "ball_hard_slice.slice.net_crossing.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.net_crossing.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.net_crossing.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.net_crossing.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.net_crossing.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.slice.net_crossing.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.net_crossing.excluded": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.paddle_occlusion.excluded": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.multi_ball_background.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.multi_ball_background.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.multi_ball_background.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.multi_ball_background.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.multi_ball_background.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.slice.multi_ball_background.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.multi_ball_background.excluded": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.fast_blur.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.fast_blur.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.fast_blur.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.fast_blur.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.fast_blur.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.slice.fast_blur.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.fast_blur.excluded": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.n": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.hits": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "ball located within the label's tolerance; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.misses": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.wrong_location": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.abstained": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "abstention on a visible ball is neither a hit nor a wrong location; hits / wrong_location carry the signal"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.violations": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "missed ball, wrong-location ball, or a location asserted while the ball is labeled occluded (violation); deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "ball_hard_slice.slice.occlusion_cycle.excluded": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "phase_gold_d3_05.anchored_segmented": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold-contact events for which segmentPhasesTemporalV2 produced a phase timeline instead of abstaining; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "phase_gold_d3_05.anchored_total": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "phase_gold_d3_05.anchor_free_segmented": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "gold-contact events for which segmentPhasesTemporalV2 produced a phase timeline instead of abstaining; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "phase_gold_d3_05.anchor_free_total": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "describes the gold corpus / evidence size, not model quality; corpus changes surface as provenance confounds"
+    },
+    "coach_gates.gates_total": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "gate count and evidence inventory; more evidence is a dataset change, not a code change"
+    },
+    "coach_gates.gates_pass": {
+      "direction": "higher_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "frozen coach release gates passing; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "coach_gates.gates_fail": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a failing frozen gate or an invalid review file must never appear silently; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    },
+    "coach_gates.gates_not_evaluable": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "NOT_EVALUABLE reflects missing evidence and already blocks release; it is not a code-quality signal"
+    },
+    "coach_gates.active_coaches": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "gate count and evidence inventory; more evidence is a dataset change, not a code change"
+    },
+    "coach_gates.review_files": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "gate count and evidence inventory; more evidence is a dataset change, not a code change"
+    },
+    "coach_gates.counted_reviews": {
+      "direction": "informational",
+      "absoluteTolerance": 0,
+      "rationale": "gate count and evidence inventory; more evidence is a dataset change, not a code change"
+    },
+    "coach_gates.invalid_review_files": {
+      "direction": "lower_is_better",
+      "absoluteTolerance": 0,
+      "rationale": "a failing frozen gate or an invalid review file must never appear silently; deterministic replay of committed artifacts; any change is a real code-path change and must be reviewed"
+    }
+  }
+}
