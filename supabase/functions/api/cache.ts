@@ -90,6 +90,10 @@ function memorySet(key: string, value: string, ttlSeconds: number): void {
   memory.set(key, { value, expiresAtMs: Date.now() + ttlSeconds * 1_000 });
 }
 
+/** How long an L2 row read through into L1 may be served locally before L2
+ * is consulted again — the longest a per-isolate copy can outlive its L2 row. */
+export const L1_READTHROUGH_TTL_SECONDS = 60;
+
 // ─── Public cache API ────────────────────────────────────────────────────────
 
 export async function cacheGet(key: string): Promise<string | null> {
@@ -103,9 +107,80 @@ export async function cacheGet(key: string): Promise<string | null> {
   if (typeof value !== "string") return null;
   const ttl = Number(results?.[1]?.result);
   if (Number.isFinite(ttl) && ttl > 0) {
-    memorySet(key, value, Math.min(ttl, 60));
+    memorySet(key, value, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
   }
   return value;
+}
+
+export interface GuardedCacheHit {
+  /** The cached value, or null when absent or revoked. */
+  value: string | null;
+  /** True when the revocation marker exists (the value, if any, was dropped). */
+  revoked: boolean;
+}
+
+/** Read `key` unless the revocation marker `revokedKey` exists.
+ *
+ * With Redis configured, L2 is the authority for whether a row is still
+ * alive and L1 only a copy of its payload: every hit — L1 included — costs
+ * one L2 round trip that fetches the marker and, for an L1 hit, confirms the
+ * row still exists in L2 (a local copy of a row another isolate deleted is a
+ * miss, not a hit). So a revocation published anywhere is honoured here on
+ * the next request, not when the local copy ages out. A marker found in L2
+ * is copied into L1 so the refusal stays cheap while the row it fences would
+ * still be alive, and the fenced row is dropped from L1. Redis being
+ * unavailable degrades to the L1 answer, like every other read here. */
+export async function cacheGetUnlessRevoked(
+  key: string,
+  revokedKey: string,
+): Promise<GuardedCacheHit> {
+  if (memoryGet(revokedKey) !== null) {
+    memory.delete(key);
+    return { value: null, revoked: true };
+  }
+  const local = memoryGet(key);
+  if (!redisConfigured()) return { value: local, revoked: false };
+
+  // TTL doubles as the liveness probe: -2 means the row is gone from L2.
+  const commands: Array<Array<string | number>> = [["GET", revokedKey]];
+  if (local === null) commands.push(["GET", key]);
+  commands.push(["TTL", key]);
+  const results = await redisPipeline(commands);
+  if (!results) return { value: local, revoked: false };
+
+  const marker = results[0]?.result;
+  if (typeof marker === "string") {
+    memorySet(revokedKey, marker, L1_READTHROUGH_TTL_SECONDS);
+    memory.delete(key);
+    return { value: null, revoked: true };
+  }
+  const ttl = Number(results[results.length - 1]?.result);
+  if (local !== null) {
+    if (ttl !== -2) return { value: local, revoked: false };
+    memory.delete(key);
+    return { value: null, revoked: false };
+  }
+
+  const value = results[1]?.result;
+  if (typeof value !== "string") return { value: null, revoked: false };
+  if (Number.isFinite(ttl) && ttl > 0) {
+    memorySet(key, value, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
+  }
+  return { value, revoked: false };
+}
+
+/** Whether the revocation marker `revokedKey` exists, L1 first, then L2
+ * (copied into L1 when found). Null when it is absent locally and Redis is
+ * unavailable — the caller decides what "unknown" means for it. */
+export async function cacheIsRevoked(revokedKey: string): Promise<boolean | null> {
+  if (memoryGet(revokedKey) !== null) return true;
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline([["GET", revokedKey]]);
+  if (!results) return null;
+  const marker = results[0]?.result;
+  if (typeof marker !== "string") return false;
+  memorySet(revokedKey, marker, L1_READTHROUGH_TTL_SECONDS);
+  return true;
 }
 
 export async function cacheSet(key: string, value: string, ttlSeconds: number): Promise<void> {
