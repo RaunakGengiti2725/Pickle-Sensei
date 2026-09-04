@@ -35,8 +35,11 @@
 #   scripts/mac-full-verify.sh --clean               # wipe DerivedData / SwiftPM caches first
 # Usage (from Linux / a Devin Cloud session):
 #   scripts/mac-full-verify.sh --remote [--ref <branch>]
-#     pushes HEAD to the trigger branch ci/mac-<branch>, waits for the "Mac Full
-#     Verify" run and downloads its artifacts to artifacts/mac-full-verify/<run>.
+#     pushes HEAD to the trigger branch ci/mac-<branch> (ci/mac-<sha12> on a
+#     detached HEAD), waits for the "Mac Full Verify" run and downloads its
+#     artifacts + run.json to artifacts/mac-full-verify/<run>. Exit 0 requires
+#     the run to be green AND the evidence to be present locally; refuses to
+#     push while the tree has uncommitted or untracked files (artifacts/ aside).
 #     Needs the GitHub CLI authenticated for RaunakGengiti2725/Pickle-Sensei.
 #
 # Never reads Keychain items, signing identities, or files outside the checkout
@@ -55,7 +58,7 @@ CLEAN=0
 REMOTE=0
 REF=""
 
-usage() { sed -n '2,43p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -82,12 +85,22 @@ if [ "$REMOTE" = 1 ]; then
     echo "--only/--skip-launch/--skip-js/--clean are for local runs or the Actions UI." >&2
     exit 2
   fi
-  if ! git diff --quiet HEAD -- . ':!artifacts' 2>/dev/null; then
-    echo "working tree has uncommitted changes — the Mac builds a pushed commit; commit first" >&2
+  # Tracked modifications AND untracked non-ignored files both count: the Mac
+  # builds the pushed commit, so anything not in it (a new Swift file, a
+  # Podfile, a helper) would silently be missing from the run.
+  DIRTY="$(git status --porcelain --untracked-files=all -- . ':!artifacts' 2>/dev/null)"
+  if [ -n "$DIRTY" ]; then
+    echo "working tree has uncommitted or untracked changes — the Mac builds a pushed commit; commit first:" >&2
+    printf '%s\n' "$DIRTY" | head -20 >&2
     exit 2
   fi
   SHA="$(git rev-parse HEAD)"
-  SRC="${REF:-$(git rev-parse --abbrev-ref HEAD)}"
+  if [ -n "$REF" ]; then
+    SRC="$REF"
+  else
+    SRC="$(git symbolic-ref -q --short HEAD 2>/dev/null || true)"
+    [ -n "$SRC" ] || SRC="${SHA:0:12}"
+  fi
   case "$SRC" in
     ci/mac-*) TRIGGER="$SRC" ;;
     *) TRIGGER="ci/mac-$(printf '%s' "$SRC" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-60)" ;;
@@ -107,9 +120,29 @@ if [ "$REMOTE" = 1 ]; then
   RC=$?
   OUT="${MAC_ARTIFACTS:-artifacts/mac-full-verify/$RUN_ID}"
   mkdir -p "$OUT"
-  gh run download "$RUN_ID" --dir "$OUT" && echo "artifacts downloaded to $OUT"
-  gh run view "$RUN_ID" --json databaseId,status,conclusion,url,headSha >"$OUT/run.json"
-  exit $RC
+  # Evidence is part of the verdict: a green run whose artifacts or run.json
+  # could not be fetched is NOT a pass (nothing to cite, nothing to review).
+  EVIDENCE_OK=1
+  if gh run download "$RUN_ID" --dir "$OUT"; then
+    echo "artifacts downloaded to $OUT"
+  else
+    echo "gh run download $RUN_ID failed (exit $?) — no artifacts in $OUT" >&2
+    EVIDENCE_OK=0
+  fi
+  RUN_JSON_TMP="$OUT/run.json.partial"
+  if gh run view "$RUN_ID" --json databaseId,status,conclusion,url,headSha >"$RUN_JSON_TMP" && [ -s "$RUN_JSON_TMP" ]; then
+    mv -f "$RUN_JSON_TMP" "$OUT/run.json"
+  else
+    rm -f "$RUN_JSON_TMP"
+    echo "gh run view $RUN_ID failed — $OUT/run.json not written" >&2
+    EVIDENCE_OK=0
+  fi
+  [ "$RC" -eq 0 ] || exit "$RC"
+  if [ "$EVIDENCE_OK" -ne 1 ]; then
+    echo "Mac run $RUN_ID finished green, but its evidence (artifacts and/or run.json) is missing locally — not a pass" >&2
+    exit 1
+  fi
+  exit 0
 fi
 
 # -------------------------------------------------------------- local mode ----
@@ -204,7 +237,10 @@ stage_swift_native() {
   [ -f "$out/extract-meta.json" ] || { echo "swing-lab extract produced no extract-meta.json"; return 1; }
   cat "$out/extract-meta.json"; echo
   "$HELPERS/check-swing-lab-extract.py" "$out" | tee "$ARTIFACTS/swing-lab-extract-summary.txt"
-  "$HELPERS/xcresult-summary.py" "$ARTIFACTS"/*.xcresult | tee "$ARTIFACTS/swift-native-xcresult-summary.txt"
+  # Name the two bundles this stage must have produced (no glob: an unmatched
+  # glob or a stage that produced nothing must fail here, not summarise nothing).
+  "$HELPERS/xcresult-summary.py" "$ARTIFACTS/vision-core-macos.xcresult" "$ARTIFACTS/vision-core-ios-simulator.xcresult" \
+    | tee "$ARTIFACTS/swift-native-xcresult-summary.txt"
 }
 
 stage_ios_app() {
