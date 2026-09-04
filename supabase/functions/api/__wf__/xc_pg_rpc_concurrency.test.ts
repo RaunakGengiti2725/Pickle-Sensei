@@ -460,7 +460,7 @@ Deno.test({
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "xc PG3: apply_synced_shot same shot id ×N concurrent — one row, permit finalized once, one rating spent; losers' verdict recorded",
+  name: "xc PG3: apply_synced_shot same shot id ×N concurrent — one row, permit finalized once, one rating spent; every lane accepted (idempotent replay)",
   ignore,
   async fn() {
     const report = await scenario(
@@ -518,11 +518,21 @@ Deno.test({
             (h.accepted ?? 0) >= 1 && !Object.keys(h).some((k) => k.startsWith("shot.")),
             JSON.stringify(h),
           );
+          // Idempotency contract: the server holds this user's row for this
+          // shot id, so EVERY copy of the sync is an accepted replay. A copy
+          // that serialized behind the winner on the advisory lock must not
+          // be told a permanent verdict (access.permit_not_reserved) that the
+          // mobile outbox treats as a contract rejection and burns an attempt
+          // on — the RPC re-checks ownership after taking the lock.
+          inv(
+            invariants,
+            `round ${r}: every lane accepted (loser of the same-shot race replays as accepted)`,
+            (h.accepted ?? 0) === LANES,
+            JSON.stringify(h),
+          );
         }
         inputs.users = users;
         observations.loserVerdicts = histogram(loserCodes);
-        observations.note =
-          "Losers that serialize behind the winner on the advisory lock see the permit already 'finalized' and are told access.permit_not_reserved (not 'accepted'); the row exists, so a retry replays as accepted.";
       },
     );
     inv(

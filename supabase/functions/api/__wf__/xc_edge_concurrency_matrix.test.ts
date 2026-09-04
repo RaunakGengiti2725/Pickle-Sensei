@@ -1115,16 +1115,17 @@ Deno.test(
     // with a code in that set; anything else is a permanent verdict for a shot
     // the server actually holds.
     //
-    // Defect on the tree under test (also observed on real Postgres, PG3 in
-    // xc_pg_rpc_concurrency.test.ts): with N in-flight copies of the SAME shot
-    // (same permit) the winner commits and finalizes the permit; every other
-    // copy that serialized behind it on the per-user advisory lock then hits
+    // Defect fixed by 20260906000000_apply_synced_shot_replay_after_lock.sql
+    // (also reproduced on real Postgres, PG3 in xc_pg_rpc_concurrency.test.ts):
+    // with N in-flight copies of the SAME shot (same permit) the winner
+    // commits and finalizes the permit; every other copy that serialized
+    // behind it on the per-user advisory lock then hit
     // `if v_permit.status <> 'reserved' then return 'access.permit_not_reserved'`
-    // (20260904000000_apply_synced_shot_error_hygiene.sql) BEFORE the
-    // unique_violation replay-accept branch can fire, and the edge forwards
-    // that code under `rejected`. The edge's batched pre-RPC replay lookup
-    // catches copies that arrive after the winner committed, not the ones
-    // already queued on the lock.
+    // BEFORE the unique_violation replay-accept branch could fire, and the
+    // edge forwarded that code under `rejected`. The edge's batched pre-RPC
+    // replay lookup catches copies that arrive after the winner committed,
+    // not the ones already queued on the lock — the RPC now re-checks
+    // ownership once it holds the lock (mirrored in the harness model).
     const RETRYABLE_REJECTIONS = new Set([
       "shot.write_failed",
       "evaluation.trial_write_failed",

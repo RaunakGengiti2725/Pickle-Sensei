@@ -32,6 +32,10 @@
 --   L. the permit gate binds direct table writes: a scored row cannot be
 --      INSERTed around apply_synced_shot() without a live permit or past the
 --      free limit, and an abstention cannot carry a score
+--   M. duplicate-sync idempotency and privilege floor: a replay of a shot the
+--      server already holds is 'accepted' even though its permit is consumed
+--      (never a permanent verdict), and the client roles hold no TRUNCATE /
+--      TRIGGER / REFERENCES on any public table
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -1990,6 +1994,153 @@ begin
   end if;
 end $$;
 reset role;
+
+-- ============================================================================
+-- M. duplicate-sync idempotency + privilege floor
+-- (20260906000000_apply_synced_shot_replay_after_lock.sql)
+-- ============================================================================
+
+-- M1: sync a shot, then replay the SAME payload — its permit is by then
+-- 'finalized' — and it is still 'accepted' with one row. The concurrent form
+-- (N copies queued on the advisory lock, each seeing the consumed permit) is
+-- pinned on real Postgres by __wf__/xc_pg_rpc_concurrency.test.ts PG3; this
+-- is the deterministic single-session form of the same contract.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000015', 'mara@example.com',
+        '{"full_name":"Mara"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-mara', '00000000-0000-4000-8000-000000000015',
+        '{"sub":"google-sub-mara","email":"mara@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000015';
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000fa',
+        '00000000-0000-4000-8000-000000000015', 'permit-m1');
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000fb',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000fa',
+    'resultKind', 'scored',
+    'shotType', 'drive',
+    'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'M1: first sync must be accepted (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000fa'
+                   and status = 'finalized') then
+    raise exception 'M1: the first sync must finalize the permit';
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000fb',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000fa',
+    'resultKind', 'scored',
+    'shotType', 'drive',
+    'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'M1: replaying an owned shot must be accepted even with a consumed permit (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where id = '00000000-0000-4000-8000-0000000000fb') <> 1 then
+    raise exception 'M1: the replay must not duplicate the row';
+  end if;
+  if (select count(*) from public.analysis_permits
+      where user_id = (select auth.uid()) and status = 'finalized') <> 1 then
+    raise exception 'M1: the replay must not touch permit state';
+  end if;
+end $$;
+
+-- M2: a consumed permit presented with a DIFFERENT (unknown) shot id is still
+-- refused — the post-lock replay check keys on ownership of the shot id, not
+-- on the permit.
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000fc',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000fa',
+    'resultKind', 'scored',
+    'shotType', 'drive',
+    'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'M2: a new shot on a consumed permit must be refused (got %)', v;
+  end if;
+  if exists (select 1 from public.shots
+             where id = '00000000-0000-4000-8000-0000000000fc') then
+    raise exception 'M2: the refused write must leave no row';
+  end if;
+end $$;
+reset role;
+
+-- M3: no client role holds TRUNCATE, TRIGGER or REFERENCES on any public
+-- table (hosted default privileges grant ALL; the DML grants are untouched).
+do $$
+declare
+  t record;
+  r text;
+  p text;
+begin
+  for t in
+    select c.relname
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p')
+  loop
+    foreach r in array array['anon', 'authenticated'] loop
+      foreach p in array array['TRUNCATE', 'TRIGGER', 'REFERENCES'] loop
+        if has_table_privilege(r, format('public.%I', t.relname), p) then
+          raise exception 'M3: % must not hold % on public.%', r, p, t.relname;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+  -- and the DML floor the app relies on is still there
+  if not has_table_privilege('authenticated', 'public.shots', 'INSERT')
+     or not has_table_privilege('authenticated', 'public.shots', 'SELECT') then
+    raise exception 'M3: authenticated must keep SELECT/INSERT on public.shots';
+  end if;
+end $$;
+
+-- M4: a table created AFTER the migration inherits the floor too.
+create table public.m4_probe (id int primary key);
+do $$
+begin
+  if has_table_privilege('authenticated', 'public.m4_probe', 'TRUNCATE')
+     or has_table_privilege('authenticated', 'public.m4_probe', 'TRIGGER')
+     or has_table_privilege('anon', 'public.m4_probe', 'REFERENCES') then
+    raise exception 'M4: default privileges must not hand TRUNCATE/TRIGGER/REFERENCES to client roles';
+  end if;
+end $$;
+drop table public.m4_probe;
 
 rollback;
 

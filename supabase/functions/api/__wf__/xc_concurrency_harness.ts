@@ -4,8 +4,8 @@
 // in-memory model of Supabase Auth (sessions, refresh-token rotation, logout),
 // PostgREST (per-table rows with eq/in filters, upserts, RLS by bearer) and the
 // three hot RPCs (access_state / reserve_analysis_permit / apply_synced_shot,
-// modelled statement-for-statement on migration 20260904000000 (the body of
-// apply_synced_shot is 20260902150000's; only the WHEN OTHERS text changed) plus
+// modelled statement-for-statement on migration 20260906000000 (the body of
+// apply_synced_shot is 20260902150000's + 20260904000000's SQLSTATE-only handler + the post-lock replay check) plus
 // reserve_analysis_permit / access_state from 20260902150000, including the
 // pre-lock reads and the per-user lock), plus RevenueCat. Every upstream call
 // is delayed by a SEEDED pseudo-random latency so Promise.all bursts against
@@ -319,7 +319,7 @@ export class FakeSupabase {
   }
 
   // ── RPC model (mirrors 20260902150000_free_rating_identity_ledger.sql and
-  //    20260904000000_apply_synced_shot_error_hygiene.sql) ──
+  //    20260904000000_apply_synced_shot_error_hygiene.sql, 20260906000000_apply_synced_shot_replay_after_lock.sql) ──
 
   private lifetimeScoredCount(userId: string): number {
     const own = this.tables.shots.filter(
@@ -432,6 +432,12 @@ export class FakeSupabase {
     }
     await this.latency();
     return await this.withUserLock(userId, () => {
+      // idempotent replay check AFTER the lock (20260906000000): a copy that
+      // won the race committed while we queued on the lock
+      if (this.tables.shots.some((s) => s.id === id && s.user_id === userId)) {
+        this.log("rpc.apply", `user=${userId} shot=${id} → accepted (replay after lock)`);
+        return "accepted";
+      }
       const permit = this.tables.analysis_permits.find(
         (p) => p.id === permitId && p.user_id === userId,
       );
