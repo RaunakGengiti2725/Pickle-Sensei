@@ -55,6 +55,17 @@ describe("validateRegressionSummary", () => {
     }
   });
 
+  it("rejects unknown keys at every closed object level, like the JSON schema does", () => {
+    expectInvalid(withPath(summary(), "extra", 1), "summary_unknown_key");
+    expectInvalid(withPath(summary(), "runner.extra", "x"), "runner_unknown_key");
+    expectInvalid(withPath(summary(), "provenance.extra", "x"), "provenance_unknown_key");
+    expectInvalid(
+      withPath(summary(), "provenance.datasetReleases.0.extra", "x"),
+      "release_unknown_key",
+    );
+    expectInvalid(withPath(summary(), "benches.0.extra", "x"), "bench_unknown_key");
+  });
+
   it("rejects wrong schema version and contract identity", () => {
     expectInvalid(withPath(summary(), "schemaVersion", 2), "summary_schema_version");
     expectInvalid(withPath(summary(), "contract", "mac-bench"), "summary_contract");

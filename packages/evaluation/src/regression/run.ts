@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   REPO_ROOT,
   TSX_BIN,
@@ -118,12 +118,34 @@ export function collectDatasetReleases(root: string = REPO_ROOT): DatasetRelease
   return refs.sort((a, b) => a.releaseDir.localeCompare(b.releaseDir));
 }
 
+/**
+ * Untracked files under `datasets/` outside the output subtrees. Bench
+ * loaders enumerate annotation directories, so an uncommitted JSON there
+ * changes metrics while `gitSha` and `datasetsTreeSha` stay the same.
+ */
+export function untrackedDatasetInputs(root: string = REPO_ROOT): string[] {
+  return git(["ls-files", "--others", "--exclude-standard", "--", "datasets"], root)
+    .split("\n")
+    .filter((path) => path.length > 0)
+    .map((path) => path.replace(/^datasets\//, ""))
+    .filter((path) => !DATASET_OUTPUT_PREFIXES.some((prefix) => path.startsWith(prefix)))
+    .map((path) => `datasets/${path}`)
+    .sort();
+}
+
+export function isTreeDirty(root: string = REPO_ROOT): boolean {
+  return (
+    git(["status", "--porcelain", "--untracked-files=no"], root).length > 0 ||
+    untrackedDatasetInputs(root).length > 0
+  );
+}
+
 export function collectProvenance(): RegressionProvenance {
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   return {
     gitSha: git(["rev-parse", "HEAD"]),
     gitBranch: branch === "HEAD" ? null : branch,
-    gitDirty: git(["status", "--porcelain", "--untracked-files=no"]).length > 0,
+    gitDirty: isTreeDirty(),
     datasetsTreeSha: datasetsInputTreeSha(),
     datasetReleases: collectDatasetReleases(),
     modelVersions: collectModelVersions(),
@@ -151,6 +173,16 @@ export function timestampRunId(date: Date = new Date()): string {
   return date.toISOString().replace(/:/g, "-");
 }
 
+/** A run id is a single filename component: no separators, no leading dot. */
+export const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+export function assertValidRunId(runId: string): string {
+  if (!RUN_ID_PATTERN.test(runId)) {
+    throw new Error(`invalid run id "${runId}": must match ${RUN_ID_PATTERN}`);
+  }
+  return runId;
+}
+
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.stack ?? error.message;
   return String(error);
@@ -172,7 +204,7 @@ export function executeBench(
     title: definition.title,
     kind: definition.kind,
     command: definition.command,
-    cwd: definition.cwd,
+    cwd: relative(REPO_ROOT, definition.cwd) || ".",
     inputs: definition.inputs,
     caveats: definition.caveats,
   };
@@ -204,7 +236,7 @@ export function executeBench(
 
 export function runRegression(options: RunOptions = {}): RunResult {
   const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
-  const runId = options.runId ?? timestampRunId();
+  const runId = assertValidRunId(options.runId ?? timestampRunId());
   const outDir = options.outDir
     ? isAbsolute(options.outDir)
       ? options.outDir

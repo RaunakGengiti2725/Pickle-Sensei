@@ -18,12 +18,15 @@ import {
 } from "../src/regression/benches.js";
 import { main, parseArgs, resolveUserPath } from "../src/regression/cli.js";
 import {
+  assertValidRunId,
   collectDatasetReleases,
   collectProvenance,
   datasetsInputTreeSha,
   executeBench,
+  isTreeDirty,
   runRegression,
   timestampRunId,
+  untrackedDatasetInputs,
 } from "../src/regression/run.js";
 import { validateRegressionSummary } from "../src/index.js";
 
@@ -82,6 +85,24 @@ describe("provenance", () => {
     git("add", "-A");
     git("commit", "-q", "-m", "input change");
     expect(datasetsInputTreeSha(repo)).not.toBe(before);
+
+    // Untracked files: a report never dirties the tree, an input always does.
+    expect(isTreeDirty(repo)).toBe(false);
+    writeFileSync(join(repo, "datasets/reports/regression/2026.json"), "{}");
+    expect(untrackedDatasetInputs(repo)).toEqual([]);
+    expect(isTreeDirty(repo)).toBe(false);
+    writeFileSync(join(repo, "datasets/gold/extra.json"), "3");
+    expect(untrackedDatasetInputs(repo)).toEqual(["datasets/gold/extra.json"]);
+    expect(isTreeDirty(repo)).toBe(true);
+    expect(datasetsInputTreeSha(repo)).toBe(datasetsInputTreeSha(repo));
+  });
+
+  it("accepts only single-component run ids", () => {
+    expect(assertValidRunId(timestampRunId(new Date(0)))).toBe("1970-01-01T00-00-00.000Z");
+    expect(assertValidRunId("test-run_2")).toBe("test-run_2");
+    for (const bad of ["", "../x", "a/b", "a\\b", ".hidden", "-dash", "x".repeat(129), "a b"]) {
+      expect(() => assertValidRunId(bad)).toThrow(/invalid run id/);
+    }
   });
 
   it("reads git identity and every registered model/provider version", () => {
@@ -251,6 +272,7 @@ describe("runRegression (real in-process bench, isolated out dir)", () => {
     expect(result.summary.benches.map((bench) => bench.id)).toEqual(["contact_replay"]);
     expect(result.summary.benches[0]?.kind).toBe("in_process");
     expect(result.summary.benches[0]?.exitCode).toBeNull();
+    expect(result.summary.benches[0]?.cwd).toBe("packages/vision-geometry");
     expect(result.summary.caveats.some((line) => line.startsWith("Partial run"))).toBe(true);
     expect(result.summary.totalWallClockMs).toBeGreaterThanOrEqual(
       result.summary.benches[0]!.wallClockMs,
@@ -265,6 +287,13 @@ describe("runRegression (real in-process bench, isolated out dir)", () => {
       runRegression({ outDir, only: ["not_a_bench"], runId: "never", log: () => {} }),
     ).toThrow(/unknown bench id "not_a_bench"/);
     expect(existsSync(join(outDir, "never.json"))).toBe(false);
+  });
+
+  it("rejects a run id that would escape the out dir before running anything", () => {
+    expect(() =>
+      runRegression({ outDir, only: ["contact_replay"], runId: "../escape", log: () => {} }),
+    ).toThrow(/invalid run id/);
+    expect(existsSync(join(scratch, "escape.json"))).toBe(false);
   });
 
   it("compares two summaries of the same run as clean via the CLI", () => {

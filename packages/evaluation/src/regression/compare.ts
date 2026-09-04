@@ -187,11 +187,11 @@ export function identityDifferences(
   push("runner.node", baseline.runner.node, candidate.runner.node, "confound");
   push("runner.platform", baseline.runner.platform, candidate.runner.platform, "confound");
   push("runner.arch", baseline.runner.arch, candidate.runner.arch, "confound");
-  if (candidate.provenance.gitDirty) {
+  if (baseline.provenance.gitDirty || candidate.provenance.gitDirty) {
     diffs.push({
       field: "provenance.gitDirty",
       baseline: String(baseline.provenance.gitDirty),
-      candidate: "true",
+      candidate: String(candidate.provenance.gitDirty),
       severity: "confound",
     });
   }
@@ -261,8 +261,11 @@ export function compareSummaries(
       status = "new_in_candidate";
       failing = b.status === "failed";
     } else if (a && b) {
-      if (a.status === "failed" && b.status === "failed") status = "failed_in_both";
-      else if (b.status === "failed") {
+      if (a.status === "failed" && b.status === "failed") {
+        // No candidate measurements exist, so nothing can be judged clean.
+        status = "failed_in_both";
+        failing = true;
+      } else if (b.status === "failed") {
         status = "failed_in_candidate";
         failing = true;
       } else if (a.status === "failed") status = "failed_in_baseline";
@@ -297,7 +300,9 @@ export function compareSummaries(
     if (
       comparison.status === "missing_in_candidate" &&
       bench &&
-      (bench.status === "failed_in_candidate" || bench.status === "missing_in_candidate")
+      (bench.status === "failed_in_candidate" ||
+        bench.status === "failed_in_both" ||
+        bench.status === "missing_in_candidate")
     ) {
       comparison.failing = false;
     }
@@ -326,7 +331,7 @@ export function compareSummaries(
     }
   }
   for (const bench of benches) {
-    if (bench.status === "failed_in_baseline" || bench.status === "failed_in_both") {
+    if (bench.status === "failed_in_baseline") {
       warnings.push(`bench ${bench.benchId}: ${bench.status}`);
     }
     if (bench.status === "new_in_candidate" && !bench.failing) {

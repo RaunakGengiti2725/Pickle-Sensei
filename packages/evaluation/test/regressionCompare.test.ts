@@ -319,6 +319,22 @@ describe("compareSummaries", () => {
     );
   });
 
+  it("fails when a bench failed on both sides — no candidate measurement can read as clean", () => {
+    const both = compareSummaries(
+      summary({}, [bench({ status: "failed", error: "boom", metrics: {} })]),
+      candidateWith({}, { status: "failed", error: "still boom", metrics: {} }),
+      config(),
+    );
+    expect(both.exitCode).toBe(1);
+    expect(both.benches[0]).toMatchObject({
+      benchId: "contact_replay",
+      status: "failed_in_both",
+      failing: true,
+    });
+    expect(both.regressions).toEqual(["bench contact_replay: failed_in_both"]);
+    expect(both.warnings.some((line) => line.includes("failed_in_both"))).toBe(false);
+  });
+
   it("does not fail on a bench that failed in the baseline but recovered", () => {
     const recovered = compareSummaries(
       summary({}, [bench({ status: "failed", error: "boom", metrics: {} })]),
@@ -376,6 +392,23 @@ describe("compareSummaries", () => {
     expect(report.exitCode).toBe(0);
     expect(report.warnings.filter((line) => line.startsWith("CONFOUND "))).toHaveLength(4);
     expect(report.improvements).toHaveLength(1);
+  });
+
+  it("flags a dirty BASELINE tree as a confound too", () => {
+    const dirtyBaseline = summary();
+    dirtyBaseline.provenance.gitDirty = true;
+    const diffs = identityDifferences(dirtyBaseline, candidateWith(BASE_METRICS), config());
+    expect(diffs).toContainEqual({
+      field: "provenance.gitDirty",
+      baseline: "true",
+      candidate: "false",
+      severity: "confound",
+    });
+    const report = compareSummaries(dirtyBaseline, candidateWith(BASE_METRICS), config());
+    expect(report.exitCode).toBe(0);
+    expect(report.warnings.some((line) => line.startsWith("CONFOUND provenance.gitDirty"))).toBe(
+      true,
+    );
   });
 
   it("formats a human-readable report that names the result and exit code", () => {

@@ -170,13 +170,25 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function requireKeys(
+/**
+ * Every closed object in the JSON schema (`additionalProperties: false`) has
+ * required == allowed, so the key set must match exactly in both directions.
+ */
+function checkKeys<T>(
   record: Record<string, unknown>,
   keys: readonly string[],
   where: string,
-): string | null {
+  codePrefix: string,
+): Result<T> | null {
   for (const key of keys) {
-    if (!(key in record)) return `${where}: missing required key "${key}"`;
+    if (!(key in record)) {
+      return invalid(`${codePrefix}_missing_key`, `${where}: missing required key "${key}"`);
+    }
+  }
+  const allowed = new Set<string>(keys);
+  const extra = Object.keys(record).filter((key) => !allowed.has(key));
+  if (extra.length > 0) {
+    return invalid(`${codePrefix}_unknown_key`, `${where}: unknown key "${extra[0]}"`);
   }
   return null;
 }
@@ -213,8 +225,8 @@ function validateStringRecord(raw: unknown, where: string): Result<Record<string
 
 function validateRelease(raw: unknown, where: string): Result<DatasetReleaseRef> {
   if (!isRecord(raw)) return invalid("release_not_object", `${where}: must be an object`);
-  const missing = requireKeys(raw, REQUIRED_RELEASE_KEYS, where);
-  if (missing) return invalid("release_missing_key", missing);
+  const keyError = checkKeys<DatasetReleaseRef>(raw, REQUIRED_RELEASE_KEYS, where, "release");
+  if (keyError) return keyError;
   if (typeof raw.releaseDir !== "string" || raw.releaseDir.length === 0) {
     return invalid("release_dir", `${where}: releaseDir must be a non-empty string`);
   }
@@ -238,8 +250,13 @@ function validateRelease(raw: unknown, where: string): Result<DatasetReleaseRef>
 function validateProvenance(raw: unknown): Result<RegressionProvenance> {
   const where = "provenance";
   if (!isRecord(raw)) return invalid("provenance_not_object", `${where}: must be an object`);
-  const missing = requireKeys(raw, REQUIRED_PROVENANCE_KEYS, where);
-  if (missing) return invalid("provenance_missing_key", missing);
+  const keyError = checkKeys<RegressionProvenance>(
+    raw,
+    REQUIRED_PROVENANCE_KEYS,
+    where,
+    "provenance",
+  );
+  if (keyError) return keyError;
   if (typeof raw.gitSha !== "string" || !GIT_SHA.test(raw.gitSha)) {
     return invalid("provenance_git_sha", `${where}.gitSha must be a 40-char lowercase hex sha`);
   }
@@ -296,8 +313,8 @@ function validateProvenance(raw: unknown): Result<RegressionProvenance> {
 
 function validateRunner(raw: unknown): Result<RegressionRunner> {
   if (!isRecord(raw)) return invalid("runner_not_object", "runner: must be an object");
-  const missing = requireKeys(raw, REQUIRED_RUNNER_KEYS, "runner");
-  if (missing) return invalid("runner_missing_key", missing);
+  const keyError = checkKeys<RegressionRunner>(raw, REQUIRED_RUNNER_KEYS, "runner", "runner");
+  if (keyError) return keyError;
   for (const key of REQUIRED_RUNNER_KEYS) {
     if (typeof raw[key] !== "string" || (raw[key] as string).length === 0) {
       return invalid("runner_value", `runner.${key} must be a non-empty string`);
@@ -313,8 +330,8 @@ function validateRunner(raw: unknown): Result<RegressionRunner> {
 function validateBench(raw: unknown, index: number): Result<BenchRecord> {
   const where = `benches[${index}]`;
   if (!isRecord(raw)) return invalid("bench_not_object", `${where}: must be an object`);
-  const missing = requireKeys(raw, REQUIRED_BENCH_KEYS, where);
-  if (missing) return invalid("bench_missing_key", missing);
+  const keyError = checkKeys<BenchRecord>(raw, REQUIRED_BENCH_KEYS, where, "bench");
+  if (keyError) return keyError;
   if (typeof raw.id !== "string" || !BENCH_ID.test(raw.id)) {
     return invalid("bench_id", `${where}.id must match ${BENCH_ID.source}`);
   }
@@ -399,8 +416,8 @@ export function flattenBenchMetrics(
 
 export function validateRegressionSummary(raw: unknown): Result<RegressionSummary> {
   if (!isRecord(raw)) return invalid("summary_not_object", "summary must be a JSON object");
-  const missing = requireKeys(raw, REQUIRED_SUMMARY_KEYS, "summary");
-  if (missing) return invalid("summary_missing_key", missing);
+  const keyError = checkKeys<RegressionSummary>(raw, REQUIRED_SUMMARY_KEYS, "summary", "summary");
+  if (keyError) return keyError;
   if (raw.schemaVersion !== REGRESSION_SUMMARY_SCHEMA_VERSION) {
     return invalid(
       "summary_schema_version",
