@@ -260,6 +260,125 @@ describe("RCD-01: version triple is checked in every configuration, comments str
     assertPasses(result, /runtimeConfig\.ts: .*APP_VERSION/);
     assert.deepEqual(result.failures, []);
   });
+
+  it("build.gradle: an arithmetic versionCode / concatenated versionName is not the literal value", () => {
+    assertFails(
+      run({ [GRADLE]: (t) => t.replace(`versionCode ${BUILD}\n`, `versionCode ${BUILD} + 11\n`) }),
+      /build\.gradle: .*versionCode/,
+    );
+    assertFails(
+      run({
+        [GRADLE]: (t) => t.replace(`versionName "${VERSION}"`, `versionName "${VERSION}" + ".1"`),
+      }),
+      /build\.gradle: .*versionName/,
+    );
+  });
+
+  it('build.gradle: Kotlin-DSL style `versionCode = N` / `versionName = "X"` still passes', () => {
+    const result = run({
+      [GRADLE]: (t) =>
+        t
+          .replace(`versionCode ${BUILD}\n`, `versionCode = ${BUILD}\n`)
+          .replace(`versionName "${VERSION}"`, `versionName = "${VERSION}"`),
+    });
+    assertPasses(result, /build\.gradle: .*versionCode/);
+    assertPasses(result, /build\.gradle: .*versionName/);
+  });
+});
+
+describe("RCD-01 (round 2): conditional Xcode build settings are effective values", () => {
+  const BUMPED_VERSION = `${VERSION}.99`;
+  const BUMPED_BUILD = String(BUILD + 99);
+
+  /** Append a conditional override right after the n-th unconditional `setting = value;`. */
+  function addConditional(setting, value, condition, override, n = 1) {
+    return (pbx) =>
+      replaceNth(
+        pbx,
+        `${setting} = ${value};`,
+        `${setting} = ${value};\n\t\t\t\t"${setting}[${condition}]" = ${override};`,
+        n,
+      );
+  }
+
+  it('precondition: project.pbxproj already uses the "SETTING[sdk=iphoneos*]" = value; spelling', () => {
+    const pbx = readFileSync(join(repoRoot, PBX), "utf8");
+    assert.match(pbx, /"[A-Z_]+\[sdk=iphoneos\*\]" = /);
+  });
+
+  it("pbxSettingValues extracts every [sdk=|arch=|config=] conditional override of the setting", async () => {
+    const { pbxSettingValues } = await import("./check-release-manifest.mjs");
+    const fixture = [
+      "\t\t\t\tMARKETING_VERSION = 1.0;",
+      '\t\t\t\t"MARKETING_VERSION[sdk=iphoneos*]" = 1.1;',
+      '\t\t\t\t"MARKETING_VERSION[arch=arm64]" = "1.2";',
+      '\t\t\t\t"MARKETING_VERSION[config=Release]" = 1.3;',
+      '\t\t\t\t"MARKETING_VERSION[sdk=iphoneos*][arch=arm64]" = 1.4;',
+      '\t\t\t\t"MARKETING_VERSION" = 1.5;',
+    ].join("\n");
+    assert.deepEqual(pbxSettingValues(fixture, "MARKETING_VERSION"), [
+      "1.0",
+      "1.1",
+      "1.2",
+      "1.3",
+      "1.4",
+      "1.5",
+    ]);
+  });
+
+  it("pbxSettingValues does not treat a setting that merely ends with the name as a match", async () => {
+    const { pbxSettingValues } = await import("./check-release-manifest.mjs");
+    const fixture = [
+      '\t\t\t\t"OTHER_MARKETING_VERSION[sdk=iphoneos*]" = 9.9;',
+      '\t\t\t\t"MARKETING_VERSION_SUFFIX[sdk=iphoneos*]" = beta;',
+      "\t\t\t\tMARKETING_VERSION_SUFFIX = beta;",
+      "\t\t\t\tMARKETING_VERSION = 1.0;",
+    ].join("\n");
+    assert.deepEqual(pbxSettingValues(fixture, "MARKETING_VERSION"), ["1.0"]);
+  });
+
+  it(`A1: Release "MARKETING_VERSION[sdk=iphoneos*]" = ${BUMPED_VERSION}; fails`, () => {
+    const result = run({
+      [PBX]: addConditional("MARKETING_VERSION", VERSION, "sdk=iphoneos*", BUMPED_VERSION),
+    });
+    assertFails(result, /pbxproj: MARKETING_VERSION/);
+  });
+
+  it(`A2: Release "CURRENT_PROJECT_VERSION[sdk=iphoneos*]" = ${BUMPED_BUILD}; fails`, () => {
+    const result = run({
+      [PBX]: addConditional("CURRENT_PROJECT_VERSION", BUILD, "sdk=iphoneos*", BUMPED_BUILD),
+    });
+    assertFails(result, /pbxproj: CURRENT_PROJECT_VERSION/);
+  });
+
+  it(`Release "MARKETING_VERSION[arch=arm64]" = ${BUMPED_VERSION}; fails`, () => {
+    const result = run({
+      [PBX]: addConditional("MARKETING_VERSION", VERSION, "arch=arm64", BUMPED_VERSION),
+    });
+    assertFails(result, /pbxproj: MARKETING_VERSION/);
+  });
+
+  it(`Debug "MARKETING_VERSION[config=Release]" = ${BUMPED_VERSION}; fails`, () => {
+    const result = run({
+      [PBX]: addConditional("MARKETING_VERSION", VERSION, "config=Release", BUMPED_VERSION, 0),
+    });
+    assertFails(result, /pbxproj: MARKETING_VERSION/);
+  });
+
+  it("a conditional override with a quoted drifting value fails", () => {
+    const result = run({
+      [PBX]: addConditional("MARKETING_VERSION", VERSION, "sdk=iphoneos*", `"${BUMPED_VERSION}"`),
+    });
+    assertFails(result, /pbxproj: MARKETING_VERSION/);
+  });
+
+  it("a same-value conditional override still passes (positive fixture)", () => {
+    const result = run({
+      [PBX]: addConditional("MARKETING_VERSION", VERSION, "sdk=iphoneos*", VERSION),
+    });
+    assertPasses(result, /pbxproj: MARKETING_VERSION/);
+    assert.deepEqual(result.failures, []);
+  });
 });
 
 describe("RCD-02: manifest contract is pinned", () => {
@@ -464,6 +583,20 @@ describe("RCD-02: manifest contract is pinned", () => {
   it("R17: a list that is not an array is a FAIL line, not an exception", () => {
     const result = run({ [MANIFEST]: editJson((m) => ({ ...m, rollbackHooks: "nope" })) });
     assertFails(result, /rollbackHooks/);
+  });
+
+  it("a null / non-object list entry is a FAIL line, not an exception", () => {
+    const nullHook = run({
+      [MANIFEST]: editJson((m) => ({ ...m, rollbackHooks: [...m.rollbackHooks, null] })),
+    });
+    assertFails(nullHook, /rollbackHooks/);
+    const stringAction = run({
+      [MANIFEST]: editJson((m) => ({
+        ...m,
+        irreversibleActions: [...m.irreversibleActions, "app_store_submission"],
+      })),
+    });
+    assertFails(stringAction, /irreversibleActions/);
   });
 
   it("R15/R16: a missing or malformed manifest is a FAIL line, not an exception", () => {

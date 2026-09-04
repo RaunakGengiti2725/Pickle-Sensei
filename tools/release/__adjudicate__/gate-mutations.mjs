@@ -60,6 +60,7 @@ const RTC = "apps/mobile/src/config/runtimeConfig.ts";
 const MANIFEST = "infra/release/release-manifest.json";
 const FASTFILE = "apps/mobile/ios/fastlane/Fastfile";
 const XCPRIVACY = "apps/mobile/ios/PickleSensei/PrivacyInfo.xcprivacy";
+const INFO_PLIST = "apps/mobile/ios/PickleSensei/Info.plist";
 
 /** Replace only the Nth (0-based) occurrence of `needle` in `text`. */
 function replaceNth(text, needle, replacement, n) {
@@ -69,6 +70,17 @@ function replaceNth(text, needle, replacement, n) {
     if (idx < 0) throw new Error(`occurrence ${n} of ${JSON.stringify(needle)} not found`);
   }
   return text.slice(0, idx) + replacement + text.slice(idx + needle.length);
+}
+
+/** Append a conditional override right after the Nth unconditional `setting = value;` (default: Release). */
+function addConditional(setting, value, condition, override, n = 1) {
+  return (pbx) =>
+    replaceNth(
+      pbx,
+      `${setting} = ${value};`,
+      `${setting} = ${value};\n\t\t\t\t"${setting}[${condition}]" = ${override};`,
+      n,
+    );
 }
 
 function countOccurrences(text, needle) {
@@ -385,6 +397,152 @@ const SCENARIOS = [
     gate: DIST_GATE,
     expectGate: "FAIL",
     mutate: { [XCPRIVACY]: () => null },
+  },
+
+  // Round 2 (adversary on 333de233): Xcode CONDITIONAL build settings —
+  // `"SETTING[sdk=iphoneos*]" = value;` (also [arch=], [config=]) — override the
+  // plain line for matching builds; sdk=iphoneos* IS the device/App Store archive.
+  {
+    id: "A0",
+    title:
+      'pbxproj: same-value "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" override (control: PASS)',
+    gate: DIST_GATE,
+    expectGate: "PASS",
+    mutate: {
+      [PBX]: addConditional(
+        "PRODUCT_BUNDLE_IDENTIFIER",
+        "com.picklesensei",
+        "sdk=iphoneos*",
+        "com.picklesensei",
+      ),
+    },
+  },
+  {
+    id: "A1",
+    title: 'pbxproj: Release "MARKETING_VERSION[sdk=iphoneos*]" = 1.0.99; (plain line still 1.0)',
+    gate: RELEASE_GATE,
+    expectGate: "FAIL",
+    mutate: { [PBX]: addConditional("MARKETING_VERSION", "1.0", "sdk=iphoneos*", "1.0.99") },
+  },
+  {
+    id: "A2",
+    title: 'pbxproj: Release "CURRENT_PROJECT_VERSION[sdk=iphoneos*]" = 100; (plain line still 1)',
+    gate: RELEASE_GATE,
+    expectGate: "FAIL",
+    mutate: { [PBX]: addConditional("CURRENT_PROJECT_VERSION", "1", "sdk=iphoneos*", "100") },
+  },
+  {
+    id: "A3",
+    title:
+      'pbxproj: Release "PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.picklesensei.staging;',
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [PBX]: addConditional(
+        "PRODUCT_BUNDLE_IDENTIFIER",
+        "com.picklesensei",
+        "sdk=iphoneos*",
+        "com.picklesensei.staging",
+      ),
+    },
+  },
+  {
+    id: "A4",
+    title: 'pbxproj: Release "TARGETED_DEVICE_FAMILY[sdk=iphoneos*]" = "1,2";',
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: { [PBX]: addConditional("TARGETED_DEVICE_FAMILY", "1", "sdk=iphoneos*", '"1,2"') },
+  },
+  {
+    id: "A5",
+    title: 'pbxproj: Release "DEVELOPMENT_TEAM[sdk=iphoneos*]" = ZZZZZZZZZZ;',
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [PBX]: addConditional("DEVELOPMENT_TEAM", "H26U6W4K6V", "sdk=iphoneos*", "ZZZZZZZZZZ"),
+    },
+  },
+  {
+    id: "A6",
+    title:
+      "Fastfile: `:distribute_external => true` hash-rocket, stale `distribute_external: false` elsewhere",
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [FASTFILE]: (t) =>
+        t
+          .replace(
+            "distribute_external: false, # internal testers only; external needs App Review",
+            ":distribute_external => true,",
+          )
+          .replace(
+            "lane :beta do\n",
+            "lane :beta do\n    defaults = { distribute_external: false }\n",
+          ),
+    },
+  },
+  {
+    id: "A7",
+    title:
+      "Fastfile: `:submit_for_review => true` hash-rocket, stale `submit_for_review: false` elsewhere",
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [FASTFILE]: (t) =>
+        t
+          .replace(
+            "submit_for_review: false, # review submission is a human decision",
+            ":submit_for_review => true,",
+          )
+          .replace(
+            "lane :release do\n",
+            "lane :release do\n    defaults = { submit_for_review: false }\n",
+          ),
+    },
+  },
+  {
+    id: "A8",
+    title: "Fastfile: `:key_content => Base64.decode64(...)` hash-rocket literal",
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [FASTFILE]: (t) =>
+        t.replace(
+          'key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY")',
+          ':key_content => Base64.decode64("TUlJR0hBSUJBQUtDQVFFQXdvcGZha2Vwcml2YXRla2V5")',
+        ),
+    },
+  },
+  {
+    id: "A9",
+    title:
+      "Info.plist: CFBundleShortVersionString hardcoded, $(MARKETING_VERSION) only in an XML comment",
+    gate: DIST_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [INFO_PLIST]: (t) =>
+        t.replace(
+          "<key>CFBundleShortVersionString</key>\n\t<string>$(MARKETING_VERSION)</string>",
+          "<key>CFBundleShortVersionString</key>\n\t<string>1.0</string>\n\t<!-- <string>$(MARKETING_VERSION)</string> -->",
+        ),
+    },
+  },
+  {
+    id: "A10",
+    title: "build.gradle: versionCode 1 + 11 (arithmetic; effective 12)",
+    gate: RELEASE_GATE,
+    expectGate: "FAIL",
+    mutate: { [GRADLE]: (t) => t.replace("versionCode 1\n", "versionCode 1 + 11\n") },
+  },
+  {
+    id: "A11",
+    title:
+      "manifest: rollbackHooks contains a null entry (diagnostic quality: FAIL line, not TypeError)",
+    gate: RELEASE_GATE,
+    expectGate: "FAIL",
+    mutate: {
+      [MANIFEST]: editJson((m) => ({ ...m, rollbackHooks: [...m.rollbackHooks, null] })),
+    },
   },
 ];
 
