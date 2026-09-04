@@ -74,10 +74,7 @@ function jwt(claims: Record<string, unknown>): string {
 
 function claimsOf(token: string): Record<string, unknown> {
   const segment = token.split(".")[1] ?? "";
-  return JSON.parse(atob(segment.replace(/-/g, "+").replace(/_/g, "/"))) as Record<
-    string,
-    unknown
-  >;
+  return JSON.parse(atob(segment.replace(/-/g, "+").replace(/_/g, "/"))) as Record<string, unknown>;
 }
 
 /** A Google ID token — accepted by POST /v1/account/bootstrap only. */
