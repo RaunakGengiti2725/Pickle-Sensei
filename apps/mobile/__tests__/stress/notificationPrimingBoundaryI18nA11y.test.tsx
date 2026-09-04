@@ -300,6 +300,82 @@ function hostInteractiveLabels(
     .map(node => String(node.props.accessibilityLabel ?? ''));
 }
 
+/** A compact host-tree dump: what an assistive technology sees, plus the
+ * geometry-relevant style keys, so clipping/unlabeled claims carry the tree. */
+interface HostTreeNode {
+  type: string;
+  text?: string;
+  testID?: string;
+  role?: unknown;
+  label?: unknown;
+  hint?: unknown;
+  state?: unknown;
+  live?: unknown;
+  style?: Record<string, unknown>;
+  children?: HostTreeNode[];
+}
+
+const GEOMETRY_KEYS = [
+  'flexDirection',
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'gap',
+  'minWidth',
+  'minHeight',
+  'padding',
+  'paddingHorizontal',
+  'paddingVertical',
+  'borderWidth',
+  'marginTop',
+  'alignSelf',
+  'fontSize',
+  'lineHeight',
+] as const;
+
+function hostTree(
+  node: ReturnType<TestRenderer.ReactTestRenderer['toJSON']>,
+): HostTreeNode[] {
+  if (node === null) return [];
+  const list = Array.isArray(node) ? node : [node];
+  return list.map(json => {
+    const props = json.props as Record<string, unknown>;
+    const flat = StyleSheet.flatten(props['style'] as never) as
+      Record<string, unknown> | undefined;
+    const style: Record<string, unknown> = {};
+    for (const key of GEOMETRY_KEYS) {
+      if (flat && flat[key] !== undefined) style[key] = flat[key];
+    }
+    const out: HostTreeNode = { type: json.type };
+    const text = (json.children ?? [])
+      .filter((c): c is string => typeof c === 'string')
+      .join('');
+    if (text) out.text = text;
+    if (props['testID'] !== undefined) out.testID = String(props['testID']);
+    if (props['accessibilityRole'] !== undefined) {
+      out.role = props['accessibilityRole'];
+    }
+    if (props['accessibilityLabel'] !== undefined) {
+      out.label = props['accessibilityLabel'];
+    }
+    if (props['accessibilityHint'] !== undefined) {
+      out.hint = props['accessibilityHint'];
+    }
+    if (props['accessibilityState'] !== undefined) {
+      out.state = props['accessibilityState'];
+    }
+    if (props['accessibilityLiveRegion'] !== undefined) {
+      out.live = props['accessibilityLiveRegion'];
+    }
+    if (Object.keys(style).length > 0) out.style = style;
+    const kids = (json.children ?? []).filter(
+      (c): c is Exclude<typeof c, string> => typeof c !== 'string',
+    );
+    if (kids.length > 0) out.children = hostTree(kids);
+    return out;
+  });
+}
+
 function cardStyles(renderer: TestRenderer.ReactTestRenderer) {
   const card = renderer.root.findAllByProps({
     testID: 'notification-priming-card',
@@ -410,6 +486,8 @@ interface Outcome {
   clipped: boolean;
   requestCalls: number;
   dismissCalls: number;
+  /** Host tree as rendered (only for variants that stayed mounted). */
+  hostTree?: HostTreeNode[];
 }
 
 async function runVariant(variant: Variant): Promise<Outcome> {
@@ -540,6 +618,7 @@ async function runVariant(variant: Variant): Promise<Outcome> {
     clipped: layout.overflowPastScreen > 0,
     requestCalls: mockRequest.mock.calls.length,
     dismissCalls: mockDismiss.mock.calls.length,
+    hostTree: hostTree(renderer.toJSON()),
   };
   act(() => renderer.unmount());
   return outcome;
