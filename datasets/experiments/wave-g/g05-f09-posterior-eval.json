@@ -1,8 +1,10 @@
 {
   "experiment": "wave-g g05-f09-posterior before/after",
-  "dateUtc": "2026-08-29T17:39:57.707Z",
-  "estimatorVersion": "contact-evidence-4.3",
+  "dateUtc": "2026-09-04T21:02:16.997Z",
+  "commit": "d9a47411bf4302563f3678b9df093213174ae4d3",
+  "estimatorVersion": "contact-evidence-4.4",
   "posteriorVersion": "ownership-posterior-v1",
+  "regenerate": "PICKLE_EVAL_ACCEPT_ARTIFACTS=1 pnpm --filter @pickle/vision-geometry eval",
   "condition": "LINUX-CPU; gold: committed pose + ORACLE-BALL, no paddle track (paddle-conditioned path cannot fire on gold — regression guard only); fixtures: synthetic",
   "thresholds": {
     "confidentWrongErrorMs": 150,
@@ -10,6 +12,7 @@
     "goldStrictMs": 66,
     "goldAcceptMs": 132
   },
+  "acceptedRegressions": [],
   "adversarialFixtures": {
     "before": {
       "fixtures": 10,

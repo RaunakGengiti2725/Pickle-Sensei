@@ -1,8 +1,9 @@
 {
   "experiment": "e02-contact-transfer",
-  "estimatorVersion": "contact-evidence-4.2",
-  "commit": "f2dedf7f080d4ebd23ac133e78b8eed3e73a0ea9",
-  "evaluatedAtIso": "2026-08-29T10:07:01.939Z",
+  "estimatorVersion": "contact-evidence-4.4",
+  "commit": "d9a47411bf4302563f3678b9df093213174ae4d3",
+  "evaluatedAtIso": "2026-09-04T21:02:16.909Z",
+  "regenerate": "PICKLE_EVAL_ACCEPT_ARTIFACTS=1 pnpm --filter @pickle/vision-geometry eval",
   "condition": {
     "platform": "linux-cpu",
     "pose": "committed runs-wave-a people.json (auto target policy)",
@@ -13,21 +14,47 @@
     "toleranceMs": {
       "strict": 66,
       "acceptable": 132
+    },
+    "regressionGate": {
+      "metrics": [
+        "wrongMarkers",
+        "medianErrorMs"
+      ],
+      "reference": "previously committed artifact; ceilings from acceptedRegressions for the live estimatorVersion"
     }
   },
+  "acceptedRegressions": [
+    {
+      "estimatorVersion": "contact-evidence-4.4",
+      "ceiling": {
+        "wrongMarkers": 1,
+        "medianErrorMs": 27
+      },
+      "rows": [
+        "wavea-sasebo-volleys@52019 target: 16ms@0.705 (contact-evidence-4.2) → 144ms@0.683 WRONG MARKER (>132ms), limitingFactors [no_paddle_evidence], estimate 51875 vs gold 52019",
+        "wavea-faead-feed@33688 target: abstained (contact-evidence-4.2) → estimated 117ms@0.55 (acceptable, <=132ms), limitingFactors [ball_evidence_weak, no_paddle_evidence]; coverage 0.6 → 0.7"
+      ],
+      "rationale": "Reviewed, accepted for contact-evidence-4.4 (ADJ-VG-05). The sasebo 52019 estimate lands 144ms early because e09's occlusion-gap censoring (gapCensorMs 150) attenuates the only true-location ball direction-change kernel to 0.3x mass (sparse ORACLE ball annotation: 500ms gap after the turn sample at 52053), so the posterior mode drifts to wrist-speed-peak + ball-wrist-proximity evidence at 51875. f09 (contact-evidence-4.3, f76f95ef) fixed the confidence side of this row — censoring can no longer raise confidence, 0.792 → 0.683, below the 0.7 confirm band, and the row carries no_paddle_evidence — and deliberately did not move the estimate: relaxing gap censoring re-opens the e09 confident-wrong attacks it closes, and retuning to a single sparse-oracle gold row is not defensible (see datasets/experiments/wave-f/f09-contact-adversarial-fixes-summary.json). g02 measured the same row under oracle ownership and found it unchanged: downstream contact-evidence localization error, not ownership error (datasets/experiments/wave-g/g02-f09-oracle-summary.json). The faead-feed 33688 row is the same censoring change turning an abstention into a low-confidence acceptable estimate (coverage +0.1). Together they move medianErrorMs 17 → 27, p75 25 → 110, p90 65 → 128 on n=7 estimated target events. contact-evidence-4.4 (h26 red-team fixes) leaves every e02 target row identical to 4.3. Ceilings are pinned at the measured values: wrongMarkers 1, medianErrorMs 27 — any further regression fails the gate.",
+      "introducedBy": "contact-evidence-4.3 (f76f95ef0ddddfbb4556746b8e5099a27a83eada, f09) — the e09 occlusion-gap censoring merged with e02 on parallel branches",
+      "versus": {
+        "estimatorVersion": "contact-evidence-4.2",
+        "commit": "f2dedf7f080d4ebd23ac133e78b8eed3e73a0ea9"
+      }
+    }
+  ],
   "overall": {
     "targetEvents": 10,
-    "estimated": 6,
-    "abstained": 4,
-    "coverage": 0.6,
-    "abstentionRate": 0.4,
-    "wrongMarkers": 0,
-    "wrongMarkerRateOfEstimated": 0,
-    "strictHits": 5,
+    "estimated": 7,
+    "abstained": 3,
+    "coverage": 0.7,
+    "abstentionRate": 0.3,
+    "wrongMarkers": 1,
+    "wrongMarkerRateOfEstimated": 0.143,
+    "strictHits": 4,
     "acceptableHits": 6,
-    "medianErrorMs": 17,
-    "p75ErrorMs": 25,
-    "p90ErrorMs": 65
+    "medianErrorMs": 27,
+    "p75ErrorMs": 110,
+    "p90ErrorMs": 128
   },
   "confidenceConditioned": [
     {
@@ -39,15 +66,15 @@
     },
     {
       "bin": "0.5≤conf<0.7",
-      "n": 2,
-      "medianErrorMs": 4,
-      "maxErrorMs": 4,
-      "wrongMarkers": 0
+      "n": 4,
+      "medianErrorMs": 61,
+      "maxErrorMs": 144,
+      "wrongMarkers": 1
     },
     {
       "bin": "conf≥0.7",
-      "n": 3,
-      "medianErrorMs": 18,
+      "n": 2,
+      "medianErrorMs": 61,
       "maxErrorMs": 103,
       "wrongMarkers": 0
     }
@@ -69,17 +96,17 @@
     },
     "dvids-faead": {
       "targetEvents": 4,
-      "estimated": 0,
-      "abstained": 4,
-      "coverage": 0,
-      "abstentionRate": 1,
+      "estimated": 1,
+      "abstained": 3,
+      "coverage": 0.25,
+      "abstentionRate": 0.75,
       "wrongMarkers": 0,
-      "wrongMarkerRateOfEstimated": null,
+      "wrongMarkerRateOfEstimated": 0,
       "strictHits": 0,
-      "acceptableHits": 0,
-      "medianErrorMs": null,
-      "p75ErrorMs": null,
-      "p90ErrorMs": null
+      "acceptableHits": 1,
+      "medianErrorMs": 117,
+      "p75ErrorMs": 117,
+      "p90ErrorMs": 117
     },
     "dvids-marne": {
       "targetEvents": 1,
@@ -101,13 +128,13 @@
       "abstained": 0,
       "coverage": 1,
       "abstentionRate": 0,
-      "wrongMarkers": 0,
-      "wrongMarkerRateOfEstimated": 0,
-      "strictHits": 2,
-      "acceptableHits": 2,
-      "medianErrorMs": 10,
-      "p75ErrorMs": 13,
-      "p90ErrorMs": 15
+      "wrongMarkers": 1,
+      "wrongMarkerRateOfEstimated": 0.5,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 74,
+      "p75ErrorMs": 109,
+      "p90ErrorMs": 130
     },
     "dvids-wgm": {
       "targetEvents": 1,
@@ -155,17 +182,17 @@
     },
     "wavea-faead-feed": {
       "targetEvents": 2,
-      "estimated": 0,
-      "abstained": 2,
-      "coverage": 0,
-      "abstentionRate": 1,
+      "estimated": 1,
+      "abstained": 1,
+      "coverage": 0.5,
+      "abstentionRate": 0.5,
       "wrongMarkers": 0,
-      "wrongMarkerRateOfEstimated": null,
+      "wrongMarkerRateOfEstimated": 0,
       "strictHits": 0,
-      "acceptableHits": 0,
-      "medianErrorMs": null,
-      "p75ErrorMs": null,
-      "p90ErrorMs": null
+      "acceptableHits": 1,
+      "medianErrorMs": 117,
+      "p75ErrorMs": 117,
+      "p90ErrorMs": 117
     },
     "wavea-faead-rally": {
       "targetEvents": 2,
@@ -215,13 +242,13 @@
       "abstained": 0,
       "coverage": 1,
       "abstentionRate": 0,
-      "wrongMarkers": 0,
-      "wrongMarkerRateOfEstimated": 0,
-      "strictHits": 2,
-      "acceptableHits": 2,
-      "medianErrorMs": 10,
-      "p75ErrorMs": 13,
-      "p90ErrorMs": 15
+      "wrongMarkers": 1,
+      "wrongMarkerRateOfEstimated": 0.5,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 74,
+      "p75ErrorMs": 109,
+      "p90ErrorMs": 130
     },
     "wavea-wgm-wheelchair": {
       "targetEvents": 1,
@@ -310,7 +337,7 @@
       "family": "unknown",
       "status": "estimated",
       "estimatedContactMs": 21975,
-      "confidence": 0.55,
+      "confidence": 0.5349108590413889,
       "errorMs": 155,
       "reason": null,
       "limitingFactors": [
@@ -334,7 +361,7 @@
       "family": "overhead",
       "status": "estimated",
       "estimatedContactMs": 4030,
-      "confidence": 0.55,
+      "confidence": 0.4695922953611275,
       "errorMs": 76,
       "reason": null,
       "limitingFactors": [
@@ -375,7 +402,7 @@
         {
           "signal": "ball_direction_change",
           "timestampMs": 4638,
-          "weight": 0.004
+          "weight": 0.001
         },
         {
           "signal": "ball_wrist_proximity",
@@ -394,7 +421,7 @@
       "estimatedContactMs": null,
       "confidence": null,
       "errorMs": null,
-      "reason": "Contact evidence is multi-modal: comparable clusters at ~33425ms and ~33865ms (86% as strong, 440ms apart); no single moment is defensible.",
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~33440ms and ~33810ms (84% as strong, 370ms apart); no single moment is defensible.",
       "limitingFactors": [
         "contact_evidence_multimodal"
       ],
@@ -407,16 +434,33 @@
       "goldContactMs": 33688,
       "owner": "target",
       "family": "unknown",
-      "status": "abstained",
-      "estimatedContactMs": null,
-      "confidence": null,
-      "errorMs": null,
-      "reason": "Contact evidence is multi-modal: comparable clusters at ~33860ms and ~33515ms (50% as strong, 345ms apart); no single moment is defensible.",
+      "status": "estimated",
+      "estimatedContactMs": 33805,
+      "confidence": 0.55,
+      "errorMs": 117,
+      "reason": null,
       "limitingFactors": [
-        "contact_evidence_multimodal"
+        "ball_evidence_weak",
+        "no_paddle_evidence"
       ],
-      "ballConfirmed": null,
-      "supportingEvidence": []
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 33750,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 33875,
+          "weight": 0.102
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 33417,
+          "weight": 0.068
+        }
+      ]
     },
     {
       "bundle": "wavea-faead-rally",
@@ -428,7 +472,7 @@
       "estimatedContactMs": null,
       "confidence": null,
       "errorMs": null,
-      "reason": "Contact evidence is multi-modal: comparable clusters at ~13615ms and ~13180ms (57% as strong, 435ms apart); no single moment is defensible.",
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~13615ms and ~13180ms (59% as strong, 435ms apart); no single moment is defensible.",
       "limitingFactors": [
         "contact_evidence_multimodal"
       ],
@@ -445,7 +489,7 @@
       "estimatedContactMs": null,
       "confidence": null,
       "errorMs": null,
-      "reason": "Contact evidence is multi-modal: comparable clusters at ~13675ms and ~14285ms (71% as strong, 610ms apart); no single moment is defensible.",
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13700ms (92% as strong, 585ms apart); no single moment is defensible.",
       "limitingFactors": [
         "contact_evidence_multimodal"
       ],
@@ -500,9 +544,9 @@
       "owner": "target",
       "family": "volley",
       "status": "estimated",
-      "estimatedContactMs": 52035,
-      "confidence": 0.7047407471056424,
-      "errorMs": 16,
+      "estimatedContactMs": 51875,
+      "confidence": 0.6830856493897352,
+      "errorMs": 144,
       "reason": null,
       "limitingFactors": [
         "no_paddle_evidence"
@@ -517,7 +561,7 @@
         {
           "signal": "ball_direction_change",
           "timestampMs": 52053,
-          "weight": 0.281
+          "weight": 0.084
         },
         {
           "signal": "ball_wrist_proximity",
@@ -551,7 +595,7 @@
         {
           "signal": "ball_direction_change",
           "timestampMs": 52053,
-          "weight": 0.049
+          "weight": 0.015
         },
         {
           "signal": "ball_wrist_proximity",

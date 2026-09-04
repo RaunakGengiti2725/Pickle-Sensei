@@ -122,6 +122,16 @@ export function formatGateViolations(
   ].join("\n");
 }
 
+export function staleArtifactMessage(label: string, committedPath: string): string {
+  return [
+    `${label}: committed artifact ${relative(REPO_ROOT, committedPath)} does not match the fresh run`,
+    `(estimator ${CONTACT_ESTIMATOR_VERSION}). The fresh artifact is under ${relative(REPO_ROOT, EVAL_OUT_DIR)}/.`,
+    `Review the diff, then regenerate with`,
+    `  ${REGENERATE_COMMAND}`,
+    `and commit the result alongside the estimator change.`,
+  ].join("\n");
+}
+
 export function readJsonArtifact<T>(path: string): T {
   if (!existsSync(path)) {
     throw new Error(`committed artifact missing: ${relative(REPO_ROOT, path)}`);
