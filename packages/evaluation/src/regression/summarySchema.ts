@@ -42,8 +42,9 @@ export interface RegressionProvenance {
   /** Tracked files modified relative to HEAD when the run started. A dirty
    *  tree means `gitSha` alone does not identify the code that was measured. */
   gitDirty: boolean;
-  /** `git rev-parse HEAD:datasets` — identity of every committed gold /
-   *  corpus artifact the benches read. */
+  /** sha1 over `git ls-tree -r HEAD:datasets` minus `reports/` — identity of
+   *  every committed gold / corpus artifact the benches READ (bench output
+   *  such as this runner's own baselines does not change it). */
   datasetsTreeSha: string;
   datasetReleases: DatasetReleaseRef[];
   /** Version constants of the estimators / heuristics exercised. */

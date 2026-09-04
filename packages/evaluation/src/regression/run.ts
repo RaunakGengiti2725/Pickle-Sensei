@@ -51,8 +51,8 @@ export interface RunResult {
   exitCode: 0 | 1;
 }
 
-function git(args: string[]): string {
-  const result = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" });
+function git(args: string[], cwd: string = REPO_ROOT): string {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed (${result.status}): ${result.stderr.trim()}`);
   }
@@ -61,6 +61,26 @@ function git(args: string[]): string {
 
 function sha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
+}
+
+/** `datasets/` subtrees that hold bench OUTPUT (this runner's own summaries
+ *  and baselines among them), so committing a report never looks like a
+ *  change of bench input. */
+const DATASET_OUTPUT_PREFIXES = ["reports/"];
+
+/**
+ * Identity of every committed file the benches READ under `datasets/`:
+ * sha1 over the `git ls-tree -r HEAD:datasets` entries minus the output
+ * subtrees. Equal for two commits iff their bench inputs are byte-identical.
+ */
+export function datasetsInputTreeSha(root: string = REPO_ROOT): string {
+  const entries = git(["ls-tree", "-r", "HEAD:datasets"], root)
+    .split("\n")
+    .filter((line) => {
+      const path = line.split("\t")[1] ?? "";
+      return line.length > 0 && !DATASET_OUTPUT_PREFIXES.some((prefix) => path.startsWith(prefix));
+    });
+  return createHash("sha1").update(entries.join("\n")).digest("hex");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -104,7 +124,7 @@ export function collectProvenance(): RegressionProvenance {
     gitSha: git(["rev-parse", "HEAD"]),
     gitBranch: branch === "HEAD" ? null : branch,
     gitDirty: git(["status", "--porcelain", "--untracked-files=no"]).length > 0,
-    datasetsTreeSha: git(["rev-parse", "HEAD:datasets"]),
+    datasetsTreeSha: datasetsInputTreeSha(),
     datasetReleases: collectDatasetReleases(),
     modelVersions: collectModelVersions(),
     evidenceClass: "linux_replay_proxy",

@@ -95,7 +95,7 @@ Design constraints the runner enforces (`src/regression/run.ts`, `benches.ts`):
     "gitSha": "<40 hex>",
     "gitBranch": "main" | null,
     "gitDirty": false,
-    "datasetsTreeSha": "<git tree sha of datasets/ at HEAD>",
+    "datasetsTreeSha": "<sha1 of the datasets/ listing at HEAD minus reports/>",
     "datasetReleases": [{ "releaseDir", "releaseId", "datasetId", "manifestSha256" }],
     "modelVersions": { "contactEstimator": "contact-evidence-4.4", "strokeHeuristic": "stroke-heuristic-7 (uncalibrated)", … },
     "evidenceClass": "linux_replay_proxy"

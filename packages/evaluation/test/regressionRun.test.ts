@@ -1,4 +1,13 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -11,6 +20,7 @@ import { main, parseArgs, resolveUserPath } from "../src/regression/cli.js";
 import {
   collectDatasetReleases,
   collectProvenance,
+  datasetsInputTreeSha,
   executeBench,
   runRegression,
   timestampRunId,
@@ -40,10 +50,45 @@ describe("provenance", () => {
     expect(collectDatasetReleases(join(scratch, "nowhere"))).toEqual([]);
   });
 
+  it("dataset identity tracks bench inputs and ignores committed reports", () => {
+    const repo = join(scratch, "identity-repo");
+    const git = (...args: string[]): string =>
+      execFileSync("git", args, {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "t",
+          GIT_AUTHOR_EMAIL: "t@t",
+          GIT_COMMITTER_NAME: "t",
+          GIT_COMMITTER_EMAIL: "t@t",
+        },
+      }).trim();
+    mkdirSync(join(repo, "datasets/gold"), { recursive: true });
+    mkdirSync(join(repo, "datasets/reports/regression"), { recursive: true });
+    writeFileSync(join(repo, "datasets/gold/a.json"), "1");
+    git("init", "-q");
+    git("add", "-A");
+    git("commit", "-q", "-m", "inputs");
+    const before = datasetsInputTreeSha(repo);
+    expect(before).toMatch(/^[0-9a-f]{40}$/);
+
+    writeFileSync(join(repo, "datasets/reports/regression/baseline.json"), "{}");
+    git("add", "-A");
+    git("commit", "-q", "-m", "report");
+    expect(datasetsInputTreeSha(repo)).toBe(before);
+
+    writeFileSync(join(repo, "datasets/gold/a.json"), "2");
+    git("add", "-A");
+    git("commit", "-q", "-m", "input change");
+    expect(datasetsInputTreeSha(repo)).not.toBe(before);
+  });
+
   it("reads git identity and every registered model/provider version", () => {
     const provenance = collectProvenance();
     expect(provenance.gitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(provenance.datasetsTreeSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(provenance.datasetsTreeSha).toBe(datasetsInputTreeSha());
     expect(provenance.evidenceClass).toBe("linux_replay_proxy");
     expect(typeof provenance.gitDirty).toBe("boolean");
     const versions = collectModelVersions();

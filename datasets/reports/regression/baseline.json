@@ -3,7 +3,7 @@
   "contract": "pickle-sensei-linux-regression",
   "contractVersion": 1,
   "runId": "baseline",
-  "generatedAtIso": "2026-09-04T02:42:19.910Z",
+  "generatedAtIso": "2026-09-04T02:55:45.201Z",
   "runner": {
     "node": "v22.23.2",
     "platform": "linux",
@@ -13,7 +13,7 @@
     "gitSha": "7c034aa00ea3c4ff0e63c3b84b548cec8d62c96f",
     "gitBranch": null,
     "gitDirty": false,
-    "datasetsTreeSha": "0afe807595172f683590fa7bfca741a7b398b638",
+    "datasetsTreeSha": "a79a163fc65c01006f031e9e23873c025f5e987e",
     "datasetReleases": [
       {
         "releaseDir": "paddle-distill-v0.1",
@@ -79,10 +79,10 @@
       "title": "Stroke classification (L1 overhead/swing, L2 family) — stroke-heuristic-lite over wave-a gold",
       "kind": "in_process",
       "command": "runStrokeHeuristicBench() from packages/swing-lab/src/strokeHeuristicBench.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 62,
+      "wallClockMs": 61,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/*.json (wave-a gold sidecars: devin-visual-v2/v3/v4)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/ (committed Apple-Vision pose replay windows)",
@@ -119,10 +119,10 @@
       "title": "Contact estimation — e02 contact-gold replay (wave-a target events, oracle ball, no paddle)",
       "kind": "in_process",
       "command": "replayAll() + loadGoldEvents() from packages/vision-geometry/eval/contactGoldReplay.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/vision-geometry",
+      "cwd": "/home/ubuntu/ps-baseline/packages/vision-geometry",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 45,
+      "wallClockMs": 44,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/devin-visual-v3-waveD-contact.json (gold contact events)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/people.json (committed pose)",
@@ -160,7 +160,7 @@
       "title": "Stroke segmentation — e13 event bounds (proposeStrokeEventsV2 vs D2-07 gold, 3 bundles)",
       "kind": "in_process",
       "command": "runE13EventBoundsEval() from packages/swing-lab/src/e13EventBoundsEval.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": null,
       "wallClockMs": 11,
@@ -201,10 +201,10 @@
       "title": "Stroke segmentation — e01 event recall over DEV gold target events",
       "kind": "subprocess",
       "command": "tsx src/eventRecallBench.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 275,
+      "wallClockMs": 234,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/*events*.json (gold target events, held-out excluded)",
         "datasets/corpus/bundles/*/runs-wave-a/ + committed run artifacts (wrist series)",
@@ -239,10 +239,10 @@
       "title": "Analysis completion — fixed 1.5s post-roll vs adaptive settle, against gold event/phase ends",
       "kind": "subprocess",
       "command": "tsx src/eventCompletionBench.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 204,
+      "wallClockMs": 208,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/ (event + phase labels incl. event-bounds-wave-a.json)",
         "datasets/corpus/bundles/*/runs-wave-a/ (wrist speed series)",
@@ -282,10 +282,10 @@
       "title": "Paddle ownership — frame-level target-vs-other paddle attribution on human-labeled dual frames",
       "kind": "in_process",
       "command": "runBench(includeHeldOut=false, applyCorrections=false) from packages/swing-lab/src/ownershipBench.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": null,
-      "wallClockMs": 71,
+      "wallClockMs": 72,
       "inputs": [
         "datasets/corpus/bundles/*/annotation/ (dual-paddle frame labels)",
         "datasets/corpus/bundles/*/runs-wave-a/people.json (committed pose, subset of frames)"
@@ -357,10 +357,10 @@
       "title": "Ball tracking — e12 hard-slice occlusion eval over D2-06 gold (pose-free proxy)",
       "kind": "subprocess",
       "command": "tsx src/ballHardSliceEval.ts <scratch>/ball-hard-slice.json",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 499,
+      "wallClockMs": 501,
       "inputs": [
         "datasets/experiments/wave-e/e12-ball-hard-slices/manifest.json (+ referenced labels and candidate files)"
       ],
@@ -446,10 +446,10 @@
       "title": "Phase segmentation — segmentPhasesTemporalV2 anchored vs anchor-free over wave-a gold contacts",
       "kind": "subprocess",
       "command": "tsx ../../datasets/experiments/wave-d3/d3-05-measure-gold.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": 0,
-      "wallClockMs": 197,
+      "wallClockMs": 228,
       "inputs": [
         "datasets/corpus/bundles/wavea-*/annotation/ (gold phase boundaries / contacts)",
         "datasets/corpus/bundles/wavea-*/runs-wave-a/ (committed pose)"
@@ -475,7 +475,7 @@
       "title": "Coaching consistency — frozen coach release gates (PASS / FAIL / NOT_EVALUABLE)",
       "kind": "in_process",
       "command": "runCoachGates() from packages/swing-lab/src/coachGates.ts",
-      "cwd": "/home/ubuntu/main-worktree/packages/swing-lab",
+      "cwd": "/home/ubuntu/ps-baseline/packages/swing-lab",
       "status": "ok",
       "exitCode": null,
       "wallClockMs": 0,
@@ -712,5 +712,5 @@
     "Gold counts are small (single-digit to low tens per bench); treat every delta as a per-case finding, not a rate estimate.",
     "Abstentions are first-class outcomes. A metric value of null means 'not measurable in this run', never zero."
   ],
-  "totalWallClockMs": 1385
+  "totalWallClockMs": 1382
 }

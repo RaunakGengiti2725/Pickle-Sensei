@@ -28,13 +28,16 @@ committed document:
     --out-dir <repo>/datasets/reports/regression --run-id baseline
   ```
 
-  Exit code 0. Runner-reported `totalWallClockMs: 1385`; shell wall clock
-  1.74 s including tsx startup. `git status --porcelain` in the worktree was
-  identical before and after the run.
-- Per-bench wall clocks (ms): stroke_heuristic 62, contact_replay 45,
-  event_bounds_e13 11, event_recall 275, completion_bench 204,
-  ownership_dual_frame 71, ball_hard_slice 499, phase_gold_d3_05 197,
+  Exit code 0. Runner-reported `totalWallClockMs: 1382`. `git status
+  --porcelain` in the worktree was identical before and after the run.
+- Per-bench wall clocks (ms): stroke_heuristic 61, contact_replay 44,
+  event_bounds_e13 11, event_recall 234, completion_bench 208,
+  ownership_dual_frame 72, ball_hard_slice 501, phase_gold_d3_05 228,
   coach_gates 0. All nine `status: "ok"`; 200 metric keys.
+- `provenance.datasetsTreeSha` hashes the `datasets/` listing at HEAD
+  **excluding `datasets/reports/`**, so committing this baseline (or any
+  later summary) does not itself trip the `datasetsTreeSha` CONFOUND
+  warning in `bench:compare`; only a change to bench inputs does.
 - Environment: Ubuntu 22.04, Node v22.23.2 (`runner.node`), pnpm 10.15.1.
   The repository declares `"node": ">=20 <21"`; the baseline was produced on
   Node 22 and pnpm printed the unsupported-engine warning. Re-running on

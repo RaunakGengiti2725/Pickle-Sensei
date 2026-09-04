@@ -51,7 +51,7 @@
         "gitBranch": { "type": ["string", "null"] },
         "gitDirty": { "type": "boolean" },
         "datasetsTreeSha": {
-          "description": "git tree sha of datasets/ at HEAD — identifies every committed gold artifact the benches read.",
+          "description": "sha1 over `git ls-tree -r HEAD:datasets` excluding reports/ — identifies every committed gold artifact the benches read; committing a report/baseline does not change it.",
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"
         },
