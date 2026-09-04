@@ -147,4 +147,140 @@ describe('consentStore', () => {
     expect(state.modelTrainingActive).toBe(false);
     expect(state.error).not.toBeNull();
   });
+
+  describe('same-session response ordering', () => {
+    interface PendingCall {
+      url: string;
+      resolve: (response: Response) => void;
+      reject: (error: Error) => void;
+    }
+
+    function manualFetch() {
+      const calls: PendingCall[] = [];
+      const fetchFn: ConsentFetch = jest.fn(
+        (url: string) =>
+          new Promise<Response>((resolve, reject) => {
+            calls.push({ url, resolve, reject });
+          }),
+      );
+      return { fetchFn, calls };
+    }
+
+    beforeEach(() => {
+      establishApiSession(session);
+    });
+
+    it('an older status GET cannot undo a newer grant', async () => {
+      useConsentStore.setState({ availability: 'ready' });
+      const { fetchFn, calls } = manualFetch();
+      const hydrating = useConsentStore.getState().hydrate(fetchFn);
+      const granting = useConsentStore
+        .getState()
+        .setModelTrainingConsent(true, fetchFn);
+      expect(calls.map(c => c.url)).toEqual([
+        'https://api.test/v1/me/consent/status',
+        'https://api.test/v1/me/consent/grant',
+      ]);
+
+      calls[1]!.resolve(jsonResponse(statusBody(true)));
+      await granting;
+      calls[0]!.resolve(jsonResponse(statusBody(false)));
+      await hydrating;
+
+      const state = useConsentStore.getState();
+      expect(state.availability).toBe('ready');
+      expect(state.modelTrainingActive).toBe(true);
+      expect(state.busy).toBe(false);
+      expect(state.error).toBeNull();
+    });
+
+    it('the newer of two overlapping hydrates wins regardless of arrival order', async () => {
+      const { fetchFn, calls } = manualFetch();
+      const first = useConsentStore.getState().hydrate(fetchFn);
+      const second = useConsentStore.getState().hydrate(fetchFn);
+
+      calls[1]!.resolve(jsonResponse(statusBody(true)));
+      await second;
+      calls[0]!.resolve(jsonResponse(statusBody(false)));
+      await first;
+
+      expect(useConsentStore.getState().availability).toBe('ready');
+      expect(useConsentStore.getState().modelTrainingActive).toBe(true);
+    });
+
+    it('a stale hydrate failure after a newer success leaves the store ready', async () => {
+      const { fetchFn, calls } = manualFetch();
+      const first = useConsentStore.getState().hydrate(fetchFn);
+      const second = useConsentStore.getState().hydrate(fetchFn);
+
+      calls[1]!.resolve(jsonResponse(statusBody(true)));
+      await second;
+      calls[0]!.reject(new Error('network down'));
+      await first;
+
+      const state = useConsentStore.getState();
+      expect(state.availability).toBe('ready');
+      expect(state.modelTrainingActive).toBe(true);
+      expect(state.error).toBeNull();
+    });
+
+    it('a stale grant response only releases busy; the newer hydrate owns the ledger', async () => {
+      useConsentStore.setState({ availability: 'ready' });
+      const { fetchFn, calls } = manualFetch();
+      const granting = useConsentStore
+        .getState()
+        .setModelTrainingConsent(true, fetchFn);
+      const hydrating = useConsentStore.getState().hydrate(fetchFn);
+      expect(useConsentStore.getState().busy).toBe(true);
+
+      calls[1]!.resolve(jsonResponse(statusBody(false)));
+      await hydrating;
+      expect(useConsentStore.getState().busy).toBe(true);
+      calls[0]!.resolve(jsonResponse(statusBody(true)));
+      await granting;
+
+      const state = useConsentStore.getState();
+      expect(state.availability).toBe('ready');
+      expect(state.modelTrainingActive).toBe(false);
+      expect(state.busy).toBe(false);
+    });
+
+    it('a stale hydrate never releases busy for a set that is still in flight', async () => {
+      useConsentStore.setState({ availability: 'ready' });
+      const { fetchFn, calls } = manualFetch();
+      const hydrating = useConsentStore.getState().hydrate(fetchFn);
+      const granting = useConsentStore
+        .getState()
+        .setModelTrainingConsent(true, fetchFn);
+
+      calls[0]!.resolve(jsonResponse(statusBody(false)));
+      await hydrating;
+      expect(useConsentStore.getState().busy).toBe(true);
+
+      calls[1]!.resolve(jsonResponse(statusBody(true)));
+      await granting;
+      expect(useConsentStore.getState().busy).toBe(false);
+      expect(useConsentStore.getState().modelTrainingActive).toBe(true);
+    });
+
+    it('a failed set that superseded a loading hydrate reports unavailable, not loading forever', async () => {
+      const { fetchFn, calls } = manualFetch();
+      const hydrating = useConsentStore.getState().hydrate(fetchFn);
+      const granting = useConsentStore
+        .getState()
+        .setModelTrainingConsent(true, fetchFn);
+      expect(useConsentStore.getState().availability).toBe('loading');
+
+      calls[1]!.reject(new Error('network down'));
+      await granting;
+      calls[0]!.resolve(jsonResponse(statusBody(true)));
+      await hydrating;
+
+      const state = useConsentStore.getState();
+      expect(state.availability).toBe('unavailable');
+      expect(state.modelTrainingActive).toBe(false);
+      expect(state.busy).toBe(false);
+      expect(state.error).not.toBeNull();
+    });
+  });
 });

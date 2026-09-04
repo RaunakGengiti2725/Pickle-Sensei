@@ -49,14 +49,42 @@ const SIGNED_OUT_STATE: Pick<
 };
 
 /**
- * A response only belongs to the account that is still signed in when it
- * lands; a sign-out or account switch mid-flight makes it stale.
+ * Every hydrate/set is one generation; only the newest generation may write
+ * the ledger. Overlapping requests within a session (a status GET racing the
+ * grant it was in flight for, Settings and Data & consent hydrating at once,
+ * a slow request that eventually fails) resolve in any order, and the last
+ * response to land would otherwise overwrite the newest truth.
  */
-function isCurrentSession(session: ApiSession): boolean {
-  return getApiSession()?.canonicalAppUserId === session.canonicalAppUserId;
+let requestGeneration = 0;
+
+function nextGeneration(): number {
+  requestGeneration += 1;
+  return requestGeneration;
 }
 
-function staleSessionState(): Partial<ConsentState> {
+/**
+ * A response only belongs to the account that is still signed in when it
+ * lands and to the newest request issued; a sign-out, an account switch, or
+ * a later hydrate/set mid-flight makes it stale.
+ */
+function isCurrentRequest(session: ApiSession, generation: number): boolean {
+  return (
+    generation === requestGeneration &&
+    getApiSession()?.canonicalAppUserId === session.canonicalAppUserId
+  );
+}
+
+/**
+ * A stale hydrate writes nothing while signed in — a newer request owns the
+ * state (including `busy`, which belongs to the one set that can be in
+ * flight). A stale set only releases `busy`. Signed out, both restore the
+ * signed-out state in case no hydrate ran after the sign-out.
+ */
+function staleHydrateState(): Partial<ConsentState> {
+  return getApiSession() ? {} : SIGNED_OUT_STATE;
+}
+
+function staleSetState(): Partial<ConsentState> {
   return getApiSession() ? { busy: false } : SIGNED_OUT_STATE;
 }
 
@@ -79,6 +107,7 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
   error: null,
 
   hydrate: async fetchFn => {
+    const generation = nextGeneration();
     const session = getApiSession();
     if (!session) {
       set(SIGNED_OUT_STATE);
@@ -87,14 +116,14 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
     set({ availability: 'loading', error: null });
     try {
       const status = await fetchConsentStatus(session, fetchFn);
-      if (!isCurrentSession(session)) {
-        set(staleSessionState());
+      if (!isCurrentRequest(session, generation)) {
+        set(staleHydrateState());
         return;
       }
       set(applyStatus(status));
     } catch (error) {
-      if (!isCurrentSession(session)) {
-        set(staleSessionState());
+      if (!isCurrentRequest(session, generation)) {
+        set(staleHydrateState());
         return;
       }
       set({
@@ -111,6 +140,7 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
   setModelTrainingConsent: async (granted, fetchFn) => {
     const session = getApiSession();
     if (!session) {
+      nextGeneration();
       set({
         ...SIGNED_OUT_STATE,
         error: 'Sign in to change this setting. Nothing was changed.',
@@ -118,24 +148,30 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
       return;
     }
     if (get().busy) return;
+    const generation = nextGeneration();
     set({ busy: true, error: null });
     try {
       const status = granted
         ? await grantModelTrainingConsent(session, deviceLabel(), fetchFn)
         : await withdrawModelTrainingConsent(session, deviceLabel(), fetchFn);
-      if (!isCurrentSession(session)) {
-        set(staleSessionState());
+      if (!isCurrentRequest(session, generation)) {
+        set(staleSetState());
         return;
       }
       set({ busy: false, ...applyStatus(status) });
     } catch (error) {
-      if (!isCurrentSession(session)) {
-        set(staleSessionState());
+      if (!isCurrentRequest(session, generation)) {
+        set(staleSetState());
         return;
       }
-      // The optimistic state is never kept: the ledger did not change.
+      // The optimistic state is never kept: the ledger did not change. A
+      // hydrate this request superseded never lands either, so a ledger that
+      // was still loading stays unknown rather than loading forever.
       set({
         busy: false,
+        ...(get().availability === 'loading'
+          ? { availability: 'unavailable' as const }
+          : {}),
         error:
           error instanceof ConsentApiError
             ? error.message
