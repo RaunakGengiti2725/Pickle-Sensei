@@ -3,6 +3,7 @@ import { SHOT_TYPES } from "@pickle/shared-types";
 import {
   DEFAULT_MODEL_MANIFEST,
   ModelRegistry,
+  ModelRegistryValidationError,
   type ModelManifest,
   type ModelManifestEntry,
 } from "../src/index.js";
@@ -86,23 +87,26 @@ describe("ModelRegistry", () => {
   });
 
   it("model replacement is a manifest change, not a code change", () => {
-    const manifest: ModelManifest = {
+    const learned = scorerEntry({
+      id: "scorer.learned",
+      version: "sm-v9",
+      runtime: "coreml",
+      artifactHash: "a".repeat(64),
+      artifactUri: "https://models.example/sm-v9.mlmodelc",
+      deploymentStatus: "production",
+    });
+    // Retiring sm-v1 is a status flip; the promoted entry is then the ONLY
+    // production entry for the task and resolves without any ordering rule.
+    const registry = new ModelRegistry({
       schemaVersion: 1,
-      entries: [
-        scorerEntry({}),
-        scorerEntry({
-          id: "scorer.learned",
-          version: "sm-v9",
-          runtime: "coreml",
-          artifactHash: "a".repeat(64),
-          artifactUri: "https://models.example/sm-v9.mlmodelc",
-          deploymentStatus: "production",
-        }),
-      ],
-    };
-    const registry = new ModelRegistry(manifest);
-    // Highest-version production entry wins; retiring sm-v1 is a status flip.
+      entries: [scorerEntry({ deploymentStatus: "deprecated" }), learned],
+    });
     expect(registry.resolve({ task: "technique_scoring", platform: "ios" })?.version).toBe("sm-v9");
+    // Leaving both in production is ambiguous and must never be settled by
+    // string order of the version labels.
+    expect(
+      () => new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({}), learned] }),
+    ).toThrow(/production/);
   });
 
   it("keeps shadow candidates separate from production", () => {
@@ -272,6 +276,443 @@ describe("ModelRegistry", () => {
     ).toThrow(/artifact hash/);
     expect(() => ModelRegistry.fromJson('{"schemaVersion":9,"entries":[]}')).toThrow(
       /schema version/,
+    );
+  });
+});
+
+describe("ModelRegistry validation hardening (ADJ-04)", () => {
+  const loose = (manifest: unknown): ModelManifest => manifest as ModelManifest;
+  const validationErrorFor = (build: () => unknown): ModelRegistryValidationError => {
+    let caught: unknown = null;
+    try {
+      build();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, "expected the manifest to be rejected").not.toBeNull();
+    expect(caught).not.toBeInstanceOf(TypeError);
+    expect(caught).toBeInstanceOf(ModelRegistryValidationError);
+    expect(caught).toBeInstanceOf(Error);
+    return caught as ModelRegistryValidationError;
+  };
+
+  it("rejects a manifest whose entries are not an array with a validation error, not a TypeError", () => {
+    for (const json of [
+      '{"entries":null}',
+      '{"schemaVersion":1,"entries":null}',
+      '{"schemaVersion":1,"entries":{}}',
+      '{"schemaVersion":1}',
+      "null",
+      "[]",
+      '"manifest"',
+    ]) {
+      const error = validationErrorFor(() => ModelRegistry.fromJson(json));
+      expect(error.message, json).toMatch(/entries|manifest must be an object/);
+      expect(error.name).toBe("ModelRegistryValidationError");
+    }
+    expect(validationErrorFor(() => ModelRegistry.fromJson('{"entries":null}')).message).toMatch(
+      /entries/,
+    );
+    expect(
+      validationErrorFor(() => new ModelRegistry(loose({ schemaVersion: 1, entries: {} }))).message,
+    ).toMatch(/entries/);
+    // Malformed JSON text is a manifest problem too, not a bare SyntaxError.
+    expect(validationErrorFor(() => ModelRegistry.fromJson("{not json")).message).toMatch(/JSON/);
+  });
+
+  it("rejects entries with missing or mistyped fields by name", () => {
+    const { supportedPlatforms: _dropped, ...withoutPlatforms } = scorerEntry({});
+    expect(
+      validationErrorFor(
+        () => new ModelRegistry(loose({ schemaVersion: 1, entries: [withoutPlatforms] })),
+      ).message,
+    ).toMatch(/supportedPlatforms/);
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry(
+            loose({ schemaVersion: 1, entries: [{ ...scorerEntry({}), version: 7 }] }),
+          ),
+      ).message,
+    ).toMatch(/version/);
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry(
+            loose({ schemaVersion: 1, entries: [{ ...scorerEntry({}), version: null }] }),
+          ),
+      ).message,
+    ).toMatch(/version/);
+    expect(
+      validationErrorFor(() => new ModelRegistry(loose({ schemaVersion: 1, entries: [null] })))
+        .message,
+    ).toMatch(/entries\[0\]/);
+    expect(
+      validationErrorFor(() => new ModelRegistry(loose({ schemaVersion: 1, entries: ["x"] })))
+        .message,
+    ).toMatch(/entries\[0\]/);
+    for (const [field, value] of [
+      ["task", "mind_reading"],
+      ["runtime", "magic"],
+      ["executionTarget", "cloud"],
+      ["deploymentStatus", "live"],
+      ["supportedPlatforms", ["web"]],
+      ["supportedPlatforms", ["ios", "ios"]],
+      ["supportedPlatforms", "ios"],
+      ["supportedStrokes", ["smash"]],
+      ["supportedStrokes", "any"],
+      ["inputSchemaVersion", 0],
+      ["outputSchemaVersion", 1.5],
+      ["runtimeRequirements", "ios-vision-framework"],
+      ["runtimeRequirements", [1]],
+      ["notes", null],
+      ["metrics", { accuracy: "high" }],
+      ["splits", { train: "t", validation: "v" }],
+      ["promotionDate", "yesterday"],
+      ["artifactUri", ""],
+      ["license", 7],
+      ["commit", ""],
+    ] as const) {
+      const error = validationErrorFor(
+        () =>
+          new ModelRegistry(
+            loose({
+              schemaVersion: 1,
+              entries: [
+                {
+                  ...scorerEntry({
+                    trainingDatasetVersion: "ds@v1",
+                    evaluationDatasetVersion: "ds@v1",
+                  }),
+                  [field]: value,
+                },
+              ],
+            }),
+          ),
+      );
+      expect(error.message, `${field}=${JSON.stringify(value)}`).toContain(field);
+    }
+    // Unknown keys are typos until proven otherwise.
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry(
+            loose({
+              schemaVersion: 1,
+              entries: [{ ...scorerEntry({}), supportedPlatform: ["ios"] }],
+            }),
+          ),
+      ).message,
+    ).toMatch(/supportedPlatform\b/);
+  });
+
+  it("reports every problem of a broken manifest at once", () => {
+    const error = validationErrorFor(
+      () =>
+        new ModelRegistry(
+          loose({
+            schemaVersion: 1,
+            entries: [
+              { ...scorerEntry({}), supportedStrokes: [] },
+              { ...scorerEntry({ id: "scorer.other" }), version: 3 },
+            ],
+          }),
+        ),
+    );
+    expect(error.problems.length).toBeGreaterThanOrEqual(2);
+    expect(error.message).toMatch(/supportedStrokes/);
+    expect(error.message).toMatch(/version/);
+  });
+
+  it("requires supportedStrokes to name at least one stroke or 'all'", () => {
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({ supportedStrokes: [] })] }),
+      ).message,
+    ).toMatch(/supportedStrokes/);
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [scorerEntry({ supportedStrokes: ["dink", "dink"] })],
+          }),
+      ).message,
+    ).toMatch(/supportedStrokes/);
+    const registry = new ModelRegistry({
+      schemaVersion: 1,
+      entries: [scorerEntry({ supportedStrokes: ["dink"] })],
+    });
+    expect(
+      registry.resolve({ task: "technique_scoring", platform: "ios", stroke: "dink" })?.id,
+    ).toBe("scorer.sm-v1");
+    expect(
+      registry.resolve({ task: "technique_scoring", platform: "ios", stroke: "serve" }),
+    ).toBeNull();
+  });
+
+  it("requires artifactHash to be a lowercase 64-hex sha256 whenever an artifact is declared", () => {
+    const uri = "https://models.example/sm-v9.mlmodelc";
+    for (const bad of [
+      "not-a-hash",
+      "",
+      "a".repeat(63),
+      "a".repeat(65),
+      "A".repeat(64),
+      `${"a".repeat(63)}g`,
+      `sha256:${"a".repeat(64)}`,
+      ` ${"a".repeat(64)}`,
+    ]) {
+      const error = validationErrorFor(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [scorerEntry({ artifactUri: uri, artifactHash: bad })],
+          }),
+      );
+      expect(error.message, JSON.stringify(bad)).toMatch(/artifactHash/);
+    }
+    // A malformed hash is wrong even for a built-in artifact with no URI.
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [scorerEntry({ artifactHash: "deadbeef" })],
+          }),
+      ).message,
+    ).toMatch(/artifactHash/);
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry(
+            loose({ schemaVersion: 1, entries: [{ ...scorerEntry({}), artifactHash: 42 }] }),
+          ),
+      ).message,
+    ).toMatch(/artifactHash/);
+    const ok = new ModelRegistry({
+      schemaVersion: 1,
+      entries: [scorerEntry({ artifactUri: uri, artifactHash: "0123456789abcdef".repeat(4) })],
+    });
+    expect(ok.byId("scorer.sm-v1", "sm-v1")?.artifactHash).toBe("0123456789abcdef".repeat(4));
+  });
+
+  it("refuses two production entries that could answer the same resolve() query", () => {
+    const second = scorerEntry({ id: "scorer.other", version: "sm-v1b" });
+    for (const entries of [
+      [scorerEntry({}), second],
+      // Version labels that string-sort either way — order must never decide.
+      [scorerEntry({ version: "sm-v10" }), scorerEntry({ id: "scorer.z", version: "sm-v2" })],
+      [scorerEntry({ version: "sm-v2" }), scorerEntry({ id: "scorer.z", version: "sm-v10" })],
+      // Overlap through a shared platform in a wider platform list.
+      [
+        scorerEntry({ supportedPlatforms: ["ios", "android"] }),
+        scorerEntry({ id: "scorer.other", supportedPlatforms: ["android", "server"] }),
+      ],
+      // Overlap through a shared stroke: "all" overlaps every explicit list.
+      [scorerEntry({}), scorerEntry({ id: "scorer.dink", supportedStrokes: ["dink"] })],
+      [
+        scorerEntry({ supportedStrokes: ["dink", "serve"] }),
+        scorerEntry({ id: "scorer.dink", supportedStrokes: ["serve", "volley"] }),
+      ],
+    ]) {
+      const error = validationErrorFor(() => new ModelRegistry({ schemaVersion: 1, entries }));
+      expect(error.message).toMatch(/production/);
+      expect(error.message).toMatch(/technique_scoring/);
+    }
+    // Disjoint coverage is a legitimate split, not ambiguity.
+    const split = new ModelRegistry({
+      schemaVersion: 1,
+      entries: [
+        scorerEntry({ supportedStrokes: ["dink"] }),
+        scorerEntry({ id: "scorer.drive", supportedStrokes: ["forehand_drive"] }),
+        scorerEntry({ id: "scorer.android", supportedPlatforms: ["android"] }),
+        scorerEntry({ id: "scorer.shadow", version: "sm-v2rc1", deploymentStatus: "shadow" }),
+        scorerEntry({ id: "scorer.old", version: "sm-v0", deploymentStatus: "deprecated" }),
+        scorerEntry({ id: "scorer.older", version: "sm-v0a", deploymentStatus: "deprecated" }),
+      ],
+    });
+    expect(split.resolve({ task: "technique_scoring", platform: "ios", stroke: "dink" })?.id).toBe(
+      "scorer.sm-v1",
+    );
+    expect(
+      split.resolve({ task: "technique_scoring", platform: "ios", stroke: "forehand_drive" })?.id,
+    ).toBe("scorer.drive");
+    expect(split.resolve({ task: "technique_scoring", platform: "android" })?.id).toBe(
+      "scorer.android",
+    );
+    // A stroke-less query over per-stroke production entries has no single
+    // answer; that is reported, never picked by string order.
+    expect(() => split.resolve({ task: "technique_scoring", platform: "ios" })).toThrow(
+      /ambiguous/i,
+    );
+    // Multiple deprecated/shadow entries per task remain legal (history).
+    expect(
+      split.resolve({ task: "technique_scoring", platform: "ios", status: "deprecated" }),
+    ).not.toBeNull();
+    // withEntry() runs the same guard.
+    const one = new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({})] });
+    expect(() => one.withEntry(second)).toThrow(/production/);
+  });
+
+  it("rejects rollbackPredecessor cycles of any length", () => {
+    const a = scorerEntry({
+      id: "scorer.a",
+      version: "v1",
+      deploymentStatus: "deprecated",
+      rollbackPredecessor: "scorer.b@v1",
+    });
+    const b = scorerEntry({
+      id: "scorer.b",
+      version: "v1",
+      deploymentStatus: "deprecated",
+      rollbackPredecessor: "scorer.a@v1",
+    });
+    expect(
+      validationErrorFor(() => new ModelRegistry({ schemaVersion: 1, entries: [a, b] })).message,
+    ).toMatch(/cycle/);
+    const c = scorerEntry({
+      id: "scorer.c",
+      version: "v1",
+      deploymentStatus: "deprecated",
+      rollbackPredecessor: "scorer.a@v1",
+    });
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [a, { ...b, rollbackPredecessor: "scorer.c@v1" }, c],
+          }),
+      ).message,
+    ).toMatch(/cycle/);
+    // A cycle reachable from a production entry is caught as well.
+    expect(
+      validationErrorFor(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [
+              scorerEntry({ rollbackPredecessor: "scorer.a@v1" }),
+              a,
+              { ...b, rollbackPredecessor: "scorer.c@v1" },
+              c,
+            ],
+          }),
+      ).message,
+    ).toMatch(/cycle/);
+    // An acyclic chain is fine.
+    const chain = new ModelRegistry({
+      schemaVersion: 1,
+      entries: [
+        scorerEntry({ rollbackPredecessor: "scorer.a@v1" }),
+        a,
+        { ...b, rollbackPredecessor: "scorer.c@v1" },
+        { ...c, rollbackPredecessor: null },
+      ],
+    });
+    expect(chain.byId("scorer.c", "v1")?.rollbackPredecessor).toBeNull();
+  });
+
+  it("is immune to mutation of the input manifest and of returned entries", () => {
+    const manifest: ModelManifest = { schemaVersion: 1, entries: [scorerEntry({})] };
+    const registry = new ModelRegistry(manifest);
+    const before = registry.resolve({ task: "technique_scoring", platform: "ios" });
+    expect(before?.version).toBe("sm-v1");
+
+    // Caller keeps mutating the object it passed in.
+    manifest.entries.push(scorerEntry({ id: "scorer.sneaky", version: "sm-v99" }));
+    manifest.entries[0]!.deploymentStatus = "deprecated";
+    manifest.entries[0]!.supportedPlatforms.push("server");
+    manifest.entries[0]!.version = "sm-v0";
+    expect(registry.resolve({ task: "technique_scoring", platform: "ios" })?.version).toBe("sm-v1");
+    expect(registry.resolve({ task: "technique_scoring", platform: "server" })).toBeNull();
+    expect(registry.list()).toHaveLength(1);
+
+    // Returned entries are deep-frozen: nothing reachable from them is writable.
+    for (const entry of [
+      before!,
+      registry.list()[0]!,
+      registry.byId("scorer.sm-v1", "sm-v1")!,
+      registry.list("technique_scoring")[0]!,
+    ]) {
+      expect(Object.isFrozen(entry)).toBe(true);
+      expect(Object.isFrozen(entry.supportedPlatforms)).toBe(true);
+      expect(Object.isFrozen(entry.runtimeRequirements)).toBe(true);
+      expect(() => {
+        (entry as { deploymentStatus: string }).deploymentStatus = "deprecated";
+      }).toThrow(TypeError);
+      expect(() => {
+        (entry.supportedPlatforms as string[]).push("server");
+      }).toThrow(TypeError);
+    }
+    expect(registry.resolve({ task: "technique_scoring", platform: "ios" })?.deploymentStatus).toBe(
+      "production",
+    );
+    // Nested lineage objects are frozen too.
+    const lineage = new ModelRegistry({
+      schemaVersion: 1,
+      entries: [
+        scorerEntry({
+          trainingDatasetVersion: "ds@v1",
+          evaluationDatasetVersion: "ds@v1",
+          splits: { train: "t", validation: "v", test: "x" },
+          metrics: { agreement: 0.5 },
+        }),
+      ],
+    }).byId("scorer.sm-v1", "sm-v1")!;
+    expect(Object.isFrozen(lineage.splits)).toBe(true);
+    expect(Object.isFrozen(lineage.metrics)).toBe(true);
+    // The array returned by list() is a fresh copy each call.
+    const listed = registry.list();
+    listed.length = 0;
+    expect(registry.list()).toHaveLength(1);
+    // The input manifest itself is left alone (not frozen behind the caller's back).
+    expect(Object.isFrozen(manifest)).toBe(false);
+  });
+
+  it("rejects near-duplicate ids and versions that differ only by case or whitespace", () => {
+    for (const pair of [
+      [scorerEntry({}), scorerEntry({ version: "SM-V1" })],
+      [scorerEntry({}), scorerEntry({ id: "Scorer.SM-v1" })],
+    ]) {
+      const error = validationErrorFor(
+        () => new ModelRegistry({ schemaVersion: 1, entries: pair }),
+      );
+      expect(error.message).toMatch(/Duplicate|differ only/);
+    }
+    for (const version of ["sm-v1 ", " sm-v1", "sm v1", "sm-v1\n", "   "]) {
+      expect(
+        validationErrorFor(
+          () => new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({ version })] }),
+        ).message,
+        JSON.stringify(version),
+      ).toMatch(/version/);
+    }
+    for (const id of ["", " scorer", "scorer x", "scorer@1"]) {
+      expect(
+        validationErrorFor(
+          () => new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({ id })] }),
+        ).message,
+        JSON.stringify(id),
+      ).toMatch(/\bid\b/);
+    }
+    for (const alias of ["Latest", " latest ", "stable", "main", "master", "default", "nightly"]) {
+      expect(
+        validationErrorFor(
+          () => new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({ version: alias })] }),
+        ).message,
+        JSON.stringify(alias),
+      ).toMatch(/version alias/);
+    }
+  });
+
+  it("keeps the shipped manifest valid under the stricter guard", () => {
+    expect(() => new ModelRegistry(DEFAULT_MODEL_MANIFEST)).not.toThrow();
+    expect(() => ModelRegistry.fromJson(JSON.stringify(DEFAULT_MODEL_MANIFEST))).not.toThrow();
+    expect(ModelRegistry.fromJson(JSON.stringify(DEFAULT_MODEL_MANIFEST)).list()).toHaveLength(
+      DEFAULT_MODEL_MANIFEST.entries.length,
     );
   });
 });
