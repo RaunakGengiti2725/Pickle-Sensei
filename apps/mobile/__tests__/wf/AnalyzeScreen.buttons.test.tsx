@@ -357,6 +357,16 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
+    it('landing privacy note describes on-device processing only — no cloud video sync opt-in', async () => {
+      const renderer = await renderScreen('camera');
+      const landing = rendered(renderer);
+      expect(landing).toContain(
+        'Camera processing and clip storage stay on this device. Clips are never uploaded.',
+      );
+      expect(landing).not.toMatch(/cloud video sync/i);
+      await unmount(renderer);
+    });
+
     it('technique radio → declares; Open automatic camera runs capture + analysis with the declaration', async () => {
       capture.mockResolvedValue(guidedClip);
       analyze.mockResolvedValue(scoredOutcome('analysis-1'));

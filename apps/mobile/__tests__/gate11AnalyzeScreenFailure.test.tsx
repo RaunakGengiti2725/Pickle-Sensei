@@ -7,6 +7,7 @@
  *   - user cancellation → clean recovery, no error surface
  *   - analysis/API failure → typed error phase, no stale Result, retry offered
  *   - duplicate taps → exactly one analysis run (one permit) per capture
+ *   - late native readiness event during the error phase → error surface kept
  */
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 jest.mock('../src/data/repository', () => ({
@@ -17,6 +18,8 @@ jest.mock('../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
 jest.mock('../src/account/apiSession', () => ({ getApiSession: () => null }));
+type CameraListener = (event: unknown) => void;
+const cameraListeners: CameraListener[] = [];
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
   return {
@@ -24,7 +27,13 @@ jest.mock('../src/camera/capture', () => {
     captureStrokeVideo: jest.fn(),
     importStrokeVideo: jest.fn(),
     cancelCameraOperation: jest.fn(),
-    subscribeToCameraEvents: jest.fn(() => () => {}),
+    subscribeToCameraEvents: jest.fn((listener: CameraListener) => {
+      cameraListeners.push(listener);
+      return () => {
+        const index = cameraListeners.indexOf(listener);
+        if (index >= 0) cameraListeners.splice(index, 1);
+      };
+    }),
   };
 });
 jest.mock('../src/camera/TargetSelector', () => ({
@@ -117,6 +126,7 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    cameraListeners.length = 0;
   });
 
   afterEach(() => {
@@ -132,6 +142,38 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
     expect(rendered).toContain('Nothing was rated.');
     expect(rendered).toContain('Photos permission denied');
     expect(rendered).toContain('Try again');
+    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it('a late readiness event during the error phase keeps the error surface and its actions', async () => {
+    (importStrokeVideo as jest.Mock).mockRejectedValue(
+      new Error('Photos permission denied. Enable access in Settings.'),
+    );
+    const renderer = await renderLibraryScreen();
+    expect(textContents(renderer)).toContain('Nothing was rated.');
+    expect(cameraListeners.length).toBeGreaterThan(0);
+    act(() => {
+      for (const listener of cameraListeners) {
+        listener({
+          type: 'readiness',
+          state: 'no_person',
+          poseConfidence: 0,
+          jointCoverage: 0,
+          stableForMs: 0,
+          missingJoints: ['nose'],
+          source: 'apple_vision_body_pose',
+          emittedAtIso: '2026-09-04T07:00:00.000Z',
+        });
+      }
+    });
+    const rendered = textContents(renderer);
+    expect(rendered).toContain('Nothing was rated.');
+    expect(rendered).toContain('Photos permission denied');
+    expect(rendered).toContain('Try again');
+    expect(rendered).not.toContain('Step fully into frame');
     expect(runCaptureAnalysis).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();
