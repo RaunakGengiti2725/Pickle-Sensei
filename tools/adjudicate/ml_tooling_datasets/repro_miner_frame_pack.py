@@ -10,7 +10,6 @@ sampled candidate lands on frame k; 1 otherwise.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
