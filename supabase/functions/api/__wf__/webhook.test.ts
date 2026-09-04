@@ -226,7 +226,9 @@ Deno.test(
     // The source write succeeds, the destination write fails: acknowledging
     // would leave the transfer half-applied forever.
     h.failEntitlementUpsert = (n) =>
-      n === 0 ? null : { status: 503, code: "57P03", message: "the database system is starting up" };
+      n === 0
+        ? null
+        : { status: 503, code: "57P03", message: "the database system is starting up" };
     const res = await h.handler(
       webhookRequest({
         id: "evt-transfer-partial",
@@ -301,11 +303,14 @@ Deno.test(
     );
     assertEquals(aliased.status, 200);
     await aliased.body?.cancel();
-    assertEquals(h.callsTo(RC_URL).map((c) => c.url), [`${RC_URL}${LOWER_UUID}`]);
     assertEquals(
-      h.callsTo("/rest/v1/billing_entitlements").map((c) =>
-        (c.body as Record<string, unknown>).user_id
-      ),
+      h.callsTo(RC_URL).map((c) => c.url),
+      [`${RC_URL}${LOWER_UUID}`],
+    );
+    assertEquals(
+      h
+        .callsTo("/rest/v1/billing_entitlements")
+        .map((c) => (c.body as Record<string, unknown>).user_id),
       [LOWER_UUID],
     );
 
@@ -321,10 +326,13 @@ Deno.test(
     );
     assertEquals(transferred.status, 200);
     await transferred.body?.cancel();
-    assertEquals(h.callsTo(RC_URL).map((c) => c.url).sort(), [
-      `${RC_URL}${LOWER_UUID}`,
-      `${RC_URL}${OTHER_USER_ID}`,
-    ].sort());
+    assertEquals(
+      h
+        .callsTo(RC_URL)
+        .map((c) => c.url)
+        .sort(),
+      [`${RC_URL}${LOWER_UUID}`, `${RC_URL}${OTHER_USER_ID}`].sort(),
+    );
     assertEquals([...h.entitlements.keys()].sort(), [LOWER_UUID, OTHER_USER_ID].sort());
   },
 );

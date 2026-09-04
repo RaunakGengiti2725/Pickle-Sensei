@@ -311,9 +311,7 @@ Deno.test(
     const h = await loadHarness();
     h.revenueCatStatus = 401;
     h.rpcs["access_state"] = ACCESS_ROW;
-    const res = await h.handler(
-      userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.19" }),
-    );
+    const res = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.19" }));
     assertEquals(res.status, 502);
     assertEquals((await res.json()).error.code, "billing_unavailable");
     // A rotated or revoked key must be diagnosable from the function logs

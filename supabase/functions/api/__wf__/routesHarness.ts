@@ -184,7 +184,8 @@ export async function loadHarness(): Promise<Harness> {
       hint: null,
     });
 
-  const captureLog = (original: (...args: unknown[]) => void) =>
+  const captureLog =
+    (original: (...args: unknown[]) => void) =>
     (...args: unknown[]) => {
       state.logLines.push(args.map((arg) => String(arg)).join(" "));
       original(...args);
@@ -278,9 +279,7 @@ export async function loadHarness(): Promise<Harness> {
       if (table === "webhook_events") {
         if (request.method === "GET") {
           const filter = new URL(url).searchParams.get("id") ?? "";
-          const row = state.webhookEvents.get(
-            filter.startsWith("eq.") ? filter.slice(3) : filter,
-          );
+          const row = state.webhookEvents.get(filter.startsWith("eq.") ? filter.slice(3) : filter);
           if ((headers["accept"] ?? "").includes("application/vnd.pgrst.object+json")) {
             return row ? jsonResponse(200, { id: row.id }) : noRows();
           }

@@ -96,6 +96,12 @@ import {
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
+  canonicalSubjectId,
+  canonicalSubjectIds,
+  classifyPersistFailure,
+  revenueCatFailureDiagnostic,
+} from "./billingPolicy.ts";
+import {
   ExternalAccountError,
   decryptAppleRefreshToken,
   deleteRevenueCatCustomer,
@@ -2127,7 +2133,10 @@ interface BillingVerdict {
 async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVerdict | null> {
   const rcKey =
     Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
-  if (!rcKey) return null;
+  if (!rcKey) {
+    console.error(revenueCatFailureDiagnostic({ kind: "unconfigured" }));
+    return null;
+  }
 
   // The RevenueCat app_user_id IS the canonical account id (the mobile SDK
   // logs in with the same uuid). GET auto-creates unknown subscribers
@@ -2149,9 +2158,16 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
       const parsed = (await rcResponse.json().catch(() => null)) as unknown;
       subscriber = isRecord(parsed) && isRecord(parsed.subscriber) ? parsed.subscriber : null;
     } else {
-      await rcResponse.text().catch(() => undefined);
+      // A revoked/rotated key (401), a project mismatch (403) or throttling
+      // (429) all read as "unreachable" to the callers; the log line is the
+      // only way an operator can tell them apart.
+      const body = await rcResponse.text().catch(() => "");
+      console.error(
+        revenueCatFailureDiagnostic({ kind: "status", status: rcResponse.status, body }),
+      );
     }
-  } catch {
+  } catch (error) {
+    console.error(revenueCatFailureDiagnostic({ kind: "transport", error }));
     subscriber = null;
   }
   if (!subscriber) return null;
@@ -2190,6 +2206,14 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   return verdict;
 }
 
+/** What happened to a verdict write. The disposition — not the message text —
+ * decides whether a caller may acknowledge the work as done. */
+export type PersistOutcome =
+  | { kind: "persisted" }
+  | { kind: "unconfigured" }
+  | { kind: "subject_not_bootstrapped"; detail: string }
+  | { kind: "retryable"; detail: string };
+
 /** Persist the verified verdict — premium AND not-premium alike, so a lapsed
  * subscription revokes saved access on its next sync. Written with the
  * service-role client: billing_entitlements has no user write policies, so
@@ -2198,9 +2222,9 @@ async function persistBillingVerdict(
   userId: string,
   verdict: BillingVerdict,
   verifiedAt: string,
-): Promise<string | null> {
+): Promise<PersistOutcome> {
   const adminDb = billingAdminDb();
-  if (!adminDb) return "service role unavailable";
+  if (!adminDb) return { kind: "unconfigured" };
   const upserted = await adminDb.from("billing_entitlements").upsert(
     {
       user_id: userId,
@@ -2211,7 +2235,9 @@ async function persistBillingVerdict(
     },
     { onConflict: "user_id" },
   );
-  return upserted.error ? upserted.error.message : null;
+  if (!upserted.error) return { kind: "persisted" };
+  const detail = `${upserted.error.code ?? "unknown"} ${upserted.error.message}`;
+  return { kind: classifyPersistFailure(upserted.error), detail };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2249,17 +2275,14 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   // parses as our canonical uuid. TRANSFER events carry no app_user_id — both
   // sides of the transfer (transferred_from / transferred_to) are re-verified
   // so the source account loses premium as soon as RevenueCat moves it.
-  const uuidList = (value: unknown): string[] =>
-    Array.isArray(value) ? (value as unknown[]).filter(isUuid) : [];
+  // Every subject is canonicalised (lowercased) here: RevenueCat app_user_ids
+  // are case-sensitive while Postgres uuid folds case, so a non-canonical id
+  // would read one RevenueCat identity and write another account's row.
   const subjectIds = new Set<string>();
-  if (isUuid(event.app_user_id)) {
-    subjectIds.add(event.app_user_id);
-  } else {
-    const alias = uuidList(event.aliases)[0];
-    if (alias) subjectIds.add(alias);
-  }
-  for (const id of uuidList(event.transferred_from)) subjectIds.add(id);
-  for (const id of uuidList(event.transferred_to)) subjectIds.add(id);
+  const primary = canonicalSubjectId(event.app_user_id) ?? canonicalSubjectIds(event.aliases)[0];
+  if (primary) subjectIds.add(primary);
+  for (const id of canonicalSubjectIds(event.transferred_from)) subjectIds.add(id);
+  for (const id of canonicalSubjectIds(event.transferred_to)) subjectIds.add(id);
   const appUserId: string | null = subjectIds.values().next().value ?? null;
 
   const adminDb = billingAdminDb();
@@ -2312,13 +2335,21 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const verifiedAt = new Date().toISOString();
   let verified = true;
   for (const { userId, verdict } of verdicts) {
-    const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
-    if (persistError) {
+    const outcome = await persistBillingVerdict(userId, verdict, verifiedAt);
+    if (outcome.kind === "persisted") continue;
+    if (outcome.kind === "subject_not_bootstrapped") {
       // A user who has never bootstrapped has no profiles row (FK target); log
       // and acknowledge — their state will be written on first billing sync.
-      console.error("[api] webhook verdict persist failed:", persistError);
+      console.error("[api] webhook verdict persist failed:", outcome.detail);
       verified = false;
+      continue;
     }
+    // Every other failure can succeed on a later attempt, so the delivery
+    // must NOT be acknowledged and must NOT be sealed by the audit row:
+    // returning before logEvent() leaves the event unprocessed, and
+    // RevenueCat's redelivery re-verifies and re-writes every subject.
+    const detail = outcome.kind === "unconfigured" ? "service role unavailable" : outcome.detail;
+    return serviceUnavailable("Webhook processing", `verdict persist failed: ${detail}`);
   }
   await logEvent();
   return json(200, { received: true, verified });
@@ -3156,16 +3187,16 @@ async function handleRequest(request: Request): Promise<Response> {
       }
 
       const verifiedAt = new Date().toISOString();
-      const persistError = await persistBillingVerdict(authed.id, verdict, verifiedAt);
-      if (persistError === "service role unavailable") {
+      const outcome = await persistBillingVerdict(authed.id, verdict, verifiedAt);
+      if (outcome.kind === "unconfigured") {
         return codedError(
           503,
           "billing_unconfigured",
           "Billing verification is not configured on the server.",
         );
       }
-      if (persistError) {
-        return serviceUnavailable("Billing verification", persistError);
+      if (outcome.kind !== "persisted") {
+        return serviceUnavailable("Billing verification", outcome.detail);
       }
 
       // Build access from the state just verified (not a re-read) so
