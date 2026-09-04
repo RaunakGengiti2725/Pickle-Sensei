@@ -6,6 +6,7 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
+import { runInTransaction } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
 import { OUTBOX_MAX_ATTEMPTS } from './sync';
@@ -73,24 +74,6 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
-async function inTransaction(
-  db: LocalDb,
-  operation: () => Promise<void>,
-): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
-}
-
 /** Every owner-partitioned local table. Kept in one place so account
  * deletion can never silently miss a store added later. */
 const OWNER_SCOPED_TABLES = [
@@ -128,7 +111,7 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -154,7 +137,7 @@ export async function saveAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -746,7 +729,7 @@ export async function saveSession(
   },
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
@@ -774,7 +757,7 @@ export async function finishSession(
   summary: Record<string, unknown>,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?

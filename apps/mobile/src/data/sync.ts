@@ -1,5 +1,6 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from './db';
+import { runInTransaction } from './transaction';
 import { ApiError } from './api';
 import { getActiveDataOwner } from './accountScope';
 
@@ -221,8 +222,7 @@ export async function drainOutbox(
       );
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
-          await db.execute('BEGIN IMMEDIATE');
-          try {
+          await runInTransaction(db, async () => {
             await db.execute(
               `INSERT OR REPLACE INTO sync_receipt
                (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
@@ -232,15 +232,7 @@ export async function drainOutbox(
               `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
               [owner, entry.row['id']],
             );
-            await db.execute('COMMIT');
-          } catch (error) {
-            try {
-              await db.execute('ROLLBACK');
-            } catch {
-              // Preserve the receipt/delete failure.
-            }
-            throw error;
-          }
+          });
           synced++;
           continue;
         }
