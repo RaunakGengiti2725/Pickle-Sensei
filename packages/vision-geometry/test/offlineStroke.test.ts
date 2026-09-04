@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { generateSwingSequence } from "@pickle/evaluation";
+import type { PoseFrame } from "@pickle/shared-types";
 import type { BallObservation } from "@pickle/swing-domain";
+import type { VideoClipRef } from "@pickle/vision-contracts";
 import {
+  RecordedPoseProvider,
   detectOfflineStrokeWindow,
   estimateContact,
   evaluateCaptureQuality,
@@ -764,5 +767,123 @@ describe("evaluateCaptureQuality", () => {
       })),
     };
     expect(evaluateCaptureQuality(tiny).reasons).toContain("player_too_small_in_frame");
+  });
+});
+
+describe("RecordedPoseProvider ordering with non-finite timestamps", () => {
+  const FRAME_MS = 1000 / 60;
+  const clip: VideoClipRef = {
+    uri: "recorded://clip",
+    durationMs: 1000,
+    fps: 60,
+    width: 100,
+    height: 100,
+  };
+  const WINDOW = { startMs: 0, endMs: 1010 };
+
+  function wristFrame(timestampMs: number, x: number, y = 0.5): PoseFrame {
+    return {
+      timestampMs,
+      space: "normalized-image",
+      confidence: 1,
+      landmarks: [{ name: "right_wrist", x, y, visibility: 0.9 }],
+    };
+  }
+
+  /** 61 frames at 60 fps (0..1000 ms); the wrist advances 1/1024 per frame. */
+  function cleanFrames(count = 61): PoseFrame[] {
+    return Array.from({ length: count }, (_, index) =>
+      wristFrame(index * FRAME_MS, (index + 1) / 1024),
+    );
+  }
+
+  function mulberry32(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const timestamps = (frames: readonly PoseFrame[]): number[] =>
+    frames.map((frame) => frame.timestampMs);
+
+  function expectStrictlyAscending(values: readonly number[]): void {
+    for (let index = 1; index < values.length; index += 1) {
+      expect(values[index]!).toBeGreaterThan(values[index - 1]!);
+    }
+  }
+
+  async function extract(frames: readonly PoseFrame[]) {
+    return new RecordedPoseProvider({ frames, poseModelVersion: "test" }).extractPose(clip, WINDOW);
+  }
+
+  it("returns the 61 finite frames ascending when a reversed clip carries one NaN-timestamp frame", async () => {
+    const clean = cleanFrames();
+    const frames = [...clean].reverse();
+    frames.splice(1, 0, wristFrame(Number.NaN, 0.5));
+
+    const result = await extract(frames);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(61);
+    expect(result.value.every((frame) => Number.isFinite(frame.timestampMs))).toBe(true);
+    expectStrictlyAscending(timestamps(result.value));
+    expect(result.value).toEqual(clean);
+  });
+
+  it("returns the 61 finite frames ascending when shuffled (mulberry32 0x5eed) with 5 NaN frames", async () => {
+    const clean = cleanFrames();
+    const random = mulberry32(0x5eed);
+    const frames = [...clean];
+    for (let index = 0; index < 5; index += 1) {
+      frames.push(wristFrame(Number.NaN, random(), random()));
+    }
+    for (let index = frames.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(random() * (index + 1));
+      [frames[index], frames[swap]] = [frames[swap]!, frames[index]!];
+    }
+
+    const result = await extract(frames);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(61);
+    expect(result.value.every((frame) => Number.isFinite(frame.timestampMs))).toBe(true);
+    expectStrictlyAscending(timestamps(result.value));
+    expect(result.value).toEqual(clean);
+  });
+
+  it("drops non-finite frames before the >=6 rule: 5 finite + 1 NaN still abstains", async () => {
+    const frames = cleanFrames(5);
+    frames.splice(2, 0, wristFrame(Number.NaN, 0.5));
+
+    const result = await extract(frames);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.code).toBe("pose.too_few_recorded_frames");
+  });
+
+  it("keeps input order for duplicate timestamps (stable) and drops nothing finite", async () => {
+    const clean = cleanFrames();
+    const duplicates = clean
+      .slice(25, 36)
+      .map((frame) => wristFrame(frame.timestampMs, frame.landmarks[0]!.x + 0.05));
+
+    const result = await extract([...clean, ...duplicates]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(clean.length + duplicates.length);
+    const ts = timestamps(result.value);
+    for (let index = 1; index < ts.length; index += 1) {
+      expect(ts[index]!).toBeGreaterThanOrEqual(ts[index - 1]!);
+    }
+    for (const duplicate of duplicates) {
+      const pair = result.value.filter((frame) => frame.timestampMs === duplicate.timestampMs);
+      expect(pair).toHaveLength(2);
+      expect(pair[0]!.landmarks[0]!.x).toBeLessThan(pair[1]!.landmarks[0]!.x);
+    }
   });
 });
