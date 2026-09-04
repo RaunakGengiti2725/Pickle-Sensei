@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Linking,
@@ -120,19 +120,25 @@ export function LibraryScreen() {
     state => state.clearMutationError,
   );
 
-  // A failed repository read is an error, never an empty library: the
-  // first-run empty state renders only from a successful, empty result.
+  // Only the newest read may touch state: a superseded read that settles
+  // late (after a refocus, a retry, or blur) is dropped, whichever way it
+  // settled. A failed repository read is an error, never an empty library:
+  // the first-run empty state renders only from a successful, empty result.
+  const readsRequestRef = useRef(0);
   const loadReads = useCallback(async () => {
+    const requestId = ++readsRequestRef.current;
     try {
       const db = getDb();
       const [realShots, pending] = await Promise.all([
         listShots(db, 100),
         listPendingCaptures(db, 100),
       ]);
+      if (requestId !== readsRequestRef.current) return;
       setShots(realShots);
       setCaptures(pending);
       setReadsLoadFailed(false);
     } catch {
+      if (requestId !== readsRequestRef.current) return;
       setReadsLoadFailed(true);
     }
   }, []);
@@ -148,6 +154,9 @@ export function LibraryScreen() {
       void loadReads();
       void loadSavedDrills();
       void loadCurrentPlan();
+      return () => {
+        readsRequestRef.current += 1;
+      };
     }, [loadCurrentPlan, loadReads, loadSavedDrills]),
   );
 
