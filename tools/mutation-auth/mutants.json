@@ -740,6 +740,36 @@
       "description": "Bootstrap accepts an already-expired provider ID token (sent to Supabase anyway).",
       "find": "  if (bearerExpired(payload)) return errorJson(401, \"The identity token has expired.\");",
       "replace": "  if (false) return errorJson(401, \"The identity token has expired.\");"
+    },
+    {
+      "id": "ED-23",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticateProviderToken return",
+      "category": "identity",
+      "description": "Bootstrap identity is the provider token's sub (Google/Apple subject) instead of the verified Supabase user id.",
+      "find": "  return {\n    authed: {\n      id: signIn.data.user.id,",
+      "replace": "  return {\n    authed: {\n      id: providerSubject,"
+    },
+    {
+      "id": "ED-24",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "logoutRoute cacheDel",
+      "category": "logout",
+      "description": "Logout evicts the cached bearer only AFTER GoTrue answers and only when it answered 2xx (a session GoTrue already considers gone stays cached and keeps working at this edge).",
+      "find": "  await cacheDel(await authCacheKey(token));\n  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {\n    method: \"POST\",\n    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },\n  });",
+      "replace": "  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {\n    method: \"POST\",\n    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },\n  });\n  if (response.ok) await cacheDel(await authCacheKey(token));"
+    },
+    {
+      "id": "ED-25",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() writeAuthCache provider",
+      "category": "identity",
+      "description": "Session-token cache entry records provider=google regardless of the verified identity (an Apple session served from cache is treated as Google downstream).",
+      "find": "      email: verified.data.user.email ?? null,\n      provider: sessionProvider,\n      accessToken: token,",
+      "replace": "      email: verified.data.user.email ?? null,\n      provider: \"google\",\n      accessToken: token,"
     }
   ]
 }
