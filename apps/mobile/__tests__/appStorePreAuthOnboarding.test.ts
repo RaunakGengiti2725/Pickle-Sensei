@@ -11,7 +11,10 @@ import {
  * owner that signs in — REPLACING any profile that owner already had (the
  * answers just given on this device are the newest intent). The stash is
  * single-use; a failed server save keeps it, and the existing profile, for
- * the next hydrate.
+ * the next hydrate — and when there is no existing profile the failure is
+ * surfaced as a retryable hydrateError rather than a fresh questionnaire.
+ * completeOnboarding supersedes the stash: an in-account completion is the
+ * newer intent, so the stash is never re-adopted over it.
  */
 
 const mockKvTable = new Map<string, string>();
@@ -59,6 +62,7 @@ jest.mock('../src/account/onboarding', () => ({
 }));
 
 import {
+  CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../src/state/appStore';
@@ -103,6 +107,7 @@ beforeEach(() => {
     hydrated: false,
     ownerKey: null,
     profile: null,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -249,11 +254,13 @@ describe('hydrate with a pre-auth stash', () => {
     expect(state.hydrated).toBe(true);
     // Nothing invented and nothing lost: the old profile still stands…
     expect(state.profile).toEqual(existing);
+    // …with no error (the owner has a usable profile to continue with)…
+    expect(state.hydrateError).toBeNull();
     // …and the answers wait for the next hydrate.
     expect(pendingRaw()).not.toBeNull();
   });
 
-  it('keeps the stash when the adoption save fails, for the next hydrate', async () => {
+  it('keeps the stash when the adoption save fails and reports a retryable hydrateError instead of re-asking the questionnaire', async () => {
     stashAnswers();
     mockApiSession = {
       apiBaseUrl: 'https://api.example.test',
@@ -267,7 +274,120 @@ describe('hydrate with a pre-auth stash', () => {
     await useAppStore.getState().hydrate();
     const state = useAppStore.getState();
     expect(state.hydrated).toBe(true);
+    expect(state.ownerKey).toBe(CANONICAL_OWNER);
     expect(state.profile).toBeNull();
+    // No profile to fall back on: the Gate must show Retry, not the
+    // in-account questionnaire (the answers are still on disk).
+    expect(state.hydrateError).toBe(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
+    expect(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))).toBeUndefined();
+    expect(JSON.parse(pendingRaw() ?? '')).toEqual({
+      version: 1,
+      profile: answers,
+    });
+  });
+
+  it('retry after a failed adoption save adopts the stash exactly once and clears hydrateError', async () => {
+    stashAnswers();
+    mockApiSession = {
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'token',
+      canonicalAppUserId: CANONICAL_OWNER,
+      provider: 'apple',
+    };
+    mockSaveCanonical.mockRejectedValueOnce(new Error('offline'));
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+
+    const serverProfile: Profile = {
+      ...answers,
+      focusCheckpoint: 'preparation',
+    };
+    mockSaveCanonical.mockResolvedValue(serverProfile);
+    await useAppStore.getState().hydrate();
+
+    const state = useAppStore.getState();
+    expect(state.hydrateError).toBeNull();
+    expect(state.profile).toEqual(serverProfile);
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(2);
+    expect(mockSaveCanonical).toHaveBeenLastCalledWith(mockApiSession, answers);
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(serverProfile);
+    expect(pendingRaw()).toBeNull();
+
+    // A third hydrate has nothing left to adopt.
+    await useAppStore.getState().hydrate();
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(2);
+    expect(useAppStore.getState().profile).toEqual(serverProfile);
+  });
+
+  it('completeOnboarding supersedes a pending stash so an older answer set is never re-adopted', async () => {
+    stashAnswers();
+    mockApiSession = {
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'token',
+      canonicalAppUserId: CANONICAL_OWNER,
+      provider: 'apple',
+    };
+    mockSaveCanonical.mockRejectedValueOnce(new Error('offline'));
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().hydrate();
+    expect(pendingRaw()).not.toBeNull();
+
+    const newer: Profile = {
+      skillLevel: '4.5',
+      handedness: 'right',
+      goal: 'volleys',
+      biggestProblem: 'consistency',
+      focusCheckpoint: 'face_wrist_stability',
+    };
+    await useAppStore.getState().completeOnboarding(newer);
+    expect(useAppStore.getState().profile).toEqual(newer);
+    expect(useAppStore.getState().onboardingError).toBeNull();
+    expect(pendingRaw()).toBeNull();
+
+    mockSaveCanonical.mockClear();
+    mockFetchCanonical.mockResolvedValue(newer);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(newer);
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+  });
+
+  it('a guest completeOnboarding supersedes the stash too', async () => {
+    stashAnswers();
+    setActiveDataOwner(GUEST_DATA_OWNER);
+    const newer: Profile = {
+      skillLevel: '2.5',
+      handedness: 'left',
+      goal: 'serve',
+      biggestProblem: 'consistency',
+      focusCheckpoint: 'sequencing',
+    };
+    await useAppStore.getState().completeOnboarding(newer);
+    expect(useAppStore.getState().profile).toEqual(newer);
+    expect(pendingRaw()).toBeNull();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+  });
+
+  it('a failed completeOnboarding save leaves the stash alone', async () => {
+    stashAnswers();
+    mockApiSession = {
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'token',
+      canonicalAppUserId: CANONICAL_OWNER,
+      provider: 'apple',
+    };
+    mockSaveCanonical.mockRejectedValue(new Error('offline'));
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().completeOnboarding(answers);
+    expect(useAppStore.getState().onboardingError).toBe('offline');
+    expect(useAppStore.getState().profile).toBeNull();
     expect(pendingRaw()).not.toBeNull();
   });
 
