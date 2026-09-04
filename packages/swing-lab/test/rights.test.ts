@@ -50,6 +50,9 @@ const NON_COMMERCIAL = [
   "CC BY-NC-SA 4.0 (item licenseurl field reads verbatim: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
   "https://creativecommons.org/licenses/by-nc/4.0/",
   "Creative Commons Attribution-NonCommercial 4.0",
+  "CC BY NC 4.0",
+  "CC-BY-SA-NC 3.0",
+  "CC BY 4.0 — not for commercial use",
 ];
 const NO_DERIVATIVES = [
   "CC BY-ND 4.0",
@@ -141,18 +144,21 @@ describe("rightsForLicense — positive controls keep their grants", () => {
       expect(trainingEligible(rights)).toBe(true);
     },
   );
-  it("CC BY-SA 4.0 grants everything with attribution and sharealike derivatives", () => {
-    const rights = rightsForLicense("CC BY-SA 4.0", "test");
-    expect(modalities(rights)).toEqual({
-      store: "yes_with_attribution",
-      analyze: "yes_with_attribution",
-      annotate: "yes_with_attribution",
-      train: "yes_with_attribution",
-      redistributeDerivatives: "sharealike",
-      commercial: "yes_with_attribution",
-    });
-    expect(trainingEligible(rights)).toBe(true);
-  });
+  it.each(["CC BY-SA 4.0", "Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)"])(
+    "%s grants everything with attribution and sharealike derivatives",
+    (license) => {
+      const rights = rightsForLicense(license, "test");
+      expect(modalities(rights)).toEqual({
+        store: "yes_with_attribution",
+        analyze: "yes_with_attribution",
+        annotate: "yes_with_attribution",
+        train: "yes_with_attribution",
+        redistributeDerivatives: "sharealike",
+        commercial: "yes_with_attribution",
+      });
+      expect(trainingEligible(rights)).toBe(true);
+    },
+  );
   it.each(["Standard YouTube License", "none declared", "MIT", "unknown", ""])(
     "%s (unrecognized) is quarantined",
     (license) => expectQuarantined(license),
