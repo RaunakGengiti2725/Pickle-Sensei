@@ -8,7 +8,11 @@
  *  - a 401 reported for a session that is NOT the signed-in account's never
  *    rotates or ends the signed-in account's session.
  *
- * Same module seams as __tests__/authDurableSession.test.ts.
+ * Same module seams as __tests__/authDurableSession.test.ts, which is the
+ * canonical pin for this contract (AGENTS.md → "Auth sessions"): its
+ * "access-token rotation" and "a 401 for a session that is not the signed-in
+ * account" cases kill AU-11/AU-12/AU-16 on their own, so the mutation matrix
+ * holds with `--suites existing`. This replica is the attack-branch record.
  */
 import { NativeModules } from 'react-native';
 import type { LocalDb } from '../../src/data/db';

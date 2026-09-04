@@ -14,7 +14,11 @@
  *  - the ONE implicit sign-out is the server refusing the refresh token
  *    (401/403): revoked elsewhere, rotated away, or the account is gone;
  *  - explicit sign-out clears the record and revokes the session server-side;
- *  - rotated access tokens reach long-lived clients without reconfiguring.
+ *  - rotated access tokens reach long-lived clients without reconfiguring:
+ *    the billing and training clients send the CURRENT bearer on the wire on
+ *    every request, after a relaunch rotation and after an in-session one;
+ *  - a 401 for a session that is NOT the signed-in account's is ignored — no
+ *    refresh of the signed-in session, no sign-out, no error.
  */
 import { NativeModules } from 'react-native';
 import type { LocalDb } from '../src/data/db';
@@ -22,7 +26,9 @@ import { useAuthStore } from '../src/auth/authStore';
 import {
   bearerTokenFor,
   clearApiSession,
+  establishApiSession,
   getApiSession,
+  reportApiUnauthorized,
 } from '../src/account/apiSession';
 import {
   SESSION_VAULT_SERVICE,
@@ -35,6 +41,8 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 import { clearSyncRuntime } from '../src/data/syncRuntime';
+import { useAccessStore } from '../src/state/accessStore';
+import { useTrainingStore } from '../src/training/store';
 import * as Keychain from 'react-native-keychain';
 
 // The auto-mock (__mocks__/react-native-keychain.ts) exposes its in-memory
@@ -110,6 +118,7 @@ jest.mock('../src/account/deviceContext', () => ({
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const canonicalId = '7fc2c743-028f-4ec6-942c-a84508f3be38';
+const otherCanonicalId = '11111111-1111-4111-8111-111111111111';
 const FAR_FUTURE_SECONDS = Math.floor(Date.now() / 1000) + 3600;
 
 function response(body: unknown, status = 200): Response {
@@ -150,6 +159,25 @@ function installRoutes(
   });
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
+}
+
+/** A route that records each request and answers like a struggling server. */
+function recordingRoute(): jest.Mock<Response, [RequestInit | undefined]> {
+  return jest.fn((init?: RequestInit) => {
+    void init;
+    return response({}, 500);
+  });
+}
+
+function bearerOf(init?: RequestInit): string | undefined {
+  const headers = (init?.headers ?? {}) as Record<string, string>;
+  return headers.Authorization ?? headers.authorization;
+}
+
+/** Lets the keeper's fire-and-forget refresh chain settle. */
+async function settle(): Promise<void> {
+  await new Promise<void>(resolve => setTimeout(resolve, 0));
+  await new Promise<void>(resolve => setTimeout(resolve, 0));
 }
 
 function vaultRecord(): Record<string, unknown> | null {
@@ -472,7 +500,7 @@ describe('access-token rotation', () => {
     });
     await useAuthStore.getState().signInWithApple();
     expect(bearerTokenFor(canonicalId)).toBe('access-1');
-    expect(bearerTokenFor('11111111-1111-4111-8111-111111111111')).toBeNull();
+    expect(bearerTokenFor(otherCanonicalId)).toBeNull();
 
     // Relaunch → refresh rotates the bearer; the same resolver follows it.
     seedVault('refresh-1', 'apple');
@@ -485,5 +513,105 @@ describe('access-token rotation', () => {
 
     await useAuthStore.getState().signOut();
     expect(bearerTokenFor(canonicalId)).toBeNull();
+  });
+
+  it('the billing and training clients send the rotated bearer on the wire after a relaunch refresh, without a reconfigure', async () => {
+    installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+    });
+    await useAuthStore.getState().signInWithApple();
+    expect(bearerTokenFor(canonicalId)).toBe('access-1');
+
+    seedVault('refresh-1', 'apple');
+    const accessCalls = recordingRoute();
+    const trainingCalls = recordingRoute();
+    installRoutes({
+      '/v1/auth/refresh': () =>
+        response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
+      '/v1/me/access': accessCalls,
+      '/v1/me/saved-drills': trainingCalls,
+    });
+    await useAuthStore.getState().hydrate();
+    expect(bearerTokenFor(canonicalId)).toBe('access-2');
+
+    await useAccessStore.getState().refreshAccess();
+    await useTrainingStore.getState().loadSavedDrills();
+
+    expect(accessCalls).toHaveBeenCalledTimes(1);
+    expect(bearerOf(accessCalls.mock.calls[0][0])).toBe('Bearer access-2');
+    expect(trainingCalls).toHaveBeenCalledTimes(1);
+    expect(bearerOf(trainingCalls.mock.calls[0][0])).toBe('Bearer access-2');
+  });
+
+  it('after an in-session rotation (401 → keeper refresh) both clients follow the new bearer', async () => {
+    const accessCalls = recordingRoute();
+    const trainingCalls = recordingRoute();
+    installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/auth/refresh': () =>
+        response(refreshBody({ access: 'access-3', refresh: 'refresh-3' })),
+      '/v1/me/access': accessCalls,
+      '/v1/me/saved-drills': trainingCalls,
+    });
+    await useAuthStore.getState().signInWithApple();
+
+    await useAccessStore.getState().refreshAccess();
+    await useTrainingStore.getState().loadSavedDrills();
+    expect(bearerOf(accessCalls.mock.calls[0]?.[0])).toBe('Bearer access-1');
+    expect(bearerOf(trainingCalls.mock.calls[0]?.[0])).toBe('Bearer access-1');
+
+    // A 401 for the CURRENT bearer → the keeper rotates it right now.
+    reportApiUnauthorized('access-1');
+    await settle();
+    expect(getApiSession()?.bearerToken).toBe('access-3');
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalId,
+    );
+
+    await useAccessStore.getState().refreshAccess();
+    await useTrainingStore.getState().loadSavedDrills();
+    expect(bearerOf(accessCalls.mock.calls[1]?.[0])).toBe('Bearer access-3');
+    expect(bearerOf(trainingCalls.mock.calls[1]?.[0])).toBe('Bearer access-3');
+  });
+});
+
+// ─── A 401 for someone else's session is not ours to act on ──────────────────
+
+describe('a 401 for a session that is not the signed-in account', () => {
+  it('is ignored: no refresh of the signed-in session, no sign-out, no error', async () => {
+    const refreshCalls = jest.fn(() =>
+      response(refreshBody({ access: 'access-9', refresh: 'refresh-9' })),
+    );
+    installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/auth/refresh': refreshCalls,
+    });
+    await useAuthStore.getState().signInWithApple();
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalId,
+    );
+
+    // A stale ApiSession for ANOTHER account becomes current (e.g. a
+    // late-landing bootstrap for the previous owner) and its bearer is
+    // rejected by the API.
+    establishApiSession({
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'other-access',
+      canonicalAppUserId: otherCanonicalId,
+      provider: 'google',
+      refreshToken: 'other-refresh',
+      bearerExpiresAtMs: FAR_FUTURE_SECONDS * 1000,
+    });
+    reportApiUnauthorized('other-access');
+    await settle();
+
+    expect(refreshCalls).not.toHaveBeenCalled();
+    const state = useAuthStore.getState();
+    expect(state.session?.canonicalAppUserId).toBe(canonicalId);
+    expect(state.error).toBeNull();
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
   });
 });
