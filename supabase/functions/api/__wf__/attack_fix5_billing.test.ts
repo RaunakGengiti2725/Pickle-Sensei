@@ -168,16 +168,20 @@ Deno.test(
         requestDateMs: farFuture,
         times: 1,
       });
+      const before = Date.now();
       const first = await sim.h.handler(
         webhookRequest({ id: "atk5-far-future", type: "RENEWAL", app_user_id: TEST_USER_ID }),
       );
+      const after = Date.now();
       assertEquals(first.status, 200);
       const wedged = sim.entitlementRows.get(TEST_USER_ID);
       assert(wedged);
-      assertEquals(
-        Date.parse(String(wedged.verified_at)),
-        farFuture,
-        "candidate stores RC's clock as-is",
+      const wedgedAt = Date.parse(String(wedged.verified_at));
+      assert(
+        wedgedAt >= before && wedgedAt <= after,
+        `observed: verified_at=${String(wedged.verified_at)} (RC's far-future clock stored as-is); ` +
+          `expected: a request_date_ms more than REVENUECAT_CLOCK_MAX_AHEAD_MS ahead of the pre-request ` +
+          `clock is rejected and verified_at falls back to that local clock (within [${before}, ${after}])`,
       );
 
       // Reality moves on: the subscription lapses and RevenueCat says so with

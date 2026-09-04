@@ -211,6 +211,20 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   still preferred — the fallback only covers subscriber reads.
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
+- Entitlement row semantics (2026-09-06): the row keeps the NEWEST
+  `verified_at` (`billing_entitlements_keep_newest_verdict`, a stale verdict
+  is dropped and the edge fn re-reads the stored row). `verified_at` is
+  RevenueCat's `request_date_ms` only when it lies within
+  `REVENUECAT_CLOCK_MAX_AHEAD_MS` (5 min) ahead / `REVENUECAT_CLOCK_MAX_BEHIND_MS`
+  (24 h) behind the isolate clock read BEFORE the RC round trip; otherwise
+  (and when absent/NaN/≤0/out of range) that pre-request clock is used — a
+  far-future provider clock must never become a key that outranks every later
+  real verdict. Anything the edge fn answers about a stored row goes through
+  `effectivePremium()` — premium AND (expires_at IS NULL OR expires_at >
+  now()), the same predicate `access_state()` and every other DB decision
+  point apply — so a stored `premium=true` past its `expires_at` is NOT
+  premium.
+  Pinned by `__wf__/fix6_billing.test.ts` + `attack_fix5_billing.test.ts`.
 - Free-rating ledger freshness (2026-09-02): `accessStore.canonicalAccess`
   is a server snapshot, and `GET /v1/me/access` derives `used` from SYNCED
   scored shots and `reserved` from live permits — so it goes stale the

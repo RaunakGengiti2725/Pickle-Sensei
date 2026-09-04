@@ -2561,22 +2561,55 @@ interface BillingVerdict {
   activeEntitlements: string[];
   /** When this verdict was true — RevenueCat's `request_date_ms` (one
    * server clock, so verdicts from different isolates order correctly even
-   * when their own clocks disagree) or, when RevenueCat omits it, this
-   * isolate's clock read BEFORE the round trip. Drives the monotonic
-   * verified_at guard on billing_entitlements. */
+   * when their own clocks disagree) or, when RevenueCat omits it or reports
+   * a clock implausibly far from ours (REVENUECAT_CLOCK_MAX_AHEAD_MS /
+   * REVENUECAT_CLOCK_MAX_BEHIND_MS), this isolate's clock read BEFORE the
+   * round trip. Drives the monotonic verified_at guard on
+   * billing_entitlements. */
   verifiedAt: string;
 }
 
 /** Largest millisecond value `Date` can represent (±100 000 000 days). */
 const MAX_EPOCH_MS = 8.64e15;
 
+/** How far AHEAD of this isolate's pre-request clock a RevenueCat
+ * `request_date_ms` may sit and still be trusted as the verdict's timestamp.
+ * RevenueCat evaluates the subscriber after our pre-request read, so a
+ * genuine value exceeds that read only by clock skew between two
+ * NTP-disciplined servers (seconds); 5 minutes is the customary allowance.
+ * Anything further ahead is not a clock this row can be ordered by — and,
+ * because billing_entitlements keeps the NEWEST verified_at, trusting it
+ * would make every later real verdict (EXPIRATION, a later sync) lose as
+ * "stale" for as long as the bogus value lies in the future: a wedge with
+ * no self-heal. Tight bound on purpose. */
+const REVENUECAT_CLOCK_MAX_AHEAD_MS = 5 * 60_000;
+
+/** How far BEHIND this isolate's pre-request clock a RevenueCat
+ * `request_date_ms` may sit and still be trusted. A value older than this
+ * cannot describe the evaluation RevenueCat just performed; trusting it would
+ * stamp a fresh verdict older than it is, so a row carrying anything newer
+ * would drop it and the truth we just fetched would not land until the next
+ * verdict. Unlike the ahead case that is self-limiting (the next sane verdict
+ * lands), so the bound only needs to reject values no live clock could
+ * produce while keeping every plausibly-skewed answer on RevenueCat's single
+ * clock (cross-isolate ordering). 24 hours. */
+const REVENUECAT_CLOCK_MAX_BEHIND_MS = 24 * 60 * 60_000;
+
 /** RevenueCat's `request_date_ms` as an ISO timestamp, or null when the
- * response carries none (or a value no clock could have produced). */
-function revenueCatRequestDate(payload: Record<string, unknown>): string | null {
+ * response carries none, a value no clock could have produced, or a value
+ * implausibly far from the local clock read BEFORE the round trip
+ * (`startedAtMs`). Callers fall back to that pre-request clock, which can
+ * never outrank a verdict evaluated after this request began. */
+function revenueCatRequestDate(
+  payload: Record<string, unknown>,
+  startedAtMs: number,
+): string | null {
   const raw = payload.request_date_ms;
   if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0 || raw > MAX_EPOCH_MS) {
     return null;
   }
+  if (raw > startedAtMs + REVENUECAT_CLOCK_MAX_AHEAD_MS) return null;
+  if (raw < startedAtMs - REVENUECAT_CLOCK_MAX_BEHIND_MS) return null;
   return new Date(raw).toISOString();
 }
 
@@ -2588,8 +2621,10 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   if (!rcKey) return null;
 
   // Fallback timestamp, read BEFORE the round trip: a slow answer must never
-  // look newer than a verification that started after it.
-  const startedAt = new Date().toISOString();
+  // look newer than a verification that started after it. Also the reference
+  // RevenueCat's own clock is judged against.
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
 
   // The RevenueCat app_user_id IS the canonical account id (the mobile SDK
   // logs in with the same uuid). GET auto-creates unknown subscribers
@@ -2611,7 +2646,7 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     if (rcResponse.ok) {
       const parsed = (await rcResponse.json().catch(() => null)) as unknown;
       subscriber = isRecord(parsed) && isRecord(parsed.subscriber) ? parsed.subscriber : null;
-      requestDate = isRecord(parsed) ? revenueCatRequestDate(parsed) : null;
+      requestDate = isRecord(parsed) ? revenueCatRequestDate(parsed, startedAtMs) : null;
     } else {
       await rcResponse.text().catch(() => undefined);
     }
@@ -2683,6 +2718,20 @@ interface PersistedBilling {
 type PersistBillingOutcome =
   | { ok: true; billing: PersistedBilling; superseded: boolean }
   | { ok: false; error: PersistBillingError };
+
+/** The ONE effective-premium rule, identical to what every database decision
+ * point applies to a billing_entitlements row — `access_state()`,
+ * `reserve_analysis_permit()`, `apply_synced_shot()`, the scored-shot write
+ * gate: `premium AND (expires_at IS NULL OR expires_at > now())`. A stored
+ * `premium=true` whose `expires_at` has passed is NOT premium; anything the
+ * edge fn answers about a persisted row must go through here so it can never
+ * disagree with `GET /v1/me/access`. */
+function effectivePremium(row: PersistedBilling, nowMs = Date.now()): boolean {
+  if (!row.premium) return false;
+  if (row.expiresAt === null) return true;
+  const expiresMs = Date.parse(row.expiresAt);
+  return Number.isFinite(expiresMs) && expiresMs > nowMs;
+}
 
 const BILLING_ENTITLEMENT_COLUMNS = "premium, product_key, expires_at, verified_at";
 
@@ -3889,11 +3938,14 @@ async function handleRequest(request: Request): Promise<Response> {
 
       // Build BOTH billing and access from the state that is durably stored
       // (the verdict just landed, or the newer row that outranked it — never
-      // a dropped verdict) so billing.premium === access.premium holds and
-      // the client is never told something the database does not say.
+      // a dropped verdict), evaluated with the same effective-premium rule
+      // access_state() applies (a stored premium row past its expires_at is
+      // not premium), so billing.premium === access.premium holds and the
+      // client is never told something the database does not say.
       const { billing } = persisted;
+      const premium = effectivePremium(billing);
       const access = await accessPayload(authed, {
-        premium: billing.premium,
+        premium,
         // Entitlement identifiers are known only for the verdict just
         // verified; a superseded verdict reports the stored row exactly as
         // GET /v1/me/access does.
@@ -3902,7 +3954,7 @@ async function handleRequest(request: Request): Promise<Response> {
       if (access instanceof Response) return access;
       return json(200, {
         billing: {
-          premium: billing.premium,
+          premium,
           productKey: billing.productKey,
           expiresAt: billing.expiresAt,
           verifiedAt: billing.verifiedAt,
