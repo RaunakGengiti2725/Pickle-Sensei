@@ -243,22 +243,22 @@ Deno.test("onboarding rejects malformed JSON with 400, not 5xx", async () => {
   assertEquals(res.status, 400);
 });
 
-// ─── REPRO: Supabase Auth outage is reported as a credential rejection ───────
+// ─── Supabase Auth outage is retryable, not a credential rejection ──────────
 
 Deno.test(
-  "REPRO: GoTrue 503 during signInWithIdToken is returned as 401 'token could not be verified'",
+  "GoTrue 503 during signInWithIdToken is returned as 503 + Retry-After, not a 401",
   async () => {
     resetState();
     state.tokenStatus = 503;
     const token = providerToken(crypto.randomUUID());
     const res = await call("POST", "/v1/account/bootstrap", token);
-    // Expected for a retryable upstream failure: 5xx (the mobile bootstrap maps
-    // 401/403 to the non-retryable `account.rejected`). Actual today: 401.
-    assertEquals(res.status, 401);
-    assertStringIncludes(
-      ((await res.json()) as { error: { message: string } }).error.message,
-      "could not be verified",
-    );
+    // The mobile bootstrap maps 401/403 to the non-retryable `account.rejected`;
+    // an upstream outage must stay retryable.
+    assertEquals(res.status, 503);
+    assertStringIncludes(res.headers.get("Retry-After") ?? "", "5");
+    assertEquals(res.headers.get("Cache-Control"), "no-store");
+    const message = ((await res.json()) as { error: { message: string } }).error.message;
+    assertEquals(message.includes("could not be verified"), false);
     assertEquals(state.tokenCalls, 1);
   },
 );

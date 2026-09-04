@@ -95,10 +95,9 @@ interface MockAuthState {
 // data owner set, NO api session.
 jest.mock('../src/auth/authStore', () => {
   const { create } = jest.requireActual<typeof import('zustand')>('zustand');
-  const scope =
-    jest.requireActual<typeof import('../src/data/accountScope')>(
-      '../src/data/accountScope',
-    );
+  const scope = jest.requireActual<typeof import('../src/data/accountScope')>(
+    '../src/data/accountScope',
+  );
   const useAuthStore = create<MockAuthState>(set => ({
     hydrated: false,
     session: null,

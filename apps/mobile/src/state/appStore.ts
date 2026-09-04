@@ -10,7 +10,11 @@ import {
   profileKeyForOwner,
   requireWritableDataOwner,
 } from '../data/accountScope';
-import { getApiSession } from '../account/apiSession';
+import {
+  getApiSession,
+  subscribeToApiSession,
+  type ApiSession,
+} from '../account/apiSession';
 import {
   fetchCanonicalOnboardingProfile,
   saveCanonicalOnboardingProfile,
@@ -36,6 +40,45 @@ export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
 
 export const CANONICAL_PROFILE_UNAVAILABLE_MESSAGE =
   'Pickle Sensei could not reach your account to load your coaching profile. Check your connection and try again.';
+
+function isCanonicalOwner(owner: string): boolean {
+  return owner !== GUEST_DATA_OWNER && owner !== SIGNED_OUT_DATA_OWNER;
+}
+
+function apiSessionFor(owner: string): ApiSession | null {
+  const apiSession = getApiSession();
+  return apiSession &&
+    canonicalDataOwner(apiSession.canonicalAppUserId) === owner
+    ? apiSession
+    : null;
+}
+
+/**
+ * A signed-in account with no local profile and no bearer yet (restored from
+ * the Keychain while its refresh is still out, or offline) has an UNKNOWN
+ * profile, not a missing one — the server may well hold it. hydrate() then
+ * reports the profile as unavailable (a retryable state, never the
+ * questionnaire) and arms this one-shot watch: the moment a bearer for that
+ * owner is established, hydration runs again and fetches canonical truth.
+ * Any later hydrate() disarms it first, so a single watch exists at a time.
+ */
+let disarmCanonicalTruthWatch: (() => void) | null = null;
+
+function armCanonicalTruthWatch(owner: string, rehydrate: () => void): void {
+  disarmCanonicalTruthWatch?.();
+  const unsubscribe = subscribeToApiSession(session => {
+    if (!session || canonicalDataOwner(session.canonicalAppUserId) !== owner) {
+      return;
+    }
+    disarm();
+    if (getActiveDataOwner() === owner) rehydrate();
+  });
+  const disarm = () => {
+    unsubscribe();
+    if (disarmCanonicalTruthWatch === disarm) disarmCanonicalTruthWatch = null;
+  };
+  disarmCanonicalTruthWatch = disarm;
+}
 
 function parsePendingProfile(raw: string | null): Profile | null {
   if (!raw) return null;
@@ -97,7 +140,7 @@ interface AppState {
   setLastShotType: (shotType: ShotTypeSlug) => void;
 }
 
-export const useAppStore = create<AppState>(set => ({
+export const useAppStore = create<AppState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
   profile: null,
@@ -106,6 +149,7 @@ export const useAppStore = create<AppState>(set => ({
   onboardingError: null,
   lastShotType: 'forehand_drive',
   hydrate: async () => {
+    disarmCanonicalTruthWatch?.();
     const owner = getActiveDataOwner();
     set({
       hydrated: false,
@@ -127,12 +171,20 @@ export const useAppStore = create<AppState>(set => ({
           raw = legacy;
         }
       }
-      const apiSession = getApiSession();
-      if (
-        !raw &&
-        apiSession &&
-        canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-      ) {
+      const apiSession = apiSessionFor(owner);
+      if (!raw && !pending && isCanonicalOwner(owner) && !apiSession) {
+        if (getActiveDataOwner() === owner) {
+          set({
+            hydrated: true,
+            ownerKey: owner,
+            profile: null,
+            hydrateError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+          });
+          armCanonicalTruthWatch(owner, () => void get().hydrate());
+        }
+        return;
+      }
+      if (!raw && apiSession) {
         let canonicalProfile: Profile | null;
         try {
           canonicalProfile = await fetchCanonicalOnboardingProfile(apiSession);
@@ -164,11 +216,9 @@ export const useAppStore = create<AppState>(set => ({
         getActiveDataOwner() === owner
       ) {
         try {
-          const adopted =
-            apiSession &&
-            canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-              ? await saveCanonicalOnboardingProfile(apiSession, pending)
-              : pending;
+          const adopted = apiSession
+            ? await saveCanonicalOnboardingProfile(apiSession, pending)
+            : pending;
           raw = JSON.stringify(adopted);
           await setKv(db, profileKeyForOwner(owner), raw);
           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');

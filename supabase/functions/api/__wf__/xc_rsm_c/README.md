@@ -70,17 +70,17 @@ access log of one seed. Exit code is 1 when any hard invariant failed.
 
 ## Invariants
 
-| id                            | meaning                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| MODEL_EXACT                   | phase A response equals the oracle (status, headers, error code)         |
-| EXPIRED_BEARER_REFUSED        | an expired bearer never yields anything but 401 (or a 429 lock)          |
-| UNKNOWN_BEARER_REFUSED        | garbage / forged / foreign-issuer bearers never authenticate             |
-| REVOKED_SESSION_REFUSED       | a bearer whose session was logged out before launch is never authorized  |
-| RATE_LIMIT_RESPONSE_SHAPE     | every 429 carries Retry-After, RateLimit-Limit/Remaining, no-store       |
-| IP_BUDGET / AUTHFAIL_*        | per-IP and auth-failure windows close at exactly `limit`                 |
-| USER_BUDGET / REFRESH_BUDGET  | per-user and anonymous refresh windows close at exactly `limit`          |
-| REFRESH_ROTATION              | a rotated-away refresh token is refused                                  |
-| UPSTREAM_5XX_NOT_AUTH_FAILURE | (soft) an Auth 5xx must not be reported as 401 / charged as auth failure |
+| id                            | meaning                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| MODEL_EXACT                   | phase A response equals the oracle (status, headers, error code)                                |
+| EXPIRED_BEARER_REFUSED        | an expired bearer never yields anything but 401 (or a 429 lock)                                 |
+| UNKNOWN_BEARER_REFUSED        | garbage / forged / foreign-issuer bearers never authenticate                                    |
+| REVOKED_SESSION_REFUSED       | a bearer whose session was logged out before launch is never authorized                         |
+| RATE_LIMIT_RESPONSE_SHAPE     | every 429 carries Retry-After, RateLimit-Limit/Remaining, no-store                              |
+| IP_BUDGET / AUTHFAIL_*        | per-IP and auth-failure windows close at exactly `limit`                                        |
+| USER_BUDGET / REFRESH_BUDGET  | per-user and anonymous refresh windows close at exactly `limit`                                 |
+| REFRESH_ROTATION              | a rotated-away refresh token is refused                                                         |
+| UPSTREAM_5XX_NOT_AUTH_FAILURE | an Auth 5xx that reached the upstream is a 503 + Retry-After, never a 401 / auth-failure charge |
 
-`REVOKED_SESSION_REFUSED` and `UPSTREAM_5XX_NOT_AUTH_FAILURE` fail on the
-current `index.ts`; see `repros/` for the minimal deterministic cases.
+`REVOKED_SESSION_REFUSED` fails on the current `index.ts`; see `repros/` for
+the minimal deterministic cases (`upstream_5xx_repro.ts` pins the 503 path).

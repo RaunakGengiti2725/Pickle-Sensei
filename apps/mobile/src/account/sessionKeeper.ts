@@ -20,6 +20,15 @@ import {
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
  * out; they just schedule another try.
+ *
+ * A refresh is a rotation, not a read: the token we present is spent the
+ * moment the request reaches the server, and only the answer carries its
+ * successor. The keeper therefore never gives up on an answer early — while
+ * one exchange is in flight no other trigger (timer, foreground, an API 401)
+ * starts a second one, and however late the answer lands it is adopted. The
+ * spent token is presented again only when the exchange itself failed
+ * (network error, 5xx, malformed answer), never because we stopped waiting
+ * for an answer the server may already have sent.
  */
 
 export interface SessionKeeperInput {
@@ -42,6 +51,11 @@ const FOREGROUND_LEAD_MS = 5 * 60_000;
 const MIN_DELAY_MS = 1_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
+/** Backstop for a rotation exchange whose transport never settles. Far above
+ * any transport timeout, so a slow answer is waited for rather than
+ * abandoned (abandoning it is what turns a healthy session into a spent
+ * token being presented again). */
+const ROTATION_ANSWER_TIMEOUT_MS = 2 * 60_000;
 
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -107,7 +121,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     try {
       const tokens = await refreshApiSession(
         { apiBaseUrl: input.apiBaseUrl, refreshToken },
-        { fetchFn: input.fetchFn },
+        { fetchFn: input.fetchFn, timeoutMs: ROTATION_ANSWER_TIMEOUT_MS },
       );
       if (!live()) return;
       refreshToken = tokens.refreshToken;

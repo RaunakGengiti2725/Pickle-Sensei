@@ -105,7 +105,8 @@ Deno.test({
       const fakeFetch = globalThis.fetch;
       let refused = 0;
       globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("/auth/v1/user") && refused === 0) {
           refused += 1;
           return Promise.reject(new TypeError("error sending request for url"));

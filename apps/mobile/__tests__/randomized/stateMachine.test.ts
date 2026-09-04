@@ -1136,8 +1136,8 @@ const INVARIANTS: Record<
   },
   'no-refresh-reuse-revocation': {
     severity: 'P2',
-    hard: false,
-    doc: 'the device never presents a refresh token the server already rotated once the reuse grace has passed (GoTrue then revokes the whole family = forced sign-out of an account in good standing); happens when the rotation answer was lost (client timeout / process death) and the retry comes later than the grace window (advisory: reproduced product behaviour, reported through failures.json rather than failing the suite)',
+    hard: true,
+    doc: 'the device never presents a refresh token the server already rotated once the reuse grace has passed (GoTrue then revokes the whole family = forced sign-out of an account in good standing); the keeper lets a slow rotation answer settle instead of aborting it and re-presenting the spent token',
   },
   'deletion-purges-local-owner-data': {
     severity: 'P0',
@@ -1166,7 +1166,7 @@ const INVARIANTS: Record<
   },
   'profile-truth-after-reconnect': {
     severity: 'P2',
-    hard: false,
+    hard: true,
     doc: 'once the network is back and the bearer live, a signed-in account whose server profile exists is not shown the in-account questionnaire',
   },
   'no-orphaned-local-data-after-lost-deletion': {
@@ -1703,7 +1703,7 @@ class Harness {
       }
     }
 
-    // profile-truth-after-reconnect (advisory)
+    // profile-truth-after-reconnect
     if (
       online &&
       this.network.pending === 0 &&

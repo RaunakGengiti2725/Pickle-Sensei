@@ -164,6 +164,29 @@ const serviceUnavailable = (context: string, detail?: unknown): Response => {
   });
 };
 
+/** Supabase Auth did not answer: GoTrue 5xx or the fetch itself failed
+ * (supabase-js surfaces both as AuthRetryableFetchError; status 0 for a
+ * network failure). Such an outage says nothing about the bearer — it is
+ * neither an auth failure to charge nor a reason for the app to sign out. */
+const isAuthUpstreamOutage = (
+  error: { name?: string; status?: number } | null | undefined,
+): boolean => {
+  if (!error) return false;
+  if (error.name === "AuthRetryableFetchError") return true;
+  return typeof error.status === "number" && (error.status === 0 || error.status >= 500);
+};
+
+const AUTH_UPSTREAM_RETRY_AFTER_SECONDS = 5;
+
+/** 503 for an Auth outage during bearer verification: retryable (Retry-After,
+ * no-store via the JSON headers), generic body, never a 401 so the client
+ * keeps its session and the per-IP auth-failure budget is untouched. */
+const authUpstreamUnavailable = (context: string, detail?: unknown): Response => {
+  const response = serviceUnavailable(context, detail);
+  response.headers.set("Retry-After", String(AUTH_UPSTREAM_RETRY_AFTER_SECONDS));
+  return response;
+};
+
 // Coded errors: the app's ApiError reads error.code (e.g. the feedback prompt
 // treats analysis.feedback_exists as already-done).
 const codedError = (status: number, code: string, message: string): Response =>
@@ -450,6 +473,9 @@ async function authenticateProviderToken(request: Request): Promise<
   }
   const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
   if (signIn.error || !signIn.data.user || !signIn.data.session) {
+    if (isAuthUpstreamOutage(signIn.error)) {
+      return authUpstreamUnavailable("Sign-in", signIn.error?.message);
+    }
     return errorJson(401, "The identity token could not be verified.");
   }
   return {
@@ -497,6 +523,9 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (provider) {
     const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
     if (signIn.error || !signIn.data.user || !signIn.data.session) {
+      if (isAuthUpstreamOutage(signIn.error)) {
+        return authUpstreamUnavailable("Session verification", signIn.error?.message);
+      }
       return errorJson(401, "The identity token could not be verified.");
     }
     await writeAuthCache(
@@ -520,6 +549,9 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 
   const verified = await anonAuthClient().auth.getUser(token);
   if (verified.error || !verified.data.user) {
+    if (isAuthUpstreamOutage(verified.error)) {
+      return authUpstreamUnavailable("Session verification", verified.error?.message);
+    }
     return errorJson(401, "The session is no longer valid. Sign in again.");
   }
   const sessionProvider = providerOfUser(verified.data.user);
@@ -558,9 +590,8 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
     refresh_token: refreshToken.trim(),
   });
   if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
+    if (isAuthUpstreamOutage(refreshed.error)) {
+      return authUpstreamUnavailable("Session refresh", refreshed.error?.message);
     }
     return errorJson(401, "The session could not be refreshed. Sign in again.");
   }

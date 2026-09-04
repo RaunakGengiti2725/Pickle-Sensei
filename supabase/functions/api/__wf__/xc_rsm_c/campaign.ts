@@ -62,9 +62,7 @@ export type InvariantId =
 /** Soft invariants are recorded and reported but do not fail a seed: they
  * describe behaviour the contract leaves open (a design question), not a
  * violation of a documented guarantee. */
-export const SOFT_INVARIANTS: ReadonlySet<InvariantId> = new Set<InvariantId>([
-  "UPSTREAM_5XX_NOT_AUTH_FAILURE",
-]);
+export const SOFT_INVARIANTS: ReadonlySet<InvariantId> = new Set<InvariantId>([]);
 
 export interface Spec {
   idx: number;
@@ -889,7 +887,9 @@ export class SeedRun {
 
   private checkInvariants(record: RequestRecord): void {
     const { spec, outcome, truthAtLaunch: truth, expected } = record;
-    const refused = outcome.status === 401 || outcome.status === 429;
+    // "Refused" = the bearer did NOT authorize the request: invalid (401),
+    // budget-locked (429), or unverifiable because Supabase Auth was down (503).
+    const refused = outcome.status === 401 || outcome.status === 429 || outcome.status === 503;
     const authedRoute = this.isAuthedRoute(spec.route);
 
     if (expected) {
@@ -963,7 +963,14 @@ export class SeedRun {
           `bearer of session ${spec.sessionRef} got ${outcome.status} on isolate ${spec.isolate} after logout 204 (idx ${by?.idx} on ${by?.isolate}, event ${session?.revokedConfirmedEvent}, launched at event ${record.launchEvent}); ${mechanism}`,
         );
       }
-      if (spec.fault && spec.fault.status >= 500 && outcome.status === 401) {
+      // An armed fault only counts once Supabase Auth was actually consulted
+      // (the one-shot fault got consumed); bearers refused locally — expired,
+      // garbage, foreign issuer — never reach the upstream and are 401s.
+      const faultConsumed =
+        spec.fault !== null &&
+        spec.token !== null &&
+        this.fake.faults.get(spec.token)?.kind !== spec.fault.kind;
+      if (spec.fault && spec.fault.status >= 500 && outcome.status === 401 && faultConsumed) {
         if (spec.fault.kind === "getuser" || spec.fault.kind === "signin") {
           this.fail(
             record,
@@ -1138,6 +1145,7 @@ export class SeedRun {
     if (
       outcome.status !== 401 &&
       outcome.status !== 429 &&
+      outcome.status !== 503 &&
       (this.isAuthedRoute(spec.route) || spec.route === "bootstrap")
     ) {
       const userId = this.userIdOf(record);
