@@ -138,6 +138,15 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * but keep both hands on ONE grip (same side of the midline) and keep
  * committing.
  *
+ * stroke-heuristic-8 closes two measurement-validity holes (adjudicated VG-7
+ * and VG-1): torso landmarks below the visibility floor at the reference
+ * frame (or in the median-extent / facing scans) are not measurements and
+ * no longer define the midline — the classifier abstains with
+ * `torso_unmeasured_at_reference`; paddle centers that are not finite inside
+ * the normalized image are detector glitches and are discarded before any
+ * distance/side arithmetic (`paddle_center_invalid`) — the classifier falls
+ * back to a measured wrist or abstains, and confidence stays finite in [0,1].
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -161,7 +170,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -326,6 +335,24 @@ const BIMANUAL_STEP_MOTION_FLOOR = 0.01;
 const BIMANUAL_WIDE_SEPARATION_SW = 0.9;
 
 /**
+ * Measurement-validity floors (stroke-heuristic-8):
+ * TORSO_MIN_VISIBILITY — a torso landmark below this visibility is NOT a
+ *   measurement (same floor as kinematics.landmark's MIN_LANDMARK_VISIBILITY;
+ *   pose estimators keep emitting coordinates for occluded joints, and
+ *   parsed sidecars carry visibility 0 as a valid value). Such a landmark
+ *   must never define the midline, the torso extent, or a facing vote — the
+ *   side decision would then be made by whatever the model last emitted.
+ * PADDLE_CENTER_IMAGE_TOLERANCE — a paddle center is usable as a contact
+ *   point only when both coordinates are finite and inside the normalized
+ *   image [−tol, 1+tol]². The detector reports box centers, so a real center
+ *   is always inside the image; the tolerance only absorbs edge rounding.
+ *   NaN / ±Infinity / far-outside centers are detector glitches, not
+ *   observations — they are dropped before any distance or side arithmetic.
+ */
+const TORSO_MIN_VISIBILITY = 0.3;
+const PADDLE_CENTER_IMAGE_TOLERANCE = 0.05;
+
+/**
  * Minimal paddle observation the heuristic actually reads. swing-lab's
  * TrackedPaddleObservation is structurally assignable to this, so the lab
  * can pass its tracks through unchanged when it adopts this port.
@@ -394,13 +421,16 @@ export function classifyStroke(input: {
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
-  const joints = new Map(frame.landmarks.map((mark) => [mark.name, mark]));
-  const leftShoulder = joints.get("left_shoulder");
-  const rightShoulder = joints.get("right_shoulder");
-  const leftHip = joints.get("left_hip");
-  const rightHip = joints.get("right_hip");
+  const leftShoulder = measuredLandmark(frame, "left_shoulder");
+  const rightShoulder = measuredLandmark(frame, "right_shoulder");
+  const leftHip = measuredLandmark(frame, "left_hip");
+  const rightHip = measuredLandmark(frame, "right_hip");
   if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) {
-    return unknown("torso_not_measured_at_contact", evidence, limitingFactors);
+    const unmeasured = TORSO_LANDMARKS.filter((name) => measuredLandmark(frame, name) === null);
+    evidence.push(
+      `torso landmarks not measured at reference (visibility < ${TORSO_MIN_VISIBILITY} or absent): ${unmeasured.join(", ")}`,
+    );
+    return unknown("torso_unmeasured_at_reference", evidence, limitingFactors);
   }
   const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
   const hipY = (leftHip.y + rightHip.y) / 2;
@@ -552,8 +582,22 @@ export function classifyStroke(input: {
   let contactPointSource: "paddle" | "wrist" | null = null;
   let contactPointReliability: "strong" | "degraded" = "degraded";
 
-  const paddleNear = input.paddle
-    ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
+  const paddleWindow =
+    input.paddle?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80) ??
+    [];
+  const paddleInvalid = paddleWindow.filter(
+    (observation) => !isValidPaddleCenter(observation.center),
+  );
+  if (paddleInvalid.length > 0) {
+    const sample = paddleInvalid[0]!.center;
+    evidence.push(
+      `${paddleInvalid.length}/${paddleWindow.length} paddle observations ±80ms carry an invalid center ` +
+        `(e.g. (${String(sample.x)}, ${String(sample.y)}) — not finite inside [−${PADDLE_CENTER_IMAGE_TOLERANCE}, ${1 + PADDLE_CENTER_IMAGE_TOLERANCE}]²) — discarded`,
+    );
+    limitingFactors.push("paddle_center_invalid");
+  }
+  const paddleNear = paddleWindow
+    .filter((observation) => isValidPaddleCenter(observation.center))
     .sort((a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs))[0];
   const paddleNearConfidence = paddleNear?.confidence ?? null;
   const paddleNearTrusted =
@@ -617,9 +661,12 @@ export function classifyStroke(input: {
     contactPointReliability =
       wristInfo.visibility >= WRIST_RELIABLE_VISIBILITY ? "strong" : "degraded";
     evidence.push(
-      `wrist at contact (${wristInfo.point.x.toFixed(2)}, ${wristInfo.point.y.toFixed(2)}) — paddle not tracked at contact`,
+      `wrist at contact (${wristInfo.point.x.toFixed(2)}, ${wristInfo.point.y.toFixed(2)}) — ` +
+        (paddleWindow.length === 0
+          ? "paddle not tracked at contact"
+          : "no valid paddle center at contact"),
     );
-    limitingFactors.push("paddle_not_tracked_at_contact");
+    if (paddleWindow.length === 0) limitingFactors.push("paddle_not_tracked_at_contact");
     if (contactPointReliability === "degraded") {
       limitingFactors.push("wrist_low_visibility_at_contact");
     }
@@ -978,16 +1025,42 @@ function unknown(
   };
 }
 
+const TORSO_LANDMARKS = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"] as const;
+
+/** A landmark counts as measured only at or above TORSO_MIN_VISIBILITY;
+ * absent, sub-floor, and NaN visibilities are all "not measured". */
+function measuredLandmark(
+  frame: ReturnType<typeof toLegacyPoseFrames>[number],
+  name: string,
+): ReturnType<typeof toLegacyPoseFrames>[number]["landmarks"][number] | null {
+  const found = frame.landmarks.find((landmark) => landmark.name === name);
+  if (!found || !(found.visibility >= TORSO_MIN_VISIBILITY)) return null;
+  return found;
+}
+
+/** Both coordinates finite and inside the normalized image (with tolerance). */
+function isValidPaddleCenter(center: { x: number; y: number }): boolean {
+  const lo = -PADDLE_CENTER_IMAGE_TOLERANCE;
+  const hi = 1 + PADDLE_CENTER_IMAGE_TOLERANCE;
+  return (
+    Number.isFinite(center.x) &&
+    Number.isFinite(center.y) &&
+    center.x >= lo &&
+    center.x <= hi &&
+    center.y >= lo &&
+    center.y <= hi
+  );
+}
+
 /** Median torso extent (hip line minus shoulder line) over all frames where
- * all four torso joints are present; null below TORSO_MEDIAN_MIN_FRAMES. */
+ * all four torso joints are measured; null below TORSO_MEDIAN_MIN_FRAMES. */
 function medianTorsoExtent(frames: ReturnType<typeof toLegacyPoseFrames>): number | null {
   const extents: number[] = [];
   for (const frame of frames) {
-    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
-    const leftShoulder = find("left_shoulder");
-    const rightShoulder = find("right_shoulder");
-    const leftHip = find("left_hip");
-    const rightHip = find("right_hip");
+    const leftShoulder = measuredLandmark(frame, "left_shoulder");
+    const rightShoulder = measuredLandmark(frame, "right_shoulder");
+    const leftHip = measuredLandmark(frame, "left_hip");
+    const rightHip = measuredLandmark(frame, "right_hip");
     if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
     extents.push((leftHip.y + rightHip.y) / 2 - (leftShoulder.y + rightShoulder.y) / 2);
   }
@@ -1011,9 +1084,8 @@ function scanFacingWindow(
   let skippedSmallSeparation = 0;
   for (const frame of frames) {
     if (Math.abs(frame.timestampMs - contactMs) > FACING_WINDOW_MS) continue;
-    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
-    const leftShoulder = find("left_shoulder");
-    const rightShoulder = find("right_shoulder");
+    const leftShoulder = measuredLandmark(frame, "left_shoulder");
+    const rightShoulder = measuredLandmark(frame, "right_shoulder");
     if (!leftShoulder || !rightShoulder) continue;
     if (Math.abs(rightShoulder.x - leftShoulder.x) < FACING_MIN_SHOULDER_SEPARATION) {
       skippedSmallSeparation += 1;

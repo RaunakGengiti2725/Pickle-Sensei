@@ -37,7 +37,9 @@ import {
  * Definitions (docs/ML_SYSTEM.md "Geometry measurement definitions"):
  * - Lengths are aspect-corrected and divided by measured torso length
  *   (shoulder-center to hip-center), so values are body-relative.
- * - Heights use the measured ankle line as ground.
+ * - Heights use the measured ankle line as ground; when no ankle pair was
+ *   measured anywhere in the clip there is no ground line and every
+ *   ground-relative metric is omitted (never defaulted to the image bottom).
  * - "Forward" is the direction the swinging wrist travels through accelerate.
  * - Paddle-position metrics (`paddle_*`) are measured at the dominant wrist —
  *   the hand holding the paddle — and carry reduced confidence until a real
@@ -50,7 +52,7 @@ import {
  * receive fabricated values.
  */
 
-export const FEATURE_EXTRACTOR_VERSION = "features-geometry-1";
+export const FEATURE_EXTRACTOR_VERSION = "features-geometry-2";
 
 const PADDLE_PROXY_FACTOR = 0.75;
 const SIDE_VIEW_TURN_FACTOR = 0.7;
@@ -65,7 +67,8 @@ interface Body {
     ankle: PoseLandmarkName;
   };
   torsoLength: number;
-  groundY: number;
+  /** Median measured ankle line; null when no ankle pair was ever measured. */
+  groundY: number | null;
   forwardSign: 1 | -1;
 }
 
@@ -284,7 +287,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
           this.visibility([wrist, ...hips]),
         );
       }
-      if (wrist && shoulders) {
+      if (wrist && shoulders && groundY !== null) {
         const shoulderHeight = groundY - midpoint(shoulders[0], shoulders[1]).y;
         if (shoulderHeight > 1e-6) {
           add(
@@ -376,7 +379,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
         ),
       );
     }
-    const groundY = groundSamples.length > 0 ? median(groundSamples) : 1;
+    const groundY = groundSamples.length > 0 ? median(groundSamples) : null;
 
     const side =
       handedness === "left"
