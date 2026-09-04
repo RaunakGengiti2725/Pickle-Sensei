@@ -15,14 +15,14 @@
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
+  apiRequest,
   APPLE_USER_ID,
+  appleIdToken,
   DISTINCT_APPLE_SUBJECT,
   DISTINCT_APPLE_USER_ID,
   DISTINCT_GOOGLE_SUBJECT,
   DISTINCT_GOOGLE_USER_ID,
   GOOGLE_USER_ID,
-  apiRequest,
-  appleIdToken,
   googleIdToken,
   jwtPayload,
   loadSessionHarness,
@@ -34,9 +34,15 @@ interface MeBody {
   error?: { message: string };
 }
 
-function assertNeverNamed(subject: string, calls: Array<{ url: string; body: unknown }>) {
+function assertNeverNamed(
+  subject: string,
+  calls: Array<{ url: string; body: unknown }>,
+) {
   for (const call of calls) {
-    assert(!call.url.includes(subject), `provider subject leaked into a request URL: ${call.url}`);
+    assert(
+      !call.url.includes(subject),
+      `provider subject leaked into a request URL: ${call.url}`,
+    );
     assert(
       !JSON.stringify(call.body ?? null).includes(subject),
       `provider subject leaked into a request body: ${call.url}`,
@@ -57,12 +63,18 @@ Deno.test(
     const body = (await response.json()) as MeBody;
     assertEquals(response.status, 200, body.error?.message);
     assertEquals(body.user?.id, DISTINCT_GOOGLE_USER_ID);
-    assertEquals(jwtPayload(body.session!.accessToken)?.sub, DISTINCT_GOOGLE_USER_ID);
+    assertEquals(
+      jwtPayload(body.session!.accessToken)?.sub,
+      DISTINCT_GOOGLE_USER_ID,
+    );
 
     const profileLookups = h.callsTo("/rest/v1/profiles");
     assert(profileLookups.length >= 1, "bootstrap read the profile row");
     for (const lookup of profileLookups) {
-      assertEquals(new URL(lookup.url).searchParams.get("id"), `eq.${DISTINCT_GOOGLE_USER_ID}`);
+      assertEquals(
+        new URL(lookup.url).searchParams.get("id"),
+        `eq.${DISTINCT_GOOGLE_USER_ID}`,
+      );
     }
     assertNeverNamed(DISTINCT_GOOGLE_SUBJECT, h.callsTo("/rest/v1/"));
 
@@ -70,7 +82,10 @@ Deno.test(
       apiRequest("GET", "/v1/me", { token: body.session!.accessToken }),
     );
     assertEquals(me.status, 200);
-    assertEquals(((await me.json()) as MeBody).user?.id, DISTINCT_GOOGLE_USER_ID);
+    assertEquals(
+      ((await me.json()) as MeBody).user?.id,
+      DISTINCT_GOOGLE_USER_ID,
+    );
   },
 );
 
@@ -87,9 +102,15 @@ Deno.test(
     const body = (await response.json()) as MeBody;
     assertEquals(response.status, 200, body.error?.message);
     assertEquals(body.user?.id, DISTINCT_APPLE_USER_ID);
-    assertEquals(jwtPayload(body.session!.accessToken)?.sub, DISTINCT_APPLE_USER_ID);
+    assertEquals(
+      jwtPayload(body.session!.accessToken)?.sub,
+      DISTINCT_APPLE_USER_ID,
+    );
     for (const lookup of h.callsTo("/rest/v1/profiles")) {
-      assertEquals(new URL(lookup.url).searchParams.get("id"), `eq.${DISTINCT_APPLE_USER_ID}`);
+      assertEquals(
+        new URL(lookup.url).searchParams.get("id"),
+        `eq.${DISTINCT_APPLE_USER_ID}`,
+      );
     }
     assertNeverNamed(DISTINCT_APPLE_SUBJECT, h.callsTo("/rest/v1/"));
   },
@@ -100,13 +121,18 @@ Deno.test(
   async () => {
     const h = await loadSessionHarness();
     const me = await h.handler(
-      apiRequest("GET", "/v1/me", { token: googleIdToken(DISTINCT_GOOGLE_SUBJECT) }),
+      apiRequest("GET", "/v1/me", {
+        token: googleIdToken(DISTINCT_GOOGLE_SUBJECT),
+      }),
     );
     const body = (await me.json()) as MeBody;
     assertEquals(me.status, 200, body.error?.message);
     assertEquals(body.user?.id, DISTINCT_GOOGLE_USER_ID);
     for (const lookup of h.callsTo("/rest/v1/profiles")) {
-      assertEquals(new URL(lookup.url).searchParams.get("id"), `eq.${DISTINCT_GOOGLE_USER_ID}`);
+      assertEquals(
+        new URL(lookup.url).searchParams.get("id"),
+        `eq.${DISTINCT_GOOGLE_USER_ID}`,
+      );
     }
   },
 );
@@ -117,7 +143,9 @@ Deno.test(
     const h = await loadSessionHarness();
     const minted = h.mintSession(GOOGLE_USER_ID);
 
-    const warm = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken }));
+    const warm = await h.handler(
+      apiRequest("GET", "/v1/me", { token: minted.accessToken }),
+    );
     assertEquals(warm.status, 200);
     await warm.body?.cancel();
     assertEquals(h.callsTo("/auth/v1/user").length, 1);
@@ -131,12 +159,22 @@ Deno.test(
     const logout = await h.handler(
       apiRequest("POST", "/v1/auth/logout", { token: minted.accessToken }),
     );
-    assertEquals(logout.status, 204, "an already-gone session is the outcome the caller wanted");
+    assertEquals(
+      logout.status,
+      204,
+      "an already-gone session is the outcome the caller wanted",
+    );
     assertEquals(h.callsTo("/auth/v1/logout").length, 1);
 
     h.logoutStatus = null;
-    const after = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken }));
-    assertEquals(after.status, 401, "the bearer must stop working at this edge immediately");
+    const after = await h.handler(
+      apiRequest("GET", "/v1/me", { token: minted.accessToken }),
+    );
+    assertEquals(
+      after.status,
+      401,
+      "the bearer must stop working at this edge immediately",
+    );
     assertStringIncludes(
       ((await after.json()) as MeBody).error?.message ?? "",
       "no longer valid",
@@ -155,7 +193,9 @@ Deno.test(
     const h = await loadSessionHarness();
     const minted = h.mintSession(APPLE_USER_ID);
 
-    const warm = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken }));
+    const warm = await h.handler(
+      apiRequest("GET", "/v1/me", { token: minted.accessToken }),
+    );
     assertEquals(warm.status, 200);
     await warm.body?.cancel();
     assertEquals(h.callsTo("/auth/v1/user").length, 1);
@@ -168,7 +208,11 @@ Deno.test(
     );
     assertEquals(response.status, 200);
     await response.body?.cancel();
-    assertEquals(h.callsTo("/auth/v1/user").length, 1, "served from the auth cache");
+    assertEquals(
+      h.callsTo("/auth/v1/user").length,
+      1,
+      "served from the auth cache",
+    );
 
     const feedback = h.callsTo("/rest/v1/account_deletion_feedback");
     assertEquals(feedback.length, 1, "the exit survey was recorded");
