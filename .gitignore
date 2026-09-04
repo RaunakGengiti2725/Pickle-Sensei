@@ -53,3 +53,6 @@ datasets/release/
 tools/mac-bench/results/scratch-*/
 # supabase CLI local state (project ref, versions)
 supabase/.temp/
+
+# canonical verification evidence (scripts/verify-*.sh) — regenerated every run
+artifacts/

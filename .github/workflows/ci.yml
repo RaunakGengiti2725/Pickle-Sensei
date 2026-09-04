@@ -1,5 +1,11 @@
 name: CI
 
+# Every job is a thin wrapper around the canonical script so CI and local
+# runs execute IDENTICAL commands: `scripts/verify-cloud.sh --tier pr` on a
+# developer machine or Devin session reproduces this workflow end to end.
+# Apple verification runs separately on the self-hosted M4 runner
+# (.github/workflows/mac-full-verify.yml -> scripts/mac-full-verify.sh).
+
 on:
   pull_request:
   push:
@@ -42,32 +48,20 @@ jobs:
       - name: Install ffmpeg (synthetic test fixtures)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Format check
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Unit + integration tests (sequential — suites share the DB service)
-        run: pnpm test
+      - name: deps + format + lint + typecheck + test + migrate/seed + ml
+        run: scripts/verify-cloud.sh --only deps,format,lint,typecheck,test,db,ml
         env:
+          # `test` and `db` share the single CI Postgres service (suites run sequentially).
           DATABASE_URL_TEST: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
-
-      - name: Migration apply + seed check (fresh database)
-        run: |
-          pnpm --filter @pickle/database migrate
-          pnpm --filter @pickle/database seed
-        env:
           DATABASE_URL: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
 
-      - name: ML annotation validator tests
-        run: python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-verify
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   mobile:
     runs-on: ubuntu-latest
@@ -76,22 +70,49 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: Install app deps (npm-managed — see DECISIONS D-013)
-        working-directory: apps/mobile
-        run: npm ci
-      - name: Typecheck
-        working-directory: apps/mobile
-        run: npx tsc --noEmit
-      - name: Jest (logic suites)
-        working-directory: apps/mobile
-        run: npm test
+      - name: apps/mobile deps (npm — DECISIONS D-013) + tsc + jest
+        run: scripts/verify-cloud.sh --only deps,mobile
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-mobile
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
+
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Supabase edge function tests + module typecheck
+        run: scripts/verify-cloud.sh --only edge
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-edge
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   supabase-security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Supabase RLS + security regression matrix
-        run: ./supabase/tests/run_rls_tests.sh
+        run: scripts/verify-cloud.sh --only rls
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-rls
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   containers:
     if: github.ref == 'refs/heads/main'

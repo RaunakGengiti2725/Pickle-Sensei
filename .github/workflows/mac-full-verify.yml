@@ -1,0 +1,92 @@
+# Canonical Apple verification on the self-hosted Apple Silicon (M4) runner.
+# All logic lives in scripts/mac-full-verify.sh — this file only schedules it
+# and uploads the artifacts. Run it from Linux with:
+#   scripts/mac-full-verify.sh --remote [--ref <branch>]
+#
+# No pull_request trigger on purpose: this is a PUBLIC repository and the
+# runner is a personal machine; fork PRs must never execute on it.
+name: Mac Full Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated stages (environment,swift-native,ios-app); empty = all"
+        type: string
+        default: ""
+      clean_build:
+        description: "Wipe DerivedData / SwiftPM caches before building"
+        type: boolean
+        default: false
+      launch_check:
+        description: "Install + launch the app on a simulator after building"
+        type: boolean
+        default: true
+      js_checks:
+        description: "Run tsc + jest for apps/mobile on the Mac (Linux CI already gates them)"
+        type: boolean
+        default: false
+  push:
+    branches: [main, "ci/mac-**"]
+    paths:
+      - "native/**"
+      - "apps/mobile/ios/**"
+      - "apps/mobile/package.json"
+      - "apps/mobile/package-lock.json"
+      - "apps/mobile/Gemfile*"
+      - "scripts/mac-full-verify.sh"
+      - "tools/macos-ci/**"
+      - ".github/workflows/mac-full-verify.yml"
+
+# One physical runner: never let two runs of the same ref fight over it.
+concurrency:
+  group: mac-full-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mac-full-verify:
+    name: scripts/mac-full-verify.sh
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 150
+    env:
+      MAC_ARTIFACTS: macos-ci-artifacts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run canonical Apple verification
+        run: |
+          set -o pipefail
+          ARGS=()
+          [ -n "${{ inputs.only }}" ] && ARGS+=(--only "${{ inputs.only }}")
+          [ "${{ inputs.clean_build }}" = "true" ] && ARGS+=(--clean)
+          [ "${{ inputs.launch_check }}" = "false" ] && ARGS+=(--skip-launch)
+          [ "${{ inputs.js_checks }}" != "true" ] && ARGS+=(--skip-js)
+          chmod +x scripts/mac-full-verify.sh
+          scripts/mac-full-verify.sh ${ARGS[@]+"${ARGS[@]}"}
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Mac Full Verify"
+            echo '```'
+            sw_vers; xcodebuild -version
+            [ -f "$MAC_ARTIFACTS/summary.json" ] && cat "$MAC_ARTIFACTS/summary.json"
+            [ -f "$MAC_ARTIFACTS/swift-native-xcresult-summary.txt" ] && cat "$MAC_ARTIFACTS/swift-native-xcresult-summary.txt"
+            [ -f "$MAC_ARTIFACTS/launch/launch-summary.txt" ] && cat "$MAC_ARTIFACTS/launch/launch-summary.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-full-verify-${{ github.run_number }}
+          path: macos-ci-artifacts/
+          if-no-files-found: warn
