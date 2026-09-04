@@ -521,6 +521,119 @@ describe('MSA-P1-1 — ManageAccountScreen', () => {
     expect(allText(renderer)).not.toMatch(/nothing was deleted/i);
     act(() => renderer.unmount());
   });
+
+  it('screen: an Apple account ended after a lost receipt is told to check the Apple side (the revocation outcome never arrived)', async () => {
+    jest.useFakeTimers();
+    installRoutes({
+      '/v1/account/bootstrap': () => response(bootstrapBody),
+      '/v1/me/delete-request': () =>
+        response({ challenge: CHALLENGE, expiresAt: '2026-09-05T00:00:00Z' }),
+      '/v1/me/delete-confirm': [neverAnswers, unauthorized],
+      '/v1/auth/refresh': unauthorized,
+    });
+    await signInWithApple();
+    const renderer = renderScreen();
+    const confirm = await signInAndArm(renderer);
+    await act(async () => {
+      confirm.props.onPress();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+    });
+    await settle();
+    await act(async () => {
+      sheetButton(renderer, 'Permanently delete').props.onPress();
+    });
+    await settle();
+
+    expect(useAuthStore.getState().session).toBeNull();
+    const shown = mockShowBrandNotice.mock.calls.map(
+      call => call[0] as { title: string; detail: string; eyebrow?: string },
+    );
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.title).toBe('Account deleted');
+    expect(shown[0]!.detail).toContain('Sign in with Apple');
+    expect(shown[0]!.detail).toContain('Stop Using Apple ID');
+    expect(`${shown[0]!.eyebrow} ${shown[0]!.detail}`).not.toMatch(
+      FORBIDDEN_COPY,
+    );
+    act(() => renderer.unmount());
+  });
+
+  it('screen: 401 then an unreachable refresh → no verdict, nothing purged, same challenge re-armed', async () => {
+    jest.useFakeTimers();
+    installRoutes({
+      '/v1/account/bootstrap': () => response(bootstrapBody),
+      '/v1/me/delete-request': () =>
+        response({ challenge: CHALLENGE, expiresAt: '2026-09-05T00:00:00Z' }),
+      '/v1/me/delete-confirm': unauthorized,
+      '/v1/auth/refresh': () => {
+        throw new TypeError('Network request failed');
+      },
+    });
+    await signInWithApple();
+    const renderer = renderScreen();
+    const confirm = await signInAndArm(renderer);
+    await act(async () => {
+      confirm.props.onPress();
+    });
+    await settle();
+
+    // Transient refresh failure: the keeper defers (backoff), the store
+    // answers 'unknown' and the account is left exactly as it was.
+    const state = useAuthStore.getState();
+    expect(state.session?.canonicalAppUserId).toBe(canonicalId);
+    expect(getApiSession()?.bearerToken).toBe('access-1');
+    expect(vaultRecord()).toEqual(
+      expect.objectContaining({ refreshToken: 'refresh-1' }),
+    );
+    expect(state.deletionCleanup).toBeNull();
+    expect(mockStatements.filter(s => s.startsWith('DELETE FROM'))).toEqual([]);
+    const retry = sheetButton(renderer, 'Permanently delete');
+    expect(retry.props.disabled).toBe(false);
+    expect(allText(renderer)).toContain(
+      'We are checking whether your account was already deleted.',
+    );
+    expect(allText(renderer)).not.toMatch(/nothing was deleted/i);
+    act(() => renderer.unmount());
+  });
+
+  it('screen: a sheet closed while the verdict is pending still ends a deleted account and announces it', async () => {
+    jest.useFakeTimers();
+    let answerRefresh!: () => void;
+    installRoutes({
+      '/v1/account/bootstrap': () => response(bootstrapBody),
+      '/v1/me/delete-request': () =>
+        response({ challenge: CHALLENGE, expiresAt: '2026-09-05T00:00:00Z' }),
+      '/v1/me/delete-confirm': unauthorized,
+      '/v1/auth/refresh': () =>
+        new Promise<Response>(resolve => {
+          answerRefresh = () => resolve(unauthorized());
+        }),
+    });
+    await signInWithApple();
+    const renderer = renderScreen();
+    const confirm = await signInAndArm(renderer);
+    await act(async () => {
+      confirm.props.onPress();
+    });
+    await settle();
+    // Still signed in while the server has not answered; the user backs out.
+    expect(useAuthStore.getState().session).not.toBeNull();
+    expect(sheetButton(renderer, 'Deleting').props.disabled).toBe(true);
+    act(() => renderer.unmount());
+
+    await act(async () => {
+      answerRefresh();
+    });
+    await settle();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(vaultRecord()).toBeNull();
+    expect(useAuthStore.getState().deletionCleanup).toEqual(
+      expect.objectContaining({ localPurge: 'complete' }),
+    );
+    expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─── D2: both post-deletion notices when both apply ──────────────────────────

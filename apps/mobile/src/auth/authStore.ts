@@ -13,6 +13,10 @@ import {
   setApiUnauthorizedListener,
   type ApiSession,
 } from '../account/apiSession';
+import {
+  clearUnconfirmedAccountDeletion,
+  unconfirmedAccountDeletionFor,
+} from '../account/deletion';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
 import {
   refreshSessionNow,
@@ -107,6 +111,20 @@ interface NativePickleAuth {
   }>;
 }
 
+/**
+ * The server's verdict on an account whose delete-confirm was answered 401
+ * after an earlier confirm may have gone through:
+ *   deleted    — the refresh token was refused too, so the account is gone;
+ *                `completeAccountDeletion` has already run.
+ *   signed_in  — the refresh token rotated: only the bearer had expired, the
+ *                account (and its local data) is intact.
+ *   signed_out — the session ended for another reason meanwhile (explicit
+ *                sign-out, or a legacy session with nothing to rotate).
+ *   unknown    — the server could not be reached in time; nothing changed.
+ */
+export type UnconfirmedDeletionVerdict =
+  'deleted' | 'signed_in' | 'signed_out' | 'unknown';
+
 interface AuthState {
   hydrated: boolean;
   session: AuthSession | null;
@@ -124,6 +142,59 @@ interface AuthState {
    * backend has acknowledged the deletion. */
   completeAccountDeletion: () => Promise<void>;
   clearError: () => void;
+}
+
+/** How long `settleUnconfirmedDeletion` waits for the keeper's verdict
+ * before answering `unknown` (the keeper's own timeout is 15s). */
+const SETTLE_DELETION_DEADLINE_MS = 20_000;
+
+let verdictWaiters: Array<(verdict: UnconfirmedDeletionVerdict) => void> = [];
+let verdictInFlight: Promise<UnconfirmedDeletionVerdict> | null = null;
+/** The last keeper verdict for the CURRENT sign-in; reset when a new API
+ * session is installed so a stale answer can never speak for a later one. */
+let lastKeeperVerdict: UnconfirmedDeletionVerdict | null = null;
+
+/** A promise for the keeper's next outcome. Shared: a 401 that arrives while
+ * a rotation is already in flight joins it instead of forcing another. */
+function awaitKeeperVerdict(): Promise<UnconfirmedDeletionVerdict> {
+  if (!verdictInFlight) {
+    verdictInFlight = new Promise(resolve => {
+      verdictWaiters.push(resolve);
+    });
+  }
+  return verdictInFlight;
+}
+
+/** Detaches the current waiters so they can be resolved AFTER the work the
+ * verdict describes (the local end of the account) has finished. */
+function takeKeeperVerdictWaiters(): (
+  verdict: UnconfirmedDeletionVerdict,
+) => void {
+  const waiters = verdictWaiters;
+  verdictWaiters = [];
+  verdictInFlight = null;
+  return verdict => {
+    lastKeeperVerdict = verdict;
+    for (const resolve of waiters) resolve(verdict);
+  };
+}
+
+function settleKeeperVerdict(verdict: UnconfirmedDeletionVerdict): void {
+  takeKeeperVerdictWaiters()(verdict);
+}
+
+function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T,
+): Promise<T> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    void promise.then(value => {
+      clearTimeout(timer);
+      resolve(value);
+    });
+  });
 }
 
 const LEGACY_SESSION_KV_KEY = 'auth.session';
@@ -201,6 +272,14 @@ function clearSyncedRuntime(): void {
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+  clearUnconfirmedAccountDeletion();
+  // Anyone still waiting on the keeper: it will not answer any more.
+  if (verdictInFlight) {
+    const waiters = verdictWaiters;
+    verdictWaiters = [];
+    verdictInFlight = null;
+    for (const resolve of waiters) resolve('signed_out');
+  }
 }
 
 /**
@@ -235,6 +314,7 @@ function installApiSession(apiSession: ApiSession): void {
   );
   configureSyncRuntime(apiSession);
   setApiUnauthorizedListener(handleApiUnauthorized);
+  lastKeeperVerdict = null;
 }
 
 /** The Keychain record for a synced session — only when the server minted a
@@ -324,13 +404,31 @@ function keepSessionAlive(
     bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
     onRotated: tokens => {
       adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+      settleKeeperVerdict('signed_in');
       onOutcome?.('online');
     },
     onRevoked: async () => {
-      await dropRevokedSession();
+      const settle = takeKeeperVerdictWaiters();
+      // The server refused the refresh token. If this device sent a
+      // delete-confirm for this account that was never answered
+      // definitively, that refusal IS the answer: the account is gone, and
+      // the end-of-account cleanup (purge, Keychain, provider disconnect)
+      // must run — not the plain revoked-session sign-out.
+      const unconfirmed = session.canonicalAppUserId
+        ? unconfirmedAccountDeletionFor(session.canonicalAppUserId)
+        : null;
+      if (unconfirmed) {
+        await useAuthStore.getState().completeAccountDeletion();
+      } else {
+        await dropRevokedSession();
+      }
+      settle(unconfirmed ? 'deleted' : 'signed_out');
       onOutcome?.('revoked');
     },
-    onDeferred: () => onOutcome?.('offline'),
+    onDeferred: () => {
+      settleKeeperVerdict('unknown');
+      onOutcome?.('offline');
+    },
   });
 }
 
@@ -509,6 +607,9 @@ function handleApiUnauthorized(expired: ApiSession): void {
     return;
   }
   if (expired.refreshToken) {
+    // Register interest before forcing the rotation so a verdict that lands
+    // before anyone asks (settleUnconfirmedDeletion) is not lost.
+    void awaitKeeperVerdict();
     refreshSessionNow();
     return;
   }
@@ -774,3 +875,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+/**
+ * Delete-confirm was answered 401 while a confirm for this account is still
+ * unconfirmed (deletion.ts ledger): let the server settle whether the
+ * account still exists by forcing a refresh-token rotation through the
+ * session keeper, and resolve with its verdict. Never guesses: a 401 alone
+ * deletes nothing locally, and the refusal of the refresh token is what
+ * turns into `completeAccountDeletion` (in the keeper's `onRevoked`).
+ * A module function rather than a store action on purpose: it is not an
+ * interactive sign-in affordance (the store deliberately exposes none).
+ */
+export async function settleUnconfirmedDeletion(): Promise<UnconfirmedDeletionVerdict> {
+  const current = useAuthStore.getState().session;
+  if (!current) return lastKeeperVerdict ?? 'signed_out';
+  const apiSession = getApiSession();
+  if (
+    current.localOnly ||
+    !apiSession?.refreshToken ||
+    apiSession.canonicalAppUserId !== current.canonicalAppUserId
+  ) {
+    return 'unknown';
+  }
+  const verdict = awaitKeeperVerdict();
+  refreshSessionNow();
+  return withDeadline(verdict, SETTLE_DELETION_DEADLINE_MS, 'unknown');
+}

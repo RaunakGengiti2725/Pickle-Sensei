@@ -1,17 +1,28 @@
 /**
  * Two-step account deletion: the client for /v1/me/delete-request +
- * /v1/me/delete-confirm (step-2 must present step-1's challenge; failures
- * always say NOTHING was deleted unless the server confirmed), and the
- * post-confirmation local purge that removes every owner-scoped row.
+ * /v1/me/delete-confirm (step-2 must present step-1's challenge; step-1
+ * failures say NOTHING was deleted; a step-2 call that left the device and
+ * was never answered says the outcome is unknown — the server may already
+ * have deleted the account), the 401 report every API client owes the auth
+ * store, the unconfirmed-confirm ledger the auth store consults when the
+ * server then refuses the refresh token, and the post-confirmation local
+ * purge that removes every owner-scoped row.
  */
-import type { ApiSession } from '../src/account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+  type ApiSession,
+} from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
   ACCOUNT_DELETION_WANTED,
   AccountDeletionError,
+  clearUnconfirmedAccountDeletion,
   confirmAccountDeletion,
   requestAccountDeletion,
+  unconfirmedAccountDeletionFor,
 } from '../src/account/deletion';
 import type { LocalDb } from '../src/data/db';
 import { purgeOwnerData } from '../src/data/repository';
@@ -171,6 +182,168 @@ describe('account deletion client', () => {
     await expect(
       confirmAccountDeletion(session, 'challenge', down),
     ).rejects.toBeInstanceOf(AccountDeletionError);
+  });
+
+  describe('unreachable server — copy is per step', () => {
+    const down = jest.fn(async () => {
+      throw new Error('network down');
+    });
+
+    it('step 1 truthfully deleted nothing and says so', async () => {
+      await expect(
+        requestAccountDeletion(session, null, down),
+      ).rejects.toMatchObject({
+        code: 'deletion.unavailable',
+        retryable: true,
+        message: expect.stringMatching(/nothing was deleted/i),
+      });
+    });
+
+    it('step 2 may have deleted the account: outcome unknown, never "Nothing was deleted"', async () => {
+      const error: unknown = await confirmAccountDeletion(
+        session,
+        'challenge',
+        down,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(AccountDeletionError);
+      const typed = error as AccountDeletionError;
+      expect(typed.code).toBe('deletion.unavailable');
+      expect(typed.retryable).toBe(true);
+      expect(typed.message).not.toMatch(/nothing was deleted/i);
+      expect(typed.message).toMatch(/whether your account was deleted/i);
+    });
+  });
+
+  describe('401 → reportApiUnauthorized (before the error is thrown)', () => {
+    const listener = jest.fn();
+    const unauthorized = jest.fn(async () =>
+      jsonResponse(401, { error: { code: 'auth.unauthorized' } }),
+    );
+
+    beforeEach(() => {
+      listener.mockClear();
+      establishApiSession(session);
+      setApiUnauthorizedListener(listener);
+    });
+    afterEach(() => {
+      setApiUnauthorizedListener(null);
+      clearApiSession();
+    });
+
+    it('delete-confirm reports the rejected bearer to the installed listener', async () => {
+      let listenerCalledBeforeThrow = false;
+      listener.mockImplementation(() => {
+        listenerCalledBeforeThrow = true;
+      });
+      await expect(
+        confirmAccountDeletion(session, 'challenge', unauthorized),
+      ).rejects.toMatchObject({
+        code: 'deletion.session_expired',
+        // The auth store is settling whether the bearer merely expired; the
+        // same challenge is presented again once it has.
+        retryable: true,
+      });
+      expect(listenerCalledBeforeThrow).toBe(true);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ bearerToken: 'provider-token' }),
+      );
+    });
+
+    it('delete-request reports the rejected bearer too (and stays non-retryable)', async () => {
+      await expect(
+        requestAccountDeletion(session, null, unauthorized),
+      ).rejects.toMatchObject({
+        code: 'deletion.session_expired',
+        retryable: false,
+        message: expect.stringMatching(/sign in again/i),
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ bearerToken: 'provider-token' }),
+      );
+    });
+
+    it('a late 401 for a bearer that has since rotated is not reported', async () => {
+      establishApiSession({ ...session, bearerToken: 'rotated-token' });
+      await expect(
+        confirmAccountDeletion(session, 'challenge', unauthorized),
+      ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unconfirmed-confirm ledger', () => {
+    afterEach(() => clearUnconfirmedAccountDeletion());
+
+    it('records the confirm while the server has not answered definitively (timeout, 401)', async () => {
+      const down = jest.fn(async () => {
+        throw new Error('network down');
+      });
+      await confirmAccountDeletion(session, 'c-1', down).catch(() => {});
+      expect(unconfirmedAccountDeletionFor(session.canonicalAppUserId)).toEqual(
+        {
+          canonicalAppUserId: session.canonicalAppUserId,
+          challenge: 'c-1',
+        },
+      );
+      // Another account never sees it.
+      expect(
+        unconfirmedAccountDeletionFor('22222222-2222-4222-8222-222222222222'),
+      ).toBeNull();
+
+      const unauthorized = jest.fn(async () =>
+        jsonResponse(401, { error: { code: 'auth.unauthorized' } }),
+      );
+      await confirmAccountDeletion(session, 'c-1', unauthorized).catch(
+        () => {},
+      );
+      expect(
+        unconfirmedAccountDeletionFor(session.canonicalAppUserId),
+      ).toMatchObject({ challenge: 'c-1' });
+    });
+
+    it('is cleared by a definitive answer: success, a rejection, or a stale challenge', async () => {
+      const down = jest.fn(async () => {
+        throw new Error('network down');
+      });
+      await confirmAccountDeletion(session, 'c-2', down).catch(() => {});
+      expect(
+        unconfirmedAccountDeletionFor(session.canonicalAppUserId),
+      ).not.toBeNull();
+
+      const rejected = jest.fn(async () =>
+        jsonResponse(403, {
+          error: { code: 'account.deletion_challenge_expired', message: 'x' },
+        }),
+      );
+      await confirmAccountDeletion(session, 'c-2', rejected).catch(() => {});
+      expect(
+        unconfirmedAccountDeletionFor(session.canonicalAppUserId),
+      ).toBeNull();
+
+      await confirmAccountDeletion(session, 'c-3', down).catch(() => {});
+      const ok = jest.fn(async () =>
+        jsonResponse(200, {
+          deleted: true,
+          appleAuthorizationRevocation: 'revoked',
+        }),
+      );
+      await confirmAccountDeletion(session, 'c-3', ok);
+      expect(
+        unconfirmedAccountDeletionFor(session.canonicalAppUserId),
+      ).toBeNull();
+    });
+
+    it('a step-1 failure never creates an entry (nothing could have been deleted)', async () => {
+      const down = jest.fn(async () => {
+        throw new Error('network down');
+      });
+      await requestAccountDeletion(session, null, down).catch(() => {});
+      expect(
+        unconfirmedAccountDeletionFor(session.canonicalAppUserId),
+      ).toBeNull();
+    });
   });
 });
 

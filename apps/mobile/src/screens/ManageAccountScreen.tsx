@@ -36,8 +36,13 @@ import {
 } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
-import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
+import { showBrandNotice, type BrandNotice } from '../design/BrandNotice';
+import {
+  settleUnconfirmedDeletion,
+  useAuthStore,
+  type AccountDeletionCleanup,
+  type AuthProvider,
+} from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
@@ -57,6 +62,62 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
   google: 'Google',
   guest: 'Guest',
 };
+
+const LOCAL_CLEANUP_DETAIL =
+  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.';
+const APPLE_STEP_DETAIL =
+  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.';
+/** The confirm's answer never reached this phone, so whether the server
+ * could revoke the Sign in with Apple authorization is unknown here. */
+const APPLE_CHECK_DETAIL =
+  'The reply confirming this deletion never reached this phone, so it could not check that Sign in with Apple was disconnected. If Pickle Sensei still appears under iPhone Settings → your name → Sign in with Apple, choose Stop Using Apple ID.';
+
+/**
+ * What to tell the user once the account is gone. Every condition that
+ * applies is said — a failed local purge must never hide the Apple step —
+ * while each single condition keeps its own notice verbatim. `apple` is
+ * `required` when the server reported it had no revocation token,
+ * `unverified` when the server's answer was lost (settled through the auth
+ * store) for an Apple account, `none` otherwise.
+ */
+function deletionNotice(input: {
+  cleanup: AccountDeletionCleanup | null;
+  apple: 'required' | 'unverified' | 'none';
+}): BrandNotice | null {
+  const localCleanupNeeded = input.cleanup?.localPurge === 'failed';
+  const appleDetail =
+    input.apple === 'required'
+      ? APPLE_STEP_DETAIL
+      : input.apple === 'unverified'
+        ? APPLE_CHECK_DETAIL
+        : null;
+  if (localCleanupNeeded && appleDetail) {
+    return {
+      title: 'Account deleted',
+      detail: `${LOCAL_CLEANUP_DETAIL}\n\n${appleDetail}`,
+      tone: 'danger',
+      eyebrow: 'LOCAL CLEANUP + APPLE STEP',
+    };
+  }
+  if (localCleanupNeeded) {
+    return {
+      title: 'Account deleted',
+      detail: LOCAL_CLEANUP_DETAIL,
+      tone: 'danger',
+      eyebrow: 'LOCAL CLEANUP NEEDED',
+    };
+  }
+  if (appleDetail) {
+    return {
+      title: 'Account deleted',
+      detail: appleDetail,
+      tone: 'neutral',
+      eyebrow:
+        input.apple === 'required' ? 'ONE APPLE STEP' : 'CHECK APPLE SIGN-IN',
+    };
+  }
+  return null;
+}
 
 /** Final-confirm hold-off (ms). Must exceed the server's 3s minimum age
  * between delete-request and delete-confirm; also honest UX friction. */
@@ -301,7 +362,14 @@ function ChoiceRow(props: {
 function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
+  /** The server answered the confirm: the account is gone. */
   onDeleted: (result: AccountDeletionResult) => void;
+  /** The confirm's answer was lost and the auth store has since settled
+   * with the server that the account is gone (and already ended it locally). */
+  onSettledDeleted: (input: { provider: AuthProvider | null }) => void;
+  /** The account ended locally for another reason while the confirm was
+   * being settled (explicit sign-out, legacy session): nothing to announce. */
+  onSignedOut: () => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -445,6 +513,39 @@ function DeleteAccountDialog(props: {
       const result = await confirmAccountDeletion(getApiSession(), challenge);
       props.onDeleted(result);
     } catch (e) {
+      if (
+        e instanceof AccountDeletionError &&
+        e.code === 'deletion.session_expired'
+      ) {
+        // The bearer was refused AFTER a confirm for this account left the
+        // phone. Whether that means "account already deleted" or merely
+        // "token expired" only the server can say: the auth store forces a
+        // refresh-token rotation and reports the verdict. Ending the account
+        // locally is the store's job (it ran completeAccountDeletion before
+        // answering 'deleted'); this dialog only decides what to show next.
+        // Deliberately not gated on the presentation: a deleted account must
+        // be announced even if the sheet was closed meanwhile.
+        const provider = getApiSession()?.provider ?? null;
+        const verdict = await settleUnconfirmedDeletion();
+        if (verdict === 'deleted') {
+          props.onSettledDeleted({ provider });
+          return;
+        }
+        if (verdict === 'signed_out') {
+          props.onSignedOut();
+          return;
+        }
+        if (presentation !== presentationRef.current) return;
+        // 'signed_in' (bearer rotated — the same challenge is still valid) or
+        // 'unknown' (no answer yet): re-arm so the next tap asks again.
+        setStep({ phase: 'armed', challenge, secondsLeft: 0 });
+        setError(
+          verdict === 'signed_in'
+            ? 'Your sign-in was renewed and your account is still here. Tap Permanently delete again to delete it.'
+            : e.message,
+        );
+        return;
+      }
       if (presentation !== presentationRef.current) return;
       const canRetrySameChallenge =
         e instanceof AccountDeletionError ? e.retryable : true;
@@ -889,28 +990,30 @@ export function ManageAccountScreen() {
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
           void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
-            if (cleanup?.localPurge === 'failed') {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
-                tone: 'danger',
-                eyebrow: 'LOCAL CLEANUP NEEDED',
-              });
-            } else if (
-              result?.appleAuthorizationRevocation === 'manual_action_required'
-            ) {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
-                tone: 'neutral',
-                eyebrow: 'ONE APPLE STEP',
-              });
-            }
+            const notice = deletionNotice({
+              cleanup: useAuthStore.getState().deletionCleanup,
+              apple:
+                result?.appleAuthorizationRevocation ===
+                'manual_action_required'
+                  ? 'required'
+                  : 'none',
+            });
+            if (notice) showBrandNotice(notice);
           });
         }}
+        onSettledDeleted={({ provider }) => {
+          setConfirmingDeletion(false);
+          // completeAccountDeletion already ran inside the auth store (the
+          // server refused the account's refresh token after an unanswered
+          // confirm). The confirm's Apple revocation outcome never arrived,
+          // so an Apple account is asked to check the Apple side itself.
+          const notice = deletionNotice({
+            cleanup: useAuthStore.getState().deletionCleanup,
+            apple: provider === 'apple' ? 'unverified' : 'none',
+          });
+          if (notice) showBrandNotice(notice);
+        }}
+        onSignedOut={() => setConfirmingDeletion(false)}
       />
     </SafeAreaView>
   );

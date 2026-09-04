@@ -64,9 +64,30 @@ jest.mock('../src/account/deletion', () => {
   };
 });
 
+const mockShowBrandNotice = jest.fn();
+jest.mock('../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
+}));
+
+const mockSettleUnconfirmedDeletion = jest.fn<Promise<string>, []>();
+jest.mock('../src/auth/authStore', () => {
+  const actual = jest.requireActual<typeof import('../src/auth/authStore')>(
+    '../src/auth/authStore',
+  );
+  return {
+    ...actual,
+    settleUnconfirmedDeletion: () => mockSettleUnconfirmedDeletion(),
+  };
+});
+
 import { ManageAccountScreen } from '../src/screens/ManageAccountScreen';
 import { Button, PressableScale } from '../src/design/components';
-import { useAuthStore, type AuthSession } from '../src/auth/authStore';
+import {
+  useAuthStore,
+  type AuthSession,
+  type UnconfirmedDeletionVerdict,
+} from '../src/auth/authStore';
+import { AccountDeletionError } from '../src/account/deletion';
 
 const syncedSession: AuthSession = {
   provider: 'google',
@@ -117,9 +138,37 @@ function radios(renderer: TestRenderer.ReactTestRenderer) {
     .filter(node => node.props.accessibilityRole === 'radio');
 }
 
+/** Opens the dialog, skips the survey, requests, and waits out the hold-off
+ * (fake timers must be active). */
+async function armDeletion(renderer: TestRenderer.ReactTestRenderer) {
+  await act(async () => {
+    pressable(renderer, 'Delete account')[0]!.props.onPress();
+  });
+  await act(async () => {
+    pressable(renderer, 'Skip the survey')[0]!.props.onPress();
+  });
+  await act(async () => {
+    sheetButton(renderer, 'Continue to delete').props.onPress();
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(5_000);
+  });
+  const confirm = sheetButton(renderer, 'Permanently delete');
+  expect(confirm.props.label).toBe('Permanently delete');
+  expect(confirm.props.disabled).toBe(false);
+  return confirm;
+}
+
+function notices() {
+  return mockShowBrandNotice.mock.calls.map(
+    call => call[0] as { title: string; detail: string; eyebrow?: string },
+  );
+}
+
 describe('ManageAccountScreen', () => {
   beforeEach(() => {
     mockGoBack.mockClear();
+    mockShowBrandNotice.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
     useAuthStore.setState({
@@ -127,6 +176,7 @@ describe('ManageAccountScreen', () => {
       session: syncedSession,
       busy: false,
       error: null,
+      deletionCleanup: null,
       completeAccountDeletion: jest.fn(() => Promise.resolve()),
     });
   });
@@ -459,5 +509,209 @@ describe('ManageAccountScreen', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  describe('post-deletion notices', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-1',
+        expiresAt: '2026-08-31T00:00:00.000Z',
+      });
+    });
+    afterEach(() => jest.useRealTimers());
+
+    async function deleteWith(
+      appleAuthorizationRevocation: string,
+      localPurge: 'complete' | 'failed',
+    ) {
+      mockConfirmAccountDeletion.mockResolvedValue({
+        appleAuthorizationRevocation,
+      } as never);
+      useAuthStore.setState({
+        completeAccountDeletion: jest.fn(async () => {
+          useAuthStore.setState({
+            session: null,
+            deletionCleanup: { localPurge },
+          });
+        }),
+      });
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      act(() => renderer.unmount());
+      return notices();
+    }
+
+    it('says BOTH when the local purge failed and Apple needs the manual step', async () => {
+      const shown = await deleteWith('manual_action_required', 'failed');
+      expect(shown).toHaveLength(1);
+      expect(shown[0]!.title).toBe('Account deleted');
+      expect(shown[0]!.detail).toContain(
+        'Some data saved on this phone could not be removed — delete the app to clear it.',
+      );
+      expect(shown[0]!.detail).toContain(
+        'Sign in with Apple → Pickle Sensei → Stop Using Apple ID',
+      );
+    });
+
+    it('keeps the single LOCAL CLEANUP NEEDED notice when only the purge failed', async () => {
+      const shown = await deleteWith('revoked', 'failed');
+      expect(shown).toEqual([
+        expect.objectContaining({
+          eyebrow: 'LOCAL CLEANUP NEEDED',
+          detail:
+            'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+        }),
+      ]);
+    });
+
+    it('keeps the single ONE APPLE STEP notice when only the manual step is needed', async () => {
+      const shown = await deleteWith('manual_action_required', 'complete');
+      expect(shown).toEqual([
+        expect.objectContaining({
+          eyebrow: 'ONE APPLE STEP',
+          detail:
+            'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
+        }),
+      ]);
+    });
+
+    it('shows nothing when the purge succeeded and Apple was revoked', async () => {
+      expect(await deleteWith('revoked', 'complete')).toEqual([]);
+    });
+  });
+
+  describe('confirm answered 401 — the auth store settles it with the server', () => {
+    beforeEach(() => {
+      mockSettleUnconfirmedDeletion.mockReset();
+      jest.useFakeTimers();
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-1',
+        expiresAt: '2026-08-31T00:00:00.000Z',
+      });
+      mockConfirmAccountDeletion.mockRejectedValue(
+        new AccountDeletionError(
+          'deletion.session_expired',
+          'The server no longer accepts this sign-in. We are checking whether your account was already deleted.',
+          true,
+        ),
+      );
+    });
+    afterEach(() => jest.useRealTimers());
+
+    function settleWith(
+      verdict: UnconfirmedDeletionVerdict,
+      after?: () => void,
+    ) {
+      mockSettleUnconfirmedDeletion.mockImplementation(async () => {
+        after?.();
+        return verdict;
+      });
+      return mockSettleUnconfirmedDeletion;
+    }
+
+    it("'deleted': the store already ended the account — the dialog closes and does not purge twice", async () => {
+      const settle = settleWith('deleted', () => {
+        useAuthStore.setState({
+          session: null,
+          deletionCleanup: { localPurge: 'complete' },
+        });
+      });
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(settle).toHaveBeenCalledTimes(1);
+      // Cleanup is the store's (it ran inside settle); the dialog must not
+      // start a second completeAccountDeletion.
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+      expect(allText(renderer)).not.toContain('Permanently delete');
+      expect(allText(renderer)).not.toContain('Deleting…');
+      // A Google account has no Apple step to check.
+      expect(notices()).toEqual([]);
+      act(() => renderer.unmount());
+    });
+
+    it("'deleted' with a failed purge tells the user about the local cleanup", async () => {
+      settleWith('deleted', () => {
+        useAuthStore.setState({
+          session: null,
+          deletionCleanup: { localPurge: 'failed' },
+        });
+      });
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(notices()).toEqual([
+        expect.objectContaining({ eyebrow: 'LOCAL CLEANUP NEEDED' }),
+      ]);
+      act(() => renderer.unmount());
+    });
+
+    it("'signed_in': the bearer merely expired — same challenge re-armed, nothing purged", async () => {
+      settleWith('signed_in');
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+      const retry = sheetButton(renderer, 'Permanently delete');
+      expect(retry.props.label).toBe('Permanently delete');
+      expect(retry.props.disabled).toBe(false);
+      expect(allText(renderer)).toContain('your account is still here');
+      expect(allText(renderer)).not.toMatch(/nothing was deleted/i);
+      await act(async () => {
+        retry.props.onPress();
+      });
+      expect(mockConfirmAccountDeletion).toHaveBeenLastCalledWith(
+        null,
+        'challenge-1',
+      );
+      act(() => renderer.unmount());
+    });
+
+    it("'unknown': no verdict yet — re-armed with the honest copy, nothing purged", async () => {
+      settleWith('unknown');
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+      expect(sheetButton(renderer, 'Permanently delete').props.disabled).toBe(
+        false,
+      );
+      expect(allText(renderer)).toContain(
+        'We are checking whether your account was already deleted.',
+      );
+      act(() => renderer.unmount());
+    });
+
+    it("'signed_out': the session ended meanwhile — the dialog closes without a notice", async () => {
+      settleWith('signed_out', () => {
+        useAuthStore.setState({ session: null });
+      });
+      const renderer = renderScreen();
+      const confirm = await armDeletion(renderer);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(allText(renderer)).not.toContain('Permanently delete');
+      expect(notices()).toEqual([]);
+      act(() => renderer.unmount());
+    });
   });
 });

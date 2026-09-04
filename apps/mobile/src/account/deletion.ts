@@ -1,4 +1,4 @@
-import type { ApiSession } from './apiSession';
+import { reportApiUnauthorized, type ApiSession } from './apiSession';
 
 /**
  * Client for the backend's two-step account deletion
@@ -18,6 +18,18 @@ import type { ApiSession } from './apiSession';
  * the account (and the bearer) cease to exist; the server keeps it
  * anonymized after deletion. It is always skippable — the survey must never
  * stand between a player and deleting their account.
+ *
+ * Step 2 is the one request whose LOSS is dangerous: once it has left the
+ * device the server may already have deleted the account (and with it the
+ * bearer's user and the refresh token), even though no answer came back.
+ * So a timed-out confirm says the outcome is unknown — never "nothing was
+ * deleted" — and the challenge stays recorded here as unconfirmed until
+ * the server gives a definitive answer. A 401 is reported through
+ * `reportApiUnauthorized`, like every other API client, so the auth store
+ * can ask the server the only question that settles it: does the refresh
+ * token still rotate? (Refused → the account is gone → finish the
+ * deletion locally. Rotated → the bearer merely expired → nothing is
+ * purged.) See authStore `settleUnconfirmedDeletion`.
  */
 
 export type AccountDeletionFetch = (
@@ -93,13 +105,82 @@ export interface AccountDeletionResult {
     'revoked' | 'not_applicable' | 'manual_action_required';
 }
 
+/** A delete-confirm this device sent but never saw answered definitively. */
+export interface UnconfirmedAccountDeletion {
+  canonicalAppUserId: string;
+  challenge: string;
+}
+
+let unconfirmed: UnconfirmedAccountDeletion | null = null;
+
+/** The confirm still in limbo for `canonicalAppUserId`, if any. Consulted by
+ * the auth store when the server refuses that account's refresh token: with
+ * an entry here the refusal means "deleted", not "signed out elsewhere". */
+export function unconfirmedAccountDeletionFor(
+  canonicalAppUserId: string,
+): UnconfirmedAccountDeletion | null {
+  return unconfirmed?.canonicalAppUserId === canonicalAppUserId
+    ? unconfirmed
+    : null;
+}
+
+/** Forgets the limbo entry — on a definitive server answer, or when the
+ * account's runtime is torn down (sign-out, deletion complete). */
+export function clearUnconfirmedAccountDeletion(): void {
+  unconfirmed = null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+type DeletionStep = 'request' | 'confirm';
+
+/** Copy is per step because only step 2 destroys anything: a lost step-1
+ * call truthfully deleted nothing; a lost step-2 call may have. */
+const STEP_FAILURES: Record<
+  DeletionStep,
+  {
+    unreachable: () => AccountDeletionError;
+    unauthorized: () => AccountDeletionError;
+  }
+> = {
+  request: {
+    unreachable: () =>
+      new AccountDeletionError(
+        'deletion.unavailable',
+        'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+        true,
+      ),
+    unauthorized: () =>
+      new AccountDeletionError(
+        'deletion.session_expired',
+        'Your sign-in has expired. Sign in again, then delete your account.',
+        false,
+      ),
+  },
+  confirm: {
+    unreachable: () =>
+      new AccountDeletionError(
+        'deletion.unavailable',
+        'The server did not answer in time, so we cannot yet tell whether your account was deleted. Tap Permanently delete again to check — if it is already gone, this phone will finish signing it out.',
+        true,
+      ),
+    // Retryable: the auth store is settling whether the bearer merely
+    // expired (refresh rotates → this challenge can be presented again).
+    unauthorized: () =>
+      new AccountDeletionError(
+        'deletion.session_expired',
+        'The server no longer accepts this sign-in. We are checking whether your account was already deleted.',
+        true,
+      ),
+  },
+};
+
 async function post(
   session: ApiSession,
   fetchFn: AccountDeletionFetch,
+  step: DeletionStep,
   path: string,
   body?: unknown,
 ): Promise<Record<string, unknown>> {
@@ -118,11 +199,7 @@ async function post(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
-    throw new AccountDeletionError(
-      'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
-      true,
-    );
+    throw STEP_FAILURES[step].unreachable();
   } finally {
     clearTimeout(timeout);
   }
@@ -133,11 +210,8 @@ async function post(
     // Non-JSON error bodies fall through to the status checks below.
   }
   if (response.status === 401) {
-    throw new AccountDeletionError(
-      'deletion.session_expired',
-      'Your sign-in has expired. Sign in again, then delete your account.',
-      false,
-    );
+    reportApiUnauthorized(session.bearerToken);
+    throw STEP_FAILURES[step].unauthorized();
   }
   if (!response.ok) {
     const error =
@@ -179,6 +253,7 @@ export async function requestAccountDeletion(
   const payload = await post(
     session,
     fetchFn,
+    'request',
     '/v1/me/delete-request',
     survey ? { survey } : undefined,
   );
@@ -207,9 +282,21 @@ export async function confirmAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-confirm', {
-    challenge,
-  });
+  unconfirmed = { canonicalAppUserId: session.canonicalAppUserId, challenge };
+  let payload: Record<string, unknown>;
+  try {
+    payload = await post(session, fetchFn, 'confirm', '/v1/me/delete-confirm', {
+      challenge,
+    });
+  } catch (error) {
+    const outcomeStillOpen =
+      error instanceof AccountDeletionError &&
+      (error.code === 'deletion.unavailable' ||
+        error.code === 'deletion.session_expired');
+    if (!outcomeStillOpen) unconfirmed = null;
+    throw error;
+  }
+  unconfirmed = null;
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
       'deletion.rejected',
