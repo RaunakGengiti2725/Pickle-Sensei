@@ -1,0 +1,7 @@
+{
+  "name": "@pickle/stress-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared seeded long-run leak harness imported by package stress tests via relative path; intentionally NOT a pnpm workspace member."
+}
