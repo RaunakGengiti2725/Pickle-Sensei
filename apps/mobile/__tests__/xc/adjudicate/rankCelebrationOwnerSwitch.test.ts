@@ -71,7 +71,8 @@ function summaryFor(tier: string, rating: number): PlayerRankSummary {
     divisionLabel,
     techniqueCount: 2,
     scoredAnalysisCount: 4,
-    updatedAtIso: '2026-09-03T12:00:00.000Z',
+    techniques: [],
+    nextTier: null,
   };
 }
 

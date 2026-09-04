@@ -8,7 +8,7 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, type PermitReleasePayload } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -178,6 +178,27 @@ export async function saveAnalysis(
       [owner, JSON.stringify({ ...analysis, analysisPermitId })],
     );
   });
+}
+
+/**
+ * Durably records that a reserved analysis permit must be finalized with a
+ * non-scored outcome. Used when the inline release could not reach the
+ * server: the drain finalizes it (idempotent server-side) once it can, so a
+ * reservation never outlives the local failure that abandoned it.
+ */
+export async function queuePermitRelease(
+  db: LocalDb,
+  release: PermitReleasePayload,
+): Promise<void> {
+  if (!release.permitId.trim()) {
+    throw new Error('A permit id is required to queue a permit release.');
+  }
+  const owner = requireWritableDataOwner();
+  await db.execute(
+    `INSERT INTO outbox (owner_key, kind, payload)
+     VALUES (?, 'permit.release', ?)`,
+    [owner, JSON.stringify(release)],
+  );
 }
 
 /**

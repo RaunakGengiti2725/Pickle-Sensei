@@ -127,6 +127,9 @@ export function createTransport(config: ApiConfigState): SyncTransport {
     async uploadEvaluationTrials(trials) {
       return request(config, 'POST', '/v1/me/evaluation/trials', { trials });
     },
+    async releasePermit(permitId, outcome) {
+      await createAnalysisPermitClient(config).release(permitId, outcome);
+    },
   };
 }
 

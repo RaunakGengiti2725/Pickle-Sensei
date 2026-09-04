@@ -10,10 +10,14 @@
  * reaches a newer row. A newer row must be attempted within a bounded number
  * of drains no matter how many older rows are stuck.
  *
- * Requires `node:sqlite`: built in from Node 22.13; on 22.11/22.12 run with
- * `NODE_OPTIONS=--experimental-sqlite`. A missing module FAILS these tests
- * rather than skipping them.
+ * Engine: `node:sqlite`, unflagged from Node 22.13. On 22.11/22.12 the module
+ * needs `--experimental-sqlite`, which a running Jest worker cannot be given,
+ * so the seam falls back to a `worker_threads` Worker started WITH the flag
+ * and bridges every statement synchronously (SharedArrayBuffer + MessagePort)
+ * — `executeSync` is what the migration path uses. No engine at all FAILS
+ * these tests rather than skipping them.
  */
+/// <reference types="node" />
 import type { ShotAnalysis } from '@pickle/shared-types';
 import {
   GUEST_DATA_OWNER,
@@ -29,38 +33,117 @@ import {
   type SyncTransport,
 } from '../../../src/data/sync';
 
-interface NodeSqliteStatement {
-  all(...params: unknown[]): Record<string, unknown>[];
-}
-interface NodeSqliteDatabase {
-  prepare(sql: string): NodeSqliteStatement;
+type SqlRow = Record<string, unknown>;
+interface SqliteEngine {
+  all(sql: string, params: unknown[]): SqlRow[];
   close(): void;
 }
+interface NodeSqliteModule {
+  DatabaseSync: new (path: string) => {
+    prepare(sql: string): { all(...params: unknown[]): unknown[] };
+    close(): void;
+  };
+}
 
-jest.mock('@op-engineering/op-sqlite', () => ({
-  open: () => {
-    let sqlite: { DatabaseSync: new (path: string) => NodeSqliteDatabase };
+const mockWorkerSource = `
+  const { workerData } = require('node:worker_threads');
+  const { DatabaseSync } = require('node:sqlite');
+  const { port, flag } = workerData;
+  const db = new DatabaseSync(':memory:');
+  const reply = message => {
+    port.postMessage(message);
+    Atomics.store(flag, 0, 1);
+    Atomics.notify(flag, 0);
+  };
+  port.on('message', ({ sql, params }) => {
+    if (sql === null) { db.close(); port.close(); return; }
+    try { reply({ rows: db.prepare(sql).all(...params) }); }
+    catch (error) { reply({ error: String(error && error.message || error) }); }
+  });
+  reply({ ready: true });
+`;
+
+jest.mock('@op-engineering/op-sqlite', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { createRequire } =
+    require('node:module') as typeof import('node:module');
+  const { MessageChannel, Worker, receiveMessageOnPort } =
+    require('node:worker_threads') as typeof import('node:worker_threads');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
+  const bindable = (params: unknown[]) =>
+    params.map(value => (value === undefined ? null : value));
+
+  function inProcess(): SqliteEngine | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      sqlite = require('node:sqlite');
-    } catch (error) {
-      throw new Error(
-        `node:sqlite is required for this suite (Node >= 22.13, or NODE_OPTIONS=--experimental-sqlite): ${String(error)}`,
-      );
+      // Bypass Jest's resolver: `node:sqlite` is not in `builtinModules`.
+      const { DatabaseSync } = createRequire(__filename)(
+        'node:sqlite',
+      ) as NodeSqliteModule;
+      const db = new DatabaseSync(':memory:');
+      return {
+        all: (sql, params) =>
+          db.prepare(sql).all(...bindable(params)) as SqlRow[],
+        close: () => db.close(),
+      };
+    } catch {
+      return null;
     }
-    const native = new sqlite.DatabaseSync(':memory:');
-    const run = (sql: string, params: unknown[] = []) => ({
-      rows: native
-        .prepare(sql)
-        .all(...params.map(value => (value === undefined ? null : value))),
+  }
+
+  function workerBridge(): SqliteEngine {
+    const flag = new Int32Array(new SharedArrayBuffer(4));
+    const { port1, port2 } = new MessageChannel();
+    const worker = new Worker(mockWorkerSource, {
+      eval: true,
+      execArgv: ['--experimental-sqlite', '--no-warnings'],
+      workerData: { port: port2, flag },
+      transferList: [port2],
     });
-    return {
-      executeSync: run,
-      execute: async (sql: string, params: unknown[] = []) => run(sql, params),
-      close: () => native.close(),
+    const await_ = (): Record<string, unknown> => {
+      // The main thread blocks here; the worker's reply lands in port1's
+      // queue before it flips the flag, so the read below is synchronous.
+      const outcome = Atomics.wait(flag, 0, 0, 30_000);
+      Atomics.store(flag, 0, 0);
+      const received = receiveMessageOnPort(port1);
+      if (!received) {
+        throw new Error(
+          `node:sqlite unavailable in-process and the --experimental-sqlite worker gave no reply (${outcome})`,
+        );
+      }
+      return received.message as Record<string, unknown>;
     };
-  },
-}));
+    await_(); // ready
+    return {
+      all: (sql, params) => {
+        port1.postMessage({ sql, params: bindable(params) });
+        const reply = await_();
+        if (typeof reply['error'] === 'string') throw new Error(reply['error']);
+        return reply['rows'] as SqlRow[];
+      },
+      close: () => {
+        port1.postMessage({ sql: null, params: [] });
+        port1.close();
+        void worker.terminate();
+      },
+    };
+  }
+
+  return {
+    open: () => {
+      const engine = inProcess() ?? workerBridge();
+      const run = (sql: string, params: unknown[] = []) => ({
+        rows: engine.all(sql, params),
+      });
+      return {
+        executeSync: run,
+        execute: async (sql: string, params: unknown[] = []) =>
+          run(sql, params),
+        close: () => engine.close(),
+      };
+    },
+  };
+});
 
 const BATCH = 50;
 
@@ -88,8 +171,12 @@ function analysisFor(n: number, sessionId: string | null): ShotAnalysis {
     versionVector: {
       appVersion: '0.1.0',
       modelBundleVersion: 'test-native-1',
-      analysisEngineVersion: 'engine-1',
+      poseModelVersion: 'test-pose-1',
+      paddleModelVersion: 'test-paddle-1',
+      strokeDetectorVersion: 'test-stroke-1',
+      phaseModelVersion: 'test-phase-1',
       scoringModelVersion: 'scoring-1',
+      shotConfigVersion: 'forehand_drive@1',
     },
     source: 'real',
   };
@@ -223,13 +310,18 @@ describe('outbox drain over real SQLite', () => {
     const afterNewRow = await outboxRows(db);
     expect(afterNewRow).toHaveLength(BATCH);
     // Never marked permanent: the attempt budget is untouched, only the
-    // reason is recorded.
+    // reason is recorded on the rows already offered.
     expect(afterNewRow.every(row => row.attempts === 0)).toBe(true);
     expect(
-      afterNewRow.every(row =>
-        String(row.last_error).startsWith(SESSION_NOT_FOUND_REJECTION),
+      afterNewRow.every(
+        row =>
+          row.last_error === null ||
+          row.last_error.startsWith(SESSION_NOT_FOUND_REJECTION),
       ),
     ).toBe(true);
+    expect(
+      afterNewRow.filter(row => row.last_error !== null).length,
+    ).toBeGreaterThan(0);
 
     // Still retried: the next drain offers every one of them to the server.
     batches.length = 0;

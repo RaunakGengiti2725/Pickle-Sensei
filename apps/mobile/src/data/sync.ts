@@ -1,6 +1,6 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from './db';
-import { ApiError } from './api';
+import { ApiError, type ReleasableAnalysisOutcome } from './api';
 import { getActiveDataOwner } from './accountScope';
 
 /**
@@ -25,6 +25,23 @@ export interface SyncTransport {
     acceptedTrialIds: string[];
     rejected: Array<{ trialId: string; code: string; message: string }>;
   }>;
+  /**
+   * Finalizes a reserved analysis permit the device could not settle inline
+   * (POST /v1/analysis-permits/:id/finalize; idempotent for the same
+   * outcome). Optional: a transport without it leaves 'permit.release' rows
+   * queued with no attempts burned.
+   */
+  releasePermit?(
+    permitId: string,
+    outcome: ReleasableAnalysisOutcome,
+  ): Promise<void>;
+}
+
+/** Outbox row queued when a reserved permit must be released but the inline
+ * release did not reach the server (see runCaptureAnalysis). */
+export interface PermitReleasePayload {
+  permitId: string;
+  outcome: ReleasableAnalysisOutcome;
 }
 
 /** Convert a persisted ShotAnalysis into the canonical sync payload (spec p. 21). */
@@ -109,6 +126,51 @@ export function isTransientSyncRejection(code: string): boolean {
   return TRANSIENT_SYNC_REJECTION_CODES.has(code);
 }
 
+/** Rows a single drain offers to the server. */
+export const OUTBOX_DRAIN_BATCH = 50;
+
+/**
+ * Per-owner rotation cursor: the outbox id the previous drain's batch ended
+ * on. Transient failures keep their attempt budget, so with more than a
+ * batch of them eligible, a fixed "oldest first" window would offer the same
+ * rows on every drain and never reach a newer one. Each drain instead takes
+ * never-attempted rows first, then continues around the queue from where the
+ * last batch stopped, so every eligible row is offered within
+ * ceil(eligible / OUTBOX_DRAIN_BATCH) drains. Process-local on purpose: the
+ * never-attempted-first rule alone puts new rows in the first drain after a
+ * relaunch, and the sweep simply restarts from the oldest row.
+ */
+const drainCursors = new Map<string, number>();
+
+const RELEASABLE_OUTCOMES: ReadonlySet<ReleasableAnalysisOutcome> =
+  new Set<ReleasableAnalysisOutcome>([
+    'low_confidence',
+    'cancelled',
+    'failed',
+    'unsupported',
+    'incorrect_recognition',
+  ]);
+
+function isReleasableOutcome(
+  value: unknown,
+): value is ReleasableAnalysisOutcome {
+  return RELEASABLE_OUTCOMES.has(value as ReleasableAnalysisOutcome);
+}
+
+function parsePermitRelease(
+  payload: Record<string, unknown>,
+): PermitReleasePayload {
+  const permitId = payload['permitId'];
+  const outcome = payload['outcome'];
+  if (typeof permitId !== 'string' || !permitId.trim()) {
+    throw new Error('permit.release_missing_permit');
+  }
+  if (!isReleasableOutcome(outcome)) {
+    throw new Error('permit.release_invalid_outcome');
+  }
+  return { permitId, outcome };
+}
+
 async function recordRowFailure(
   db: LocalDb,
   owner: string,
@@ -136,11 +198,16 @@ export async function drainOutbox(
   transport: SyncTransport,
 ): Promise<{ synced: number; failed: number; remaining: number }> {
   const owner = getActiveDataOwner();
+  const cursor = drainCursors.get(owner) ?? 0;
   const { rows } = await db.execute(
-    `SELECT id, kind, payload, attempts FROM outbox
-     WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
-    [owner, OUTBOX_MAX_ATTEMPTS],
+    `SELECT id, kind, payload, attempts, last_error FROM outbox
+     WHERE owner_key = ? AND attempts < ?
+     ORDER BY (last_error IS NOT NULL) ASC, (id <= ?) ASC, id ASC
+     LIMIT ${OUTBOX_DRAIN_BATCH}`,
+    [owner, OUTBOX_MAX_ATTEMPTS, cursor],
   );
+  const lastRetried = rows.filter(row => row['last_error'] != null).pop();
+  if (lastRetried) drainCursors.set(owner, Number(lastRetried['id']));
   let synced = 0;
   let failed = 0;
 
@@ -153,9 +220,15 @@ export async function drainOutbox(
     row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
   )) {
     let payload: Record<string, unknown>;
+    let release: PermitReleasePayload | null = null;
     try {
       payload = JSON.parse(String(r['payload'])) as Record<string, unknown>;
-      if (r['kind'] !== 'session.create' && r['kind'] !== 'session.finalize') {
+      if (r['kind'] === 'permit.release') {
+        release = parsePermitRelease(payload);
+      } else if (
+        r['kind'] !== 'session.create' &&
+        r['kind'] !== 'session.finalize'
+      ) {
         throw new Error(`unknown outbox kind ${String(r['kind'])}`);
       }
     } catch (error) {
@@ -164,7 +237,11 @@ export async function drainOutbox(
       continue;
     }
     try {
-      if (r['kind'] === 'session.create')
+      if (release) {
+        // No release path on this transport: the row waits, budget intact.
+        if (!transport.releasePermit) continue;
+        await transport.releasePermit(release.permitId, release.outcome);
+      } else if (r['kind'] === 'session.create')
         await transport.createSession(payload);
       else await transport.finalizeSession(String(payload['id']));
       await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [

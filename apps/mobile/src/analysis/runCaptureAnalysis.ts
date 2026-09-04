@@ -13,10 +13,12 @@ import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
   markCaptureAnalyzed,
+  queuePermitRelease,
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
 } from '../data/repository';
+import { isPermanentSyncFailure } from '../data/sync';
 import { createFusionProviders } from '../vision/providers';
 import {
   ApiError,
@@ -174,6 +176,26 @@ export const PAYWALL_REQUIRED_CODE = 'access.paywall_required';
 
 function isPaywallRequired(error: ApiError): boolean {
   return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
+}
+
+/**
+ * A reservation that local persistence abandoned must not stay held on the
+ * server. Release inline when the server answers; when it cannot be reached
+ * (offline, timeout, 5xx, expired bearer) the release becomes a durable
+ * outbox row the drain finalizes later. A definitive 4xx means the server
+ * has already settled the permit and there is nothing left to retry.
+ */
+async function settleAbandonedPermit(
+  db: LocalDb,
+  permits: ReturnType<typeof createAnalysisPermitClient>,
+  permitId: string,
+): Promise<void> {
+  try {
+    await permits.release(permitId, 'failed');
+  } catch (error) {
+    if (isPermanentSyncFailure(error)) return;
+    await queuePermitRelease(db, { permitId, outcome: 'failed' });
+  }
 }
 
 async function runCaptureAnalysisCore(
@@ -357,13 +379,24 @@ async function runCaptureAnalysisCore(
   };
 
   // Every run is durably recorded, scored or not — reprocessing history.
-  await saveAnalysisRecord(request.db, record);
-  await markCaptureAnalyzed(request.db, request.captureId);
+  // Until the shot.sync row exists the permit is only held, so a failed
+  // local write settles the reservation before the error reaches the caller.
+  try {
+    await saveAnalysisRecord(request.db, record);
+    await markCaptureAnalyzed(request.db, request.captureId);
 
-  if (record.result && record.result.resultKind === 'scored') {
-    // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record, freeLimitReached };
+    if (record.result && record.result.resultKind === 'scored') {
+      // Promote to the product rating; the sync transaction consumes the permit.
+      await saveAnalysis(request.db, record.result, permitId);
+      return { kind: 'scored', analysisId, record, freeLimitReached };
+    }
+  } catch (error) {
+    await settleAbandonedPermit(request.db, permits, permitId).catch(() => {
+      // Neither the server nor the outbox took the release: the persistence
+      // error below is what the caller must see, and the server's stale-
+      // permit sweep reclaims the reservation.
+    });
+    throw error;
   }
 
   // Permit accounting: EVERY non-scored outcome releases the reservation.

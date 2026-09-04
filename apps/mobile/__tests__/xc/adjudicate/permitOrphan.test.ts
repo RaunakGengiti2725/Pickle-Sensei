@@ -62,7 +62,7 @@ function faultyDb(failOn: (sql: string) => boolean): FaultyDb {
       if (sql.includes('INSERT INTO outbox')) {
         const kindMatch = /VALUES \(\?, '([a-z.]+)', \?\)/.exec(sql);
         outbox.push({
-          kind: kindMatch ? kindMatch[1] : String(params[1]),
+          kind: kindMatch?.[1] ?? String(params[1]),
           payload: JSON.parse(String(params[params.length - 1])) as Record<
             string,
             unknown
@@ -105,7 +105,7 @@ function permitServer(options: { finalizeReachable: boolean }): PermitServer {
       }
       const body = JSON.parse(String(init?.body)) as { outcome: unknown };
       finalized.push({
-        permitId: decodeURIComponent(finalize[1]),
+        permitId: decodeURIComponent(finalize[1] ?? ''),
         outcome: body.outcome,
       });
       return jsonResponse({ ok: true });
@@ -256,7 +256,7 @@ describe('permit reserved, then a local persistence failure', () => {
       // Exactly one release, and never a durable shot row that would consume
       // the permit for a rating the user does not have locally.
       expect(releases).toHaveLength(1);
-      expect(releases[0].outcome).toBe('failed');
+      expect(releases[0]?.outcome).toBe('failed');
       expect(
         faulty.outbox.filter(row => row.kind === 'shot.sync'),
       ).toHaveLength(0);
@@ -277,7 +277,7 @@ describe('permit reserved, then a local persistence failure', () => {
       expect(server.finalized).toHaveLength(0);
       const rows = releaseRows(faulty, PERMIT_ID);
       expect(rows).toHaveLength(1);
-      expect(rows[0].payload).toEqual({
+      expect(rows[0]?.payload).toEqual({
         permitId: PERMIT_ID,
         outcome: 'failed',
       });
@@ -420,7 +420,7 @@ describe('durable permit.release rows drain to the server', () => {
 
     expect(result).toEqual({ synced: 0, failed: 1, remaining: 1 });
     expect(outbox).toHaveLength(1);
-    expect(outbox[0].attempts).toBe(0);
-    expect(outbox[0].last_error).toContain('Network request failed');
+    expect(outbox[0]?.attempts).toBe(0);
+    expect(outbox[0]?.last_error).toContain('Network request failed');
   });
 });

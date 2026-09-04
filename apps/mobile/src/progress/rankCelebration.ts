@@ -9,6 +9,7 @@ import { getKv, setKv } from '../data/repository';
 import {
   getActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
+  subscribeActiveDataOwner,
 } from '../data/accountScope';
 import {
   useWalkthroughStore,
@@ -27,12 +28,20 @@ import {
  *     rating down so climbing BACK to a tier celebrates again.
  *
  * The record is written before the overlay is shown, so a race between two
- * screens can never produce a duplicate ceremony.
+ * screens can never produce a duplicate ceremony. A ceremony that resolves
+ * while another is already showing (or held) is skipped WITHOUT writing the
+ * record, so the next resolve after dismissal raises it.
  *
  * The overlay never stacks on the first-run walkthrough: a ceremony that
  * resolves while the tour is showing is held as `pending` and raised the
  * moment the tour is dismissed, and the tour in turn waits for a showing
  * ceremony (`walkthroughYieldsTo`).
+ *
+ * Overlay state is owner-scoped. The overlay is mounted above the auth gate,
+ * so a sign-out or account switch does not unmount it: the store drops its
+ * showing and held ceremony the moment the active data owner changes, so one
+ * account's ceremony is never shown to — or suppresses the placement of —
+ * the next.
  */
 
 export interface RankCelebration {
@@ -109,6 +118,9 @@ interface RankCelebrationState {
   /** Serialized: concurrent reports from multiple screens queue up. */
   maybeCelebrate: (summary: PlayerRankSummary) => Promise<void>;
   dismiss: () => void;
+  /** Drops the showing and held ceremony: the account they belong to is no
+   * longer the active owner. */
+  reset: () => void;
 }
 
 let evaluationQueue: Promise<void> = Promise.resolve();
@@ -131,6 +143,12 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           // Unreadable state: skip rather than risk a duplicate ceremony.
           return;
         }
+        // The owner may have changed while the record was read.
+        if (getActiveDataOwner() !== owner) return;
+        const celebration = evaluateRankTransition(stored, summary);
+        // Another ceremony is showing or held: leave the record alone so
+        // this one is raised by the next resolve after dismissal.
+        if (celebration && (get().current || get().pending)) return;
         const record: StoredRankRecord = {
           version: 1,
           tier: summary.tier,
@@ -142,7 +160,6 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           stored.rating !== record.rating;
         if (changed) {
           try {
-            if (getActiveDataOwner() !== owner) return;
             await setKv(
               getDb(),
               rankCelebrationKeyForOwner(owner),
@@ -155,8 +172,8 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
             return;
           }
         }
-        const celebration = evaluateRankTransition(stored, summary);
-        if (!celebration || get().current || get().pending) return;
+        // The owner may have changed while the record was written.
+        if (!celebration || getActiveDataOwner() !== owner) return;
         if (useWalkthroughStore.getState().visible) {
           set({ pending: celebration });
         } else {
@@ -168,8 +185,15 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
     },
 
     dismiss: () => set({ current: null }),
+
+    reset: () => set({ current: null, pending: null }),
   }),
 );
+
+// Every account transition (sign-out, revoked session, account deletion,
+// sign-in as someone else) moves the active owner; the previous owner's
+// ceremony must not outlive it.
+subscribeActiveDataOwner(() => useRankCelebrationStore.getState().reset());
 
 useWalkthroughStore.subscribe(state => {
   if (state.visible) return;

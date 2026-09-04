@@ -12,6 +12,23 @@ const UUID_PATTERN =
 
 let activeOwner = SIGNED_OUT_DATA_OWNER;
 
+type ActiveDataOwnerListener = (owner: string, previous: string) => void;
+const ownerListeners = new Set<ActiveDataOwnerListener>();
+
+/**
+ * In-memory state that is partitioned by owner (overlays, caches) subscribes
+ * here so an account transition drops what belonged to the previous owner.
+ * Fires only when the owner actually changes.
+ */
+export function subscribeActiveDataOwner(
+  listener: ActiveDataOwnerListener,
+): () => void {
+  ownerListeners.add(listener);
+  return () => {
+    ownerListeners.delete(listener);
+  };
+}
+
 export function canonicalDataOwner(canonicalAppUserId: string): string {
   const normalized = canonicalAppUserId.trim().toLowerCase();
   if (!UUID_PATTERN.test(normalized)) {
@@ -28,7 +45,10 @@ export function setActiveDataOwner(owner: string): void {
   ) {
     throw new Error('Invalid local data owner.');
   }
+  const previous = activeOwner;
   activeOwner = owner.toLowerCase();
+  if (activeOwner === previous) return;
+  for (const listener of ownerListeners) listener(activeOwner, previous);
 }
 
 export function getActiveDataOwner(): string {
