@@ -684,6 +684,41 @@ begin
   end;
 end $$;
 
+-- B1c: the two service-written account tables a client CAN select
+-- (billing_entitlements, account_deletion_requests — E7 above left Alice a
+-- deletion request) isolate rows like every other user-owned relation.
+reset role;
+insert into public.billing_entitlements (user_id, premium)
+values ('00000000-0000-4000-8000-00000000000a', false);
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+do $$
+declare
+  t text;
+  n int;
+begin
+  foreach t in array array['billing_entitlements','account_deletion_requests'] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n <> 1 then
+      raise exception 'B1c: owner must see exactly 1 row in public.% (saw %)', t, n;
+    end if;
+  end loop;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000b';
+do $$
+declare
+  t text;
+  n int;
+begin
+  foreach t in array array['billing_entitlements','account_deletion_requests'] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n <> 0 then
+      raise exception 'B1c: public.% must show 0 rows to a second user (saw %)', t, n;
+    end if;
+  end loop;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+
 -- E9: the webhook audit log is invisible and unwritable to clients
 do $$
 begin
