@@ -87,38 +87,114 @@ const GLUE_GATES = {
   distinctPeakRatio: 0.6,
 } as const;
 
-export function proposeStrokeEvents(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  clipStartMs: number;
-  clipEndMs: number;
-}): { events: StrokeEventProposal[]; source: "paddle" | "wrist" | "none" } {
-  const clipLength = Math.max(1, input.clipEndMs - input.clipStartMs);
-  const coverage = (series: ReadonlyArray<{ timestampMs: number }> | null): number => {
-    if (!series || series.length < 4) return 0;
-    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
-  };
-  let source: "paddle" | "wrist";
-  let series: ReadonlyArray<{ timestampMs: number; value: number }>;
-  if (input.paddleSpeeds && coverage(input.paddleSpeeds) >= 0.35) {
-    source = "paddle";
-    series = input.paddleSpeeds;
-  } else if (input.wristSpeeds && coverage(input.wristSpeeds) >= 0.4) {
-    source = "wrist";
-    series = input.wristSpeeds;
-  } else {
-    return { events: [], source: "none" };
-  }
-  const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
-  // Light smoothing (3-sample) to suppress single-frame jitter.
-  const smoothed = sorted.map((sample, index) => {
+export interface SpeedSeriesSample {
+  timestampMs: number;
+  value: number;
+}
+
+/** What the dropped prefix of one speed stream still contributes to the
+ * proposer (see StrokeEventStreamPrefix). */
+export interface SpeedStreamPrefix {
+  /** Fraction of the clip the WHOLE stream covers (the window alone would
+   * under-report it). */
+  coverage: number;
+  /** The sample immediately preceding the window: smooths the window's first
+   * sample with its true neighbour; never a peak itself. */
+  leadIn: SpeedSeriesSample | null;
+  /** Highest 3-sample-smoothed speed among the dropped samples: keeps the
+   * 30%-of-global-peak proposal floor at the full-stream value. */
+  peakSmoothedSpeed: number;
+}
+
+/**
+ * Declares that the series passed in are the TRAILING WINDOW of a longer
+ * stream (SessionEventEngine) rather than the whole clip. The proposer then
+ * behaves exactly as if the dropped prefix were still present: `wrist` and
+ * `paddle` carry each stream's contribution (null while nothing of that
+ * stream was dropped) and `paddlePeakSpeed` is the highest raw paddle speed
+ * dropped (keeps the paddle confirm normalization at the full-stream max;
+ * null when no paddle sample was dropped). Offline callers pass the whole
+ * clip and omit it.
+ */
+export interface StrokeEventStreamPrefix {
+  wrist: SpeedStreamPrefix | null;
+  paddle: SpeedStreamPrefix | null;
+  paddlePeakSpeed: number | null;
+}
+
+const isFiniteSample = (sample: SpeedSeriesSample): boolean =>
+  Number.isFinite(sample.timestampMs) && Number.isFinite(sample.value);
+
+/** Non-finite samples (NaN/±Infinity timestamp or value) carry no evidence
+ * and must never reach coverage, smoothing, gating or output fields. */
+function finiteSamples(
+  series: ReadonlyArray<SpeedSeriesSample> | null,
+): ReadonlyArray<SpeedSeriesSample> | null {
+  if (!series) return null;
+  return series.every(isFiniteSample) ? series : series.filter(isFiniteSample);
+}
+
+/** A clip with non-finite or non-positive length cannot gate coverage —
+ * the proposer abstains (typed) instead of treating it as a 1ms clip. */
+function isUsableClip(clipStartMs: number, clipEndMs: number): boolean {
+  return Number.isFinite(clipStartMs) && Number.isFinite(clipEndMs) && clipEndMs > clipStartMs;
+}
+
+/** Light smoothing (3-sample) to suppress single-frame jitter. `leadIn`, when
+ * present, is the true predecessor of `sorted[0]` (see StrokeEventStreamPrefix). */
+function smoothSeries(
+  sorted: ReadonlyArray<SpeedSeriesSample>,
+  leadIn: SpeedSeriesSample | null,
+): SpeedSeriesSample[] {
+  return sorted.map((sample, index) => {
     const window = sorted.slice(Math.max(0, index - 1), index + 2);
+    if (index === 0 && leadIn) window.unshift(leadIn);
     return {
       timestampMs: sample.timestampMs,
       value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
     };
   });
-  const globalPeak = smoothed.reduce((best, sample) => Math.max(best, sample.value), 0);
+}
+
+export function proposeStrokeEvents(input: {
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  clipStartMs: number;
+  clipEndMs: number;
+  streamPrefix?: StrokeEventStreamPrefix | undefined;
+}): { events: StrokeEventProposal[]; source: "paddle" | "wrist" | "none" } {
+  if (!isUsableClip(input.clipStartMs, input.clipEndMs)) return { events: [], source: "none" };
+  const clipLength = input.clipEndMs - input.clipStartMs;
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
+  const coverage = (
+    series: ReadonlyArray<{ timestampMs: number }> | null,
+    prefix: SpeedStreamPrefix | null,
+  ): number => {
+    if (prefix) return prefix.coverage;
+    if (!series || series.length < 4) return 0;
+    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
+  };
+  let source: "paddle" | "wrist";
+  let series: ReadonlyArray<SpeedSeriesSample>;
+  let prefix: SpeedStreamPrefix | null;
+  if (paddleSpeeds && coverage(paddleSpeeds, input.streamPrefix?.paddle ?? null) >= 0.35) {
+    source = "paddle";
+    series = paddleSpeeds;
+    prefix = input.streamPrefix?.paddle ?? null;
+  } else if (wristSpeeds && coverage(wristSpeeds, input.streamPrefix?.wrist ?? null) >= 0.4) {
+    source = "wrist";
+    series = wristSpeeds;
+    prefix = input.streamPrefix?.wrist ?? null;
+  } else {
+    return { events: [], source: "none" };
+  }
+  const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
+  const smoothed = smoothSeries(sorted, prefix?.leadIn ?? null);
+  const globalPeak = smoothed.reduce(
+    (best, sample) => Math.max(best, sample.value),
+    prefix?.peakSmoothedSpeed ?? 0,
+  );
   const threshold = Math.max(
     EVENT_GATES.minPeakSpeed,
     globalPeak * EVENT_GATES.minPeakFractionOfMax,
@@ -291,16 +367,21 @@ export interface StrokeEventProposalV2 extends StrokeEventProposal {
 }
 
 export function proposeStrokeEventsV2(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
   clipStartMs: number;
   clipEndMs: number;
+  streamPrefix?: StrokeEventStreamPrefix | undefined;
 }): { events: StrokeEventProposalV2[]; source: "wrist" | "paddle_fallback" | "none" } {
+  if (!isUsableClip(input.clipStartMs, input.clipEndMs)) return { events: [], source: "none" };
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
   const body = proposeStrokeEvents({
     paddleSpeeds: null,
-    wristSpeeds: input.wristSpeeds,
+    wristSpeeds,
     clipStartMs: input.clipStartMs,
     clipEndMs: input.clipEndMs,
+    streamPrefix: input.streamPrefix,
   });
   // Wrist series are noisier than paddle series: one physical stroke can
   // fragment into swing + follow-through bursts separated by a brief dip
@@ -335,15 +416,9 @@ export function proposeStrokeEventsV2(input: {
   // gold events — volley 240/800ms, rally2 123/670ms overlap). Boundaries
   // extend while smoothed wrist speed stays ≥ max(12% of peak, 0.08),
   // within the same reach cap. Peaks and event identity are untouched.
-  if (input.wristSpeeds && input.wristSpeeds.length >= 4) {
-    const sorted = [...input.wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
-    const smoothed = sorted.map((sample, index) => {
-      const window = sorted.slice(Math.max(0, index - 1), index + 2);
-      return {
-        timestampMs: sample.timestampMs,
-        value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
-      };
-    });
+  if (wristSpeeds && wristSpeeds.length >= 4) {
+    const sorted = [...wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
+    const smoothed = smoothSeries(sorted, input.streamPrefix?.wrist?.leadIn ?? null);
     for (const event of glued) {
       const relax = Math.max(0.12 * event.peakSpeed, 0.08);
       let startIndex = smoothed.findIndex((sample) => sample.timestampMs >= event.startMs);
@@ -384,12 +459,13 @@ export function proposeStrokeEventsV2(input: {
   });
   let baseEvents = glued;
   let source: "wrist" | "paddle_fallback" | "none" = body.source === "wrist" ? "wrist" : "none";
-  if (baseEvents.length === 0 && input.paddleSpeeds) {
+  if (baseEvents.length === 0 && paddleSpeeds) {
     const paddleOnly = proposeStrokeEvents({
-      paddleSpeeds: input.paddleSpeeds,
+      paddleSpeeds,
       wristSpeeds: null,
       clipStartMs: input.clipStartMs,
       clipEndMs: input.clipEndMs,
+      streamPrefix: input.streamPrefix,
     });
     if (paddleOnly.events.length > 0) {
       baseEvents = paddleOnly.events.map((event) => ({
@@ -404,9 +480,15 @@ export function proposeStrokeEventsV2(input: {
   // also "confirm" itself would double-count the same evidence.
   const paddle =
     source === "wrist"
-      ? (input.paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
+      ? (paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
       : [];
-  const paddleMax = paddle.reduce((best, sample) => Math.max(best, sample.value), 0);
+  const droppedPaddlePeak =
+    source === "wrist" ? (input.streamPrefix?.paddlePeakSpeed ?? null) : null;
+  const paddlePresent = paddle.length > 0 || droppedPaddlePeak !== null;
+  const paddleMax = paddle.reduce(
+    (best, sample) => Math.max(best, sample.value),
+    droppedPaddlePeak ?? 0,
+  );
   const events: StrokeEventProposalV2[] = baseEvents.map((event) => {
     const inside = paddle.filter(
       (sample) =>
@@ -437,9 +519,7 @@ export function proposeStrokeEventsV2(input: {
       0.15,
       Math.min(
         0.95,
-        event.confidence +
-          0.15 * paddleSupport -
-          (paddle.length > 0 && paddleSupport === 0 ? 0.1 : 0),
+        event.confidence + 0.15 * paddleSupport - (paddlePresent && paddleSupport === 0 ? 0.1 : 0),
       ),
     );
     return {

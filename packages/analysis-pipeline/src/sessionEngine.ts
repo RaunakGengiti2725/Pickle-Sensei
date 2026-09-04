@@ -125,38 +125,114 @@ const GLUE_GATES = {
   distinctPeakRatio: 0.6,
 } as const;
 
-export function proposeStrokeEvents(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  clipStartMs: number;
-  clipEndMs: number;
-}): { events: StrokeEventProposal[]; source: "paddle" | "wrist" | "none" } {
-  const clipLength = Math.max(1, input.clipEndMs - input.clipStartMs);
-  const coverage = (series: ReadonlyArray<{ timestampMs: number }> | null): number => {
-    if (!series || series.length < 4) return 0;
-    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
-  };
-  let source: "paddle" | "wrist";
-  let series: ReadonlyArray<{ timestampMs: number; value: number }>;
-  if (input.paddleSpeeds && coverage(input.paddleSpeeds) >= 0.35) {
-    source = "paddle";
-    series = input.paddleSpeeds;
-  } else if (input.wristSpeeds && coverage(input.wristSpeeds) >= 0.4) {
-    source = "wrist";
-    series = input.wristSpeeds;
-  } else {
-    return { events: [], source: "none" };
-  }
-  const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
-  // Light smoothing (3-sample) to suppress single-frame jitter.
-  const smoothed = sorted.map((sample, index) => {
+export interface SpeedSeriesSample {
+  timestampMs: number;
+  value: number;
+}
+
+/** What the dropped prefix of one speed stream still contributes to the
+ * proposer (see StrokeEventStreamPrefix). */
+export interface SpeedStreamPrefix {
+  /** Fraction of the clip the WHOLE stream covers (the window alone would
+   * under-report it). */
+  coverage: number;
+  /** The sample immediately preceding the window: smooths the window's first
+   * sample with its true neighbour; never a peak itself. */
+  leadIn: SpeedSeriesSample | null;
+  /** Highest 3-sample-smoothed speed among the dropped samples: keeps the
+   * 30%-of-global-peak proposal floor at the full-stream value. */
+  peakSmoothedSpeed: number;
+}
+
+/**
+ * Declares that the series passed in are the TRAILING WINDOW of a longer
+ * stream (SessionEventEngine) rather than the whole clip. The proposer then
+ * behaves exactly as if the dropped prefix were still present: `wrist` and
+ * `paddle` carry each stream's contribution (null while nothing of that
+ * stream was dropped) and `paddlePeakSpeed` is the highest raw paddle speed
+ * dropped (keeps the paddle confirm normalization at the full-stream max;
+ * null when no paddle sample was dropped). Offline callers pass the whole
+ * clip and omit it.
+ */
+export interface StrokeEventStreamPrefix {
+  wrist: SpeedStreamPrefix | null;
+  paddle: SpeedStreamPrefix | null;
+  paddlePeakSpeed: number | null;
+}
+
+const isFiniteSample = (sample: SpeedSeriesSample): boolean =>
+  Number.isFinite(sample.timestampMs) && Number.isFinite(sample.value);
+
+/** Non-finite samples (NaN/±Infinity timestamp or value) carry no evidence
+ * and must never reach coverage, smoothing, gating or output fields. */
+function finiteSamples(
+  series: ReadonlyArray<SpeedSeriesSample> | null,
+): ReadonlyArray<SpeedSeriesSample> | null {
+  if (!series) return null;
+  return series.every(isFiniteSample) ? series : series.filter(isFiniteSample);
+}
+
+/** A clip with non-finite or non-positive length cannot gate coverage —
+ * the proposer abstains (typed) instead of treating it as a 1ms clip. */
+function isUsableClip(clipStartMs: number, clipEndMs: number): boolean {
+  return Number.isFinite(clipStartMs) && Number.isFinite(clipEndMs) && clipEndMs > clipStartMs;
+}
+
+/** Light smoothing (3-sample) to suppress single-frame jitter. `leadIn`, when
+ * present, is the true predecessor of `sorted[0]` (see StrokeEventStreamPrefix). */
+function smoothSeries(
+  sorted: ReadonlyArray<SpeedSeriesSample>,
+  leadIn: SpeedSeriesSample | null,
+): SpeedSeriesSample[] {
+  return sorted.map((sample, index) => {
     const window = sorted.slice(Math.max(0, index - 1), index + 2);
+    if (index === 0 && leadIn) window.unshift(leadIn);
     return {
       timestampMs: sample.timestampMs,
       value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
     };
   });
-  const globalPeak = smoothed.reduce((best, sample) => Math.max(best, sample.value), 0);
+}
+
+export function proposeStrokeEvents(input: {
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  clipStartMs: number;
+  clipEndMs: number;
+  streamPrefix?: StrokeEventStreamPrefix | undefined;
+}): { events: StrokeEventProposal[]; source: "paddle" | "wrist" | "none" } {
+  if (!isUsableClip(input.clipStartMs, input.clipEndMs)) return { events: [], source: "none" };
+  const clipLength = input.clipEndMs - input.clipStartMs;
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
+  const coverage = (
+    series: ReadonlyArray<{ timestampMs: number }> | null,
+    prefix: SpeedStreamPrefix | null,
+  ): number => {
+    if (prefix) return prefix.coverage;
+    if (!series || series.length < 4) return 0;
+    return (series[series.length - 1]!.timestampMs - series[0]!.timestampMs) / clipLength;
+  };
+  let source: "paddle" | "wrist";
+  let series: ReadonlyArray<SpeedSeriesSample>;
+  let prefix: SpeedStreamPrefix | null;
+  if (paddleSpeeds && coverage(paddleSpeeds, input.streamPrefix?.paddle ?? null) >= 0.35) {
+    source = "paddle";
+    series = paddleSpeeds;
+    prefix = input.streamPrefix?.paddle ?? null;
+  } else if (wristSpeeds && coverage(wristSpeeds, input.streamPrefix?.wrist ?? null) >= 0.4) {
+    source = "wrist";
+    series = wristSpeeds;
+    prefix = input.streamPrefix?.wrist ?? null;
+  } else {
+    return { events: [], source: "none" };
+  }
+  const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
+  const smoothed = smoothSeries(sorted, prefix?.leadIn ?? null);
+  const globalPeak = smoothed.reduce(
+    (best, sample) => Math.max(best, sample.value),
+    prefix?.peakSmoothedSpeed ?? 0,
+  );
   const threshold = Math.max(
     EVENT_GATES.minPeakSpeed,
     globalPeak * EVENT_GATES.minPeakFractionOfMax,
@@ -329,16 +405,21 @@ export interface StrokeEventProposalV2 extends StrokeEventProposal {
 }
 
 export function proposeStrokeEventsV2(input: {
-  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
-  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  paddleSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
+  wristSpeeds: ReadonlyArray<SpeedSeriesSample> | null;
   clipStartMs: number;
   clipEndMs: number;
+  streamPrefix?: StrokeEventStreamPrefix | undefined;
 }): { events: StrokeEventProposalV2[]; source: "wrist" | "paddle_fallback" | "none" } {
+  if (!isUsableClip(input.clipStartMs, input.clipEndMs)) return { events: [], source: "none" };
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
   const body = proposeStrokeEvents({
     paddleSpeeds: null,
-    wristSpeeds: input.wristSpeeds,
+    wristSpeeds,
     clipStartMs: input.clipStartMs,
     clipEndMs: input.clipEndMs,
+    streamPrefix: input.streamPrefix,
   });
   // Wrist series are noisier than paddle series: one physical stroke can
   // fragment into swing + follow-through bursts separated by a brief dip
@@ -373,15 +454,9 @@ export function proposeStrokeEventsV2(input: {
   // gold events — volley 240/800ms, rally2 123/670ms overlap). Boundaries
   // extend while smoothed wrist speed stays ≥ max(12% of peak, 0.08),
   // within the same reach cap. Peaks and event identity are untouched.
-  if (input.wristSpeeds && input.wristSpeeds.length >= 4) {
-    const sorted = [...input.wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
-    const smoothed = sorted.map((sample, index) => {
-      const window = sorted.slice(Math.max(0, index - 1), index + 2);
-      return {
-        timestampMs: sample.timestampMs,
-        value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
-      };
-    });
+  if (wristSpeeds && wristSpeeds.length >= 4) {
+    const sorted = [...wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
+    const smoothed = smoothSeries(sorted, input.streamPrefix?.wrist?.leadIn ?? null);
     for (const event of glued) {
       const relax = Math.max(0.12 * event.peakSpeed, 0.08);
       let startIndex = smoothed.findIndex((sample) => sample.timestampMs >= event.startMs);
@@ -422,12 +497,13 @@ export function proposeStrokeEventsV2(input: {
   });
   let baseEvents = glued;
   let source: "wrist" | "paddle_fallback" | "none" = body.source === "wrist" ? "wrist" : "none";
-  if (baseEvents.length === 0 && input.paddleSpeeds) {
+  if (baseEvents.length === 0 && paddleSpeeds) {
     const paddleOnly = proposeStrokeEvents({
-      paddleSpeeds: input.paddleSpeeds,
+      paddleSpeeds,
       wristSpeeds: null,
       clipStartMs: input.clipStartMs,
       clipEndMs: input.clipEndMs,
+      streamPrefix: input.streamPrefix,
     });
     if (paddleOnly.events.length > 0) {
       baseEvents = paddleOnly.events.map((event) => ({
@@ -442,9 +518,15 @@ export function proposeStrokeEventsV2(input: {
   // also "confirm" itself would double-count the same evidence.
   const paddle =
     source === "wrist"
-      ? (input.paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
+      ? (paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
       : [];
-  const paddleMax = paddle.reduce((best, sample) => Math.max(best, sample.value), 0);
+  const droppedPaddlePeak =
+    source === "wrist" ? (input.streamPrefix?.paddlePeakSpeed ?? null) : null;
+  const paddlePresent = paddle.length > 0 || droppedPaddlePeak !== null;
+  const paddleMax = paddle.reduce(
+    (best, sample) => Math.max(best, sample.value),
+    droppedPaddlePeak ?? 0,
+  );
   const events: StrokeEventProposalV2[] = baseEvents.map((event) => {
     const inside = paddle.filter(
       (sample) =>
@@ -475,9 +557,7 @@ export function proposeStrokeEventsV2(input: {
       0.15,
       Math.min(
         0.95,
-        event.confidence +
-          0.15 * paddleSupport -
-          (paddle.length > 0 && paddleSupport === 0 ? 0.1 : 0),
+        event.confidence + 0.15 * paddleSupport - (paddlePresent && paddleSupport === 0 ? 0.1 : 0),
       ),
     );
     return {
@@ -579,9 +659,16 @@ export function selectTargetEvent(
  *
  *  1. EVENT IDENTITY = stroke-event-2 (D-030, strokeEvents.ts). The engine
  *     never invents its own proposer: on every reconciliation it runs
- *     `proposeStrokeEventsV2` over the ACCUMULATED series (target BODY
+ *     `proposeStrokeEventsV2` over the accumulated series (target BODY
  *     motion proposes; paddle only confirms/ranks/refines). Emitted events
  *     carry the canonical `StrokeEventProposalV2` — no second event type.
+ *     The series handed to the proposer is a TRAILING WINDOW of the stream
+ *     (see "BOUNDED RECONCILIATION WINDOW" below) so per-sample cost does
+ *     not grow with session length; the proposer's `streamPrefix` input
+ *     carries what the dropped samples still contribute (the smoothing
+ *     neighbour of the window's first sample, the global-peak proposal
+ *     floor, the paddle confirm normalization), so the window proposes the
+ *     same events the full series would.
  *
  *  2. EVENT COMPLETION = D-029 adaptive settle-or-valley-or-safety
  *     (eventCompletionBench.ts, ADAPTIVE variant). Constants are mirrored
@@ -605,6 +692,30 @@ export function selectTargetEvent(
  *     samples are kept regardless: per D-030 paddle evidence can never
  *     create/delete/re-bound a proposal, so late paddle history only feeds
  *     the confirm-normalization of FUTURE candidates.
+ *
+ * BOUNDED RECONCILIATION WINDOW (why push() cost is independent of session
+ * length): a peak can only still become, or still change, a proposal while
+ * the stream is within the ±1200ms boundary reach cap of it, and its bounds
+ * walk at most that far back; the local-baseline median that scores its
+ * prominence looks a further 1500ms back (strokeEvents.ts L243). So after
+ * every push the engine drops wrist/paddle samples older than
+ *   min(start of the still-open candidate, lastSample − 2·1200) − 1500,
+ * additionally keeping the LAST EMITTED event's samples (from its start −
+ * 1500) while a new proposal could still glue onto it (gap ≤ 350ms,
+ * GLUE_GATES.maxGapMs). Everything the dropped samples still contribute to
+ * the batch is carried through `streamPrefix`: the window's true predecessor
+ * sample (exact 3-sample smoothing at the edge), the highest smoothed wrist
+ * speed dropped (the 30%-of-global-peak floor keeps rising exactly as it
+ * would over the full series) and the highest raw paddle speed dropped. Two
+ * consequences are deliberate and recorded: wrist samples arriving later
+ * than the window (older than its first sample) are dropped and counted like
+ * samples behind the frontier, and paddle_fallback batches are ignored while
+ * a trimmed body proposal still clears the proposal floor (the full series
+ * would still hold it and not fall back).
+ * Once an emitted event has left the window, its retro-suppression check
+ * (SESSION_EVENT_RETRO_SUPPRESSED) is made against the global-peak floor
+ * (carried floor + window) — the one full-series rule that can still drop
+ * it — instead of the batch itself.
  *
  * BOUND-STABILITY WAIT (why emission is not instant on settle): proposal
  * boundaries walk outward while smoothed wrist speed stays above the
@@ -650,6 +761,26 @@ export const SESSION_COMPLETION = {
  * there): once the stream passes peak+this, no sample can extend the
  * proposal's boundaries any further — bounds are stable and freezable. */
 export const BOUND_STABILITY_MS = 1200;
+
+/** Mirror of the ±1.5s local-baseline context the proposer's prominence
+ * median looks at (strokeEvents.ts L243, literal there): the earliest sample
+ * a proposal's SCORE can depend on is its start minus this. */
+const BASELINE_CONTEXT_MS = 1500;
+
+/** The window is never trimmed below the proposer's minimum series length. */
+const MIN_WINDOW_SAMPLES = 4;
+
+/** Mirror of the boundary-relaxation floor (strokeEvents.ts, literal there):
+ * a proposal's bounds extend while smoothed speed stays ≥ max(12% of its
+ * peak, this), within the reach cap. */
+const RELAXATION_FLOOR = 0.08;
+const RELAXATION_PEAK_FRACTION = 0.12;
+
+/** Hard bound on how far back the peak chain (see chainStartMs) is followed.
+ * Reached only when the smoothed speed has not once dipped to 60% of two
+ * consecutive proposal-floor peaks, or their spans have kept touching, for
+ * this long — continuous activity with no quiet moment. */
+const CHAIN_RETENTION_CAP_MS = 30_000;
 
 export interface SpeedSample {
   timestampMs: number;
@@ -714,7 +845,8 @@ export interface SessionCaptureMeta {
 export interface SessionQualityState {
   wristSamples: number;
   paddleSamples: number;
-  /** Late wrist samples at/before the frontier — dropped, never rewritten. */
+  /** Late wrist samples at/before the frontier or behind the reconciliation
+   * window — dropped, never rewritten. */
   droppedLateSamples: number;
   lastSampleMs: number | null;
   /** Recorded oddities (e.g. suppressed merged proposals) — never silent. */
@@ -804,14 +936,46 @@ function adaptiveCompletion(
 }
 
 export class SessionEventEngine {
+  /** Trailing reconciliation window of the wrist/paddle streams (sorted). */
   private readonly wrist: SpeedSample[] = [];
   private readonly paddle: SpeedSample[] = [];
   private readonly events: SessionStrokeEvent[] = [];
   private frontierMs = Number.NEGATIVE_INFINITY;
   private droppedLateSamples = 0;
+  private acceptedWristSamples = 0;
+  private acceptedPaddleSamples = 0;
+  /** What the samples trimmed from the window still contribute to the batch
+   * (see StrokeEventStreamPrefix); samples older than `windowCutoffMs` have
+   * been trimmed (or, arriving late, are folded/dropped the same way). */
+  private wristLeadIn: SpeedSample | null = null;
+  private wristPeakSmoothedFloor = 0;
+  private paddleLeadIn: SpeedSample | null = null;
+  private paddlePeakSmoothedFloor = 0;
+  private paddlePeakFloor: number | null = null;
+  private windowCutoffMs = Number.NEGATIVE_INFINITY;
+  /** Full-stream spans (accepted samples), for the paddle coverage gate. */
+  private firstWristMs = Number.POSITIVE_INFINITY;
+  private firstPaddleMs = Number.POSITIVE_INFINITY;
+  private lastPaddleMs = Number.NEGATIVE_INFINITY;
+  /** Start of the earliest still-open candidate after the last reconcile. */
+  private openCandidateStartMs: number | null = null;
+  /** Highest peakSpeed of any wrist-sourced proposal the batch has ever
+   * made, and the same over proposals prominent enough for the low-amplitude
+   * tier: whether the full series would still hold a body proposal (and so
+   * never fall back to the paddle) once the window holds none. */
+  private pastWristPeak = 0;
+  private pastProminentWristPeak = 0;
+  private paddleFallbackActive = false;
   private readonly notes: string[] = [];
   private readonly suppressionNoted = new Set<number>();
   private readonly retroNoted = new Set<string>();
+  /** Emitted events whose start has left the window: wrist-sourced ones
+   * ascending by peakSpeed (judged against the global-peak floor),
+   * paddle-sourced ones (judged by the full-series source). */
+  private readonly retroPending: SessionStrokeEvent[] = [];
+  private readonly retroPendingPaddle: SessionStrokeEvent[] = [];
+  /** Index of the first emitted event whose start is still inside the window. */
+  private retroWindowCursor = 0;
 
   constructor(
     private readonly options: {
@@ -832,18 +996,31 @@ export class SessionEventEngine {
   }): SessionStrokeEvent[] {
     for (const sample of input.paddle ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
+      this.acceptedPaddleSamples += 1;
+      this.firstPaddleMs = Math.min(this.firstPaddleMs, sample.timestampMs);
+      this.lastPaddleMs = Math.max(this.lastPaddleMs, sample.timestampMs);
+      if (sample.timestampMs < this.windowCutoffMs) {
+        // Behind the window: can only feed the confirm normalization.
+        this.paddlePeakFloor = Math.max(this.paddlePeakFloor ?? 0, sample.value);
+        continue;
+      }
       insertSorted(this.paddle, sample);
     }
     for (const sample of input.wrist ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
-      if (sample.timestampMs <= this.frontierMs) {
-        // Late data behind the frontier could only rewrite closed events.
+      if (sample.timestampMs <= this.frontierMs || sample.timestampMs < this.windowCutoffMs) {
+        // Late data behind the frontier (or behind the reconciliation
+        // window) could only rewrite closed events.
         this.droppedLateSamples += 1;
         continue;
       }
+      this.acceptedWristSamples += 1;
+      this.firstWristMs = Math.min(this.firstWristMs, sample.timestampMs);
       insertSorted(this.wrist, sample);
     }
-    return this.reconcile(false);
+    const emitted = this.reconcile(false);
+    this.trimWindow();
+    return emitted;
   }
 
   /** Convenience for one-sample-per-frame live feeding. */
@@ -892,8 +1069,8 @@ export class SessionEventEngine {
           "adaptive-completion (D-029 settle-or-valley-or-safety; constants mirrored from eventCompletionBench.ts)",
       },
       qualityState: {
-        wristSamples: this.wrist.length + this.droppedLateSamples,
-        paddleSamples: this.paddle.length,
+        wristSamples: this.acceptedWristSamples + this.droppedLateSamples,
+        paddleSamples: this.acceptedPaddleSamples,
         droppedLateSamples: this.droppedLateSamples,
         lastSampleMs: this.lastSampleMs(),
         notes: [...this.notes],
@@ -949,18 +1126,191 @@ export class SessionEventEngine {
     return last ?? null;
   }
 
-  /** Canonical proposals over the accumulated series (stroke-event-2). Clip
-   * bounds are the observed sample span — in proposeStrokeEventsV2 they only
-   * gate coverage, so a live session (full coverage by construction) sees
-   * identical events to the offline batch run. */
+  /** Canonical proposals over the reconciliation window (stroke-event-2).
+   * Clip bounds are the observed sample span — in proposeStrokeEventsV2 they
+   * only gate coverage, so a live session (full coverage by construction)
+   * sees identical events to the offline batch run; `streamPrefix` carries
+   * what the trimmed samples still contribute. */
   private propose(): StrokeEventProposalV2[] {
-    if (this.wrist.length < 4) return [];
-    return proposeStrokeEventsV2({
+    if (this.wrist.length < MIN_WINDOW_SAMPLES) return [];
+    const hasPaddle = this.paddle.length > 0 || this.paddlePeakFloor !== null;
+    const clipStartMs = this.wrist[0]!.timestampMs;
+    const clipEndMs = this.wrist[this.wrist.length - 1]!.timestampMs;
+    const batch = proposeStrokeEventsV2({
       paddleSpeeds: this.paddle.length > 0 ? this.paddle : null,
       wristSpeeds: this.wrist,
-      clipStartMs: this.wrist[0]!.timestampMs,
-      clipEndMs: this.wrist[this.wrist.length - 1]!.timestampMs,
-    }).events;
+      clipStartMs,
+      clipEndMs,
+      streamPrefix:
+        this.wristLeadIn === null && !hasPaddle
+          ? undefined
+          : {
+              wrist:
+                this.wristLeadIn === null
+                  ? null
+                  : {
+                      coverage: 1,
+                      leadIn: this.wristLeadIn,
+                      peakSmoothedSpeed: this.wristPeakSmoothedFloor,
+                    },
+              paddle: hasPaddle
+                ? {
+                    coverage:
+                      this.acceptedPaddleSamples < 4
+                        ? 0
+                        : (this.lastPaddleMs - this.firstPaddleMs) /
+                          (clipEndMs - this.firstWristMs),
+                    leadIn: this.paddleLeadIn,
+                    peakSmoothedSpeed: this.paddlePeakSmoothedFloor,
+                  }
+                : null,
+              paddlePeakSpeed: this.paddlePeakFloor,
+            },
+    });
+    if (batch.source === "wrist") {
+      // A peak is a settled proposal once two samples follow it (its own
+      // smoothed value and its right neighbour's are final); one at the
+      // stream's edge may still turn out to be a rising flank.
+      const lastMs = this.wrist[this.wrist.length - 1]!.timestampMs;
+      const settledBeforeMs = this.wrist[this.wrist.length - 2]!.timestampMs;
+      for (const event of batch.events) {
+        if (event.peakMs >= settledBeforeMs) continue;
+        this.pastWristPeak = Math.max(this.pastWristPeak, event.peakSpeed);
+        // Prominence is final once its ±1.5s baseline context has arrived.
+        if (
+          event.endMs + BASELINE_CONTEXT_MS <= lastMs &&
+          event.prominence >= LOW_AMPLITUDE_GATES.minProminence
+        ) {
+          this.pastProminentWristPeak = Math.max(this.pastProminentWristPeak, event.peakSpeed);
+        }
+      }
+    }
+    this.paddleFallbackActive = false;
+    if (batch.source !== "wrist") {
+      // The full series falls back to the paddle only while NO wrist peak
+      // clears the current proposal floor; a trimmed body proposal that
+      // still clears it keeps the fallback shut.
+      const relativeFloor = this.globalWristPeak() * EVENT_GATES.minPeakFractionOfMax;
+      const floor = Math.max(EVENT_GATES.minPeakSpeed, relativeFloor);
+      const lowFloor = Math.max(LOW_AMPLITUDE_GATES.minPeakSpeed, relativeFloor);
+      const bodyHeld = this.pastWristPeak >= floor || this.pastProminentWristPeak >= lowFloor;
+      if (batch.source === "paddle_fallback") {
+        if (bodyHeld) return [];
+        this.paddleFallbackActive = true;
+      } else if (hasPaddle && !bodyHeld) {
+        // Body empty over the full series too: trimmed paddle peaks may be
+        // sourcing the full-series batch.
+        this.paddleFallbackActive = true;
+      }
+    }
+    return batch.events;
+  }
+
+  /**
+   * Drop the samples no current or future proposal can depend on (see
+   * "BOUNDED RECONCILIATION WINDOW"), folding their contribution into the
+   * stream prefix. Runs after every reconcile.
+   */
+  private trimWindow(): void {
+    const lastMs = this.lastSampleMs();
+    if (lastMs === null) return;
+    // A peak can only (still) become, or change, a proposal while the stream
+    // is within the reach cap of it; its start walks at most the reach cap
+    // back. Everything chained to such a live peak stays with it.
+    const openStartMs = this.openCandidateStartMs ?? Number.POSITIVE_INFINITY;
+    const livePeakFromMs = Math.min(openStartMs, lastMs - BOUND_STABILITY_MS);
+    let keepFromMs = Math.min(
+      openStartMs,
+      lastMs - 2 * BOUND_STABILITY_MS,
+      chainStartMs(
+        this.wrist,
+        this.wristLeadIn,
+        this.wristPeakSmoothedFloor,
+        livePeakFromMs,
+        lastMs,
+      ),
+    );
+    if (this.paddle.length > 0) {
+      // A paddle peak past the frontier is a dormant fallback proposal: it
+      // becomes a candidate the moment body proposals disappear, however
+      // much later, so it (and its glue reach behind the frontier) stays.
+      keepFromMs = Math.min(
+        keepFromMs,
+        chainStartMs(
+          this.paddle,
+          this.paddleLeadIn,
+          this.paddlePeakSmoothedFloor,
+          Math.min(livePeakFromMs, this.frontierMs - BOUND_STABILITY_MS),
+          lastMs,
+        ),
+      );
+    }
+    // The window must be chain-closed: a peak kept for context would
+    // resurface as its own proposal if the peak that silences it were cut.
+    let cutoffMs = keepFromMs - BASELINE_CONTEXT_MS;
+    for (;;) {
+      let closedFromMs = chainStartMs(
+        this.wrist,
+        this.wristLeadIn,
+        this.wristPeakSmoothedFloor,
+        cutoffMs,
+        lastMs,
+      );
+      if (this.paddle.length > 0) {
+        closedFromMs = Math.min(
+          closedFromMs,
+          chainStartMs(
+            this.paddle,
+            this.paddleLeadIn,
+            this.paddlePeakSmoothedFloor,
+            cutoffMs,
+            lastMs,
+          ),
+        );
+      }
+      if (closedFromMs >= keepFromMs) break;
+      keepFromMs = closedFromMs;
+      cutoffMs = keepFromMs - BASELINE_CONTEXT_MS;
+    }
+    let drop = 0;
+    while (drop < this.wrist.length && this.wrist[drop]!.timestampMs < cutoffMs) drop += 1;
+    drop = Math.min(drop, this.wrist.length - MIN_WINDOW_SAMPLES);
+    if (drop > 0) {
+      for (let index = 0; index < drop; index += 1) {
+        this.wristPeakSmoothedFloor = Math.max(
+          this.wristPeakSmoothedFloor,
+          smoothedAt(this.wrist, this.wristLeadIn, index),
+        );
+      }
+      this.wristLeadIn = this.wrist[drop - 1]!;
+      this.wrist.splice(0, drop);
+      this.windowCutoffMs = cutoffMs;
+      let paddleDrop = 0;
+      while (paddleDrop < this.paddle.length && this.paddle[paddleDrop]!.timestampMs < cutoffMs) {
+        this.paddlePeakFloor = Math.max(this.paddlePeakFloor ?? 0, this.paddle[paddleDrop]!.value);
+        this.paddlePeakSmoothedFloor = Math.max(
+          this.paddlePeakSmoothedFloor,
+          smoothedAt(this.paddle, this.paddleLeadIn, paddleDrop),
+        );
+        paddleDrop += 1;
+      }
+      if (paddleDrop > 0) {
+        this.paddleLeadIn = this.paddle[paddleDrop - 1]!;
+        this.paddle.splice(0, paddleDrop);
+      }
+    }
+    // The retro floor check must see every push: the stream edge's 2-sample
+    // smoothing can lift the global peak for a single push.
+    this.retireRetroChecks();
+  }
+
+  /** The full series' global smoothed wrist peak: carried floor + window. */
+  private globalWristPeak(): number {
+    let globalPeak = this.wristPeakSmoothedFloor;
+    for (let index = 0; index < this.wrist.length; index += 1) {
+      globalPeak = Math.max(globalPeak, smoothedAt(this.wrist, this.wristLeadIn, index));
+    }
+    return globalPeak;
   }
 
   private reconcile(flush: boolean): SessionStrokeEvent[] {
@@ -975,6 +1325,7 @@ export class SessionEventEngine {
       this.noteRetroSubthreshold(batch);
       const candidates = batch.filter((event) => event.peakMs > this.frontierMs);
       const candidate = candidates[0];
+      this.openCandidateStartMs = candidate?.startMs ?? null;
       if (!candidate) break;
       const hasNewerCandidate = candidates.length > 1;
       const completion = adaptiveCompletion(this.wrist, candidate);
@@ -1026,7 +1377,11 @@ export class SessionEventEngine {
    * downstream confidence handling.
    */
   private noteRetroSubthreshold(batch: readonly StrokeEventProposalV2[]): void {
-    for (const event of this.events) {
+    // Only events whose span the window still holds can be judged against
+    // the batch; older ones are judged against the carried floor (see
+    // retireRetroChecks).
+    for (let index = this.retroWindowCursor; index < this.events.length; index += 1) {
+      const event = this.events[index]!;
       if (this.retroNoted.has(event.eventId)) continue;
       const stillProposed = batch.some(
         (proposal) =>
@@ -1034,13 +1389,55 @@ export class SessionEventEngine {
           proposal.peakMs <= event.proposal.endMs + 1,
       );
       if (stillProposed) continue;
-      this.retroNoted.add(event.eventId);
-      this.notes.push(
-        `SESSION_EVENT_RETRO_SUPPRESSED: ${event.eventId} (peak ${event.proposal.peakSpeed.toFixed(2)} u/s ` +
-          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the full-series batch ` +
-          `(a later stroke raised the relative proposal floor); kept append-only, flagged`,
-      );
+      this.noteRetro(event);
     }
+  }
+
+  /** Events whose start has left the window move to the floor-judged set;
+   * any of them now under 30% of the global peak (carried floor + window) is
+   * retro-suppressed exactly as the full-series batch would have dropped it. */
+  private retireRetroChecks(): void {
+    const windowStartMs = this.wrist[0]!.timestampMs;
+    while (
+      this.retroWindowCursor < this.events.length &&
+      this.events[this.retroWindowCursor]!.proposal.startMs <= windowStartMs
+    ) {
+      const event = this.events[this.retroWindowCursor]!;
+      this.retroWindowCursor += 1;
+      if (this.retroNoted.has(event.eventId)) continue;
+      if (event.proposal.source === "paddle") {
+        this.retroPendingPaddle.push(event);
+        continue;
+      }
+      let low = 0;
+      let high = this.retroPending.length;
+      while (low < high) {
+        const mid = (low + high) >> 1;
+        if (this.retroPending[mid]!.proposal.peakSpeed <= event.proposal.peakSpeed) low = mid + 1;
+        else high = mid;
+      }
+      this.retroPending.splice(low, 0, event);
+    }
+    // While the full series is in paddle fallback, the batch judges emitted
+    // events by paddle proposals, not the wrist floor; the verdict is
+    // deferred to the next wrist-sourced push — which no longer proposes any
+    // paddle-sourced event at all.
+    if (this.paddleFallbackActive) return;
+    while (this.retroPendingPaddle.length > 0) this.noteRetro(this.retroPendingPaddle.shift()!);
+    if (this.retroPending.length === 0) return;
+    const floor = this.globalWristPeak() * EVENT_GATES.minPeakFractionOfMax;
+    while (this.retroPending.length > 0 && this.retroPending[0]!.proposal.peakSpeed < floor) {
+      this.noteRetro(this.retroPending.shift()!);
+    }
+  }
+
+  private noteRetro(event: SessionStrokeEvent): void {
+    this.retroNoted.add(event.eventId);
+    this.notes.push(
+      `SESSION_EVENT_RETRO_SUPPRESSED: ${event.eventId} (peak ${event.proposal.peakSpeed.toFixed(2)} u/s ` +
+        `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the full-series batch ` +
+        `(a later stroke raised the relative proposal floor); kept append-only, flagged`,
+    );
   }
 
   /** A batch proposal whose peak sits at/before the frontier is the same
@@ -1060,6 +1457,121 @@ export class SessionEventEngine {
       );
     }
   }
+}
+
+/**
+ * The earliest sample time the batch's proposals from `liveFromMs` on can
+ * still depend on, over one speed series: the start bound of the oldest peak
+ * CHAINED to a live one. Every way the batch lets one peak decide another's
+ * fate needs the two to be chained — consecutive activity peaks (smoothed
+ * local maxima at/above the low-amplitude floor) are chained when their
+ * relaxed spans touch or glue (≤ GLUE_GATES.maxGapMs apart: overlap drops,
+ * low-tier suppression, fragment glue, midpoint clamps) or, for two peaks at
+ * the proposal floor, when the smoothed speed between them never dips to 60%
+ * of the weaker (they would merge into one peak). Both links can only break,
+ * never form, as the floors rise, so a break stays a break. The series edge
+ * counts as a peak that may still crest at the proposal floor while it is
+ * within reach of the stream's last sample; the chain is never followed
+ * further back than CHAIN_RETENTION_CAP_MS.
+ */
+function chainStartMs(
+  series: readonly SpeedSample[],
+  leadIn: SpeedSample | null,
+  peakSmoothedFloor: number,
+  liveFromMs: number,
+  streamLastMs: number,
+): number {
+  const length = series.length;
+  if (length === 0) return Number.POSITIVE_INFINITY;
+  const smoothed = series.map((_, index) => smoothedAt(series, leadIn, index));
+  // The edge sample's smoothed value is provisional (its right neighbour has
+  // not arrived) and may still fall; only settled values may raise the floor.
+  const globalPeak = smoothed
+    .slice(0, -1)
+    .reduce((best, value) => Math.max(best, value), peakSmoothedFloor);
+  const relativeFloor = globalPeak * EVENT_GATES.minPeakFractionOfMax;
+  const threshold = Math.max(EVENT_GATES.minPeakSpeed, relativeFloor);
+  const lowThreshold = Math.max(LOW_AMPLITUDE_GATES.minPeakSpeed, relativeFloor);
+  const reach = (index: number, value: number): { startMs: number; endMs: number } => {
+    const relax = Math.max(RELAXATION_PEAK_FRACTION * value, RELAXATION_FLOOR);
+    const peakMs = series[index]!.timestampMs;
+    let start = index;
+    while (
+      start > 0 &&
+      smoothed[start - 1]! >= relax &&
+      peakMs - series[start - 1]!.timestampMs <= BOUND_STABILITY_MS
+    ) {
+      start -= 1;
+    }
+    let end = index;
+    while (
+      end < length - 1 &&
+      smoothed[end + 1]! >= relax &&
+      series[end + 1]!.timestampMs - peakMs <= BOUND_STABILITY_MS
+    ) {
+      end += 1;
+    }
+    return { startMs: series[start]!.timestampMs, endMs: series[end]!.timestampMs };
+  };
+  const peaks: Array<{ index: number; value: number; startMs: number; endMs: number }> = [];
+  for (let index = 1; index < length - 1; index += 1) {
+    const value = smoothed[index]!;
+    if (value < lowThreshold) continue;
+    if (value >= smoothed[index - 1]! && value > smoothed[index + 1]!) {
+      peaks.push({ index, value, ...reach(index, value) });
+    }
+  }
+  const edge = length - 1;
+  if (series[edge]!.timestampMs >= streamLastMs - BOUND_STABILITY_MS) {
+    peaks.push({ index: edge, value: threshold, ...reach(edge, 0) });
+  } else if (smoothed[edge]! >= lowThreshold && smoothed[edge]! >= smoothed[edge - 1]!) {
+    peaks.push({ index: edge, value: smoothed[edge]!, ...reach(edge, smoothed[edge]!) });
+  }
+  if (peaks.length === 0) return series[edge]!.timestampMs;
+  let head = peaks.findIndex((peak) => series[peak.index]!.timestampMs >= liveFromMs);
+  if (head < 0) head = peaks.length - 1;
+  // Peak merging skips sub-floor peaks: the valley is judged between the
+  // chain's earliest proposal-floor peak and the nearest one before the chain.
+  let floorHead = head;
+  while (floorHead < peaks.length && peaks[floorHead]!.value < threshold) floorHead += 1;
+  while (head > 0) {
+    if (series[peaks[head]!.index]!.timestampMs < streamLastMs - CHAIN_RETENTION_CAP_MS) break;
+    if (peaks[head]!.startMs <= peaks[head - 1]!.endMs + GLUE_GATES.maxGapMs) {
+      head -= 1;
+      if (peaks[head]!.value >= threshold) floorHead = head;
+      continue;
+    }
+    if (floorHead >= peaks.length) break;
+    let previous = head - 1;
+    while (previous >= 0 && peaks[previous]!.value < threshold) previous -= 1;
+    if (previous < 0) break;
+    let valley = Number.POSITIVE_INFINITY;
+    for (let index = peaks[previous]!.index; index <= peaks[floorHead]!.index; index += 1) {
+      valley = Math.min(valley, smoothed[index]!);
+    }
+    const weaker = Math.min(peaks[previous]!.value, peaks[floorHead]!.value);
+    if (valley <= EVENT_GATES.mergeValleyFraction * weaker) break;
+    head = previous;
+    floorHead = previous;
+  }
+  let startMs = Number.POSITIVE_INFINITY;
+  for (let index = head; index < peaks.length; index += 1) {
+    startMs = Math.min(startMs, peaks[index]!.startMs);
+  }
+  return startMs;
+}
+
+/** Full-series 3-sample smoothed value of window sample `index` (the lead-in
+ * stands in for the trimmed left neighbour of the first sample). */
+function smoothedAt(
+  series: readonly SpeedSample[],
+  leadIn: SpeedSample | null,
+  index: number,
+): number {
+  const left = index === 0 ? leadIn : series[index - 1]!;
+  const right = series[index + 1];
+  const sum = (left?.value ?? 0) + series[index]!.value + (right?.value ?? 0);
+  return sum / ((left ? 1 : 0) + 1 + (right ? 1 : 0));
 }
 
 function insertSorted(series: SpeedSample[], sample: SpeedSample): void {
