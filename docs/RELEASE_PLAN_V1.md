@@ -1,5 +1,21 @@
 # PICKLE SENSEI — RELEASE PLAN v1 (Wave H, h25-release-cert, 2026-08-29)
 
+> **SUPERSEDED (2026-09-04) for versioning, tagging, and backend deployment.**
+> The operational source of truth is `docs/RELEASE_OPERATIONS.md` with
+> `infra/release/release-manifest.json` (validated by `pnpm release:check`).
+> The shipping backend is the Supabase Edge Function in
+> `supabase/functions/api` (deploy commands in `AGENTS.md` → Deploy);
+> `services/api` / `services/media-worker` are the legacy local stack and the
+> app does not call them. Release tags follow `v<MAJOR.MINOR.PATCH>-build.<BUILD>`
+> (RELEASE_OPERATIONS §1); the `rc-v0.1.0` tag and the wave-H RC SHA quoted
+> below were never cut. The machine-generated RC record is
+> `pnpm --filter @pickle/release-ops manifest:generate`
+> (`datasets/release/manifest.json`), which derives its mobile build from the
+> release manifest and its backend from `supabase/functions/api` at the record's
+> commit. §1 staging criteria and §3–§6 (rollback, DB forward-fix,
+> limitations, monitoring) remain in force; read "backend image" there as "the
+> edge function at a given commit SHA".
+
 > Companion to the pinned release-candidate record:
 > `datasets/experiments/wave-h/h25-release-candidate-record.json` (RC =
 > `104ea0f6383f5573ddc9393401700c7ecc163436`, head of
@@ -63,14 +79,20 @@ Stage 2 — BROADER RELEASE
 
 ## 2. Exact release steps that would execute on GO (none executed now)
 
-1. Freeze: tag the audited SHA `git tag rc-v0.1.0 104ea0f6383f5573ddc9393401700c7ecc163436 && git push origin rc-v0.1.0`
-   (or the post-wave-H integration SHA after re-audit — re-pin the RC record if
-   the SHA moves; the record, not this prose, is authoritative).
-2. Backend: build `services/api` and `services/media-worker` images from their
-   Dockerfiles at the tag; push to the registry with the git SHA as the image
-   tag; deploy staging; run migration set 0001–0017 via the migration runner
-   against staging; smoke-test consent lifecycle (grant → export v2 verify →
-   withdraw → append-only rejection) and the analysis permit path.
+1. Freeze: regenerate the RC record at the audited SHA
+   (`pnpm --filter @pickle/release-ops manifest:generate`; `pnpm release:check`
+   green), then tag that SHA `v<MAJOR.MINOR.PATCH>-build.<BUILD>` per
+   RELEASE_OPERATIONS §1 (e.g. `v1.0.0-build.1` for marketing version `1.0`,
+   build `1`). If the SHA moves after re-audit, regenerate the record — the
+   record, not this prose, is authoritative.
+2. Backend: the Supabase Edge Function `supabase/functions/api` is deployed
+   from the repo tree at the tag (`supabase db push` for new migrations in
+   `supabase/migrations/`, then `supabase functions deploy api --no-verify-jwt`
+   — AGENTS.md → Deploy; both are `HUMAN AUTHORIZATION REQUIRED`). Deploy the
+   edge function BEFORE the app build that depends on it (auth-session
+   contract, AGENTS.md). Smoke-test `GET /healthz`, the bootstrap → refresh →
+   logout session path, and the analysis permit path; run
+   `./supabase/tests/run_rls_tests.sh` at the tag.
 3. Mobile: from a Mac at the tag, `cd apps/mobile && npm ci && npx tsc --noEmit && npx jest`;
    build the iOS archive (Release config, FIXED completion strategy verified in
    the build); upload to TestFlight internal.
@@ -90,8 +112,9 @@ Stage 2 — BROADER RELEASE
   coach surfaces are already gate-blocked server-side; analysis endpoints can
   return typed maintenance errors (existing typed-error contract) to disable
   analysis without a client update.
-- Backend: images are SHA-tagged and stateless; rollback = redeploy the
-  previous image tag. Config/flags roll back with the deployment.
+- Backend: the edge function is stateless and deployed from a commit SHA;
+  rollback = redeploy `supabase/functions/api` from the previous good SHA
+  (`HUMAN AUTHORIZATION REQUIRED`). Config/flags roll back with the deployment.
 
 ## 4. Database rollback / forward-fix strategy
 
@@ -172,7 +195,10 @@ Release hygiene
 
 ## 7. GO / NO-GO inputs (who decides on what)
 
-The GO decision consumes: (1) the RC record, (2) the P0/P1 remaining register
+The GO decision consumes: (1) the RC record generated at the release SHA by
+`pnpm --filter @pickle/release-ops manifest:generate` (mobile build = release
+manifest marketing version/build, cross-checked against the compiled app;
+backend = `supabase/functions/api` at that SHA), (2) the P0/P1 remaining register
 (P0 must be empty; every P1 fixed or explicitly accepted), (3) Mac re-measure
 results at the release SHA, (4) device-latency results from the h06 harness,
 (5) claim-gate language check. The decision and its rationale get a D-number

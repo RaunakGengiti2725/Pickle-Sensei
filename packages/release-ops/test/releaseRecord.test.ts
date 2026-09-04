@@ -1,7 +1,16 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { findRepoRoot, generateReleaseRecord } from "../src/generateManifest.js";
+import {
+  findRepoRoot,
+  generateReleaseRecord,
+  IOS_PBXPROJ_PATH,
+  readBackendReleaseRef,
+  readMobileBuildRef,
+  RELEASE_MANIFEST_PATH,
+  RUNTIME_CONFIG_PATH,
+} from "../src/generateManifest.js";
 import {
   createInitialCoachReviewGate,
   createInitialStageGates,
@@ -14,7 +23,7 @@ import {
 const REPO_ROOT = findRepoRoot(process.cwd());
 
 function readVersionScheme(): { marketingVersion: string; buildNumber: number } {
-  const raw = readFileSync(join(REPO_ROOT, "infra/release/release-manifest.json"), "utf8");
+  const raw = readFileSync(join(REPO_ROOT, RELEASE_MANIFEST_PATH), "utf8");
   const parsed = JSON.parse(raw) as {
     versionScheme: { marketingVersion: string; buildNumber: number };
   };
@@ -221,5 +230,102 @@ describe("generateReleaseRecord", () => {
     const record = generateReleaseRecord({ repoRoot: REPO_ROOT });
     expect(record.backendRelease.serviceName).toBe("supabase/functions/api");
     expect(record.backendRelease.version).toBe(record.commitSha);
+  });
+});
+
+describe("readMobileBuildRef drift detection", () => {
+  interface FixtureVersions {
+    manifestVersion: string;
+    manifestBuild: number;
+    runtimeVersion: string;
+    pbxMarketing: string;
+    pbxBuild: string;
+  }
+
+  function writeFixture(versions: FixtureVersions): string {
+    const root = mkdtempSync(join(tmpdir(), "release-ops-drift-"));
+    mkdirSync(join(root, "infra/release"), { recursive: true });
+    mkdirSync(join(root, "apps/mobile/src/config"), { recursive: true });
+    mkdirSync(join(root, "apps/mobile/ios/PickleSensei.xcodeproj"), { recursive: true });
+    writeFileSync(
+      join(root, RELEASE_MANIFEST_PATH),
+      JSON.stringify({
+        versionScheme: {
+          marketingVersion: versions.manifestVersion,
+          buildNumber: versions.manifestBuild,
+        },
+      }),
+    );
+    writeFileSync(
+      join(root, RUNTIME_CONFIG_PATH),
+      `const OTHER = 'x';\nconst APP_VERSION = '${versions.runtimeVersion}';\nexport { APP_VERSION };\n`,
+    );
+    writeFileSync(
+      join(root, IOS_PBXPROJ_PATH),
+      [
+        "\t\t\t\tCURRENT_PROJECT_VERSION = " + versions.pbxBuild + ";",
+        "\t\t\t\tMARKETING_VERSION = " + versions.pbxMarketing + ";",
+        "\t\t\t\tCURRENT_PROJECT_VERSION = " + versions.pbxBuild + ";",
+        "\t\t\t\tMARKETING_VERSION = " + versions.pbxMarketing + ";",
+      ].join("\n"),
+    );
+    return root;
+  }
+
+  const coherent: FixtureVersions = {
+    manifestVersion: "1.2",
+    manifestBuild: 7,
+    runtimeVersion: "1.2",
+    pbxMarketing: "1.2",
+    pbxBuild: "7",
+  };
+
+  it("returns the manifest version + build when every source agrees", () => {
+    const root = writeFixture(coherent);
+    try {
+      expect(readMobileBuildRef(root)).toEqual({ appVersion: "1.2", buildNumber: "7" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses when runtimeConfig APP_VERSION disagrees with the manifest", () => {
+    const root = writeFixture({ ...coherent, runtimeVersion: "1.1" });
+    try {
+      expect(() => readMobileBuildRef(root)).toThrow(/APP_VERSION '1.1'/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses when the Xcode project disagrees with the manifest", () => {
+    const root = writeFixture({ ...coherent, pbxMarketing: "1.3", pbxBuild: "8" });
+    try {
+      expect(() => readMobileBuildRef(root)).toThrow(
+        /MARKETING_VERSION '1.3'[\s\S]*CURRENT_PROJECT_VERSION '8'/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a manifest without a positive integer build number", () => {
+    const root = writeFixture({ ...coherent, manifestBuild: 0 });
+    try {
+      expect(() => readMobileBuildRef(root)).toThrow(/buildNumber must be a positive integer/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("readBackendReleaseRef", () => {
+  it("refuses a tree with no Edge Function to describe", () => {
+    const root = mkdtempSync(join(tmpdir(), "release-ops-backend-"));
+    try {
+      expect(() => readBackendReleaseRef(root, "b".repeat(40))).toThrow(/supabase\/functions\/api/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
