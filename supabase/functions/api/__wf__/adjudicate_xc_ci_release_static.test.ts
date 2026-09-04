@@ -32,7 +32,11 @@ function fakeSupabaseAccessToken(sub = TEST_USER_ID, salt = ""): string {
   return `${header}.${payload}.sig`;
 }
 
-const jsonResponse = (status: number, body: unknown, headers: Record<string, string> = {}) =>
+const jsonResponse = (
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...headers },
@@ -67,8 +71,7 @@ const healthyUser = () => ({
 });
 
 const authUserFault =
-  (respond: () => Promise<Response> | Response): Fault =>
-  (request) => {
+  (respond: () => Promise<Response> | Response): Fault => (request) => {
     if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`)) {
       return respond();
     }
@@ -76,8 +79,7 @@ const authUserFault =
   };
 
 const refreshFault =
-  (respond: () => Promise<Response> | Response): Fault =>
-  (request) => {
+  (respond: () => Promise<Response> | Response): Fault => (request) => {
     if (
       request.url.includes("/auth/v1/token") &&
       request.url.includes("grant_type=refresh_token")
@@ -112,29 +114,44 @@ async function statusOf(
   return { status: response.status, body: await response.text() };
 }
 
-const isTransientStatus = (status: number) => status === 503 || status === 502 || status === 429;
+const isTransientStatus = (status: number) =>
+  status === 503 || status === 502 || status === 429;
 
 // ── AUTH-OUTAGE-1: authenticate() maps a transient Supabase Auth failure to 401.
-for (const [label, respond] of [
-  ["auth.getUser → HTTP 503", () => jsonResponse(503, { message: "upstream unavailable" })],
-  ["auth.getUser → HTTP 502 html", () => new Response("<html>bad gateway</html>", { status: 502 })],
-  [
-    "auth.getUser → HTTP 429",
-    () => jsonResponse(429, { message: "rate limited" }, { "Retry-After": "5" }),
-  ],
-  [
-    "auth.getUser → network error (fetch rejects)",
-    () => Promise.reject(new TypeError("connection reset")),
-  ],
-] as Array<[string, () => Promise<Response> | Response]>) {
+for (
+  const [label, respond] of [
+    [
+      "auth.getUser → HTTP 503",
+      () => jsonResponse(503, { message: "upstream unavailable" }),
+    ],
+    [
+      "auth.getUser → HTTP 502 html",
+      () => new Response("<html>bad gateway</html>", { status: 502 }),
+    ],
+    [
+      "auth.getUser → HTTP 429",
+      () =>
+        jsonResponse(429, { message: "rate limited" }, { "Retry-After": "5" }),
+    ],
+    [
+      "auth.getUser → network error (fetch rejects)",
+      () => Promise.reject(new TypeError("connection reset")),
+    ],
+  ] as Array<[string, () => Promise<Response> | Response]>
+) {
   Deno.test(`AUTH-OUTAGE-1 authenticated route stays retryable when ${label}`, async () => {
     const h = await loadHarness();
-    const ip = `10.1.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+    const ip = `10.1.${Math.floor(Math.random() * 250)}.${
+      Math.floor(Math.random() * 250)
+    }`;
     const bearer = fakeSupabaseAccessToken(TEST_USER_ID, crypto.randomUUID());
-    const observed = await withFault(authUserFault(respond), () =>
-      statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
+    const observed = await withFault(
+      authUserFault(respond),
+      () => statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
     );
-    console.log(`  [AUTH-OUTAGE-1] ${label}: observed ${observed.status} ${observed.body}`);
+    console.log(
+      `  [AUTH-OUTAGE-1] ${label}: observed ${observed.status} ${observed.body}`,
+    );
     assert(
       isTransientStatus(observed.status),
       `expected 503/429 (retryable) for a transient Auth failure, observed ${observed.status}: ${observed.body}`,
@@ -144,33 +161,45 @@ for (const [label, respond] of [
 
 // ── AUTH-OUTAGE-2: /v1/auth/refresh maps a non-5xx transient failure to 401,
 // which the app treats as "server refused the refresh token" → sign-out.
-for (const [label, respond] of [
-  [
-    "refreshSession → HTTP 429",
-    () => jsonResponse(429, { message: "rate limited" }, { "Retry-After": "5" }),
-  ],
-  [
-    "refreshSession → HTTP 200 non-JSON body",
-    () =>
-      new Response("<html>gateway</html>", {
-        status: 200,
-        headers: { "Content-Type": "text/html" },
-      }),
-  ],
-  ["refreshSession → HTTP 200 JSON without session", () => jsonResponse(200, { ok: true })],
-] as Array<[string, () => Promise<Response> | Response]>) {
+for (
+  const [label, respond] of [
+    [
+      "refreshSession → HTTP 429",
+      () =>
+        jsonResponse(429, { message: "rate limited" }, { "Retry-After": "5" }),
+    ],
+    [
+      "refreshSession → HTTP 200 non-JSON body",
+      () =>
+        new Response("<html>gateway</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    ],
+    [
+      "refreshSession → HTTP 200 JSON without session",
+      () => jsonResponse(200, { ok: true }),
+    ],
+  ] as Array<[string, () => Promise<Response> | Response]>
+) {
   Deno.test(`AUTH-OUTAGE-2 /v1/auth/refresh does not answer 401 when ${label}`, async () => {
     const h = await loadHarness();
-    const ip = `10.2.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
-    const observed = await withFault(refreshFault(respond), () =>
-      statusOf(h.handler, {
-        method: "POST",
-        path: "/v1/auth/refresh",
-        ip,
-        body: { refreshToken: "rt-live-device" },
-      }),
+    const ip = `10.2.${Math.floor(Math.random() * 250)}.${
+      Math.floor(Math.random() * 250)
+    }`;
+    const observed = await withFault(
+      refreshFault(respond),
+      () =>
+        statusOf(h.handler, {
+          method: "POST",
+          path: "/v1/auth/refresh",
+          ip,
+          body: { refreshToken: "rt-live-device" },
+        }),
     );
-    console.log(`  [AUTH-OUTAGE-2] ${label}: observed ${observed.status} ${observed.body}`);
+    console.log(
+      `  [AUTH-OUTAGE-2] ${label}: observed ${observed.status} ${observed.body}`,
+    );
     assert(
       observed.status !== 401,
       `refresh must not tell the app to sign out on a transient failure; observed 401: ${observed.body}`,
@@ -278,21 +307,29 @@ Deno.test("AUTH-OUTAGE-3 Auth outage must not trip the per-IP auth-failure locko
 // 401 (that is the one signal the app may sign out on), a 200 whose body is
 // not a user/session is an outage, and every retryable answer names a
 // Retry-After so the app's backoff has something to honor.
-for (const [label, respond] of [
-  [
-    "auth.getUser → HTTP 200 non-JSON body",
-    () => new Response("<html>gateway</html>", { status: 200 }),
-  ],
-  ["auth.getUser → HTTP 200 JSON without a user id", () => jsonResponse(200, { ok: true })],
-] as Array<[string, () => Promise<Response> | Response]>) {
+for (
+  const [label, respond] of [
+    [
+      "auth.getUser → HTTP 200 non-JSON body",
+      () => new Response("<html>gateway</html>", { status: 200 }),
+    ],
+    [
+      "auth.getUser → HTTP 200 JSON without a user id",
+      () => jsonResponse(200, { ok: true }),
+    ],
+  ] as Array<[string, () => Promise<Response> | Response]>
+) {
   Deno.test(`AUTH-OUTAGE-1 authenticated route stays retryable when ${label}`, async () => {
     const h = await loadHarness();
     const ip = `10.1.251.${Math.floor(Math.random() * 250)}`;
     const bearer = fakeSupabaseAccessToken(TEST_USER_ID, crypto.randomUUID());
-    const observed = await withFault(authUserFault(respond), () =>
-      statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
+    const observed = await withFault(
+      authUserFault(respond),
+      () => statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
     );
-    console.log(`  [AUTH-OUTAGE-1] ${label}: observed ${observed.status} ${observed.body}`);
+    console.log(
+      `  [AUTH-OUTAGE-1] ${label}: observed ${observed.status} ${observed.body}`,
+    );
     assertEquals(
       observed.status,
       503,
@@ -301,59 +338,86 @@ for (const [label, respond] of [
   });
 }
 
-for (const [label, respond] of [
-  [
-    "auth.getUser → HTTP 401 bad_jwt",
-    () => jsonResponse(401, { code: 401, msg: "invalid JWT: unable to parse or verify signature" }),
-  ],
-  [
-    "auth.getUser → HTTP 403 session_not_found",
-    () =>
-      jsonResponse(403, {
-        code: 403,
-        error_code: "session_not_found",
-        msg: "Session from session_id claim in JWT does not exist",
-      }),
-  ],
-] as Array<[string, () => Promise<Response> | Response]>) {
+for (
+  const [label, respond] of [
+    [
+      "auth.getUser → HTTP 401 bad_jwt",
+      () =>
+        jsonResponse(401, {
+          code: 401,
+          msg: "invalid JWT: unable to parse or verify signature",
+        }),
+    ],
+    [
+      "auth.getUser → HTTP 403 session_not_found",
+      () =>
+        jsonResponse(403, {
+          code: 403,
+          error_code: "session_not_found",
+          msg: "Session from session_id claim in JWT does not exist",
+        }),
+    ],
+  ] as Array<[string, () => Promise<Response> | Response]>
+) {
   Deno.test(`AUTH-OUTAGE-1 control: ${label} is a definitive 401`, async () => {
     const h = await loadHarness();
     const ip = `10.1.252.${Math.floor(Math.random() * 250)}`;
     const bearer = fakeSupabaseAccessToken(TEST_USER_ID, crypto.randomUUID());
-    const observed = await withFault(authUserFault(respond), () =>
-      statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
+    const observed = await withFault(
+      authUserFault(respond),
+      () => statusOf(h.handler, { method: "GET", path: "/v1/me", ip, bearer }),
     );
-    assertEquals(observed.status, 401, `a refused bearer must stay 401: ${observed.body}`);
+    assertEquals(
+      observed.status,
+      401,
+      `a refused bearer must stay 401: ${observed.body}`,
+    );
   });
 }
 
-for (const [label, respond] of [
-  [
-    "refreshSession → HTTP 400 invalid_grant",
-    () =>
-      jsonResponse(400, {
-        error: "invalid_grant",
-        error_description: "Invalid Refresh Token: Refresh Token Not Found",
-      }),
-  ],
-  ["refreshSession → HTTP 401", () => jsonResponse(401, { code: 401, msg: "Invalid token" })],
-  [
-    "refreshSession → HTTP 403 user_banned",
-    () => jsonResponse(403, { code: 403, error_code: "user_banned", msg: "User is banned" }),
-  ],
-] as Array<[string, () => Promise<Response> | Response]>) {
+for (
+  const [label, respond] of [
+    [
+      "refreshSession → HTTP 400 invalid_grant",
+      () =>
+        jsonResponse(400, {
+          error: "invalid_grant",
+          error_description: "Invalid Refresh Token: Refresh Token Not Found",
+        }),
+    ],
+    [
+      "refreshSession → HTTP 401",
+      () => jsonResponse(401, { code: 401, msg: "Invalid token" }),
+    ],
+    [
+      "refreshSession → HTTP 403 user_banned",
+      () =>
+        jsonResponse(403, {
+          code: 403,
+          error_code: "user_banned",
+          msg: "User is banned",
+        }),
+    ],
+  ] as Array<[string, () => Promise<Response> | Response]>
+) {
   Deno.test(`AUTH-OUTAGE-2 control: ${label} is a definitive 401`, async () => {
     const h = await loadHarness();
     const ip = `10.2.251.${Math.floor(Math.random() * 250)}`;
-    const observed = await withFault(refreshFault(respond), () =>
-      statusOf(h.handler, {
-        method: "POST",
-        path: "/v1/auth/refresh",
-        ip,
-        body: { refreshToken: "rt-revoked-device" },
-      }),
+    const observed = await withFault(
+      refreshFault(respond),
+      () =>
+        statusOf(h.handler, {
+          method: "POST",
+          path: "/v1/auth/refresh",
+          ip,
+          body: { refreshToken: "rt-revoked-device" },
+        }),
     );
-    assertEquals(observed.status, 401, `a refused refresh token must stay 401: ${observed.body}`);
+    assertEquals(
+      observed.status,
+      401,
+      `a refused refresh token must stay 401: ${observed.body}`,
+    );
   });
 }
 
@@ -362,12 +426,17 @@ Deno.test(
   async () => {
     const h = await loadHarness();
     const limited = await withFault(
-      refreshFault(() => jsonResponse(429, { message: "rate limited" }, { "Retry-After": "7" })),
+      refreshFault(() =>
+        jsonResponse(429, { message: "rate limited" }, { "Retry-After": "7" })
+      ),
       async () => {
         const response = await h.handler(
           new Request("http://edge.test/v1/auth/refresh", {
             method: "POST",
-            headers: { "x-forwarded-for": "10.2.252.1", "content-type": "application/json" },
+            headers: {
+              "x-forwarded-for": "10.2.252.1",
+              "content-type": "application/json",
+            },
             body: JSON.stringify({ refreshToken: "rt-live-device" }),
           }),
         );
@@ -387,7 +456,10 @@ Deno.test(
         const response = await h.handler(
           new Request("http://edge.test/v1/auth/refresh", {
             method: "POST",
-            headers: { "x-forwarded-for": "10.2.252.2", "content-type": "application/json" },
+            headers: {
+              "x-forwarded-for": "10.2.252.2",
+              "content-type": "application/json",
+            },
             body: JSON.stringify({ refreshToken: "rt-live-device" }),
           }),
         );
@@ -415,7 +487,9 @@ Deno.test("AUTH-OUTAGE-2 a healthy refresh still rotates the session (200)", asy
     body: { refreshToken: "rt-live-device" },
   });
   assertEquals(observed.status, 200, observed.body);
-  const parsed = JSON.parse(observed.body) as { session?: Record<string, unknown> };
+  const parsed = JSON.parse(observed.body) as {
+    session?: Record<string, unknown>;
+  };
   assertEquals(typeof parsed.session?.accessToken, "string");
   assertEquals(typeof parsed.session?.refreshToken, "string");
   assertEquals(typeof parsed.session?.expiresAt, "number");
@@ -444,7 +518,10 @@ Deno.test(
         `  [AUTH-OUTAGE-2b] hang: observed ${observed.status} after ${elapsedMs}ms ${observed.body}`,
       );
       assertEquals(observed.status, 503, observed.body);
-      assert(elapsedMs < 5_000, `expected the bounded timeout to fire, took ${elapsedMs}ms`);
+      assert(
+        elapsedMs < 5_000,
+        `expected the bounded timeout to fire, took ${elapsedMs}ms`,
+      );
     } finally {
       if (previous === undefined) Deno.env.delete("AUTH_UPSTREAM_TIMEOUT_MS");
       else Deno.env.set("AUTH_UPSTREAM_TIMEOUT_MS", previous);
@@ -472,14 +549,16 @@ Deno.test(
       );
       const elapsedMs = Math.round(performance.now() - startedAt);
       assertEquals(observed.status, 503, observed.body);
-      assert(elapsedMs < 5_000, `expected the bounded timeout to fire, took ${elapsedMs}ms`);
+      assert(
+        elapsedMs < 5_000,
+        `expected the bounded timeout to fire, took ${elapsedMs}ms`,
+      );
     } finally {
       if (previous === undefined) Deno.env.delete("AUTH_UPSTREAM_TIMEOUT_MS");
       else Deno.env.set("AUTH_UPSTREAM_TIMEOUT_MS", previous);
     }
   },
 );
-||||||| parent of 3faa19a (test(edge): pin logout session revocation + 503 on Auth network error (failing on 4d812e1a))
 
 // ── LOGOUT-1: logoutRoute() maps a 5xx from Auth to 503 but a THROWN fetch
 // error (DNS, reset, timeout) must not escape to the generic 500 either.
@@ -512,4 +591,3 @@ Deno.test("LOGOUT-1 /v1/auth/logout answers 503 (not 500) when Auth is unreachab
     `logout on Auth network error must be the generic 503 'temporarily unavailable', observed ${observed.status}`,
   );
 });
->>>>>>> 3faa19a (test(edge): pin logout session revocation + 503 on Auth network error (failing on 4d812e1a))
