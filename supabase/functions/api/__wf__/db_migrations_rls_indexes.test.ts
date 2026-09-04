@@ -298,8 +298,9 @@ Deno.test(
 
     const check = gate.statements.find(
       (s) =>
-        s.startsWith("alter table public.shots add constraint unscored_shots_have_no_score check") ||
-        s.includes("add constraint unscored_shots_have_no_score check"),
+        s.startsWith(
+          "alter table public.shots add constraint unscored_shots_have_no_score check",
+        ) || s.includes("add constraint unscored_shots_have_no_score check"),
     );
     ok(check, "the gate migration must add the unscored_shots_have_no_score CHECK");
     ok(
@@ -350,14 +351,15 @@ Deno.test("permits: terminal statuses are locked by a BEFORE UPDATE trigger", as
   ok(
     create.includes(" before update ") &&
       create.includes(" on public.analysis_permits ") &&
-      create.endsWith(
-        "for each row execute function public.reject_terminal_permit_transition()",
-      ),
+      create.endsWith("for each row execute function public.reject_terminal_permit_transition()"),
     `the lock must be a BEFORE UPDATE row trigger on public.analysis_permits: ${create}`,
   );
 
   const bodies = functionBodies(lock.raw, "reject_terminal_permit_transition");
-  ok(bodies.length === 1, "the transitions migration must define reject_terminal_permit_transition()");
+  ok(
+    bodies.length === 1,
+    "the transitions migration must define reject_terminal_permit_transition()",
+  );
   const body = bodies[0];
   ok(body.includes("set search_path = ''"), "the lock must pin search_path");
   ok(
@@ -487,9 +489,7 @@ Deno.test(
             !(
               statement.startsWith("drop trigger") &&
               statement.includes(writer.trigger) &&
-              !migration.statements.some((s) =>
-                s.startsWith(`create trigger ${writer.trigger} `),
-              )
+              !migration.statements.some((s) => s.startsWith(`create trigger ${writer.trigger} `))
             ),
             `${migration.file} drops ${writer.trigger} without recreating it`,
           );
