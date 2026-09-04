@@ -226,6 +226,64 @@ describe("analyzeCapture fusion engine", () => {
     expect(result.failure.code).toBe("technique_scoring.provider_crash");
   });
 
+  it("an AUTO classifier crash on a declared-null run surfaces as the crash, not as unresolved", async () => {
+    const crashing: IHierarchicalStrokeClassifier = {
+      descriptor: {
+        providerId: "classifier.hier-crashy",
+        modelVersion: "0",
+        runtime: "coreml",
+        executionTarget: "on_device",
+        artifactHash: null,
+        inputSchemaVersion: 1,
+        outputSchemaVersion: 1,
+      },
+      classify: async () => {
+        throw new Error("coreml_model_load_failed");
+      },
+    };
+    const result = await analyzeCapture(
+      providers({ autoStrokeClassifier: crashing }),
+      captureInput({ declared: null, predicted: null }),
+      options(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.kind).toBe("permanent");
+    expect(result.failure.code).toBe("stroke_classification.provider_crash");
+    expect(result.failure.message).toBe("coreml_model_load_failed");
+  });
+
+  it("an AUTO classifier crash on a DECLARED run is recorded and the declaration still scores", async () => {
+    const crashing: IHierarchicalStrokeClassifier = {
+      descriptor: {
+        providerId: "classifier.hier-crashy",
+        modelVersion: "0",
+        runtime: "coreml",
+        executionTarget: "on_device",
+        artifactHash: null,
+        inputSchemaVersion: 1,
+        outputSchemaVersion: 1,
+      },
+      classify: async () => {
+        throw new Error("coreml_model_load_failed");
+      },
+    };
+    const result = await analyzeCapture(
+      providers({ autoStrokeClassifier: crashing }),
+      captureInput(),
+      options(),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.strokeResolution).toEqual({ kind: "declared", shotType: "forehand_drive" });
+    expect(result.value.strokeIntent.predictedStroke).toBeNull();
+    const crashed = result.value.modelRuns.find(
+      (run) => run.model.providerId === "classifier.hier-crashy",
+    );
+    expect(crashed?.status).toBe("failed");
+    expect(crashed?.failure?.code).toBe("stroke_classification.provider_crash");
+  });
+
   it("a confident classifier prediction overrides the declaration (recorded as predicted)", async () => {
     const classifier = {
       descriptor: {

@@ -11,6 +11,7 @@ import { unavailable, type StrokeIdentity } from "@pickle/swing-domain";
 import { GeometricPhaseSegmenter, GeometryBiomechanicsExtractor } from "@pickle/vision-geometry";
 import {
   analyzeCapture,
+  detectFlatDisagreement,
   detectHierarchicalDisagreement,
   resolvePredictedProfile,
   resolveSlugProfileId,
@@ -418,6 +419,32 @@ describe("resolution helpers (registry-terminated, conservative gate)", () => {
     expect(
       resolvePredictedProfile({ ...base, label: "BERT", leaf: "BERT", taxonomyDepth: 3 }),
     ).toMatchObject({ kind: "abstain", reason: "auto_stroke_leaf_not_in_registry" });
+  });
+
+  it("non-finite confidence (NaN, ±Infinity) is below the floor at every gate", () => {
+    const leaf = { ...base, label: "OVERHEAD", leaf: "OVERHEAD", taxonomyDepth: 1 as const };
+    for (const confidence of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(resolvePredictedProfile({ ...base, confidence })).toEqual({
+        kind: "abstain",
+        reason: "auto_stroke_confidence_below_floor",
+      });
+      expect(resolvePredictedProfile({ ...leaf, confidence })).toEqual({
+        kind: "abstain",
+        reason: "auto_stroke_confidence_below_floor",
+      });
+      expect(detectHierarchicalDisagreement("dink", { ...leaf, confidence })).toBeNull();
+      expect(
+        detectHierarchicalDisagreement("forehand_drive", { ...base, label: "BACKHAND", confidence }),
+      ).toBeNull();
+      expect(
+        detectFlatDisagreement("forehand_drive", {
+          shotType: "backhand_drive",
+          confidence,
+          alternatives: [],
+          producedBy: TRIGGER_MODEL,
+        }),
+      ).toBeNull();
+    }
   });
 
   it("resolveSlugProfileId: unambiguous slugs resolve, shared slugs need the canonical", () => {
