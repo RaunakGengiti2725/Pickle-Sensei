@@ -207,6 +207,29 @@ Deno.test("legal documents are substantive and contain numbered sections", () =>
   assertMatch(TERMS_TEXT, /\n20\. CONTACT\n/);
 });
 
+// These texts are the Privacy Policy / Terms / Support URLs entered in App
+// Store Connect, i.e. store-facing copy: docs/APP_STORE_SUBMISSION.md §0
+// forbids the platform we do not ship on, the retired feature names, the
+// third-party rating trademark, and competitor names.
+const FORBIDDEN_STORE_COPY =
+  /Android|Google Play|Play Store|guest mode|Live Court|DUPR|SwingVision|PB Vision|Selkirk|JOOLA/gi;
+
+Deno.test("legal text contains no forbidden store-copy term (APP_STORE_SUBMISSION.md §0)", () => {
+  const hits: string[] = [];
+  for (const [name, text] of [
+    ["PRIVACY_POLICY_TEXT", PRIVACY_POLICY_TEXT],
+    ["TERMS_TEXT", TERMS_TEXT],
+    ["SUPPORT_TEXT", SUPPORT_TEXT],
+  ] as const) {
+    text.split("\n").forEach((line, index) => {
+      for (const match of line.matchAll(FORBIDDEN_STORE_COPY)) {
+        hits.push(`${name}:${index + 1} "${match[0]}"`);
+      }
+    });
+  }
+  assert(hits.length === 0, `forbidden-term hits:\n  ${hits.join("\n  ")}`);
+});
+
 Deno.test("legal text contains no control or bidi characters (served as text/plain)", () => {
   const isBad = (cp: number) =>
     (cp < 0x20 && cp !== 0x0a) ||
