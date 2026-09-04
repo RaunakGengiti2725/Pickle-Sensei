@@ -92,7 +92,7 @@ const KNOWN_VIOLATIONS: readonly Pin[] = [
   {
     id: 'F1',
     finding:
-      'data/api.ts:97 clears the abort timer when fetch() resolves, so a body that stalls (response.json() never / late) bypasses API_REQUEST_TIMEOUT_MS — the promise hangs or settles late (also pinned by serverResponseMatrix.callSites.test.ts F1)',
+      'data/api.ts:99 clears the abort timer when fetch() resolves, so a body that stalls (response.json() never / late) bypasses API_REQUEST_TIMEOUT_MS — the promise hangs or settles late (also pinned by serverResponseMatrix.callSites.test.ts F1)',
     matches: v =>
       v.violation === 'unbounded_await' && v.replyKind === 'body_stall',
   },
@@ -116,7 +116,7 @@ const KNOWN_VIOLATIONS: readonly Pin[] = [
   {
     id: 'S2',
     finding:
-      'data/api.ts:108-111 copies `error.code` / `error.message` from a non-2xx envelope without a type check: ApiError.code can be a number/object/array (typed string), ApiError.message can be "[object Object]"/"" — and runCaptureAnalysis.ts:336,342 shows ApiError.message to the user verbatim',
+      'data/api.ts:109-110 copies `error.code` / `error.message` from a non-2xx envelope without a type check: ApiError.code can be a number/object/array (typed string), ApiError.message can be "[object Object]"/"" — and runCaptureAnalysis.ts:336,342 shows ApiError.message to the user verbatim',
     matches: v =>
       (v.violation === 'error_code_not_string' ||
         v.violation === 'error_message_not_string_source' ||
