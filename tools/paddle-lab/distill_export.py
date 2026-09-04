@@ -21,8 +21,11 @@ GATES (both must pass for trainingEligible=true):
   1. RIGHTS: the case's source must resolve to a corpus rights record
      (datasets/corpus/sources.json) whose rights.train is "yes" or
      "yes_with_attribution"; a source absent from the corpus rights ledger
-     falls back to the license rule (PD-USGov => yes; CC BY => with
-     attribution; anything else => not_cleared => quarantined).
+     falls back to the license rule, a strict allow-list of exact license
+     identifiers (PD-USGov / public domain / CC0 => yes; CC BY <ver> => with
+     attribution). Anything else — negated or unverified wording, any
+     NC/ND/SA term, CC BY-SA (ShareAlike obligations need a reviewed rights
+     record), unknown licenses — is not_cleared => quarantined.
   2. CONSENT (C10): examples with a sourceUserId (first-party footage) are
      eligible only with an explicit model_training consent grant exported
      from the consent ledger (--consent-export, the offline mirror of
@@ -41,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 FORMAT_VERSION = "paddle-distill-v1"
@@ -84,14 +88,53 @@ def build_rights_index(repo: Path) -> tuple[dict, dict, dict]:
     return by_url, by_source_id, by_source_key
 
 
+# Exact license identifiers the fallback may clear (matched against the text
+# before any parenthetical qualifier, lowercased, whitespace-collapsed).
+PUBLIC_DOMAIN_RE = re.compile(
+    r"pd-usgov|public domain|cc0(?: 1\.0)?(?: universal)?",
+)
+CC_BY_RE = re.compile(r"cc[ -]by(?:[ -]\d\.\d)?(?: (?:unported|international))?")
+CC_BY_SA_RE = re.compile(r"cc[ -]by[ -]sa(?:[ -]\d\.\d)?")
+# Any of these anywhere in the string (qualifiers included) fails closed:
+# negation, uncertainty, and every CC restriction element.
+RESTRICTIVE_TOKENS = frozenset(
+    {
+        "nc", "nd", "sa",
+        "non", "noncommercial", "commercial",
+        "noderivatives", "noderivs", "derivative", "derivatives",
+        "sharealike", "share", "alike",
+        "not", "no", "none", "never",
+        "unverified", "unknown", "unclear", "unlicensed", "unconfirmed", "uncertain",
+        "claimed", "purported", "presumed", "assumed", "likely", "probably", "maybe",
+        "false", "laundering", "pending", "tbd", "review",
+        "reserved", "proprietary", "restricted", "only",
+    }
+)
+
+
 def license_rule(license_str: str | None) -> tuple[str, str]:
-    """Fallback when no corpus rights record exists. Returns (train, basis)."""
-    if not license_str:
+    """Fallback when no corpus rights record exists. Returns (train, basis).
+
+    Fails closed: only an exact allow-listed identifier clears training.
+    """
+    if not license_str or not license_str.strip():
         return "not_cleared", "no license recorded"
-    lic = license_str.lower()
-    if "pd-usgov" in lic or "public domain" in lic:
-        return "yes", f"license rule: {license_str} (17 U.S.C. §105)"
-    if lic.startswith("cc by ") or lic.startswith("cc-by"):
+    lic = " ".join(license_str.lower().split())
+    head = lic.split("(", 1)[0].strip()
+    if CC_BY_SA_RE.fullmatch(head):
+        return (
+            "not_cleared",
+            f"license rule: {license_str} imposes ShareAlike on redistributed derivatives; requires an explicit corpus rights record",
+        )
+    tokens = set(re.split(r"[^a-z0-9]+", lic)) - {""}
+    if "?" in lic or tokens & RESTRICTIVE_TOKENS:
+        return (
+            "not_cleared",
+            f"license rule: {license_str} carries a negated, unverified or restrictive term; not cleared for training",
+        )
+    if PUBLIC_DOMAIN_RE.fullmatch(head):
+        return "yes", f"license rule: {license_str} (17 U.S.C. §105 / CC0: no copyright restriction)"
+    if CC_BY_RE.fullmatch(head):
         return (
             "yes_with_attribution",
             f"license rule: {license_str} permits commercial use incl. adaptation with attribution",

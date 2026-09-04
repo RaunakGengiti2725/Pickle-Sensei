@@ -114,6 +114,7 @@ class LicenseRuleTable(unittest.TestCase):
         for s in NOT_CLEARED_SHAREALIKE:
             with self.subTest(license=s):
                 self.assert_train(s, "not_cleared")
+                self.assertIn("ShareAlike", distill_export.license_rule(s)[1])
 
     def test_public_domain_allow_list_clears(self):
         for s in PUBLIC_DOMAIN_YES:
