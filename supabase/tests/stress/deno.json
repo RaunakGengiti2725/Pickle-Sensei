@@ -1,0 +1,10 @@
+{
+  "nodeModulesDir": "none",
+  "lock": false,
+  "imports": {
+    "postgres": "npm:postgres@3.4.5"
+  },
+  "tasks": {
+    "stress": "deno run -A --config deno.json boundary_malformed.ts"
+  }
+}
