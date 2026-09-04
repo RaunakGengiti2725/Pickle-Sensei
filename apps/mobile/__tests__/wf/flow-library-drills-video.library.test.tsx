@@ -322,11 +322,27 @@ describe('Library flow · Reads tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failing local read never strands the spinner: it falls to the empty state', async () => {
+  it('a failing local read never strands the spinner: it is disclosed as an error with a retry, not painted as a first-run empty library', async () => {
     mockListShots.mockRejectedValue(new Error('sqlite closed'));
     const renderer = await renderLibrary();
     expect(allText(renderer)).not.toContain('Opening your library…');
-    expect(allText(renderer)).toContain('Your measured reads, in one place.');
+    expect(allText(renderer)).not.toContain(
+      'Your measured reads, in one place.',
+    );
+    expect(allText(renderer)).toContain('couldn’t load');
+    expect(
+      renderer.root.findAll(
+        n =>
+          typeof n.type === 'string' && n.props.accessibilityRole === 'alert',
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAll(
+        n =>
+          n.props.accessibilityLabel === 'Try again' &&
+          typeof n.props.onPress === 'function',
+      ).length,
+    ).toBeGreaterThan(0);
     act(() => renderer.unmount());
   });
 

@@ -131,12 +131,13 @@ function findByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return node ?? null;
 }
 
+// One host View per rendered read row (the composite PressableScale and its
+// inner Pressable both carry the label, so composites would double count).
 function readRowLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
   return renderer.root
     .findAll(
       n =>
-        typeof n.type !== 'string' &&
-        typeof n.props.onPress === 'function' &&
+        typeof n.type === 'string' &&
         String(n.props.accessibilityLabel ?? '').startsWith('Open ') &&
         String(n.props.accessibilityLabel ?? '').endsWith(' result'),
     )

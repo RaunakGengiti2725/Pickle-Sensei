@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Linking,
@@ -16,6 +16,7 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   LoadingState,
   Pill,
   PressableScale,
@@ -45,6 +46,32 @@ export const PENDING_SECTION_PILL = 'NOT SCORED';
 export const PENDING_SECTION_NOTE =
   'Saved clips aren’t scored from the library. Record a new stroke to get a score.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
+
+/** Which local tables failed on the most recent reads-tab load. */
+type ReadsFailure = { shots: boolean; captures: boolean };
+
+/** Error copy for a failed local read; exported so tests pin it. */
+export function readsFailureCopy(
+  failure: ReadsFailure,
+  showingEarlierRows: boolean,
+): { title: string; detail: string } {
+  const both = failure.shots && failure.captures;
+  const part = both
+    ? 'Your analyzed reads and pending clips'
+    : failure.shots
+      ? 'Your analyzed reads'
+      : 'Your pending clips';
+  return {
+    title: both
+      ? 'Your library couldn’t load'
+      : 'Part of your library couldn’t load',
+    detail: `${part} could not be opened from this device.${
+      showingEarlierRows
+        ? ' What you see here is from the last successful read.'
+        : ''
+    }`,
+  };
+}
 
 /**
  * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
@@ -98,8 +125,11 @@ export function LibraryScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
   const [tab, setTab] = useState<LibraryTab>('reads');
+  // null = this table has never been read successfully on this screen.
   const [shots, setShots] = useState<LocalShotRow[] | null>(null);
-  const [captures, setCaptures] = useState<PendingCapture[]>([]);
+  const [captures, setCaptures] = useState<PendingCapture[] | null>(null);
+  const [readsFailure, setReadsFailure] = useState<ReadsFailure | null>(null);
+  const readsLoadSeq = useRef(0);
   const savedStatus = useTrainingStore(state => state.savedStatus);
   const planStatus = useTrainingStore(state => state.planStatus);
   const savedDrills = useTrainingStore(state => state.savedDrills);
@@ -115,21 +145,34 @@ export function LibraryScreen() {
     state => state.clearMutationError,
   );
 
+  // Each table settles on its own: rows that loaded are shown, a table that
+  // failed is disclosed, and rows already on screen are never replaced by a
+  // failure. Only the newest in-flight load may write state.
+  const loadReads = useCallback(async () => {
+    readsLoadSeq.current += 1;
+    const seq = readsLoadSeq.current;
+    const [shotsResult, capturesResult] = await Promise.allSettled([
+      (async () => listShots(getDb(), 100))(),
+      (async () => listPendingCaptures(getDb(), 100))(),
+    ]);
+    if (seq !== readsLoadSeq.current) return;
+    if (shotsResult.status === 'fulfilled') setShots(shotsResult.value);
+    if (capturesResult.status === 'fulfilled') {
+      setCaptures(capturesResult.value);
+    }
+    const failure: ReadsFailure = {
+      shots: shotsResult.status === 'rejected',
+      captures: capturesResult.status === 'rejected',
+    };
+    setReadsFailure(failure.shots || failure.captures ? failure : null);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      const db = getDb();
-      void Promise.all([listShots(db, 100), listPendingCaptures(db, 100)])
-        .then(([realShots, pending]) => {
-          setShots(realShots);
-          setCaptures(pending);
-        })
-        .catch(() => {
-          setShots([]);
-          setCaptures([]);
-        });
+      void loadReads();
       void loadSavedDrills();
       void loadCurrentPlan();
-    }, [loadCurrentPlan, loadSavedDrills]),
+    }, [loadCurrentPlan, loadReads, loadSavedDrills]),
   );
 
   const openMedia = useCallback(async (media: InstructionalMedia) => {
@@ -151,6 +194,26 @@ export function LibraryScreen() {
   }, []);
 
   const reads = shots ?? [];
+  const pendingClips = captures ?? [];
+  const readsNeverLoaded = shots === null && captures === null;
+  const hasReadRows = reads.length > 0 || pendingClips.length > 0;
+  const readsError = readsFailure
+    ? readsFailureCopy(readsFailure, hasReadRows)
+    : null;
+  const retryReads = () => {
+    setReadsFailure(null);
+    void loadReads();
+  };
+  const readsCountLine = [
+    shots === null
+      ? null
+      : `${reads.length} analyzed ${plural(reads.length, 'read')}`,
+    captures === null
+      ? null
+      : `${pendingClips.length} pending ${plural(pendingClips.length, 'clip')}`,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(' · ');
   const completedPlanItems =
     currentPlan?.items.filter(item => item.drill && item.completion).length ??
     0;
@@ -429,8 +492,20 @@ export function LibraryScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
-      {shots === null ? (
+      {readsNeverLoaded && !readsError ? (
         <LoadingState label="Opening your library…" />
+      ) : readsError && !hasReadRows ? (
+        <ScrollView
+          contentContainerStyle={styles.readsContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {header}
+          <ErrorState
+            title={readsError.title}
+            detail={readsError.detail}
+            onRetry={retryReads}
+          />
+        </ScrollView>
       ) : (
         <FlatList
           data={reads}
@@ -438,18 +513,24 @@ export function LibraryScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.readsContent,
-            reads.length === 0 && captures.length === 0 && styles.emptyContent,
+            !hasReadRows && styles.emptyContent,
           ]}
           ListHeaderComponent={
             <>
               {header}
-              {reads.length || captures.length ? (
+              {readsError ? (
+                <ErrorState
+                  title={readsError.title}
+                  detail={readsError.detail}
+                  onRetry={retryReads}
+                />
+              ) : null}
+              {hasReadRows ? (
                 <View style={styles.readHeader}>
                   <Text style={[type.body, { color: color.inkSoft }]}>
-                    {reads.length} analyzed {plural(reads.length, 'read')} ·{' '}
-                    {captures.length} pending {plural(captures.length, 'clip')}
+                    {readsCountLine}
                   </Text>
-                  {captures.length ? (
+                  {pendingClips.length ? (
                     <View style={styles.pendingGroup}>
                       <View style={styles.pendingHeader}>
                         <Text
@@ -460,7 +541,7 @@ export function LibraryScreen() {
                         </Text>
                         <Pill label={PENDING_SECTION_PILL} tone="neutral" />
                       </View>
-                      {captures.slice(0, 3).map(capture => (
+                      {pendingClips.slice(0, 3).map(capture => (
                         <View key={capture.id} style={styles.pendingRow}>
                           <View style={styles.pendingIcon}>
                             <Icon
