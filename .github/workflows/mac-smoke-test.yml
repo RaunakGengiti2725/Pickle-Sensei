@@ -1,11 +1,18 @@
+# Manual dispatch only, on purpose: this is a PUBLIC repository and the
+# runner is a personal machine; fork PRs must never execute on it.
 name: Mac Smoke Test
 
 on:
   workflow_dispatch:
 
+# Least-privilege workflow token: read the repo, nothing else.
+permissions:
+  contents: read
+
 jobs:
   mac-test:
     runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
