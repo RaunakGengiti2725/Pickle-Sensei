@@ -1,9 +1,10 @@
 // Fault-injection layer over routesHarness.ts for the adversarial webhook /
-// billing tests (`*_attack.test.ts`).
+// billing pins (webhook_billing_invariants.test.ts) and any `*_attack.test.ts`
+// scratch file written against mutation/mutants.ts.
 //
 // routesHarness installs a fake `globalThis.fetch` whose PostgREST branch can
 // only answer happy paths (GET → stubbed rows, POST/PATCH → 201) and whose
-// RevenueCat branch is either "200 + subscriber" or "500". The attack tests
+// RevenueCat branch is either "200 + subscriber" or "500". Those tests
 // need to inject the other shapes — a failed entitlement upsert, a failed
 // webhook_events lookup, a 200 from RevenueCat without a subscriber object,
 // a stateful webhook_events table — WITHOUT editing the shared harness.

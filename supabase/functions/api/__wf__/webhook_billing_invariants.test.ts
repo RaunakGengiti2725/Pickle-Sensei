@@ -1,13 +1,19 @@
-// Adversarial tests for POST /webhooks/revenuecat + POST /v1/billing/sync +
-// GET /v1/me/access, written from the mutation run in ./mutation/ (see
-// mutation/mutants.ts). Every test here targets at least one mutant that the
-// suite at 4d812e1a let survive; the mutant ids are named in each test title.
+// Regression pins for POST /webhooks/revenuecat + POST /v1/billing/sync +
+// GET /v1/me/access: the secret gate, never-trust-the-body re-verification,
+// idempotency/audit ordering, persistence error handling and access folding.
+//
+// Each test names the mutants in ./mutation/mutants.ts it kills (bracketed
+// ids in the title). This file is part of the permanent suite on purpose:
+// mutation/run_mutations.ts `--mode existing` only drops `*_attack.test.ts`
+// scratch files, so these pins count towards the score the permanent suite
+// earns — a mutant listed here that survives `--mode existing` is a
+// regression in this file, not a gap in coverage.
 //
 // Exercised through the real Deno.serve handler (routesHarness) with fault
 // injection layered on top (attackHarness) — no network, no Supabase project.
 //
 //   cd supabase/functions/api/__wf__ && deno task test          # whole suite
-//   deno test -A --no-check --config deno.json webhook_billing_attack.test.ts
+//   deno test -A --no-check --config deno.json webhook_billing_invariants.test.ts
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { loadAttackHarness, pgError, withEnvUnset, type AttackHarness } from "./attackHarness.ts";
@@ -61,7 +67,7 @@ function statefulAuditTable(h: AttackHarness): void {
 // ── secret gate ──────────────────────────────────────────────────────────────
 
 Deno.test(
-  "attack[SEC-03,SEC-04,SEC-07]: near-miss secrets (prefix, suffix, case, Bearer, same-length) are 401 with zero downstream calls",
+  "webhook invariant[SEC-03,SEC-04,SEC-07]: near-miss secrets (prefix, suffix, case, Bearer, same-length) are 401 with zero downstream calls",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -111,7 +117,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[SEC-02]: unset REVENUECAT_WEBHOOK_AUTH fails closed (503) even when Authorization is absent or empty",
+  "webhook invariant[SEC-02]: unset REVENUECAT_WEBHOOK_AUTH fails closed (503) even when Authorization is absent or empty",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -132,7 +138,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[SEC-08]: webhook per-IP budget — the 241st delivery in a minute is 429 with Retry-After and is not verified",
+  "webhook invariant[SEC-08]: webhook per-IP budget — the 241st delivery in a minute is 429 with Retry-After and is not verified",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -164,7 +170,7 @@ Deno.test(
 // ── idempotency / audit ordering ─────────────────────────────────────────────
 
 Deno.test(
-  "attack[DUP-01]: an event id already in webhook_events is acknowledged as duplicate — no RevenueCat call, no entitlement write, no second audit row",
+  "webhook invariant[DUP-01]: an event id already in webhook_events is acknowledged as duplicate — no RevenueCat call, no entitlement write, no second audit row",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -187,7 +193,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-01,DUP-05,DUP-14]: replaying a completed delivery is idempotent end to end — one verification and one entitlement write for N deliveries, distinct ids still processed",
+  "webhook invariant[DUP-01,DUP-05,DUP-14]: replaying a completed delivery is idempotent end to end — one verification and one entitlement write for N deliveries, distinct ids still processed",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -219,7 +225,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-03]: a failed webhook_events lookup does not short-circuit — the event is still verified, persisted and audited",
+  "webhook invariant[DUP-03]: a failed webhook_events lookup does not short-circuit — the event is still verified, persisted and audited",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -242,7 +248,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-04]: a 503'd delivery (RevenueCat down) leaves NO audit row, so RevenueCat's retry is fully processed instead of deduped",
+  "webhook invariant[DUP-04]: a 503'd delivery (RevenueCat down) leaves NO audit row, so RevenueCat's retry is fully processed instead of deduped",
   async () => {
     const h = await loadAttackHarness();
     statefulAuditTable(h);
@@ -269,7 +275,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-08,DUP-09]: an entitlement write failure is reported as verified:false, the other TRANSFER side is still written, and the audit row is still logged",
+  "webhook invariant[DUP-08,DUP-09]: an entitlement write failure is reported as verified:false, the other TRANSFER side is still written, and the audit row is still logged",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -307,7 +313,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-10]: the entitlement row is an upsert keyed on user_id with merge-duplicates (a second sync must never be a PK violation)",
+  "webhook invariant[DUP-10]: the entitlement row is an upsert keyed on user_id with merge-duplicates (a second sync must never be a PK violation)",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -325,7 +331,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[DUP-13]: an anonymous-only event (nothing to verify) still leaves an audit row with app_user_id null",
+  "webhook invariant[DUP-13]: an anonymous-only event (nothing to verify) still leaves an audit row with app_user_id null",
   async () => {
     const h = await loadAttackHarness();
     const res = await h.handler(
@@ -347,7 +353,7 @@ Deno.test(
 // ── body claims never reach the row ──────────────────────────────────────────
 
 Deno.test(
-  "attack[BODY-03,BODY-04]: expiration_at_ms / product_id from the body never reach expires_at / product_key — RevenueCat's values do",
+  "webhook invariant[BODY-03,BODY-04]: expiration_at_ms / product_id from the body never reach expires_at / product_key — RevenueCat's values do",
   async () => {
     const h = await loadAttackHarness();
     const rcExpires = new Date(Date.now() + 86_400_000).toISOString();
@@ -380,7 +386,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[BODY-05]: EXPIRATION / CANCELLATION / BILLING_ISSUE event types are re-verified too — RevenueCat's active state wins over the event type",
+  "webhook invariant[BODY-05]: EXPIRATION / CANCELLATION / BILLING_ISSUE event types are re-verified too — RevenueCat's active state wins over the event type",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -419,7 +425,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[BODY-07,BODY-08]: only pickle_sensei_pro / premium grant; an undefined expires_date or a malformed entitlements map never grants",
+  "webhook invariant[BODY-07,BODY-08]: only pickle_sensei_pro / premium grant; an undefined expires_date or a malformed entitlements map never grants",
   async () => {
     const h = await loadAttackHarness();
     const cases: Array<{
@@ -498,7 +504,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[BODY-12]: a 2xx RevenueCat response without a subscriber object is 'unavailable' — 503, nothing persisted, no audit row",
+  "webhook invariant[BODY-12]: a 2xx RevenueCat response without a subscriber object is 'unavailable' — 503, nothing persisted, no audit row",
   async () => {
     const h = await loadAttackHarness();
     const shapes: Array<[string, Response]> = [
@@ -537,7 +543,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[BODY-14]: when app_user_id is the canonical uuid, alias uuids in the body do not select extra accounts to write",
+  "webhook invariant[BODY-14]: when app_user_id is the canonical uuid, alias uuids in the body do not select extra accounts to write",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -561,7 +567,7 @@ Deno.test(
 // ── POST /v1/billing/sync ────────────────────────────────────────────────────
 
 Deno.test(
-  "attack[SYNC-02]: a failed entitlement write on sync is a generic 503 — the verdict is not returned as if persisted",
+  "webhook invariant[SYNC-02]: a failed entitlement write on sync is a generic 503 — the verdict is not returned as if persisted",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -587,7 +593,7 @@ Deno.test(
 );
 
 Deno.test(
-  "attack[SYNC-05]: sync without any RevenueCat API key is 503 billing_unconfigured and never calls RevenueCat",
+  "webhook invariant[SYNC-05]: sync without any RevenueCat API key is 503 billing_unconfigured and never calls RevenueCat",
   async () => {
     const h = await loadAttackHarness();
     h.subscriber = activeSubscriber();
@@ -605,7 +611,7 @@ Deno.test(
 // ── GET /v1/me/access ────────────────────────────────────────────────────────
 
 Deno.test(
-  "attack[ACC-02,ACC-03]: GET /v1/me/access honours the verified billing_entitlements row — premium unlocks rating past the free limit; non-premium exposes no entitlements",
+  "webhook invariant[ACC-02,ACC-03]: GET /v1/me/access honours the verified billing_entitlements row — premium unlocks rating past the free limit; non-premium exposes no entitlements",
   async () => {
     const h = await loadAttackHarness();
     h.rpcs["access_state"] = [{ premium: true, scored_count: 2, reserved_count: 0 }];
