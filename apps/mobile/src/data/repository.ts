@@ -9,7 +9,7 @@ import type { LocalDb } from './db';
 import { runInTransaction } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, isSessionOrphanedVerdict } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -824,7 +824,7 @@ export async function hasShotSyncReceipt(
 export type ShotOutboxStatus =
   | { state: 'absent' }
   | {
-      state: 'queued' | 'rejected' | 'exhausted';
+      state: 'queued' | 'rejected' | 'exhausted' | 'orphaned';
       attempts: number;
       lastError: string | null;
     };
@@ -832,7 +832,9 @@ export type ShotOutboxStatus =
 /**
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
- * have spent it and are excluded from every future drain (see sync.ts).
+ * have spent it and are excluded from every future drain (see sync.ts), as
+ * are `orphaned` rows — shots of a practice set whose own session.create row
+ * is exhausted, which the server therefore can never accept.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -860,6 +862,9 @@ export async function getShotOutboxStatus(
       : null;
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
+  }
+  if (isSessionOrphanedVerdict(lastError)) {
+    return { state: 'orphaned', attempts, lastError };
   }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };

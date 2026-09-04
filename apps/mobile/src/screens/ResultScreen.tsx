@@ -139,7 +139,8 @@ export type SyncEvidenceState =
       kind: 'rejected' | 'exhausted';
       attempts: number;
       lastError: string | null;
-    };
+    }
+  | { kind: 'orphaned'; lastError: string | null };
 
 function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
   switch (status.state) {
@@ -150,6 +151,8 @@ function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
         attempts: status.attempts,
         lastError: status.lastError,
       };
+    case 'orphaned':
+      return { kind: 'orphaned', lastError: status.lastError };
     case 'queued':
       return { kind: 'pending' };
     case 'absent':
@@ -1583,6 +1586,29 @@ function TrainingPlanSection(props: {
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
             {`Sync was refused ${syncEvidence.attempts} times and this read will not be sent again${
+              syncEvidence.lastError
+                ? ` (last response: ${syncEvidence.lastError})`
+                : ''
+            }. It stays on this device; capture a new read to build training.`}
+          </Text>
+          <View style={styles.trainingAction}>
+            <Button
+              label="Capture a new read"
+              variant="secondary"
+              onPress={props.onCaptureNewRead}
+            />
+          </View>
+        </Card>
+      ) : syncEvidence.kind === 'orphaned' ? (
+        <Card tone="soft" style={styles.trainingStateCard}>
+          <View style={styles.trainingStateIcon}>
+            <Icon name="close" size={22} color={color.bad} />
+          </View>
+          <Text style={[type.h2, styles.trainingStateTitle]}>
+            The server did not accept this read.
+          </Text>
+          <Text style={[type.body, styles.trainingStateBody]}>
+            {`The practice set this read belongs to was refused by the server, so the read cannot be accepted and will not be sent again${
               syncEvidence.lastError
                 ? ` (last response: ${syncEvidence.lastError})`
                 : ''
