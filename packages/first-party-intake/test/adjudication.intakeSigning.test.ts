@@ -309,5 +309,28 @@ describe("SPO-01: operator intake path can require a signed, fresh consent ledge
     expect(badSeq.status).toBe(2);
     expect(badSeq.stderr).toMatch(/--min-max-seq/);
     expect(badSeq.stderr).toMatch(/^usage: intake/m);
+
+    // A flag whose value was forgotten must not swallow the next flag as its value.
+    const swallowed = runCli([...common, "--signing-key", "--min-max-seq", "2"]);
+    expect(swallowed.status).toBe(2);
+    expect(swallowed.stderr).toMatch(/--signing-key requires a value/);
+
+    // The key can be read from a file (trailing newline tolerated) so it never
+    // has to appear in argv; the file path is the documented operator form.
+    const keyFile = join(dir, "signing-key.txt");
+    writeFileSync(keyFile, `${KEY}\n`);
+    const fromFile = runCli([...common, "--signing-key-file", keyFile]);
+    expect(fromFile.status).toBe(1);
+    expect(fromFile.stderr).toMatch(/signature downgrade/);
+    const both = runCli([...common, "--signing-key", KEY, "--signing-key-file", keyFile]);
+    expect(both.status).toBe(2);
+    expect(both.stderr).toMatch(/mutually exclusive/);
+
+    // --help (referenced by FIRST_PARTY_CAPTURE_PROTOCOL.md) prints usage on stdout, exit 0.
+    const help = runCli(["--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toMatch(/^usage: intake/);
+    expect(help.stdout).toContain("--signing-key-file");
+    expect(help.stdout).toContain("--min-max-seq");
   });
 });

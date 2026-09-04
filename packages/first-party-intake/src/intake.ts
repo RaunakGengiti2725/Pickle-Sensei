@@ -7,12 +7,13 @@ import {
   probeClipStream,
   type CaptureEnvelopeMeasurements,
 } from "@pickle/capture-envelope";
-import type { EnvelopeVerdict } from "@pickle/shared-types";
+import type { ConsentRecord, EnvelopeVerdict } from "@pickle/shared-types";
 import { loadCaptureMeta, type CaptureMeta } from "./captureMeta.js";
 import {
   checkConsentForSubject,
   loadConsentLedger,
   type ConsentCheckResult,
+  type ConsentLedgerVerifyOptions,
 } from "./consentRef.js";
 
 /**
@@ -24,7 +25,8 @@ import {
  * approval). Intake never claims `approved_for_snapshot`.
  */
 
-export const INTAKE_VERSION = "first-party-intake-v1";
+/** v2: record carries `consentLedger` evidence and ledger verification failures REJECT instead of throwing. */
+export const INTAKE_VERSION = "first-party-intake-v2";
 
 export type IntakeStatus = "ACCEPTED" | "ACCEPTED_DEGRADED" | "REJECTED";
 
@@ -45,6 +47,28 @@ export interface IntakeInput {
   subjectPseudonym: string;
   captureMetaPath: string;
   operatorId: string;
+  /**
+   * HMAC key of consent export contract v2. When set, only a correctly signed
+   * v2 envelope is trusted: unsigned (v1) envelopes and bare record arrays are
+   * a signature downgrade and REJECT the clip. Never written to the record.
+   */
+  consentSigningKey?: string;
+  /**
+   * Highest export `maxSeq` this host has already accepted for the subject
+   * (read it back from the previous record's `consentLedger.maxSeq`). An
+   * export behind it is a stale replay and REJECTS the clip.
+   */
+  consentMinMaxSeq?: number;
+}
+
+/** What the host actually verified about the ledger it consulted. */
+export interface ConsentLedgerEvidence {
+  /** true only when a signing key was configured AND the v2 signature verified. */
+  signatureVerified: boolean;
+  /** Highest seq in the trusted export; null for a bare array or an unloadable ledger. */
+  maxSeq: number | null;
+  /** The watermark the host required, null when none was configured. */
+  watermark: number | null;
 }
 
 export interface ManifestDraft {
@@ -67,6 +91,8 @@ export interface ManifestDraft {
     ledgerSha256: string;
     subjectPseudonym: string;
     modelTrainingConsentVersion: string | null;
+    exportSignatureVerified: boolean;
+    ledgerMaxSeq: number | null;
   };
   pendingBeforeSnapshot: readonly string[];
 }
@@ -78,6 +104,7 @@ export interface IntakeRecord {
   status: IntakeStatus;
   reasons: string[];
   consent: ConsentCheckResult;
+  consentLedger: ConsentLedgerEvidence;
   measurements: CaptureEnvelopeMeasurements | null;
   envelope: EnvelopeVerdict | null;
   manifestDraft: ManifestDraft | null;
@@ -87,12 +114,75 @@ export function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+function ledgerVerifyOptions(input: IntakeInput): ConsentLedgerVerifyOptions {
+  const options: ConsentLedgerVerifyOptions = {};
+  if (input.consentSigningKey !== undefined) {
+    if (input.consentSigningKey.length === 0) {
+      throw new Error("consentSigningKey must be a non-empty string when provided");
+    }
+    options.signingKey = input.consentSigningKey;
+  }
+  if (input.consentMinMaxSeq !== undefined) {
+    // A watermark that cannot be compared (NaN, negative, fractional) would
+    // silently disable the replay check; refuse the invocation instead.
+    if (!Number.isSafeInteger(input.consentMinMaxSeq) || input.consentMinMaxSeq < 0) {
+      throw new Error(
+        `consentMinMaxSeq must be a non-negative integer, got ${String(input.consentMinMaxSeq)}`,
+      );
+    }
+    options.minMaxSeq = input.consentMinMaxSeq;
+  }
+  return options;
+}
+
+function ledgerMaxSeq(ledger: readonly ConsentRecord[]): number | null {
+  let max: number | null = null;
+  for (const row of ledger) {
+    if (typeof row.seq === "number" && (max === null || row.seq > max)) max = row.seq;
+  }
+  return max;
+}
+
+function consentNotEstablished(subjectPseudonym: string, reason: string): ConsentCheckResult {
+  return {
+    ok: false,
+    subjectPseudonym,
+    subjectRecordCount: 0,
+    videoAnalysisActive: false,
+    modelTrainingActive: false,
+    modelTrainingConsentVersion: null,
+    errors: [reason],
+  };
+}
+
 export function intakeClip(input: IntakeInput): IntakeRecord {
   const reasons: string[] = [];
 
   const meta = loadCaptureMeta(input.captureMetaPath);
-  const ledger = loadConsentLedger(input.consentLedgerPath);
-  const consent = checkConsentForSubject(ledger, input.subjectPseudonym);
+  const verify = ledgerVerifyOptions(input);
+
+  // A ledger the host cannot parse or verify is a consent failure, not a
+  // crash: the clip is REJECTED and the record carries the reason, so the
+  // operator keeps an auditable trail of the refused export.
+  let ledger: ConsentRecord[] | null = null;
+  let ledgerProblem: string | null = null;
+  try {
+    ledger = loadConsentLedger(input.consentLedgerPath, verify);
+  } catch (error) {
+    ledgerProblem = (error as Error).message;
+  }
+  const consent: ConsentCheckResult =
+    ledger !== null
+      ? checkConsentForSubject(ledger, input.subjectPseudonym)
+      : consentNotEstablished(
+          input.subjectPseudonym,
+          `consent ledger could not be verified: ${ledgerProblem ?? "unknown error"}`,
+        );
+  const consentLedger: ConsentLedgerEvidence = {
+    signatureVerified: ledger !== null && verify.signingKey !== undefined,
+    maxSeq: ledger !== null ? ledgerMaxSeq(ledger) : null,
+    watermark: verify.minMaxSeq ?? null,
+  };
   reasons.push(...consent.errors);
 
   let measurements: CaptureEnvelopeMeasurements | null = null;
@@ -141,6 +231,8 @@ export function intakeClip(input: IntakeInput): IntakeRecord {
         ledgerSha256: sha256File(input.consentLedgerPath),
         subjectPseudonym: input.subjectPseudonym,
         modelTrainingConsentVersion: consent.modelTrainingConsentVersion,
+        exportSignatureVerified: consentLedger.signatureVerified,
+        ledgerMaxSeq: consentLedger.maxSeq,
       },
       pendingBeforeSnapshot: PENDING_BEFORE_SNAPSHOT,
     };
@@ -153,6 +245,7 @@ export function intakeClip(input: IntakeInput): IntakeRecord {
     status,
     reasons,
     consent,
+    consentLedger,
     measurements,
     envelope,
     manifestDraft,

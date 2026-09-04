@@ -125,6 +125,27 @@ intake CLI refuses clips whose ledger reference is missing, malformed, or
 whose `model_training` scope is not currently active — including after a
 withdrawal, since status is derived from the latest ledger action.
 
+**The ledger file must be trusted, not just present.** A withdrawal only
+protects the subject if the export the intake host reads still contains it.
+The consent service (`services/api` consent routes) exports the ledger under
+contract v2 — a `consent-ledger-export` envelope with an HMAC-SHA256
+signature over the canonical records — when `CONSENT_EXPORT_SIGNING_KEY` is
+set on the service; the intake host holds the same key and is configured
+with:
+
+| Configuration                         | Guarantee                                                                                                                                                                                                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--signing-key-file <path>` (or `--signing-key <key>`) | Only a correctly signed v2 export is trusted. An unsigned v1 envelope or a bare record array is a signature downgrade and the clip is REJECTED; so is an export whose signature does not verify (rows stripped, `recordsSha256` recomputed).                     |
+| `--min-max-seq <n>`                   | `n` is the highest `maxSeq` this host already accepted for the subject (`consentLedger.maxSeq` of the previous intake record). A correctly signed but older export — one that may predate a withdrawal — is a stale replay and the clip is REJECTED. |
+
+Without a signing key the intake trusts whatever rows the file contains (the
+v1 limitation pinned in `packages/first-party-intake/test/consentExport.redteam.test.ts`),
+so a production intake host MUST run with the key configured. Keep the key
+in a file readable only by the intake operator; it is never written to the
+intake record, the manifest draft or the CLI output. An unknown or
+misspelled flag exits 2 with usage on stderr rather than being ignored, so a
+typo can never silently turn the protection off.
+
 **No fake consent records.** Test fixtures for the intake CLI live only under
 `packages/first-party-intake/test/` and are marked `SYNTHETIC-TEST-FIXTURE` in
 their subject pseudonyms; nothing under `datasets/` may contain example
@@ -182,13 +203,23 @@ The thresholds are PROVISIONAL (v0.1). Changing them requires re-versioning in
      --subject <subjectPseudonym> \
      --capture-meta <capture-meta.json> \
      --operator <operatorId> \
-     --out <intake-record.json>
+     --out <intake-record.json> \
+     --signing-key-file <consent-export.key> \
+     --min-max-seq <consentLedger.maxSeq of the previous accepted record>
    ```
 
+   `--signing-key-file` is mandatory on production intake hosts (§2). Omit
+   `--min-max-seq` only for the first clip of a subject on this host; after
+   that, feed the previous record's `consentLedger.maxSeq` forward.
+
 4. The CLI computes the SHA-256 digest, probes the stream, evaluates the
-   envelope, verifies the consent reference, and writes an intake record
-   containing a draft manifest entry. Exit code 0 = accepted (SUPPORTED or
-   DEGRADED), 1 = rejected, 2 = invalid invocation/inputs.
+   envelope, verifies the consent export signature and freshness, verifies
+   the consent reference, and writes an intake record containing a draft
+   manifest entry plus `consentLedger` evidence (`signatureVerified`,
+   `maxSeq`, `watermark`). Exit code 0 = accepted (SUPPORTED or DEGRADED),
+   1 = rejected (a ledger that fails signature/watermark verification is a
+   rejection with the reason in the record, not a crash), 2 = invalid
+   invocation/inputs (including any unrecognised flag).
 5. The intake record is a DRAFT: its `pendingBeforeSnapshot` list names every
    manifest requirement intake cannot honestly satisfy (annotation, two-person
    review + coach adjudication, quality flags, split assignment, eligibility
