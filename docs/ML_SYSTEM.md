@@ -137,23 +137,23 @@ measured visibility of the joints used (paddle-proxy metrics ×0.75;
 image-plane shoulder turn ×0.7 on side view). Unmeasurable metrics are
 omitted so scoring abstains rather than receives fabricated values.
 
-| Metric                        | Definition                                                                                                                        |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `stance_width_ratio`          | Ankle separation ÷ shoulder separation at the ready representative frame.                                                         |
-| `knee_flexion_deg`            | 180° − interior hip–knee–ankle angle on the dominant side at ready.                                                               |
-| `shoulder_turn_deg`           | Max image-plane angle between the shoulder line and hip line during preparation.                                                  |
-| `paddle_ready_height_ratio`   | (hip-center y − wrist y) ÷ torso length at ready (wrist proxy).                                                                   |
-| `paddle_set_height_ratio`     | Same measure at the end of preparation (wrist proxy).                                                                             |
-| `paddle_set_forward_norm`     | Forward-signed wrist offset from hip center ÷ torso length at set (wrist proxy).                                                  |
-| `backswing_length_norm`       | Wrist path length across preparation ÷ torso length.                                                                              |
-| `hip_shoulder_lag_ms`         | Time from peak hip-line angular speed to peak shoulder-line angular speed.                                                        |
-| `weight_transfer_norm`        | Forward-signed hip-center displacement, accelerate start → contact, ÷ torso length.                                               |
-| `path_low_to_high_slope`      | Rise from the forward swing's lowest wrist point to contact ÷ its horizontal run.                                                 |
-| `contact_forward_of_hip_norm` | Forward-signed wrist offset from hip center ÷ torso length at contact.                                                            |
-| `contact_height_ratio`        | Wrist height above ground ÷ shoulder height above ground at contact.                                                              |
-| `wrist_angle_variance_deg`    | Std-dev of the unwrapped forearm (elbow→wrist) angle through the contact neighborhood.                                            |
-| `follow_through_length_norm`  | Wrist path length across follow-through ÷ torso length.                                                                           |
-| `recovery_time_ms`            | Follow-through end → recover end, bounded by the last measured pose frame; omitted when no measured frame follows follow-through. |
+| Metric                        | Definition                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| `stance_width_ratio`          | Ankle separation ÷ shoulder separation at the ready representative frame.              |
+| `knee_flexion_deg`            | 180° − interior hip–knee–ankle angle on the dominant side at ready.                    |
+| `shoulder_turn_deg`           | Max image-plane angle between the shoulder line and hip line during preparation.       |
+| `paddle_ready_height_ratio`   | (hip-center y − wrist y) ÷ torso length at ready (wrist proxy).                        |
+| `paddle_set_height_ratio`     | Same measure at the end of preparation (wrist proxy).                                  |
+| `paddle_set_forward_norm`     | Forward-signed wrist offset from hip center ÷ torso length at set (wrist proxy).       |
+| `backswing_length_norm`       | Wrist path length across preparation ÷ torso length.                                   |
+| `hip_shoulder_lag_ms`         | Time from peak hip-line angular speed to peak shoulder-line angular speed.             |
+| `weight_transfer_norm`        | Forward-signed hip-center displacement, accelerate start → contact, ÷ torso length.    |
+| `path_low_to_high_slope`      | Rise from the forward swing's lowest wrist point to contact ÷ its horizontal run.      |
+| `contact_forward_of_hip_norm` | Forward-signed wrist offset from hip center ÷ torso length at contact.                 |
+| `contact_height_ratio`        | Wrist height above ground ÷ shoulder height above ground at contact.                   |
+| `wrist_angle_variance_deg`    | Std-dev of the unwrapped forearm (elbow→wrist) angle through the contact neighborhood. |
+| `follow_through_length_norm`  | Wrist path length across follow-through ÷ torso length.                                |
+| `recovery_time_ms`            | Recover span after follow-through, capped at the last measured frame; omitted if none. |
 
 ## F. Fusion / scoring
 
