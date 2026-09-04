@@ -1,0 +1,33 @@
+{
+  "seed": 1306368280,
+  "profile": "signedIn",
+  "openTaps": 2,
+  "waitForCatalog": true,
+  "failureRate": 0.25,
+  "latency": "mixed",
+  "snapshotAt": "arrival",
+  "localEvidence": "none",
+  "ops": [
+    {
+      "kind": "save",
+      "slug": "reset-block-rally",
+      "taps": 2,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "expand",
+      "slug": "dink-target-ladder",
+      "taps": 3,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "advance",
+      "ms": 1000
+    },
+    {
+      "kind": "browse",
+      "taps": 2,
+      "spacing": "sameTick"
+    }
+  ]
+}

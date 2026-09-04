@@ -1,0 +1,22 @@
+{
+  "seed": 2566377802,
+  "profile": "signedIn",
+  "openTaps": 2,
+  "waitForCatalog": true,
+  "failureRate": 0,
+  "latency": "held",
+  "snapshotAt": "arrival",
+  "localEvidence": "focus",
+  "ops": [
+    {
+      "kind": "refresh",
+      "taps": 2
+    },
+    {
+      "kind": "save",
+      "slug": "drive-lane-pressure",
+      "taps": 1,
+      "spacing": "microtask"
+    }
+  ]
+}

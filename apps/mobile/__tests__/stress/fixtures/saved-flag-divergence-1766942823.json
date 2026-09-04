@@ -1,0 +1,61 @@
+{
+  "seed": 1766942823,
+  "profile": "signedIn",
+  "openTaps": 2,
+  "waitForCatalog": true,
+  "failureRate": 0,
+  "latency": "short",
+  "snapshotAt": "arrival",
+  "localEvidence": "corrupt",
+  "ops": [
+    {
+      "kind": "save",
+      "slug": "dink-target-ladder",
+      "taps": 2,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "browse",
+      "taps": 2,
+      "spacing": "ms"
+    },
+    {
+      "kind": "expand",
+      "slug": "dink-target-ladder",
+      "taps": 3,
+      "spacing": "microtask"
+    },
+    {
+      "kind": "save",
+      "slug": "dink-crosscourt-clock",
+      "taps": 1,
+      "spacing": "microtask"
+    },
+    {
+      "kind": "type",
+      "text": "dink",
+      "gapMs": 40
+    },
+    {
+      "kind": "expand",
+      "slug": "serve-depth-boxes",
+      "taps": 1,
+      "spacing": "microtask"
+    },
+    {
+      "kind": "release",
+      "count": 3
+    },
+    {
+      "kind": "browse",
+      "taps": 2,
+      "spacing": "ms"
+    },
+    {
+      "kind": "save",
+      "slug": "dink-target-ladder",
+      "taps": 3,
+      "spacing": "ms"
+    }
+  ]
+}

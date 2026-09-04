@@ -1,0 +1,38 @@
+{
+  "seed": 112703858,
+  "profile": "signedIn",
+  "openTaps": 2,
+  "waitForCatalog": true,
+  "failureRate": 0.1,
+  "latency": "mixed",
+  "snapshotAt": "arrival",
+  "localEvidence": "focus",
+  "ops": [
+    {
+      "kind": "save",
+      "slug": "dink-target-ladder",
+      "taps": 3,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "save",
+      "slug": "drive-lane-pressure",
+      "taps": 2,
+      "spacing": "ms"
+    },
+    {
+      "kind": "expand",
+      "slug": "dink-crosscourt-clock",
+      "taps": 1,
+      "spacing": "microtask"
+    },
+    {
+      "kind": "advance",
+      "ms": 2600
+    },
+    {
+      "kind": "retryDetail",
+      "taps": 3
+    }
+  ]
+}

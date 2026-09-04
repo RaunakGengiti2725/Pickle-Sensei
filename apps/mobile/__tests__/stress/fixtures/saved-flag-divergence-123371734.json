@@ -1,0 +1,26 @@
+{
+  "seed": 123371734,
+  "profile": "signedIn",
+  "openTaps": 2,
+  "waitForCatalog": false,
+  "failureRate": 0.25,
+  "latency": "held",
+  "snapshotAt": "arrival",
+  "localEvidence": "corrupt",
+  "ops": [
+    {
+      "kind": "release",
+      "count": 3
+    },
+    {
+      "kind": "refresh",
+      "taps": 1
+    },
+    {
+      "kind": "save",
+      "slug": "volley-wall-reflex",
+      "taps": 3,
+      "spacing": "sameTick"
+    }
+  ]
+}

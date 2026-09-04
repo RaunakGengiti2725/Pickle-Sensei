@@ -1,0 +1,39 @@
+{
+  "seed": 1320466476,
+  "profile": "signedIn",
+  "openTaps": 1,
+  "waitForCatalog": false,
+  "failureRate": 0.25,
+  "latency": "held",
+  "snapshotAt": "arrival",
+  "localEvidence": "focus",
+  "ops": [
+    {
+      "kind": "release",
+      "count": 1
+    },
+    {
+      "kind": "family",
+      "family": "dink",
+      "taps": 2
+    },
+    {
+      "kind": "expand",
+      "slug": "shadow-swing-mirror",
+      "taps": 1,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "save",
+      "slug": "serve-depth-boxes",
+      "taps": 1,
+      "spacing": "sameTick"
+    },
+    {
+      "kind": "save",
+      "slug": "dink-target-ladder",
+      "taps": 2,
+      "spacing": "ms"
+    }
+  ]
+}
