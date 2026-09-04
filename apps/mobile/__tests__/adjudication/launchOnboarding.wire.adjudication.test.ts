@@ -72,3 +72,24 @@ describe('ADJ-H — GET /v1/me 200 with an unrecognised body', () => {
     ).resolves.toBeNull();
   });
 });
+
+describe('ADJ-H — GET /v1/me 200 "complete" without a contract-valid profile', () => {
+  // The server only ever marks an account complete together with the four
+  // required answers; a "complete" body missing them is a broken response,
+  // not permission to re-run the questionnaire over the server profile.
+  it.each([
+    ['profile missing', '{"onboardingState":"complete"}'],
+    [
+      'required field missing',
+      '{"onboardingState":"complete","profile":{"skill_level":"3.5","handedness":"left","primary_goal":"drives"}}',
+    ],
+    [
+      'unknown handedness',
+      '{"onboardingState":"complete","profile":{"skill_level":"3.5","handedness":"both","primary_goal":"drives","biggest_problem":"contact"}}',
+    ],
+  ])('%s is a typed OnboardingSyncError', async (_label, body) => {
+    await expect(
+      fetchCanonicalOnboardingProfile(session, respond(body)),
+    ).rejects.toBeInstanceOf(OnboardingSyncError);
+  });
+});

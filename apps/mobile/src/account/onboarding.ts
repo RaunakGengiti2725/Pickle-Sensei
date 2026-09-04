@@ -21,6 +21,9 @@ export class OnboardingSyncError extends Error {
   }
 }
 
+const INVALID_SERVER_PROFILE_MESSAGE =
+  'The account server returned an invalid coaching profile.';
+
 export type OnboardingFetch = (
   input: string,
   init?: RequestInit,
@@ -59,7 +62,14 @@ async function request(
   } finally {
     clearTimeout(timeout);
   }
-  const payload = (await response.json().catch(() => null)) as unknown;
+  let payload: unknown = null;
+  let isJson = false;
+  try {
+    payload = JSON.parse(await response.text()) as unknown;
+    isJson = true;
+  } catch {
+    isJson = false;
+  }
   if (!response.ok) {
     const serverMessage =
       isRecord(payload) &&
@@ -71,15 +81,32 @@ async function request(
       serverMessage ?? 'Your coaching profile could not be securely saved.',
     );
   }
+  // A 2xx whose body is not JSON (captive-portal HTML, a proxy stub, a
+  // truncated response) is not an answer from the account server.
+  if (!isJson) {
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
+  }
   return payload;
 }
 
+// GET /v1/me contract: `{ user, onboardingState: 'complete' | 'pending',
+// profile }`. Only a contract-valid 'pending' means "this account has no
+// profile"; every other shape is a broken response and must surface as a
+// retryable error — treating it as "no profile" would send an onboarded
+// account back through the questionnaire and overwrite the server profile.
 function parseServerProfile(payload: unknown): Profile | null {
-  if (!isRecord(payload) || payload['onboardingState'] !== 'complete') {
-    return null;
+  if (!isRecord(payload)) {
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
+  }
+  const onboardingState = payload['onboardingState'];
+  if (onboardingState === 'pending') return null;
+  if (onboardingState !== 'complete') {
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
   }
   const raw = payload['profile'];
-  if (!isRecord(raw)) return null;
+  if (!isRecord(raw)) {
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
+  }
   const skillLevel = raw['skill_level'];
   const handedness = raw['handedness'];
   const goal = raw['primary_goal'];
@@ -95,7 +122,7 @@ function parseServerProfile(payload: unknown): Profile | null {
     typeof biggestProblem !== 'string' ||
     !biggestProblem.trim()
   ) {
-    return null;
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
   }
   // Identity fields are optional on the wire (first_name/gender): older
   // server profiles predate them and must keep hydrating unchanged.
@@ -168,9 +195,7 @@ export async function saveCanonicalOnboardingProfile(
     }
   }
   if (!isRecord(payload)) {
-    throw new OnboardingSyncError(
-      'The account server returned an invalid coaching profile.',
-    );
+    throw new OnboardingSyncError(INVALID_SERVER_PROFILE_MESSAGE);
   }
   const recommendation = payload['recommendedCheckpoint'];
   if (
