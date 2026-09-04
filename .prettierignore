@@ -24,6 +24,7 @@ docs/STATUS_BOARD.md
 docs/HANDOFF_V3.md
 docs/DECISIONS.md
 .testing/
+.pytest_cache/
 # Supabase CLI local state + committed bench result artifacts (provenance bytes)
 supabase/.temp/
 tools/mac-bench/results/

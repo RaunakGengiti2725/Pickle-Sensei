@@ -3,6 +3,7 @@ dist/
 coverage/
 *.log
 __pycache__/
+.pytest_cache/
 *.pyc
 .env
 .env.local
