@@ -5,6 +5,7 @@
 #   scripts/security-scan.sh --tree          # working tree only (tracked, untracked, unignored)
 #   scripts/security-scan.sh --history       # git history only
 #   scripts/security-scan.sh --history --log-opts "origin/main..HEAD"   # only this branch's commits
+#   scripts/security-scan.sh --history --log-opts "--full-history --all"  # every fetched ref
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
@@ -34,7 +35,12 @@ CONFIG="$REPO_ROOT/.gitleaks.toml"
 CACHE_DIR="${SECURITY_SCAN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/pickle-sensei}"
 
 DOWNLOAD_TMP=""
-trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"' EXIT
+STAGE_DIR=""
+cleanup() {
+  [ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"
+  [ -z "$STAGE_DIR" ] || rm -rf "$STAGE_DIR"
+}
+trap cleanup EXIT
 
 log() { printf '[security-scan] %s\n' "$*" >&2; }
 die() {
@@ -49,7 +55,10 @@ usage() {
 
 SCAN_TREE=1
 SCAN_HISTORY=1
-LOG_OPTS=""
+# gitleaks' own default is `--full-history --all`: the verdict would then depend
+# on whichever unrelated refs this clone has fetched (CI checks out with
+# fetch-depth 0), not on the commit under test. Scan HEAD's full ancestry.
+LOG_OPTS="--full-history HEAD"
 REPORT_DIR=""
 VERBOSE=0
 while [ $# -gt 0 ]; do
@@ -174,8 +183,8 @@ run_scan() {
   if [ -n "$REPORT_DIR" ]; then
     args+=(--report-format json --report-path "$REPORT_DIR/gitleaks-${label}.json")
   fi
-  # Scan "." from the repo root so findings carry repo-relative paths (the
-  # allowlists in .gitleaks.toml are anchored on them).
+  # Scan "." from the repo root (or the staged copy of it) so findings carry
+  # repo-relative paths (the allowlists in .gitleaks.toml are anchored on them).
   args+=("$@" .)
   log "scanning ${label}…"
   local start end rc=0
@@ -190,16 +199,43 @@ run_scan() {
   return "$rc"
 }
 
+# `gitleaks dir` walks every file under the path, including gitignored ones, so
+# scanning the checkout directly would judge whatever happens to sit in
+# artifacts/, node_modules/, downloaded CI logs, etc. Hard-link the files git
+# would actually commit (tracked + untracked-unignored, worktree contents) into
+# a staging tree with the same repo-relative paths, so .gitleaks.toml's
+# path-anchored allowlists still apply, and scan that.
+stage_tree() {
+  local f dir
+  local -A made=()
+  STAGE_DIR="$(mktemp -d "$(git rev-parse --git-dir)/security-scan-stage.XXXXXX")"
+  while IFS= read -r -d '' f; do
+    [ -f "$f" ] || continue # deleted in the worktree, or a submodule
+    dir="${f%/*}"
+    [ "$dir" = "$f" ] && dir=.
+    if [ -z "${made[$dir]:-}" ]; then
+      mkdir -p "$STAGE_DIR/$dir"
+      made[$dir]=1
+    fi
+    ln "$f" "$STAGE_DIR/$f" 2>/dev/null || cp -p "$f" "$STAGE_DIR/$f"
+  done < <(git ls-files -z --cached --others --exclude-standard)
+}
+
+scan_tree() {
+  local rc=0
+  stage_tree
+  (cd "$STAGE_DIR" && run_scan tree dir) || rc=$?
+  rm -rf "$STAGE_DIR"
+  STAGE_DIR=""
+  return "$rc"
+}
+
 overall=0
 if [ "$SCAN_TREE" = 1 ]; then
-  run_scan tree dir || overall=1
+  scan_tree || overall=1
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  if [ -n "$LOG_OPTS" ]; then
-    run_scan history git --log-opts "$LOG_OPTS" || overall=1
-  else
-    run_scan history git || overall=1
-  fi
+  run_scan history git --log-opts "$LOG_OPTS" || overall=1
 fi
 
 if [ "$overall" = 0 ]; then

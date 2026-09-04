@@ -21,7 +21,8 @@
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
-#   security   scripts/security-scan.sh (secret/dependency scan) when present
+#   security   scripts/tests/security-scan-scope.sh (scanner scope regression)
+#              then scripts/security-scan.sh (secret scan) when present
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
@@ -244,6 +245,7 @@ stage_security() {
     echo "scripts/security-scan.sh not present in this checkout"
     exit 75
   fi
+  scripts/tests/security-scan-scope.sh
   scripts/security-scan.sh
 }
 
