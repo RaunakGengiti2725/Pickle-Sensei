@@ -228,7 +228,7 @@ async def baseline(spec: dict) -> dict:
 
 TASK — establish the BASELINE for objective: {spec['objective']}
 1. `git checkout origin/{base}` (record the SHA — that is `base_sha`).
-2. `scripts/verify-cloud.sh --tier full --start-services`; report the summary.json path and the list of stages whose status is `fail` (empty if green; `skipped`/`unavailable` are NOT failures — list them in notes).
+2. `scripts/verify-cloud.sh --tier full --start-services`; report the summary.json path and the list of stages whose status is `failed` (empty if green; `skipped`/`unavailable` are NOT failures — list them in notes).
 3. `pnpm --filter @pickle/evaluation bench:regression --out-dir /tmp/baseline --run-id baseline` and `pnpm -s --filter @pickle/evaluation bench:compare datasets/reports/regression/baseline.json /tmp/baseline/baseline.json --json > /tmp/baseline/compare.json`; report the metric count and confirm the committed baseline still matches `main` (0 improvements, 0 regressions). If it does not, say so in notes — do NOT regenerate the baseline.
 4. Upload `/tmp/baseline/baseline.json` as an attachment and return its URL in `bench_summary_attachment_url`.
 Do not change any file."""

@@ -52,7 +52,7 @@ cd "$REPO_ROOT"
 
 ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin e2e release)
 # What .github/workflows/ci.yml gates on every PR (verify + mobile + edge + supabase-security jobs).
-PR_STAGES=(deps format lint typecheck test db mobile ml edge rls)
+PR_STAGES=(deps format lint typecheck test db mobile ml edge rls security)
 
 TIER="full"
 ONLY=""
