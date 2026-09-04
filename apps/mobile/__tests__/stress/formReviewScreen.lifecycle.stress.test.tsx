@@ -2,7 +2,7 @@
  * STRESS · scr-formreviewscreen · lens `lifecycle`
  *
  * Seeded lifecycle-interruption campaign against the FormReview screen mounted
- * in the real navigator/providers (see formReviewLifecycle.harness.tsx for
+ * in the real navigator/providers (see __harness__/formReviewLifecycle/harness.tsx for
  * exactly what is real and what is a native boundary).
  *
  * Per iteration (one seed): two owners' strokes are written through the
@@ -38,7 +38,7 @@ jest.mock('react-native', () => {
   RN.NativeModules.PickleVideoCapture = {
     readTextFile: (uri: string) =>
       (
-        jest.requireActual('./formReviewLifecycle.harness') as {
+        jest.requireActual('../../__harness__/formReviewLifecycle/harness') as {
           device: { readTextFile: (uri: string) => Promise<string> };
         }
       ).device.readTextFile(uri),
@@ -48,7 +48,7 @@ jest.mock('react-native', () => {
 jest.mock('@op-engineering/op-sqlite', () => ({
   open: () =>
     (
-      jest.requireActual('./formReviewLifecycle.harness') as {
+      jest.requireActual('../../__harness__/formReviewLifecycle/harness') as {
         device: { openSqlite: () => unknown };
       }
     ).device.openSqlite(),
@@ -112,7 +112,7 @@ import {
   type SidecarVariant,
   type Tree,
   type VisibleState,
-} from './formReviewLifecycle.harness';
+} from '../../__harness__/formReviewLifecycle/harness';
 
 declare const require: (id: string) => unknown;
 declare const __dirname: string;
