@@ -163,8 +163,10 @@ describe('xc deep links — inbound URL surface census', () => {
       present: registeredSchemes.length > 0,
       detail: registeredSchemes.join(', '),
       validation:
-        'Consumed by GoogleSignIn 9.x (AppAuth ASWebAuthenticationSession) — ' +
-        'the SDK validates state/nonce/code_verifier; app code never sees the URL.',
+        'No app code handles this scheme (AppDelegate has no openURL override, ' +
+        'no RCTLinkingManager, no JS listener). INFERRED from vendor docs: the ' +
+        'GoogleSignIn 9.x / AppAuth flow consumes the return URL itself; ' +
+        'iOS-runtime behaviour is not established on Linux.',
       verdict: 'sdk-owned',
     },
     {
