@@ -10,10 +10,13 @@
  * refuses that session (a 4xx contract verdict), so the set's shots are
  * orphaned. Runs the production SQL against Node's real `node:sqlite`.
  *
- * Run: cd apps/mobile && NODE_OPTIONS=--experimental-sqlite npx jest
- *      __tests__/outboxDrainLiveness.test.ts
+ * Run: cd apps/mobile && npx jest __tests__/outboxDrainLiveness.test.ts
  */
-import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
+import {
+  MessageChannel,
+  Worker,
+  receiveMessageOnPort,
+} from 'node:worker_threads';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from '../src/data/db';
 import {
@@ -49,17 +52,90 @@ interface Handle {
 
 const mockState: { handle: Handle | null } = { handle: null };
 
-function mockOpenHandle(): Handle {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { DatabaseSync } = require('node:sqlite') as {
-    DatabaseSync: typeof DatabaseSyncType;
+/** `node:sqlite` driven synchronously from a worker thread, so the suite runs
+ * under plain `npx jest` on every Node the app supports: 22.11–22.12 gate the
+ * module behind `--experimental-sqlite`, which a worker can enable for itself
+ * even when the test process was started without it. */
+const SQLITE_WORKER = `
+const { workerData } = require('node:worker_threads');
+const { DatabaseSync } = require('node:sqlite');
+const db = new DatabaseSync(workerData.path);
+const signal = new Int32Array(workerData.signal);
+workerData.port.on('message', request => {
+  let reply;
+  try {
+    if (request.close) {
+      db.close();
+      reply = { rows: [] };
+    } else {
+      reply = {
+        rows: db
+          .prepare(request.sql)
+          .all(...request.params)
+          .map(row => ({ ...row })),
+      };
+    }
+  } catch (error) {
+    reply = { error: error instanceof Error ? error.message : String(error) };
+  }
+  workerData.port.postMessage(reply);
+  Atomics.store(signal, 0, 1);
+  Atomics.notify(signal, 0);
+});
+`;
+
+interface RawSqlite {
+  run(sql: string, params?: unknown[]): Record<string, unknown>[];
+  close(): void;
+}
+
+function openRawSqlite(path = ':memory:'): RawSqlite {
+  const { port1, port2 } = new MessageChannel();
+  const signal = new Int32Array(new SharedArrayBuffer(4));
+  const worker = new Worker(SQLITE_WORKER, {
+    eval: true,
+    execArgv: [
+      ...process.execArgv,
+      '--experimental-sqlite',
+      '--disable-warning=ExperimentalWarning',
+    ],
+    workerData: { path, port: port2, signal: signal.buffer },
+    transferList: [port2],
+  });
+  worker.unref();
+  const request = (
+    message: { sql: string; params: unknown[] } | { close: true },
+  ): Record<string, unknown>[] => {
+    Atomics.store(signal, 0, 0);
+    port1.postMessage(message);
+    Atomics.wait(signal, 0, 0, 10_000);
+    const reply = receiveMessageOnPort(port1)?.message as
+      { rows: Record<string, unknown>[] } | { error: string } | undefined;
+    if (!reply) {
+      throw new Error(
+        `node:sqlite worker did not answer under ${process.version}`,
+      );
+    }
+    if ('error' in reply) throw new Error(reply.error);
+    return reply.rows;
   };
-  const raw = new DatabaseSync(':memory:');
+  let closed = false;
+  return {
+    run: (sql, params = []) => request({ sql, params }),
+    close() {
+      if (closed) throw new Error('database is not open');
+      closed = true;
+      request({ close: true });
+      port1.close();
+      void worker.terminate();
+    },
+  };
+}
+
+function mockOpenHandle(): Handle {
+  const raw = openRawSqlite();
   const run = (sql: string, params: unknown[] = []) => ({
-    rows: raw
-      .prepare(sql)
-      .all(...(params as never[]))
-      .map(row => ({ ...(row as Record<string, unknown>) })),
+    rows: raw.run(sql, params),
   });
   return {
     executeSync: run,
