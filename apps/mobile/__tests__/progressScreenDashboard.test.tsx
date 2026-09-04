@@ -503,6 +503,63 @@ describe('ProgressScreen dashboard', () => {
     act(() => renderer.unmount());
   });
 
+  it('keeps BY STROKE on the scored v1 series when a newer abstention lands on v2 (same anchor as KEY STATISTICS)', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      // Newest fact of any kind: a low-confidence abstention on a NEWER
+      // scoring model. It is not a scored read, so it anchors nothing.
+      fact({
+        capturedAt: daysAgoIso(1),
+        overallScore: null,
+        confidence: 0.2,
+        resultKind: 'low_confidence',
+        scoringModelVersion: 'model-3',
+      }),
+      // Three scored reads on model-2 — the stroke's scored history.
+      fact({ capturedAt: daysAgoIso(2), overallScore: 7.1 }),
+      fact({ capturedAt: daysAgoIso(3), overallScore: 6.8 }),
+      fact({ capturedAt: daysAgoIso(4), overallScore: 6.4 }),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'technique progress');
+    const text = renderedText(renderer).replace(/\s+/g, ' ');
+
+    // KEY STATISTICS counts the three scored model-2 reads…
+    const reps = findByTestId(renderer, 'technique-stat-reps')!;
+    expect(reps.props.accessibilityLabel).toBe('SCORED REPS: 3');
+    const best = findByTestId(renderer, 'technique-stat-best')!;
+    expect(best.props.accessibilityLabel).toBe('BEST SCORE: 7.1');
+
+    // …and BY STROKE shows the same three reads as the dink series, newest
+    // score 7.1 and the +0.7 series movement (6.4 → 7.1).
+    expect(text).toContain('BY STROKE');
+    expect(text).not.toContain('Comparable trends start after scoring');
+    expect(text).toContain('3 accepted reps · 3 scored reads');
+    expect(text).toContain('7.1 +0.7 SERIES');
+    act(() => renderer.unmount());
+  });
+
+  it('a sub-display-precision AVG SCORE change reads flat: no triangle, no trend claim, "+0.0" insight', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      // Current window average 7.15, prior window average 7.2: the change
+      // (-0.05) rounds to 0.0 at the one-decimal display precision.
+      fact({ capturedAt: daysAgoIso(2), overallScore: 7.1 }),
+      fact({ capturedAt: daysAgoIso(5), overallScore: 7.2 }),
+      fact({ capturedAt: daysAgoIso(40), overallScore: 7.2 }),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'technique progress');
+    const text = renderedText(renderer).replace(/\s+/g, ' ');
+
+    const avg = findByTestId(renderer, 'technique-stat-avg')!;
+    expect(avg.props.accessibilityLabel).toBe(
+      'AVG SCORE: 7.2. Prior period 7.2',
+    );
+    expect(avg.props.accessibilityLabel).not.toContain('trending');
+    expect(text).toContain('Average score +0.0 vs the prior 4 weeks.');
+    expect(text).not.toContain('-0.0');
+    act(() => renderer.unmount());
+  });
+
   it('keeps the technique tab honest with zero scored history', async () => {
     mockListRealAnalysisFacts.mockResolvedValue([]);
     const renderer = await renderScreen();

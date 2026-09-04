@@ -115,6 +115,43 @@ describe('StatDeltaRow', () => {
     expect(texts(renderer)).toEqual(['SCORED DAYS', '4', '4']);
     act(() => renderer.unmount());
   });
+
+  it('reads a delta below the display precision as flat, never as a downward trend', () => {
+    const renderer = render(
+      <StatDeltaRow
+        icon="progress"
+        label="AVG SCORE"
+        value="7.2"
+        previous="7.2"
+        delta={7.15 - 7.2}
+        deltaDecimals={1}
+        testID="row"
+      />,
+    );
+    expect(hostByTestId(renderer, 'row')!.props.accessibilityLabel).toBe(
+      'AVG SCORE: 7.2. Prior period 7.2',
+    );
+    expect(texts(renderer)).toEqual(['AVG SCORE', '7.2', '7.2']);
+    act(() => renderer.unmount());
+  });
+
+  it('keeps a real one-decimal drop trending down at that precision', () => {
+    const renderer = render(
+      <StatDeltaRow
+        icon="progress"
+        label="AVG SCORE"
+        value="7.1"
+        previous="7.2"
+        delta={7.14 - 7.2}
+        deltaDecimals={1}
+        testID="row"
+      />,
+    );
+    expect(hostByTestId(renderer, 'row')!.props.accessibilityLabel).toBe(
+      'AVG SCORE: 7.1. Prior period 7.2, trending down',
+    );
+    act(() => renderer.unmount());
+  });
 });
 
 function bucket(
