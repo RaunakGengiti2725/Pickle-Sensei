@@ -1,8 +1,10 @@
 /**
- * C3 — an orphaned shot (its practice set's `session.create` row spent its
- * budget, so the server can never accept the shot; sync.ts settles it with
- * the `shot.session_orphaned` verdict) must be told to the user as a terminal
- * state on the Result surface, not left as "still in the secure outbox".
+ * C3 — a parked shot (its practice set's `session.create` row spent its
+ * budget, or no session row exists for it yet; sync.ts marks it with the
+ * `shot.session_orphaned` verdict and stops offering it until a session row
+ * for the set is accepted) must be told to the user as PAUSED on the Result
+ * surface — neither "still in the secure outbox" (it is not being offered)
+ * nor "will not be sent again" (the server accepts it once the set exists).
  *
  * Same harness as fix-12: the sync gate lives in the Personalized training
  * section of the full breakdown hosted by the `ResultDetails` route.
@@ -80,7 +82,7 @@ import { SESSION_ORPHANED_VERDICT } from '../../../src/data/sync';
 import { ResultDetailsScreen } from '../../../src/screens/ResultDetailsScreen';
 import { clearTryAgainHandoff } from '../../../src/screens/tryAgainHandoff';
 
-const ORPHAN_VERDICT = `${SESSION_ORPHANED_VERDICT}: Session not found for this shot. Its practice set was refused for good (Error: Session id belongs to another user.).`;
+const ORPHAN_VERDICT = `${SESSION_ORPHANED_VERDICT}: Session not found for this shot. Its practice set was refused by the server (Error: Session id belongs to another user.).`;
 
 function analysisFixture(): ShotAnalysis {
   return {
@@ -160,7 +162,7 @@ async function renderResult(): Promise<TestRenderer.ReactTestRenderer> {
 }
 
 describe('C3: getShotOutboxStatus reports the orphan verdict', () => {
-  it('is `orphaned` — a terminal state with the untouched attempt count', async () => {
+  it('is `orphaned` — a parked state with the untouched attempt count', async () => {
     await expect(
       getShotOutboxStatus(
         fakeDb([{ attempts: 0, last_error: ORPHAN_VERDICT }]),
@@ -216,14 +218,18 @@ describe('C3: Result breakdown tells the truth about an orphaned shot', () => {
     jest.useRealTimers();
   });
 
-  it('names the refused practice set, says the read will not be sent again, and offers a new read', async () => {
+  it('names the missing practice set, says the read is paused until the set is accepted (never "will not be sent again"), and offers a new read', async () => {
     const renderer = await renderResult();
     const text = textOf(renderer);
 
-    expect(text).toContain('The server did not accept this read.');
-    expect(text).toContain('practice set this read belongs to was refused');
-    expect(text).toContain('will not be sent again');
+    expect(text).toContain('This read is paused.');
+    expect(text).toContain(
+      'practice set this read belongs to is not on the server yet',
+    );
+    expect(text).toContain('sent again as soon as the set is accepted');
     expect(text).toContain('Session id belongs to another user.');
+    expect(text).not.toContain('will not be sent again');
+    expect(text).not.toContain('The server did not accept this read.');
     expect(text).not.toContain('still in the secure outbox');
     expect(text).not.toContain('will be retried');
     expect(

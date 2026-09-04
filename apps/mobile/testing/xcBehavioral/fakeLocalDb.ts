@@ -31,7 +31,13 @@ export interface FakeLocalDb {
   receipts: Array<{ owner: string; kind: string; entityId: string }>;
   kv: Map<string, string>;
   shots: Array<{ owner: string; id: string; sessionId: string | null }>;
-  sessions: Array<{ owner: string; id: string; mode: string }>;
+  sessions: Array<{
+    owner: string;
+    id: string;
+    mode: string;
+    shotType: string | null;
+    startedAt: string;
+  }>;
   captures: Array<{ owner: string; id: string }>;
   analysisRecords: Array<{ owner: string; id: string }>;
   /** Fail the next statement whose SQL contains `needle` (once). */
@@ -41,6 +47,17 @@ export interface FakeLocalDb {
   openTransactions(): number;
   push(kind: string, payload: unknown, owner: string): number;
   reset(): void;
+}
+
+function parsePayload(payload: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(payload) as unknown;
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createFakeLocalDb(): FakeLocalDb {
@@ -130,23 +147,91 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
+        // sync.ts selectOutboxPage: one pass's live rows after the cursor.
+        // params: [owner, OUTBOX_MAX_ATTEMPTS, cursor, parked-marker LIKE].
+        const exhaustedKind = /OR kind = '([a-z.]+)'\)/.exec(sql)?.[1] ?? null;
+        const kindEquals = /AND kind = '([a-z.]+)'/.exec(sql)?.[1] ?? null;
+        const kindNotIn = /kind NOT IN \(([^)]+)\)/.exec(sql)?.[1];
+        const excludedKinds = kindNotIn
+          ? kindNotIn.split(',').map(k => k.trim().replace(/'/g, ''))
+          : [];
+        const parkedPrefix = String(params[3]).replace(/%$/, '');
         return {
           rows: outbox
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
+                (r.attempts < Number(params[1]) || r.kind === exhaustedKind) &&
+                r.id > Number(params[2]) &&
+                (kindEquals === null || r.kind === kindEquals) &&
+                !excludedKinds.includes(r.kind) &&
+                !(r.last_error ?? '').startsWith(parkedPrefix),
             )
             .sort((a, b) => a.id - b.id)
             .slice(0, 50)
             .map(r => ({ ...r })),
         };
       }
+      if (sql.startsWith('SELECT DISTINCT json_extract(payload')) {
+        // sync.ts selectParkedSessions.
+        const prefix = String(params[1]).replace(/%$/, '');
+        const sessionIds = new Set<string>();
+        for (const r of outbox) {
+          if (r.owner_key !== params[0] || r.kind !== 'shot.sync') continue;
+          if (!(r.last_error ?? '').startsWith(prefix)) continue;
+          const sessionId = parsePayload(r.payload)?.['sessionId'];
+          if (typeof sessionId === 'string') sessionIds.add(sessionId);
+        }
+        return {
+          rows: Array.from(sessionIds, session_id => ({ session_id })),
+        };
+      }
+      if (sql.startsWith('SELECT 1 FROM outbox')) {
+        // sync.ts hasQueuedSessionCreate.
+        const hit = outbox.some(
+          r =>
+            r.owner_key === params[0] &&
+            r.kind === 'session.create' &&
+            parsePayload(r.payload)?.['id'] === params[1],
+        );
+        return { rows: hit ? [{ '1': 1 }] : [] };
+      }
       if (sql.startsWith('DELETE FROM outbox')) {
+        if (sql.includes("kind = 'session.create'")) {
+          // Exhausted session.create rows of a set the server now knows.
+          for (let i = outbox.length - 1; i >= 0; i -= 1) {
+            const r = outbox[i]!;
+            if (
+              r.owner_key === params[0] &&
+              r.kind === 'session.create' &&
+              r.attempts >= Number(params[1]) &&
+              parsePayload(r.payload)?.['id'] === params[2]
+            ) {
+              outbox.splice(i, 1);
+            }
+          }
+          return { rows: [] };
+        }
         const idx = outbox.findIndex(
           r => r.owner_key === params[0] && r.id === params[1],
         );
         if (idx >= 0) outbox.splice(idx, 1);
+        return { rows: [] };
+      }
+      if (sql.startsWith('UPDATE outbox SET attempts = 0, last_error = NULL')) {
+        // sync.ts unparkShotsOfSession: [owner, parked-marker LIKE, sessionId].
+        const prefix = String(params[1]).replace(/%$/, '');
+        for (const r of outbox) {
+          if (
+            r.owner_key === params[0] &&
+            r.kind === 'shot.sync' &&
+            (r.last_error ?? '').startsWith(prefix) &&
+            parsePayload(r.payload)?.['sessionId'] === params[2]
+          ) {
+            r.attempts = 0;
+            r.last_error = null;
+          }
+        }
         return { rows: [] };
       }
       if (sql.startsWith('UPDATE outbox')) {
@@ -206,8 +291,29 @@ export function createFakeLocalDb(): FakeLocalDb {
           owner: String(params[0]),
           id: String(params[1]),
           mode: String(params[2]),
+          shotType: params[3] == null ? null : String(params[3]),
+          startedAt: String(params[5]),
         });
         return { rows: [] };
+      }
+      if (sql.includes('FROM local_session WHERE owner_key = ? AND id = ?')) {
+        // sync.ts enqueueSessionCreateFromLocalRow.
+        const session = sessions.find(
+          s => s.owner === params[0] && s.id === params[1],
+        );
+        return {
+          rows: session
+            ? [
+                {
+                  id: session.id,
+                  mode: session.mode,
+                  shot_type: session.shotType,
+                  focus_checkpoint: null,
+                  started_at: session.startedAt,
+                },
+              ]
+            : [],
+        };
       }
       if (sql.includes('INSERT INTO local_capture')) {
         captures.push({ owner: String(params[0]), id: String(params[1]) });

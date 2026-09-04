@@ -4,7 +4,12 @@ import {
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
-import { getKv, saveSession, setKv } from '../data/repository';
+import {
+  getKv,
+  saveSession,
+  setKv,
+  type LocalSessionInput,
+} from '../data/repository';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -205,33 +210,59 @@ export async function planPracticeSet(
 }
 
 /**
- * Persists a plan: a new set writes its `practice_set` local_session row +
- * session.create outbox entry (drained ahead of shots by sync.ts); every
- * commit refreshes the kv record's activity stamp. Called AFTER a scored
- * analysis was saved with the plan's sessionId, so the session row and the
- * shot that references it always land together.
+ * The `practice_set` session row of a plan's set. The capture flow hands it
+ * to `saveAnalysis` for EVERY scored analysis: a new set's row and its
+ * session.create outbox entry commit in the same transaction as the scored
+ * shot that references it, and a continued set whose row is missing on this
+ * device (its first analysis abstained, or an older build died between the
+ * rating and the set's commit) gets the row the same way. A set whose row
+ * exists is left alone by `saveAnalysis`.
  */
-export async function commitPracticeSet(
+export function practiceSetSessionRow(
+  plan: PracticeSetPlan,
+): LocalSessionInput {
+  return {
+    id: plan.sessionId,
+    mode: PRACTICE_SET_MODE,
+    shotType: plan.shotType,
+    focusCheckpoint: null,
+    startedAt: plan.startedAtIso,
+  };
+}
+
+/**
+ * Refreshes the live-set kv record's activity stamp for a plan whose session
+ * row is already durable (persisted with the scored analysis).
+ */
+export async function stampPracticeSet(
   db: LocalDb,
   plan: PracticeSetPlan,
   nowIso?: string,
 ): Promise<void> {
   const now = resolveNow(nowIso ?? plan.nowIso);
-  if (!plan.resumed) {
-    await saveSession(db, {
-      id: plan.sessionId,
-      mode: PRACTICE_SET_MODE,
-      shotType: plan.shotType,
-      focusCheckpoint: null,
-      startedAt: plan.startedAtIso,
-    });
-  }
   await writeStoredSet(db, plan.owner, {
     sessionId: plan.sessionId,
     shotType: plan.shotType,
     startedAtIso: plan.startedAtIso,
     lastActivityAtIso: now.iso,
   });
+}
+
+/**
+ * Persists a plan on its own: a new set writes its `practice_set`
+ * local_session row + session.create outbox entry (drained ahead of shots by
+ * sync.ts); every commit refreshes the kv record's activity stamp. Callers
+ * that record a scored analysis pass `practiceSetSessionRow(plan)` to
+ * `saveAnalysis` instead and then `stampPracticeSet`, so the session row and
+ * the shot that references it land in one transaction.
+ */
+export async function commitPracticeSet(
+  db: LocalDb,
+  plan: PracticeSetPlan,
+  nowIso?: string,
+): Promise<void> {
+  if (!plan.resumed) await saveSession(db, practiceSetSessionRow(plan));
+  await stampPracticeSet(db, plan, nowIso);
 }
 
 /**

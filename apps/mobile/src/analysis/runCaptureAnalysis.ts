@@ -25,6 +25,7 @@ import {
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
+  type LocalSessionInput,
 } from '../data/repository';
 import { createFusionProviders } from '../vision/providers';
 import {
@@ -145,6 +146,14 @@ export interface RunCaptureAnalysisRequest {
   apiConfig: ApiConfigState;
   appVersion: string;
   sessionId?: string | null;
+  /**
+   * The practice-set session `sessionId` names. A scored result persists it
+   * (local_session row + session.create outbox entry) in the same transaction
+   * as the rating when this device holds no row for it yet, so a kill right
+   * after the score can never strand a shot without its session. Ignored for
+   * every non-scored outcome (nothing to bookkeep).
+   */
+  newSession?: LocalSessionInput | null;
   focusCheckpoint?: string;
   /**
    * Product-assisted target selection ("tap yourself"). Normalized image
@@ -507,7 +516,9 @@ async function analyzeReservedCapture(
 
   if (record.result && record.result.resultKind === 'scored') {
     // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
+    await saveAnalysis(request.db, record.result, permitId, {
+      session: request.newSession ?? null,
+    });
     ctx.markPermitConsumed();
     return { kind: 'scored', analysisId, record, freeLimitReached };
   }

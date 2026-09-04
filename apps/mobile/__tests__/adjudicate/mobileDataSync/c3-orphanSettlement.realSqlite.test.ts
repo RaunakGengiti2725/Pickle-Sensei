@@ -10,9 +10,11 @@
  *    row is merely queued behind it is an ordering artifact: the session is
  *    created in the same drain and the shot keeps its full budget;
  *  - a shot rejected `shot.session_not_found` whose `session.create` row has
- *    spent its budget is settled with the `shot.session_orphaned` verdict:
- *    its attempt count is untouched, it is never sent again, and
- *    getShotOutboxStatus reports `orphaned` instead of `queued`.
+ *    spent its budget is parked with the `shot.session_orphaned` verdict:
+ *    its attempt count is untouched, it is not offered again while the set
+ *    stays refused, and getShotOutboxStatus reports `orphaned` instead of
+ *    `queued` (it is re-offered once a session.create row for the set is
+ *    accepted — see attack-fix3-c3-terminalStateGaps).
  */
 import type { LocalDb } from '../../../src/data/db';
 import { createRealOpSqliteModule } from '../../../adjudicate/mobile-data-sync/realSqliteOpMock';
@@ -186,7 +188,7 @@ describe('C3: orphan settlement and full-backlog paging (real SQLite)', () => {
     expect(await hasShotSyncReceipt(db, shotId(0x300))).toBe(true);
   });
 
-  it('a shot of a permanently refused practice set is settled, never re-sent, and surfaced as orphaned', async () => {
+  it('a shot of a refused practice set is parked, not re-sent while the set stays refused, and surfaced as orphaned', async () => {
     const server = serverEmulator();
     await saveShot(db, 0x400, DEAD_SESSION);
     await queueSession(db, DEAD_SESSION);

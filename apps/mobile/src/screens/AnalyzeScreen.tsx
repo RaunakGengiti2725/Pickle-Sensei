@@ -55,8 +55,9 @@ import {
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import {
-  commitPracticeSet,
   planPracticeSet,
+  practiceSetSessionRow,
+  stampPracticeSet,
   type PracticeSetPlan,
 } from '../analysis/practiceSet';
 import { getApiSession } from '../account/apiSession';
@@ -866,9 +867,12 @@ export function AnalyzeScreen() {
         // sessionId so the Result and Progress surfaces can show whether the
         // re-record after the advice moved the score. A TRY AGAIN re-arm
         // joins the set it came from; otherwise the live set is resumed or a
-        // new one starts. The plan is only READ here — it is committed
-        // (session row + outbox + kv) after a score exists, so an abstained
-        // or failed run bookkeeps nothing. Set errors never fail an analysis.
+        // new one starts. The plan is only READ here — the set's session row
+        // + sync entry are written by runCaptureAnalysis in the SAME
+        // transaction as the score when this device holds no row for the set
+        // yet (so a kill can never leave a rated shot without its session),
+        // and the kv stamp follows after; an abstained or failed run
+        // bookkeeps nothing. Set errors never fail an analysis.
         let practiceSet: PracticeSetPlan | null = null;
         try {
           practiceSet = await planPracticeSet(getDb(), {
@@ -897,6 +901,7 @@ export function AnalyzeScreen() {
           },
           appVersion: getRuntimePublicConfig().appVersion,
           sessionId,
+          newSession: practiceSet ? practiceSetSessionRow(practiceSet) : null,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -947,12 +952,10 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
+          // The scored analysis and its session row are durable together;
+          // the kv activity stamp that keeps the set alive is best-effort.
           if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+            await stampPracticeSet(getDb(), practiceSet).catch(() => {});
           }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free

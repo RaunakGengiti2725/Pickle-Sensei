@@ -120,7 +120,10 @@ import type {
   BillingAccessDependencies,
   CanonicalAccessState,
 } from '../src/billing/types';
-import { practiceSetKeyForOwner } from '../src/analysis/practiceSet';
+import {
+  PRACTICE_SET_MODE,
+  practiceSetKeyForOwner,
+} from '../src/analysis/practiceSet';
 import { triggerOutboxSync } from '../src/data/syncRuntime';
 
 // ─── Recording LocalDb: every statement is logged so commits are visible ─────
@@ -652,10 +655,10 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
   });
 });
 
-// ─── S10 (extra): unmount mid-run orphans the practice set ──────────────────
+// ─── S10 (extra): unmount mid-run must not orphan the practice set ───────────
 
-describe('S10 (extra) — practice set commit skipped for a run whose screen was left', () => {
-  it('[BROKEN] a scored analysis saved with a NEW sessionId never gets its local_session row / session.create outbox entry / kv stamp when the screen unmounts mid-run', async () => {
+describe('S10 (extra) — a run whose screen was left still owns its practice-set session', () => {
+  it('[FIXED] a scored analysis saved with a NEW sessionId carries that session INTO runCaptureAnalysis (persisted with the shot); only the kv stamp is skipped when the screen unmounts mid-run', async () => {
     const analysis = deferred<CaptureAnalysisOutcome>(
       runCaptureAnalysis as jest.Mock,
     );
@@ -663,10 +666,19 @@ describe('S10 (extra) — practice set commit skipped for a run whose screen was
     await startCameraRun(renderer);
     const request = analysisRequest();
     // The plan chose a fresh set id and handed it to the analysis (the shot
-    // row and its shot.sync outbox payload will carry this sessionId).
+    // row and its shot.sync outbox payload will carry this sessionId)…
     expect(request.sessionId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+    // …together with the session row itself, which saveAnalysis writes in
+    // the SAME transaction as the scored shot. The screen never writes it.
+    expect(request.newSession).toEqual({
+      id: request.sessionId,
+      mode: PRACTICE_SET_MODE,
+      shotType: 'forehand_drive',
+      focusCheckpoint: null,
+      startedAt: expect.any(String),
+    });
     expect(sqlMatching(/local_session/i)).toHaveLength(0);
 
     // Player taps X on "Measuring your swing…" / navigates away.
@@ -675,25 +687,21 @@ describe('S10 (extra) — practice set commit skipped for a run whose screen was
     await analysis.resolve(scoredOutcome(false));
     await flush();
 
-    // OBSERVED on 4d812e1a: `if (abandoned.current) return;` (AnalyzeScreen
-    // ~L891) runs BEFORE `commitPracticeSet` (~L925): no session row, no
-    // session.create outbox entry, no practice.set kv record — yet the
-    // scored shot already persisted inside runCaptureAnalysis references
-    // request.sessionId. Its shot.sync will hit `shot.session_not_found`
-    // (transient → retried) until the permit ages out (24h) and then be
-    // rejected for good; a TRY AGAIN from that Result rearms with the same
-    // orphan id (`preferredSessionId` → resumed:true → no row ever written).
-    // EXPECTED: the set is committed whenever the scored shot was saved,
-    // regardless of whether the screen is still mounted.
+    // OBSERVED on 4d812e1a: the session row + session.create entry were
+    // written by a separate best-effort commit AFTER `if (abandoned.current)
+    // return;`, so a run left mid-measure stranded its scored shot (its
+    // shot.sync answered `shot.session_not_found` forever). Now the row
+    // travels with the request (above); the abandoned run only skips the kv
+    // activity stamp, so the next sitting starts a fresh set — no shot is
+    // ever left without a session.
     expect(sqlMatching(/local_session/i)).toHaveLength(0);
-    expect(sqlMatching(/INSERT INTO outbox/i)).toHaveLength(0);
     expect(kv.get(practiceSetKeyForOwner(owner))).toBeUndefined();
-    // …and the outbox drain for the orphaned shot.sync row WAS kicked off
+    // …and the outbox drain for the shot.sync row WAS kicked off
     // (triggerOutboxSync runs before the abandoned check).
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
   });
 
-  it('[HELD] control: the same run with the screen still mounted commits the set (session row + kv stamp)', async () => {
+  it('[HELD] control: the same run with the screen still mounted hands the session row to the analysis and stamps the set (kv)', async () => {
     const analysis = deferred<CaptureAnalysisOutcome>(
       runCaptureAnalysis as jest.Mock,
     );
@@ -702,13 +710,7 @@ describe('S10 (extra) — practice set commit skipped for a run whose screen was
     const request = analysisRequest();
     await analysis.resolve(scoredOutcome(false));
     await flush();
-    const sessionInserts = sqlMatching(/local_session/i);
-    expect(sessionInserts.length).toBeGreaterThan(0);
-    expect(
-      sessionInserts.some(statement =>
-        statement.params.includes(request.sessionId),
-      ),
-    ).toBe(true);
+    expect(request.newSession?.id).toBe(request.sessionId);
     const stored = kv.get(practiceSetKeyForOwner(owner));
     expect(stored).toBeDefined();
     expect(JSON.parse(stored!).sessionId).toBe(request.sessionId);

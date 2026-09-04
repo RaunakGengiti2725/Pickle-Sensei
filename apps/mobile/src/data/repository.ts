@@ -123,10 +123,72 @@ export async function purgeOwnerData(
   });
 }
 
+export interface LocalSessionInput {
+  id: string;
+  mode: string;
+  shotType: string | null;
+  focusCheckpoint: string | null;
+  startedAt: string;
+}
+
+/** The session row + its `session.create` outbox entry, inside the caller's
+ * transaction. */
+async function writeSession(
+  db: LocalDb,
+  owner: string,
+  session: LocalSessionInput,
+): Promise<void> {
+  await db.execute(
+    `INSERT OR REPLACE INTO local_session
+     (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      owner,
+      session.id,
+      session.mode,
+      session.shotType,
+      session.focusCheckpoint,
+      session.startedAt,
+    ],
+  );
+  await db.execute(
+    `INSERT INTO outbox (owner_key, kind, payload)
+     VALUES (?, 'session.create', ?)`,
+    [owner, JSON.stringify(session)],
+  );
+}
+
+/** True when `local_session` already holds `sessionId` for `owner`. */
+async function hasLocalSession(
+  db: LocalDb,
+  owner: string,
+  sessionId: string,
+): Promise<boolean> {
+  const { rows } = await db.execute(
+    `SELECT 1 FROM local_session WHERE owner_key = ? AND id = ? LIMIT 1`,
+    [owner, sessionId],
+  );
+  return rows.length > 0;
+}
+
+export interface SaveAnalysisOptions {
+  /**
+   * The practice-set session the analysis references. When this device
+   * holds no `local_session` row for it yet, the row and its `session.create`
+   * outbox entry land in the SAME transaction as the rating, so no kill or
+   * failed write between "rating saved" and "set committed" can leave a shot
+   * whose sessionId no session row will ever name; a set that already has
+   * its row is left alone (no duplicate session.create). Must be the session
+   * the analysis references.
+   */
+  session?: LocalSessionInput | null;
+}
+
 export async function saveAnalysis(
   db: LocalDb,
   analysis: ShotAnalysis,
   analysisPermitId: string,
+  options: SaveAnalysisOptions = {},
 ): Promise<void> {
   if (analysis.source !== 'real') {
     throw new Error('Only real analyses may be persisted by the app runtime.');
@@ -136,8 +198,17 @@ export async function saveAnalysis(
       'A server-reserved analysis permit is required before persisting a rating.',
     );
   }
+  const session = options.session ?? null;
+  if (session && session.id !== analysis.sessionId) {
+    throw new Error(
+      'The session persisted with a rating must be the one the rating references.',
+    );
+  }
   const owner = requireWritableDataOwner();
   await runInTransaction(db, async () => {
+    if (session && !(await hasLocalSession(db, owner, session.id))) {
+      await writeSession(db, owner, session);
+    }
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -720,35 +791,10 @@ function parseCaptureRow(row: Record<string, unknown>): PendingCapture {
 
 export async function saveSession(
   db: LocalDb,
-  session: {
-    id: string;
-    mode: string;
-    shotType: string | null;
-    focusCheckpoint: string | null;
-    startedAt: string;
-  },
+  session: LocalSessionInput,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await runInTransaction(db, async () => {
-    await db.execute(
-      `INSERT OR REPLACE INTO local_session
-       (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        owner,
-        session.id,
-        session.mode,
-        session.shotType,
-        session.focusCheckpoint,
-        session.startedAt,
-      ],
-    );
-    await db.execute(
-      `INSERT INTO outbox (owner_key, kind, payload)
-       VALUES (?, 'session.create', ?)`,
-      [owner, JSON.stringify(session)],
-    );
-  });
+  await runInTransaction(db, () => writeSession(db, owner, session));
 }
 
 export async function finishSession(
@@ -832,9 +878,11 @@ export type ShotOutboxStatus =
 /**
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
- * have spent it and are excluded from every future drain (see sync.ts), as
- * are `orphaned` rows — shots of a practice set whose own session.create row
- * is exhausted, which the server therefore can never accept.
+ * have spent it and are excluded from every future drain (see sync.ts).
+ * `orphaned` rows are PARKED, not settled: the server does not know the
+ * shot's practice set (its session.create row is exhausted, or no session row
+ * exists on this device), so the shot is held back — whatever its attempt
+ * count — until the session syncs, when sync.ts re-offers it.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -860,11 +908,11 @@ export async function getShotOutboxStatus(
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
       : null;
-  if (attempts >= OUTBOX_MAX_ATTEMPTS) {
-    return { state: 'exhausted', attempts, lastError };
-  }
   if (isSessionOrphanedVerdict(lastError)) {
     return { state: 'orphaned', attempts, lastError };
+  }
+  if (attempts >= OUTBOX_MAX_ATTEMPTS) {
+    return { state: 'exhausted', attempts, lastError };
   }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };

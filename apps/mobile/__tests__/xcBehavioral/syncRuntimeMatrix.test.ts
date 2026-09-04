@@ -16,7 +16,10 @@
  *   - no transaction is left open (no orphaned BEGIN) after a fault;
  *   - receipts and deletes are owner-scoped after an account switch;
  *   - exactly one retry timer is armed after any storm (no timer leak);
- *   - permanent failures are bounded by OUTBOX_MAX_ATTEMPTS.
+ *   - permanent failures are bounded by OUTBOX_MAX_ATTEMPTS;
+ *   - a shot with no session.create row anywhere is offered at most
+ *     OUTBOX_MAX_ATTEMPTS times, then parked (`orphaned`, not deleted) and
+ *     delivered as soon as a session.create row for its set is accepted.
  *
  * Replay a failing line: XC_SEED=<seed> npx jest __tests__/xcBehavioral/syncRuntimeMatrix
  */
@@ -26,6 +29,7 @@ import { createTransport, ApiError } from '../../src/data/api';
 import {
   OUTBOX_MAX_ATTEMPTS,
   SESSION_NOT_FOUND_REJECTION,
+  SESSION_ORPHANED_VERDICT,
   type SyncTransport,
 } from '../../src/data/sync';
 import {
@@ -239,10 +243,15 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
     for (const handler of appStateHandlers) handler(state);
   }
 
-  /** Drains observed by the DB (the transport is only hit when rows exist). */
+  /**
+   * Drains observed by the DB (the transport is only hit when rows exist).
+   * A drain issues several page reads (one per kind, one per 50 rows), so
+   * pages cannot be counted as drains; the backlog count that produces
+   * `remaining` is issued exactly once, at the end of every drainOutbox.
+   */
   function drainCount() {
     return fake.statements.filter(s =>
-      s.sql.startsWith('SELECT id, kind, payload'),
+      s.sql.startsWith('SELECT count(*) AS n FROM outbox'),
     ).length;
   }
 
@@ -602,29 +611,63 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
     );
   });
 
-  it('a shot whose session.create row never exists is re-sent on every drain with attempts pinned at 0 (unbounded retry — see analyzeScreenMatrix close-during-measuring)', async () => {
+  it('a shot whose session.create row never exists is offered OUTBOX_MAX_ATTEMPTS times, then parked (orphaned, kept) and delivered as soon as a session.create row for its set lands', async () => {
     await recordScenario(
       SUITE,
-      'orphanSessionUnbounded',
+      'orphanSessionBounded',
       0,
-      { drains: 40 },
+      { drains: 40, budget: OUTBOX_MAX_ATTEMPTS },
       async () => {
         fake.push('shot.sync', shotPayload('shot-0', 'orphan-session'), ownerA);
         configureSyncRuntime(sessionFor(USER_A));
         await flushMicrotasks(20);
+        // The first cadence tick is the one drain that fits inside the
+        // budget's last offer; every later tick finds the row parked.
         for (let i = 0; i < 40; i += 1) {
           await advance(SYNC_RETRY_MAX_MS * 1.3);
         }
         const sends = server.received.filter(id => id === 'shot-0').length;
-        // Observational: the transient classification is by design
-        // (sync.ts TRANSIENT_SYNC_REJECTION_CODES) so the row is re-sent on
-        // every cadence tick for as long as the app lives.
-        expect(sends).toBe(41);
-        expect(fake.outbox[0]!.attempts).toBe(0);
-        expect(fake.outbox[0]!.last_error).toContain(
-          SESSION_NOT_FOUND_REJECTION,
+        // Bounded: with no session.create row and no local_session row to
+        // re-queue one from, every `shot.session_not_found` counts against
+        // the shot's budget; once spent the row is PARKED (orphaned marker,
+        // still in the outbox, no receipt) instead of offered on every tick.
+        expect(sends).toBe(OUTBOX_MAX_ATTEMPTS);
+        expect(fake.outbox).toHaveLength(1);
+        expect(fake.outbox[0]!.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+        expect(fake.outbox[0]!.last_error).toMatch(
+          new RegExp(`^${SESSION_ORPHANED_VERDICT}:`),
         );
-        return { sends, attempts: fake.outbox[0]!.attempts };
+        expect(fake.outbox[0]!.last_error).not.toContain(
+          `${SESSION_NOT_FOUND_REJECTION}:`,
+        );
+        expect(fake.receipts).toHaveLength(0);
+
+        // Not terminal: a session.create row for the set appears (the
+        // server upsert is idempotent) → the SAME drain that creates it
+        // un-parks the shot, offers it once more and receipts it.
+        fake.push(
+          'session.create',
+          {
+            id: 'orphan-session',
+            mode: 'practice_set',
+            shotType: 'forehand_drive',
+            focusCheckpoint: null,
+            startedAt: '2026-09-04T12:00:00.000Z',
+          },
+          ownerA,
+        );
+        const drainsBeforeRecovery = drainCount();
+        await advance(SYNC_RETRY_MAX_MS * 1.3);
+        expect(drainCount()).toBe(drainsBeforeRecovery + 1);
+        expect(server.knownSessions.has('orphan-session')).toBe(true);
+        const sendsAfter = server.received.filter(id => id === 'shot-0').length;
+        expect(sendsAfter).toBe(OUTBOX_MAX_ATTEMPTS + 1);
+        expect(fake.receipts).toEqual([
+          { owner: ownerA, kind: 'shot.sync', entityId: 'shot-0' },
+        ]);
+        expect(fake.outbox).toHaveLength(0);
+        expect(fake.openTransactions()).toBe(0);
+        return { sends, sendsAfter, receipts: fake.receipts.length };
       },
     );
   });
