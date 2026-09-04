@@ -3,12 +3,11 @@
  * vs a scoring run that is still in flight when the screen is left.
  *
  * AnalyzeScreen re-reads canonical access in its unmount cleanup once a run
- * touched the ledger (AnalyzeScreen.tsx:623-629). `scoreCapture()` is fired
- * with `void`, so leaving the screen mid-run performs the re-read while the
- * server still holds the run's RESERVED permit. If that run then ends
- * without a score, its permit is released — but nothing re-reads the ledger
- * again, and the store keeps the snapshot in which the last free rating
- * looked reserved (`canStartRating: false`).
+ * touched the ledger. `scoreCapture()` is fired with `void`, so the screen
+ * can be left while the server still holds the run's RESERVED permit. The
+ * contract (MAC-03): the unmount re-read is DEFERRED until that run
+ * settles, so the snapshot the rest of the app reads reflects the
+ * consumed/released permit — never the reserved intermediate state.
  */
 const mockNavigation = {
   replace: jest.fn(),
@@ -233,11 +232,12 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
     expect(backend.getAccess).not.toHaveBeenCalled();
 
     // The player leaves the screen while runCaptureAnalysis is still in
-    // flight (permit reserved on the server).
+    // flight (permit reserved on the server). No read happens yet: it would
+    // observe the reserved ledger and nothing would re-read afterwards.
     await act(async () => renderer.unmount());
     await flush();
-    expect(backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 1));
+    expect(backend.getAccess).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
 
     // The abandoned run now ends without a score; its permit is released.
     permitHeld = false;
@@ -247,7 +247,9 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
     await flush();
     await flush();
 
-    // Expected: the ledger the rest of the app reads reflects the release.
+    // The deferred re-read fires exactly once, after settlement, and the
+    // ledger the rest of the app reads reflects the release.
+    expect(backend.getAccess).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
       true,
     );

@@ -4,7 +4,9 @@
  * pins the behaviour OBSERVED on this commit so the run is an executable
  * record. Attacks whose observed behaviour contradicts REVIEW.md / the
  * AGENTS.md contract are labelled `[BROKEN]` in their title and their
- * expectation comment; everything else is `[HELD]`.
+ * expectation comment; everything else is `[HELD]`. Pins inverted by the
+ * MAC-03/MAC-04 fixes (S1 cancellation classification, S8 deferred ledger
+ * refresh) are labelled `[FIXED]` and now assert the contract.
  *
  * Camera + native are simulated exactly like the existing flow harnesses
  * (analyzeScreenExtractionProgress / analyzeScreenAccessRefresh): the typed
@@ -433,7 +435,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
   const interruption = () =>
     new Error('Recording cancelled by system interruption');
 
-  it('[BROKEN] camera: the interruption is swallowed as a user cancel — screen returns to ready, no error surface, no SLO failure', async () => {
+  it('[FIXED] camera: the interruption reaches the error surface with the message and Try again — it is not a user cancel', async () => {
     (captureStrokeVideo as jest.Mock).mockRejectedValue(interruption());
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
@@ -442,19 +444,18 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     await flush();
 
     const text = renderedText(renderer);
-    // OBSERVED on 4d812e1a: the substring match `message.includes('cancel')`
-    // (AnalyzeScreen.tsx ~L1036) classifies the interruption as a voluntary
-    // cancel: phase → ready, nothing rendered with accessibilityRole="alert".
-    // EXPECTED (REVIEW.md "errors are surfaced, never swallowed"): the
-    // `Nothing was rated.` error surface with the message and a Try again.
-    expect(alertCount(renderer)).toBe(0);
-    expect(text).not.toContain('Nothing was rated.');
-    expect(text).not.toContain('Recording cancelled by system interruption');
-    expect(hasButton(renderer, 'Open automatic camera')).toBe(true);
+    // Only the typed native code `camera.cancelled` is a user cancel; a
+    // rejection whose message merely contains "cancel" is a real failure and
+    // must be surfaced (REVIEW.md "errors are surfaced, never swallowed").
+    expect(alertCount(renderer)).toBe(1);
+    expect(text).toContain('Nothing was rated.');
+    expect(text).toContain('Recording cancelled by system interruption');
+    expect(hasButton(renderer, 'Try again')).toBe(true);
+    expect(hasButton(renderer, 'Open automatic camera')).toBe(false);
     expect(mockNavigation.goBack).not.toHaveBeenCalled();
   });
 
-  it('[BROKEN] library: the interruption pops the screen (goBack) exactly like a user cancel', async () => {
+  it('[FIXED] library: the interruption does NOT pop the screen — the player sees the error surface', async () => {
     (importStrokeVideo as jest.Mock).mockRejectedValue(interruption());
     // Library imports auto-launch the picker; the rejection lands before any
     // stroke picker is shown.
@@ -462,13 +463,15 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     await flush();
     await flush();
     expect(importStrokeVideo).toHaveBeenCalledTimes(1);
-    // OBSERVED: navigation.goBack() — the player is returned to wherever they
-    // came from with no explanation. EXPECTED: an error surface.
-    expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-    expect(alertCount(renderer)).toBe(0);
+    expect(mockNavigation.goBack).not.toHaveBeenCalled();
+    expect(alertCount(renderer)).toBe(1);
+    expect(renderedText(renderer)).toContain(
+      'Recording cancelled by system interruption',
+    );
+    expect(hasButton(renderer, 'Try again')).toBe(true);
   });
 
-  it('[BROKEN] the native error CODE is ignored: a `camera.session_failed` rejection is classified by its message text alone', async () => {
+  it('[FIXED] the native error CODE decides: a `camera.session_failed` rejection is a failure even though its message says "cancelled"', async () => {
     const nativeFailure = Object.assign(
       new Error('The operation was cancelled by the system.'),
       { code: 'camera.session_failed' },
@@ -479,8 +482,12 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     pressButton(renderer, 'Open automatic camera');
     await flush();
     await flush();
-    expect(alertCount(renderer)).toBe(0);
-    expect(hasButton(renderer, 'Open automatic camera')).toBe(true);
+    expect(alertCount(renderer)).toBe(1);
+    expect(renderedText(renderer)).toContain(
+      'The operation was cancelled by the system.',
+    );
+    expect(hasButton(renderer, 'Try again')).toBe(true);
+    expect(hasButton(renderer, 'Open automatic camera')).toBe(false);
   });
 
   it('[HELD] control: the same interruption WITHOUT the substring reaches the error surface with Try again', async () => {
@@ -518,7 +525,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
 // ─── S8: unmount mid-runCaptureAnalysis after ratingLedgerTouched ───────────
 
 describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
-  it('[HELD] refreshAccess fires exactly once, at unmount, and observes the PRE-consumption (reserved) ledger', async () => {
+  it('[HELD] refreshAccess fires exactly once for the abandoned run — after it settles — and observes the CONSUMED ledger, never the reserved one', async () => {
     // Server ledger as the analysis progresses: while the permit is
     // reserved the server reports reserved=1; once the run scores it
     // reports used=2. Which snapshot the unmount refresh sees is recorded.
@@ -544,23 +551,22 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
 
     await act(async () => renderer.unmount());
     await flush();
-    // The cleanup fires the refresh immediately — before the analysis
-    // settles — so it reads the RESERVED ledger.
-    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(observed).toEqual(['reserved']);
-    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 1));
+    // The cleanup defers the refresh until the analysis settles: no read
+    // while the server still holds the RESERVED permit.
+    expect(clients.backend.getAccess).not.toHaveBeenCalled();
+    expect(observed).toEqual([]);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
     // The camera operation itself was already over: no native cancel is
     // issued for an analysis that is only running in JS.
     expect(cancelCameraOperation).not.toHaveBeenCalled();
 
     serverLedger = 'consumed';
     await analysis.resolve(scoredOutcome(true));
-    // Nothing re-reads after the outcome lands on an unmounted screen: the
-    // store keeps the pre-consumption snapshot. For a SCORED run both
-    // snapshots gate identically (availableToReserve 0), so the tab-bar and
-    // Settings row stay honest by coincidence of arithmetic, not by a read.
+    await flush();
+    // Exactly one read, and it observes the consumed ledger (used=2).
     expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 1));
+    expect(observed).toEqual(['consumed']);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(2, 0));
     expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
       false,
     );
@@ -568,7 +574,7 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
     expect(mockNavigation.replace).not.toHaveBeenCalled();
   });
 
-  it('[BROKEN] unmount mid-run + LOW-CONFIDENCE outcome leaves the store saying canStartRating=false although the server released the permit', async () => {
+  it('[FIXED] unmount mid-run + LOW-CONFIDENCE outcome: the deferred refresh observes the RELEASED ledger once and the store admits the next rating (canStartRating=true)', async () => {
     // Last free rating: store admitted the visit on availableToReserve=1.
     let serverLedger: 'reserved' | 'released' = 'reserved';
     clients = backendReturning(async () =>
@@ -587,26 +593,25 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
 
     await act(async () => renderer.unmount());
     await flush();
-    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+    // No read while the permit is reserved: the admitted snapshot stays.
+    expect(clients.backend.getAccess).not.toHaveBeenCalled();
     expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
-      false,
+      true,
     );
 
     serverLedger = 'released';
     await analysis.resolve(lowConfidenceOutcome());
-    // OBSERVED on 4d812e1a: no second refresh; the store keeps
-    // canStartRating=false (paywallRequired=true) while the server would
-    // admit a rating (reserved 0, remaining 1). useRatingRouteGate replaces
-    // the next Analyze visit with the Paywall until a Settings visit
-    // refreshes. EXPECTED: the snapshot converges with the server after
-    // the run that touched the ledger settles.
+    await flush();
+    // The snapshot converges with the server after the run that touched the
+    // ledger settles: reserved 0, remaining 1 — useRatingRouteGate admits
+    // the next Analyze visit instead of routing to the Paywall.
     expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 1));
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1, 0));
     expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
-      false,
+      true,
     );
     expect(useAccessStore.getState().canonicalAccess?.paywallRequired).toBe(
-      true,
+      false,
     );
   });
 
@@ -626,8 +631,10 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
     await startCameraRun(renderer);
     await act(async () => renderer.unmount());
     await flush();
-    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
     await analysis.resolve(scoredOutcome(false));
+    await flush();
+    // The deferred unmount refresh runs once the analysis settles.
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
     // OBSERVED on 4d812e1a: accessStore.refreshAccess's catch branch sets
     // `canonicalAccess: null` (accessStore.ts ~L208-212). A transient
     // network failure at the moment the player leaves the screen therefore
