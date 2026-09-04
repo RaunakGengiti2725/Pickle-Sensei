@@ -14,7 +14,7 @@
 //
 //   cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json xc_adjudication_loginjection.test.ts
 
-import { assert, assertEquals, assertMatch } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { loadHarness, userRequest } from "./routesHarness.ts";
 
 // V8's legacy Date parser treats a parenthesised suffix as a comment, so this
@@ -143,7 +143,11 @@ Deno.test(
     const line = writeFailed[0];
     assertEquals(line.includes("\n"), false, "no forged second log line");
     assertEquals(line.includes("\r"), false, "no carriage return");
-    assertMatch(line, /^[^\u0000-\u001f\u007f]*$/, "control characters stripped");
+    const controlChars = [...line].filter((ch) => {
+      const cp = ch.codePointAt(0) ?? 0;
+      return cp <= 0x1f || cp === 0x7f;
+    });
+    assertEquals(controlChars, [], "control characters stripped");
     assert(line.length <= 300, `detail is length-capped; got ${line.length} chars`);
   },
 );
