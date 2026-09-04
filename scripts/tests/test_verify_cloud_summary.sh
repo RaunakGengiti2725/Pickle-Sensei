@@ -67,7 +67,7 @@ else
     escaped="$(json_escape "$input")"
     printf '"%s"' "$escaped" >"$TMP/rt.json"
     jq -e . "$TMP/rt.json" >/dev/null 2>&1 || return 1
-    decoded="$(jq -r . "$TMP/rt.json"; printf x)"
+    decoded="$(jq -rj . "$TMP/rt.json"; printf x)"
     decoded="${decoded%x}"
     [ "$decoded" = "$input" ]
   }

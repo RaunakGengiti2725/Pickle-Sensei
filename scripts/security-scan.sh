@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Secret-scanning gate for Pickle Sensei (gitleaks, pinned, non-interactive).
 #
-#   scripts/security-scan.sh                 # working tree + full git history of HEAD
+#   scripts/security-scan.sh                 # working tree + git history of HEAD's ancestry
 #   scripts/security-scan.sh --tree          # working tree only (tracked, untracked, unignored)
-#   scripts/security-scan.sh --history       # git history only
+#   scripts/security-scan.sh --history       # git history only (HEAD's ancestry)
 #   scripts/security-scan.sh --history --log-opts "origin/main..HEAD"   # only this branch's commits
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
+#
+# The history scan is a function of the commit under test: without --log-opts it
+# walks HEAD's ancestry (every commit reachable from HEAD) and never consults
+# other branches or remote-tracking refs present in the clone, so a
+# full-fetch CI checkout with unrelated (possibly poisoned) branches cannot
+# change this checkout's verdict. Pass --log-opts to widen or narrow the range
+# explicitly (any `git log` revision arguments; e.g. --all for a whole-clone
+# audit). The log line names the range that was scanned and its commit count.
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
 # with a justification). Findings are ALWAYS redacted in output and reports.
@@ -49,7 +57,8 @@ usage() {
 
 SCAN_TREE=1
 SCAN_HISTORY=1
-LOG_OPTS=""
+LOG_OPTS="HEAD"
+LOG_OPTS_EXPLICIT=0
 REPORT_DIR=""
 VERBOSE=0
 while [ $# -gt 0 ]; do
@@ -58,7 +67,9 @@ while [ $# -gt 0 ]; do
     --history) SCAN_TREE=0 ;;
     --log-opts)
       [ $# -ge 2 ] || die "--log-opts needs a value"
+      [ -n "$2" ] || die "--log-opts needs a non-empty value (git log revision arguments)"
       LOG_OPTS="$2"
+      LOG_OPTS_EXPLICIT=1
       shift
       ;;
     --report-dir)
@@ -167,9 +178,10 @@ COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --config "$CONFIG")
 [ "$VERBOSE" = 1 ] && COMMON_ARGS+=(--verbose)
 
 run_scan() {
-  # $1 = label, $2 = gitleaks subcommand, remaining = extra args
-  local label="$1" sub="$2"
-  shift 2
+  # $1 = label, $2 = scope shown in the log lines ("" for none),
+  # $3 = gitleaks subcommand, remaining = extra args
+  local label="$1" scope="$2" sub="$3"
+  shift 3
   local args=("$sub" "${COMMON_ARGS[@]}")
   if [ -n "$REPORT_DIR" ]; then
     args+=(--report-format json --report-path "$REPORT_DIR/gitleaks-${label}.json")
@@ -177,29 +189,49 @@ run_scan() {
   # Scan "." from the repo root so findings carry repo-relative paths (the
   # allowlists in .gitleaks.toml are anchored on them).
   args+=("$@" .)
-  log "scanning ${label}…"
+  # "tree: clean" / "history: HEAD ancestry, 42 commits — clean"
+  local shown="${label}${scope:+: $scope}" sep=": "
+  [ -z "$scope" ] || sep=" — "
+  log "scanning ${shown}…"
   local start end rc=0
   start=$(date +%s)
   "$GITLEAKS" "${args[@]}" || rc=$?
   end=$(date +%s)
   case "$rc" in
-    0) log "${label}: clean ($((end - start))s)" ;;
-    1) log "${label}: FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
-    *) log "${label}: gitleaks failed with exit $rc" ;;
+    0) log "${shown}${sep}clean ($((end - start))s)" ;;
+    1) log "${shown}${sep}FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
+    *) log "${shown}${sep}gitleaks failed with exit $rc" ;;
   esac
   return "$rc"
 }
 
+history_scope() {
+  # Human-readable description of the revision range the history scan walks,
+  # with its commit count so the scope is visible in the log.
+  local -a revs
+  local count
+  read -ra revs <<<"$LOG_OPTS"
+  # `git log` (not rev-list) so every option gitleaks forwards is accepted.
+  if count="$(git log --format=%H "${revs[@]}" 2>/dev/null | wc -l)"; then
+    count="$((count)) commit$([ "$((count))" -eq 1 ] || printf s)"
+  else
+    count="commit count unavailable"
+  fi
+  if [ "$LOG_OPTS_EXPLICIT" = 1 ]; then
+    printf 'log-opts %s, %s' "$LOG_OPTS" "$count"
+  else
+    printf 'HEAD ancestry, %s' "$count"
+  fi
+}
+
 overall=0
 if [ "$SCAN_TREE" = 1 ]; then
-  run_scan tree dir || overall=1
+  run_scan tree "" dir || overall=1
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  if [ -n "$LOG_OPTS" ]; then
-    run_scan history git --log-opts "$LOG_OPTS" || overall=1
-  else
-    run_scan history git || overall=1
-  fi
+  # Always hand gitleaks an explicit range: with no --log-opts it defaults to
+  # `git log --all`, i.e. every ref in the clone rather than the commit under test.
+  run_scan history "$(history_scope)" git --log-opts "$LOG_OPTS" || overall=1
 fi
 
 if [ "$overall" = 0 ]; then

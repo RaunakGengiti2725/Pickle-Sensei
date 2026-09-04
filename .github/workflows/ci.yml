@@ -111,7 +111,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # scripts/security-scan.sh scans the full history for leaked secrets
+          # scripts/security-scan.sh walks HEAD's full ancestry for leaked secrets
+          # (only HEAD's — other branches in the clone never affect the verdict).
+          fetch-depth: 0
       - name: Supabase RLS + security regression matrix + secret scan
         run: scripts/verify-cloud.sh --only rls,security
         env:
