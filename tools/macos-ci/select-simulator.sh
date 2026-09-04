@@ -13,6 +13,7 @@
 set -euo pipefail
 
 BOOT=0
+CI_DEVICE_NAME="PickleSensei-CI"
 for arg in "$@"; do
   case "$arg" in
     --boot) BOOT=1 ;;
@@ -42,12 +43,13 @@ for runtime, devices in data.items():
 candidates.sort(reverse=True)
 if candidates:
     v, _, _, name, udid = candidates[0]
+    ios = ".".join(str(p) for p in v)
     print(udid)
-    print(f"selected simulator: {name} (iOS {'.'.join(map(str, v))}) {udid}", file=sys.stderr)
+    print(f"selected simulator: {name} (iOS {ios}) {udid}", file=sys.stderr)
 '
 }
 
-UDID="$(pick || true)"
+UDID="$(pick)"
 
 if [ -z "$UDID" ]; then
   echo "no available iPhone simulator found; trying to create one" >&2
@@ -69,9 +71,24 @@ pro = [t for t in types if "Pro" in t["name"] and "Max" not in t["name"]]
 chosen = (pro or types)[-1]
 print(chosen["identifier"])
 ')"
-  echo "creating simulator PickleSensei-CI ($DEVICE_TYPE on $RUNTIME)" >&2
-  UDID="$(xcrun simctl create "PickleSensei-CI" "$DEVICE_TYPE" "$RUNTIME")"
+  echo "creating simulator $CI_DEVICE_NAME ($DEVICE_TYPE on $RUNTIME)" >&2
+  UDID="$(xcrun simctl create "$CI_DEVICE_NAME" "$DEVICE_TYPE" "$RUNTIME")"
 fi
+
+# Remove any other CI-created devices so repeated runs never accumulate them.
+xcrun simctl list devices -j | python3 -c '
+import json, sys
+keep, name = sys.argv[1], sys.argv[2]
+for devs in json.load(sys.stdin)["devices"].values():
+    for d in devs:
+        if d["name"] == name and d["udid"] != keep:
+            print(d["udid"])
+' "$UDID" "$CI_DEVICE_NAME" | while IFS= read -r stale; do
+  [ -n "$stale" ] || continue
+  echo "deleting stale simulator $CI_DEVICE_NAME $stale" >&2
+  xcrun simctl shutdown "$stale" >/dev/null 2>&1 || true
+  xcrun simctl delete "$stale" >&2 || true
+done
 
 if [ "$BOOT" = "1" ]; then
   STATE="$(xcrun simctl list devices -j | python3 -c '

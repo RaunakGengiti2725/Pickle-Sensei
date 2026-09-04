@@ -20,6 +20,8 @@ SETTLE_SECONDS="${4:-25}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT_DIR"
+# `simctl io screenshot` does not resolve paths against our cwd; use an absolute one.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "::error::app bundle not found at $APP_PATH"
@@ -78,8 +80,15 @@ if [ -z "$PID" ]; then
 fi
 
 # Early screenshot (splash / first frame), then the settled screen.
+screenshot() {
+  if ! xcrun simctl io "$UDID" screenshot "$OUT_DIR/$1" >/dev/null 2>"$OUT_DIR/$1.err"; then
+    echo "::warning::screenshot $1 failed: $(tr '\n' ' ' < "$OUT_DIR/$1.err")"
+  fi
+  rm -f "$OUT_DIR/$1.err"
+}
+
 sleep 5
-xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-05s.png" >/dev/null || true
+screenshot launch-05s.png
 ALIVE=1
 for _ in $(seq 1 "$((SETTLE_SECONDS - 5))"); do
   if ! kill -0 "$PID" 2>/dev/null; then
@@ -88,7 +97,7 @@ for _ in $(seq 1 "$((SETTLE_SECONDS - 5))"); do
   fi
   sleep 1
 done
-xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-settled.png" >/dev/null || true
+screenshot launch-settled.png
 
 # Give the log stream a moment to flush, then stop it.
 sleep 2
@@ -118,6 +127,7 @@ FATAL_LINES="$(grep -E 'RCTFatal|Unhandled JS Exception|Terminating app due to u
   echo "alive_after_${SETTLE_SECONDS}s=$ALIVE"
   echo "crash_reports=$CRASHES"
   echo "fatal_log_lines=$(printf '%s' "$FATAL_LINES" | grep -c . || true)"
+  echo "screenshots=$(find "$OUT_DIR" -maxdepth 1 -name 'launch-*.png' | wc -l | tr -d ' ')"
 } | tee "$OUT_DIR/launch-summary.txt"
 
 STATUS=0
