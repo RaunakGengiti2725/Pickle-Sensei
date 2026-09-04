@@ -238,39 +238,158 @@ export function qualityBlockedMessage(
 }
 
 /**
+ * Where a camera event came from: the native capture that emitted it and
+ * when. Both fields are what the native bridge stamps on every event
+ * (`CameraEventBase`); either may be missing on older builds, in which case
+ * the corresponding check is skipped rather than guessed.
+ */
+export interface AttemptEvidenceProvenance {
+  captureId?: string | undefined;
+  emittedAtIso?: string | undefined;
+}
+
+/**
  * Mutable per-attempt evidence buffer for the live camera signals the
- * attempt envelope consumes. `beginAttempt()` MUST run when a new capture
- * attempt starts: readiness/quality evidence describes exactly ONE clip and
- * must never be attributed to the next one — a stale carried-over reading
- * would let a verdict rest on evidence from a different capture.
+ * attempt envelope consumes. Evidence describes exactly ONE clip, measured
+ * inside its own attempt and — for readiness — at or before the stroke:
+ *
+ * - `beginAttempt()` MUST run when a new capture attempt starts. It opens a
+ *   fresh attempt id and RETIRES the previous attempt's native capture id,
+ *   so an event that drains late from the torn-down pipeline is rejected
+ *   instead of being attributed to the new clip.
+ * - The attempt binds to the native capture id carried by its first
+ *   correlated event; evidence stamped with any other capture id is foreign
+ *   and ignored.
+ * - `noteStroke()` closes the readiness window at the stroke's emission
+ *   time: a readiness frame observed after it (whether it arrives before or
+ *   after the stroke event) cannot overwrite the swing-time visibility.
+ *   Clip-level quality summaries may still land until the clip resolves.
+ * - `sealAttempt()` (clip resolved or attempt ended) rejects everything.
+ *
+ * Every `note*` returns whether the evidence was accepted, so the caller
+ * can skip UI derived from evidence that was not.
  */
 export interface AttemptEvidenceBuffer {
+  /** Correlation id of the open attempt. */
+  readonly attemptId: string;
+  /** Native capture id bound to this attempt; null until an event binds it. */
+  readonly captureId: string | null;
   readonly readiness: ReadinessSnapshot | null;
   readonly quality: CaptureQualitySignalsV1 | null;
-  noteReadiness(readiness: ReadinessSnapshot): void;
-  noteQuality(quality: CaptureQualitySignalsV1): void;
-  beginAttempt(): void;
+  beginAttempt(attemptId?: string): void;
+  noteReadiness(
+    readiness: ReadinessSnapshot,
+    provenance?: AttemptEvidenceProvenance,
+  ): boolean;
+  noteQuality(
+    quality: CaptureQualitySignalsV1,
+    provenance?: AttemptEvidenceProvenance,
+  ): boolean;
+  noteStroke(provenance?: AttemptEvidenceProvenance): boolean;
+  sealAttempt(): void;
+}
+
+/** Retired capture ids remembered for late-event rejection. */
+const RETIRED_CAPTURE_IDS_KEPT = 8;
+
+function observedAtMs(provenance: AttemptEvidenceProvenance): number | null {
+  if (provenance.emittedAtIso === undefined) return null;
+  const ms = Date.parse(provenance.emittedAtIso);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 export function createAttemptEvidenceBuffer(): AttemptEvidenceBuffer {
-  let readiness: ReadinessSnapshot | null = null;
+  let sequence = 0;
+  let attemptId = `attempt-${sequence}`;
+  let captureId: string | null = null;
+  const retired: string[] = [];
+  let readiness: {
+    snapshot: ReadinessSnapshot;
+    observedAtMs: number | null;
+  } | null = null;
   let quality: CaptureQualitySignalsV1 | null = null;
+  let strokeAtMs: number | null = null;
+  let strokeSeen = false;
+  let sealed = false;
+
+  /** Correlates the event to this attempt, binding the capture id if new. */
+  const belongs = (provenance: AttemptEvidenceProvenance): boolean => {
+    const id = provenance.captureId;
+    if (id === undefined) return true;
+    if (retired.includes(id)) return false;
+    if (captureId === null) {
+      captureId = id;
+      return true;
+    }
+    return captureId === id;
+  };
+
+  const insideStrokeWindow = (
+    provenance: AttemptEvidenceProvenance,
+  ): boolean => {
+    if (!strokeSeen) return true;
+    if (strokeAtMs === null) return false;
+    const at = observedAtMs(provenance);
+    return at !== null && at <= strokeAtMs;
+  };
+
   return {
+    get attemptId() {
+      return attemptId;
+    },
+    get captureId() {
+      return captureId;
+    },
     get readiness() {
-      return readiness;
+      return readiness?.snapshot ?? null;
     },
     get quality() {
       return quality;
     },
-    noteReadiness(next: ReadinessSnapshot) {
-      readiness = next;
-    },
-    noteQuality(next: CaptureQualitySignalsV1) {
-      quality = next;
-    },
-    beginAttempt() {
+    beginAttempt(nextAttemptId?: string) {
+      sequence += 1;
+      attemptId = nextAttemptId ?? `attempt-${sequence}`;
+      if (captureId !== null) {
+        retired.push(captureId);
+        if (retired.length > RETIRED_CAPTURE_IDS_KEPT) retired.shift();
+      }
+      captureId = null;
       readiness = null;
       quality = null;
+      strokeAtMs = null;
+      strokeSeen = false;
+      sealed = false;
+    },
+    noteReadiness(next, provenance = {}) {
+      if (sealed || !belongs(provenance) || !insideStrokeWindow(provenance)) {
+        return false;
+      }
+      readiness = { snapshot: next, observedAtMs: observedAtMs(provenance) };
+      return true;
+    },
+    noteQuality(next, provenance = {}) {
+      if (sealed || !belongs(provenance)) return false;
+      quality = next;
+      return true;
+    },
+    noteStroke(provenance = {}) {
+      if (!belongs(provenance)) return false;
+      strokeSeen = true;
+      strokeAtMs = observedAtMs(provenance);
+      // Readiness measured after the stroke describes the follow-through or
+      // the walk-off, not the swing: drop it now that the window is known.
+      if (
+        readiness !== null &&
+        strokeAtMs !== null &&
+        readiness.observedAtMs !== null &&
+        readiness.observedAtMs > strokeAtMs
+      ) {
+        readiness = null;
+      }
+      return true;
+    },
+    sealAttempt() {
+      sealed = true;
     },
   };
 }

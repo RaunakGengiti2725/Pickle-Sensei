@@ -118,8 +118,17 @@ function faultDb(): FaultDb {
         staged = null;
         return { rows: [] };
       }
+      // Nested savepoints ride on the outer transaction: they commit with it
+      // and are discarded by its ROLLBACK, which every failing case ends in.
+      if (
+        /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(statement)
+      ) {
+        if (!staged) throw new Error('fakeDb: savepoint outside a transaction');
+        return { rows: [] };
+      }
       if (statement.startsWith('SELECT value FROM kv')) return { rows: [] };
-      if (statement.startsWith('INSERT OR REPLACE INTO kv')) return { rows: [] };
+      if (statement.startsWith('INSERT OR REPLACE INTO kv'))
+        return { rows: [] };
       if (statement.includes('INSERT INTO local_analysis_record')) {
         const id = String(params[1]);
         const captureId = String(params[2]);

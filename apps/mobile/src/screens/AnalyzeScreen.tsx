@@ -54,11 +54,7 @@ import {
   setDeclaredStroke,
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
-import {
-  commitPracticeSet,
-  planPracticeSet,
-  type PracticeSetPlan,
-} from '../analysis/practiceSet';
+import { planPracticeSet, type PracticeSetPlan } from '../analysis/practiceSet';
 import { getApiSession } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { useAppStore } from '../state/appStore';
@@ -645,13 +641,22 @@ export function AnalyzeScreen() {
   useEffect(
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
+        // Live evidence is correlated to the OPEN attempt by the buffer
+        // (native captureId + emission time vs. the stroke window); an event
+        // it rejects belongs to another clip or to the follow-through and
+        // drives neither the envelope nor the coaching caption.
+        const provenance = {
+          captureId: event.captureId,
+          emittedAtIso: event.emittedAtIso,
+        };
         if (event.type === 'readiness') {
+          const accepted = attemptEvidence.current.noteReadiness(
+            { state: event.state, jointCoverage: event.jointCoverage },
+            provenance,
+          );
+          if (!accepted) return;
           usabilityFunnel.log('readiness_state', event.state);
           if (event.state === 'ready') usabilityFunnel.log('ready');
-          attemptEvidence.current.noteReadiness({
-            state: event.state,
-            jointCoverage: event.jointCoverage,
-          });
           setCaptureEnvelope(
             liveCaptureEnvelope(
               attemptEvidence.current.readiness,
@@ -663,7 +668,9 @@ export function AnalyzeScreen() {
             message: READINESS_COPY[event.state] ?? 'Reading your position…',
           });
         } else if (event.type === 'capture_quality') {
-          attemptEvidence.current.noteQuality(event.signals);
+          if (!attemptEvidence.current.noteQuality(event.signals, provenance)) {
+            return;
+          }
           setCaptureEnvelope(
             liveCaptureEnvelope(
               attemptEvidence.current.readiness,
@@ -671,6 +678,7 @@ export function AnalyzeScreen() {
             ),
           );
         } else if (event.type === 'stroke_detected') {
+          if (!attemptEvidence.current.noteStroke(provenance)) return;
           usabilityFunnel.log('stroke_captured');
           setCaptureEnvelope(null);
           setPhase({
@@ -840,9 +848,11 @@ export function AnalyzeScreen() {
         // sessionId so the Result and Progress surfaces can show whether the
         // re-record after the advice moved the score. A TRY AGAIN re-arm
         // joins the set it came from; otherwise the live set is resumed or a
-        // new one starts. The plan is only READ here — it is committed
-        // (session row + outbox + kv) after a score exists, so an abstained
-        // or failed run bookkeeps nothing. Set errors never fail an analysis.
+        // new one starts. The plan is only READ here — runCaptureAnalysis
+        // commits it (session row + outbox + kv) inside the scored promotion
+        // transaction, so an abstained or failed run bookkeeps nothing and a
+        // scored one is committed even if this screen is gone by then. Plan
+        // errors never fail an analysis.
         let practiceSet: PracticeSetPlan | null = null;
         try {
           practiceSet = await planPracticeSet(getDb(), {
@@ -868,6 +878,7 @@ export function AnalyzeScreen() {
           },
           appVersion: getRuntimePublicConfig().appVersion,
           sessionId,
+          practiceSet,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -913,13 +924,6 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
@@ -979,6 +983,8 @@ export function AnalyzeScreen() {
     // Each capture attempt starts with a clean envelope verdict, live
     // evidence buffer, target seed, and live-window signals: all of them
     // describe ONE clip's live window and must never carry into the next one.
+    // The buffer also retires the previous attempt's native capture, so its
+    // late-draining events cannot be attributed to this one.
     attemptEvidence.current.beginAttempt();
     setCaptureEnvelope(null);
     setTargetSeed(null);
@@ -1054,6 +1060,9 @@ export function AnalyzeScreen() {
         });
       }
     } finally {
+      // The capture has resolved (clip, cancel or failure): the attempt's
+      // evidence is complete and nothing arriving later may alter it.
+      attemptEvidence.current.sealAttempt();
       operationActive.current = false;
     }
   }, [declaredStroke, navigation, scoreCapture, source, techniqueIntent]);

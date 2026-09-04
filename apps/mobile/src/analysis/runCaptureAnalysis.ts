@@ -22,7 +22,9 @@ import {
   ApiError,
   createAnalysisPermitClient,
   type ApiConfigState,
+  type ReleasableAnalysisOutcome,
 } from '../data/api';
+import { commitPracticeSet, type PracticeSetPlan } from './practiceSet';
 import { makeUuid } from '../util/uuid';
 import {
   recordEvaluationTrial,
@@ -41,6 +43,13 @@ import { stabilitySlo } from './stabilityTelemetry';
  *   system requires; abstentions release the permit instead of burning it.
  * - Every run appends an immutable AnalysisRecord; scored runs additionally
  *   promote the product rating (local_shot + sync outbox).
+ * - Once a permit is reserved it is settled EXACTLY once on every exit: a
+ *   scored run consumes it through the durable shot.sync row, every other
+ *   outcome — including a thrown error — releases it (`PermitSettlement`).
+ * - The durable promotion (analysis record, capture status, rating, sync
+ *   row and the practice-set bookkeeping the rating references) is ONE
+ *   SQLite transaction (`inPromotionTransaction`), so a failure part-way
+ *   leaves the capture retryable instead of half-promoted.
  */
 
 export type CaptureAnalysisOutcome =
@@ -126,6 +135,99 @@ export interface RunCaptureAnalysisRequest {
    * Telemetry never alters or blocks the analysis outcome.
    */
   evaluationTelemetry?: EvaluationTelemetryContext | null;
+  /**
+   * Practice set the scored rating belongs to (its `sessionId` must equal
+   * `sessionId` above). Committed inside the scored promotion transaction —
+   * session row + session.create outbox entry ahead of the shot.sync row,
+   * plus the kv activity stamp — so the rating can never be durable with a
+   * sessionId the server is never told about. Non-scored runs bookkeep
+   * nothing.
+   */
+  practiceSet?: PracticeSetPlan | null;
+}
+
+type AnalysisPermitClient = ReturnType<typeof createAnalysisPermitClient>;
+
+/**
+ * Settles a reserved analysis permit exactly once. `release()` is a no-op
+ * after the first call, and a failing release is swallowed: the server
+ * sweeps stale reservations, and a lost release must never mask the error
+ * that caused it or turn into a second accounting event.
+ */
+class PermitSettlement {
+  private settled = false;
+
+  constructor(
+    private readonly permits: AnalysisPermitClient,
+    private readonly permitId: string,
+  ) {}
+
+  async release(outcome: ReleasableAnalysisOutcome): Promise<void> {
+    if (this.settled) return;
+    this.settled = true;
+    try {
+      await this.permits.release(this.permitId, outcome);
+    } catch {
+      // Server-side expiry covers a lost release.
+    }
+  }
+
+  /** The scored promotion is durable: shot.sync consumes the permit. */
+  consumedBySync(): void {
+    this.settled = true;
+  }
+}
+
+const TRANSACTION_CONTROL =
+  /^\s*(BEGIN(\s+IMMEDIATE)?|COMMIT|ROLLBACK)\s*;?\s*$/i;
+
+/**
+ * Runs `work` as ONE SQLite transaction. Repository helpers each open their
+ * own `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`; inside this scope those
+ * become nested SAVEPOINTs on the outer transaction, so the existing
+ * helpers compose atomically without being rewritten. A helper's own
+ * rollback unwinds only its savepoint; the outer transaction is committed
+ * only when every step succeeded and rolled back otherwise.
+ */
+async function inPromotionTransaction<T>(
+  db: LocalDb,
+  work: (scoped: LocalDb) => Promise<T>,
+): Promise<T> {
+  let depth = 0;
+  const scoped: LocalDb = {
+    async execute(sql, params) {
+      const control = TRANSACTION_CONTROL.exec(sql);
+      if (!control) return db.execute(sql, params);
+      const verb = control[1]!.toUpperCase();
+      if (verb.startsWith('BEGIN')) {
+        depth += 1;
+        return db.execute(`SAVEPOINT promotion_${depth}`);
+      }
+      const name = `promotion_${depth}`;
+      depth = Math.max(0, depth - 1);
+      if (verb === 'ROLLBACK') {
+        await db.execute(`ROLLBACK TO SAVEPOINT ${name}`);
+      }
+      return db.execute(`RELEASE SAVEPOINT ${name}`);
+    },
+    close() {
+      db.close();
+    },
+  };
+  await db.execute('BEGIN IMMEDIATE');
+  let value: T;
+  try {
+    value = await work(scoped);
+  } catch (error) {
+    try {
+      await db.execute('ROLLBACK');
+    } catch {
+      // Preserve the original persistence error.
+    }
+    throw error;
+  }
+  await db.execute('COMMIT');
+  return value;
 }
 
 export async function runCaptureAnalysis(
@@ -312,15 +414,50 @@ async function runCaptureAnalysisCore(
           },
         };
 
+  const settlement = new PermitSettlement(permits, permitId);
+  try {
+    return await analyzeAndPromote(request, {
+      envelope,
+      parsedPose: parsed.value,
+      providers: fusion.providers,
+      trigger,
+      permitId,
+      freeLimitReached,
+      settlement,
+    });
+  } catch (error) {
+    // Any thrown step after reservation: the permit is released (once) and
+    // the original error still reaches the caller.
+    await settlement.release('failed');
+    throw error;
+  }
+}
+
+interface ReservedRun {
+  envelope: EnvelopeVerdict | null;
+  parsedPose: Parameters<typeof analyzeCapture>[1]['pose'];
+  providers: Parameters<typeof analyzeCapture>[0];
+  trigger: Parameters<typeof analyzeCapture>[1]['trigger'];
+  permitId: string;
+  freeLimitReached: boolean;
+  settlement: PermitSettlement;
+}
+
+async function analyzeAndPromote(
+  request: RunCaptureAnalysisRequest,
+  run: ReservedRun,
+): Promise<CaptureAnalysisOutcome> {
+  const { clip } = request;
+  const { envelope, permitId, settlement } = run;
   const analysisId = makeUuid();
   const result = await analyzeCapture(
-    fusion.providers,
+    run.providers,
     {
       captureId: request.captureId,
-      pose: parsed.value,
+      pose: run.parsedPose,
       paddle: unavailable('paddle_detector_not_installed'),
       ball: unavailable('ball_tracker_not_installed'),
-      trigger,
+      trigger: run.trigger,
       // declared may be null (AUTO DETECT); predicted is filled downstream
       // by the classifier providers, never here.
       stroke: { declared: request.declaredStroke, predicted: null },
@@ -344,9 +481,8 @@ async function runCaptureAnalysisCore(
   );
 
   if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
-    });
+    // The permit expires server-side; a lost release is not a lost rating.
+    await settlement.release('failed');
     return { kind: 'unavailable', reason: result.failure.message };
   }
   // Attach the measured envelope so downstream Result can explain
@@ -356,27 +492,43 @@ async function runCaptureAnalysisCore(
     captureEnvelope: envelope,
   };
 
-  // Every run is durably recorded, scored or not — reprocessing history.
-  await saveAnalysisRecord(request.db, record);
-  await markCaptureAnalyzed(request.db, request.captureId);
-
   if (record.result && record.result.resultKind === 'scored') {
-    // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record, freeLimitReached };
+    const scored = record.result;
+    // Record, capture status, practice-set bookkeeping and the product
+    // rating land together or not at all; the shot.sync row consumes the
+    // permit.
+    await inPromotionTransaction(request.db, async db => {
+      await saveAnalysisRecord(db, record);
+      await markCaptureAnalyzed(db, request.captureId);
+      if (request.practiceSet) {
+        await commitPracticeSet(db, request.practiceSet);
+      }
+      await saveAnalysis(db, scored, permitId);
+    });
+    settlement.consumedBySync();
+    return {
+      kind: 'scored',
+      analysisId,
+      record,
+      freeLimitReached: run.freeLimitReached,
+    };
   }
 
   // Permit accounting: EVERY non-scored outcome releases the reservation.
   // This branch also carries the AUTO DETECT abstained partial records — an
   // abstained run has result:null and must never burn the user's rating
   // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
+  await settlement.release('low_confidence');
+  const localOnly = record.result;
+  // Every run is durably recorded, scored or not — reprocessing history.
+  await inPromotionTransaction(request.db, async db => {
+    await saveAnalysisRecord(db, record);
+    await markCaptureAnalyzed(db, request.captureId);
+    if (localOnly) {
+      // Local display only — abstentions are never synced as ratings.
+      await saveLocalOnlyAnalysis(db, localOnly);
+    }
   });
-  if (record.result) {
-    // Local display only — abstentions are never synced as ratings.
-    await saveLocalOnlyAnalysis(request.db, record.result);
-  }
   return {
     kind: 'low_confidence',
     analysisId,

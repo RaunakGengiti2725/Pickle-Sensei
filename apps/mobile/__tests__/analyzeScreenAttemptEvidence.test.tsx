@@ -445,7 +445,9 @@ describe('AnalyzeScreen — attempt evidence is correlated to the attempt and th
     emit(readinessEvent('cap-2', 5000, 'ready', 0.93));
     // A quality summary from the torn-down cap-1 pipeline drains late: a
     // dark frame sample that would be UNSUPPORTED brightness.
-    emit(qualityEvent('cap-1', 1500, qualitySignals({ brightnessMeanLuma: 10 })));
+    emit(
+      qualityEvent('cap-1', 1500, qualitySignals({ brightnessMeanLuma: 10 })),
+    );
     // The live guidance for attempt 2 must not adopt it.
     expect(textOf(renderer)).not.toContain('brighter');
     emit(strokeDetectedEvent('cap-2', 6000));
@@ -535,8 +537,7 @@ describe('createAttemptEvidenceBuffer — explicit correlation id and stroke win
       reordered.readiness,
     );
     expect(
-      verdict.dimensions.find(d => d.dimension === 'player_visibility')
-        ?.status,
+      verdict.dimensions.find(d => d.dimension === 'player_visibility')?.status,
     ).toBe('NOT_MEASURED');
     expect(verdict.overall).not.toBe('UNSUPPORTED');
   });
@@ -562,9 +563,9 @@ describe('createAttemptEvidenceBuffer — explicit correlation id and stroke win
     expect(buffer.captureId).toBeNull();
     expect(buffer.quality).toBeNull();
 
-    expect(
-      buffer.noteQuality(qualitySignals(), stamp('cap-2', 5000)),
-    ).toBe(true);
+    expect(buffer.noteQuality(qualitySignals(), stamp('cap-2', 5000))).toBe(
+      true,
+    );
     expect(buffer.captureId).toBe('cap-2');
   });
 

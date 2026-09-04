@@ -146,6 +146,14 @@ function ledgerDb(): Ledger {
         staged = null;
         return { rows: [] };
       }
+      // Nested savepoints ride on the outer transaction.
+      if (
+        /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(statement)
+      ) {
+        if (!staged)
+          throw new Error('ledgerDb: savepoint outside a transaction');
+        return { rows: [] };
+      }
       if (statement.startsWith('SELECT value FROM kv')) {
         const value = kv.get(String(params[0]));
         return { rows: value === undefined ? [] : [{ value }] };
@@ -470,7 +478,8 @@ describe('practice set commit survives an unmount during in-flight scoring', () 
     expect(shot).toBeDefined();
     expect(shot!.sessionId).toEqual(expect.any(String));
     const sessionCreateIndex = activeDb.outbox.findIndex(
-      row => row.kind === 'session.create' && row.payload['id'] === shot!.sessionId,
+      row =>
+        row.kind === 'session.create' && row.payload['id'] === shot!.sessionId,
     );
     const shotSyncIndex = activeDb.outbox.findIndex(
       row => row.kind === 'shot.sync' && row.payload['id'] === shot!.id,
