@@ -1,19 +1,25 @@
+import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from '../src/data/db';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
 } from '../src/data/accountScope';
+import { saveAnalysis } from '../src/data/repository';
+import { drainOutbox, SESSION_NOT_FOUND_REJECTION } from '../src/data/sync';
 import {
   commitPracticeSet,
+  commitPracticeSetForAnalysis,
   currentPracticeSetId,
   notePracticeSetAnalysis,
   planPracticeSet,
+  PRACTICE_SET_COMMIT_ATTEMPTS,
   PRACTICE_SET_IDLE_TIMEOUT_MS,
   PRACTICE_SET_MODE,
   practiceSetKeyForOwner,
   resumeOrStartPracticeSet,
 } from '../src/analysis/practiceSet';
+import { createMemoryDb } from '../harness/outbox/memoryDb';
 
 /**
  * Practice set lifecycle over a fake LocalDb: one sitting = one sessionId,
@@ -444,5 +450,261 @@ describe('planPracticeSet / commitPracticeSet (deferred commit)', () => {
       planPracticeSet(db, { shotType: 'dink', nowIso: T0 }),
     ).resolves.toBeNull();
     expect(sql).toHaveLength(0);
+  });
+});
+
+/**
+ * XCF-07: the scored analysis is durable (saveAnalysis committed, with the
+ * plan's sessionId) BEFORE the set is committed. A failed saveSession used to
+ * be swallowed by the screen, leaving a shot that names a session which
+ * exists nowhere — rejected by the server as shot.session_not_found forever.
+ * These run over the harness's independent SQLite model (real transactions,
+ * json_extract, unknown SQL throws) with statement-level faults injected.
+ */
+describe('commitPracticeSetForAnalysis (XCF-07)', () => {
+  const shotId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const permitId = 'cccccccc-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+  beforeEach(() => setActiveDataOwner(ownerA));
+  afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+
+  function analysisIn(sessionId: string | null): ShotAnalysis {
+    return {
+      id: shotId,
+      sessionId,
+      shotType: 'forehand_drive',
+      cameraView: 'side',
+      handedness: 'right',
+      capturedAtIso: T0,
+      timestamps: { startMs: 0, contactMs: 1040, endMs: 2000 },
+      phases: [],
+      measurements: [],
+      checkpoints: [],
+      overallScore: 7.4,
+      analysisConfidence: 0.9,
+      resultKind: 'scored',
+      guidance: null,
+      priorityFix: null,
+      versionVector: {
+        appVersion: '0.1.0',
+        modelBundleVersion: 'test-native-1',
+        poseModelVersion: 'test-pose-1',
+        paddleModelVersion: 'test-paddle-1',
+        strokeDetectorVersion: 'test-stroke-1',
+        phaseModelVersion: 'test-phase-1',
+        scoringModelVersion: 'sm-v1',
+        shotConfigVersion: 'forehand_drive@1',
+      },
+      source: 'real',
+    };
+  }
+
+  /** Wraps the model so chosen statements fail with a storage error. */
+  function faultyDb(shouldFail: (sql: string, occurrence: number) => boolean) {
+    const store = createMemoryDb();
+    const seen = new Map<string, number>();
+    const failures: string[] = [];
+    const db: LocalDb = {
+      async execute(sql, params) {
+        const key = sql.replace(/\s+/g, ' ').trim();
+        const occurrence = (seen.get(key) ?? 0) + 1;
+        seen.set(key, occurrence);
+        if (shouldFail(key, occurrence)) {
+          failures.push(key);
+          throw new Error('disk I/O error');
+        }
+        return store.db.execute(sql, params);
+      },
+      close() {},
+    };
+    return { db, store, failures };
+  }
+
+  const isSessionInsert = (sql: string) =>
+    sql.startsWith('INSERT OR REPLACE INTO local_session');
+
+  /** Server stand-in that only knows sessions delivered via createSession. */
+  function serverTransport() {
+    const known = new Set<string>();
+    return {
+      syncShots: async (shots: unknown[]) => {
+        const acceptedIds: string[] = [];
+        const rejected: Array<{ id: string; code: string; message: string }> =
+          [];
+        for (const shot of shots as Array<{
+          id: string;
+          sessionId: string | null;
+        }>) {
+          if (shot.sessionId === null || known.has(shot.sessionId))
+            acceptedIds.push(shot.id);
+          else
+            rejected.push({
+              id: shot.id,
+              code: SESSION_NOT_FOUND_REJECTION,
+              message: 'Session not found or not yours.',
+            });
+        }
+        return { acceptedIds, rejected };
+      },
+      createSession: async (session: unknown) => {
+        known.add((session as { id: string }).id);
+      },
+      finalizeSession: async () => {},
+    };
+  }
+
+  it('retries a session write that fails once and commits the set with the shot still attached', async () => {
+    const { db, store, failures } = faultyDb(
+      (sql, occurrence) => isSessionInsert(sql) && occurrence === 1,
+    );
+    const plan = (await planPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: T0,
+    }))!;
+    await saveAnalysis(db, analysisIn(plan.sessionId), permitId);
+
+    const outcome = await commitPracticeSetForAnalysis(
+      db,
+      plan,
+      shotId,
+      plus(1_000),
+    );
+    expect(outcome).toEqual({ kind: 'committed', attempts: 2 });
+    expect(failures).toHaveLength(1);
+    expect(PRACTICE_SET_COMMIT_ATTEMPTS).toBeGreaterThanOrEqual(2);
+
+    const snap = store.snapshot();
+    expect(snap.sessions).toEqual([
+      expect.objectContaining({ owner_key: ownerA, id: plan.sessionId }),
+    ]);
+    expect(snap.outbox.map(r => r.kind)).toEqual([
+      'shot.sync',
+      'session.create',
+    ]);
+    expect(snap.shots[0]).toMatchObject({ session_id: plan.sessionId });
+    expect(JSON.parse(snap.kv[0]!.value)).toMatchObject({
+      sessionId: plan.sessionId,
+    });
+    // A healthy drain converges: session first, then the shot.
+    const result = await drainOutbox(db, serverTransport());
+    expect(result).toEqual({ synced: 2, failed: 0, remaining: 0 });
+  });
+
+  it('detaches the durable shot from a set whose session write keeps failing, so the shot can still sync', async () => {
+    const { db, store, failures } = faultyDb(isSessionInsert);
+    const plan = (await planPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: T0,
+    }))!;
+    await saveAnalysis(db, analysisIn(plan.sessionId), permitId);
+
+    const outcome = await commitPracticeSetForAnalysis(
+      db,
+      plan,
+      shotId,
+      plus(1_000),
+    );
+    expect(outcome).toEqual({
+      kind: 'detached',
+      attempts: PRACTICE_SET_COMMIT_ATTEMPTS,
+      error: 'disk I/O error',
+    });
+    expect(failures).toHaveLength(PRACTICE_SET_COMMIT_ATTEMPTS);
+
+    const snap = store.snapshot();
+    // Nothing of the set survives: no session row, no session.create, no kv
+    // record (the next analysis starts a fresh set instead of joining a
+    // ghost).
+    expect(snap.sessions).toEqual([]);
+    expect(snap.kv).toEqual([]);
+    expect(snap.outbox).toHaveLength(1);
+    expect(snap.outbox[0]!.kind).toBe('shot.sync');
+    // Local row and queued payload were reassigned together.
+    expect(snap.shots[0]).toMatchObject({ id: shotId, session_id: null });
+    expect(JSON.parse(snap.shots[0]!.payload)).toMatchObject({
+      id: shotId,
+      sessionId: null,
+    });
+    expect(JSON.parse(snap.outbox[0]!.payload)).toMatchObject({
+      id: shotId,
+      sessionId: null,
+      analysisPermitId: permitId,
+    });
+    // The server has never heard of the session and never will — the
+    // detached shot is accepted on the first healthy drain.
+    const result = await drainOutbox(db, serverTransport());
+    expect(result).toEqual({ synced: 1, failed: 0, remaining: 0 });
+    expect(store.snapshot().receipts).toEqual([
+      { owner_key: ownerA, kind: 'shot.sync', entity_id: shotId },
+    ]);
+  });
+
+  it('surfaces the failure when neither the session nor the detachment can be written, leaving the shot untouched', async () => {
+    const { db, store } = faultyDb(
+      sql =>
+        isSessionInsert(sql) || sql.startsWith('UPDATE outbox SET payload'),
+    );
+    const plan = (await planPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: T0,
+    }))!;
+    await saveAnalysis(db, analysisIn(plan.sessionId), permitId);
+    const before = JSON.stringify(store.snapshot());
+
+    await expect(
+      commitPracticeSetForAnalysis(db, plan, shotId, plus(1_000)),
+    ).rejects.toThrow('disk I/O error');
+    // The half-applied detachment rolled back: local row and outbox payload
+    // still agree with each other.
+    expect(JSON.stringify(store.snapshot())).toBe(before);
+  });
+
+  it('a resumed set only re-stamps activity; a failing stamp is retried and then reported without touching the shot', async () => {
+    const { db, store } = faultyDb(() => false);
+    const first = (await planPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: T0,
+    }))!;
+    await commitPracticeSet(db, first, T0);
+    const resumed = (await planPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: plus(30_000),
+    }))!;
+    expect(resumed).toMatchObject({
+      sessionId: first.sessionId,
+      resumed: true,
+    });
+    await saveAnalysis(db, analysisIn(resumed.sessionId), permitId);
+
+    let kvWrites = 0;
+    const stampFails: LocalDb = {
+      async execute(sql, params) {
+        if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+          kvWrites += 1;
+          throw new Error('disk I/O error');
+        }
+        return db.execute(sql, params);
+      },
+      close() {},
+    };
+    const outcome = await commitPracticeSetForAnalysis(
+      stampFails,
+      resumed,
+      shotId,
+      plus(31_000),
+    );
+    expect(outcome).toEqual({
+      kind: 'activity_not_recorded',
+      attempts: PRACTICE_SET_COMMIT_ATTEMPTS,
+      error: 'disk I/O error',
+    });
+    expect(kvWrites).toBe(PRACTICE_SET_COMMIT_ATTEMPTS);
+    // The session exists durably (row + session.create), so the shot keeps
+    // its sessionId and syncs behind it.
+    const snap = store.snapshot();
+    expect(snap.sessions).toHaveLength(1);
+    expect(snap.shots[0]).toMatchObject({ session_id: first.sessionId });
+    const result = await drainOutbox(db, serverTransport());
+    expect(result).toEqual({ synced: 2, failed: 0, remaining: 0 });
   });
 });

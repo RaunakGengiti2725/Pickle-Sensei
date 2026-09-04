@@ -2,15 +2,22 @@
 import type { LocalDb } from '../src/data/db';
 import {
   drainOutbox,
+  OUTBOX_MAX_ATTEMPTS,
   SESSION_NOT_FOUND_REJECTION,
   toSyncPayload,
 } from '../src/data/sync';
+import { getShotOutboxStatus } from '../src/data/repository';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
 } from '../src/data/accountScope';
+
+function jsonId(payload: string): string | null {
+  const parsed = JSON.parse(payload) as { id?: unknown };
+  return typeof parsed.id === 'string' ? parsed.id : null;
+}
 
 function fakeDb() {
   interface OutboxRow {
@@ -21,7 +28,16 @@ function fakeDb() {
     attempts: number;
     last_error: string | null;
   }
+  interface LocalSessionRow {
+    owner_key: string;
+    id: string;
+    mode: string;
+    shot_type: string | null;
+    focus_checkpoint: string | null;
+    started_at: string;
+  }
   const outbox: OutboxRow[] = [];
+  const sessions: LocalSessionRow[] = [];
   const receipts: Array<{ owner: string; entityId: string }> = [];
   let nextId = 1;
   const db: LocalDb = {
@@ -37,15 +53,66 @@ function fakeDb() {
         return { rows: [] };
       }
       if (sql.includes('INSERT INTO outbox')) {
+        const kind = /'([a-z.]+)'/.exec(sql)?.[1];
+        if (!kind) throw new Error(`fakeDb: outbox insert without kind ${sql}`);
         outbox.push({
           id: nextId++,
           owner_key: String(params[0]),
-          kind: String(params[1] ?? 'shot.sync'),
+          kind,
           payload: String(params[params.length - 1]),
           attempts: 0,
           last_error: null,
         });
         return { rows: [] };
+      }
+      if (
+        sql.startsWith('SELECT payload, attempts FROM outbox') &&
+        sql.includes("kind = 'session.create'")
+      ) {
+        return {
+          rows: outbox
+            .filter(
+              r =>
+                r.owner_key === String(params[0]) &&
+                r.kind === 'session.create',
+            )
+            .sort((x, y) => x.id - y.id)
+            .map(r => ({ payload: r.payload, attempts: r.attempts })),
+        };
+      }
+      if (
+        sql.includes("kind = 'shot.sync'") &&
+        sql.includes("json_extract(payload, '$.id') = ?")
+      ) {
+        const match = outbox
+          .filter(
+            r =>
+              r.owner_key === String(params[0]) &&
+              r.kind === 'shot.sync' &&
+              jsonId(r.payload) === String(params[1]),
+          )
+          .sort((x, y) => y.id - x.id)[0];
+        return {
+          rows: match
+            ? [{ attempts: match.attempts, last_error: match.last_error }]
+            : [],
+        };
+      }
+      if (sql.includes('FROM local_session WHERE owner_key = ? AND id = ?')) {
+        return {
+          rows: sessions
+            .filter(
+              s =>
+                s.owner_key === String(params[0]) && s.id === String(params[1]),
+            )
+            .map(s => ({
+              id: s.id,
+              mode: s.mode,
+              shot_type: s.shot_type,
+              focus_checkpoint: s.focus_checkpoint,
+              started_at: s.started_at,
+            })),
+        };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
         return {
@@ -86,17 +153,28 @@ function fakeDb() {
     },
     close() {},
   };
-  const push = (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) => {
+  const push = (
+    kind: string,
+    payload: unknown,
+    owner = GUEST_DATA_OWNER,
+    attempts = 0,
+  ) => {
     outbox.push({
       id: nextId++,
       owner_key: owner,
       kind,
       payload: JSON.stringify(payload),
-      attempts: 0,
+      attempts,
       last_error: null,
     });
   };
-  return { db, push, outbox, receipts };
+  const addLocalSession = (
+    session: Omit<LocalSessionRow, 'owner_key'>,
+    owner = GUEST_DATA_OWNER,
+  ) => {
+    sessions.push({ owner_key: owner, ...session });
+  };
+  return { db, push, addLocalSession, outbox, sessions, receipts };
 }
 
 const analysis: ShotAnalysis = {
@@ -228,35 +306,202 @@ describe('drainOutbox', () => {
     });
   });
 
-  it('does not spend the retry budget on a shot whose practice-set session has not synced yet', async () => {
-    // The practice set's session.create row is queued moments AFTER its
-    // first scored shot (the set is committed once a score exists). If a
-    // drain slips between the two writes, the server rejects the shot as
-    // session_not_found — an ordering artifact, not a permanent failure, so
-    // the row keeps its full attempt budget for the next pass.
-    const { db, push, outbox } = fakeDb();
-    push('shot.sync', {
-      ...permittedAnalysis,
-      sessionId: '11111111-2222-4333-8444-555555555555',
+  describe('shot.session_not_found (XCF-07)', () => {
+    const sessionId = '11111111-2222-4333-8444-555555555555';
+    const localSession = {
+      id: sessionId,
+      mode: 'practice_set',
+      shot_type: 'forehand_drive',
+      focus_checkpoint: null,
+      started_at: '2026-08-26T17:59:00.000Z',
+    };
+    const sessionNotFound = {
+      id: analysis.id,
+      code: SESSION_NOT_FOUND_REJECTION,
+      message: 'Session not found or not yours.',
+    };
+    /** Server stand-in: knows exactly the sessions createSession delivered. */
+    function serverTransport(options: { createSessionFails?: boolean } = {}) {
+      const knownSessions = new Set<string>();
+      const calls: string[] = [];
+      const transport = {
+        syncShots: async (shots: unknown[]) => {
+          calls.push('syncShots');
+          const acceptedIds: string[] = [];
+          const rejected: Array<{ id: string; code: string; message: string }> =
+            [];
+          for (const shot of shots as Array<{
+            id: string;
+            sessionId: string | null;
+          }>) {
+            if (shot.sessionId === null || knownSessions.has(shot.sessionId))
+              acceptedIds.push(shot.id);
+            else rejected.push({ ...sessionNotFound, id: shot.id });
+          }
+          return { acceptedIds, rejected };
+        },
+        createSession: async (session: unknown) => {
+          calls.push('createSession');
+          if (options.createSessionFails) throw new Error('offline');
+          knownSessions.add((session as { id: string }).id);
+        },
+        finalizeSession: async () => {},
+      };
+      return { transport, calls, knownSessions };
+    }
+
+    it('keeps the budget intact while a retryable session.create row for that session is still queued', async () => {
+      // The ordering artifact: the practice set's session.create row failed
+      // transiently in this very drain (or sits behind the shot), so the
+      // shot's rejection is not the shot's fault — it will be re-sent once
+      // the session lands, and neither row spends its budget.
+      const { db, push, addLocalSession, outbox } = fakeDb();
+      addLocalSession(localSession);
+      push('shot.sync', { ...permittedAnalysis, sessionId });
+      push('session.create', {
+        id: sessionId,
+        mode: 'practice_set',
+        shotType: 'forehand_drive',
+        focusCheckpoint: null,
+        startedAt: localSession.started_at,
+      });
+      const { transport } = serverTransport({ createSessionFails: true });
+      const result = await drainOutbox(db, transport);
+      expect(result).toMatchObject({ synced: 0, failed: 2, remaining: 2 });
+      expect(outbox).toHaveLength(2);
+      expect(outbox[0]).toMatchObject({
+        kind: 'shot.sync',
+        attempts: 0,
+        last_error: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+      });
+      expect(outbox[1]).toMatchObject({
+        kind: 'session.create',
+        attempts: 0,
+      });
     });
-    const result = await drainOutbox(db, {
-      syncShots: async () => ({
-        acceptedIds: [],
-        rejected: [
-          {
-            id: analysis.id,
-            code: SESSION_NOT_FOUND_REJECTION,
-            message: 'Session not found or not yours.',
-          },
-        ],
-      }),
-      createSession: async () => {},
-      finalizeSession: async () => {},
+
+    it('re-queues session.create from the local session row when the shot has no session.create row, then converges', async () => {
+      // commitPracticeSet's session write was lost after the shot became
+      // durable (or the accepted session was later rolled back server-side):
+      // the device still holds the local_session row, so the drain repairs
+      // the outbox from it instead of asking the server the same question
+      // forever. The rejection is charged so the shot's status reflects the
+      // failure and the repair itself is bounded.
+      const { db, push, addLocalSession, outbox, receipts } = fakeDb();
+      addLocalSession(localSession);
+      push('shot.sync', { ...permittedAnalysis, sessionId });
+      const { transport, calls } = serverTransport();
+
+      const first = await drainOutbox(db, transport);
+      expect(first).toMatchObject({ synced: 0, failed: 1, remaining: 2 });
+      expect(calls).toEqual(['syncShots']);
+      expect(outbox).toHaveLength(2);
+      expect(outbox[0]).toMatchObject({
+        kind: 'shot.sync',
+        attempts: 1,
+        last_error: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+      });
+      expect(outbox[1]).toMatchObject({
+        kind: 'session.create',
+        attempts: 0,
+        owner_key: GUEST_DATA_OWNER,
+      });
+      expect(JSON.parse(outbox[1]!.payload)).toEqual({
+        id: sessionId,
+        mode: 'practice_set',
+        shotType: 'forehand_drive',
+        focusCheckpoint: null,
+        startedAt: localSession.started_at,
+      });
+      await expect(getShotOutboxStatus(db, analysis.id)).resolves.toEqual({
+        state: 'rejected',
+        attempts: 1,
+        lastError: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+      });
+
+      const second = await drainOutbox(db, transport);
+      expect(second).toMatchObject({ synced: 2, failed: 0, remaining: 0 });
+      expect(calls).toEqual(['syncShots', 'createSession', 'syncShots']);
+      expect(outbox).toHaveLength(0);
+      expect(receipts).toEqual([
+        { owner: GUEST_DATA_OWNER, entityId: analysis.id },
+      ]);
     });
-    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
-    expect(outbox[0]).toMatchObject({
-      attempts: 0,
-      last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
+
+    it('re-queues one session.create for several shots of the same lost session', async () => {
+      const { db, push, addLocalSession, outbox } = fakeDb();
+      addLocalSession(localSession);
+      push('shot.sync', { ...permittedAnalysis, sessionId });
+      push('shot.sync', {
+        ...permittedAnalysis,
+        id: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        sessionId,
+      });
+      const { transport } = serverTransport();
+      const result = await drainOutbox(db, transport);
+      expect(result).toMatchObject({ synced: 0, failed: 2, remaining: 3 });
+      expect(outbox.filter(r => r.kind === 'session.create')).toHaveLength(1);
+      expect(outbox.filter(r => r.kind === 'shot.sync')).toEqual([
+        expect.objectContaining({ attempts: 1 }),
+        expect.objectContaining({ attempts: 1 }),
+      ]);
+      const second = await drainOutbox(db, transport);
+      expect(second).toMatchObject({ synced: 3, failed: 0, remaining: 0 });
+    });
+
+    it('charges the budget and fails the shot terminally when the device has no record of the session', async () => {
+      // Nothing can ever make this session exist: no session.create row, no
+      // local_session row. N consecutive drains must spend the budget and
+      // end in a visible terminal state instead of "queued" forever.
+      const { db, push, outbox } = fakeDb();
+      push('shot.sync', { ...permittedAnalysis, sessionId });
+      const { transport, calls } = serverTransport();
+      for (let i = 1; i <= OUTBOX_MAX_ATTEMPTS; i += 1) {
+        const result = await drainOutbox(db, transport);
+        expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+        expect(outbox).toHaveLength(1);
+        expect(outbox[0]).toMatchObject({
+          kind: 'shot.sync',
+          attempts: i,
+          last_error: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+        });
+      }
+      expect(calls.filter(c => c === 'createSession')).toHaveLength(0);
+      await expect(getShotOutboxStatus(db, analysis.id)).resolves.toEqual({
+        state: 'exhausted',
+        attempts: OUTBOX_MAX_ATTEMPTS,
+        lastError: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+      });
+      // Exhausted rows leave the drain window: no further requests are made.
+      const sent = calls.length;
+      const idle = await drainOutbox(db, transport);
+      expect(idle).toMatchObject({ synced: 0, failed: 0, remaining: 1 });
+      expect(calls).toHaveLength(sent);
+    });
+
+    it('charges the shot instead of re-queuing when its session.create row has already spent its budget', async () => {
+      // The session's own row is exhausted (permanent server verdict): the
+      // local row is still there, but re-enqueuing it would only replay the
+      // same verdict. The shot must run down its budget, not loop.
+      const { db, push, addLocalSession, outbox } = fakeDb();
+      addLocalSession(localSession);
+      push(
+        'session.create',
+        { id: sessionId, mode: 'practice_set' },
+        GUEST_DATA_OWNER,
+        OUTBOX_MAX_ATTEMPTS,
+      );
+      push('shot.sync', { ...permittedAnalysis, sessionId });
+      const { transport, calls } = serverTransport();
+      for (let i = 1; i <= OUTBOX_MAX_ATTEMPTS; i += 1) {
+        await drainOutbox(db, transport);
+        expect(outbox).toHaveLength(2);
+        expect(outbox[1]).toMatchObject({ kind: 'shot.sync', attempts: i });
+      }
+      expect(calls).not.toContain('createSession');
+      await expect(getShotOutboxStatus(db, analysis.id)).resolves.toMatchObject(
+        { state: 'exhausted', attempts: OUTBOX_MAX_ATTEMPTS },
+      );
     });
   });
 
