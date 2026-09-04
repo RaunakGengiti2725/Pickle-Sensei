@@ -273,6 +273,16 @@ describe('attack fix5 / MDS-C3 self-heal loops (real SQLite)', () => {
     expect(await getShotOutboxStatus(db, shotId(1))).toMatchObject({
       attempts: 0,
     });
+    // Added on this base (d29b95f5 already decided liveness by SQL, so the
+    // two assertions above held there): the stricter invariant is that a
+    // shot whose set is still queued is not offered at all — no doomed round
+    // trip, no `session_not_found` verdict written for an ordering artifact.
+    expect(offersOf(server, 1)).toBe(0);
+    expect(await getShotOutboxStatus(db, shotId(1))).toEqual({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
   });
 
   it('C. two drains of one owner running together must not both re-queue the same parked set', async () => {
