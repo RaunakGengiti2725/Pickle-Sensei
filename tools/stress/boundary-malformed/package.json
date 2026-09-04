@@ -1,0 +1,7 @@
+{
+  "name": "@pickle/stress-boundary-malformed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared seeded boundary/malformed-input stress harness imported by the per-package *.stress.test.ts files. Not a workspace package: it is type-checked and executed through the packages that import it."
+}
