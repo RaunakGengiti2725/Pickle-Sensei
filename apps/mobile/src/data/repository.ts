@@ -6,9 +6,10 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
+import { runInTransaction } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, isSessionOrphanedVerdict } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -73,24 +74,6 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
-async function inTransaction(
-  db: LocalDb,
-  operation: () => Promise<void>,
-): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
-}
-
 /** Every owner-partitioned local table. Kept in one place so account
  * deletion can never silently miss a store added later. */
 const OWNER_SCOPED_TABLES = [
@@ -128,7 +111,7 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -154,7 +137,7 @@ export async function saveAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -746,7 +729,7 @@ export async function saveSession(
   },
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
@@ -774,7 +757,7 @@ export async function finishSession(
   summary: Record<string, unknown>,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  await runInTransaction(db, async () => {
     await db.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?
@@ -841,7 +824,7 @@ export async function hasShotSyncReceipt(
 export type ShotOutboxStatus =
   | { state: 'absent' }
   | {
-      state: 'queued' | 'rejected' | 'exhausted';
+      state: 'queued' | 'rejected' | 'exhausted' | 'orphaned';
       attempts: number;
       lastError: string | null;
     };
@@ -849,17 +832,24 @@ export type ShotOutboxStatus =
 /**
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
- * have spent it and are excluded from every future drain (see sync.ts).
+ * have spent it and are excluded from every future drain (see sync.ts), as
+ * are `orphaned` rows — shots of a practice set whose own session.create row
+ * is exhausted, which the server therefore can never accept.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
   shotId: string,
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
+  // The id is read out of every sibling row's payload, so the extraction is
+  // guarded per row: json_extract() raises "malformed JSON" on a corrupt
+  // payload, and one such row must not make every healthy shot's lookup
+  // throw. CASE evaluates in order, unlike a bare AND.
   const { rows } = await db.execute(
     `SELECT attempts, last_error FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.id') END = ?
      ORDER BY id DESC LIMIT 1`,
     [owner, shotId],
   );
@@ -872,6 +862,9 @@ export async function getShotOutboxStatus(
       : null;
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
+  }
+  if (isSessionOrphanedVerdict(lastError)) {
+    return { state: 'orphaned', attempts, lastError };
   }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };
