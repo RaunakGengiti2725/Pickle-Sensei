@@ -107,6 +107,8 @@ export default tseslint.config(
       "packages/swing-lab/src/engine/**/*.ts",
       // release-manifest generator CLI prints its summary.
       "packages/release-ops/src/generateManifestCli.ts",
+      // edge-function mutation runner CLI prints its per-mutant verdicts.
+      "supabase/functions/api/__wf__/mutation/run_mutations.ts",
     ],
     rules: {
       "no-console": "off",
