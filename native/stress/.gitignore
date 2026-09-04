@@ -1,0 +1,6 @@
+# SwiftPM build products of the stress packages (Linux + Apple planes).
+*/.build/
+*/.swiftpm/
+*/Package.resolved
+# Local run output; canonical results go to artifacts/stress/ (root-ignored).
+linux-harness/node_modules/

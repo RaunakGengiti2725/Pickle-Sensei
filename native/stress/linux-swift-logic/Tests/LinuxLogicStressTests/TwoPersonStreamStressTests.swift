@@ -1,0 +1,1 @@
+../../../vision-stress-xctest/Tests/VisionStressTests/TwoPersonStreamStressTests.swift

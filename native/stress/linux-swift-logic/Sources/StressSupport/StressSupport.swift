@@ -1,0 +1,1 @@
+../../../vision-stress-xctest/Sources/StressSupport/StressSupport.swift

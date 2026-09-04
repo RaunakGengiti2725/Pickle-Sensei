@@ -1,0 +1,10 @@
+{
+  "name": "pickle-native-stress-linux-harness",
+  "private": true,
+  "type": "module",
+  "description": "Not a pnpm workspace member: resolves vitest/@pickle/swing-domain through packages/swing-lab (see run.sh).",
+  "scripts": {
+    "stress": "./run.sh",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "typeRoots": ["../../../packages/swing-lab/node_modules/@types"],
+    "baseUrl": ".",
+    "paths": {
+      "@pickle/swing-domain": ["../../../packages/swing-domain/src/index.ts"],
+      "vitest": ["../../../packages/swing-lab/node_modules/vitest/dist/index.d.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}
