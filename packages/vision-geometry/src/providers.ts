@@ -24,7 +24,11 @@ export class RecordedPoseProvider implements IPoseProvider {
 
   public constructor(options: { frames: readonly PoseFrame[]; poseModelVersion: string }) {
     this.modelVersion = options.poseModelVersion;
-    this.frames = [...options.frames].sort((a, b) => a.timestampMs - b.timestampMs);
+    // A non-finite timestamp cannot be placed on the timeline; it must go
+    // before sorting because `a - b` is not a total order once NaN is present.
+    this.frames = options.frames
+      .filter((frame) => Number.isFinite(frame.timestampMs))
+      .sort((a, b) => a.timestampMs - b.timestampMs);
   }
 
   public async extractPose(
