@@ -10,6 +10,7 @@ import type {
 import { fail, failure, ok } from "@pickle/shared-types";
 import {
   CAPTURE_ENVELOPE_VERSION_NOT_MEASURED,
+  positionalNoiseSigma,
   resolveStroke,
   toLegacyPoseFrames,
   type AnalysisRecord,
@@ -66,6 +67,25 @@ import {
 export const FUSION_ENGINE_VERSION = "fusion-1";
 export const STROKE_TAXONOMY_VERSION = "pickleball-taxonomy-v2";
 export const PREDICTION_CONFIDENCE_THRESHOLD = 0.8;
+
+/**
+ * Positional noise of the landmark estimator (normalized image units, per
+ * axis) at which a measured joint's confidence is halved. A measurement's
+ * confidence from the extractor is the estimator's own visibility, which
+ * says nothing about how much the joint jitters; the stream's measured
+ * noise scale does. A tenth of the frame height is about half a torso
+ * length — a joint known only to that precision supports a technique
+ * metric about as well as one seen half the time.
+ */
+export const POSITIONAL_NOISE_HALF_CONFIDENCE_SIGMA = 0.1;
+
+/** σ_half / (σ_half + σ): 1 for a noise-free stream, ½ at σ_half, never 0. */
+export function positionalPrecisionFactor(noiseSigma: number | null): number {
+  if (noiseSigma === null || !(noiseSigma > 0)) return 1;
+  return (
+    POSITIONAL_NOISE_HALF_CONFIDENCE_SIGMA / (POSITIONAL_NOISE_HALF_CONFIDENCE_SIGMA + noiseSigma)
+  );
+}
 
 export interface FusionProviders {
   /** Required minimum: temporal phase structure + measured biomechanics. */
@@ -340,9 +360,20 @@ export async function analyzeCapture(
   );
   if (!measurements.ok) return measurements;
 
+  // ── Positional precision ───────────────────────────────────────────────
+  // Every measurement's confidence is scaled by the stream's measured
+  // landmark noise, so the analysis confidence (and the abstention it
+  // gates) cannot rise as the joints get noisier.
+  const noiseSigma = positionalNoiseSigma(legacyFrames);
+  const precision = positionalPrecisionFactor(noiseSigma);
+  const qualifiedMeasurements = measurements.value.map((measurement) => ({
+    ...measurement,
+    confidence: measurement.confidence * precision,
+  }));
+
   // ── Scoring ────────────────────────────────────────────────────────────
   const scored = await run("technique_scoring", providers.scorer.descriptor, () =>
-    providers.scorer.score({ shotType, measurements: measurements.value, embedding: null }),
+    providers.scorer.score({ shotType, measurements: qualifiedMeasurements, embedding: null }),
   );
   if (!scored.ok) return scored;
 
@@ -384,7 +415,7 @@ export async function analyzeCapture(
   const shadow: AnalysisRecord["shadow"] = [];
   for (const candidate of providers.shadowScorers) {
     const shadowResult = await run("technique_scoring", candidate.descriptor, () =>
-      candidate.score({ shotType, measurements: measurements.value, embedding: null }),
+      candidate.score({ shotType, measurements: qualifiedMeasurements, embedding: null }),
     );
     shadow.push({
       run: modelRuns[modelRuns.length - 1]!,
@@ -423,7 +454,7 @@ export async function analyzeCapture(
       endMs: input.trigger.endMs,
     },
     phases: phases.value,
-    measurements: measurements.value,
+    measurements: qualifiedMeasurements,
     checkpoints: scored.value.checkpoints,
     overallScore: scored.value.overallScore,
     analysisConfidence: scored.value.analysisConfidence,

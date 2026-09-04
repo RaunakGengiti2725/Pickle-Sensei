@@ -384,19 +384,61 @@ describe("randomized-pipeline-D — coupled noise ladder (seeds 4000–4099)", (
   // FINDING D-2 (fixed, XCF-10): rung 4 used to abstain (phase.no_distinct_stroke)
   // while the noisier rung 5 segmented and returned a low_confidence result; two
   // seeds abstained (UNKNOWN) on cleaner input and committed FOREHAND on noisier.
-  it(
-    "D2 monotone confidence along the coupled ladder (never increases; no label/result appearing on noisier input) [FINDING D-2]",
-    () => {
-      const violations = monotoneViolations(rows);
-      dump("d2_monotone_confidence.json", {
-        violations,
-        violationsByMetric: histogram(violations.map((v) => String(v["metric"]))),
-        seedsAffected: [...new Set(violations.map((v) => v["seed"] as number))].sort(),
-        matrix: ladderMatrix(NOISE_LADDER, rows),
+  it("D2 monotone confidence along the coupled ladder (never increases; no label/result appearing on noisier input) [FINDING D-2]", () => {
+    const violations = monotoneViolations(rows);
+    dump("d2_monotone_confidence.json", {
+      violations,
+      violationsByMetric: histogram(violations.map((v) => String(v["metric"]))),
+      seedsAffected: [...new Set(violations.map((v) => v["seed"] as number))].sort(),
+      matrix: ladderMatrix(NOISE_LADDER, rows),
+    });
+    expect(violations).toEqual([]);
+  });
+
+  // The three seeds the adjudicator reproduced XCF-10 on: the segmenter's
+  // no_distinct_stroke decision sat on a knife-edge between rungs 4 and 5.
+  it("D2-pinned seeds 4065 / 4085 / 4089: rungs 4 and 5 reach the same segment/abstain decision; nothing appears on the noisier rung", () => {
+    const pinned = [4065, 4085, 4089];
+    const decisions: Row[] = [];
+    for (const seed of pinned) {
+      const rung4 = rows.find((row) => row.seed === seed && row.level === 4);
+      const rung5 = rows.find((row) => row.seed === seed && row.level === 5);
+      expect(rung4).toBeDefined();
+      expect(rung5).toBeDefined();
+      if (!rung4 || !rung5) continue;
+      decisions.push({
+        seed,
+        rung4: {
+          segmenter: rung4.segmenter.ok ? "segmented" : rung4.segmenter.failureCode,
+          classifier: rung4.classifier.label,
+          declared: rung4.declared.outcome,
+          auto: rung4.auto.outcome,
+          autoConfidence: rung4.auto.analysisConfidence,
+        },
+        rung5: {
+          segmenter: rung5.segmenter.ok ? "segmented" : rung5.segmenter.failureCode,
+          classifier: rung5.classifier.label,
+          declared: rung5.declared.outcome,
+          auto: rung5.auto.outcome,
+          autoConfidence: rung5.auto.analysisConfidence,
+        },
       });
-      expect(violations).toEqual([]);
-    },
-  );
+      expect(rung5.segmenter.ok).toBe(rung4.segmenter.ok);
+      if (!rung4.segmenter.ok && !rung5.segmenter.ok) {
+        expect(rung5.segmenter.failureCode).toBe(rung4.segmenter.failureCode);
+      }
+      if (rung4.classifier.label === "UNKNOWN") expect(rung5.classifier.label).toBe("UNKNOWN");
+      if (rung4.declared.outcome !== "scored") expect(rung5.declared.outcome).not.toBe("scored");
+      if (rung4.auto.outcome !== "scored") expect(rung5.auto.outcome).not.toBe("scored");
+      expect(rung5.auto.analysisConfidence ?? 0).toBeLessThanOrEqual(
+        rung4.auto.analysisConfidence ?? 0,
+      );
+      expect(rung5.declared.analysisConfidence ?? 0).toBeLessThanOrEqual(
+        rung4.declared.analysisConfidence ?? 0,
+      );
+    }
+    dump("d2_pinned_seeds.json", decisions);
+  });
 });
 
 // ─── Position-only ladder (visibility/dropout held constant) ───────────────
@@ -432,23 +474,20 @@ describe("randomized-pipeline-D — position-only noise ladder (visibility fixed
   // used to RISE with positional noise (the score moved, the confidence did not
   // track it) and rung 5 (σ=0.04) committed BACKHAND at the same 0.6 confidence
   // as a correct FOREHAND call on the synthetic forehand-drive stream.
-  it(
-    "D2b monotone confidence + no mirrored label under position-only noise [FINDING D-1 / D-3]",
-    () => {
-      const increases = monotoneViolations(rows).filter(
-        (v) => v["metric"] === "phase" || v["metric"] === "declaredAnalysis",
-      );
-      const fabricated = fabricatedLabels(rows);
-      dump("d2b_position_only.json", {
-        increases,
-        increasesByMetric: histogram(increases.map((v) => String(v["metric"]))),
-        fabricated,
-        matrix: ladderMatrix(POSITION_ONLY_LADDER, rows),
-      });
-      expect(increases).toEqual([]);
-      expect(fabricated).toEqual([]);
-    },
-  );
+  it("D2b monotone confidence + no mirrored label under position-only noise [FINDING D-1 / D-3]", () => {
+    const increases = monotoneViolations(rows).filter(
+      (v) => v["metric"] === "phase" || v["metric"] === "declaredAnalysis",
+    );
+    const fabricated = fabricatedLabels(rows);
+    dump("d2b_position_only.json", {
+      increases,
+      increasesByMetric: histogram(increases.map((v) => String(v["metric"]))),
+      fabricated,
+      matrix: ladderMatrix(POSITION_ONLY_LADDER, rows),
+    });
+    expect(increases).toEqual([]);
+    expect(fabricated).toEqual([]);
+  });
 });
 
 // ─── Timing jitter / frame dropout / frame reordering ─────────────────────

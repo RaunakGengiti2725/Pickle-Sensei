@@ -91,4 +91,56 @@ describe("GeometricPhaseSegmenter", () => {
     const second = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
     expect(second).toEqual(first);
   });
+
+  it("contact frame index is invariant to monotone timestamp jitter below 0.3 frame interval (XCF-09)", async () => {
+    const swing = generateSwing();
+    const intervalMs = 1000 / swing.clip.fps;
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const baseline = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
+    expect(baseline.ok).toBe(true);
+    if (!baseline.ok) return;
+    const baselineContact = baseline.value.find((span) => span.key === "contact")!;
+    const baselineIndex = nearestFrameIndex(swing.frames, baselineContact.representativeMs);
+
+    // Deterministic LCG so the perturbation is reproducible; each frame moves
+    // by at most JITTER_FRACTION of an interval, which keeps the order strict.
+    const JITTER_FRACTION = 0.29;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      let state = seed;
+      const next = (): number => {
+        state = (state * 1664525 + 1013904223) % 4294967296;
+        return state / 4294967296;
+      };
+      const jittered = swing.frames.map((frame) => ({
+        ...frame,
+        timestampMs: frame.timestampMs + (2 * next() - 1) * JITTER_FRACTION * intervalMs,
+      }));
+      for (let index = 1; index < jittered.length; index += 1) {
+        expect(jittered[index]!.timestampMs).toBeGreaterThan(jittered[index - 1]!.timestampMs);
+      }
+
+      const result = await segmenter.segmentPhases(jittered, [], stroke(swing.window));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const contact = result.value.find((span) => span.key === "contact")!;
+      expect(nearestFrameIndex(jittered, contact.representativeMs)).toBe(baselineIndex);
+      expect(result.value.map((span) => span.key)).toEqual(baseline.value.map((span) => span.key));
+    }
+  });
 });
+
+function nearestFrameIndex(
+  frames: readonly { timestampMs: number }[],
+  timestampMs: number,
+): number {
+  let bestIndex = 0;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  frames.forEach((frame, index) => {
+    const delta = Math.abs(frame.timestampMs - timestampMs);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}

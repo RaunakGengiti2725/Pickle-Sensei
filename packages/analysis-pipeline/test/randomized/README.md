@@ -38,16 +38,16 @@ RANDOMIZED_D_REPLAY=4056:dropout:0.5 RANDOMIZED_D_OUT=/tmp/randomized-D \
 
 ## Properties
 
-| id  | property                                                                                                                                                                                  | status on 4d812e1a        |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| D1  | same seed ⇒ byte-identical outputs on all four surfaces (1200 double runs)                                                                                                                | holds                     |
-| D2  | confidence never increases along the coupled noise ladder; no label/result appears on noisier input                                                                                       | fails — FINDING D-2       |
-| D2b | same under position-only noise; no mirrored side label                                                                                                                                    | fails — FINDING D-1 / D-3 |
-| D3  | abstention rate is 0 on clean input and non-decreasing along the ladder                                                                                                                   | holds                     |
-| D4  | no fabricated label on the coupled ladder (declared stroke never rewritten; AUTO never scores an unresolved disagreement)                                                                 | holds                     |
-| D5  | sub-frame monotone timing jitter never flips label / contact > 1.5 frames / score > 0.5                                                                                                   | fails — FINDING D-4       |
-| D6  | frame dropout p ∈ {0.1, 0.3, 0.5}: typed outcomes only, ordered phases, valid ranges                                                                                                      | holds                     |
-| D6  | frame dropout never yields a mirrored (BACKHAND) label on the forehand fixture                                                                                                            | fails — FINDING D-3       |
-| D7  | reordered (non-monotonic) frames: no crash, no mirrored label, exactly N inversions                                                                                                       | holds                     |
-| D7  | non-monotonic input is rejected with a typed failure or yields the sorted result                                                                                                          | fails — FINDING D-5       |
-| D8  | `SessionEventEngine`: one-by-one == random batches == intra-batch shuffle == whole stream; late-sample drop count matches the frontier contract exactly; `closedAtMs ≤ endMs + safetyMax` | holds                     |
+| id  | property                                                                                                                                                                                  | status                |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| D1  | same seed ⇒ byte-identical outputs on all four surfaces (1200 double runs)                                                                                                                | holds                 |
+| D2  | confidence never increases along the coupled noise ladder; no label/result appears on noisier input                                                                                       | holds (fixed, XCF-10) |
+| D2b | same under position-only noise; no mirrored side label                                                                                                                                    | holds (fixed, XCF-08) |
+| D3  | abstention rate is 0 on clean input and non-decreasing along the ladder                                                                                                                   | holds                 |
+| D4  | no fabricated label on the coupled ladder (declared stroke never rewritten; AUTO never scores an unresolved disagreement)                                                                 | holds                 |
+| D5  | sub-frame monotone timing jitter never flips label / contact > 1.5 frames / score > 0.5                                                                                                   | holds (fixed, XCF-09) |
+| D6  | frame dropout p ∈ {0.1, 0.3, 0.5}: typed outcomes only, ordered phases, valid ranges                                                                                                      | holds                 |
+| D6  | frame dropout never yields a mirrored (BACKHAND) label on the forehand fixture                                                                                                            | holds (fixed, XCF-08) |
+| D7  | reordered (non-monotonic) frames: no crash, no mirrored label, exactly N inversions                                                                                                       | holds                 |
+| D7  | non-monotonic input is rejected with a typed failure or yields the sorted result                                                                                                          | fails — FINDING D-5   |
+| D8  | `SessionEventEngine`: one-by-one == random batches == intra-batch shuffle == whole stream; late-sample drop count matches the frontier contract exactly; `closedAtMs ≤ endMs + safetyMax` | holds                 |

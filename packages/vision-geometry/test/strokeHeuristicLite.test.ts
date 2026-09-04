@@ -172,6 +172,66 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
   });
 });
 
+describe("gate 14: sparse sampling around the event peak (XCF-08 root cause)", () => {
+  // The AUTO route commits a side only at confidence >= 0.5
+  // (AUTO_RESOLUTION_MIN_CONFIDENCE in @pickle/analysis-pipeline); a sparse
+  // event window must land strictly below that, whatever the wrist says.
+  const AUTO_COMMIT_THRESHOLD = 0.5;
+  const { sequence, window } = generateSwingSequence();
+  const intervalMs = 1000 / sequence.video.fps;
+
+  function classifyWithFrames(frames: typeof sequence.frames) {
+    return classifyStroke({
+      sequence: { ...sequence, frames },
+      window: { startMs: window.startMs, endMs: window.endMs },
+      contactMs: null,
+      eventPeakMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+  }
+
+  it("fully sampled event peak commits the side at or above the commit threshold", () => {
+    const prediction = classifyWithFrames(sequence.frames);
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.confidence).toBeGreaterThanOrEqual(AUTO_COMMIT_THRESHOLD);
+    expect(prediction.limitingFactors).not.toContain("sampling.sparse_event_window");
+  });
+
+  it("frame gap > 1.5 frame intervals at the event peak abstains below the commit threshold", () => {
+    // Drop every frame within one interval of the peak: the frames that
+    // bracket the peak are then >= 2 intervals apart (only the event is
+    // missing; the rest of the swing is fully sampled).
+    const gapped = sequence.frames.filter(
+      (frame) => Math.abs(frame.timestampMs - window.peakMs) >= intervalMs,
+    );
+    expect(gapped.length).toBeLessThan(sequence.frames.length);
+    const before = gapped.filter((frame) => frame.timestampMs < window.peakMs).at(-1)!;
+    const after = gapped.find((frame) => frame.timestampMs > window.peakMs)!;
+    expect((after.timestampMs - before.timestampMs) / intervalMs).toBeGreaterThan(1.5);
+
+    const prediction = classifyWithFrames(gapped);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("sampling.sparse_event_window");
+    expect(prediction.confidence).toBeLessThan(AUTO_COMMIT_THRESHOLD);
+    expect(prediction.evidence.some((entry) => entry.includes("frame intervals apart"))).toBe(true);
+  });
+
+  it("a gap elsewhere in the window (not at the peak) does not trip the gate", () => {
+    const awayMs = window.peakMs - 400;
+    const gapped = sequence.frames.filter(
+      (frame) => Math.abs(frame.timestampMs - awayMs) >= intervalMs,
+    );
+    expect(gapped.length).toBeLessThan(sequence.frames.length);
+    const prediction = classifyWithFrames(gapped);
+    expect(prediction.limitingFactors).not.toContain("sampling.sparse_event_window");
+    expect(prediction.label).toBe("FOREHAND");
+  });
+});
+
 describe("gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)", () => {
   // Hand-built frames: collapsed image-plane shoulders (below the 0.04
   // floor) with a MEASURED rival (left) wrist, so the fixture reaches the

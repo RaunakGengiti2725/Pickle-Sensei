@@ -1,5 +1,11 @@
 import type { Handedness } from "@pickle/shared-types";
-import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
+import {
+  frameGrid,
+  positionalNoiseSigma,
+  sampleGapAt,
+  toLegacyPoseFrames,
+  type PoseSequence,
+} from "@pickle/swing-domain";
 
 /**
  * Stroke recognition taxonomy v3 + the hierarchical HEURISTIC baseline —
@@ -137,6 +143,30 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * decided by measurement noise. Abstain. Two-handed backhands tie on travel
  * but keep both hands on ONE grip (same side of the midline) and keep
  * committing.
+ *
+ * The sampling gates close the randomized-fuzz sampling holes (XCF-08 /
+ * XCF-10, randomizedPipelineD): the side decision is read from ONE reference
+ * frame, so it is only as good as the sampling around the reference.
+ *
+ * 14. SPARSE EVENT WINDOW — when the measured frames bracketing the
+ *     reference are more than SPARSE_EVENT_WINDOW_MAX_GAP_FRAMES frame
+ *     intervals apart (frames were dropped exactly where the event is), the
+ *     "nearest" frame is a different instant of the swing and its wrist can
+ *     sit on the other side of the midline. Abstain
+ *     (`sampling.sparse_event_window`) instead of committing a mirrored side.
+ *     The gap is counted on the frame grid, so timestamp jitter never turns
+ *     adjacent frames into a gap.
+ * 15. NOISE-CORRECTED TRAVEL — the dominant wrist is the argmax of path
+ *     length, but a still wrist measured with estimator noise σ accrues
+ *     ≈ √π·σ of spurious path per step; at high noise that exceeds a real
+ *     swing's travel and the argmax picks the OFF hand (whose point sits on
+ *     the other side → mirrored label). Every travel is corrected by the
+ *     expected noise path (measured torso roughness → σ), floored at 0.
+ * 16. NOISE-AWARE SIDE MARGIN — the margin must clear its floor by
+ *     SIDE_MARGIN_NOISE_SIGMAS standard deviations of the margin's own
+ *     noise (σ√1.5 / shoulder width) and the committed confidence reads
+ *     the noise-adjusted margin, so confidence never rises with noise. On a
+ *     clean stream σ is 0 and every decision is unchanged.
  *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
@@ -292,6 +322,41 @@ const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
  * hands on one grip, same side) are untouched.
  */
 const DOMINANT_WRIST_NEAR_TIE_RATIO = 1.35;
+/**
+ * Sampling / noise constants (randomized-fuzz derived
+ * — conservative floors, NOT calibrated statistics):
+ * SPARSE_EVENT_WINDOW_MAX_GAP_FRAMES — the measured frames bracketing the
+ *   reference may be at most this many frame intervals apart. Adjacent
+ *   frames measure 1; one dropped frame at the event measures 2. The
+ *   randomized dropout ladder (p = 0.5, seed 4056: nearest frame 71 ms from
+ *   the peak at 60 fps) mirrored the side exactly when the event fell in a
+ *   gap.
+ * NOISE_PATH_PER_STEP — expected path length a STILL point accrues per
+ *   consecutive measured step under i.i.d. per-axis noise σ: the step is a
+ *   Rayleigh magnitude with scale σ√2 and mean σ√2·√(π/2) = σ√π.
+ * SIDE_MARGIN_NOISE_SIGMAS — the contact→midline offset combines one wrist
+ *   and two shoulder measurements (variance σ²(1 + ½) = 1.5σ²); the margin
+ *   must clear its floor by two standard deviations of that noise.
+ * REFERENCE_FRAME_MAX_DISTANCE_MS — a reference with no measured frame
+ *   within this distance on the grid-aligned clock has no frame to read
+ *   from.
+ * REFERENCE_REACH_FRAMES — when the reference is the recorded motion peak
+ *   (no contact measurement) the side is read from the nearest frame and
+ *   must hold at every measured frame within this many intervals of the
+ *   peak on the aligned clock: the peak comes from a frame-sampled series,
+ *   so the event may have fallen on any frame within one interval of it
+ *   (the extra quarter interval absorbs the aligned clock's uncertainty:
+ *   a peak on a frame keeps both neighbours, a peak between two frames
+ *   keeps exactly those two), and the wrist crosses a third of a
+ *   shoulder-width per frame at contact. Sub-frame clock jitter cannot
+ *   change the set.
+ */
+const SPARSE_EVENT_WINDOW_MAX_GAP_FRAMES = 1.5;
+const REFERENCE_FRAME_MAX_DISTANCE_MS = 80;
+const REFERENCE_REACH_FRAMES = 1.25;
+const NOISE_PATH_PER_STEP = Math.sqrt(Math.PI);
+const SIDE_MARGIN_NOISE_SIGMAS = 2;
+const SIDE_MARGIN_NOISE_FACTOR = Math.sqrt(1.5);
 const FACING_WINDOW_MS = 200;
 const FACING_MIN_SHOULDER_SEPARATION = 0.03;
 const FACING_MIN_VOTES = 3;
@@ -390,9 +455,40 @@ export function classifyStroke(input: {
     return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
   }
 
-  const frame = nearestFrame(frames, contactMs);
+  const timestamps = frames.map((entry) => entry.timestampMs);
+
+  // ── Reference frames ─────────────────────────────────────────────────────
+  // The side is read from the frame nearest the reference on the
+  // grid-aligned clock. When the reference is a recorded motion peak rather
+  // than a measured contact, the event may have fallen on any frame within
+  // an interval of it, and the side must hold at each (see the
+  // neighbouring-frame gate below).
+  const reference = referenceFrames(frames, timestamps, contactMs);
+  const frame = reference?.nearest ?? null;
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
+  }
+
+  // ── Gate: sparse sampling around the reference (gate 14) ────────────────
+  // When the frames bracketing the reference instant are further apart than
+  // adjacent frames, the event itself was not measured — the nearest frame
+  // is another instant of the swing and the wrist may already be across the
+  // midline.
+  const gap = sampleGapAt(timestamps, contactMs);
+  if (gap !== null && gap.gapFrames > SPARSE_EVENT_WINDOW_MAX_GAP_FRAMES) {
+    evidence.push(
+      `measured frames bracketing the reference are ${gap.gapFrames} frame intervals apart ` +
+        `(nominal ${gap.intervalMs.toFixed(1)} ms; nearest frame ${gap.nearestDeltaMs.toFixed(1)} ms away; ` +
+        `floor ${SPARSE_EVENT_WINDOW_MAX_GAP_FRAMES})`,
+    );
+    return unknown("sampling.sparse_event_window", evidence, limitingFactors);
+  }
+  const neighbourFrames = referenceIsEventPeak ? (reference?.neighbours ?? []) : [];
+
+  // Positional noise of the estimator, measured from the stream itself.
+  const noiseSigma = positionalNoiseSigma(frames) ?? 0;
+  if (noiseSigma > 0) {
+    evidence.push(`estimator positional noise σ ≈ ${noiseSigma.toFixed(4)}u (torso roughness)`);
   }
   const joints = new Map(frame.landmarks.map((mark) => [mark.name, mark]));
   const leftShoulder = joints.get("left_shoulder");
@@ -434,7 +530,7 @@ export function classifyStroke(input: {
     return unknown("torso_extent_collapsed_vs_sequence_median", evidence, limitingFactors);
   }
 
-  const wristInfo = dominantWristInfo(frames, contactMs);
+  const wristInfo = dominantWristInfo(frames, contactMs, noiseSigma);
 
   // ── Gate: dominant-wrist attribution must be verifiable (v4) ──────────
   // The dominant wrist is chosen by comparative travel. When the rival
@@ -459,7 +555,7 @@ export function classifyStroke(input: {
   // shape. The gate acts only on paired MEASUREMENTS of both wrists, and
   // wide separation keeps genuine two-handed backhands (both hands on one
   // grip, small separation) out of its reach.
-  const bimanual = bimanualMotionInfo(frames, contactMs);
+  const bimanual = bimanualMotionInfo(frames, contactMs, noiseSigma);
   if (
     bimanual.pairedSteps >= BIMANUAL_MIN_PAIRED_STEPS &&
     wristInfo.travel >= NON_SWING_TRAVEL_FLOOR &&
@@ -872,10 +968,66 @@ export function classifyStroke(input: {
   // offset > 0 = contact on the player's RIGHT side.
   const dominantRight = input.handedness === "right";
   const sameSide = dominantRight ? offset > 0 : offset < 0;
-  const sideMargin = Math.abs(offset);
+  let rawSideMargin = Math.abs(offset);
+  // ── Gate: the side must hold at every frame the peak may fall on (15) ──
+  // A recorded motion peak is known only to a frame, and the wrist crosses
+  // the midline within a frame or two of contact. With no contact evidence
+  // the side is committed only when the wrist reads on the same side at the
+  // nearest frame and at every measured frame within reach of the peak, and
+  // the margin read is the smallest of them; an unmeasured neighbouring
+  // wrist leaves the side unverified.
+  if (neighbourFrames.length > 0 && contactPointSource === "wrist") {
+    const readings: Array<{ timestampMs: number; offset: number }> = [];
+    for (const neighbour of neighbourFrames) {
+      const other = wristSideOffset(neighbour, wristInfo.side, facing);
+      if (other === null) {
+        evidence.push(
+          `wrist or shoulders unmeasured at neighbouring frame ${neighbour.timestampMs.toFixed(0)} ms`,
+        );
+        return unknown(
+          "side_unverified_neighbouring_frame_unmeasured",
+          evidence,
+          limitingFactors,
+          contactPointSource,
+          contactPointReliability,
+        );
+      }
+      readings.push({ timestampMs: neighbour.timestampMs, offset: other });
+    }
+    evidence.push(
+      `wrist offset at neighbouring frame(s): ` +
+        readings
+          .map(
+            (reading) =>
+              `${reading.timestampMs.toFixed(0)} ms ${Math.abs(reading.offset).toFixed(2)} sw ${reading.offset > 0 ? "right" : "left"}`,
+          )
+          .join(", "),
+    );
+    if (
+      readings.some(
+        (reading) => reading.offset === 0 || Math.sign(reading.offset) !== Math.sign(offset),
+      )
+    ) {
+      return unknown(
+        "side_not_stable_across_neighbouring_frames",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    rawSideMargin = Math.min(rawSideMargin, ...readings.map((reading) => Math.abs(reading.offset)));
+  }
+  // The margin's own measurement noise (one wrist + two shoulders, in
+  // shoulder-widths); the decision reads the margin net of that allowance.
+  const marginNoise = (SIDE_MARGIN_NOISE_FACTOR * noiseSigma) / shoulderWidth;
+  const sideMargin = Math.max(0, rawSideMargin - SIDE_MARGIN_NOISE_SIGMAS * marginNoise);
   const side = sameSide ? "FOREHAND" : "BACKHAND";
   evidence.push(
-    `contact ${sideMargin.toFixed(2)} shoulder-widths ${offset > 0 ? "right" : "left"} of midline (${input.handedness}-handed → ${side.toLowerCase()})`,
+    `contact ${rawSideMargin.toFixed(2)} shoulder-widths ${offset > 0 ? "right" : "left"} of midline (${input.handedness}-handed → ${side.toLowerCase()})` +
+      (marginNoise > 0
+        ? `; ${sideMargin.toFixed(2)} net of ${SIDE_MARGIN_NOISE_SIGMAS}σ margin noise (σ ${marginNoise.toFixed(3)} sw)`
+        : ""),
   );
   if (sideMargin < SIDE_MARGIN_FLOOR) {
     limitingFactors.push("contact_too_close_to_midline_for_confident_side");
@@ -1031,6 +1183,69 @@ function scanFacingWindow(
   return { consensus, rear, front, skippedSmallSeparation };
 }
 
+/**
+ * The measured frames a recorded instant may have fallen on: the frame
+ * nearest `referenceMs` on the grid-aligned clock, and every other measured
+ * frame within REFERENCE_REACH_FRAMES intervals of the reference on that
+ * clock. A recorded peak comes from a frame-sampled series, so its true
+ * instant is within a frame of the recorded one; distances are read on the
+ * aligned clock so sub-frame timestamp jitter cannot change which frames
+ * qualify. Null when no frame lies within REFERENCE_FRAME_MAX_DISTANCE_MS
+ * of the reference.
+ */
+function referenceFrames(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  timestamps: readonly number[],
+  referenceMs: number,
+): {
+  nearest: ReturnType<typeof toLegacyPoseFrames>[number];
+  neighbours: ReturnType<typeof toLegacyPoseFrames>[number][];
+} | null {
+  const grid = frameGrid(timestamps);
+  const aligned = grid?.alignedMs ?? timestamps;
+  let nearestIndex: number | null = null;
+  let nearestDelta = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < frames.length; index += 1) {
+    const delta = Math.abs((aligned[index] ?? frames[index]!.timestampMs) - referenceMs);
+    if (delta < nearestDelta) {
+      nearestDelta = delta;
+      nearestIndex = index;
+    }
+  }
+  if (nearestIndex === null || nearestDelta > REFERENCE_FRAME_MAX_DISTANCE_MS) return null;
+  const neighbours: ReturnType<typeof toLegacyPoseFrames>[number][] = [];
+  if (grid !== null) {
+    const reach = REFERENCE_REACH_FRAMES * grid.intervalMs;
+    for (let index = 0; index < frames.length; index += 1) {
+      if (index === nearestIndex) continue;
+      const delta = Math.abs((aligned[index] ?? frames[index]!.timestampMs) - referenceMs);
+      if (delta <= reach) neighbours.push(frames[index]!);
+    }
+  }
+  return { nearest: frames[nearestIndex]!, neighbours };
+}
+
+/**
+ * Side offset (shoulder-widths, +right in the player's frame) of a wrist at
+ * a frame, read against that frame's own shoulders; null when the wrist or
+ * either shoulder is unmeasured or the shoulders are degenerate.
+ */
+function wristSideOffset(
+  frame: ReturnType<typeof toLegacyPoseFrames>[number],
+  wristSide: "left" | "right",
+  facing: 1 | -1,
+): number | null {
+  const wrist = frame.landmarks.find(
+    (mark) => mark.name === `${wristSide}_wrist` && mark.visibility >= 0.25,
+  );
+  const leftShoulder = frame.landmarks.find((mark) => mark.name === "left_shoulder");
+  const rightShoulder = frame.landmarks.find((mark) => mark.name === "right_shoulder");
+  if (!wrist || !leftShoulder || !rightShoulder) return null;
+  const separation = Math.abs(rightShoulder.x - leftShoulder.x);
+  if (separation < SHOULDER_MIN_SEPARATION) return null;
+  return ((wrist.x - (leftShoulder.x + rightShoulder.x) / 2) / separation) * facing;
+}
+
 function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs: number) {
   let best: (typeof frames)[number] | null = null;
   let bestDelta = Infinity;
@@ -1051,6 +1266,7 @@ function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs
 function dominantWristInfo(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
+  noiseSigma: number,
 ): {
   side: "left" | "right";
   point: { x: number; y: number } | null;
@@ -1064,6 +1280,7 @@ function dominantWristInfo(
   const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
   const travel = { left: 0, right: 0 };
   const measured = { left: 0, right: 0 };
+  const steps = { left: 0, right: 0 };
   const previous: { left?: { x: number; y: number }; right?: { x: number; y: number } } = {};
   for (const frame of nearby) {
     for (const sideName of ["left", "right"] as const) {
@@ -1073,10 +1290,16 @@ function dominantWristInfo(
       if (!mark) continue;
       measured[sideName] += 1;
       const prior = previous[sideName];
-      if (prior) travel[sideName] += Math.hypot(mark.x - prior.x, mark.y - prior.y);
+      if (prior) {
+        travel[sideName] += Math.hypot(mark.x - prior.x, mark.y - prior.y);
+        steps[sideName] += 1;
+      }
       previous[sideName] = { x: mark.x, y: mark.y };
     }
   }
+  // Net of the path a still point accrues from estimator noise alone.
+  travel.left = noiseCorrectedTravel(travel.left, steps.left, noiseSigma);
+  travel.right = noiseCorrectedTravel(travel.right, steps.right, noiseSigma);
   const chosen = travel.right >= travel.left ? "right" : "left";
   const frame = nearestFrame(frames, contactMs);
   const mark = frame?.landmarks.find(
@@ -1112,6 +1335,7 @@ function dominantWristInfo(
 function bimanualMotionInfo(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
+  noiseSigma: number,
 ): {
   pairedSteps: number;
   movingSteps: number;
@@ -1157,7 +1381,10 @@ function bimanualMotionInfo(
     }
     prior = { left: { x: left.x, y: left.y }, right: { x: right.x, y: right.y } };
   }
-  const rivalTravel = Math.min(travel.left, travel.right);
+  const rivalTravel = Math.min(
+    noiseCorrectedTravel(travel.left, pairedSteps, noiseSigma),
+    noiseCorrectedTravel(travel.right, pairedSteps, noiseSigma),
+  );
   return {
     pairedSteps,
     movingSteps,
@@ -1165,6 +1392,11 @@ function bimanualMotionInfo(
     rivalTravel,
     meanSeparation: separationSamples > 0 ? separationSum / separationSamples : 0,
   };
+}
+
+/** Path length net of the expected noise path over `steps` measured steps. */
+function noiseCorrectedTravel(travel: number, steps: number, noiseSigma: number): number {
+  return Math.max(0, travel - steps * NOISE_PATH_PER_STEP * noiseSigma);
 }
 
 /**
