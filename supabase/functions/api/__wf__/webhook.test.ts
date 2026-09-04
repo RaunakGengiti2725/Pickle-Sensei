@@ -13,12 +13,7 @@ import {
   TEST_USER_ID,
   webhookRequest,
 } from "./routesHarness.ts";
-import {
-  dbUnavailable,
-  ENTITLEMENTS_URL,
-  EVENTS_URL,
-  simulate,
-} from "./webhookSim.ts";
+import { dbUnavailable, ENTITLEMENTS_URL, EVENTS_URL, simulate } from "./webhookSim.ts";
 
 Deno.test("webhook: missing or wrong Authorization is rejected (401) before any work", async () => {
   const h = await loadHarness();
@@ -109,40 +104,24 @@ Deno.test(
           app_user_id: TEST_USER_ID,
         }),
       );
-      const order = sim.h.calls.map((c) =>
-        `${c.method} ${c.url.split("?")[0]}`
-      );
+      const order = sim.h.calls.map((c) => `${c.method} ${c.url.split("?")[0]}`);
       const reserveIdx = order.indexOf(`POST ${EVENTS_URL}`);
-      const rcIdx = order.findIndex((entry) =>
-        entry.startsWith(`GET ${RC_URL}`)
-      );
+      const rcIdx = order.findIndex((entry) => entry.startsWith(`GET ${RC_URL}`));
       assert(reserveIdx >= 0 && rcIdx >= 0);
-      assert(
-        reserveIdx < rcIdx,
-        `reservation precedes verification: ${order.join(" → ")}`,
-      );
+      assert(reserveIdx < rcIdx, `reservation precedes verification: ${order.join(" → ")}`);
 
-      const audit = sim.h.callsTo(EVENTS_URL).filter((c) =>
-        c.method === "POST"
-      );
+      const audit = sim.h.callsTo(EVENTS_URL).filter((c) => c.method === "POST");
       assertEquals(audit.length, 1);
       const row = audit[0].body as Record<string, unknown>;
       assertEquals(row.id, "evt-audit");
       assertEquals(row.provider, "revenuecat");
       assertEquals(row.event_type, "RENEWAL");
       assertEquals(row.app_user_id, TEST_USER_ID);
-      assert(
-        String(audit[0].headers["prefer"]).includes(
-          "resolution=ignore-duplicates",
-        ),
-      );
+      assert(String(audit[0].headers["prefer"]).includes("resolution=ignore-duplicates"));
 
       const stored = sim.auditRows.get("evt-audit");
       assert(stored, "audit row present");
-      assert(
-        typeof stored.processed_at === "string",
-        "processed_at set on completion",
-      );
+      assert(typeof stored.processed_at === "string", "processed_at set on completion");
     } finally {
       sim.restore();
     }
@@ -164,11 +143,7 @@ Deno.test(
       assertEquals(res.status, 503);
       await res.text();
       assertEquals(sim.entitlementUpserts(), 0);
-      assertEquals(
-        sim.auditRows.has("evt-outage"),
-        false,
-        "no row survives a failed delivery",
-      );
+      assertEquals(sim.auditRows.has("evt-outage"), false, "no row survives a failed delivery");
 
       sim.h.subscriber = activeSubscriber();
       const redelivery = await sim.h.handler(webhookRequest(event));
@@ -199,10 +174,7 @@ Deno.test(
       assertEquals(await res.json(), { received: true, verified: false });
       assertEquals(sim.rcCalls(), 0);
       const row = sim.auditRows.get("evt-anon");
-      assert(
-        row && typeof row.processed_at === "string",
-        "audited and processed",
-      );
+      assert(row && typeof row.processed_at === "string", "audited and processed");
     } finally {
       sim.restore();
     }
@@ -261,31 +233,15 @@ Deno.test(
       assertEquals(res.status, 200);
       assertEquals(await res.json(), { received: true, verified: true });
       const rc = h.callsTo(RC_URL);
-      assertEquals(
-        rc.length,
-        2,
-        "both accounts are re-verified against RevenueCat",
-      );
+      assertEquals(rc.length, 2, "both accounts are re-verified against RevenueCat");
       assert(rc.some((c) => c.url.endsWith(encodeURIComponent(TEST_USER_ID))));
       assert(rc.some((c) => c.url.endsWith(encodeURIComponent(OTHER_USER_ID))));
-      assertEquals(
-        sim.entitlementRows.size,
-        2,
-        "one entitlement row per account",
-      );
-      assert(
-        sim.entitlementRows.has(TEST_USER_ID) &&
-          sim.entitlementRows.has(OTHER_USER_ID),
-      );
+      assertEquals(sim.entitlementRows.size, 2, "one entitlement row per account");
+      assert(sim.entitlementRows.has(TEST_USER_ID) && sim.entitlementRows.has(OTHER_USER_ID));
       const audit = h.callsTo(EVENTS_URL).find((c) => c.method === "POST");
       assert(audit, "audit row reserved");
-      assertEquals(
-        (audit.body as Record<string, unknown>).app_user_id,
-        TEST_USER_ID,
-      );
-      assert(
-        typeof sim.auditRows.get("evt-transfer")?.processed_at === "string",
-      );
+      assertEquals((audit.body as Record<string, unknown>).app_user_id, TEST_USER_ID);
+      assert(typeof sim.auditRows.get("evt-transfer")?.processed_at === "string");
     } finally {
       sim.restore();
     }
@@ -300,8 +256,7 @@ Deno.test(
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
         match: (m, u) =>
-          m === "POST" && u.startsWith(ENTITLEMENTS_URL) &&
-          sim.entitlementUpserts() === 2,
+          m === "POST" && u.startsWith(ENTITLEMENTS_URL) && sim.entitlementUpserts() === 2,
         ...dbUnavailable,
         times: 1,
       });
@@ -314,17 +269,10 @@ Deno.test(
       const first = await sim.h.handler(webhookRequest(event));
       assertEquals(first.status, 503);
       const text = await first.text();
-      assert(
-        !/could not connect|PGRST/i.test(text),
-        `generic 5xx body: ${text}`,
-      );
+      assert(!/could not connect|PGRST/i.test(text), `generic 5xx body: ${text}`);
       assertEquals(sim.rcCalls(), 2);
       assertEquals(sim.entitlementUpserts(), 2);
-      assertEquals(
-        sim.auditRows.has("evt-transfer-fail"),
-        false,
-        "no audit row",
-      );
+      assertEquals(sim.auditRows.has("evt-transfer-fail"), false, "no audit row");
 
       const redelivery = await sim.h.handler(webhookRequest(event));
       assertEquals(redelivery.status, 200);
@@ -333,10 +281,7 @@ Deno.test(
       assertEquals(sim.entitlementUpserts(), 4, "both subjects re-written");
       assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, true);
       assertEquals(sim.entitlementRows.get(OTHER_USER_ID)?.premium, true);
-      assert(
-        typeof sim.auditRows.get("evt-transfer-fail")?.processed_at ===
-          "string",
-      );
+      assert(typeof sim.auditRows.get("evt-transfer-fail")?.processed_at === "string");
     } finally {
       sim.restore();
     }
@@ -371,10 +316,7 @@ Deno.test(
       assertEquals(sim.entitlementUpserts(), 1);
       assertEquals(sim.entitlementRows.has(TEST_USER_ID), false);
       const row = sim.auditRows.get("evt-no-profile");
-      assert(
-        row && typeof row.processed_at === "string",
-        "audit row written and processed",
-      );
+      assert(row && typeof row.processed_at === "string", "audit row written and processed");
       assert(
         sim.errors.some((e) => /webhook verdict persist/i.test(e)),
         "23503 is logged",

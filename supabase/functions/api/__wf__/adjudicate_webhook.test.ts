@@ -47,10 +47,7 @@ const ACCESS_ROW = [{ premium: true, scored_count: 0, reserved_count: 0 }];
 
 const genericBody = async (res: Response): Promise<void> => {
   const text = await res.text();
-  assert(
-    !/could not connect|PGRST|internal/i.test(text),
-    `5xx body stays generic: ${text}`,
-  );
+  assert(!/could not connect|PGRST|internal/i.test(text), `5xx body stays generic: ${text}`);
 };
 
 // ── A. entitlement persistence failures ─────────────────────────────────────
@@ -87,16 +84,8 @@ Deno.test(
         sim.errors.some((e) => /webhook verdict persist/i.test(e)),
         `persist failure is logged: ${JSON.stringify(sim.errors)}`,
       );
-      assertEquals(
-        sim.auditRows.has("adj-exp-1"),
-        false,
-        "no audit row for a failed delivery",
-      );
-      assertEquals(
-        sim.entitlementRows.get(TEST_USER_ID)?.premium,
-        true,
-        "DB untouched so far",
-      );
+      assertEquals(sim.auditRows.has("adj-exp-1"), false, "no audit row for a failed delivery");
+      assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, true, "DB untouched so far");
 
       // RevenueCat retries on 5xx: the redelivery is fully re-processed.
       const replay = await sim.h.handler(webhookRequest(event));
@@ -104,11 +93,7 @@ Deno.test(
       assertEquals(await replay.json(), { received: true, verified: true });
       assertEquals(sim.rcCalls(), 2, "re-verified against RevenueCat");
       assertEquals(sim.entitlementUpserts(), 2);
-      assertEquals(
-        sim.entitlementRows.get(TEST_USER_ID)?.premium,
-        false,
-        "downgrade landed",
-      );
+      assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, false, "downgrade landed");
       const audit = sim.auditRows.get("adj-exp-1");
       assert(audit, "audit row written once handled to completion");
       assert(typeof audit.processed_at === "string", "and marked processed");
@@ -164,8 +149,7 @@ Deno.test(
       // Destination has never bootstrapped → FK violation on ITS upsert only.
       sim.faults.push({
         match: (m, u) =>
-          m === "POST" && u.startsWith(ENTITLEMENTS_URL) &&
-          sim.entitlementUpserts() === 2,
+          m === "POST" && u.startsWith(ENTITLEMENTS_URL) && sim.entitlementUpserts() === 2,
         status: 409,
         body: { code: "23503", message: "violates foreign key constraint" },
         times: 1,
@@ -182,25 +166,14 @@ Deno.test(
       assertEquals(await res.json(), { received: true, verified: false });
       assertEquals(sim.rcCalls(), 2);
       assertEquals(sim.entitlementUpserts(), 2);
-      assertEquals(
-        sim.entitlementRows.get(TEST_USER_ID)?.premium,
-        false,
-        "source revoked",
-      );
-      assertEquals(
-        sim.entitlementRows.has(OTHER_USER_ID),
-        false,
-        "destination never written",
-      );
+      assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, false, "source revoked");
+      assertEquals(sim.entitlementRows.has(OTHER_USER_ID), false, "destination never written");
       assert(
         sim.errors.some((e) => /webhook verdict persist/i.test(e)),
         "23503 is logged",
       );
       const audit = sim.auditRows.get("adj-transfer-1");
-      assert(
-        audit && typeof audit.processed_at === "string",
-        "audit row written and processed",
-      );
+      assert(audit && typeof audit.processed_at === "string", "audit row written and processed");
 
       const replay = await sim.h.handler(webhookRequest(event));
       assertEquals(replay.status, 200);
@@ -240,10 +213,7 @@ Deno.test(
       assertEquals(sim.rcCalls(), 0);
       assertEquals(sim.entitlementUpserts(), 0);
       assertEquals(sim.auditRows.size, 0);
-      assertEquals(
-        sim.errors.filter((e) => /webhook event reservation/i.test(e)).length,
-        3,
-      );
+      assertEquals(sim.errors.filter((e) => /webhook event reservation/i.test(e)).length, 3);
     } finally {
       sim.restore();
     }
@@ -346,11 +316,7 @@ Deno.test(
       await genericBody(first);
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
-      assertEquals(
-        sim.entitlementRows.get(TEST_USER_ID)?.premium,
-        true,
-        "verdict persisted",
-      );
+      assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, true, "verdict persisted");
       const row = sim.auditRows.get("adj-audit-2");
       assert(row, "reservation kept (the verdict IS persisted)");
       assertEquals(row.processed_at, null);
@@ -362,11 +328,7 @@ Deno.test(
         503,
         "in-flight reservation is retryable, never a false duplicate",
       );
-      assertEquals(
-        sim.rcCalls(),
-        1,
-        "no second verification while the lease is live",
-      );
+      assertEquals(sim.rcCalls(), 1, "no second verification while the lease is live");
     } finally {
       sim.restore();
     }
@@ -401,10 +363,7 @@ Deno.test(
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
       const row = sim.auditRows.get("adj-concurrent-1");
-      assert(
-        row && typeof row.processed_at === "string",
-        "single processed row",
-      );
+      assert(row && typeof row.processed_at === "string", "single processed row");
 
       // Once processed, the retries RevenueCat issues for the 503s are duplicates.
       const replay = await sim.h.handler(webhookRequest(event));
@@ -453,16 +412,8 @@ Deno.test(
       assertEquals(b.status, 200);
       await a.json();
       await b.json();
-      assertEquals(
-        sim.entitlementUpserts(),
-        2,
-        "both deliveries attempt their write",
-      );
-      assertEquals(
-        sim.entitlementWrites.length,
-        1,
-        "only the newer verdict is accepted",
-      );
+      assertEquals(sim.entitlementUpserts(), 2, "both deliveries attempt their write");
+      assertEquals(sim.entitlementWrites.length, 1, "only the newer verdict is accepted");
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, false, "the newer (expired) verdict stands");
       const fastWrite = sim.h
@@ -470,19 +421,14 @@ Deno.test(
         .map((c) => c.body as Record<string, unknown>)
         .find((body) => body.premium === false);
       assert(fastWrite, "fast delivery wrote premium:false");
-      assertEquals(
-        row?.verified_at,
-        fastWrite.verified_at,
-        "verified_at is the fast delivery's",
-      );
+      assertEquals(row?.verified_at, fastWrite.verified_at, "verified_at is the fast delivery's");
       const slowWrite = sim.h
         .callsTo(ENTITLEMENTS_URL)
         .map((c) => c.body as Record<string, unknown>)
         .find((body) => body.premium === true);
       assert(slowWrite, "slow delivery attempted premium:true");
       assert(
-        Date.parse(String(slowWrite.verified_at)) <
-          Date.parse(String(fastWrite.verified_at)),
+        Date.parse(String(slowWrite.verified_at)) < Date.parse(String(fastWrite.verified_at)),
         "verified_at is taken BEFORE the RevenueCat round trip, so the slow verdict is older",
       );
     } finally {
@@ -520,14 +466,8 @@ Deno.test(
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
       const row = sim.auditRows.get("adj-orphan-1");
-      assert(
-        row && typeof row.processed_at === "string",
-        "reclaimed row is marked processed",
-      );
-      assert(
-        Date.parse(String(row.claimed_at)) > Date.parse(stale),
-        "lease renewed on reclaim",
-      );
+      assert(row && typeof row.processed_at === "string", "reclaimed row is marked processed");
+      assert(Date.parse(String(row.claimed_at)) > Date.parse(stale), "lease renewed on reclaim");
 
       const live = new Date().toISOString();
       sim.auditRows.set("adj-orphan-2", {
@@ -580,19 +520,9 @@ Deno.test(
       assertEquals(res.status, 503);
       await res.text();
       assertEquals(sim.entitlementUpserts(), 0);
-      assertEquals(
-        sim.auditRows.has("adj-rc401"),
-        false,
-        "reservation released",
-      );
-      const upstream = sim.errors.filter((e) =>
-        /revenuecat|401|api key/i.test(e)
-      );
-      assertEquals(
-        upstream,
-        [],
-        "observed: nothing is logged for the RevenueCat 4xx",
-      );
+      assertEquals(sim.auditRows.has("adj-rc401"), false, "reservation released");
+      const upstream = sim.errors.filter((e) => /revenuecat|401|api key/i.test(e));
+      assertEquals(upstream, [], "observed: nothing is logged for the RevenueCat 4xx");
     } finally {
       sim.restore();
     }
@@ -604,10 +534,7 @@ Deno.test(
   async () => {
     const sim = await simulate();
     try {
-      const ids = Array.from(
-        { length: 6 },
-        (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa0${i}`,
-      );
+      const ids = Array.from({ length: 6 }, (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa0${i}`);
       sim.faults.push({
         match: (_m, u) => u.startsWith(RC_URL),
         delayMs: 300,
@@ -655,10 +582,7 @@ Deno.test(
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
       assertStringIncludes(
-        String(
-          sim.h.callsTo(EVENTS_URL).find((c) => c.method === "POST")
-            ?.headers["prefer"],
-        ),
+        String(sim.h.callsTo(EVENTS_URL).find((c) => c.method === "POST")?.headers["prefer"]),
         "resolution=ignore-duplicates",
       );
     } finally {

@@ -73,23 +73,11 @@ export interface Sim {
 
 type Filter = { column: string; op: string; value: string };
 
-const NON_FILTER_PARAMS = new Set([
-  "select",
-  "on_conflict",
-  "columns",
-  "order",
-  "limit",
-  "offset",
-]);
+const NON_FILTER_PARAMS = new Set(["select", "on_conflict", "columns", "order", "limit", "offset"]);
 
-const isRecord = (v: unknown): v is Row =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Row => typeof v === "object" && v !== null && !Array.isArray(v);
 
-export const pgError = (
-  status: number,
-  code: string,
-  message: string,
-): Response =>
+export const pgError = (status: number, code: string, message: string): Response =>
   new Response(JSON.stringify({ code, message, details: null, hint: null }), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -101,8 +89,7 @@ const jsonResponse = (status: number, body: unknown): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
-export const sleep = (ms: number): Promise<void> =>
-  new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 function parseFilters(url: URL): Filter[] {
   const filters: Filter[] = [];
@@ -110,9 +97,7 @@ function parseFilters(url: URL): Filter[] {
     if (NON_FILTER_PARAMS.has(column)) continue;
     const dot = raw.indexOf(".");
     if (dot < 0) {
-      throw new Error(
-        `webhookSim: unsupported PostgREST query ${column}=${raw}`,
-      );
+      throw new Error(`webhookSim: unsupported PostgREST query ${column}=${raw}`);
     }
     filters.push({ column, op: raw.slice(0, dot), value: raw.slice(dot + 1) });
   }
@@ -134,15 +119,11 @@ function matches(row: Row, filters: Filter[]): boolean {
         if (value === "false") return actual === false;
         throw new Error(`webhookSim: unsupported is.${value}`);
       case "lt":
-        return typeof actual === "string" &&
-          Date.parse(actual) < Date.parse(value);
+        return typeof actual === "string" && Date.parse(actual) < Date.parse(value);
       case "gt":
-        return typeof actual === "string" &&
-          Date.parse(actual) > Date.parse(value);
+        return typeof actual === "string" && Date.parse(actual) > Date.parse(value);
       default:
-        throw new Error(
-          `webhookSim: unsupported PostgREST filter ${column}=${op}.${value}`,
-        );
+        throw new Error(`webhookSim: unsupported PostgREST filter ${column}=${op}.${value}`);
     }
   });
 }
@@ -151,11 +132,7 @@ function matches(row: Row, filters: Filter[]): boolean {
  * reads always carry rows; writes carry them only under
  * `Prefer: return=representation` (201 for inserts, 200 for update/delete),
  * otherwise 201 / 204 with no body. */
-function rowsResponse(
-  headers: Headers,
-  rows: Row[],
-  kind: "read" | "insert" | "mutate",
-): Response {
+function rowsResponse(headers: Headers, rows: Row[], kind: "read" | "insert" | "mutate"): Response {
   const accept = headers.get("accept") ?? "";
   const prefer = headers.get("prefer") ?? "";
   if (kind !== "read" && !prefer.includes("return=representation")) {
@@ -197,20 +174,17 @@ export async function simulate(): Promise<Sim> {
 
   const record = (request: Request, body: unknown) => {
     const headers: Record<string, string> = {};
-    request.headers.forEach((
-      value,
-      key,
-    ) => (headers[key.toLowerCase()] = value));
+    request.headers.forEach((value, key) => (headers[key.toLowerCase()] = value));
     h.calls.push({ url: request.url, method: request.method, headers, body });
   };
 
-  globalThis.fetch = (async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
     const { url, method } = request;
-    const bodyText = await request.clone().text().catch(() => "");
+    const bodyText = await request
+      .clone()
+      .text()
+      .catch(() => "");
     let body: unknown = null;
     try {
       body = bodyText ? JSON.parse(bodyText) : null;
@@ -229,9 +203,7 @@ export async function simulate(): Promise<Sim> {
       if (method === "DELETE") counts.auditDelete += 1;
     }
 
-    const fault = faults.find((f) =>
-      f.match(method, url) && (f.times ?? 1) > 0
-    );
+    const fault = faults.find((f) => f.match(method, url) && (f.times ?? 1) > 0);
     if (fault) {
       fault.times = (fault.times ?? 1) - 1;
       if (fault.delayMs) {
@@ -245,13 +217,10 @@ export async function simulate(): Promise<Sim> {
       }
       if (fault.status !== undefined) {
         record(request, body);
-        return new Response(
-          fault.body === undefined ? "" : JSON.stringify(fault.body),
-          {
-            status: fault.status,
-            headers: { "Content-Type": "application/json" },
-          },
-        );
+        return new Response(fault.body === undefined ? "" : JSON.stringify(fault.body), {
+          status: fault.status,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       if (fault.subscriber) {
         record(request, body);
@@ -266,16 +235,12 @@ export async function simulate(): Promise<Sim> {
       record(request, body);
       const filters = parseFilters(parsed);
       if (method === "GET") {
-        const rows = [...auditRows.values()].filter((row) =>
-          matches(row, filters)
-        );
+        const rows = [...auditRows.values()].filter((row) => matches(row, filters));
         return rowsResponse(request.headers, rows, "read");
       }
       if (method === "POST") {
         const prefer = request.headers.get("prefer") ?? "";
-        const incoming = (Array.isArray(body) ? body : [body]).filter(
-          isRecord,
-        );
+        const incoming = (Array.isArray(body) ? body : [body]).filter(isRecord);
         const inserted: Row[] = [];
         for (const row of incoming) {
           const id = String(row.id);
