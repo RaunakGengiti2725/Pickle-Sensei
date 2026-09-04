@@ -127,7 +127,13 @@ describe('attack fix5 / C2: the drain reads rows of an open saveAnalysis transac
       sql => sql.trim().toUpperCase() === 'ROLLBACK',
     );
     expect(firstShotPage).toBeGreaterThan(-1);
-    expect(rollback).toBeGreaterThan(firstShotPage);
+    expect(rollback).toBeGreaterThan(-1);
+    // The drain was scheduled while the save's transaction was open, yet its
+    // first read of the outbox happened only after that transaction had been
+    // rolled back: drain reads run between transactions, never inside one.
+    // (On the candidate the read preceded the ROLLBACK — it ran inside the
+    // open transaction and saw its uncommitted rows.)
+    expect(firstShotPage).toBeGreaterThan(rollback);
     // The save did roll back: nothing of the rating survived locally.
     expect(await getAnalysis(db, shotId(2))).toBeNull();
     expect(await outboxRows(db, OWNER)).toHaveLength(0);

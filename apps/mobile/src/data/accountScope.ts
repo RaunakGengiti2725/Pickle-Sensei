@@ -42,6 +42,23 @@ export function requireWritableDataOwner(): string {
   return activeOwner;
 }
 
+/**
+ * Per-owner count of bucket purges (account deletion) in this process. Work
+ * that captured an owner's generation before going off the connection — the
+ * outbox drain while it awaits the server — compares it again before writing
+ * anything for that owner: a purge in between means the bucket it was
+ * working on no longer exists and nothing may be written back into it.
+ */
+const purgeGenerations = new Map<string, number>();
+
+export function ownerPurgeGeneration(owner: string): number {
+  return purgeGenerations.get(owner) ?? 0;
+}
+
+export function notePurgedOwnerData(owner: string): void {
+  purgeGenerations.set(owner, ownerPurgeGeneration(owner) + 1);
+}
+
 export function profileKeyForOwner(owner: string): string {
   return `profile:${owner}`;
 }

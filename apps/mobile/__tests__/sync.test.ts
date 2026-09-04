@@ -58,11 +58,20 @@ function fakeDb() {
             .map(r => ({ ...r })),
         };
       }
-      if (sql.startsWith('SELECT 1 FROM outbox')) {
-        const hit = outbox.some(r => {
+      if (
+        sql.startsWith('SELECT 1 FROM outbox') ||
+        sql.startsWith('SELECT last_error FROM outbox')
+      ) {
+        // hasLiveSessionCreate (attempts < ?) / exhaustedSessionCreateVerdict
+        // (attempts >= ?): a session.create row for `$.id` on either side
+        // of the budget.
+        const live = sql.includes('attempts < ?');
+        const hit = outbox.find(r => {
           if (
             r.owner_key !== params[0] ||
-            r.attempts >= Number(params[1]) ||
+            (live
+              ? r.attempts >= Number(params[1])
+              : r.attempts < Number(params[1])) ||
             r.kind !== 'session.create'
           ) {
             return false;
@@ -73,7 +82,8 @@ function fakeDb() {
             return false;
           }
         });
-        return { rows: hit ? [{ '1': 1 }] : [] };
+        if (!hit) return { rows: [] };
+        return { rows: [live ? { '1': 1 } : { last_error: hit.last_error }] };
       }
       if (sql.startsWith('SELECT mode, shot_type')) {
         return { rows: [] };
@@ -250,9 +260,10 @@ describe('drainOutbox', () => {
 
   it('does not spend the retry budget on a shot whose queued practice-set session has not synced yet', async () => {
     // The set's session.create row is queued with the shot; when the session
-    // pass cannot reach the server this drain, the shot's session_not_found
-    // is an ordering artifact, not a permanent failure, so the row keeps its
-    // full attempt budget for the next pass.
+    // pass cannot reach the server this drain, the shot is not offered at all
+    // (the server could only answer session_not_found for a purely local
+    // ordering artifact), so the row keeps its full attempt budget, and a
+    // clean last_error, for the next pass.
     const { db, push, outbox } = fakeDb();
     const sessionId = '11111111-2222-4333-8444-555555555555';
     push('shot.sync', { ...permittedAnalysis, sessionId });
@@ -273,11 +284,11 @@ describe('drainOutbox', () => {
       },
       finalizeSession: async () => {},
     });
-    expect(result).toMatchObject({ synced: 0, failed: 2, remaining: 2 });
+    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 2 });
     expect(outbox[0]).toMatchObject({
       kind: 'shot.sync',
       attempts: 0,
-      last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
+      last_error: null,
     });
     expect(outbox[1]).toMatchObject({ kind: 'session.create', attempts: 0 });
   });

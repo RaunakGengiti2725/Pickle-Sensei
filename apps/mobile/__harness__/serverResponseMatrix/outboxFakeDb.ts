@@ -61,6 +61,38 @@ export function createFakeOutboxDb(): FakeOutboxDb {
             .map(row => ({ ...row })),
         };
       }
+      if (
+        sql.trimStart().startsWith('SELECT 1 FROM outbox') ||
+        sql.trimStart().startsWith('SELECT last_error FROM outbox')
+      ) {
+        // hasLiveSessionCreate (attempts < ?) / exhaustedSessionCreateVerdict
+        // (attempts >= ?): a session.create row for `$.id` on either side
+        // of the budget.
+        const live = sql.includes('attempts < ?');
+        const hit = outbox.find(row => {
+          if (
+            row.owner_key !== params[0] ||
+            (live
+              ? row.attempts >= Number(params[1])
+              : row.attempts < Number(params[1])) ||
+            row.kind !== 'session.create'
+          ) {
+            return false;
+          }
+          try {
+            return (
+              (JSON.parse(row.payload) as { id?: unknown }).id === params[2]
+            );
+          } catch {
+            return false;
+          }
+        });
+        if (!hit) return { rows: [] };
+        return { rows: [live ? { '1': 1 } : { last_error: hit.last_error }] };
+      }
+      if (sql.trimStart().startsWith('SELECT mode, shot_type')) {
+        return { rows: [] };
+      }
       if (sql.trimStart().startsWith('DELETE FROM outbox')) {
         const index = outbox.findIndex(
           row => row.owner_key === params[0] && row.id === params[1],

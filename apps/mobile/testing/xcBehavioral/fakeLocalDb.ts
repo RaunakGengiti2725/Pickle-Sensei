@@ -149,6 +149,13 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
+        // The receipt is written only while the outbox row it retires exists.
+        if (
+          sql.includes('WHERE EXISTS') &&
+          !outbox.some(r => r.owner_key === params[2] && r.id === params[3])
+        ) {
+          return { rows: [] };
+        }
         receipts.push({
           owner: String(params[0]),
           kind: 'shot.sync',
@@ -163,6 +170,27 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: hit ? [{ '1': 1 }] : [] };
       }
       if (sql.includes('INSERT INTO outbox')) {
+        if (sql.includes('WHERE NOT EXISTS')) {
+          // enqueueSessionCreate: one LIVE session.create per set.
+          const exists = outbox.some(
+            r =>
+              r.owner_key === params[2] &&
+              r.attempts < Number(params[3]) &&
+              r.kind === 'session.create' &&
+              payloadField(r, 'id') === params[4],
+          );
+          if (!exists) {
+            outbox.push({
+              id: nextOutboxId++,
+              owner_key: String(params[0]),
+              kind: 'session.create',
+              payload: String(params[1]),
+              attempts: 0,
+              last_error: null,
+            });
+          }
+          return { rows: [] };
+        }
         const kindMatch = /VALUES \(\?, '([a-z.]+)', \?\)/.exec(sql);
         outbox.push({
           id: nextOutboxId++,
@@ -203,14 +231,16 @@ export function createFakeLocalDb(): FakeLocalDb {
       }
       if (sql.startsWith('DELETE FROM outbox')) {
         if (sql.includes('attempts >= ?')) {
-          // Exhausted session.create rows for a set the server now has.
+          // retireAcceptedSessionCreate: the accepted row plus exhausted
+          // session.create rows for a set the server now has.
           for (let i = outbox.length - 1; i >= 0; i -= 1) {
             const r = outbox[i]!;
             if (
               r.owner_key === params[0] &&
-              r.attempts >= Number(params[1]) &&
-              r.kind === 'session.create' &&
-              payloadField(r, 'id') === params[2]
+              (r.id === params[1] ||
+                (r.attempts >= Number(params[2]) &&
+                  r.kind === 'session.create' &&
+                  payloadField(r, 'id') === params[3]))
             ) {
               outbox.splice(i, 1);
             }
@@ -224,6 +254,31 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('UPDATE outbox')) {
+        if (sql.includes('attempts >= ?')) {
+          // rearmExhaustedSessionCreate: budget back for an exhausted
+          // session.create of `$.id` unless a live one exists.
+          const live = outbox.some(
+            r =>
+              r.owner_key === params[0] &&
+              r.attempts < Number(params[1]) &&
+              r.kind === 'session.create' &&
+              payloadField(r, 'id') === params[2],
+          );
+          if (!live) {
+            for (const r of outbox) {
+              if (
+                r.owner_key === params[0] &&
+                r.attempts >= Number(params[1]) &&
+                r.kind === 'session.create' &&
+                payloadField(r, 'id') === params[2]
+              ) {
+                r.attempts = 0;
+                r.last_error = null;
+              }
+            }
+          }
+          return { rows: [] };
+        }
         if (sql.includes('SET attempts = 0, last_error = NULL')) {
           // releaseParkedShotsOfSession: parked shots of `$.sessionId`.
           for (const r of outbox) {

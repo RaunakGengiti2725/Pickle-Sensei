@@ -8,11 +8,16 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { runInTransaction } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
-import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
+import {
+  getActiveDataOwner,
+  notePurgedOwnerData,
+  requireWritableDataOwner,
+} from './accountScope';
 import {
   OUTBOX_MAX_ATTEMPTS,
-  hasLiveSessionCreate,
+  enqueueSessionCreate,
   isSessionOrphanedVerdict,
+  rearmExhaustedSessionCreate,
 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
@@ -116,6 +121,9 @@ export async function purgeOwnerData(
   owner: string,
 ): Promise<void> {
   await runInTransaction(db, async () => {
+    // Fences every drain already in flight for this owner: none of its
+    // statements runs again once the bucket is gone (sync.ts).
+    notePurgedOwnerData(owner);
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -136,31 +144,15 @@ export interface SessionInput {
 }
 
 /**
- * Queues `session.create` for `session` unless a row for that id is already
- * waiting with attempt budget: the server upsert is idempotent, so one
- * pending entry per set is all a drain needs. Runs inside the caller's
- * transaction.
- */
-async function enqueueSessionCreate(
-  db: LocalDb,
-  owner: string,
-  session: SessionInput,
-): Promise<void> {
-  if (await hasLiveSessionCreate(db, owner, session.id)) return;
-  await db.execute(
-    `INSERT INTO outbox (owner_key, kind, payload)
-     VALUES (?, 'session.create', ?)`,
-    [owner, JSON.stringify(session)],
-  );
-}
-
-/**
  * Persists a scored rating: the `local_shot` row and its `shot.sync` outbox
  * entry, atomically. When the shot belongs to a practice set, pass the set as
  * `options.session`: a set this device has no `local_session` row for yet
  * gets that row AND its `session.create` outbox entry in the SAME
  * transaction, ahead of the shot — so a kill or a failed follow-up write can
- * never leave a shot whose session no queue entry will ever name.
+ * never leave a shot whose session no queue entry will ever name. A set the
+ * device already knows whose `session.create` spent its budget is re-armed
+ * by the new shot: the server is asked for the set once more (one bounded
+ * round per shot that joins it), so the set's parked shots can be delivered.
  */
 export async function saveAnalysis(
   db: LocalDb,
@@ -204,6 +196,8 @@ export async function saveAnalysis(
           ],
         );
         await enqueueSessionCreate(db, owner, session);
+      } else {
+        await rearmExhaustedSessionCreate(db, owner, session.id);
       }
     }
     await db.execute(

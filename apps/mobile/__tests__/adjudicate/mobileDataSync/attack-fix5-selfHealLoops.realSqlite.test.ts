@@ -45,7 +45,7 @@ import {
   getShotOutboxStatus,
   hasShotSyncReceipt,
   saveAnalysis,
-  type LocalSessionInput,
+  type SessionInput as LocalSessionInput,
 } from '../../../src/data/repository';
 import {
   OUTBOX_MAX_ATTEMPTS,

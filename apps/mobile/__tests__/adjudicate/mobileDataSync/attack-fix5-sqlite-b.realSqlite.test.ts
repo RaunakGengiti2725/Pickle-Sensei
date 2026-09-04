@@ -44,6 +44,7 @@ import { ApiError } from '../../../src/data/api';
 import { getDb } from '../../../src/data/db';
 import {
   getShotOutboxStatus,
+  hasShotSyncReceipt,
   purgeOwnerData,
   saveAnalysis,
   type SessionInput,
@@ -255,14 +256,35 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
     await settleMicrotasks(20);
 
     serverAnswers.resolve();
-    const result = await drain;
-    expect(result.failed).toBe(1);
+    // Expected: the verdict must not land inside the open transaction, so
+    // the drain cannot complete while the save still holds the connection —
+    // the row is untouched until that transaction has ended.
+    // Observed on the candidate: the drain completed here (failed=1) with
+    // its UPDATE inside the save's transaction, and the save's ROLLBACK
+    // took the verdict with it ({ state: 'queued', attempts: 0 }).
+    let drainSettled = false;
+    void drain.then(
+      () => {
+        drainSettled = true;
+      },
+      () => {
+        drainSettled = true;
+      },
+    );
+    await settleMicrotasks(20);
+    expect(drainSettled).toBe(false);
+    expect(await getShotOutboxStatus(db, rejectedShot)).toEqual({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
 
     releaseSave.resolve();
     await expect(save).rejects.toThrow(/SQLITE_FULL/);
+    const result = await drain;
+    expect(result.failed).toBe(1);
 
-    // Expected: the verdict the drain just recorded is durable.
-    // Observed on the candidate: { state: 'queued', attempts: 0, lastError: null }.
+    // The verdict the drain recorded after the rollback is durable.
     expect(await getShotOutboxStatus(db, rejectedShot)).toEqual({
       state: 'rejected',
       attempts: 1,
@@ -370,20 +392,25 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
       laterShots.map(id => getShotOutboxStatus(db, id)),
     );
 
+    // Expected: the first new shot re-arms the set's exhausted session.create
+    // (budget reset, no second row); the next drain creates the set with ONE
+    // createSession call, releases the parked first shot and delivers it
+    // together with the new one; every later shot is delivered on its own
+    // drain (the set is known, nothing is re-armed). Nothing of the set is
+    // left in the outbox and the idle drains offer nothing.
     // Observed on the candidate: 0 new createSession calls, one doomed offer
     // per new shot (session_not_found -> parked at attempt 0), 1 exhausted
     // session.create row (attempts=8) pinned forever, all six shots
     // 'orphaned' ("paused until the set is accepted").
-    expect(states.map(s => s.state)).toEqual(laterShots.map(() => 'orphaned'));
-    expect(sessionCreates).toEqual([
-      expect.objectContaining({ attempts: OUTBOX_MAX_ATTEMPTS }),
-    ]);
+    expect(states.map(s => s.state)).toEqual(laterShots.map(() => 'absent'));
+    expect(
+      await Promise.all(
+        [firstShot, ...laterShots].map(id => hasShotSyncReceipt(db, id)),
+      ),
+    ).toEqual([firstShot, ...laterShots].map(() => true));
+    expect(sessionCreates).toEqual([]);
+    expect(rows).toHaveLength(0);
     expect(emulator.offered.length).toBe(offeredBefore + laterShots.length);
-
-    // Expected by the candidate's own contract ("re-offered when the set's
-    // session.create is accepted"; ResultScreen: "this read is sent again
-    // automatically"): the set is asked for again at least once after a new
-    // shot joins it, so the parked reads can ever leave the paused state.
-    expect(emulator.created.length).toBeGreaterThan(createdBefore);
+    expect(emulator.created.length).toBe(createdBefore + 1);
   });
 });
