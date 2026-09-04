@@ -27,6 +27,11 @@ import {
  *
  * A signed-out process gets everything cancelled — reminders never outlive
  * the account context that asked for them.
+ *
+ * Reconciles are serialized and generation-stamped: only one pass talks to
+ * the OS at a time, and a pass whose preferences were superseded while it
+ * was reading facts never applies its plan — the newer pass owns the
+ * schedule.
  */
 
 export interface NotificationStoreDeps {
@@ -119,6 +124,9 @@ function parsePendingOnboardingChoice(
     return null;
   }
 }
+
+let syncGeneration = 0;
+let syncQueue: Promise<void> = Promise.resolve();
 
 async function persistPrefs(
   owner: string,
@@ -264,30 +272,45 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     await get().setPrefs({ promptDismissed: true }, deps);
   },
 
-  syncNow: async deps => {
-    const scheduler = deps?.scheduler ?? getScheduler();
-    const owner = getActiveDataOwner();
-    const { ownerKey, prefs, permission } = get();
-    try {
-      if (
-        owner === SIGNED_OUT_DATA_OWNER ||
-        ownerKey !== owner ||
-        !prefs.enabled ||
-        permission !== 'granted'
-      ) {
-        await scheduler.cancelAllPlanned();
-        set({ scheduleFailed: false });
-        return;
-      }
-      const loadContext = deps?.loadContext ?? defaultLoadContext;
-      const plan = buildNotificationPlan(prefs, await loadContext());
-      if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-      await scheduler.applyPlan(plan);
-      set({ scheduleFailed: false });
-    } catch {
-      // Scheduling is best-effort by design: a failed sync never breaks the
-      // app, and the next foreground pass retries with fresh facts.
-      set({ scheduleFailed: true });
-    }
+  syncNow: deps => {
+    const generation = ++syncGeneration;
+    const run = syncQueue.then(() => reconcile(generation, deps));
+    syncQueue = run.catch(() => undefined);
+    return run;
   },
 }));
+
+async function reconcile(
+  generation: number,
+  deps: NotificationStoreDeps | undefined,
+): Promise<void> {
+  const isCurrent = () => generation === syncGeneration;
+  // A newer pass is already queued; it reads fresher preferences and facts.
+  if (!isCurrent()) return;
+  const { getState, setState } = useNotificationStore;
+  const scheduler = deps?.scheduler ?? getScheduler();
+  const owner = getActiveDataOwner();
+  const { ownerKey, prefs, permission } = getState();
+  try {
+    if (
+      owner === SIGNED_OUT_DATA_OWNER ||
+      ownerKey !== owner ||
+      !prefs.enabled ||
+      permission !== 'granted'
+    ) {
+      await scheduler.cancelAllPlanned();
+      if (isCurrent()) setState({ scheduleFailed: false });
+      return;
+    }
+    const loadContext = deps?.loadContext ?? defaultLoadContext;
+    const context = await loadContext();
+    if (!isCurrent()) return;
+    if (getActiveDataOwner() !== owner || getState().ownerKey !== owner) return;
+    await scheduler.applyPlan(buildNotificationPlan(prefs, context));
+    if (isCurrent()) setState({ scheduleFailed: false });
+  } catch {
+    // Scheduling is best-effort by design: a failed sync never breaks the
+    // app, and the next foreground pass retries with fresh facts.
+    if (isCurrent()) setState({ scheduleFailed: true });
+  }
+}

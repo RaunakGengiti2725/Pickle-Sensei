@@ -116,7 +116,6 @@ describe('notification sync race (stale plan)', () => {
     await useNotificationStore.getState().requestPermissionAndEnable(fastDeps);
     expect(useNotificationStore.getState().prefs.enabled).toBe(true);
     expect(scheduler.live.length).toBeGreaterThan(0);
-    const planSize = scheduler.live.length;
 
     // A foreground sync starts and blocks while reading practice facts.
     const contextGate = gate();
@@ -151,7 +150,6 @@ describe('notification sync race (stale plan)', () => {
         .slice(disableIndex + 1)
         .filter(op => op.startsWith('applyPlan')),
     ).toEqual([]);
-    expect(planSize).toBeGreaterThan(0);
   });
 
   it('enabling reminders while a disabled sync is cancelling ends with the plan live', async () => {
