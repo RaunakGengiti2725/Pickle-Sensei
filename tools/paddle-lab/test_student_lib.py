@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -148,11 +147,22 @@ class FrameClockAgreement(unittest.TestCase):
                 res = run_ball_candidates("--start-ms", str(start_ms), "--end-ms", str(end_ms), video=AFN_CLIP, out=out)
                 self.assertEqual(res.returncode, 0, res.stderr)
                 payload = json.loads(out.read_text())
+                # Reference: the (index, tMs) grid detect_paddle.frame_iter emits for the same window.
                 first_index = detect_paddle.plan_window_seek(start_ms, self.fps, self.start_time_ms)[0]
+                reference = [
+                    (first_index + window_index, t_ms)
+                    for window_index, t_ms, _ in detect_paddle.frame_iter(
+                        str(AFN_CLIP), start_ms, end_ms, self.width, self.height, self.fps,
+                        decode_size=(64, 64), start_time_ms=self.start_time_ms, duration_ms=self.duration_ms,
+                    )
+                ]
+                self.assertGreaterEqual(len(reference), 11)
                 # candidate frame i is the middle of the (i-1, i, i+1) triple
-                self.assertEqual(len(payload["frames"]), 12 - 2)
-                for offset, frame in enumerate(payload["frames"], start=1):
-                    self.assertAlmostEqual(frame["tMs"], self.t_ms_of(first_index + offset), delta=TOLERANCE_MS)
+                self.assertEqual(len(payload["frames"]), len(reference) - 2)
+                for frame, (k, ref_t_ms) in zip(payload["frames"], reference[1:-1]):
+                    self.assertAlmostEqual(frame["tMs"], ref_t_ms, delta=TOLERANCE_MS)
+                    self.assertAlmostEqual(frame["tMs"], self.t_ms_of(k), delta=TOLERANCE_MS)
+                    self.assertEqual(detect_paddle.frame_index_for_t_ms(frame["tMs"], self.fps, self.start_time_ms), k)
 
     def test_miner_frame_pack_grabs_named_frame(self) -> None:
         candidates = [
