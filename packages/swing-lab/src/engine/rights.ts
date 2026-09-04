@@ -47,15 +47,25 @@ export function redistributionEligible(rights: RightsProfile): boolean {
   return AFFIRMATIVE.has(rights.redistributeDerivatives);
 }
 
+/**
+ * License identifiers must START the string (after optional whitespace) so a
+ * negated or descriptive phrase ("NOT public domain", "no CC BY grant") can
+ * never match by containing a known identifier as a substring.
+ */
+const PUBLIC_DOMAIN_LICENSE = /^\s*(?:public domain\b|pd(?:[ -]|$)|cc0\b)/;
+
+/**
+ * Creative Commons "BY" family: `CC BY` followed by any of the NC / ND / SA
+ * elements, then a version or end of identifier. The captured element list
+ * decides which modalities the license restricts.
+ */
+const CC_BY_LICENSE = /^\s*cc[ -]by((?:[ -](?:nc|nd|sa))*)(?:[ -]v?\d|\s|$)/;
+
 /** Known-license derivations. Anything not matched returns all-unclear. */
 export function rightsForLicense(license: string, reviewedBy: string): RightsProfile {
   const now = new Date().toISOString();
   const normalized = license.toLowerCase();
-  if (
-    normalized.includes("public domain") ||
-    normalized.includes("pd-usgov") ||
-    normalized.includes("cc0")
-  ) {
+  if (PUBLIC_DOMAIN_LICENSE.test(normalized)) {
     return {
       store: "yes",
       analyze: "yes",
@@ -68,20 +78,48 @@ export function rightsForLicense(license: string, reviewedBy: string): RightsPro
       reviewedAtIso: now,
     };
   }
-  if (/cc[ -]by[ -]sa/.test(normalized)) {
-    return {
-      store: "yes_with_attribution",
-      analyze: "yes_with_attribution",
-      annotate: "yes_with_attribution",
-      train: "yes_with_attribution",
-      redistributeDerivatives: "sharealike",
-      commercial: "yes_with_attribution",
-      basis: `${license} — CC BY-SA permits any use incl. commercial with attribution; redistributed derivatives must be ShareAlike-licensed.`,
-      reviewedBy,
-      reviewedAtIso: now,
-    };
-  }
-  if (/cc[ -]by/.test(normalized)) {
+  const ccBy = CC_BY_LICENSE.exec(normalized);
+  if (ccBy) {
+    const elements = new Set(ccBy[1]!.split(/[ -]/).filter((element) => element.length > 0));
+    const nonCommercial = elements.has("nc");
+    const noDerivatives = elements.has("nd");
+    const shareAlike = elements.has("sa");
+    if (nonCommercial || noDerivatives) {
+      const restrictions = [
+        nonCommercial
+          ? "NonCommercial forbids commercial use, and models shipped in a commercial product are commercial use"
+          : null,
+        noDerivatives
+          ? "NoDerivatives forbids sharing adapted material, and whether a trained model or derived dataset is an adaptation needs a human legal call"
+          : null,
+      ]
+        .filter((restriction): restriction is string => restriction !== null)
+        .join("; ");
+      return {
+        store: "yes_with_attribution",
+        analyze: "yes_with_attribution",
+        annotate: "yes_with_attribution",
+        train: "unclear",
+        redistributeDerivatives: noDerivatives ? "no" : shareAlike ? "sharealike" : "unclear",
+        commercial: nonCommercial ? "no" : "unclear",
+        basis: `${license} — CC BY with restrictive elements: ${restrictions}. Private copies, analysis and annotations are permitted with attribution; training and redistribution stay quarantined until a human review grants them.`,
+        reviewedBy,
+        reviewedAtIso: now,
+      };
+    }
+    if (shareAlike) {
+      return {
+        store: "yes_with_attribution",
+        analyze: "yes_with_attribution",
+        annotate: "yes_with_attribution",
+        train: "yes_with_attribution",
+        redistributeDerivatives: "sharealike",
+        commercial: "yes_with_attribution",
+        basis: `${license} — CC BY-SA permits any use incl. commercial with attribution; redistributed derivatives must be ShareAlike-licensed.`,
+        reviewedBy,
+        reviewedAtIso: now,
+      };
+    }
     return {
       store: "yes_with_attribution",
       analyze: "yes_with_attribution",
