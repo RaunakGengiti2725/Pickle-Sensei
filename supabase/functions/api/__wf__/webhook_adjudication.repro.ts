@@ -157,7 +157,7 @@ Deno.test(
         }),
       );
       const body = await res.json();
-      console.log(
+      console.error(
         `[ADJ-A1] first delivery → HTTP ${res.status} ${JSON.stringify(
           body,
         )}; audit rows=${s.events.size}; entitlement rows=${s.entitlements.size}; log=${JSON.stringify(
@@ -205,7 +205,7 @@ Deno.test(
         }),
       );
       const secondBody = await second.json();
-      console.log(
+      console.error(
         `[ADJ-A2] first → ${first.status} ${JSON.stringify(
           firstBody,
         )}; redelivery → ${second.status} ${JSON.stringify(
@@ -251,7 +251,7 @@ Deno.test(
         }),
       );
       const body = await res.json();
-      console.log(
+      console.error(
         `[ADJ-A3] TRANSFER → ${res.status} ${JSON.stringify(body)}; upserts=${JSON.stringify(
           s.entitlementUpserts.map((r) => [r.user_id, r.premium]),
         )}; persisted=${JSON.stringify([...s.entitlements.keys()])}; audit rows=${s.events.size}`,
@@ -297,7 +297,7 @@ for (const status of [401, 403, 429]) {
           }),
         );
         const body = await res.json();
-        console.log(
+        console.error(
           `[ADJ-E ${status}] → HTTP ${res.status} ${JSON.stringify(
             body,
           )}; console.error/warn lines=${JSON.stringify(log.lines)}`,
@@ -345,7 +345,7 @@ Deno.test(
         }),
       );
       const body = await res.json();
-      console.log(
+      console.error(
         `[ADJ-F] → ${res.status} ${JSON.stringify(body)}; RC url=${
           s.rcUrls[0]
         }; upsert user_id=${s.entitlementUpserts[0]?.user_id} premium=${
@@ -454,7 +454,7 @@ Deno.test(
         }),
       );
       const body = await res.json();
-      console.log(
+      console.error(
         `[ADJ-OBS-C] → ${res.status} ${JSON.stringify(
           body,
         )}; RC calls=${s.rcUrls.length}; upsert premium=${
@@ -498,7 +498,7 @@ Deno.test(
         }),
       );
       const replayBody = await replay.json();
-      console.log(
+      console.error(
         `[ADJ-OBS-D] first → ${res.status} ${JSON.stringify(
           body,
         )} audit rows=${s.events.size}; replay → ${replay.status} ${JSON.stringify(
@@ -565,7 +565,7 @@ Deno.test(
       const r1 = await p1;
       await r1.text();
       const final = s.entitlements.get(TEST_USER_ID);
-      console.log(
+      console.error(
         `[ADJ-OBS-G] after EXPIRATION persisted premium=${afterSecond}; after the older RENEWAL read landed premium=${final?.premium} verified_at=${final?.verified_at}; upserts=${JSON.stringify(
           s.entitlementUpserts.map((r) => [r.premium, r.verified_at]),
         )}`,
@@ -604,7 +604,7 @@ Deno.test(
         }),
       );
       const body = await res.json();
-      console.log(
+      console.error(
         `[ADJ-OBS-J] → ${res.status} ${JSON.stringify(
           body,
         )}; audit rows=${s.events.size}; premium persisted=${
@@ -636,7 +636,7 @@ Deno.test(
         });
       const results = await Promise.all([h.handler(mk()), h.handler(mk()), h.handler(mk())]);
       const bodies = await Promise.all(results.map((r) => r.json()));
-      console.log(
+      console.error(
         `[ADJ-NEG-3] statuses=${results.map((r) => r.status)} bodies=${JSON.stringify(
           bodies,
         )} RC calls=${s.rcUrls.length} upserts=${s.entitlementUpserts.length} audit rows=${s.events.size}`,
