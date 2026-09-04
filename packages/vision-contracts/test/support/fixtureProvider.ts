@@ -25,7 +25,8 @@ import type {
  * Emits deterministic synthetic data solely for automated pipeline tests.
  * This module lives under test/support and is not exported by the production
  * package entry point. Guarantees:
- *   1. Construction throws in production builds (PICKLE_ENV === "production").
+ *   1. Construction throws in production builds: PICKLE_ENV === "production",
+ *      falling back to NODE_ENV when PICKLE_ENV is unset or blank.
  *   2. Every artifact is tagged source:"fixture"; the tag persists end-to-end
  *      so no screen can present fixture output as real analysis.
  *   3. Output is deterministic per (clip uri, shot type) — no randomness.
@@ -33,9 +34,15 @@ import type {
 
 const FIXTURE_VERSION = "fixture-1";
 
-function assertNotProduction(): void {
+/** An exported-but-blank variable (e.g. `PICKLE_ENV=` in an .env file) is unset. */
+function readEnv(name: string): string | undefined {
   const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-  const env = proc?.env?.["PICKLE_ENV"] ?? proc?.env?.["NODE_ENV"];
+  const value = proc?.env?.[name];
+  return value === undefined || value.trim() === "" ? undefined : value;
+}
+
+function assertNotProduction(): void {
+  const env = readEnv("PICKLE_ENV") ?? readEnv("NODE_ENV");
   if (env === "production") {
     throw new Error(
       "FixtureVisionProvider must never be constructed in a production build (directive §5).",
