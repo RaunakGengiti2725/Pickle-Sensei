@@ -15,15 +15,15 @@ scenarios never share state. Output: `artifacts/attack-db-schema-migrations-3/la
 (`<scenario>.log`, per-session `.out` files for the concurrency tests, `results.json`).
 Exit code 0 ⇔ every scenario printed `SCENARIO HELD`.
 
-| script | scenario | verdict @4d812e1a |
-| --- | --- | --- |
-| `s1_migration_rerun.sh` | re-run `20260902150000_free_rating_identity_ledger.sql` on a populated DB | HELD (S1b: re-run re-credits a service-role-reassigned shot — informational) |
-| `s2_permit_boundary.sh` | permit at `now()-24h+1s` crossing `access_state()`→`apply_synced_shot` | HELD |
-| `s3_concurrent_apply.sh` | two `apply_synced_shot` sessions on the advisory lock at lifetime=1 (+ 8-way stampede) | HELD |
-| `s4_identity_reappears.sh` | same Google subject under a new `auth.identities.id` | HELD |
-| `s5_service_role_result_flip.sh` | service-role `low_confidence`→`scored`; repeat is a no-op | HELD (S5b: flip-flop double-credits — informational) |
-| `s6_service_role_user_move.sh` | service-role `shots.user_id`→bob; ranks both, ledger not credited | HELD |
-| `s7_premium_flip_under_lock.sh` | `premium=false` flipped while a reserve waits on the lock | HELD |
-| `x1_detail_rows_owner_drift.sh` | own: detail rows keep the OLD `user_id` after a shot move | BROKEN |
-| `x2_premium_expiry_frozen_now.sh` | own: `expires_at` lapsing during a lock wait is not seen (`now()` is tx-frozen) | BROKEN (P3) |
-| `x3_direct_insert_bypass.sh` | own: `authenticated` direct `INSERT` into `public.shots` skips permit + paywall | BROKEN |
+| script                            | scenario                                                                               | verdict @4d812e1a                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `s1_migration_rerun.sh`           | re-run `20260902150000_free_rating_identity_ledger.sql` on a populated DB              | HELD (S1b: re-run re-credits a service-role-reassigned shot — informational) |
+| `s2_permit_boundary.sh`           | permit at `now()-24h+1s` crossing `access_state()`→`apply_synced_shot`                 | HELD                                                                         |
+| `s3_concurrent_apply.sh`          | two `apply_synced_shot` sessions on the advisory lock at lifetime=1 (+ 8-way stampede) | HELD                                                                         |
+| `s4_identity_reappears.sh`        | same Google subject under a new `auth.identities.id`                                   | HELD                                                                         |
+| `s5_service_role_result_flip.sh`  | service-role `low_confidence`→`scored`; repeat is a no-op                              | HELD (S5b: flip-flop double-credits — informational)                         |
+| `s6_service_role_user_move.sh`    | service-role `shots.user_id`→bob; ranks both, ledger not credited                      | HELD                                                                         |
+| `s7_premium_flip_under_lock.sh`   | `premium=false` flipped while a reserve waits on the lock                              | HELD                                                                         |
+| `x1_detail_rows_owner_drift.sh`   | own: detail rows keep the OLD `user_id` after a shot move                              | BROKEN                                                                       |
+| `x2_premium_expiry_frozen_now.sh` | own: `expires_at` lapsing during a lock wait is not seen (`now()` is tx-frozen)        | BROKEN (P3)                                                                  |
+| `x3_direct_insert_bypass.sh`      | own: `authenticated` direct `INSERT` into `public.shots` skips permit + paywall        | BROKEN                                                                       |
