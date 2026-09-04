@@ -2,13 +2,16 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
+import { deltaDirection } from './techniqueDashboard';
 
 /**
  * WHOOP-style key-statistic row (MOBBIN: WHOOP "Key statistics" / "Sleep
  * statistics"): icon chip, uppercase label, big right-aligned value with the
  * prior-window value beneath it and a delta triangle beside it. The triangle
  * and prior value render only when a real prior window exists — a first
- * measured window shows the value alone, never a fabricated comparison.
+ * measured window shows the value alone, never a fabricated comparison. The
+ * triangle reads the delta at display precision: a change that rounds away,
+ * or two identical rendered values, is flat — never a trend claim.
  */
 export function StatDeltaRow(props: {
   icon: IconName;
@@ -16,16 +19,18 @@ export function StatDeltaRow(props: {
   value: string;
   /** Formatted prior-window value; null hides the comparison entirely. */
   previous: string | null;
-  /** Sign picks the triangle direction; null or 0 renders no triangle. */
+  /** Sign picks the triangle direction; null, 0, or a delta that rounds to
+   * zero at `deltaDecimals` renders no triangle. */
   delta: number | null;
+  /** Decimals the value renders at; omit for exact (integer) deltas. */
+  deltaDecimals?: number;
   testID?: string;
 }) {
-  const direction =
-    props.delta === null || props.delta === 0
-      ? null
-      : props.delta > 0
-        ? ('up' as const)
-        : ('down' as const);
+  const readDirection =
+    props.delta === null || props.value === props.previous
+      ? 'flat'
+      : deltaDirection(props.delta, props.deltaDecimals ?? null);
+  const direction = readDirection === 'flat' ? null : readDirection;
   const comparison =
     props.previous === null
       ? ''

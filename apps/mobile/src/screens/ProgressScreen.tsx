@@ -53,6 +53,8 @@ import { ScoreTrendChart } from '../progress/ScoreTrendChart';
 import { StatDeltaRow } from '../progress/StatDeltaRow';
 import {
   buildTechniqueDashboard,
+  comparableScoredFacts,
+  deltaDirection,
   formatSignedDelta,
   vsPriorLabel,
 } from '../progress/techniqueDashboard';
@@ -90,10 +92,6 @@ function spread(values: number[]) {
   const variance =
     values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   return Math.sqrt(variance);
-}
-
-function signed(value: number) {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 }
 
 function deviceTimeZone() {
@@ -245,20 +243,24 @@ export function ProgressScreen() {
         try {
           const db = getDb();
           const apiSession = getApiSession();
-          const [localFacts, localCaptures, accountProgress] =
-            await Promise.all([
-              listRealAnalysisFacts(db, null),
-              listCaptureHistory(db, null),
-              apiSession
-                ? fetchCanonicalProgress(apiSession).catch(() => null)
-                : Promise.resolve(null),
-            ]);
+          // The account series is optional context: it starts alongside the
+          // local reads but never gates them. Whatever it resolves to is
+          // applied only while this focus is still the current one.
+          const accountProgress = apiSession
+            ? fetchCanonicalProgress(apiSession).catch(() => null)
+            : Promise.resolve(null);
+          const [localFacts, localCaptures] = await Promise.all([
+            listRealAnalysisFacts(db, null),
+            listCaptureHistory(db, null),
+          ]);
           if (!active) return;
           setFacts(localFacts);
           setCaptures(localCaptures);
-          setCanonical(accountProgress);
           setAsOfIso(new Date().toISOString());
           setLoadError(null);
+          void accountProgress.then(progress => {
+            if (active) setCanonical(progress);
+          });
         } catch {
           if (!active) return;
           setLoadError(
@@ -314,6 +316,12 @@ export function ProgressScreen() {
       ),
     [canonical, selectedEndDay, selectedStartDay],
   );
+  // The same comparability anchor KEY STATISTICS applies (each stroke's
+  // newest SCORED read), so BY STROKE can never hide history the row counts.
+  const comparableFactIds = useMemo(
+    () => new Set(comparableScoredFacts(facts, asOfIso).map(fact => fact.id)),
+    [asOfIso, facts],
+  );
   const latestLocal = useMemo(
     () =>
       facts.find(
@@ -360,16 +368,9 @@ export function ProgressScreen() {
       const allForShot = selectedFacts.filter(
         fact => fact.shotType === shotType,
       );
-      const newest = allForShot[0];
-      if (!newest) return null;
+      if (!allForShot.length) return null;
       const comparable = allForShot
-        .filter(
-          fact =>
-            fact.resultKind === 'scored' &&
-            fact.overallScore !== null &&
-            fact.scoringModelVersion === newest.scoringModelVersion &&
-            fact.shotConfigVersion === newest.shotConfigVersion,
-        )
+        .filter(fact => comparableFactIds.has(fact.id))
         .reverse();
       const points = comparable.map(fact => fact.overallScore as number);
       return {
@@ -381,7 +382,7 @@ export function ProgressScreen() {
         basis: 'scored reads' as const,
       };
     }).filter((item): item is NonNullable<typeof item> => Boolean(item));
-  }, [selectedFacts, selectedSeries]);
+  }, [comparableFactIds, selectedFacts, selectedSeries]);
 
   // The SAME rule the aggregation applies, so the list and the count can
   // never disagree about what is verified practice.
@@ -864,6 +865,7 @@ export function ProgressScreen() {
                     : avgScore.previous.toFixed(1)
                 }
                 delta={avgDelta}
+                deltaDecimals={1}
                 testID="technique-stat-avg"
               />
               <StatDeltaRow
@@ -880,6 +882,7 @@ export function ProgressScreen() {
                     : bestScore.previous.toFixed(1)
                 }
                 delta={bestDelta}
+                deltaDecimals={1}
                 testID="technique-stat-best"
               />
               <StatDeltaRow
@@ -995,11 +998,13 @@ export function ProgressScreen() {
                               type.micro,
                               {
                                 color:
-                                  item.movement >= 0 ? color.mint : color.flame,
+                                  deltaDirection(item.movement) === 'down'
+                                    ? color.flame
+                                    : color.mint,
                               },
                             ]}
                           >
-                            {signed(item.movement)} SERIES
+                            {formatSignedDelta(item.movement)} SERIES
                           </Text>
                         ) : null}
                       </View>

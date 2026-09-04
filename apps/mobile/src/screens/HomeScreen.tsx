@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -106,8 +112,23 @@ export function HomeScreen() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const timeZone = useMemo(deviceTimeZone, []);
+  // Focus loads and pull-to-refresh overlap; only the newest load may write,
+  // and nothing writes after unmount — an older read that settles last never
+  // rolls the screen back.
+  const loadSequence = useRef(0);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
+    loadSequence.current += 1;
+    const sequence = loadSequence.current;
+    const isCurrent = () =>
+      mounted.current && loadSequence.current === sequence;
     try {
       const db = getDb();
       // The week card reads the SAME real analyses the Progress dashboard
@@ -119,6 +140,7 @@ export function HomeScreen() {
         listRealAnalysisFacts(db),
         getKv(db, WEEK_CHART_KV_KEY).catch(() => null),
       ]);
+      if (!isCurrent()) return;
       setRecent(shots.slice(0, 5));
       setAllShots(shots);
       setLatestScored(
@@ -129,24 +151,30 @@ export function HomeScreen() {
       setFacts(analysisFacts);
       setAsOfIso(new Date().toISOString());
       setWeekChart(parseWeekChart(storedChart));
+      setLoadError(null);
+      // The account series is optional context: it hydrates the synced
+      // numbers when it arrives and is silently absent on failure. It never
+      // gates the local paint.
       const apiSession = getApiSession();
       if (apiSession) {
-        try {
-          const progress = await fetchCanonicalProgress(apiSession);
-          setCanonicalProgress(progress);
-        } catch {
-          setCanonicalProgress(null);
-        }
+        void fetchCanonicalProgress(apiSession).then(
+          progress => {
+            if (isCurrent()) setCanonicalProgress(progress);
+          },
+          () => {
+            if (isCurrent()) setCanonicalProgress(null);
+          },
+        );
       } else {
         setCanonicalProgress(null);
       }
-      setLoadError(null);
     } catch {
+      if (!isCurrent()) return;
       setLoadError(
         'Your saved reads could not be opened. Try again to load your real court history.',
       );
     } finally {
-      setLoaded(true);
+      if (isCurrent()) setLoaded(true);
     }
   }, []);
 

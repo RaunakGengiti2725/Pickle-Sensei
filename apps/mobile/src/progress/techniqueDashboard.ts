@@ -111,6 +111,75 @@ export function formatSignedDelta(value: number, decimals = 1): string {
   return value < 0 && Number(fixed) !== 0 ? `-${fixed}` : `+${fixed}`;
 }
 
+export type DeltaDirection = 'up' | 'down' | 'flat';
+
+/**
+ * The direction a delta reads at display precision — the sign of
+ * `formatSignedDelta(value, decimals)`. A change that rounds to zero is flat,
+ * so a triangle or colour can never contradict the "+0.0" beside it. Pass
+ * `null` decimals to read the exact value (integer counts, durations).
+ */
+export function deltaDirection(
+  value: number,
+  decimals: number | null = 1,
+): DeltaDirection {
+  const magnitude =
+    decimals === null
+      ? Math.abs(value)
+      : Number(Math.abs(value).toFixed(decimals));
+  if (!(magnitude > 0)) return 'flat';
+  return value < 0 ? 'down' : 'up';
+}
+
+interface TimedFact {
+  fact: RealAnalysisFact;
+  capturedAtMs: number;
+}
+
+/**
+ * The stroke-scoped comparability rule as a public filter: the scored reads
+ * (captured at or before asOf, with a parseable timestamp) that match their
+ * stroke's newest SCORED read on both version axes, in input order. A newer
+ * abstention or unparseable row anchors nothing and hides nothing.
+ */
+export function comparableScoredFacts(
+  facts: readonly RealAnalysisFact[],
+  asOfIso: string,
+): RealAnalysisFact[] {
+  const asOfMs = Date.parse(asOfIso);
+  if (!Number.isFinite(asOfMs)) {
+    throw new Error('asOfIso must be a parseable ISO timestamp.');
+  }
+  return comparableTimedFacts(facts, asOfMs).map(timed => timed.fact);
+}
+
+function comparableTimedFacts(
+  facts: readonly RealAnalysisFact[],
+  asOfMs: number,
+): TimedFact[] {
+  const scored: TimedFact[] = [];
+  for (const fact of facts) {
+    if (fact.resultKind !== 'scored' || fact.overallScore === null) continue;
+    const capturedAtMs = Date.parse(fact.capturedAt);
+    if (!Number.isFinite(capturedAtMs) || capturedAtMs > asOfMs) continue;
+    scored.push({ fact, capturedAtMs });
+  }
+  const newestByShot = new Map<string, TimedFact>();
+  for (const timed of scored) {
+    const newest = newestByShot.get(timed.fact.shotType);
+    if (!newest || timed.capturedAtMs > newest.capturedAtMs) {
+      newestByShot.set(timed.fact.shotType, timed);
+    }
+  }
+  return scored.filter(({ fact }) => {
+    const newest = newestByShot.get(fact.shotType)!.fact;
+    return (
+      fact.scoringModelVersion === newest.scoringModelVersion &&
+      fact.shotConfigVersion === newest.shotConfigVersion
+    );
+  });
+}
+
 interface ComparableRead {
   id: string;
   shotType: string;
@@ -189,37 +258,13 @@ function comparableReads(
   asOfMs: number,
   dayFormatter: Intl.DateTimeFormat,
 ): ComparableRead[] {
-  const scored: Array<RealAnalysisFact & { capturedAtMs: number }> = [];
-  for (const fact of facts) {
-    if (fact.resultKind !== 'scored' || fact.overallScore === null) continue;
-    const capturedAtMs = Date.parse(fact.capturedAt);
-    if (!Number.isFinite(capturedAtMs) || capturedAtMs > asOfMs) continue;
-    scored.push({ ...fact, capturedAtMs });
-  }
-  const newestByShot = new Map<
-    string,
-    RealAnalysisFact & { capturedAtMs: number }
-  >();
-  for (const fact of scored) {
-    const newest = newestByShot.get(fact.shotType);
-    if (!newest || fact.capturedAtMs > newest.capturedAtMs) {
-      newestByShot.set(fact.shotType, fact);
-    }
-  }
   const reads: ComparableRead[] = [];
-  for (const fact of scored) {
-    const newest = newestByShot.get(fact.shotType)!;
-    if (
-      fact.scoringModelVersion !== newest.scoringModelVersion ||
-      fact.shotConfigVersion !== newest.shotConfigVersion
-    ) {
-      continue;
-    }
-    const day = dayForInstant(fact.capturedAtMs, dayFormatter);
+  for (const { fact, capturedAtMs } of comparableTimedFacts(facts, asOfMs)) {
+    const day = dayForInstant(capturedAtMs, dayFormatter);
     reads.push({
       id: fact.id,
       shotType: fact.shotType,
-      capturedAtMs: fact.capturedAtMs,
+      capturedAtMs,
       day,
       ordinal: dayOrdinal(day),
       score: fact.overallScore as number,
