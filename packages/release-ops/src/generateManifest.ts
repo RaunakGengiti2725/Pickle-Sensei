@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CAPTURE_ENVELOPE_THRESHOLDS_VERSION } from "@pickle/capture-envelope";
@@ -20,7 +21,17 @@ import {
  * hand-maintained, so the manifest cannot drift from the code it describes.
  *
  * Gates start honest: nothing evaluated, external gates BLOCKED_EXTERNAL.
+ *
+ * The backend that ships is the Supabase Edge Function in
+ * supabase/functions/api with the schema in supabase/migrations (AGENTS.md).
+ * services/api and packages/database are the legacy local stack the mobile
+ * app does not call, so the record never describes them.
  */
+
+/** Repo path of the shipping backend; doubles as its serviceName. */
+export const SHIPPING_BACKEND_PATH = "supabase/functions/api";
+/** Repo path of the schema the shipping backend runs against. */
+export const SHIPPING_MIGRATIONS_PATH = "supabase/migrations";
 
 export function findRepoRoot(startDir: string): string {
   let dir = startDir;
@@ -41,15 +52,44 @@ function readPackageVersion(repoRoot: string, relPath: string): { name: string; 
   return { name: parsed.name, version: parsed.version };
 }
 
+/**
+ * The edge function has no package.json; its version is a fingerprint of the
+ * deployable source (the top-level .ts modules `supabase functions deploy`
+ * bundles — tests under __wf__ are not part of the deploy).
+ */
+export function readBackendRelease(repoRoot: string): { serviceName: string; version: string } {
+  const dir = join(repoRoot, SHIPPING_BACKEND_PATH);
+  if (!existsSync(join(dir, "index.ts"))) {
+    throw new Error(`${SHIPPING_BACKEND_PATH}/index.ts not found`);
+  }
+  const sources = readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) => entry.name)
+    .sort();
+  const hash = createHash("sha256");
+  for (const name of sources) {
+    hash.update(name);
+    hash.update("\0");
+    hash.update(readFileSync(join(dir, name)));
+    hash.update("\0");
+  }
+  return {
+    serviceName: SHIPPING_BACKEND_PATH,
+    version: `sha256-${hash.digest("hex").slice(0, 16)}`,
+  };
+}
+
 export function readDatabaseSchemaVersion(repoRoot: string): {
   latestMigration: string;
   migrationCount: number;
 } {
-  const migrations = readdirSync(join(repoRoot, "packages/database/migrations"))
+  const migrations = readdirSync(join(repoRoot, SHIPPING_MIGRATIONS_PATH))
     .filter((file) => file.endsWith(".sql"))
     .sort();
   const latestMigration = migrations[migrations.length - 1];
-  if (latestMigration === undefined) throw new Error("no database migrations found");
+  if (latestMigration === undefined) {
+    throw new Error(`no migrations found in ${SHIPPING_MIGRATIONS_PATH}`);
+  }
   return { latestMigration, migrationCount: migrations.length };
 }
 
@@ -67,7 +107,6 @@ export interface GenerateManifestOptions {
 export function generateReleaseRecord(options: GenerateManifestOptions): ReleaseRecord {
   const { repoRoot } = options;
   const mobile = readPackageVersion(repoRoot, "apps/mobile");
-  const api = readPackageVersion(repoRoot, "services/api");
 
   const techniqueAnalysisProfileVersions: Record<string, string> = {};
   for (const [canonical, profile] of Object.entries(TECHNIQUE_ANALYSIS_PROFILES_V1)) {
@@ -85,7 +124,7 @@ export function generateReleaseRecord(options: GenerateManifestOptions): Release
     generatedAtIso: options.generatedAtIso ?? new Date().toISOString(),
     commitSha: options.commitSha ?? readCommitSha(repoRoot),
     mobileBuild: { appVersion: mobile.version, buildNumber: null },
-    backendRelease: { serviceName: api.name, version: api.version },
+    backendRelease: readBackendRelease(repoRoot),
     databaseSchema: readDatabaseSchemaVersion(repoRoot),
     modelVersions: DEFAULT_MODEL_MANIFEST.entries.map((entry) => ({
       id: entry.id,

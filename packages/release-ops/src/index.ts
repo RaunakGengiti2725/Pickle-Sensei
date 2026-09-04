@@ -20,7 +20,10 @@ export {
 export {
   findRepoRoot,
   generateReleaseRecord,
+  readBackendRelease,
   readCommitSha,
   readDatabaseSchemaVersion,
+  SHIPPING_BACKEND_PATH,
+  SHIPPING_MIGRATIONS_PATH,
   type GenerateManifestOptions,
 } from "./generateManifest.js";

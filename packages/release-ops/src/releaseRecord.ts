@@ -56,11 +56,17 @@ export const EXTERNALLY_BLOCKED_STAGES: readonly ReleaseStage[] = ["physical-dev
 export interface StageGate {
   stage: ReleaseStage;
   state: GateState;
-  /** Pointer to the evidence backing the state (report path, CI run, doc). */
+  /**
+   * Pointer to the evidence backing the state (report path, CI run, doc).
+   * Never blank: a PASSED gate must carry one.
+   */
   evidence: string | null;
-  /** ISO timestamp of the evaluation; null when never evaluated. */
+  /**
+   * ISO timestamp of the evaluation; null when never evaluated. A PASSED
+   * gate must carry a parseable one.
+   */
   evaluatedAt: string | null;
-  /** Required when state is BLOCKED_EXTERNAL or NOT_EVALUABLE. */
+  /** Required (non-blank) when state is BLOCKED_EXTERNAL or NOT_EVALUABLE. */
   blockedReason: string | null;
 }
 
@@ -83,12 +89,17 @@ export interface MobileBuildRef {
 }
 
 export interface BackendReleaseRef {
+  /** Repo path of the shipping backend, i.e. "supabase/functions/api". */
   serviceName: string;
+  /** Content fingerprint of the deployable function source. */
   version: string;
 }
 
 export interface DatabaseSchemaRef {
-  /** Filename of the latest migration, e.g. "0018_evaluation_telemetry.sql". */
+  /**
+   * Filename of the newest supabase/migrations file, e.g.
+   * "20260902150000_free_rating_identity_ledger.sql".
+   */
   latestMigration: string;
   migrationCount: number;
 }
@@ -153,7 +164,8 @@ export interface ReleaseRecordValidation {
 }
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
-const MIGRATION_PATTERN = /^\d{4}_[a-z0-9_]+\.sql$/;
+/** Supabase CLI naming: YYYYMMDDHHMMSS_description.sql (AGENTS.md → Deploy). */
+const MIGRATION_PATTERN = /^\d{14}_[a-z0-9_]+\.sql$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -163,8 +175,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function isStringOrNull(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isNonBlankStringOrNull(value: unknown): value is string | null {
+  return value === null || isNonBlankString(value);
+}
+
+function isParseableTimestamp(value: unknown): value is string {
+  return isNonBlankString(value) && !Number.isNaN(Date.parse(value));
+}
+
+function isParseableTimestampOrNull(value: unknown): value is string | null {
+  return value === null || isParseableTimestamp(value);
 }
 
 function isGateState(value: unknown): value is GateState {
@@ -183,23 +207,39 @@ function validateGateShape(
   if (!isGateState(gate["state"])) {
     problems.push(`${label} state must be one of ${GATE_STATES.join(", ")}`);
   }
-  if (!isStringOrNull(gate["evidence"])) problems.push(`${label} evidence must be string or null`);
-  if (!isStringOrNull(gate["evaluatedAt"])) {
-    problems.push(`${label} evaluatedAt must be string or null`);
+  const evidence = gate["evidence"];
+  const evaluatedAt = gate["evaluatedAt"];
+  const blockedReason = gate["blockedReason"];
+  if (!isNonBlankStringOrNull(evidence)) {
+    problems.push(`${label} evidence must be a non-blank string or null`);
   }
-  if (!isStringOrNull(gate["blockedReason"])) {
-    problems.push(`${label} blockedReason must be string or null`);
+  if (!isParseableTimestampOrNull(evaluatedAt)) {
+    problems.push(`${label} evaluatedAt must be a parseable ISO timestamp or null`);
   }
-  if (gate["state"] === "PASSED" && gate["evidence"] === null) {
-    problems.push(`${label} cannot be PASSED without evidence`);
+  if (!isNonBlankStringOrNull(blockedReason)) {
+    problems.push(`${label} blockedReason must be a non-blank string or null`);
+  }
+  if (gate["state"] === "PASSED") {
+    if (!isNonBlankString(evidence)) {
+      problems.push(`${label} cannot be PASSED without evidence`);
+    }
+    if (!isParseableTimestamp(evaluatedAt)) {
+      problems.push(`${label} cannot be PASSED without an evaluatedAt timestamp`);
+    }
   }
   if (
     (gate["state"] === "BLOCKED_EXTERNAL" || gate["state"] === "NOT_EVALUABLE") &&
-    gate["blockedReason"] === null
+    !isNonBlankString(blockedReason)
   ) {
     problems.push(`${label} in state ${String(gate["state"])} requires a blockedReason`);
   }
   return true;
+}
+
+function stageGateLabel(gate: unknown, index: number): string {
+  const base = `stageGates[${index}]`;
+  if (!isRecord(gate) || typeof gate["stage"] !== "string") return base;
+  return `${base} (stage "${gate["stage"]}")`;
 }
 
 /**
@@ -215,8 +255,8 @@ export function validateReleaseRecord(record: unknown): ReleaseRecordValidation 
   if (record["schemaVersion"] !== RELEASE_RECORD_SCHEMA_VERSION) {
     problems.push(`schemaVersion must be ${RELEASE_RECORD_SCHEMA_VERSION}`);
   }
-  if (!isNonEmptyString(record["generatedAtIso"])) {
-    problems.push("generatedAtIso must be a non-empty string");
+  if (!isParseableTimestamp(record["generatedAtIso"])) {
+    problems.push("generatedAtIso must be a parseable ISO timestamp");
   }
   if (typeof record["commitSha"] !== "string" || !COMMIT_SHA_PATTERN.test(record["commitSha"])) {
     problems.push("commitSha must be a full 40-hex commit SHA");
@@ -229,8 +269,8 @@ export function validateReleaseRecord(record: unknown): ReleaseRecordValidation 
     if (!isNonEmptyString(mobileBuild["appVersion"])) {
       problems.push("mobileBuild.appVersion must be a non-empty string");
     }
-    if (!isStringOrNull(mobileBuild["buildNumber"])) {
-      problems.push("mobileBuild.buildNumber must be string or null");
+    if (!isNonBlankStringOrNull(mobileBuild["buildNumber"])) {
+      problems.push("mobileBuild.buildNumber must be a non-blank string or null");
     }
   }
 
@@ -252,7 +292,9 @@ export function validateReleaseRecord(record: unknown): ReleaseRecordValidation 
   } else {
     const latest = databaseSchema["latestMigration"];
     if (typeof latest !== "string" || !MIGRATION_PATTERN.test(latest)) {
-      problems.push("databaseSchema.latestMigration must look like NNNN_name.sql");
+      problems.push(
+        "databaseSchema.latestMigration must be a supabase/migrations file named YYYYMMDDHHMMSS_name.sql",
+      );
     }
     const count = databaseSchema["migrationCount"];
     if (typeof count !== "number" || !Number.isInteger(count) || count < 1) {
@@ -336,7 +378,7 @@ export function validateReleaseRecord(record: unknown): ReleaseRecordValidation 
       }
     }
     for (const [index, gate] of stageGates.entries()) {
-      validateGateShape(gate, `stageGates[${index}]`, problems);
+      validateGateShape(gate, stageGateLabel(gate, index), problems);
     }
     let earlierUnresolved = false;
     for (const gate of stageGates) {

@@ -8,7 +8,8 @@
       "marketingVersion": "MAJOR.MINOR.PATCH; MUST equal iOS MARKETING_VERSION, Android versionName, and APP_VERSION in apps/mobile/src/config/runtimeConfig.ts",
       "buildNumber": "monotonically increasing integer across all releases; MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode; never reused or reset",
       "gitTag": "store-submitted and TestFlight-external builds are built only from tag v<version>-build.<build> on the audited RC SHA",
-      "backendImages": "services/api and services/media-worker images tagged with the git SHA of the release"
+      "backendRelease": "the shipping backend is the Supabase Edge Function supabase/functions/api (`supabase functions deploy api`, deployed from the release SHA BEFORE the app build ships) with schema supabase/migrations (YYYYMMDDHHMMSS_name.sql, forward-fix only); @pickle/release-ops pins both in the release record. services/api is the legacy local stack the mobile app does not call and is never a release artifact",
+      "backendImages": "services/media-worker images tagged with the git SHA of the release"
     }
   },
   "environments": {

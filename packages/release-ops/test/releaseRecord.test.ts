@@ -182,8 +182,9 @@ describe("generateReleaseRecord", () => {
     const record = completeRecord();
     expect(record.commitSha).toBe("a".repeat(40));
     expect(record.mobileBuild.appVersion.length).toBeGreaterThan(0);
-    expect(record.backendRelease.serviceName).toBe("@pickle/api");
-    expect(record.databaseSchema.latestMigration).toMatch(/^\d{4}_[a-z0-9_]+\.sql$/);
+    expect(record.backendRelease.serviceName).toBe("supabase/functions/api");
+    expect(record.backendRelease.version).toMatch(/^sha256-[0-9a-f]{16}$/);
+    expect(record.databaseSchema.latestMigration).toMatch(/^\d{14}_[a-z0-9_]+\.sql$/);
     expect(record.databaseSchema.migrationCount).toBeGreaterThan(0);
     expect(record.modelVersions.length).toBeGreaterThan(0);
     expect(Object.keys(record.techniqueAnalysisProfileVersions).length).toBeGreaterThan(0);
