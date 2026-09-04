@@ -139,26 +139,57 @@ export function numericBinLabel(metric: NumericDriftMetric, value: number): stri
 }
 
 /**
+ * Own-property bin counts as a Map. Bin labels are data (device models, OS
+ * versions, stroke names): a label such as "constructor" or "__proto__" is
+ * just another bin, never a lookup against Object.prototype. Counts must be
+ * finite and non-negative, otherwise the statistic would be NaN — which
+ * compares below every threshold and would read as "stable".
+ */
+function binCounts(
+  counts: Record<string, number>,
+  side: "reference" | "current",
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [bin, count] of Object.entries(counts)) {
+    if (typeof count !== "number" || !Number.isFinite(count) || count < 0) {
+      throw new RangeError(
+        `computePsi: ${side} bin ${JSON.stringify(bin)} has an invalid count ${String(count)}`,
+      );
+    }
+    out.set(bin, count);
+  }
+  return out;
+}
+
+/**
  * Population Stability Index between two count distributions over the union
  * of their bins. Smoothing keeps the statistic finite when a bin is empty
- * on one side.
+ * on one side. Throws RangeError if any count is not a finite non-negative
+ * number — the statistic is never allowed to come back NaN.
  */
 export function computePsi(
   reference: Record<string, number>,
   current: Record<string, number>,
   smoothing: number = DRIFT_THRESHOLDS.smoothing,
 ): number {
-  const bins = new Set([...Object.keys(reference), ...Object.keys(current)]);
-  const refTotal = Object.values(reference).reduce((a, b) => a + b, 0);
-  const curTotal = Object.values(current).reduce((a, b) => a + b, 0);
+  const ref = binCounts(reference, "reference");
+  const cur = binCounts(current, "current");
+  const bins = new Set([...ref.keys(), ...cur.keys()]);
+  let refTotal = 0;
+  for (const count of ref.values()) refTotal += count;
+  let curTotal = 0;
+  for (const count of cur.values()) curTotal += count;
   if (refTotal === 0 || curTotal === 0 || bins.size === 0) return 0;
   const smoothedRefTotal = refTotal + smoothing * bins.size;
   const smoothedCurTotal = curTotal + smoothing * bins.size;
   let psi = 0;
   for (const bin of bins) {
-    const p = ((reference[bin] ?? 0) + smoothing) / smoothedRefTotal;
-    const q = ((current[bin] ?? 0) + smoothing) / smoothedCurTotal;
+    const p = ((ref.get(bin) ?? 0) + smoothing) / smoothedRefTotal;
+    const q = ((cur.get(bin) ?? 0) + smoothing) / smoothedCurTotal;
     psi += (q - p) * Math.log(q / p);
+  }
+  if (!Number.isFinite(psi)) {
+    throw new RangeError(`computePsi: statistic is not finite (${String(psi)})`);
   }
   return psi;
 }

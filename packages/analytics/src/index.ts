@@ -300,19 +300,34 @@ export interface IAnalyticsSink {
   flush(): Promise<void>;
 }
 
+/** A buffered event tagged with its track order so re-buffered batches merge chronologically. */
+interface SequencedEvent {
+  seq: number;
+  event: AnalyticsEvent;
+}
+
 /**
  * Buffers events; a transport drains it. Used by mobile + services.
  * Every event passes the redaction guard before buffering: a violating event
  * is NEVER sent — it is counted and reported through `onViolation` so the
  * drop is visible, not silent.
+ *
+ * Delivery failures re-buffer the batch, bounded to its newest `maxBuffer`
+ * events; anything the bound evicts is counted in `droppedTransportCount()`
+ * and reported through `onTransportDrop`. Re-buffered events keep their
+ * track order relative to everything else in the buffer, so a recovered
+ * transport receives events in the order they were tracked.
  */
 export class BufferedAnalytics implements IAnalyticsSink {
-  private buffer: AnalyticsEvent[] = [];
+  private buffer: SequencedEvent[] = [];
+  private nextSeq = 0;
   private violationCount = 0;
+  private transportDropCount = 0;
   constructor(
     private transport: (batch: AnalyticsEvent[]) => Promise<void>,
     private maxBuffer = 50,
     private onViolation?: (eventName: AnalyticsEventName, violations: PrivacyViolation[]) => void,
+    private onTransportDrop?: (droppedCount: number, error: unknown) => void,
   ) {}
 
   track(event: AnalyticsEvent): void {
@@ -322,7 +337,7 @@ export class BufferedAnalytics implements IAnalyticsSink {
       this.onViolation?.(event.name, violations);
       return;
     }
-    this.buffer.push(event);
+    this.buffer.push({ seq: this.nextSeq++, event });
     if (this.buffer.length >= this.maxBuffer) void this.flush();
   }
 
@@ -331,20 +346,59 @@ export class BufferedAnalytics implements IAnalyticsSink {
     return this.violationCount;
   }
 
+  /** Events evicted by the re-buffer bound after a failed delivery since construction. */
+  droppedTransportCount(): number {
+    return this.transportDropCount;
+  }
+
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
     const batch = this.buffer;
     this.buffer = [];
     try {
-      await this.transport(batch);
-    } catch {
+      await this.transport(batch.map((entry) => entry.event));
+    } catch (error) {
       // Failed delivery re-buffers (bounded) — analytics must never crash the app,
-      // but failures are not silently dropped either.
-      this.buffer = [...batch.slice(-this.maxBuffer), ...this.buffer];
+      // and every event the bound evicts is counted rather than silently lost.
+      const kept = batch.slice(-this.maxBuffer);
+      const dropped = batch.length - kept.length;
+      if (dropped > 0) {
+        this.transportDropCount += dropped;
+        this.onTransportDrop?.(dropped, error);
+      }
+      this.buffer = mergeBySeq(kept, this.buffer);
     }
   }
 
   pendingCount(): number {
     return this.buffer.length;
   }
+}
+
+/** Merge two seq-ascending lists into one seq-ascending list. */
+function mergeBySeq(a: SequencedEvent[], b: SequencedEvent[]): SequencedEvent[] {
+  const out: SequencedEvent[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const left = a[i];
+    const right = b[j];
+    if (left === undefined || right === undefined) break;
+    if (left.seq <= right.seq) {
+      out.push(left);
+      i++;
+    } else {
+      out.push(right);
+      j++;
+    }
+  }
+  for (; i < a.length; i++) {
+    const left = a[i];
+    if (left !== undefined) out.push(left);
+  }
+  for (; j < b.length; j++) {
+    const right = b[j];
+    if (right !== undefined) out.push(right);
+  }
+  return out;
 }
