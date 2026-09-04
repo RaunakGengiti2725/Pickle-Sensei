@@ -438,6 +438,11 @@ function anonAuthClient(): ReturnType<typeof createClient> {
  * edge answers — with a verdict or a retryable 503 — well inside that.
  * `AUTH_UPSTREAM_TIMEOUT_MS` overrides it (positive integer, milliseconds). */
 const AUTH_UPSTREAM_TIMEOUT_MS_DEFAULT = 6_000;
+/** Pauses before re-sending an Auth call whose SOCKET failed (reset, refused,
+ * DNS) — never after an HTTP answer of any status. All attempts share the one
+ * deadline above, so a flaky link is ridden out for ≈3 s, not the ~25 s the
+ * supabase-js retry loop spent. */
+const AUTH_CONNECT_RETRY_BACKOFF_MS: readonly number[] = [100, 200, 400, 800, 1600];
 /** Retry hint on a retryable Auth answer when upstream named none. */
 const AUTH_RETRY_AFTER_SECONDS = 2;
 /** GoTrue statuses that are a verdict on the credential itself: bad/expired
@@ -487,11 +492,25 @@ function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUse
   ) {
     return null;
   }
+  // A session that is already dead on arrival (expires_in ≤ 0, expires_at in
+  // the past) is a half-written answer, not a usable rotation: handing it to
+  // the app would make it refresh again immediately, forever.
+  const expiresIn = payload.expires_in ?? undefined;
+  if (expiresIn !== undefined && (typeof expiresIn !== "number" || !(expiresIn > 0))) {
+    return null;
+  }
+  const expiresAt = payload.expires_at ?? undefined;
+  if (
+    expiresAt !== undefined &&
+    (typeof expiresAt !== "number" || !(expiresAt * 1000 > Date.now()))
+  ) {
+    return null;
+  }
   return {
     access_token: payload.access_token,
     refresh_token: payload.refresh_token,
-    expires_at: typeof payload.expires_at === "number" ? payload.expires_at : undefined,
-    expires_in: typeof payload.expires_in === "number" ? payload.expires_in : undefined,
+    expires_at: expiresAt,
+    expires_in: expiresIn,
     user,
   };
 }
@@ -516,9 +535,32 @@ function retryAfterOf(header: string | null): number {
   return Number.isInteger(seconds) && seconds > 0 ? seconds : AUTH_RETRY_AFTER_SECONDS;
 }
 
+class AuthDeadlineError extends Error {
+  constructor(timeoutMs: number) {
+    super(`no answer within ${timeoutMs}ms`);
+    this.name = "AuthDeadlineError";
+  }
+}
+
+function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** One bounded GoTrue call. `parse` turns a 2xx JSON body into the value the
  * caller needs; a 2xx it cannot read is an outage (a gateway page, a
- * half-written answer), never a verdict on the credential. */
+ * half-written answer), never a verdict on the credential. Connection-level
+ * faults are re-sent per `AUTH_CONNECT_RETRY_BACKOFF_MS` inside the single
+ * deadline; the first HTTP answer, whatever its status, is final. */
 async function authRequest<T>(
   path: string,
   init: {
@@ -535,40 +577,57 @@ async function authRequest<T>(
   if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
   if (init.body) headers["Content-Type"] = "application/json";
   const timeoutMs = authUpstreamTimeoutMs();
+  const startedAt = Date.now();
   const controller = new AbortController();
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     deadlineTimer = setTimeout(() => {
       controller.abort();
-      reject(new Error(`no answer within ${timeoutMs}ms`));
+      reject(new AuthDeadlineError(timeoutMs));
     }, timeoutMs);
   });
+  // A deadline that fires while nothing races it must not surface as an
+  // unhandled rejection.
+  deadline.catch(() => undefined);
+  const unreachable = (detail: string): AuthVerdict<T> => ({
+    kind: "unavailable",
+    detail: `Supabase Auth unreachable: ${detail}`,
+    retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+  });
+  const attemptOnce = async () => {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+      method: init.method,
+      headers,
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: controller.signal,
+    });
+    return {
+      status: response.status,
+      retryAfter: response.headers.get("Retry-After"),
+      text: await response.text(),
+    };
+  };
   let answer: { status: number; retryAfter: string | null; text: string };
   try {
-    answer = await Promise.race([
-      (async () => {
-        const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
-          method: init.method,
-          headers,
-          body: init.body ? JSON.stringify(init.body) : undefined,
-          signal: controller.signal,
-        });
-        return {
-          status: response.status,
-          retryAfter: response.headers.get("Retry-After"),
-          text: await response.text(),
-        };
-      })(),
-      deadline,
-    ]);
-  } catch (error) {
-    return {
-      kind: "unavailable",
-      detail: `Supabase Auth unreachable: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-      retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
-    };
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        answer = await Promise.race([attemptOnce(), deadline]);
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (error instanceof AuthDeadlineError || controller.signal.aborted) {
+          return unreachable(attempt === 0 ? message : `${message} (${attempt + 1} attempts)`);
+        }
+        const backoffMs = AUTH_CONNECT_RETRY_BACKOFF_MS[attempt];
+        const remainingMs = timeoutMs - (Date.now() - startedAt);
+        if (backoffMs === undefined || backoffMs >= remainingMs) {
+          return unreachable(`${message} (${attempt + 1} attempts)`);
+        }
+        await Promise.race([sleepUnlessAborted(backoffMs, controller.signal), deadline]).catch(
+          () => undefined,
+        );
+      }
+    }
   } finally {
     clearTimeout(deadlineTimer);
   }
