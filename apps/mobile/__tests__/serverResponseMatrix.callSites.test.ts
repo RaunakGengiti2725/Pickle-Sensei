@@ -303,7 +303,9 @@ test('every non-2xx status rejects (no resolution on an error status)', () => {
 
 test('duplicate identical successes: two answers → two independent settlements, no extra request', () => {
   const duplicates = rows.filter(row => row.scenario === 'ok_duplicate_x2');
-  expect(duplicates.length).toBeGreaterThan(0);
+  if (!process.env['MATRIX_FILTER']) {
+    expect(duplicates.length).toBe(CALL_SITES.length);
+  }
   for (const row of duplicates) {
     expect(row.settlement).toBe('resolved');
     expect(row.requestsSeen).toBe(2);
