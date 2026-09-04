@@ -185,6 +185,37 @@ function youtubeSearchUrl(topic: string): string {
   );
 }
 
+/**
+ * A bookmark value the catalog must honour over refetched rows: the
+ * optimistic value while its mutation is in flight (`untilRequestId`
+ * Infinity), then the server-confirmed value for every catalog request that
+ * was issued before the mutation committed — such a GET can still return the
+ * pre-mutation row, and applying it would undo a save the server accepted.
+ * A request issued after the commit is authoritative and retires the entry.
+ */
+interface SavedOverride {
+  saved: boolean;
+  untilRequestId: number;
+}
+
+function applySavedOverrides(
+  items: CatalogDrill[],
+  overrides: Map<string, SavedOverride>,
+  requestId: number,
+): CatalogDrill[] {
+  if (overrides.size === 0) return items;
+  for (const [slug, override] of overrides) {
+    if (requestId > override.untilRequestId) overrides.delete(slug);
+  }
+  if (overrides.size === 0) return items;
+  return items.map(item => {
+    const override = overrides.get(item.slug);
+    return override && override.saved !== item.saved
+      ? { ...item, saved: override.saved }
+      : item;
+  });
+}
+
 type DetailState =
   | { status: 'loading' }
   | { status: 'ready'; detail: DrillDetail }
@@ -506,6 +537,7 @@ export function DrillLibraryScreen() {
    * state (drives the disabled UI) and only flushes between events, so a
    * same-tick double-fire could slip past it — this ref cannot. */
   const inFlightSavesRef = useRef<Set<string>>(new Set());
+  const savedOverridesRef = useRef<Map<string, SavedOverride>>(new Map());
   const insets = useReliableSafeAreaInsets();
 
   /**
@@ -577,7 +609,9 @@ export function DrillLibraryScreen() {
         });
         if (requestId !== requestIdRef.current) return;
         hasLoadedRef.current = true;
-        setDrills(items);
+        setDrills(
+          applySavedOverrides(items, savedOverridesRef.current, requestId),
+        );
         setLoadFailure(null);
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
@@ -615,16 +649,28 @@ export function DrillLibraryScreen() {
               item.slug === drill.slug ? { ...item, saved } : item,
             ) ?? prev,
         );
+      savedOverridesRef.current.set(drill.slug, {
+        saved: nextSaved,
+        untilRequestId: Number.POSITIVE_INFINITY,
+      });
       applySaved(nextSaved);
       try {
         if (nextSaved) await api.saveDrill(drill.slug);
         else await api.unsaveDrill(drill.slug);
+        // Confirmed: pin the server state against any catalog request that
+        // left before this commit, and make the row reflect it now.
+        savedOverridesRef.current.set(drill.slug, {
+          saved: nextSaved,
+          untilRequestId: requestIdRef.current,
+        });
+        applySaved(nextSaved);
         showToast(
           nextSaved
             ? 'Saved to your library · Library → Saved drills'
             : 'Removed from saved drills',
         );
       } catch (error) {
+        savedOverridesRef.current.delete(drill.slug);
         applySaved(drill.saved);
         setInlineError(toMessage(error));
       } finally {
