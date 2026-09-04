@@ -22,7 +22,10 @@ import {
 } from '../../../src/data/accountScope';
 import { saveAnalysis } from '../../../src/data/repository';
 import { drainOutbox, type SyncTransport } from '../../../src/data/sync';
-import { openNodeSqliteLocalDb, type SqlTrace } from './nodeSqliteDb';
+import {
+  openNodeSqliteLocalDb,
+  type SqlTrace,
+} from '../../../test-support/adjudicate/nodeSqliteDb';
 
 const owner = '11111111-1111-4111-8111-111111111111';
 const permitId = '22222222-2222-4222-8222-222222222222';

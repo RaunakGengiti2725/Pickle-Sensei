@@ -247,6 +247,9 @@ function ensureAccountScopedSchema(db: DB): void {
 }
 
 let instance: DB | null = null;
+/** The one `LocalDb` facade over `instance`: the write queue is keyed by
+ * facade identity, so every `getDb()` caller must share it. */
+let facade: LocalDb | null = null;
 
 function openMigrated(): DB {
   const db = open({ name: 'pickle-sensei.db' });
@@ -267,18 +270,21 @@ function openMigrated(): DB {
 }
 
 export function getDb(): LocalDb {
-  if (!instance) {
-    instance = openMigrated();
-  }
-  const db = instance;
-  return {
+  if (instance && facade) return facade;
+  const db = openMigrated();
+  instance = db;
+  facade = {
     async execute(sql, params = []) {
       const result = await db.execute(sql, params as never[]);
       return { rows: (result.rows ?? []) as Record<string, unknown>[] };
     },
     close() {
       db.close();
-      instance = null;
+      if (instance === db) {
+        instance = null;
+        facade = null;
+      }
     },
   };
+  return facade;
 }

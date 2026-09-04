@@ -2,6 +2,7 @@ import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from './db';
 import { ApiError } from './api';
 import { getActiveDataOwner } from './accountScope';
+import { withWriteLock, withWriteTransaction } from './writeQueue';
 
 /**
  * Outbox sync engine (directive §32): durable queue drained on reconnect.
@@ -116,19 +117,37 @@ async function recordRowFailure(
   error: unknown,
   permanent: boolean,
 ): Promise<void> {
-  if (permanent) {
-    await db.execute(
-      `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-       WHERE owner_key = ? AND id = ?`,
-      [String(error), owner, rowId],
-    );
-  } else {
-    await db.execute(
-      `UPDATE outbox SET last_error = ?
-       WHERE owner_key = ? AND id = ?`,
-      [String(error), owner, rowId],
-    );
-  }
+  await withWriteLock(db, async () => {
+    if (permanent) {
+      await db.execute(
+        `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+         WHERE owner_key = ? AND id = ?`,
+        [String(error), owner, rowId],
+      );
+    } else {
+      await db.execute(
+        `UPDATE outbox SET last_error = ?
+         WHERE owner_key = ? AND id = ?`,
+        [String(error), owner, rowId],
+      );
+    }
+  });
+}
+
+/** Autocommit delete of one drained row, kept out of any transaction another
+ * caller may hold on the connection (it would otherwise join that unit and
+ * vanish with its ROLLBACK). */
+async function deleteOutboxRow(
+  db: LocalDb,
+  owner: string,
+  rowId: unknown,
+): Promise<void> {
+  await withWriteLock(db, async () => {
+    await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
+      owner,
+      rowId,
+    ]);
+  });
 }
 
 export async function drainOutbox(
@@ -167,10 +186,7 @@ export async function drainOutbox(
       if (r['kind'] === 'session.create')
         await transport.createSession(payload);
       else await transport.finalizeSession(String(payload['id']));
-      await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
-        owner,
-        r['id'],
-      ]);
+      await deleteOutboxRow(db, owner, r['id']);
       synced++;
     } catch (error) {
       await recordRowFailure(
@@ -221,8 +237,10 @@ export async function drainOutbox(
       );
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
-          await db.execute('BEGIN IMMEDIATE');
-          try {
+          // Receipt + delete are one atomic unit, serialized with every other
+          // transaction on the connection (a scored write landing now waits
+          // its turn rather than nesting a BEGIN inside this one).
+          await withWriteTransaction(db, async () => {
             await db.execute(
               `INSERT OR REPLACE INTO sync_receipt
                (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
@@ -232,15 +250,7 @@ export async function drainOutbox(
               `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
               [owner, entry.row['id']],
             );
-            await db.execute('COMMIT');
-          } catch (error) {
-            try {
-              await db.execute('ROLLBACK');
-            } catch {
-              // Preserve the receipt/delete failure.
-            }
-            throw error;
-          }
+          });
           synced++;
           continue;
         }
@@ -296,10 +306,7 @@ export async function drainOutbox(
       );
       for (const entry of entries) {
         if (accepted.has(entry.trial.trialId)) {
-          await db.execute(
-            `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
-            [owner, entry.row['id']],
-          );
+          await deleteOutboxRow(db, owner, entry.row['id']);
           synced++;
           continue;
         }

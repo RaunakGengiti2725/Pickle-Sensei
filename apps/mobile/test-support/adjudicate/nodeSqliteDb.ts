@@ -8,7 +8,7 @@
  * Requires Node >= 22.13 or NODE_OPTIONS=--experimental-sqlite; fails loudly
  * otherwise (never a silent skip).
  */
-import type { LocalDb } from '../../../src/data/db';
+import type { LocalDb } from '../../src/data/db';
 
 declare const require: (id: string) => unknown;
 

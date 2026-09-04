@@ -9,6 +9,7 @@ import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
 import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { withWriteTransaction } from './writeQueue';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -73,23 +74,10 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
-async function inTransaction(
-  db: LocalDb,
-  operation: () => Promise<void>,
-): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
-}
+/** Serialized with every other transaction on `db` (see writeQueue.ts): a
+ * scored write that lands while the outbox drain holds its receipt
+ * transaction waits its turn instead of failing on a nested BEGIN. */
+const inTransaction = withWriteTransaction;
 
 /** Every owner-partitioned local table. Kept in one place so account
  * deletion can never silently miss a store added later. */

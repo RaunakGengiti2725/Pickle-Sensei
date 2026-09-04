@@ -120,6 +120,80 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   await redisPipeline([["DEL", ...keys]]);
 }
 
+// ─── Fenced keys (revocation tombstones) ─────────────────────────────────────
+//
+// A plain DEL cannot revoke a key whose next writer already holds the value it
+// is about to store (an `authenticate()` that verified the bearer with GoTrue
+// just before logout evicted it): the late SET simply resurrects the entry.
+// `cacheFence` drops the key AND leaves a tombstone beside it for as long as
+// any legitimate entry could still live; `cacheSetFenced` refuses to store
+// (and undoes a store that raced the fence) while the tombstone stands, and
+// `cacheGetFenced` treats a fenced key as a miss on both tiers.
+
+const fenceKeyOf = (key: string) => `${key}#fence`;
+
+function fenceExists(results: RedisPipelineResult | null, index: number): boolean {
+  return Number(results?.[index]?.result) > 0;
+}
+
+/** Evict `key` and fence it for `ttlSeconds` on both tiers. */
+export async function cacheFence(key: string, ttlSeconds: number): Promise<void> {
+  const fence = fenceKeyOf(key);
+  memorySet(fence, "1", ttlSeconds);
+  memory.delete(key);
+  await redisPipeline([
+    ["SET", fence, "1", "EX", Math.ceil(ttlSeconds)],
+    ["DEL", key],
+  ]);
+}
+
+/** `cacheGet` that reports a miss while `key` is fenced. */
+export async function cacheGetFenced(key: string): Promise<string | null> {
+  const fence = fenceKeyOf(key);
+  if (memoryGet(fence) !== null) {
+    memory.delete(key);
+    return null;
+  }
+  const local = memoryGet(key);
+  if (local !== null) return local;
+  const results = await redisPipeline([
+    ["GET", key],
+    ["TTL", key],
+    ["EXISTS", fence],
+  ]);
+  if (fenceExists(results, 2)) return null;
+  const value = results?.[0]?.result;
+  if (typeof value !== "string") return null;
+  const ttl = Number(results?.[1]?.result);
+  if (Number.isFinite(ttl) && ttl > 0) {
+    memorySet(key, value, Math.min(ttl, 60));
+  }
+  return value;
+}
+
+/** `cacheSet` that yields to a fence: returns false (and stores nothing) when
+ * `key` is fenced before or during the write. The post-write EXISTS travels
+ * in the same pipeline as the SET, so a fence raised between the two is seen
+ * and the just-stored value is deleted again. */
+export async function cacheSetFenced(
+  key: string,
+  value: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  if (ttlSeconds <= 0) return false;
+  const fence = fenceKeyOf(key);
+  if (memoryGet(fence) !== null) return false;
+  memorySet(key, value, ttlSeconds);
+  const results = await redisPipeline([
+    ["SET", key, value, "EX", Math.ceil(ttlSeconds)],
+    ["EXISTS", fence],
+  ]);
+  if (memoryGet(fence) === null && !fenceExists(results, 1)) return true;
+  memory.delete(key);
+  await redisPipeline([["DEL", key]]);
+  return false;
+}
+
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */

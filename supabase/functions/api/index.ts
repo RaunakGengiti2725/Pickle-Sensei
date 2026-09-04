@@ -80,7 +80,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
-import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
+import {
+  cacheDel,
+  cacheFence,
+  cacheGet,
+  cacheGetFenced,
+  cacheSet,
+  cacheSetFenced,
+  sha256Hex,
+} from "./cache.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
@@ -345,11 +353,19 @@ function bearerOf(request: Request): string {
 
 const authCacheKey = async (token: string): Promise<string> => `auth:${await sha256Hex(token)}`;
 
+/** Revoke a bearer at this edge: drop its verified-auth entry AND fence the
+ * key for as long as any entry for it could live, so an `authenticate()`
+ * whose GoTrue verification was already in flight when the session died
+ * cannot re-cache it (`cacheSetFenced` yields to the fence). */
+async function revokeAuthCache(token: string): Promise<void> {
+  await cacheFence(await authCacheKey(token), AUTH_CACHE_MAX_TTL_SECONDS);
+}
+
 async function readAuthCache(
   cacheKey: string,
   provider: "google" | "apple" | null,
 ): Promise<AuthedUser | null> {
-  const cachedRaw = await cacheGet(cacheKey);
+  const cachedRaw = await cacheGetFenced(cacheKey);
   if (!cachedRaw) return null;
   try {
     const cached = JSON.parse(cachedRaw) as CachedAuthSession;
@@ -388,7 +404,7 @@ async function writeAuthCache(
   );
   const ttlSeconds = Math.floor((expiresAtMs - Date.now()) / 1_000) - 30;
   if (ttlSeconds >= 60) {
-    await cacheSet(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
+    await cacheSetFenced(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
   }
 }
 
@@ -572,7 +588,7 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
  * bearer from the auth cache so it stops working at this edge immediately. */
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
-  await cacheDel(await authCacheKey(token));
+  await revokeAuthCache(token);
   const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
     method: "POST",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
@@ -2626,11 +2642,8 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   // entry, so the bearer that just deleted the account cannot keep
   // authenticating (any other cached bearer ages out within ≤10 min, and
   // every query behind it hits RLS-empty rows).
-  await cacheDel(
-    rankCacheKey(authed.id),
-    progressCacheKey(authed.id),
-    await authCacheKey(bearerOf(request)),
-  );
+  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));
+  await revokeAuthCache(bearerOf(request));
   console.warn(`[api] account deleted: ${authed.id}`);
   return json(200, { deleted: true, appleAuthorizationRevocation });
 }

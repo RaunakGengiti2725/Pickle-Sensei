@@ -42,6 +42,18 @@ const FOREGROUND_LEAD_MS = 5 * 60_000;
 const MIN_DELAY_MS = 1_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
+/**
+ * Pacing for a bearer that already sits inside the refresh lead the moment
+ * the server issues it. Its `expiresAt` cannot drive the schedule: read
+ * against a device clock that runs ahead of the server's (or a server
+ * lifetime shorter than the lead) every rotation would look due at once and
+ * the keeper would rotate at the MIN_DELAY_MS floor — ~1 Hz, draining the
+ * per-IP refresh budget for every device behind the same NAT. Instead such
+ * rotations pace themselves from this floor, doubling while the condition
+ * persists (60 s, 2 min, 4 min, 5 min, 5 min …); a bearer the server does
+ * refuse in the meantime still reaches `refreshSessionNow()` at once.
+ */
+const SKEWED_EXPIRY_FLOOR_MS = REFRESH_LEAD_MS;
 
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -74,6 +86,15 @@ export function retryDelayMs(attempt: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));
 }
 
+/** Delay after the n-th consecutive rotation that produced a bearer already
+ * inside the refresh lead (see SKEWED_EXPIRY_FLOOR_MS). */
+export function skewedRotationDelayMs(consecutive: number): number {
+  return Math.min(
+    RETRY_MAX_MS,
+    SKEWED_EXPIRY_FLOOR_MS * 2 ** Math.max(0, consecutive - 1),
+  );
+}
+
 export function startSessionKeeper(input: SessionKeeperInput): void {
   stopSessionKeeper();
   const myGeneration = generation;
@@ -81,6 +102,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   let refreshToken = input.refreshToken;
   let bearerExpiresAtMs = input.bearerExpiresAtMs;
   let failedAttempts = 0;
+  let skewedRotations = 0;
   let inflight = false;
 
   const live = () => myGeneration === generation;
@@ -97,8 +119,25 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     );
   };
 
+  const leadUntilRefreshMs = () =>
+    (bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS;
+
   const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+    schedule(leadUntilRefreshMs());
+  };
+
+  /** After a rotation: a bearer with life beyond the lead is scheduled from
+   * its expiry; one the server issued already inside the lead is paced from
+   * the skew floor instead of being rotated again a second later. */
+  const scheduleAfterRotation = () => {
+    const lead = leadUntilRefreshMs();
+    if (lead > 0) {
+      skewedRotations = 0;
+      schedule(lead);
+      return;
+    }
+    skewedRotations += 1;
+    schedule(skewedRotationDelayMs(skewedRotations));
   };
 
   const refresh = async () => {
@@ -114,7 +153,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
       failedAttempts = 0;
       await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry();
+      if (live()) scheduleAfterRotation();
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
