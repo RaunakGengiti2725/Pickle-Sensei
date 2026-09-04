@@ -124,15 +124,13 @@ DEVICETYPES='{"devicetypes": [
 fail=0
 RC=0
 OUT=""
-ERR=""
 
 run_script() {
-  # run_script [args…] → RC, OUT (stdout), ERR (stderr); resets the simctl log
+  # run_script [args…] → RC, OUT (stdout), stderr in $WORK/err; resets the simctl log
   : >"$FAKE_SIMCTL_LOG"
   RC=0
   PATH="$FAKE_BIN:$PATH" "$SCRIPT" "$@" >"$WORK/out" 2>"$WORK/err" || RC=$?
   OUT="$(cat "$WORK/out")"
-  ERR="$(cat "$WORK/err")"
 }
 
 pass() { log "PASS: $*"; }
