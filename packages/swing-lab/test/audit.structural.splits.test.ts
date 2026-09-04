@@ -8,9 +8,18 @@
  *
  * Plane: Linux bench.
  */
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RecordingRecord } from "../src/engine/corpus.js";
-import { assignSplit, auditSplits, type SplitsFile } from "../src/engine/splits.js";
+import {
+  assignSplit,
+  auditSplits,
+  deterministicSplit,
+  loadSplits,
+  type SplitsFile,
+} from "../src/engine/splits.js";
 
 function splitsFile(pinned: SplitsFile["pinned"] = {}): SplitsFile {
   return {
@@ -115,5 +124,72 @@ describe("audit: controls that hold", () => {
     const first = assignSplit(splits, "sess-x");
     splits.pinned["sess-x"] = { split: first === "dev" ? "val" : "dev", reason: "late pin" };
     expect(assignSplit(splits, "sess-x")).toBe(first);
+  });
+});
+
+describe("audit: loadSplits validates the on-disk shape before trusting it", () => {
+  const write = (name: string, body: unknown): string => {
+    const dir = mkdtempSync(join(tmpdir(), "splits-shape-"));
+    const path = join(dir, `${name}.json`);
+    writeFileSync(path, typeof body === "string" ? body : JSON.stringify(body));
+    return path;
+  };
+  const base = {
+    schemaVersion: 1,
+    policyVersion: "splits-v1",
+    proportions: { dev: 0.5, val: 0.2, locked_test: 0.15, shadow: 0.15 },
+  };
+
+  it("a file without a pinned map (or pinned: null) loads with empty pins instead of crashing", () => {
+    const loaded = loadSplits(write("no-pinned", { ...base, assigned: {} }));
+    expect(loaded.pinned).toEqual({});
+    expect(assignSplit(loaded, "sess-1")).toBe(deterministicSplit("sess-1"));
+    const nulled = loadSplits(write("null-pinned", { ...base, pinned: null, assigned: null }));
+    expect(nulled.pinned).toEqual({});
+    expect(nulled.assigned).toEqual({});
+  });
+
+  it.each(["Shadow", "SHADOW", "nonsense", 7, null])(
+    "a pin whose split is %j is rejected rather than treated as a tightened split",
+    (split) => {
+      const path = write("bad-pin", {
+        ...base,
+        pinned: { "sess-1": { split, reason: "seen" } },
+        assigned: {},
+      });
+      expect(() => loadSplits(path)).toThrow(/splits: pin for session sess-1 has split/);
+    },
+  );
+
+  it("an assignment with an unknown split is rejected", () => {
+    const path = write("bad-assignment", {
+      ...base,
+      pinned: {},
+      assigned: {
+        "sess-1": { split: "Dev", method: "deterministic", assignedAtIso: "2026-01-01T00:00:00Z" },
+      },
+    });
+    expect(() => loadSplits(path)).toThrow(/assignment for session sess-1 has split "Dev"/);
+  });
+
+  it("pinned/assigned that are not objects, and non-object roots, are rejected", () => {
+    expect(() => loadSplits(write("array-pinned", { ...base, pinned: [], assigned: {} }))).toThrow(
+      /'pinned' must be an object/,
+    );
+    expect(() =>
+      loadSplits(write("string-assigned", { ...base, pinned: {}, assigned: "x" })),
+    ).toThrow(/'assigned' must be an object/);
+    expect(() => loadSplits(write("root-array", "[]"))).toThrow(/is not a JSON object/);
+  });
+
+  it("a well-formed file with valid pins still loads unchanged", () => {
+    const path = write("good", {
+      ...base,
+      pinned: { "sess-1": { split: "locked_test", reason: "inspected" } },
+      assigned: {},
+    });
+    const loaded = loadSplits(path);
+    expect(loaded.pinned["sess-1"]?.split).toBe("locked_test");
+    expect(assignSplit(loaded, "sess-1")).toBe("locked_test");
   });
 });

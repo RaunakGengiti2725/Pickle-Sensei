@@ -63,14 +63,48 @@ function assertPinNotShadow(
   if (pin?.split === "shadow") throw new Error(`splits: ${shadowPinMessage(sessionKey)}`);
 }
 
-export function loadSplits(path: string): SplitsFile {
-  if (existsSync(path)) {
-    const splits = JSON.parse(readFileSync(path, "utf8")) as SplitsFile;
-    for (const [sessionKey, pin] of Object.entries(splits.pinned)) {
-      assertPinNotShadow(sessionKey, pin);
-    }
-    return splits;
+const SPLIT_NAMES: ReadonlySet<string> = new Set(BUCKETS.map((entry) => entry.split));
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertSplitName(value: unknown, where: string): asserts value is SplitName {
+  if (typeof value !== "string" || !SPLIT_NAMES.has(value)) {
+    throw new Error(
+      `splits: ${where} has split ${JSON.stringify(value)}; expected one of ${[...SPLIT_NAMES].join("/")}`,
+    );
   }
+}
+
+/**
+ * Validate the on-disk shape before anything trusts it: `pinned`/`assigned`
+ * must be objects, and every split value must be a real SplitName (a pin of
+ * "Shadow" or "nonsense" is not a tightened split — it is a broken file).
+ */
+function parseSplitsFile(raw: string, path: string): SplitsFile {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error(`splits: ${path} is not a JSON object`);
+  const pinned = parsed.pinned ?? {};
+  const assigned = parsed.assigned ?? {};
+  if (!isRecord(pinned)) throw new Error(`splits: ${path} 'pinned' must be an object`);
+  if (!isRecord(assigned)) throw new Error(`splits: ${path} 'assigned' must be an object`);
+  for (const [sessionKey, pin] of Object.entries(pinned)) {
+    if (!isRecord(pin)) throw new Error(`splits: pin for session ${sessionKey} must be an object`);
+    assertSplitName(pin.split, `pin for session ${sessionKey}`);
+    assertPinNotShadow(sessionKey, pin as SplitsFile["pinned"][string]);
+  }
+  for (const [sessionKey, assignment] of Object.entries(assigned)) {
+    if (!isRecord(assignment)) {
+      throw new Error(`splits: assignment for session ${sessionKey} must be an object`);
+    }
+    assertSplitName(assignment.split, `assignment for session ${sessionKey}`);
+  }
+  return { ...(parsed as Omit<SplitsFile, "pinned" | "assigned">), pinned, assigned } as SplitsFile;
+}
+
+export function loadSplits(path: string): SplitsFile {
+  if (existsSync(path)) return parseSplitsFile(readFileSync(path, "utf8"), path);
   return {
     schemaVersion: 1,
     policyVersion: SPLIT_POLICY_VERSION,
