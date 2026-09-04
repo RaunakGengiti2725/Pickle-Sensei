@@ -1,0 +1,1 @@
+../../../Sources/TemporalStrokeDetector.swift

@@ -1,0 +1,4 @@
+.build/
+Package.resolved
+# Derived from ../../Sources/VisionCoreContracts.swift by generate-contracts.sh
+Sources/VisionCoreContracts.swift
