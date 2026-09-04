@@ -308,6 +308,8 @@ describe("security-monitoring detectors (no database)", () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/me?email=victim@example.com",
+      // Fresh address: the cases above spent this process's per-IP budget.
+      remoteAddress: "203.0.113.50",
       headers: { authorization: `Bearer ${secretToken}` },
     });
     expect(res.statusCode).toBe(401);

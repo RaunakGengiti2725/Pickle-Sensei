@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { DevTokenVerifier } from "../../src/auth/tokens.js";
 import type { ApiConfig } from "../../src/config.js";
-import { DEFAULT_RATE_LIMIT } from "../../src/plugins/rateLimitPlugin.js";
+import { DEFAULT_RATE_LIMIT, WindowStore } from "../../src/plugins/rateLimitPlugin.js";
 
 /**
  * ADJ-01 — the request budget must not be chosen by an unauthenticated caller.
@@ -140,5 +140,54 @@ describe("ADJ-01: pre-auth budgets are owned by the client address, not by the b
     expect(await inject(app, tokenB, sharedIp)).toBe(503);
     // … and A's verified traffic did not consume the address's pre-auth budget.
     expect(await inject(app, "not-a-token", sharedIp)).toBe(401);
+    // The budget follows the verified subject, not the address it came from.
+    expect(await inject(app, tokenA, "198.51.100.43")).toBe(429);
+  });
+});
+
+describe("ADJ-01: WindowStore capacity eviction never clears every window", () => {
+  const windowMs = 60_000;
+
+  it("drops expired windows first and keeps a refused caller's window", () => {
+    const store = new WindowStore(100);
+    const t0 = 1_000_000;
+    for (let i = 0; i <= 3; i += 1) store.hit("victim", windowMs, t0, 3);
+    expect(store.hit("victim", windowMs, t0, 3).count).toBe(5);
+    for (let i = 0; i < 99; i += 1) store.hit(`stranger-${i}`, windowMs, t0, 3);
+    expect(store.size).toBe(100);
+
+    // Capacity reached: the next fresh key must evict, but never the victim.
+    for (let i = 0; i < 5_000; i += 1) store.hit(`flood-${i}`, windowMs, t0 + 1, 3);
+    expect(store.size).toBeLessThanOrEqual(100);
+    expect(store.hit("victim", windowMs, t0 + 2, 3).count).toBe(6);
+  });
+
+  it("evicts only expired windows when enough of them exist", () => {
+    const store = new WindowStore(10);
+    const t0 = 5_000_000;
+    for (let i = 0; i < 9; i += 1) store.hit(`old-${i}`, windowMs, t0, 3);
+    store.hit("fresh", windowMs, t0 + windowMs - 1, 3);
+    expect(store.size).toBe(10);
+    store.hit("newcomer", windowMs, t0 + windowMs, 3);
+    // The nine expired windows went; the live one and the newcomer remain.
+    expect(store.size).toBe(2);
+    expect(store.hit("fresh", windowMs, t0 + windowMs, 3).count).toBe(2);
+  });
+
+  it("when every window has refused, frees a bounded slice rather than all", () => {
+    const store = new WindowStore(10);
+    const t0 = 9_000_000;
+    for (let i = 0; i < 10; i += 1) {
+      for (let n = 0; n <= 1; n += 1) store.hit(`refused-${i}`, windowMs, t0, 1);
+    }
+    expect(store.size).toBe(10);
+    store.hit("newcomer", windowMs, t0 + 1, 1);
+    // 90% target → one slot freed for the newcomer, nine refusals still stand.
+    expect(store.size).toBe(10);
+    let stillRefused = 0;
+    for (let i = 0; i < 10; i += 1) {
+      if (store.hit(`refused-${i}`, windowMs, t0 + 2, 1).count > 1) stillRefused += 1;
+    }
+    expect(stillRefused).toBe(9);
   });
 });

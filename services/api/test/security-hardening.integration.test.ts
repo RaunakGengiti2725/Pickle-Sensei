@@ -379,4 +379,60 @@ describe.skipIf(!testUrl)("security hardening regressions (isolated PostgreSQL s
       await limitedApp.close();
     }
   });
+
+  it("unverified bearers are budgeted by address and cannot touch a verified caller's budget", async () => {
+    const limitedApp = buildApp(
+      {
+        env: "test",
+        port: 0,
+        host: "127.0.0.1",
+        appVersion: "0.1.0-test",
+        databaseUrl: schemaUrl(testUrl!, schemaName),
+        devAuthSecret: secret,
+        oidcIssuer: undefined,
+        oidcAudience: undefined,
+        oidcJwksUrl: undefined,
+        sqsQueueUrl: undefined,
+        consentExportSigningKey: undefined,
+        consentExportSigningKeyId: "consent-export-k1",
+        appleIapConfigured: false,
+        googlePlayConfigured: false,
+      },
+      {
+        queue: new InMemoryJobQueue(),
+        objectStore: store,
+        rateLimit: { enabled: true, windowMs: 60_000, defaultLimit: 50, expensiveLimit: 3 },
+      },
+    );
+    const nat = "198.51.100.77";
+    const exportFrom = (authorization: string, remoteAddress: string) =>
+      limitedApp.inject({
+        method: "POST",
+        url: "/v1/me/export",
+        remoteAddress,
+        headers: { authorization },
+      });
+    try {
+      // A verified caller behind the NAT is known to the limiter from here on.
+      const known = await exportFrom(`Bearer ${tokenB}`, nat);
+      expect(known.statusCode, known.body).toBe(200);
+
+      // Rotating garbage from the same address: one shared budget, then 429.
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        statuses.push((await exportFrom(`Bearer garbage-${i}`, nat)).statusCode);
+      }
+      expect(statuses).toEqual([401, 401, 401, 429, 429]);
+
+      // The flood never reached the verified caller's ledger …
+      const stillServed = await exportFrom(`Bearer ${tokenB}`, nat);
+      expect(stillServed.statusCode, stillServed.body).toBe(200);
+      // … and the verified caller's traffic never counted against the address:
+      // a fresh address with the same garbage still gets its own three.
+      const elsewhere = await exportFrom("Bearer garbage-0", "198.51.100.78");
+      expect(elsewhere.statusCode).toBe(401);
+    } finally {
+      await limitedApp.close();
+    }
+  });
 });
