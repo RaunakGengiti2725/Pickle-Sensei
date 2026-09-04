@@ -29,14 +29,22 @@ export function nextSyncRetryDelayMs(
 }
 
 let generation = 0;
-const runningGenerations = new Set<number>();
+/**
+ * The single drain in flight over the shared SQLite connection, whichever
+ * generation started it. Every generation drains the same outbox through the
+ * same connection, so a second concurrent drain would re-POST the rows the
+ * first one is awaiting and race its receipt transaction.
+ */
+let inFlightDrain: Promise<void> | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
 let triggerForGeneration: (() => Promise<void>) | null = null;
 
 /** Stops future work synchronously. An already-issued request remains bound to
  * its original owner: its bearer resolves only while that owner's session is
- * current, so it cannot upload another account's rows. */
+ * current, so it cannot upload another account's rows. A drain that is already
+ * awaiting the network runs to completion (its receipts are keyed by the owner
+ * it was started for); the next generation's first drain waits for it. */
 export function clearSyncRuntime(): void {
   generation += 1;
   triggerForGeneration = null;
@@ -59,6 +67,7 @@ export function configureSyncRuntime(session: ApiSession): void {
     },
   });
   let consecutiveFailures = 0;
+  let followUpQueued = false;
 
   const schedule = () => {
     if (configuredGeneration !== generation) return;
@@ -69,18 +78,7 @@ export function configureSyncRuntime(session: ApiSession): void {
     );
   };
 
-  const trigger = async () => {
-    if (
-      configuredGeneration !== generation ||
-      runningGenerations.has(configuredGeneration)
-    ) {
-      return;
-    }
-    if (getActiveDataOwner() !== owner) {
-      schedule();
-      return;
-    }
-    runningGenerations.add(configuredGeneration);
+  const runDrain = async () => {
     try {
       const result = await drainOutbox(getDb(), transport);
       consecutiveFailures = result.failed > 0 ? consecutiveFailures + 1 : 0;
@@ -88,10 +86,37 @@ export function configureSyncRuntime(session: ApiSession): void {
       // Outbox rows remain durable with their attempt history. The foreground
       // event or the backed-off timer retries without inventing a receipt.
       consecutiveFailures += 1;
-    } finally {
-      runningGenerations.delete(configuredGeneration);
-      schedule();
     }
+  };
+
+  const trigger = async () => {
+    if (configuredGeneration !== generation) return;
+    if (inFlightDrain) {
+      // Coalesce: whatever generation owns the in-flight drain, this one runs
+      // exactly one follow-up after it settles (a rating saved mid-drain, a
+      // foreground event, or a re-sign-in all collapse into that one pass).
+      if (followUpQueued) return;
+      followUpQueued = true;
+      try {
+        await inFlightDrain;
+      } finally {
+        followUpQueued = false;
+      }
+      await trigger();
+      return;
+    }
+    if (getActiveDataOwner() !== owner) {
+      schedule();
+      return;
+    }
+    // The slot is released by the trigger that filled it (never by runDrain
+    // itself) so a drain that fails before its first await cannot leave an
+    // already-settled promise parked in the slot.
+    const drain = runDrain();
+    inFlightDrain = drain;
+    await drain;
+    if (inFlightDrain === drain) inFlightDrain = null;
+    schedule();
   };
 
   triggerForGeneration = trigger;

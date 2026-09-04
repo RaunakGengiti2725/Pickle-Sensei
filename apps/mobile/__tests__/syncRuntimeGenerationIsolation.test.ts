@@ -378,4 +378,31 @@ describe('syncRuntime — one drain in flight across generations', () => {
     expect(pending).toHaveLength(2);
     expect(fake.outbox).toEqual([]);
   });
+
+  it('a drain that fails before reaching the network releases the in-flight slot: later triggers each run one bounded attempt and the outbox drains once the database is back', async () => {
+    const getDbMock = getDb as jest.Mock;
+    getDbMock.mockReset();
+    getDbMock.mockImplementation(() => {
+      throw new Error('no native sqlite');
+    });
+    configureSyncRuntime(session('bearer-one'));
+    await settle();
+    triggerOutboxSync();
+    triggerOutboxSync();
+    await settle();
+    expect(getDbMock).toHaveBeenCalledTimes(3);
+    expect(pending).toHaveLength(0);
+
+    getDbMock.mockReset();
+    getDbMock.mockReturnValue(fake.db);
+    triggerOutboxSync();
+    await settle();
+    expect(postsOf(pending)).toEqual([
+      { bearer: 'Bearer bearer-one', shotIds: IDS },
+    ]);
+    pending[0]!.release();
+    await settle();
+    expect(fake.outbox).toEqual([]);
+    expect(fake.receipts.map(r => r.entityId)).toEqual(IDS);
+  });
 });
