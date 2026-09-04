@@ -406,6 +406,53 @@ describe('relaunch (hydrate) with a persisted session', () => {
     expect(mockKv.get('auth.last-provider')).toBe('');
   });
 
+  it('a stale server expiry on the launch refresh (device clock ahead) never becomes a per-second refresh + Keychain-write loop, and never signs out', async () => {
+    jest.useFakeTimers();
+    const keychainWrites = jest.spyOn(Keychain, 'setGenericPassword');
+    try {
+      seedVault('refresh-1', 'apple');
+      let rotations = 0;
+      const fetchMock = installRoutes({
+        '/v1/auth/refresh': () => {
+          rotations += 1;
+          return response({
+            session: {
+              accessToken: `access-${rotations + 1}`,
+              refreshToken: `refresh-${rotations + 1}`,
+              // An hour in this device's past: the server clock lags, or the
+              // server handed back an already-spent expiry.
+              expiresAt: Math.floor(Date.now() / 1000) - 3600,
+            },
+          });
+        },
+      });
+
+      await useAuthStore.getState().hydrate();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const writesAfterLaunch = keychainWrites.mock.calls.length;
+
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      // Launch exchange + at most one rescheduled attempt in 30 s (the
+      // unfixed keeper made ~30 exchanges and ~30 Keychain writes here).
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(
+        keychainWrites.mock.calls.length - writesAfterLaunch,
+      ).toBeLessThanOrEqual(1);
+      const state = useAuthStore.getState();
+      expect(state.session?.canonicalAppUserId).toBe(canonicalId);
+      expect(state.error).toBeNull();
+      expect(getApiSession()).toMatchObject({
+        bearerToken: 'access-2',
+        refreshToken: 'refresh-2',
+      });
+      expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+    } finally {
+      keychainWrites.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
   it('discards a malformed Keychain record instead of trusting it', async () => {
     __keychainStore.set(SESSION_VAULT_SERVICE, {
       username: 'session',
