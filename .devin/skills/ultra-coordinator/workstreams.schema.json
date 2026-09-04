@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pickle Sensei Ultra coordinator workstreams",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["objective", "workstreams"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "objective": { "type": "string", "minLength": 10 },
+    "base_branch": { "type": "string", "default": "main" },
+    "workstreams": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "plane", "scope_paths", "acceptance"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,40}$" },
+          "title": { "type": "string", "minLength": 10 },
+          "plane": {
+            "type": "string",
+            "enum": ["cloud", "mac", "bench"],
+            "description": "cloud = Linux/backend/general (verify-cloud); mac = Apple truth via the M4 runner (mac-full-verify --remote); bench = CV intelligence judged by bench:compare."
+          },
+          "scope_paths": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "Globs the implementer may edit. Two workstreams must not overlap."
+          },
+          "acceptance": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "Objective, executable criteria. Each is checked by the reviewer and the adversary independently."
+          },
+          "competing": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 1,
+            "description": "Number of independent implementers. >1 = competing approaches judged on identical benchmarks."
+          }
+        }
+      }
+    }
+  }
+}
