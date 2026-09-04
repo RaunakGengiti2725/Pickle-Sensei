@@ -65,6 +65,37 @@ export function toSyncPayload(
  * consume it (see isPermanentSyncFailure). */
 export const OUTBOX_MAX_ATTEMPTS = 8;
 
+/** Rows of ONE kind a single drain takes, oldest first. */
+export const OUTBOX_DRAIN_WINDOW = 50;
+
+/**
+ * The outbox holds kinds with a dependency between them — a shot.sync row is
+ * only accepted once its session.create row has landed — so each kind gets
+ * its own window: sessions, then shots, then evaluation trials. One shared
+ * window would let 50 retryable shots of a not-yet-created session (or 50
+ * trial rows a transport cannot upload) sit at the head of the queue and keep
+ * the row they depend on out of reach for ever.
+ */
+type OutboxLane = 'session' | 'shot.sync' | 'evaluation.trial';
+
+async function selectDrainWindow(
+  db: LocalDb,
+  owner: string,
+  lane: OutboxLane,
+): Promise<Record<string, unknown>[]> {
+  const laneClause =
+    lane === 'session'
+      ? `kind NOT IN ('shot.sync', 'evaluation.trial')`
+      : `kind = '${lane}'`;
+  const { rows } = await db.execute(
+    `SELECT id, kind, payload, attempts FROM outbox
+     WHERE owner_key = ? AND attempts < ? AND ${laneClause}
+     ORDER BY id ASC LIMIT ${OUTBOX_DRAIN_WINDOW}`,
+    [owner, OUTBOX_MAX_ATTEMPTS],
+  );
+  return rows;
+}
+
 /** Server rejection code for a shot whose sessionId is not (yet) known —
  * mirrors `apply_synced_shot` / supabase/functions/api "shot.session_not_found". */
 export const SESSION_NOT_FOUND_REJECTION = 'shot.session_not_found';
@@ -207,11 +238,6 @@ export async function drainOutbox(
   transport: SyncTransport,
 ): Promise<{ synced: number; failed: number; remaining: number }> {
   const owner = getActiveDataOwner();
-  const { rows } = await db.execute(
-    `SELECT id, kind, payload, attempts FROM outbox
-     WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
-    [owner, OUTBOX_MAX_ATTEMPTS],
-  );
   let synced = 0;
   let failed = 0;
 
@@ -220,7 +246,8 @@ export async function drainOutbox(
   // session.create row is queued in the same batch as its first shot. Session
   // creation is idempotent server-side, so draining it ahead of the shots
   // costs nothing when it was already accepted.
-  for (const r of rows.filter(
+  const sessionRows = await selectDrainWindow(db, owner, 'session');
+  for (const r of sessionRows.filter(
     row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
   )) {
     let payload: Record<string, unknown>;
@@ -255,7 +282,9 @@ export async function drainOutbox(
     }
   }
 
-  const shotRows = rows.filter(r => r['kind'] === 'shot.sync');
+  const shotRows = (await selectDrainWindow(db, owner, 'shot.sync')).filter(
+    r => r['kind'] === 'shot.sync',
+  );
   // A row whose payload cannot become a sync request (corrupt JSON, missing
   // permit) fails alone and permanently; it never poisons the whole batch.
   const entries: Array<{
@@ -353,7 +382,9 @@ export async function drainOutbox(
     }
   }
 
-  const trialRows = rows.filter(r => r['kind'] === 'evaluation.trial');
+  const trialRows = (
+    await selectDrainWindow(db, owner, 'evaluation.trial')
+  ).filter(r => r['kind'] === 'evaluation.trial');
   if (trialRows.length > 0 && transport.uploadEvaluationTrials) {
     const entries: Array<{
       row: (typeof trialRows)[number];

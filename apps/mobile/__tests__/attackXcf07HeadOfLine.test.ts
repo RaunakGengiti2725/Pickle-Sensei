@@ -19,15 +19,16 @@ import { createSqliteDb, isSqliteAvailable } from '../harness/outbox/sqliteDb';
 import type { HarnessDb } from '../harness/outbox/durableStore';
 
 /**
- * ADVERSARIAL (XCF-07 fix, b7988b25): the session_not_found repair inserts
- * the replacement session.create row at the TAIL of the outbox, but
- * drainOutbox only ever looks at the first 50 retryable rows (ORDER BY id
- * ASC LIMIT 50). When 50 shots of the same lost session sit ahead of the
- * repaired row, resolveSessionNotFound sees "a retryable session.create row
- * is queued" and treats every rejection as transient — while that row can
- * never enter the drain window. Nothing is ever charged, nothing ever
- * converges: the exact "retried forever with shot.session_not_found, attempts
- * never advance" failure the fix claims to have removed.
+ * XCF-07 head-of-line regression (adversarial break of the round-1 fix):
+ * the session_not_found repair inserts the replacement session.create row at
+ * the TAIL of the outbox. With one shared 50-row drain window (ORDER BY id
+ * ASC LIMIT 50) 50 shots of the same lost session filled the window, the
+ * repaired row never entered it, and resolveSessionNotFound kept classifying
+ * every rejection as transient ("a retryable session.create row is queued") —
+ * attempts frozen at 1, nothing converged. drainOutbox now selects one window
+ * PER LANE (sessions, shots, trials), so the repaired row drains on the very
+ * next pass and the shots are accepted; these cases pin that on the harness
+ * memory model and on real SQLite with the production schema.
  */
 
 const owner = '11111111-1111-4111-8111-111111111111';
@@ -214,7 +215,7 @@ function describeBackend(name: string, make: () => HarnessDb, only: typeof it) {
     );
 
     only(
-      `never makes progress when ${WINDOW} shots of the lost session fill the drain window: the re-enqueued session.create sits behind them for ever and every rejection stays "transient"`,
+      `still repairs the session when ${WINDOW} shots of the lost session fill the shot window: the re-enqueued session.create drains on the next pass and every shot is accepted`,
       async () => {
         const store = make();
         const server = serverTransport();
@@ -233,37 +234,30 @@ function describeBackend(name: string, make: () => HarnessDb, only: typeof it) {
           server.transport,
           drains,
         );
-        const snap = store.snapshot();
-        const repaired = snap.outbox.filter(r => r.kind === 'session.create');
-        const shotRows = snap.outbox.filter(r => r.kind === 'shot.sync');
-
-        // Diagnostics for the report.
-        console.log(
-          JSON.stringify({
-            backend: name,
-            drains: results.length,
-            first: results[0],
-            last: results[results.length - 1],
-            createSessionCalls: server.calls.filter(c => c === 'createSession')
-              .length,
-            repairedRows: repaired.map(r => ({
-              id: r.id,
-              attempts: r.attempts,
-            })),
-            shotAttempts: Array.from(
-              new Set(shotRows.map(r => r.attempts)),
-            ).sort(),
-          }),
-        );
-
         await expectRepairedOrTerminal(store.db, shotIds);
-        expect(results[results.length - 1]).toMatchObject({ remaining: 0 });
+        // Pass 1: every shot rejected once, exactly one repair row queued.
+        // Pass 2: the repair drains ahead of the shots, then all 50 land.
+        expect(results).toHaveLength(2);
+        expect(results[0]).toMatchObject({
+          synced: 0,
+          failed: WINDOW,
+          remaining: WINDOW + 1,
+        });
+        expect(results[1]).toMatchObject({
+          synced: WINDOW + 1,
+          failed: 0,
+          remaining: 0,
+        });
+        expect(server.calls.filter(c => c === 'createSession')).toHaveLength(2);
+        expect(
+          store.snapshot().outbox.filter(r => r.owner_key === owner),
+        ).toEqual([]);
         store.close();
       },
     );
 
     only(
-      `also livelocks when the ${WINDOW} shots ahead of the repaired rows belong to two different lost sessions`,
+      `repairs both sessions when the ${WINDOW} shots ahead of the repaired rows belong to two different lost sessions`,
       async () => {
         const store = make();
         const server = serverTransport();
@@ -278,22 +272,17 @@ function describeBackend(name: string, make: () => HarnessDb, only: typeof it) {
           server.transport,
           OUTBOX_MAX_ATTEMPTS * 3,
         );
-        const snap = store.snapshot();
-        console.log(
-          JSON.stringify({
-            backend: name,
-            variant: 'two lost sessions',
-            drains: results.length,
-            last: results[results.length - 1],
-            createSessionCalls: server.calls.filter(c => c === 'createSession')
-              .length,
-            repairedRows: snap.outbox
-              .filter(r => r.kind === 'session.create')
-              .map(r => ({ id: r.id, attempts: r.attempts })),
-          }),
-        );
         await expectRepairedOrTerminal(store.db, shotIds);
-        expect(results[results.length - 1]).toMatchObject({ remaining: 0 });
+        expect(results).toHaveLength(2);
+        expect(results[1]).toMatchObject({
+          synced: WINDOW + 2,
+          failed: 0,
+          remaining: 0,
+        });
+        expect(server.calls.filter(c => c === 'createSession')).toHaveLength(4);
+        expect(
+          store.snapshot().outbox.filter(r => r.owner_key === owner),
+        ).toEqual([]);
         store.close();
       },
     );

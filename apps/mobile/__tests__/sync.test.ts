@@ -2,6 +2,7 @@
 import type { LocalDb } from '../src/data/db';
 import {
   drainOutbox,
+  OUTBOX_DRAIN_WINDOW,
   OUTBOX_MAX_ATTEMPTS,
   SESSION_NOT_FOUND_REJECTION,
   toSyncPayload,
@@ -115,13 +116,27 @@ function fakeDb() {
         };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
+        // Mirrors the production drain window: one lane per query, oldest
+        // first, capped by the LIMIT in the statement.
+        const laneMatch = /kind = '([a-z.]+)'/.exec(sql);
+        const lane = laneMatch ? laneMatch[1] : null;
+        const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] ?? Infinity);
+        const inLane = (kind: string) =>
+          lane !== null
+            ? kind === lane
+            : sql.includes('kind NOT IN')
+              ? kind !== 'shot.sync' && kind !== 'evaluation.trial'
+              : true;
         return {
           rows: outbox
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
+                r.attempts < Number(params[1]) &&
+                inLane(r.kind),
             )
+            .sort((x, y) => x.id - y.id)
+            .slice(0, limit)
             .map(r => ({ ...r })),
         };
       }
@@ -447,6 +462,42 @@ describe('drainOutbox', () => {
       ]);
       const second = await drainOutbox(db, transport);
       expect(second).toMatchObject({ synced: 3, failed: 0, remaining: 0 });
+    });
+
+    it(`drains the re-queued session.create ahead of ${OUTBOX_DRAIN_WINDOW} older retryable shots (per-lane windows, no head-of-line livelock)`, async () => {
+      // The repair row lands at the outbox TAIL. Shots and sessions get
+      // separate drain windows, so a full window of retryable shots can never
+      // keep the row they depend on out of reach.
+      const { db, push, addLocalSession, outbox } = fakeDb();
+      addLocalSession(localSession);
+      const shotIds = Array.from(
+        { length: OUTBOX_DRAIN_WINDOW },
+        (_, i) => `cccccccc-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      );
+      for (const id of shotIds) {
+        push('shot.sync', { ...permittedAnalysis, id, sessionId });
+      }
+      const { transport, calls } = serverTransport();
+
+      const first = await drainOutbox(db, transport);
+      expect(first).toMatchObject({
+        synced: 0,
+        failed: OUTBOX_DRAIN_WINDOW,
+        remaining: OUTBOX_DRAIN_WINDOW + 1,
+      });
+      expect(outbox[OUTBOX_DRAIN_WINDOW]).toMatchObject({
+        kind: 'session.create',
+        attempts: 0,
+      });
+
+      const second = await drainOutbox(db, transport);
+      expect(second).toEqual({
+        synced: OUTBOX_DRAIN_WINDOW + 1,
+        failed: 0,
+        remaining: 0,
+      });
+      expect(calls).toEqual(['syncShots', 'createSession', 'syncShots']);
+      expect(outbox).toHaveLength(0);
     });
 
     it('charges the budget and fails the shot terminally when the device has no record of the session', async () => {

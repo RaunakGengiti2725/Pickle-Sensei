@@ -305,6 +305,7 @@ describe('randomized outbox state machine (seeds 2000-2099)', () => {
       for (const op of [
         'save_shot',
         'save_shot_in_set',
+        'save_shot_burst',
         'save_shot_duplicate',
         'save_abstention',
         'start_set',

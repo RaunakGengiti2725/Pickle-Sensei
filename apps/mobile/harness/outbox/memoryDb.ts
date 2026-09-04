@@ -208,15 +208,22 @@ export function createMemoryDb(): HarnessDb {
       return { rows: [] };
     }
 
-    if (
-      sql.startsWith(
-        'SELECT id, kind, payload, attempts FROM outbox WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50',
-      )
-    ) {
+    const drainWindow =
+      /^SELECT id, kind, payload, attempts FROM outbox WHERE owner_key = \? AND attempts < \? AND (kind NOT IN \('shot\.sync', 'evaluation\.trial'\)|kind = '(shot\.sync|evaluation\.trial)') ORDER BY id ASC LIMIT 50$/.exec(
+        sql,
+      );
+    if (drainWindow) {
       const owner = str(params[0]);
       const cap = num(params[1]);
+      const lane = drainWindow[2];
+      const inLane = (kind: string) =>
+        lane === undefined
+          ? kind !== 'shot.sync' && kind !== 'evaluation.trial'
+          : kind === lane;
       const rows = tables.outbox
-        .filter(r => r.owner_key === owner && r.attempts < cap)
+        .filter(
+          r => r.owner_key === owner && r.attempts < cap && inLane(r.kind),
+        )
         .sort((x, y) => x.id - y.id)
         .slice(0, 50)
         .map(r => ({

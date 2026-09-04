@@ -21,6 +21,7 @@ import {
 } from '../../src/data/repository';
 import {
   drainOutbox,
+  OUTBOX_DRAIN_WINDOW,
   OUTBOX_MAX_ATTEMPTS,
   type SyncTransport,
 } from '../../src/data/sync';
@@ -87,6 +88,16 @@ export type Operation =
       order: 'session_first' | 'shot_first' | 'orphan';
       newSet: boolean;
       fate: ShotFate;
+    }
+  /** A whole sitting at once: enough shots of ONE set to fill (or overflow)
+   * a 50-row drain window, so a repair/session row queued after them must
+   * still be reachable. */
+  | {
+      op: 'save_shot_burst';
+      sessionId: string;
+      order: 'session_first' | 'shot_first' | 'orphan';
+      newSet: boolean;
+      shots: Array<{ shotId: string; permitId: string; fate: ShotFate }>;
     }
   | { op: 'save_shot_duplicate'; shotId: string }
   | { op: 'save_abstention'; shotId: string }
@@ -355,14 +366,57 @@ function payloadShotId(row: OutboxRowSnapshot): string | null {
   }
 }
 
+const OUTBOX_LANES = ['session', 'shot.sync', 'evaluation.trial'] as const;
+type OutboxLane = (typeof OUTBOX_LANES)[number];
+
+function laneOf(kind: string): OutboxLane {
+  return kind === 'shot.sync' || kind === 'evaluation.trial' ? kind : 'session';
+}
+
+function retryableByLane(
+  snapshot: DurableSnapshot,
+  owner: string,
+): Record<OutboxLane, OutboxRowSnapshot[]> {
+  const lanes: Record<OutboxLane, OutboxRowSnapshot[]> = {
+    session: [],
+    'shot.sync': [],
+    'evaluation.trial': [],
+  };
+  for (const row of [...snapshot.outbox].sort((x, y) => x.id - y.id)) {
+    if (row.owner_key !== owner || row.attempts >= OUTBOX_MAX_ATTEMPTS)
+      continue;
+    lanes[laneOf(row.kind)].push(row);
+  }
+  return lanes;
+}
+
+/** Mirrors drainOutbox's selection: one 50-row window PER LANE (sessions,
+ * shots, trials), so shots can never keep a session.create row out of reach. */
 function eligibleWindow(
   snapshot: DurableSnapshot,
   owner: string,
 ): OutboxRowSnapshot[] {
-  return snapshot.outbox
-    .filter(r => r.owner_key === owner && r.attempts < OUTBOX_MAX_ATTEMPTS)
-    .sort((x, y) => x.id - y.id)
-    .slice(0, 50);
+  const lanes = retryableByLane(snapshot, owner);
+  return OUTBOX_LANES.flatMap(lane =>
+    lanes[lane].slice(0, OUTBOX_DRAIN_WINDOW),
+  );
+}
+
+/**
+ * Healthy drains a queue needs to settle: every retryable row is accepted or
+ * charged once per drain it is selected in, so a lane deeper than one window
+ * needs OUTBOX_MAX_ATTEMPTS more drains per extra window before its last
+ * permanently-rejected row can exhaust. The base of 12 covers one window plus
+ * the session-repair pass and bounded transient fates.
+ */
+function healthyDrainsToConverge(
+  snapshot: DurableSnapshot,
+  owner: string,
+): number {
+  const lanes = retryableByLane(snapshot, owner);
+  const deepest = Math.max(...OUTBOX_LANES.map(lane => lanes[lane].length));
+  const windows = Math.max(1, Math.ceil(deepest / OUTBOX_DRAIN_WINDOW));
+  return 12 + OUTBOX_MAX_ATTEMPTS * (windows - 1);
 }
 
 function rowsToStatuses(rows: OutboxRowSnapshot[]): OutboxRowStatus[] {
@@ -1278,6 +1332,31 @@ export async function runSequence(
         },
         14,
       ]);
+      choices.push([
+        () => {
+          const reuse = ownerSessions.length > 0 && rng.chance(0.5);
+          const session = reuse ? rng.pick(ownerSessions) : null;
+          const count = rng.int(OUTBOX_DRAIN_WINDOW, OUTBOX_DRAIN_WINDOW + 10);
+          return {
+            op: 'save_shot_burst',
+            sessionId: session ? session.id : rng.uuid(),
+            order: session
+              ? 'session_first'
+              : rng.weighted([
+                  ['shot_first', 5],
+                  ['session_first', 3],
+                  ['orphan', 3],
+                ] as const),
+            newSet: session === null,
+            shots: Array.from({ length: count }, () => ({
+              shotId: rng.uuid(),
+              permitId: rng.uuid(),
+              fate: rng.chance(0.7) ? { kind: 'accept' } : drawFate(rng),
+            })),
+          };
+        },
+        1.5,
+      ]);
       if (ownerShots.length > 0) {
         choices.push([
           () => ({
@@ -1425,7 +1504,13 @@ export async function runSequence(
       ]);
     }
     if (outboxRows.length > 0 && writable) {
-      choices.push([() => ({ op: 'healthy_convergence', maxDrains: 12 }), 3]);
+      choices.push([
+        () => ({
+          op: 'healthy_convergence',
+          maxDrains: healthyDrainsToConverge(snapshot, OWNER_KEYS[role]),
+        }),
+        3,
+      ]);
     }
     return rng.weighted(choices)();
   };
@@ -1498,6 +1583,41 @@ export async function runSequence(
             operation.order === 'orphan'
               ? 'saved (session never queued)'
               : 'saved',
+          );
+          break;
+        }
+        case 'save_shot_burst': {
+          const startedAt = isoAt(rng);
+          const start = async () => {
+            await saveSession(db, {
+              id: operation.sessionId,
+              mode: 'practice_set',
+              shotType: 'forehand_drive',
+              focusCheckpoint: null,
+              startedAt,
+            });
+            sessions.set(operation.sessionId, {
+              id: operation.sessionId,
+              role,
+            });
+            sessionQueued.add(`${role}|${operation.sessionId}`);
+          };
+          if (operation.newSet && operation.order === 'session_first')
+            await start();
+          for (const shot of operation.shots) {
+            await saveShot(
+              shot.shotId,
+              shot.permitId,
+              operation.sessionId,
+              shot.fate,
+            );
+          }
+          if (operation.newSet && operation.order === 'shot_first')
+            await start();
+          record(
+            step,
+            operation,
+            `saved ${operation.shots.length} shots${operation.order === 'orphan' ? ' (session never queued)' : ''}`,
           );
           break;
         }
