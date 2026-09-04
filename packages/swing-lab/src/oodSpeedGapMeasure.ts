@@ -3,6 +3,12 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  deriveHeldOutCaseIds,
+  HOLDOUT_LEDGER_PATH,
+  loadHoldoutLedger,
+  type HoldoutLedger,
+} from "./holdoutRotation.js";
 
 /**
  * F10 speed-gap experiment: measures pose-free TEMPORAL signals over the
@@ -16,13 +22,16 @@ import { fileURLToPath } from "node:url";
  *  - inter-frame timing: container frame-timestamp delta statistics
  *  - optical-flow proxy: block-matching velocity distribution (128x72 gray)
  *
- * Held-out cases (wm-dink-01, afn-vic-rally1) are never read. Fresh
+ * Held-out cases are never read: the set comes from the holdout ledger
+ * (datasets/holdouts/ledger.json — retired holdouts plus every designated
+ * SHADOW_HOLDOUT / LOCKED_TEST successor), so a fresh candidate that the
+ * ledger has designated as a successor is skipped by the enumeration, and a
+ * tune positive that the ledger holds out aborts the experiment. Fresh
  * candidates are measured for verification only (would a candidate signal
  * falsely reject them) — no thresholds are fit to them.
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const HELD_OUT = new Set(["wm-dink-01", "afn-vic-rally1"]);
 const TUNE_POSITIVES = ["afn-sasebo-rally1", "wm-volley-02"];
 const SPEED_FACTORS = [1.5, 2, 3];
 /** Bound decode work on long fresh candidates; deterministic prefix. */
@@ -284,14 +293,62 @@ export function measureClip(
   };
 }
 
+export interface SpeedGapClip {
+  id: string;
+  path: string;
+}
+
+export interface SpeedGapClipPlan {
+  tunePositives: SpeedGapClip[];
+  /** Fresh-candidate clips with every ledger-held-out id removed before any read. */
+  freshCandidates: SpeedGapClip[];
+  /** Sorted ledger-derived held-out ids the plan excluded. */
+  heldOut: string[];
+}
+
+export interface SpeedGapClipPlanOptions {
+  bundlesDir?: string;
+  freshDir?: string;
+  ledger?: HoldoutLedger;
+}
+
+/**
+ * Which clips the experiment may touch. Computed before any decode so that a
+ * held-out clip is never opened: a held-out tune positive is a hard error,
+ * and held-out fresh candidates are dropped from the enumeration.
+ */
+export function speedGapClipPlan(options: SpeedGapClipPlanOptions = {}): SpeedGapClipPlan {
+  const bundlesDir = options.bundlesDir ?? join(repoRoot, "datasets", "paddle-bench", "bundles");
+  const freshDir = options.freshDir ?? join(repoRoot, "datasets", "pickleball", "fresh-candidates");
+  const heldOut = deriveHeldOutCaseIds(options.ledger ?? loadHoldoutLedger(repoRoot)).all;
+  for (const bundle of TUNE_POSITIVES) {
+    if (heldOut.has(bundle)) {
+      throw new Error(
+        `held-out bundle in tune set: ${bundle} is held out by ${HOLDOUT_LEDGER_PATH} and cannot be a tune positive`,
+      );
+    }
+  }
+  const freshCandidates = readdirSync(freshDir)
+    .filter((file) => file.endsWith(".mp4"))
+    .sort()
+    .map((file) => ({ id: file.replace(/\.mp4$/, ""), path: join(freshDir, file) }))
+    .filter((clip) => !heldOut.has(clip.id));
+  return {
+    tunePositives: TUNE_POSITIVES.map((bundle) => ({
+      id: bundle,
+      path: join(bundlesDir, bundle, "clip.mp4"),
+    })),
+    freshCandidates,
+    heldOut: [...heldOut].sort(),
+  };
+}
+
 export function runSpeedGapExperiment(): SpeedGapMeasurement[] {
   const measurements: SpeedGapMeasurement[] = [];
-  const bundles = join(repoRoot, "datasets", "paddle-bench", "bundles");
+  const plan = speedGapClipPlan();
   const workDir = mkdtempSync(join(tmpdir(), "ood-speed-gap-"));
   try {
-    for (const bundle of TUNE_POSITIVES) {
-      if (HELD_OUT.has(bundle)) throw new Error(`held-out bundle in tune set: ${bundle}`);
-      const clip = join(bundles, bundle, "clip.mp4");
+    for (const { id: bundle, path: clip } of plan.tunePositives) {
       measurements.push(measureClip(bundle, clip, "tune_positive", null, null));
       for (const factor of SPEED_FACTORS) {
         const variant = join(workDir, `${bundle}-x${factor}.mp4`);
@@ -314,17 +371,8 @@ export function runSpeedGapExperiment(): SpeedGapMeasurement[] {
         );
       }
     }
-    const freshDir = join(repoRoot, "datasets", "pickleball", "fresh-candidates");
-    for (const file of readdirSync(freshDir).filter((f) => f.endsWith(".mp4"))) {
-      measurements.push(
-        measureClip(
-          file.replace(/\.mp4$/, ""),
-          join(freshDir, file),
-          "fresh_candidate",
-          null,
-          null,
-        ),
-      );
+    for (const clip of plan.freshCandidates) {
+      measurements.push(measureClip(clip.id, clip.path, "fresh_candidate", null, null));
     }
   } finally {
     rmSync(workDir, { recursive: true, force: true });

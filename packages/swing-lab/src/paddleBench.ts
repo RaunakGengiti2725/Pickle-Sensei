@@ -2,12 +2,21 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PaddleFrameLabel } from "./annotationSchema.js";
+import { REPO_ROOT } from "./engine/corpus.js";
+import { HOLDOUT_LEDGER_PATH, loadHeldOutCaseIds, type HeldOutCaseIds } from "./holdoutRotation.js";
 
 /**
  * REAL paddle benchmark scoring: human center-point labels vs the tracker's
  * observations. Point-based ground truth supports detection rate and center
  * error (no IoU without boxes — not claimed). Sample sizes print first;
  * a tiny benchmark must look tiny.
+ *
+ * HELD-OUT SAFETY: before any label or run file is opened, every manifest
+ * case is checked against the holdout ledger. A budget-protected case
+ * (SHADOW_HOLDOUT / LOCKED_TEST holdout or designated successor) is refused
+ * under any role — one scoring run is one inspection too many — and a retired
+ * holdout is accepted only when the manifest declares it held out, never
+ * relabelled as development footage.
  */
 
 export const PADDLE_HIT_RADIUS = 0.08; // normalized units ≈ paddle diameter
@@ -114,18 +123,47 @@ function nearestPrediction(
 
 // ── CLI ────────────────────────────────────────────────────────────────────
 
+export const HELD_OUT_MANIFEST_ROLES: readonly string[] = ["held_out", "test_held_out"];
+
+export interface BenchManifestCase {
+  id: string;
+  video: string;
+  labels: string; // annotation JSON with paddleFrames
+  runDir: string; // lab:analyze output dir containing debug.json
+  role?: string;
+  sourceKey?: string;
+  sessionKey?: string;
+}
+
 interface BenchManifest {
   schemaVersion: 1;
   provenance: string;
   coverageGaps?: string[];
-  cases: Array<{
-    id: string;
-    video: string;
-    labels: string; // annotation JSON with paddleFrames
-    runDir: string; // lab:analyze output dir containing debug.json
-    sourceKey?: string;
-    sessionKey?: string;
-  }>;
+  cases: BenchManifestCase[];
+}
+
+/**
+ * Ledger violations in a manifest, one message per offending case. Empty
+ * means every case may be scored.
+ */
+export function heldOutManifestViolations(
+  cases: readonly Pick<BenchManifestCase, "id" | "role">[],
+  heldOut: HeldOutCaseIds,
+): string[] {
+  const violations: string[] = [];
+  for (const benchCase of cases) {
+    const role = benchCase.role ?? "(no role)";
+    if (heldOut.protected.has(benchCase.id)) {
+      violations.push(
+        `case ${benchCase.id} (role ${role}) is a budget-protected holdout in ${HOLDOUT_LEDGER_PATH} — a SHADOW_HOLDOUT/LOCKED_TEST holdout or designated successor may not be scored by paddle-bench`,
+      );
+    } else if (heldOut.retired.has(benchCase.id) && !HELD_OUT_MANIFEST_ROLES.includes(role)) {
+      violations.push(
+        `case ${benchCase.id} is a retired holdout in ${HOLDOUT_LEDGER_PATH} but the manifest lists it as role ${role} — retired holdouts run only as declared held-out regression fixtures (${HELD_OUT_MANIFEST_ROLES.join(" | ")})`,
+      );
+    }
+  }
+  return violations;
 }
 
 const isMain = process.argv[1]?.endsWith("paddleBench.ts");
@@ -141,6 +179,17 @@ if (isMain) {
   const baseDir = dirname(manifestPath);
   if (manifest.provenance === "synthetic") {
     console.error("paddle-bench refuses synthetic provenance; this benchmark is for REAL footage.");
+    process.exit(1);
+  }
+  const heldOutViolations = heldOutManifestViolations(
+    manifest.cases,
+    loadHeldOutCaseIds(REPO_ROOT),
+  );
+  if (heldOutViolations.length > 0) {
+    console.error(
+      `paddle-bench refuses manifest ${manifestPath}: ${heldOutViolations.length} held-out violation(s)`,
+    );
+    for (const violation of heldOutViolations) console.error(`  ${violation}`);
     process.exit(1);
   }
   const results: PaddleBenchCaseResult[] = [];

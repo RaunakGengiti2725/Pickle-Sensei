@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,8 +26,12 @@ const tsxBin = join(pkgRoot, "node_modules", ".bin", "tsx");
 const cli = join(pkgRoot, "src", "paddleBench.ts");
 const committedManifest = join(REPO_ROOT, "datasets", "paddle-bench", "paddle-bench.json");
 
-function runPaddleBench(manifest?: string): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(tsxBin, manifest ? [cli, manifest] : [cli], {
+function runPaddleBench(manifest: string): {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+} {
+  const result = spawnSync(tsxBin, [cli, manifest], {
     cwd: pkgRoot,
     encoding: "utf8",
     env: { ...process.env, NO_COLOR: "1" },
@@ -102,7 +106,15 @@ describe("S1: paddle-bench refuses ledger-held-out case ids", () => {
     for (const benchCase of committed.cases) {
       expect(successorIds, benchCase.id).not.toContain(benchCase.id);
     }
-    const run = runPaddleBench();
+    // Score from a scratch copy of the manifest whose data dirs link back to
+    // the committed ones, so the run's results file lands outside the repo.
+    const scratch = mkdtempSync(join(tmpdir(), "paddle-bench-committed-"));
+    for (const dir of ["bundles", "runs", "videos"]) {
+      symlinkSync(join(dirname(committedManifest), dir), join(scratch, dir), "dir");
+    }
+    const manifest = join(scratch, "paddle-bench.json");
+    writeFileSync(manifest, readFileSync(committedManifest));
+    const run = runPaddleBench(manifest);
     expect(run.status, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`).toBe(0);
     expect(run.stdout).toContain("REAL PADDLE BENCHMARK");
   });

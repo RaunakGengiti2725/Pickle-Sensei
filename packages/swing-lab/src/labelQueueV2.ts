@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
+import { loadHeldOutCaseIds } from "./holdoutRotation.js";
 
 /**
  * Active-learning label queue v2 (Wave D2, workstream D2-10).
@@ -19,12 +20,18 @@ import { REPO_ROOT } from "./engine/corpus.js";
  * provenance quotes the committed artifact it was derived from. No RNG,
  * no timestamps in the ranking, stable tie-breaks (score desc, then id asc).
  *
- * HELD-OUT SAFETY: wm-dink-01 and afn-vic-rally1 are excluded from candidate
- * generation entirely — the queue must never direct labeling effort at them
- * (HANDOFF_V3 rule 17: held-out iteration is forbidden).
+ * HELD-OUT SAFETY: every case the holdout ledger holds out (retired holdouts
+ * and designated SHADOW_HOLDOUT / LOCKED_TEST successors, see
+ * datasets/holdouts/ledger.json) is excluded from candidate generation
+ * entirely — the queue must never direct labeling effort at them
+ * (HANDOFF_V3 rule 17: held-out iteration is forbidden). The list is derived
+ * from the ledger at load time, never hand-copied; a missing or malformed
+ * ledger fails the import (HoldoutLedgerError) rather than queueing blind.
  */
 
-export const HELD_OUT_BUNDLES = ["wm-dink-01", "afn-vic-rally1"] as const;
+export const HELD_OUT_BUNDLES: readonly string[] = Object.freeze(
+  [...loadHeldOutCaseIds(REPO_ROOT).all].sort(),
+);
 
 export type Modality = "ownership" | "contact" | "ball" | "events" | "stroke";
 
@@ -298,7 +305,7 @@ export function countBundleLabels(bundlesDir: string): BundleModalityCount[] {
   const counts: BundleModalityCount[] = [];
   const bundles = existsSync(bundlesDir)
     ? readdirSync(bundlesDir)
-        .filter((b) => !(HELD_OUT_BUNDLES as readonly string[]).includes(b))
+        .filter((b) => !HELD_OUT_BUNDLES.includes(b))
         .sort()
     : [];
   for (const bundleId of bundles) {
