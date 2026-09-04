@@ -117,6 +117,8 @@ describe('StreakCalendarScreen', () => {
       dayNode.props.onPress();
     });
     const copy = allText(renderer);
+    // The heading names the tapped engine day key in every device zone.
+    expect(copy).toContain('Monday, March 9');
     expect(copy).toContain('forehand drive');
     expect(copy).toContain('Dink ladder');
     expect(copy).toContain('2 ACTIVITIES');
