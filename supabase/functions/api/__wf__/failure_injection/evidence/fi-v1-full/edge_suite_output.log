@@ -1,0 +1,349 @@
+[0m[32mTask[0m [0m[36mtest[0m deno test -A --no-check --config deno.json .
+[0m[38;5;245mrunning 5 tests from ./account_external_cleanup.test.ts[0m
+Apple bootstrap exchanges the one-use code and stores only encrypted revocation material ...
+[0m[38;5;245m------- output -------[0m
+[0m[38;5;245m----- output end -----[0m
+Apple bootstrap exchanges the one-use code and stores only encrypted revocation material ... [0m[32mok[0m [0m[38;5;245m(23ms)[0m
+legacy Apple bootstrap remains compatible before the mobile update ships ...
+[0m[38;5;245m------- output -------[0m
+[0m[38;5;245m----- output end -----[0m
+legacy Apple bootstrap remains compatible before the mobile update ships ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+revocation-capable Apple clients fail closed if the one-use code is missing ...
+[0m[38;5;245m------- output -------[0m
+[0m[38;5;245m----- output end -----[0m
+revocation-capable Apple clients fail closed if the one-use code is missing ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+delete-confirm revokes Apple and erases RevenueCat before deleting Supabase auth ...
+[0m[38;5;245m------- output -------[0m
+[0m[38;5;245m----- output end -----[0m
+delete-confirm revokes Apple and erases RevenueCat before deleting Supabase auth ... [0m[32mok[0m [0m[38;5;245m(4ms)[0m
+legacy Apple deletion is fulfilled and explicitly reports the manual disconnect step ...
+[0m[38;5;245m------- output -------[0m
+[0m[38;5;245m----- output end -----[0m
+legacy Apple deletion is fulfilled and explicitly reports the manual disconnect step ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[0m[38;5;245mrunning 9 tests from ./account_routes.test.ts[0m
+delete-request mints a UUID challenge with a 15-minute expiry ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+delete-request mints a UUID challenge with a 15-minute expiry ... [0m[32mok[0m [0m[38;5;245m(22ms)[0m
+delete-confirm rejects a non-UUID challenge with 400 and no admin call ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+delete-confirm rejects a non-UUID challenge with 400 and no admin call ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+delete-confirm enforces the 3-second minimum challenge age (429) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+delete-confirm enforces the 3-second minimum challenge age (429) ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+onboarding rejects malformed JSON with 400, not 5xx ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+onboarding rejects malformed JSON with 400, not 5xx ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+REPRO: GoTrue 503 during signInWithIdToken is returned as 401 'token could not be verified' ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+REPRO: GoTrue 503 during signInWithIdToken is returned as 401 'token could not be verified' ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+replaying delete-confirm after deleteUser succeeded remains a successful deletion ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+replaying delete-confirm after deleteUser succeeded remains a successful deletion ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+after a successful delete-confirm the bearer is re-verified with Supabase Auth, not served from cache ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+after a successful delete-confirm the bearer is re-verified with Supabase Auth, not served from cache ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+teardown fake supabase ... [0m[32mok[0m [0m[38;5;245m(326µs)[0m
+[0m[38;5;245mrunning 2 tests from ./auth_session_cache_test.ts[0m
+one stale-bearer client on a shared IP locks out fresh sign-ins from that IP ... [0m[32mok[0m [0m[38;5;245m(619µs)[0m
+verified-session entry outlives account deletion: cacheDel(rank, progress) leaves auth:<hash> readable until expiresAtMs ... [0m[32mok[0m [0m[38;5;245m(493µs)[0m
+[0m[38;5;245mrunning 6 tests from ./be-edge-routes-shots-rank.test.ts[0m
+apply_synced_shot: a failing detail insert rolls back the shot and leaves the permit reserved ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+apply_synced_shot: accepted scored shot finalizes the permit, refreshes rank state, and replays idempotently ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+free limit: after two scored analyses the third permit is refused (access.paywall_required) ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+apply_synced_shot: values the edge parser accepts but the schema rejects surface as shot.write_failed (retryable) instead of validation errors ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+progress_daily: one year of three-technique daily practice exceeds PostgREST's default 1000-row cap ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+rank parity: player_technique_rating + recompute_player_rank match computePlayerRank on seeded histories ... [0m[33mignored[0m [0m[38;5;245m(0ms)[0m
+[0m[38;5;245mrunning 9 tests from ./cache.test.ts[0m
+cacheSet writes L1 and L2; cacheGet on a cold isolate reads L2 and warms L1 ... [0m[32mok[0m [0m[38;5;245m(18ms)[0m
+cacheGet does NOT warm L1 from a Redis value without a TTL ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[defect] cross-isolate cacheDel leaves the OTHER isolate's L1 copy alive for the full TTL ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+[defect] auth-failure counter: concurrent failures in one isolate collapse to a single increment ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[defect] auth-failure counter: each isolate counts from its own L1 copy, so the shared budget is never reached ... [0m[32mok[0m [0m[38;5;245m(4ms)[0m
+Redis HTTP failure: cacheGet is null, cacheSet still warms L1, nothing throws ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+[defect] no circuit breaker: every L2 call after a timeout still waits the full 1.2 s ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+L1 is capped at 5 000 entries; overflow drops the oldest third (no unbounded growth) ... [0m[32mok[0m [0m[38;5;245m(7ms)[0m
+expired L1 entries are dropped lazily on read ... [0m[32mok[0m [0m[38;5;245m(92ms)[0m
+[0m[38;5;245mrunning 1 test from ./db_migrations_rls_indexes.audit.test.ts[0m
+db-migrations-rls-indexes audit matrix ...
+  INVARIANT: hosted-like matrix applies (migration chain + shim boot) ... [0m[32mok[0m [0m[38;5;245m(50ms)[0m
+  FIXED (high): authenticated has no DELETE on public.shots -> lifetime free-rating counter is not client-resettable ... [0m[32mok[0m [0m[38;5;245m(178ms)[0m
+  INVARIANT: shots UPDATE, detail-row and ledger mutations stay denied ... [0m[32mok[0m [0m[38;5;245m(152ms)[0m
+  INVARIANT: hot RPCs are SECURITY INVOKER; rank recompute is DEFINER, pinned, not client-executable ... [0m[32mok[0m [0m[38;5;245m(50ms)[0m
+  INVARIANT: hot reads use the owner indexes under RLS (100k-user shape) ... [0m[32mok[0m [0m[38;5;245m(5s)[0m
+  FIXED (medium): profiles -> shot_phases / shot_measurements / analysis_feedback cascades are user_id-indexed (account deletion does not seq-scan them) ... [0m[32mok[0m [0m[38;5;245m(58ms)[0m
+  FIXED (low): pg_cron stale-permit sweep predicate is index-backed (no hourly seq scan of every permit ever issued) ... [0m[32mok[0m [0m[38;5;245m(52ms)[0m
+db-migrations-rls-indexes audit matrix ... [0m[32mok[0m [0m[38;5;245m(8s)[0m
+[0m[38;5;245mrunning 5 tests from ./db_migrations_rls_indexes.test.ts[0m
+shots: the client DELETE path is closed and never reopened ... [0m[32mok[0m [0m[38;5;245m(10ms)[0m
+shots: the pre-fix chain is the one the revoke was written against ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+cascade children and the permit sweep are indexed on their lookup columns ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+permit sweep: the pg_cron predicate and the partial index stay in step ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+free ratings: every decision point counts through the identity ledger, from the ledger migration on ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[0m[38;5;245mrunning 14 tests from ./drills_billing_healthz.test.ts[0m
+catalog list: whole static catalog, cursor null, ONE saved-slug query, saved flags merged ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+catalog list: whole static catalog, cursor null, ONE saved-slug query, saved flags merged ... [0m[32mok[0m [0m[38;5;245m(67ms)[0m
+catalog list: q/family filters narrow the static catalog; unknown family → empty items (not an error) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+catalog list: q/family filters narrow the static catalog; unknown family → empty items (not an error) ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+catalog detail: drill + empty mappings + youtube-nocookie embed media; unknown slug → 404 coded ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+catalog detail: drill + empty mappings + youtube-nocookie embed media; unknown slug → 404 coded ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+drill ids are deterministic across calls (catalog + media) ... [0m[32mok[0m [0m[38;5;245m(911µs)[0m
+saved drills list: catalog entries hydrated in-memory, no per-row DB queries ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+saved drills list: catalog entries hydrated in-memory, no per-row DB queries ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+REPRO (defect): PUT /v1/me/saved-drills/:slug accepts slugs that are not in the catalog ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+REPRO (defect): PUT /v1/me/saved-drills/:slug accepts slugs that are not in the catalog ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+REPRO (defect): orphaned bookmark gets a NEW random id on every list call ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+REPRO (defect): orphaned bookmark gets a NEW random id on every list call ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+malformed percent-encoding in a slug path is a JSON 400 from the handler, never an uncaught URIError 500 ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+malformed percent-encoding in a slug path is a JSON 400 from the handler, never an uncaught URIError 500 ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+billing sync: RevenueCat verdict persisted via service role and returned with access ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+billing sync: RevenueCat verdict persisted via service role and returned with access ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+billing sync: lapsed entitlement revokes premium; RevenueCat outage → 502 billing_unavailable ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+billing sync: lapsed entitlement revokes premium; RevenueCat outage → 502 billing_unavailable ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+billing sync: per-user budget 10/min → 11th call is 429 with Retry-After ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+billing sync: per-user budget 10/min → 11th call is 429 with Retry-After ... [0m[32mok[0m [0m[38;5;245m(7ms)[0m
+healthz: 200 {ok:true} with no-store/nosniff, no auth, no DB ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+healthz: 200 {ok:true} with no-store/nosniff, no auth, no DB ... [0m[32mok[0m [0m[38;5;245m(178µs)[0m
+healthz: 60/min per IP, then 429 + Retry-After ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+healthz: 60/min per IP, then 429 + Retry-After ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+per-IP limits key on the edge-authoritative address, so rotating the client-controlled first x-forwarded-for hop cannot buy a fresh budget ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+per-IP limits key on the edge-authoritative address, so rotating the client-controlled first x-forwarded-for hop cannot buy a fresh budget ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[0m[38;5;245mrunning 5 tests from ./externalAccounts_test.ts[0m
+Apple authorization-code exchange sends a signed client secret and returns the bound grant ... [0m[32mok[0m [0m[38;5;245m(12ms)[0m
+Apple invalid_grant is distinguished from a retryable provider outage ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+Apple refresh-token encryption round-trips and is bound to the canonical user ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+Apple revocation uses the refresh-token hint and accepts idempotent 200 ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+RevenueCat customer deletion requires the secret key and treats not-found as erased ... [0m[32mok[0m [0m[38;5;245m(450µs)[0m
+[0m[38;5;245mrunning 18 tests from ./failure_injection.test.ts[0m
+failure injection: matrix runs against the real handler and reaches every declared dependency ...[0m[1m[33m'failure injection: matrix runs against the real handler and reaches every declared dependency' has been running for over [0m[38;5;245m(1m0s)[0m[0m
+ [0m[32mok[0m [0m[38;5;245m(1m17s)[0m
+failure injection: no response leaks upstream/internal detail (sentinel or 5xx patterns) — pinned defects included ... [0m[32mok[0m [0m[38;5;245m(157µs)[0m
+failure injection: no unexpected HTTP 500 under any injected upstream failure ... [0m[32mok[0m [0m[38;5;245m(115µs)[0m
+failure injection: Redis outage/slow/malformed/hang never changes a route's status (memory fallback) ... [0m[32mok[0m [0m[38;5;245m(81µs)[0m
+failure injection: Auth outages surface as retryable 503, never as a sign-out 401 ... [0m[32mok[0m [0m[38;5;245m(188µs)[0m
+failure injection: DB (PostgREST/RPC) failures → 503 or per-item retryable rejection, never a false 2xx ... [0m[32mok[0m [0m[38;5;245m(160µs)[0m
+failure injection: RevenueCat/Apple failures map to their coded 502/503 (or coded 401 for invalid_grant) ... [0m[32mok[0m [0m[38;5;245m(81µs)[0m
+failure injection: targeted single-call faults behave as documented ... [0m[32mok[0m [0m[38;5;245m(58µs)[0m
+failure injection: bounded-latency dependencies (Redis 1.2s, RevenueCat 10s) answer within budget under a hang ... [0m[32mok[0m [0m[38;5;245m(66µs)[0m
+REPRO (defect F1): Supabase Auth outage (5xx/network/malformed) → 401 sign-out class instead of retryable 503 ... [0m[32mok[0m [0m[38;5;245m(119µs)[0m
+REPRO (defect F1b): POST /v1/auth/refresh: Auth network error / malformed body → 401 (only HTTP 5xx maps to 503) ... [0m[32mok[0m [0m[38;5;245m(42µs)[0m
+REPRO (defect F2): 30 Auth-outage responses from one IP trip the auth-failure lockout: healthy requests get 429 ... [0m[32mok[0m [0m[38;5;245m(23µs)[0m
+REPRO (defect F3): POST /v1/auth/logout: Auth network error is uncaught → generic 500 instead of 503 ... [0m[32mok[0m [0m[38;5;245m(32µs)[0m
+REPRO (defect F4): No upstream timeout on Supabase Auth / PostgREST calls: a hung upstream hangs the route past every client timeout ... [0m[32mok[0m [0m[38;5;245m(22µs)[0m
+REPRO (defect F5): RevenueCat webhook: DB failure while persisting the verified verdict is acknowledged with 200 (provider never retries) ... [0m[32mok[0m [0m[38;5;245m(28µs)[0m
+REPRO (defect F6): Array-typed PostgREST reads assume an array: a 2xx object body throws → generic 500 (low realism) ... [0m[32mok[0m [0m[38;5;245m(21µs)[0m
+REPRO (defect F7): POST /v1/auth/refresh during an Auth outage is held ~25s by auth-js retry backoff — longer than the app's 15s refresh timeout ... [0m[32mok[0m [0m[38;5;245m(54µs)[0m
+REPRO (defect F8): Hung Upstash Redis costs every authenticated request 5–7 serial 1.2s timeouts (6–8.4s added latency, no circuit breaker) ... [0m[32mok[0m [0m[38;5;245m(34µs)[0m
+[0m[38;5;245mrunning 10 tests from ./fix-18-http_test.ts[0m
+sanitizeUserText never splits a surrogate pair at the length cap ... [0m[32mok[0m [0m[38;5;245m(661µs)[0m
+sanitizeUserText caps in code points and matches the DB char_length caps ... [0m[32mok[0m [0m[38;5;245m(194µs)[0m
+sanitizeUserText drops lone surrogates present in the input ... [0m[32mok[0m [0m[38;5;245m(62µs)[0m
+sanitizeUserText normalises line breaks and tabs to a single space ... [0m[32mok[0m [0m[38;5;245m(34µs)[0m
+sanitizeUserText still strips non-whitespace control and spoofing characters ... [0m[32mok[0m [0m[38;5;245m(45µs)[0m
+sanitizeUserText leaves no trailing whitespace after truncation ... [0m[32mok[0m [0m[38;5;245m(28µs)[0m
+clientIp prefers cf-connecting-ip over any x-forwarded-for hop ... [0m[32mok[0m [0m[38;5;245m(4ms)[0m
+clientIp ignores the client-controlled leading x-forwarded-for hops ... [0m[32mok[0m [0m[38;5;245m(175µs)[0m
+clientIp uses the only x-forwarded-for hop when the edge header is absent ... [0m[32mok[0m [0m[38;5;245m(88µs)[0m
+clientIp falls back to 'unknown' without any client address ... [0m[32mok[0m [0m[38;5;245m(95µs)[0m
+[0m[38;5;245mrunning 10 tests from ./http_test.ts[0m
+sanitizeUserText strips C0/C1 controls, zero-width, bidi overrides, BOM ... [0m[32mok[0m [0m[38;5;245m(512µs)[0m
+sanitizeUserText removes CR/LF (header/log injection vector) and collapses spaces ... [0m[32mok[0m [0m[38;5;245m(79µs)[0m
+sanitizeUserText turns \n \r \t between words into single spaces instead of gluing words together ... [0m[32mok[0m [0m[38;5;245m(23µs)[0m
+sanitizeUserText truncates to maxLength code points ... [0m[32mok[0m [0m[38;5;245m(30µs)[0m
+sanitizeUserText never truncates inside a surrogate pair, so the result is valid UTF-16 / JSON ... [0m[32mok[0m [0m[38;5;245m(209µs)[0m
+clientIp prefers the edge's cf-connecting-ip and otherwise the LAST X-Forwarded-For hop ... [0m[32mok[0m [0m[38;5;245m(4ms)[0m
+constantTimeEqual compares byte-wise and rejects length mismatch ... [0m[32mok[0m [0m[38;5;245m(88µs)[0m
+JSON_SECURITY_HEADERS pin content-type, nosniff, no-store, no-referrer ... [0m[32mok[0m [0m[38;5;245m(86µs)[0m
+Headers API rejects CR/LF so a hostile value cannot split response headers ... [0m[32mok[0m [0m[38;5;245m(277µs)[0m
+legalTextResponse is text/plain, nosniff, publicly cacheable for 1h ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+[0m[38;5;245mrunning 7 tests from ./index_preauth_test.ts[0m
+healthz answers without auth ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+healthz answers without auth ... [0m[32mok[0m [0m[38;5;245m(13ms)[0m
+an already-expired provider token is refused before any verification ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+an already-expired provider token is refused before any verification ... [0m[32mok[0m [0m[38;5;245m(944µs)[0m
+repeated auth failures from one IP trip the auth-failure budget with a bucket-bounded Retry-After ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+repeated auth failures from one IP trip the auth-failure budget with a bucket-bounded Retry-After ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+a declared oversized body is refused with 413 ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+a declared oversized body is refused with 413 ... [0m[32mok[0m [0m[38;5;245m(292µs)[0m
+webhook: wrong shared secret is rejected ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: wrong shared secret is rejected ... [0m[32mok[0m [0m[38;5;245m(381µs)[0m
+webhook: a chunked body past the cap is cut off with 413, not buffered ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: a chunked body past the cap is cut off with 413, not buffered ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+webhook: malformed JSON is a 400, not a crash ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: malformed JSON is a 400, not a crash ... [0m[32mok[0m [0m[38;5;245m(524µs)[0m
+[0m[38;5;245mrunning 12 tests from ./legal_test.ts[0m
+both documents identify the service and expose the same real support mailbox ... [0m[32mok[0m [0m[38;5;245m(569µs)[0m
+support page provides real contact, troubleshooting, and account deletion help ... [0m[32mok[0m [0m[38;5;245m(146µs)[0m
+terms contain complete subscription, trial, lifetime, refund, and deletion disclosures ... [0m[32mok[0m [0m[38;5;245m(223µs)[0m
+terms explain product limits, health safety, consumer carve-outs, and the Apple license ... [0m[32mok[0m [0m[38;5;245m(178µs)[0m
+privacy policy accurately separates device-only media from synced structured data ... [0m[32mok[0m [0m[38;5;245m(220µs)[0m
+privacy policy details consent data without falsely calling linked evaluation records anonymous ... [0m[32mok[0m [0m[38;5;245m(580µs)[0m
+privacy policy identifies processors, purposes, retention, choices, and deletion effects ... [0m[32mok[0m [0m[38;5;245m(266µs)[0m
+privacy policy and support page disclose the free-rating record that outlives account deletion ... [0m[32mok[0m [0m[38;5;245m(250µs)[0m
+privacy policy states important negative disclosures ... [0m[32mok[0m [0m[38;5;245m(203µs)[0m
+terms select California law and a specific San Diego forum with consumer carve-outs ... [0m[32mok[0m [0m[38;5;245m(199µs)[0m
+legal documents are substantive and contain numbered sections ... [0m[32mok[0m [0m[38;5;245m(59µs)[0m
+legal text contains no control or bidi characters (served as text/plain) ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+[0m[38;5;245mrunning 6 tests from ./rateLimit.test.ts[0m
+with Upstash: the budget is shared across isolates (INCR + EXPIRE NX per hit) ... [0m[32mok[0m [0m[38;5;245m(18ms)[0m
+Retry-After is the remaining time in the current fixed window (never 0) ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+Upstash HTTP failure → fail-open to the per-isolate memory counter (still enforced locally) ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+without Upstash: budgets are per isolate (documented degradation — N isolates = N× the budget) ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+[defect] memory fallback: 20 000 distinct ids wipe EVERY live window, un-blocking a limited client ... [0m[32mok[0m [0m[38;5;245m(16ms)[0m
+memory fallback: a new fixed window replaces the expired one in place ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+[0m[38;5;245mrunning 6 tests from ./rateLimit_test.ts[0m
+no Redis configured in this test process ... [0m[32mok[0m [0m[38;5;245m(357µs)[0m
+redisWindowGet reports unavailable (null) without Redis so the caller falls back ... [0m[32mok[0m [0m[38;5;245m(157µs)[0m
+peek never charges a hit ... [0m[32mok[0m [0m[38;5;245m(478µs)[0m
+gate closes after exactly `limit` recorded failures ... [0m[32mok[0m [0m[38;5;245m(7ms)[0m
+Retry-After counts down within the aligned bucket ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+scopes and ids are isolated ... [0m[32mok[0m [0m[38;5;245m(120µs)[0m
+[0m[38;5;245mrunning 5 tests from ./request_id_test.ts[0m
+resolveRequestId honours a well-formed client id and mints otherwise ... [0m[32mok[0m [0m[38;5;245m(5ms)[0m
+routeTemplate collapses uuids and long digit runs, keeps route words ... [0m[32mok[0m [0m[38;5;245m(222µs)[0m
+accessLogEntry / errorCodeOf / withRequestId are categorical and body-preserving ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+handler: minted x-request-id on every response + one access-log line ... [0m[32mok[0m [0m[38;5;245m(57ms)[0m
+handler: echoes a well-formed client id, ignores a malformed one, logs error.code ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+handler: echoes a well-formed client id, ignores a malformed one, logs error.code ... [0m[32mok[0m [0m[38;5;245m(6ms)[0m
+[0m[38;5;245mrunning 12 tests from ./router_test.ts[0m
+public routes: healthz/support/privacy/terms answer without auth, with hardening headers ...Listening on http://0.0.0.0:8000/ (http://localhost:8000/)
+
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+public routes: healthz/support/privacy/terms answer without auth, with hardening headers ... [0m[32mok[0m [0m[38;5;245m(69ms)[0m
+public routes match on pathname suffix only (…/v1/me/privacy also serves the policy) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+public routes match on pathname suffix only (…/v1/me/privacy also serves the policy) ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+no CORS surface: OPTIONS preflight is an ordinary 401 with no Access-Control-* headers ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+no CORS surface: OPTIONS preflight is an ordinary 401 with no Access-Control-* headers ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+webhook fails closed when REVENUECAT_WEBHOOK_AUTH is unset (503, generic body) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook fails closed when REVENUECAT_WEBHOOK_AUTH is unset (503, generic body) ... [0m[32mok[0m [0m[38;5;245m(885µs)[0m
+declared oversize body (Content-Length > 5 MB) is refused with 413 before auth ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+declared oversize body (Content-Length > 5 MB) is refused with 413 before auth ... [0m[32mok[0m [0m[38;5;245m(880µs)[0m
+streamed (chunked, no Content-Length) 6 MB body on PUT /v1/me/onboarding is rejected with 413 and never reaches the DB ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+streamed (chunked, no Content-Length) 6 MB body on PUT /v1/me/onboarding is rejected with 413 and never reaches the DB ... [0m[32mok[0m [0m[38;5;245m(17ms)[0m
+streamed 6 MB body on a readBody() route is reported as 413 (a size problem, not a validation 400) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+streamed 6 MB body on a readBody() route is reported as 413 (a size problem, not a validation 400) ... [0m[32mok[0m [0m[38;5;245m(9ms)[0m
+PUT /v1/me/onboarding sanitizes biggestProblem like firstName (bidi + control chars never reach the DB write) ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+PUT /v1/me/onboarding sanitizes biggestProblem like firstName (bidi + control chars never reach the DB write) ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+POST /v1/me/evaluation/trials reports a write failure with generic copy, never raw PostgREST/DB error text ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+POST /v1/me/evaluation/trials reports a write failure with generic copy, never raw PostgREST/DB error text ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+malformed percent-encoding in a path parameter is a JSON 400, not an uncaught URIError 500 ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+malformed percent-encoding in a path parameter is a JSON 400, not an uncaught URIError 500 ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+5xx from a DB failure is generic (no internal detail) on the standard path ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+5xx from a DB failure is generic (no internal detail) on the standard path ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+authenticated user identity flows through to PostgREST as the user's session ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+authenticated user identity flows through to PostgREST as the user's session ... [0m[32mok[0m [0m[38;5;245m(2ms)[0m
+[0m[38;5;245mrunning 9 tests from ./webhook.test.ts[0m
+webhook: missing or wrong Authorization is rejected (401) before any work ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: missing or wrong Authorization is rejected (401) before any work ... [0m[32mok[0m [0m[38;5;245m(64ms)[0m
+webhook: body entitlement claims are never trusted — verdict comes from RevenueCat ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: body entitlement claims are never trusted — verdict comes from RevenueCat ... [0m[32mok[0m [0m[38;5;245m(6ms)[0m
+webhook: verified active entitlement is persisted via service role ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: verified active entitlement is persisted via service role ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+webhook: audit row is written with event id/type/app_user_id and ignoreDuplicates ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: audit row is written with event id/type/app_user_id and ignoreDuplicates ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+webhook: RevenueCat outage → 503 so RevenueCat retries; nothing persisted ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: RevenueCat outage → 503 so RevenueCat retries; nothing persisted ... [0m[32mok[0m [0m[38;5;245m(668µs)[0m
+webhook: non-uuid app_user_id (anonymous RevenueCat id) is acknowledged without verification ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: non-uuid app_user_id (anonymous RevenueCat id) is acknowledged without verification ... [0m[32mok[0m [0m[38;5;245m(613µs)[0m
+REPRO (defect): replayed event id is fully re-processed — no id-dedupe short-circuit ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+REPRO (defect): replayed event id is fully re-processed — no id-dedupe short-circuit ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+webhook: TRANSFER events (no app_user_id/aliases) re-verify BOTH transferred_from and transferred_to ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: TRANSFER events (no app_user_id/aliases) re-verify BOTH transferred_from and transferred_to ... [0m[32mok[0m [0m[38;5;245m(861µs)[0m
+webhook: oversized body is refused with 413 like every other route ...
+[0m[38;5;245m------- post-test output -------[0m
+[0m[38;5;245m----- post-test output end -----[0m
+webhook: oversized body is refused with 413 like every other route ... [0m[32mok[0m [0m[38;5;245m(3ms)[0m
+
+[0m[32mok[0m | 145 passed (7 steps) | 0 failed | 6 ignored [0m[38;5;245m(1m30s)[0m
+

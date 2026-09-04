@@ -1,0 +1,139 @@
+{
+  "run": {
+    "commit": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+    "seed": "fi-v1",
+    "tier": "full",
+    "scenariosExecuted": 1014,
+    "byTier": { "baseline": 35, "matrix": 773, "sweep": 176, "targeted": 30 },
+    "command": "cd supabase/functions/api/__wf__ && FI_TIER=full FI_SEED=fi-v1 deno test -A --no-check --config deno.json failure_injection.test.ts",
+    "replayAssertions": "cd supabase/functions/api/__wf__ && FI_REPLAY_DIR=$PWD/failure_injection/evidence/fi-v1-full deno test -A --no-check --config deno.json failure_injection.test.ts",
+    "replayOneScenario": "cd supabase/functions/api/__wf__ && FI_ONLY='<scenario id>' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+    "responseLeaks": 0,
+    "storageCallsObserved": 0
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "P1",
+      "title": "Supabase Auth outage (5xx / network / malformed body) is reported to the app as a sign-out 401 instead of a retryable 503",
+      "files": [
+        "supabase/functions/api/index.ts:521-524",
+        "supabase/functions/api/index.ts:327-330"
+      ],
+      "repro": "FI_ONLY='matrix:me:auth:down_503,matrix:shots_sync:auth:network_error,matrix:account_bootstrap_google:auth:down_503' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "262/262 authenticated + bootstrap scenarios with Auth returning 500/502/503, a connect error, malformed JSON, wrong-shape JSON or an empty body answer HTTP 401 'The session is no longer valid. Sign in again.' / 'The identity token could not be verified.' — the class the mobile client treats as terminal (handleApiUnauthorized → refresh → sign-out when refresh also fails).",
+      "expected": "Auth transport/5xx failures → generic 503 (serviceUnavailable) so the app retries; only a definitive token rejection (401/403 from Auth) should be a 401.",
+      "evidence": "anomalies.json (verdict=misclassified_auth_failure), matrix.csv, test_replay_output.log (REPRO F1)",
+      "regression": "unknown"
+    },
+    {
+      "id": "F1b",
+      "severity": "P1",
+      "title": "POST /v1/auth/refresh: Auth network error / malformed or empty body → 401 (only an HTTP status >= 500 maps to 503)",
+      "files": ["supabase/functions/api/index.ts:557-565"],
+      "repro": "FI_ONLY='matrix:auth_refresh:auth:network_error,matrix:auth_refresh:auth:malformed_json,matrix:auth_refresh:auth:empty_body' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "network_error / malformed_json / wrong_shape / empty_body → 401 'The session could not be refreshed. Sign in again.' (refreshed.error.status is undefined for these, so the >= 500 branch is skipped). This is the ONE implicit sign-out path the AGENTS.md contract reserves for a refused refresh token.",
+      "expected": "503 for anything that is not an explicit 401/403 refresh-token rejection.",
+      "evidence": "anomalies.json, test_replay_output.log (REPRO F1b)",
+      "regression": "unknown"
+    },
+    {
+      "id": "F2",
+      "severity": "P1",
+      "title": "An Auth outage trips the per-IP auth-failure lockout: once Auth recovers, the IP gets 429 for up to 5 minutes",
+      "files": [
+        "supabase/functions/api/index.ts:521-524",
+        "supabase/functions/api/index.ts:2700",
+        "supabase/functions/api/index.ts:2897"
+      ],
+      "repro": "FI_ONLY='targeted:me:recovers_after_30_outage_calls,targeted:auth_refresh:refresh_after_30_outage_calls,targeted:account_bootstrap_google:bootstrap_after_30_outage_calls' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "30 requests during an Auth 503 outage from one IP → 30×401 (each counted as an auth failure); the first request after Auth is healthy again → 429 (verdict locked_out) on /v1/me, /v1/auth/refresh and /v1/account/bootstrap.",
+      "expected": "Outage responses must not count against AUTH_FAILURE_LIMIT; the first healthy request after recovery → 200.",
+      "evidence": "anomalies.json (verdict=locked_out, preludeStatuses), test_replay_output.log (REPRO F2)",
+      "regression": "unknown"
+    },
+    {
+      "id": "F3",
+      "severity": "P2",
+      "title": "POST /v1/auth/logout: a network error on the raw fetch to /auth/v1/logout is uncaught → generic 500",
+      "files": ["supabase/functions/api/index.ts:573-576"],
+      "repro": "FI_ONLY='targeted:auth_logout:logout_call_network_error' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "500 'Something went wrong. Please try again.' (body generic, no leak; the TypeError is logged server-side).",
+      "expected": "503 via serviceUnavailable('Sign-out', …) like the >= 500 branch two lines below.",
+      "evidence": "anomalies.json (id targeted:auth_logout:logout_call_network_error), server.log",
+      "regression": "unknown"
+    },
+    {
+      "id": "F4",
+      "severity": "P2",
+      "title": "No upstream timeout on Supabase Auth / PostgREST calls: a hung upstream hangs the route past every mobile client timeout",
+      "files": [
+        "supabase/functions/api/index.ts:127-129",
+        "supabase/functions/api/index.ts:320-330"
+      ],
+      "repro": "FI_ONLY='matrix:me:auth:hang,matrix:shots_sync:rest:hang' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "57 auth/rest hang scenarios still unresolved at the 25 s harness budget (mobile gives up at 15–20 s), while Redis (1.2 s) and RevenueCat (10 s) hangs are bounded.",
+      "expected": "Bounded upstream wait (AbortSignal.timeout on the client fetch) → 503 within the client's timeout.",
+      "evidence": "anomalies.json (verdict=hang_unbounded), matrix.csv durationMs",
+      "regression": "unknown"
+    },
+    {
+      "id": "F5",
+      "severity": "P2",
+      "title": "RevenueCat webhook: DB failure while persisting a verified verdict is acknowledged with 200 {received:true, verified:false} — RevenueCat never retries, entitlement row stays stale",
+      "files": ["supabase/functions/api/index.ts:2316-2324"],
+      "repro": "FI_ONLY='targeted:webhook_revenuecat:entitlement_persist_500,matrix:webhook_revenuecat:rest:down_503' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "billing_entitlements upsert returns 500/502/503/network error/malformed body → route answers 200 (8 false_success records). The code comment documents acknowledging a missing-profile FK failure on purpose, but the same branch swallows transient DB outages.",
+      "expected": "503 so RevenueCat retries the event (the verification-failure branch already does this).",
+      "evidence": "anomalies.json (verdict=false_success), summary.json falseSuccess",
+      "regression": "unknown"
+    },
+    {
+      "id": "F6",
+      "severity": "P3",
+      "title": "Array-typed PostgREST reads assume an array: a 2xx object body throws → generic 500 (low realism: only if PostgREST/gateway returns 2xx with a non-array JSON body)",
+      "files": [
+        "supabase/functions/api/index.ts:1148-1149",
+        "supabase/functions/api/index.ts:1219",
+        "supabase/functions/api/index.ts:1397",
+        "supabase/functions/api/index.ts:1410"
+      ],
+      "repro": "FI_ONLY='matrix:progress:rest:wrong_shape,matrix:shots_sync:rest:wrong_shape,matrix:consent_status:rest:wrong_shape' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "10 routes → 500 (TypeError: rows.filter is not a function / (existing.data ?? []).map is not a function / Spread syntax requires iterable). Body is the generic 500; no leak.",
+      "expected": "503 (treat a non-array `data` as an upstream error).",
+      "evidence": "summary.json unhandled500, server.log",
+      "regression": "unknown"
+    },
+    {
+      "id": "F7",
+      "severity": "P2",
+      "title": "POST /v1/auth/refresh during an Auth 5xx outage is held ~25 s by auth-js retry backoff — longer than the app's 15 s refresh timeout",
+      "files": ["supabase/functions/api/index.ts:557-559", "apps/mobile/src/account/sessionLifecycle.ts (15 s timeout)"],
+      "repro": "FI_ONLY='matrix:auth_refresh:auth:down_503,matrix:auth_refresh:auth:error_500' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "503 after 25.4 s (auth-js retries 5xx with exponential backoff); the client has already timed out, so the eventual correct 503 is never seen.",
+      "expected": "Answer within the client budget (bounded retries or a fetch timeout).",
+      "evidence": "matrix.csv durationMs for matrix:auth_refresh:auth:down_503 / error_500",
+      "regression": "unknown"
+    },
+    {
+      "id": "F8",
+      "severity": "P2",
+      "title": "Hung Upstash Redis costs every authenticated request 5–7 serial 1.2 s timeouts (6–8.4 s added latency, no circuit breaker)",
+      "files": ["supabase/functions/api/cache.ts:18", "supabase/functions/api/cache.ts:40", "supabase/functions/api/rateLimit.ts"],
+      "repro": "FI_ONLY='matrix:me:redis:hang,matrix:progress:redis:hang' FI_TIER=full FI_SEED=fi-v1 deno run -A --no-check --config deno.json failure_injection/fiRunner.ts",
+      "observed": "27 redis:hang scenarios answer with the baseline status (fail-open works) but take 6.0–8.4 s (5–7 sequential Redis calls each waiting the full 1.2 s).",
+      "expected": "After the first timeout, short-circuit Redis for the rest of the request (or a short-lived isolate-level breaker) so a Redis hang adds ≤ 1.2 s.",
+      "evidence": "matrix.csv (dependency=redis, mode=hang, durationMs), test_replay_output.log (REPRO F8)",
+      "regression": "unknown"
+    }
+  ],
+  "verifiedOk": [
+    "0 response-body leaks across 1014 scenarios (sentinel + 5xx-pattern scan)",
+    "Redis down/HTTP error/malformed/slow/hang: every route keeps its baseline status (memory fallback; no lockout)",
+    "PostgREST/RPC 5xx on non-webhook routes: generic 503 or per-item retryable rejection envelope (shots_sync, evaluation_trials); no false 2xx",
+    "RevenueCat down/slow/malformed on billing sync: coded 502 billing_unavailable / 503; hang bounded at 10 s",
+    "Apple exchange/revoke 5xx/network/invalid_grant on deletion: 503 (status-only calls, malformed 2xx body correctly treated as success)",
+    "Webhook: RevenueCat verification failure → 503 (provider retries); anonymous-only events → 200 without lookup",
+    "No Storage call reachable from any route (storageCalls=0 on all 35 baselines)"
+  ]
+}

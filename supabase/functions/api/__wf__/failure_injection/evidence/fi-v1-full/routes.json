@@ -1,0 +1,415 @@
+[
+  {
+    "id": "healthz",
+    "method": "GET",
+    "auth": "none",
+    "provider": null,
+    "deps": [
+      "redis"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "support",
+    "method": "GET",
+    "auth": "none",
+    "provider": null,
+    "deps": [
+      "redis"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "privacy",
+    "method": "GET",
+    "auth": "none",
+    "provider": null,
+    "deps": [
+      "redis"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "terms",
+    "method": "GET",
+    "auth": "none",
+    "provider": null,
+    "deps": [
+      "redis"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "webhook_revenuecat",
+    "method": "POST",
+    "auth": "webhook",
+    "provider": null,
+    "deps": [
+      "redis",
+      "rest",
+      "revenuecat"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "account_bootstrap_google",
+    "method": "POST",
+    "auth": "provider_token",
+    "provider": "google",
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "account_bootstrap_apple",
+    "method": "POST",
+    "auth": "provider_token",
+    "provider": "apple",
+    "deps": [
+      "redis",
+      "auth",
+      "rest",
+      "apple"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "auth_refresh",
+    "method": "POST",
+    "auth": "none",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "auth_logout",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "me",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "me_onboarding",
+    "method": "PUT",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "me_access",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "billing_sync",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest",
+      "revenuecat"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "analysis_permits_reserve",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "analysis_permits_finalize",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "shots_sync",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": "shots"
+  },
+  {
+    "id": "sessions_create",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "sessions_finalize",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "analyses_feedback",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "evaluation_trials",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": "trials"
+  },
+  {
+    "id": "progress",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "rank",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "consent_status",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "consent_grant",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "consent_withdraw",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "delete_request",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "delete_confirm_google",
+    "method": "POST",
+    "auth": "session",
+    "provider": "google",
+    "deps": [
+      "redis",
+      "auth",
+      "rest",
+      "revenuecat"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "delete_confirm_apple",
+    "method": "POST",
+    "auth": "session",
+    "provider": "apple",
+    "deps": [
+      "redis",
+      "auth",
+      "rest",
+      "revenuecat",
+      "apple"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "saved_drills_list",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "saved_drills_save",
+    "method": "PUT",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "saved_drills_unsave",
+    "method": "DELETE",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "catalog_drills_list",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "catalog_drill_get",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth",
+      "rest"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "training_plans_current",
+    "method": "GET",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth"
+    ],
+    "perItemEnvelope": null
+  },
+  {
+    "id": "training_plans_create",
+    "method": "POST",
+    "auth": "session",
+    "provider": null,
+    "deps": [
+      "redis",
+      "auth"
+    ],
+    "perItemEnvelope": null
+  }
+]

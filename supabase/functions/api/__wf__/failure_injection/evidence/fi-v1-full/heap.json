@@ -1,0 +1,65 @@
+[
+  {
+    "label": "start",
+    "heapUsedBytes": 90580792,
+    "heapTotalBytes": 93532160,
+    "rssBytes": 139280384,
+    "externalBytes": 1317278,
+    "redisKeys": 0,
+    "at": "2026-09-04T06:55:34.144Z"
+  },
+  {
+    "label": "after-baseline",
+    "heapUsedBytes": 91815376,
+    "heapTotalBytes": 105201664,
+    "rssBytes": 156909568,
+    "externalBytes": 1238655,
+    "redisKeys": 3,
+    "at": "2026-09-04T06:55:34.247Z"
+  },
+  {
+    "label": "after-matrix",
+    "heapUsedBytes": 102064856,
+    "heapTotalBytes": 116211712,
+    "rssBytes": 177524736,
+    "externalBytes": 1217410,
+    "redisKeys": 2,
+    "at": "2026-09-04T07:31:51.024Z"
+  },
+  {
+    "label": "soak-start",
+    "heapUsedBytes": 102128112,
+    "heapTotalBytes": 116211712,
+    "rssBytes": 177524736,
+    "externalBytes": 1217876,
+    "redisKeys": 2,
+    "at": "2026-09-04T07:31:51.025Z"
+  },
+  {
+    "label": "soak-healthy-x300",
+    "heapUsedBytes": 113345720,
+    "heapTotalBytes": 128270336,
+    "rssBytes": 188870656,
+    "externalBytes": 1234490,
+    "redisKeys": 5,
+    "at": "2026-09-04T07:31:51.124Z"
+  },
+  {
+    "label": "soak-rest-500-distinct-users-x300",
+    "heapUsedBytes": 137449208,
+    "heapTotalBytes": 166281216,
+    "rssBytes": 227045376,
+    "externalBytes": 1237920,
+    "redisKeys": 905,
+    "at": "2026-09-04T07:31:51.414Z"
+  },
+  {
+    "label": "soak-redis-down-distinct-users-x300",
+    "heapUsedBytes": 127214640,
+    "heapTotalBytes": 174841856,
+    "rssBytes": 237342720,
+    "externalBytes": 1228310,
+    "redisKeys": 905,
+    "at": "2026-09-04T07:31:51.640Z"
+  }
+]
