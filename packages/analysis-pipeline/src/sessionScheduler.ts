@@ -209,7 +209,9 @@ export class SessionAnalysisScheduler {
   }
 
   /** Restart-path recovery: re-enqueue engine events that are non-terminal
-   * ('pending' — including honest reverts after failures) and not already
+   * ('pending' — including honest reverts after failures — or 'processing'
+   * with no live dispatch in THIS scheduler: a lease abandoned by a crashed
+   * owner, reverted to 'pending' before re-admission) and not already
    * queued/in-flight. Terminal events are never re-dispatched; events whose
    * retries were exhausted are re-admitted with a fresh attempt budget only
    * when `readmitExhausted` is set (explicit operator decision). Returns the
@@ -217,13 +219,14 @@ export class SessionAnalysisScheduler {
   recoverPending(options?: { readmitExhausted?: boolean }): string[] {
     const readmitted: string[] = [];
     for (const event of this.engine.snapshot().events) {
-      if (event.state !== "pending") continue;
+      if (event.state !== "pending" && event.state !== "processing") continue;
       if (this.inFlightIds.has(event.eventId)) continue;
       if (this.queue.some((entry) => entry.event.eventId === event.eventId)) continue;
       const record = this.records.get(event.eventId);
       if (record?.outcome === "ready" || record?.outcome === "abstained") continue;
       const exhausted = record?.outcome === "retry_exhausted" || record?.outcome === "failed_final";
       if (exhausted && !options?.readmitExhausted) continue;
+      if (event.state === "processing") this.engine.markEvent(event.eventId, "pending");
       if (record) {
         // Fresh recovery lease: the terminal verdict is superseded by an
         // explicit recovery decision; prior failures stay recorded. The lease
