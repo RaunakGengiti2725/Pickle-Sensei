@@ -1,0 +1,7 @@
+{
+  "name": "@pickle/stress-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Seeded randomized stress-campaign kit shared by packages/*/test/stress.randomizedSeeded.test.ts (imported by relative path; not a workspace package).",
+  "type": "module"
+}
