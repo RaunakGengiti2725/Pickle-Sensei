@@ -10,16 +10,73 @@ const clip: VideoClipRef = {
   height: 1280,
 };
 
-const originalEnv = process.env["PICKLE_ENV"];
+type GuardVar = "PICKLE_ENV" | "NODE_ENV";
+const originalEnv: Record<GuardVar, string | undefined> = {
+  PICKLE_ENV: process.env["PICKLE_ENV"],
+  NODE_ENV: process.env["NODE_ENV"],
+};
+
+function setEnv(name: GuardVar, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 afterEach(() => {
-  if (originalEnv === undefined) delete process.env["PICKLE_ENV"];
-  else process.env["PICKLE_ENV"] = originalEnv;
+  setEnv("PICKLE_ENV", originalEnv.PICKLE_ENV);
+  setEnv("NODE_ENV", originalEnv.NODE_ENV);
 });
+
+const construct = () => createFixtureVisionProviderSet("forehand_drive");
 
 describe("FixtureVisionProvider guardrails (directive §5)", () => {
   it("REFUSES to construct in production builds", () => {
     process.env["PICKLE_ENV"] = "production";
-    expect(() => createFixtureVisionProviderSet("forehand_drive")).toThrow(/production/i);
+    expect(construct).toThrow(/production/i);
+  });
+
+  describe("production guard — PICKLE_ENV / NODE_ENV precedence", () => {
+    it("refuses when only NODE_ENV=production is set", () => {
+      setEnv("PICKLE_ENV", undefined);
+      setEnv("NODE_ENV", "production");
+      expect(construct).toThrow(/production/i);
+    });
+
+    it("a set PICKLE_ENV takes precedence over NODE_ENV in both directions", () => {
+      setEnv("PICKLE_ENV", "development");
+      setEnv("NODE_ENV", "production");
+      expect(construct().source).toBe("fixture");
+
+      setEnv("PICKLE_ENV", "production");
+      setEnv("NODE_ENV", "test");
+      expect(construct).toThrow(/production/i);
+    });
+
+    it("constructs when neither variable is set (local tooling default)", () => {
+      setEnv("PICKLE_ENV", undefined);
+      setEnv("NODE_ENV", undefined);
+      expect(construct().source).toBe("fixture");
+    });
+
+    it.each(["", " ", "\t\n"])(
+      "a blank PICKLE_ENV (%j) is unset — NODE_ENV=production still refuses",
+      (blank) => {
+        setEnv("PICKLE_ENV", blank);
+        setEnv("NODE_ENV", "production");
+        expect(construct).toThrow(/production/i);
+      },
+    );
+
+    it.each(["", " "])("a blank PICKLE_ENV (%j) with NODE_ENV unset constructs", (blank) => {
+      setEnv("PICKLE_ENV", blank);
+      setEnv("NODE_ENV", undefined);
+      expect(construct().source).toBe("fixture");
+    });
+
+    it("a blank NODE_ENV never counts as production either", () => {
+      setEnv("PICKLE_ENV", undefined);
+      setEnv("NODE_ENV", "");
+      expect(construct().source).toBe("fixture");
+    });
   });
 
   it("tags every emitted artifact as fixture — nothing can masquerade as real inference", async () => {
