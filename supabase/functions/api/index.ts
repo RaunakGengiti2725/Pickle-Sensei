@@ -2629,28 +2629,63 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   return verdict;
 }
 
+interface PersistBillingError {
+  /** PostgREST/Postgres SQLSTATE (e.g. "23503"), or null when the write
+   * never reached the database (service role unavailable). */
+  code: string | null;
+  message: string;
+}
+
+const SERVICE_ROLE_UNAVAILABLE: PersistBillingError = {
+  code: null,
+  message: "service role unavailable",
+};
+
+/** Postgres FK violation: the user has no profiles row (never bootstrapped). */
+const FK_VIOLATION = "23503";
+
 /** Persist the verified verdict — premium AND not-premium alike, so a lapsed
  * subscription revokes saved access on its next sync. Written with the
  * service-role client: billing_entitlements has no user write policies, so
- * verified paths are the ONLY writers. */
+ * verified paths are the ONLY writers.
+ *
+ * `verifiedAt` must be taken BEFORE the RevenueCat round trip that produced
+ * the verdict: billing_entitlements keeps the NEWEST verified_at (BEFORE
+ * UPDATE trigger, 20260905120000), so a slow response carrying an older
+ * verdict is dropped rather than overwriting a fresher one. A dropped write
+ * is not an error — the stored row is the more recent truth. */
 async function persistBillingVerdict(
   userId: string,
   verdict: BillingVerdict,
   verifiedAt: string,
-): Promise<string | null> {
+): Promise<PersistBillingError | null> {
   const adminDb = billingAdminDb();
-  if (!adminDb) return "service role unavailable";
-  const upserted = await adminDb.from("billing_entitlements").upsert(
-    {
-      user_id: userId,
-      premium: verdict.premium,
-      product_key: verdict.productKey,
-      expires_at: verdict.expiresAt,
-      verified_at: verifiedAt,
-    },
-    { onConflict: "user_id" },
-  );
-  return upserted.error ? upserted.error.message : null;
+  if (!adminDb) return SERVICE_ROLE_UNAVAILABLE;
+  const upserted = await adminDb
+    .from("billing_entitlements")
+    .upsert(
+      {
+        user_id: userId,
+        premium: verdict.premium,
+        product_key: verdict.productKey,
+        expires_at: verdict.expiresAt,
+        verified_at: verifiedAt,
+      },
+      { onConflict: "user_id" },
+    )
+    .select("verified_at");
+  if (upserted.error) {
+    return {
+      code: upserted.error.code || null,
+      message: upserted.error.message,
+    };
+  }
+  if (Array.isArray(upserted.data) && upserted.data.length === 0) {
+    console.warn(
+      `[api] billing verdict superseded by a newer verification: ${userId} @ ${verifiedAt}`,
+    );
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2663,7 +2698,25 @@ async function persistBillingVerdict(
 // API. A forged request therefore cannot grant premium — at worst it makes
 // the server re-check a real subscriber. Events are logged (webhook_events)
 // for audit + replay analysis.
+//
+// Idempotency is INSERT-FIRST: the event id is reserved in webhook_events
+// (ON CONFLICT DO NOTHING) before RevenueCat is consulted, so of N concurrent
+// deliveries exactly one owns the row. `processed_at` is set only once every
+// entitlement write landed; a retryable failure (RevenueCat down, transient
+// DB error) DELETEs the reservation and answers 503 so RevenueCat redelivers
+// and the event is fully re-processed. Any audit-plane error is itself a 503
+// (fail closed) — a 200 is only ever sent for a durably recorded outcome.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** How long an in-flight reservation is honoured before a redelivery may
+ * take it over (an isolate that died mid-flight never sets processed_at).
+ * Generously above the function's wall-clock budget. */
+const WEBHOOK_CLAIM_LEASE_MS = 5 * 60_000;
+
+interface WebhookEventState {
+  claimed_at: string;
+  processed_at: string | null;
+}
 
 async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const secret = Deno.env.get("REVENUECAT_WEBHOOK_AUTH") ?? "";
@@ -2706,61 +2759,133 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     return errorJson(503, "Webhook processing is not configured.");
   }
 
-  // The audit row is written only once an event has been handled to
-  // completion, so its presence means "already processed": replays are
-  // acknowledged without another RevenueCat round trip, while a delivery
-  // that failed (503 below) leaves no row and is fully re-processed.
-  const seen = await adminDb.from("webhook_events").select("id").eq("id", eventId).maybeSingle();
-  if (seen.error) {
-    console.error("[api] webhook event lookup failed:", seen.error.message);
-  } else if (seen.data) {
-    return json(200, { received: true, duplicate: true });
-  }
-  const logEvent = async () => {
-    const logged = await adminDb.from("webhook_events").upsert(
+  // Reserve the event id. The row's primary key is the atomic dedupe: with
+  // ignoreDuplicates the insert returns the row only when THIS delivery
+  // created it, so concurrent deliveries of one id elect exactly one owner.
+  const claimedAt = new Date().toISOString();
+  const reserved = await adminDb
+    .from("webhook_events")
+    .upsert(
       {
         id: eventId,
         provider: "revenuecat",
         event_type: eventType,
         app_user_id: appUserId,
         payload: body,
+        claimed_at: claimedAt,
+        processed_at: null,
       },
       { onConflict: "id", ignoreDuplicates: true },
-    );
-    if (logged.error) {
-      console.error("[api] webhook event log failed:", logged.error.message);
+    )
+    .select("id");
+  if (reserved.error) {
+    return serviceUnavailable("Webhook event reservation", reserved.error.message);
+  }
+  if (!Array.isArray(reserved.data) || reserved.data.length === 0) {
+    // Someone else holds (or held) this id: processed → duplicate ack;
+    // in flight → retryable, so an owner that dies mid-flight cannot turn
+    // RevenueCat's redelivery into a false "already processed".
+    const existing = await adminDb
+      .from("webhook_events")
+      .select("claimed_at, processed_at")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (existing.error) {
+      return serviceUnavailable("Webhook event lookup", existing.error.message);
     }
+    const state = existing.data as WebhookEventState | null;
+    if (!state) {
+      // Released by a concurrent failing delivery between our two calls.
+      return serviceUnavailable("Webhook event lookup", `${eventId} released mid-flight`, 5);
+    }
+    if (state.processed_at) {
+      return json(200, { received: true, duplicate: true });
+    }
+    const leaseExpired = Date.parse(state.claimed_at) + WEBHOOK_CLAIM_LEASE_MS <= Date.now();
+    if (!leaseExpired) {
+      return serviceUnavailable("Webhook event processing", `${eventId} in flight`, 30);
+    }
+    // Orphaned reservation: take it over, guarded so only one redelivery wins.
+    const reclaimed = await adminDb
+      .from("webhook_events")
+      .update({ claimed_at: claimedAt })
+      .eq("id", eventId)
+      .eq("claimed_at", state.claimed_at)
+      .is("processed_at", null)
+      .select("id");
+    if (reclaimed.error) {
+      return serviceUnavailable("Webhook event reclaim", reclaimed.error.message);
+    }
+    if (!Array.isArray(reclaimed.data) || reclaimed.data.length === 0) {
+      return serviceUnavailable("Webhook event processing", `${eventId} reclaimed elsewhere`, 30);
+    }
+  }
+
+  // Hand the id back so RevenueCat's redelivery is fully re-processed. Best
+  // effort: if the delete itself fails the row stays in flight and is
+  // reclaimed once its lease lapses.
+  const release = async () => {
+    const released = await adminDb
+      .from("webhook_events")
+      .delete()
+      .eq("id", eventId)
+      .eq("claimed_at", claimedAt)
+      .is("processed_at", null);
+    if (released.error) {
+      console.error("[api] webhook event release failed:", released.error.message);
+    }
+  };
+  const complete = async (verified: boolean): Promise<Response> => {
+    const marked = await adminDb
+      .from("webhook_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("id", eventId)
+      .eq("claimed_at", claimedAt);
+    if (marked.error) {
+      // The verdict IS persisted; keep the reservation so the redelivery
+      // waits out the lease instead of re-verifying, then marks it again.
+      return serviceUnavailable("Webhook event completion", marked.error.message, 30);
+    }
+    return json(200, { received: true, verified });
   };
 
   if (!appUserId) {
     // Nothing to verify (e.g. an anonymous-only subscriber). Acknowledge so
     // RevenueCat stops retrying; the audit row preserves the event.
-    await logEvent();
-    return json(200, { received: true, verified: false });
+    return await complete(false);
   }
 
+  // Taken BEFORE the RevenueCat round trips: it timestamps the verdicts so
+  // the monotonic verified_at guard orders them by verification, not by
+  // how quickly RevenueCat answered.
+  const verifiedAt = new Date().toISOString();
   const verdicts: Array<{ userId: string; verdict: BillingVerdict }> = [];
   for (const userId of subjectIds) {
     const verdict = await verifyRevenueCatSubscriber(userId);
     if (!verdict) {
       // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
+      await release();
       return errorJson(503, "Verification is temporarily unavailable.");
     }
     verdicts.push({ userId, verdict });
   }
-  const verifiedAt = new Date().toISOString();
   let verified = true;
   for (const { userId, verdict } of verdicts) {
     const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
-    if (persistError) {
+    if (!persistError) continue;
+    if (persistError.code === FK_VIOLATION) {
       // A user who has never bootstrapped has no profiles row (FK target); log
       // and acknowledge — their state will be written on first billing sync.
-      console.error("[api] webhook verdict persist failed:", persistError);
+      console.error("[api] webhook verdict persist failed:", persistError.message);
       verified = false;
+      continue;
     }
+    // Anything else is transient: all-or-nothing across the subjects — the
+    // reservation is released and RevenueCat retries the whole event.
+    await release();
+    return serviceUnavailable("Webhook verdict persist", persistError.message);
   }
-  await logEvent();
-  return json(200, { received: true, verified });
+  return await complete(verified);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3612,6 +3737,8 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
 
+      // Timestamp the verdict BEFORE the round trip (see persistBillingVerdict).
+      const verifiedAt = new Date().toISOString();
       const verdict = await verifyRevenueCatSubscriber(authed.id);
       if (!verdict) {
         return codedError(
@@ -3621,9 +3748,8 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
 
-      const verifiedAt = new Date().toISOString();
       const persistError = await persistBillingVerdict(authed.id, verdict, verifiedAt);
-      if (persistError === "service role unavailable") {
+      if (persistError === SERVICE_ROLE_UNAVAILABLE) {
         return codedError(
           503,
           "billing_unconfigured",
@@ -3631,7 +3757,7 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
       if (persistError) {
-        return serviceUnavailable("Billing verification", persistError);
+        return serviceUnavailable("Billing verification", persistError.message);
       }
 
       // Build access from the state just verified (not a re-read) so

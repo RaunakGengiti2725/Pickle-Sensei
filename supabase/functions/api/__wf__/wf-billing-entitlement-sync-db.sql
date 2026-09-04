@@ -212,5 +212,56 @@ begin
   if res <> 'access.permit_not_found' then raise exception 'foreign permit consumed: %', res; end if;
 end $$;
 
+-- 9. verified_at is monotonic: the exact upsert the edge function issues
+--    (PostgREST `on_conflict=user_id`, merge-duplicates) with an OLDER
+--    verified_at must not overwrite a newer verdict, an EQUAL one is an
+--    idempotent replay, and a NEWER one wins. Guards the race where a slow
+--    RevenueCat round trip lands after a faster, fresher one.
+reset role;
+do $$
+declare row_ record;
+begin
+  -- newest verdict first: expired at T
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', false, null, null, '2026-09-04T12:00:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+
+  -- stale verdict (T - 5 min) says premium: must be dropped
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', true, 'pickle_sensei_pro_monthly', '2026-10-04T12:00:00Z', '2026-09-04T11:55:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if row_.premium or row_.verified_at <> '2026-09-04T12:00:00Z'::timestamptz or row_.product_key is not null then
+    raise exception 'stale verdict overwrote the newer one: %', row_;
+  end if;
+
+  -- equal verified_at (redelivery of the same verification) is accepted
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', false, null, null, '2026-09-04T12:00:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if row_.premium or row_.verified_at <> '2026-09-04T12:00:00Z'::timestamptz then
+    raise exception 'equal-timestamp replay rejected: %', row_;
+  end if;
+
+  -- newer verdict (T + 1 min) says premium again: must win
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', true, 'pickle_sensei_pro_monthly', '2026-10-04T12:00:00Z', '2026-09-04T12:01:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if not row_.premium or row_.verified_at <> '2026-09-04T12:01:00Z'::timestamptz
+     or row_.product_key <> 'pickle_sensei_pro_monthly' then
+    raise exception 'newer verdict did not win: %', row_;
+  end if;
+end $$;
+
 rollback;
 \echo SEQUENTIAL FREE-RATING / ENTITLEMENT INVARIANTS: ALL PASSED
