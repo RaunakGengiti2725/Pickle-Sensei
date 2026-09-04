@@ -24,24 +24,19 @@ const NAMES: ReadonlyArray<readonly [label: string, input: string]> = [
 const graphemes = (s: string) => [...new Intl.Segmenter().segment(s)].length;
 
 Deno.test({
-  name:
-    "B1 expected: ZWNJ/ZWJ inside a name survive sanitizeUserText unchanged",
+  name: "B1 expected: ZWNJ/ZWJ inside a name survive sanitizeUserText unchanged",
   ignore: !EXPECTED,
   fn() {
     for (const [label, input] of NAMES) {
       assertEquals(sanitizeUserText(input, 40), input, label);
     }
     // Spoofing/format characters that are NOT orthographic must still go.
-    assertEquals(
-      sanitizeUserText("Ra\u200bun\u202eak\ufeff\u200e", 40),
-      "Raunak",
-    );
+    assertEquals(sanitizeUserText("Ra\u200bun\u202eak\ufeff\u200e", 40), "Raunak");
   },
 });
 
 Deno.test({
-  name:
-    "B1 reproduction (4d812e1a): ZWNJ/ZWJ are stripped, splitting the emoji family into 4 graphemes",
+  name: "B1 reproduction (4d812e1a): ZWNJ/ZWJ are stripped, splitting the emoji family into 4 graphemes",
   ignore: EXPECTED,
   fn() {
     assertEquals(sanitizeUserText("علی\u200cرضا", 40), "علیرضا");

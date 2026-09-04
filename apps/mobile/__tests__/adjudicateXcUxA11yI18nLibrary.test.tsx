@@ -110,18 +110,20 @@ beforeEach(() => {
   mockNavigate.mockClear();
   mockListShots.mockReset().mockImplementation(async () => []);
   mockListPendingCaptures.mockReset().mockImplementation(async () => []);
-  useTrainingStore.setState({
-    savedStatus: 'ready',
-    planStatus: 'ready',
-    mutation: 'idle',
-    savedDrills: [],
-    drillDetails: {},
-    currentPlan: null,
-    savedError: null,
-    planError: null,
-    mutationError: null,
-    loadSavedDrills: async () => true,
-    loadCurrentPlan: async () => true,
+  act(() => {
+    useTrainingStore.setState({
+      savedStatus: 'ready',
+      planStatus: 'ready',
+      mutation: 'idle',
+      savedDrills: [],
+      drillDetails: {},
+      currentPlan: null,
+      savedError: null,
+      planError: null,
+      mutationError: null,
+      loadSavedDrills: async () => true,
+      loadCurrentPlan: async () => true,
+    });
   });
 });
 
