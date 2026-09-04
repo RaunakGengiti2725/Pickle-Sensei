@@ -74,6 +74,8 @@ export function NotificationSettingsScreen() {
   const permission = useNotificationStore(s => s.permission);
   const persistFailed = useNotificationStore(s => s.persistFailed);
   const scheduleFailed = useNotificationStore(s => s.scheduleFailed);
+  const readFailed = useNotificationStore(s => s.readFailed);
+  const hydrate = useNotificationStore(s => s.hydrate);
   const setPrefs = useNotificationStore(s => s.setPrefs);
   const refreshPermission = useNotificationStore(s => s.refreshPermission);
   const syncNow = useNotificationStore(s => s.syncNow);
@@ -140,6 +142,8 @@ export function NotificationSettingsScreen() {
 
   const recheckPermission = () =>
     void refreshPermission().then(() => syncNow());
+
+  const retryRead = () => void hydrate();
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
@@ -231,7 +235,29 @@ export function NotificationSettingsScreen() {
           </View>
         ) : null}
 
-        {!prefs.enabled && !permissionDenied ? (
+        {readFailed ? (
+          <Card style={styles.deniedCard}>
+            <View style={styles.deniedHeader}>
+              <View style={styles.deniedIcon}>
+                <Icon name="shield" size={20} color={color.warn} />
+              </View>
+              <Text style={[type.h3, styles.deniedTitle]}>
+                Couldn’t load your reminder settings
+              </Text>
+            </View>
+            <Text style={[type.body, styles.deniedBody]}>
+              Your saved choices are still on this phone — they just couldn’t be
+              read right now. Nothing was changed or rescheduled.
+            </Text>
+            <View style={styles.deniedAction}>
+              <Button
+                label="Try again"
+                variant="secondary"
+                onPress={retryRead}
+              />
+            </View>
+          </Card>
+        ) : !prefs.enabled && !permissionDenied ? (
           <Card tone="dark" style={styles.enableCard}>
             <View style={styles.enableIcon}>
               <Icon name="bell" size={24} color={color.volt} />

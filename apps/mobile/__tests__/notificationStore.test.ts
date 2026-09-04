@@ -85,6 +85,9 @@ function resetStore() {
     ownerKey: null,
     prefs: { ...DEFAULT_NOTIFICATION_PREFS },
     permission: 'unknown',
+    persistFailed: false,
+    scheduleFailed: false,
+    readFailed: false,
   });
 }
 
@@ -291,6 +294,84 @@ describe('notification store', () => {
     });
 
     expect(scheduler.appliedPlans).toEqual([]);
+  });
+
+  it('an owner change invalidates the previous owner’s committed state before the new read lands', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        promptDismissed: true,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: owner,
+    });
+
+    setActiveDataOwner(otherOwner);
+    const pending = useNotificationStore
+      .getState()
+      .hydrate({ ...deps(scheduler), expectedOwnerKey: otherOwner });
+    // Synchronously after the switch: nothing of `owner` is presented.
+    const midSwitch = useNotificationStore.getState();
+    expect(midSwitch.hydrated).toBe(false);
+    expect(midSwitch.ownerKey).toBe(otherOwner);
+    expect(midSwitch.prefs).toEqual(DEFAULT_NOTIFICATION_PREFS);
+
+    await pending;
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+    });
+    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+    expect(mockKvTable.has(notificationPrefsKeyForOwner(otherOwner))).toBe(
+      false,
+    );
+  });
+
+  it('a write for a new owner whose row is not yet in memory is re-based onto that row, never onto the previous owner’s prefs', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        promptDismissed: true,
+        practiceReminderMinutes: 6 * 60,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+
+    // The owner flips before the bootstrap effect has hydrated the new one.
+    setActiveDataOwner(otherOwner);
+    await useNotificationStore
+      .getState()
+      .setPrefs({ streakDefense: false }, deps(scheduler));
+
+    const stored = JSON.parse(
+      mockKvTable.get(notificationPrefsKeyForOwner(otherOwner))!,
+    );
+    expect(stored).toMatchObject({
+      enabled: false,
+      practiceReminderMinutes:
+        DEFAULT_NOTIFICATION_PREFS.practiceReminderMinutes,
+      streakDefense: false,
+    });
+    expect(
+      JSON.parse(mockKvTable.get(notificationPrefsKeyForOwner(owner))!),
+    ).toMatchObject({ enabled: true, practiceReminderMinutes: 6 * 60 });
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+    });
   });
 
   it('dismissPrompt is durable and one-way', async () => {

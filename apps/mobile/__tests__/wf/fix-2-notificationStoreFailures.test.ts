@@ -14,18 +14,20 @@ import {
 } from '../../src/data/accountScope';
 
 /**
- * A failed preference write or a failed OS reconcile must never be
- * invisible: the store records each as a flag the settings screen renders,
- * and clears it again on the next success.
+ * A failed preference write, a failed OS reconcile, or a failed durable
+ * read must never be invisible: the store records each as a flag the
+ * settings screen renders, and clears it again on the next success.
  */
 
 const mockKvTable = new Map<string, string>();
 let mockKvWriteFails = false;
+let mockKvReadFails = false;
 
 jest.mock('../../src/data/db', () => ({
   getDb: () => ({
     async execute(sql: string, params: unknown[] = []) {
       if (sql.startsWith('SELECT value FROM kv')) {
+        if (mockKvReadFails) throw new Error('SQLITE_IOERR');
         const value = mockKvTable.get(String(params[0]));
         return { rows: value === undefined ? [] : [{ value }] };
       }
@@ -80,6 +82,7 @@ const owner = '55555555-5555-4555-8555-555555555555';
 beforeEach(() => {
   mockKvTable.clear();
   mockKvWriteFails = false;
+  mockKvReadFails = false;
   useNotificationStore.setState({
     hydrated: false,
     ownerKey: null,
@@ -87,6 +90,7 @@ beforeEach(() => {
     permission: 'unknown',
     persistFailed: false,
     scheduleFailed: false,
+    readFailed: false,
   });
   setActiveDataOwner(owner);
 });
@@ -98,6 +102,69 @@ describe('notification store failure flags', () => {
     const state = useNotificationStore.getState();
     expect(state.persistFailed).toBe(false);
     expect(state.scheduleFailed).toBe(false);
+    expect(state.readFailed).toBe(false);
+  });
+
+  it('records a failed durable read without hydrating, and clears it once a read succeeds', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({ ...DEFAULT_NOTIFICATION_PREFS, enabled: true }),
+    );
+    const scheduler = new FakeScheduler();
+
+    mockKvReadFails = true;
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    let state = useNotificationStore.getState();
+    expect(state.readFailed).toBe(true);
+    expect(state.hydrated).toBe(false);
+    expect(state.prefs).toEqual(DEFAULT_NOTIFICATION_PREFS);
+    expect(scheduler.appliedPlans).toEqual([]);
+
+    mockKvReadFails = false;
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    state = useNotificationStore.getState();
+    expect(state.readFailed).toBe(false);
+    expect(state.hydrated).toBe(true);
+    expect(state.prefs.enabled).toBe(true);
+    expect(scheduler.appliedPlans.length).toBe(1);
+  });
+
+  it('a write while the read is failing is held, then re-based onto the durable row', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        practiceReminderMinutes: 9 * 60,
+      }),
+    );
+    const scheduler = new FakeScheduler();
+
+    mockKvReadFails = true;
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    await useNotificationStore
+      .getState()
+      .setPrefs({ weeklyRecap: false }, deps(scheduler));
+    // Nothing durable moved while the row was unreadable.
+    expect(
+      JSON.parse(mockKvTable.get(notificationPrefsKeyForOwner(owner))!),
+    ).toMatchObject({ enabled: true, weeklyRecap: true });
+    expect(useNotificationStore.getState().hydrated).toBe(false);
+
+    mockKvReadFails = false;
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(
+      JSON.parse(mockKvTable.get(notificationPrefsKeyForOwner(owner))!),
+    ).toMatchObject({
+      enabled: true,
+      practiceReminderMinutes: 9 * 60,
+      weeklyRecap: false,
+    });
+    expect(useNotificationStore.getState().prefs).toMatchObject({
+      enabled: true,
+      practiceReminderMinutes: 9 * 60,
+      weeklyRecap: false,
+    });
   });
 
   it('records a failed preference write and clears it on the next successful save', async () => {
