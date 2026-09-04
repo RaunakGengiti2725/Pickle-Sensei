@@ -497,6 +497,118 @@ describe('LiveSessionCoach', () => {
   });
 });
 
+describe('LiveSessionCoach voice-port failures and lifecycle', () => {
+  function throwingVoice(shouldThrow: (text: string) => boolean) {
+    const attempted: string[] = [];
+    const voice: CoachVoicePort = {
+      available: () => true,
+      speak: (text: string) => {
+        attempted.push(text);
+        if (shouldThrow(text)) {
+          throw new Error('native speech bridge rejected the utterance');
+        }
+      },
+      stop: jest.fn(),
+    };
+    return { voice, attempted };
+  }
+
+  it('logs the cue with spoken:false and keeps going when the port throws', () => {
+    const { voice, attempted } = throwingVoice(() => true);
+    const seen: SpokenCue[] = [];
+    const coach = new LiveSessionCoach({ voice, onCue: cue => seen.push(cue) });
+
+    coach.sessionStarted('live');
+    coach.consumeSnapshot(
+      snap([
+        view({
+          index: 0,
+          state: 'ready',
+          analysis: scoredAnalysis(6.2, [kneeFault]),
+        }),
+      ]),
+    );
+
+    expect(attempted).toHaveLength(2);
+    const recap = coach.recap();
+    expect(recap.cues.map(cue => cue.category)).toEqual([
+      'SESSION_START',
+      'CORRECTION',
+    ]);
+    expect(recap.cues.every(cue => cue.spoken === false)).toBe(true);
+    expect(recap.spokenCount).toBe(0);
+    expect(seen).toHaveLength(2);
+  });
+
+  it('registers the recap when the closing line fails to speak', () => {
+    const { voice } = throwingVoice(text => text.startsWith('Session over'));
+    const coach = new LiveSessionCoach({ voice });
+    const finalSnapshot = snap(
+      [
+        view({
+          index: 0,
+          state: 'ready',
+          analysis: scoredAnalysis(6.2, [kneeFault]),
+        }),
+      ],
+      { sessionId: 'session-end-throws', phase: 'ended' },
+    );
+    coach.consumeSnapshot(finalSnapshot);
+    const recap = coach.sessionEnded(finalSnapshot);
+
+    expect(recap.cues.at(-1)?.category).toBe('SESSION_END');
+    expect(recap.cues.at(-1)?.spoken).toBe(false);
+    expect(getCompletedCoachRecap('session-end-throws')).toEqual(recap);
+  });
+
+  it('speaks the opening line at most once per coach', () => {
+    const { voice, spoken } = makeVoice();
+    const coach = new LiveSessionCoach({ voice });
+    coach.sessionStarted('live');
+    coach.sessionStarted('live');
+    expect(spoken).toHaveLength(1);
+  });
+
+  it('stays quiet when sessionStarted() arrives after dispose() or the wrap-up', () => {
+    const { voice, spoken } = makeVoice();
+    const disposed = new LiveSessionCoach({ voice });
+    disposed.dispose();
+    disposed.sessionStarted('live');
+    expect(spoken).toEqual([]);
+
+    const ended = new LiveSessionCoach({ voice });
+    ended.sessionEnded(
+      snap([], { sessionId: 'session-quiet', phase: 'ended' }),
+    );
+    const spokenAtEnd = spoken.length;
+    ended.sessionStarted('live');
+    expect(spoken).toHaveLength(spokenAtEnd);
+  });
+
+  it('registers the recap when the screen unmounts before the flow ends', () => {
+    const { voice } = makeVoice();
+    const coach = new LiveSessionCoach({ voice });
+    const events = [
+      view({
+        index: 0,
+        state: 'ready',
+        analysis: scoredAnalysis(6.2, [kneeFault]),
+      }),
+    ];
+    coach.consumeSnapshot(snap(events, { sessionId: 'session-unmounted' }));
+
+    coach.dispose();
+    const recap = coach.sessionEnded(
+      snap(events, { sessionId: 'session-unmounted', phase: 'ended' }),
+    );
+
+    // A disposed coach has no voice left to say the closing line, but the
+    // log it kept must still reach LiveSummary.
+    expect(recap.cues.map(cue => cue.category)).toEqual(['CORRECTION']);
+    expect(getCompletedCoachRecap('session-unmounted')).toEqual(recap);
+  });
+});
+
 describe('LiveSessionCoach + real LiveSessionFlow (end-to-end)', () => {
   it('speaks once per engine-closed event across scored, low-confidence and abstained outcomes', async () => {
     const outcomesByEvent: Record<string, 'scored' | 'low' | 'abstain'> = {

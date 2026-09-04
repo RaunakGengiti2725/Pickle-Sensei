@@ -3,10 +3,37 @@
  * Verifies the spec loop: rep → score → cue → summary (spec pp. 9, 35–37).
  */
 import { createFixtureVisionProviderSet } from '../../../packages/vision-contracts/test/support/fixtureProvider';
+import type {
+  VideoClipRef,
+  VisionProviderSet,
+} from '../../../packages/vision-contracts/src/contracts';
 import { LiveCourtEngine } from '../src/flow/liveCourt';
 
 declare const process: { env: Record<string, string | undefined> };
 process.env.PICKLE_ENV = 'development';
+
+/** Rep indices the REAL cue engine was called with, in call order. */
+// eslint-disable-next-line no-var
+var mockCueRepIndices: number[] = [];
+
+jest.mock('@pickle/audio-coach-core', () => {
+  const actual = jest.requireActual('@pickle/audio-coach-core');
+  return {
+    ...actual,
+    selectCue: (
+      state: Parameters<typeof actual.selectCue>[0],
+      observation: Parameters<typeof actual.selectCue>[1],
+      rules?: Parameters<typeof actual.selectCue>[2],
+    ) => {
+      mockCueRepIndices.push(observation.repIndex);
+      return actual.selectCue(state, observation, rules);
+    },
+  };
+});
+
+beforeEach(() => {
+  mockCueRepIndices = [];
+});
 
 const clip = {
   uri: 'fixture://forehand/live',
@@ -19,6 +46,46 @@ const clip = {
 function makeEngine() {
   let counter = 0;
   return new LiveCourtEngine(createFixtureVisionProviderSet('forehand_drive'), {
+    sessionId: '11111111-2222-4333-8444-555555555555',
+    shotType: 'forehand_drive',
+    focusCheckpoint: 'contact_position',
+    handedness: 'right',
+    appVersion: '0.1.0-test',
+    modelBundleVersion: 'fixture-1',
+    makeId: () =>
+      `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`,
+  });
+}
+
+/** Fixture providers whose stroke detection resolves on demand, so several
+ * onStroke() calls can be in flight at once and settle out of order. */
+function gatedProviders(): {
+  providers: VisionProviderSet;
+  release: (call: number) => void;
+} {
+  const base = createFixtureVisionProviderSet('forehand_drive');
+  const gates: Array<() => void> = [];
+  return {
+    providers: {
+      ...base,
+      stroke: {
+        modelVersion: base.stroke.modelVersion,
+        source: base.stroke.source,
+        detectStrokes: async (target: VideoClipRef) => {
+          await new Promise<void>(resolve => {
+            gates.push(resolve);
+          });
+          return base.stroke.detectStrokes(target);
+        },
+      },
+    },
+    release: call => gates[call]?.(),
+  };
+}
+
+function makeGatedEngine(providers: VisionProviderSet) {
+  let counter = 0;
+  return new LiveCourtEngine(providers, {
     sessionId: '11111111-2222-4333-8444-555555555555',
     shotType: 'forehand_drive',
     focusCheckpoint: 'contact_position',
@@ -62,5 +129,41 @@ describe('LiveCourtEngine', () => {
       cuesB.push((await b.onStroke(clip))?.cue.text ?? null);
     }
     expect(cuesA).toEqual(cuesB);
+  });
+
+  it('gives every rep its own 1-based index when strokes overlap and settle in reverse order', async () => {
+    const { providers, release } = gatedProviders();
+    const engine = makeGatedEngine(providers);
+    const inFlight = [
+      engine.onStroke(clip),
+      engine.onStroke(clip),
+      engine.onStroke(clip),
+      engine.onStroke(clip),
+    ];
+    for (let call = inFlight.length - 1; call >= 0; call--) release(call);
+    await Promise.all(inFlight);
+
+    const indices = engine
+      .allReps()
+      .map(rep => rep.repIndex)
+      .sort((a, b) => a - b);
+    expect(indices).toEqual([1, 2, 3, 4]);
+  });
+
+  it('hands the cue engine the same rep index the rep carries', async () => {
+    const { providers, release } = gatedProviders();
+    const engine = makeGatedEngine(providers);
+    const inFlight = [engine.onStroke(clip), engine.onStroke(clip)];
+    release(1);
+    release(0);
+    await Promise.all(inFlight);
+
+    expect(mockCueRepIndices).toHaveLength(2);
+    expect([...mockCueRepIndices].sort((a, b) => a - b)).toEqual([1, 2]);
+    // Completion order drives both the rep log and the cue calls, so the
+    // sequences line up element by element.
+    expect(engine.allReps().map(rep => rep.repIndex)).toEqual(
+      mockCueRepIndices,
+    );
   });
 });
