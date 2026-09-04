@@ -522,6 +522,36 @@
       "replace": "  await clearPersistedSession();\n  await persistLocalGuest(false);\n}"
     },
     {
+      "id": "AU-21",
+      "plane": "mobile",
+      "file": "apps/mobile/src/data/syncRuntime.ts",
+      "symbol": "configureSyncRuntime (transport)",
+      "category": "bearer-binding",
+      "description": "The sync transport captures the bearer at construction instead of resolving it per request (a rotation leaves every later drain on the dead bearer).",
+      "find": "    get token() {\n      return bearerTokenFor(session.canonicalAppUserId);\n    },",
+      "replace": "    token: session.bearerToken,"
+    },
+    {
+      "id": "AU-22",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "installApiSession (billing)",
+      "category": "bearer-binding",
+      "description": "The billing client resolves the bearer per request but WITHOUT the account binding: a client configured for account A sends whatever bearer is live, including account B's.",
+      "find": "      get apiToken() {\n        return bearerTokenFor(canonicalAppUserId);\n      },",
+      "replace": "      get apiToken() {\n        return getApiSession()?.bearerToken ?? null;\n      },"
+    },
+    {
+      "id": "AU-23",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "installApiSession (training)",
+      "category": "bearer-binding",
+      "description": "The training client resolves the bearer per request but WITHOUT the account binding: a client configured for account A sends whatever bearer is live, including account B's.",
+      "find": "      get token() {\n        return bearerTokenFor(canonicalAppUserId);\n      },",
+      "replace": "      get token() {\n        return getApiSession()?.bearerToken ?? null;\n      },"
+    },
+    {
       "id": "ED-01",
       "plane": "edge",
       "file": "supabase/functions/api/index.ts",
