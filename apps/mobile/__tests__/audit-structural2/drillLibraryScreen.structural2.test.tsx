@@ -417,16 +417,17 @@ describe('DrillLibraryScreen — structural audit #2', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     expect(
-      findByTestId(renderer, 'watch-media-dink-target-ladder-0'),
-    ).not.toBeNull();
+      findByTestId(renderer, 'watch-media-dink-target-ladder-0') !== null,
+    ).toBe(true);
 
     // Ten seconds later (modern fake timers advance Date.now too).
     await advanceTimers(10_000);
     expect(new Date(expiresAt).getTime()).toBeLessThan(Date.now());
     // The signed URL is dead; the row must not still offer it.
-    expect(
-      findByTestId(renderer, 'watch-media-dink-target-ladder-0'),
-    ).toBeNull();
+    expect({
+      expiredMediaStillOffered:
+        findByTestId(renderer, 'watch-media-dink-target-ladder-0') !== null,
+    }).toEqual({ expiredMediaStillOffered: false });
   });
 
   it('VERIFY: saving two different drills back-to-back shows one toast at a time, and the superseded toast never resurfaces', async () => {

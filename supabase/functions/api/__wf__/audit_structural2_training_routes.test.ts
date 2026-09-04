@@ -12,8 +12,7 @@ import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import { drillCatalog } from "../drills.ts";
 import { loadHarness, userRequest } from "./routesHarness.ts";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.test(
   "REPRO: POST /v1/drill-completions (called by TrainingApi.completeDrill) is dispatched with a coded error, not the generic unknown-endpoint 404",
@@ -85,15 +84,10 @@ Deno.test(
   "VERIFY: the two unrouted training routes answer a JSON 404 whose body has error.message but NO error.code (what the mobile client must tolerate)",
   async () => {
     const h = await loadHarness();
-    for (
-      const [path, ip] of [
-        ["/v1/drill-completions", "198.51.100.43"],
-        [
-          `/v1/training-plans/${crypto.randomUUID()}/reassessment`,
-          "198.51.100.44",
-        ],
-      ] as const
-    ) {
+    for (const [path, ip] of [
+      ["/v1/drill-completions", "198.51.100.43"],
+      [`/v1/training-plans/${crypto.randomUUID()}/reassessment`, "198.51.100.44"],
+    ] as const) {
       const res = await h.handler(userRequest("POST", path, { ip, body: {} }));
       assertEquals(res.status, 404);
       const body = (await res.json()) as { error: Record<string, unknown> };
@@ -107,18 +101,14 @@ Deno.test(
   "REPRO: an orphaned bookmark keeps ONE stable id across list responses (the client-visible id of a saved entry changes on every refresh; index.ts savedDrillEntry mints crypto.randomUUID per call)",
   async () => {
     const h = await loadHarness();
-    h.tables["user_saved_drills"] = [
-      { slug: "retired-drill", saved_at: new Date().toISOString() },
-    ];
+    h.tables["user_saved_drills"] = [{ slug: "retired-drill", saved_at: new Date().toISOString() }];
     const ids = new Set<string>();
     for (let i = 0; i < 3; i++) {
       const res = await h.handler(
         userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.45" }),
       );
       assertEquals(res.status, 200);
-      const items = (await res.json()).items as Array<
-        { id: string; slug: string }
-      >;
+      const items = (await res.json()).items as Array<{ id: string; slug: string }>;
       assertEquals(items.length, 1);
       assertEquals(items[0].slug, "retired-drill");
       assert(
@@ -135,9 +125,7 @@ Deno.test(
   "VERIFY: an orphaned bookmark's detail is a coded 404 (drill.not_found) — the mobile card can never load it, so Retry can never succeed",
   async () => {
     const h = await loadHarness();
-    h.tables["user_saved_drills"] = [
-      { slug: "retired-drill", saved_at: new Date().toISOString() },
-    ];
+    h.tables["user_saved_drills"] = [{ slug: "retired-drill", saved_at: new Date().toISOString() }];
     const list = await h.handler(
       userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.46" }),
     );
@@ -158,16 +146,22 @@ Deno.test(
   async () => {
     const h = await loadHarness();
     const [entry] = await drillCatalog();
-    h.tables["user_saved_drills"] = [{
-      slug: entry.slug,
-      saved_at: new Date().toISOString(),
-    }];
-    const a = (await (await h.handler(
-      userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.47" }),
-    )).json()).items[0] as { id: string };
-    const b = (await (await h.handler(
-      userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.47" }),
-    )).json()).items[0] as { id: string };
+    h.tables["user_saved_drills"] = [
+      {
+        slug: entry.slug,
+        saved_at: new Date().toISOString(),
+      },
+    ];
+    const a = (
+      await (
+        await h.handler(userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.47" }))
+      ).json()
+    ).items[0] as { id: string };
+    const b = (
+      await (
+        await h.handler(userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.47" }))
+      ).json()
+    ).items[0] as { id: string };
     assertEquals(a.id, entry.id);
     assertEquals(a.id, b.id);
     assertNotEquals(a.id, "");
