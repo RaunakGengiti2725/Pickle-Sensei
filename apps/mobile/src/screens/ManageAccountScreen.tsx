@@ -36,8 +36,12 @@ import {
 } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
-import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
+import { showBrandNotice, type BrandNotice } from '../design/BrandNotice';
+import {
+  useAuthStore,
+  type AccountDeletionCleanup,
+  type AuthProvider,
+} from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
@@ -823,6 +827,60 @@ function DetailRow(props: { label: string; value: string; last?: boolean }) {
  * 5.1.1(v) requires in-app deletion to stay findable) rather than a red row
  * on the Settings root.
  */
+/**
+ * The one notice shown after the account is gone. Nothing here can be
+ * re-shown later (the session no longer exists), so every fact the user
+ * must act on is carried together: local rows that survived the purge, and
+ * the manual Sign in with Apple step — required for an older account with
+ * no stored revocation token, or worth checking when the deletion was
+ * inferred from a lost reply and Apple's outcome never reached the phone.
+ */
+export function postDeletionNotice(
+  cleanup: AccountDeletionCleanup | null,
+  result: AccountDeletionResult | null | undefined,
+): BrandNotice | null {
+  const localCleanupNeeded = cleanup?.localPurge === 'failed';
+  const revocation = result?.appleAuthorizationRevocation;
+  const appleStep =
+    revocation === 'manual_action_required'
+      ? 'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.'
+      : revocation === 'unconfirmed'
+        ? 'If Pickle Sensei is still listed under iPhone Settings → your name → Sign in with Apple, choose Stop Using Apple ID.'
+        : null;
+  const lead =
+    revocation === 'unconfirmed'
+      ? 'Your account was deleted, but the confirmation did not reach this phone.'
+      : 'Your account and synced data were deleted.';
+  const localStep =
+    'Some data saved on this phone could not be removed — delete the app to clear it.';
+
+  if (localCleanupNeeded && appleStep) {
+    return {
+      title: 'Account deleted',
+      detail: `${lead} ${localStep} ${appleStep}`,
+      tone: 'danger',
+      eyebrow: 'TWO STEPS LEFT',
+    };
+  }
+  if (localCleanupNeeded) {
+    return {
+      title: 'Account deleted',
+      detail: `${lead} ${localStep}`,
+      tone: 'danger',
+      eyebrow: 'LOCAL CLEANUP NEEDED',
+    };
+  }
+  if (appleStep) {
+    return {
+      title: 'Account deleted',
+      detail: revocation === 'unconfirmed' ? `${lead} ${appleStep}` : appleStep,
+      tone: 'neutral',
+      eyebrow: 'ONE APPLE STEP',
+    };
+  }
+  return null;
+}
+
 export function ManageAccountScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
@@ -889,26 +947,11 @@ export function ManageAccountScreen() {
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
           void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
-            if (cleanup?.localPurge === 'failed') {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
-                tone: 'danger',
-                eyebrow: 'LOCAL CLEANUP NEEDED',
-              });
-            } else if (
-              result?.appleAuthorizationRevocation === 'manual_action_required'
-            ) {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
-                tone: 'neutral',
-                eyebrow: 'ONE APPLE STEP',
-              });
-            }
+            const notice = postDeletionNotice(
+              useAuthStore.getState().deletionCleanup,
+              result,
+            );
+            if (notice) showBrandNotice(notice);
           });
         }}
       />
