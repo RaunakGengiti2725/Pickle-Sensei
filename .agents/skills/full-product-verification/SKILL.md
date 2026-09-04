@@ -44,13 +44,13 @@ summarise as "all green" without them.
 
 ## Interpreting mixed results
 
-| Linux | Mac | Meaning |
-|---|---|---|
-| pass | pass | product verified on both planes for this commit |
-| pass | fail in `swift-native` | perception/native regression or clip/tooling issue — read `vision-core-*.log`, `swing-lab-extract-summary.txt`; Linux tests cannot see this |
-| pass | fail in `ios-app` | app build/pods/bundle/launch — `xcodebuild-build.log`, `pod-install.log`, `launch/` |
-| fail | any | fix Linux first (`pre-pr-verification`), then re-run everything; a Mac pass on a Linux-failing commit is not a release candidate |
-| pass | queued for hours | runner busy/offline — `gh run list --workflow mac-full-verify.yml`; if the runner shows offline in GitHub → tell the user (only they can wake the Mac) |
+| Linux | Mac                    | Meaning                                                                                                                                                |
+| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| pass  | pass                   | product verified on both planes for this commit                                                                                                        |
+| pass  | fail in `swift-native` | perception/native regression or clip/tooling issue — read `vision-core-*.log`, `swing-lab-extract-summary.txt`; Linux tests cannot see this            |
+| pass  | fail in `ios-app`      | app build/pods/bundle/launch — `xcodebuild-build.log`, `pod-install.log`, `launch/`                                                                    |
+| fail  | any                    | fix Linux first (`pre-pr-verification`), then re-run everything; a Mac pass on a Linux-failing commit is not a release candidate                       |
+| pass  | queued for hours       | runner busy/offline — `gh run list --workflow mac-full-verify.yml`; if the runner shows offline in GitHub → tell the user (only they can wake the Mac) |
 
 ## Not covered (say so when it matters)
 

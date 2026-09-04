@@ -81,7 +81,7 @@ step on the Mac.
 - "signed out after relaunch" → hydrate order in `authStore.hydrate()`
   (vault first, refresh ≤ 8 s, proceed signed in), `sessionKeeper.ts`
   foreground re-check; the suite `relaunch (hydrate) with a persisted
-  session` reproduces it.
+session` reproduces it.
 - 401 storms → `rateLimit.ts` auth-failure budget; check the edge logs
   (`supabase functions logs api` requires the linked project — human/CLI
   auth) before changing budgets.
