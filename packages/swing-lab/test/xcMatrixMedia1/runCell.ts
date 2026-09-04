@@ -79,12 +79,14 @@ export const DEFAULT_BUDGET: Record<"pr" | "full", CellBudget> = {
  * What the user would see for this cell on each shipping entry point
  * (apps/mobile/src/analysis/runCaptureAnalysis.ts `runCaptureAnalysisCore`):
  *  - guided capture (AnalyzeScreen.tsx:873): `attemptCaptureEnvelope` →
- *    UNSUPPORTED blocks; then sidecar parse; then analyzeCapture.
+ *    UNSUPPORTED blocks; then sidecar parse; then evaluateCaptureQuality +
+ *    evaluatePreAnalysisGate (a measured pose-quality refusal is
+ *    `quality_blocked`); then analyzeCapture.
  *  - imported video (AnalyzeScreen.tsx:880 passes `captureEnvelope: null`):
- *    sidecar parse; then analyzeCapture over the whole clip. No envelope,
- *    frame-analyzability, capture-quality or pre-analysis gate runs.
- * Neither entry point calls preAnalysisGate / evaluateFrameAnalyzability /
- * evaluateCaptureQuality (grep apps/mobile/src: no references).
+ *    sidecar parse; then the same pose-quality gate; then analyzeCapture over
+ *    the whole clip. No envelope or frame-analyzability check runs.
+ * Neither entry point calls evaluateFrameAnalyzability (no frame statistics
+ * are computed on the phone).
  */
 export type Delivery =
   "quality_blocked" | "unavailable" | "scored" | "low_confidence" | "threw" | "not_run";
@@ -133,9 +135,9 @@ export interface CellResult {
     failure: StageFailure | null;
     /**
      * The pose-quality report refused (any reason) but the composite gate
-     * passed. By contract the composite gate only lifts the implausible-
-     * scale reasons out of captureQuality; this flags every other refusal
-     * the gate lets through so the report can count them.
+     * passed. By contract the composite gate lifts EVERY measured
+     * captureQuality refusal, so this must stay false; the report counts it
+     * so a regression to "scale only" shows up as a number, not silence.
      */
     qualityRefusedButGatePassed: boolean;
   };
@@ -645,19 +647,17 @@ function checkGateOracle(
 
   // Composite-gate contract (analysis-pipeline/src/preAnalysisGate.ts):
   // refuse when the frame report refuses, when the pose is empty, or when
-  // captureQuality carries an implausible-scale reason; pass otherwise.
-  // Other captureQuality reasons (too_few_pose_frames, insufficient_fps,
-  // dropout…) are deliberately NOT lifted — recorded per cell as
-  // `qualityRefusedButGatePassed`, not as a violation.
-  const implausibleScale = quality.reasons.some(
-    (r) => r === "player_too_small_in_frame" || r === "player_too_close_or_cropped",
-  );
+  // captureQuality refuses for any MEASURED reason (too_few_pose_frames,
+  // insufficient_fps, low confidence, coverage, dropout, torso, scale); pass
+  // otherwise. The stroke-window continuity check is not evaluated here (no
+  // stroke context is passed), so it cannot refuse.
+  const qualityRefused = !quality.analyzable;
   const componentRefused =
-    !frame.analyzable || capture.sequence.frames.length === 0 || implausibleScale;
+    !frame.analyzable || capture.sequence.frames.length === 0 || qualityRefused;
   if (gate.ok && componentRefused) {
     violations.push({
       invariant: "pre_gate_fails_closed",
-      detail: `frame.analyzable=${frame.analyzable} poseFrames=${capture.sequence.frames.length} implausibleScale=${implausibleScale} but gate ok`,
+      detail: `frame.analyzable=${frame.analyzable} poseFrames=${capture.sequence.frames.length} qualityRefused=${qualityRefused} but gate ok`,
     });
   }
   if (gate.ok && (!gate.value.analyzable || gate.value.reasons.length > 0)) {

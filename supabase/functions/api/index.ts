@@ -608,7 +608,7 @@ async function refreshUpstream(refreshToken: string): Promise<UpstreamRefreshOut
   for (let attempt = 0; attempt < REFRESH_UPSTREAM_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
       await new Promise((resolve) =>
-        setTimeout(resolve, REFRESH_UPSTREAM_BACKOFF_MS * 2 ** (attempt - 1))
+        setTimeout(resolve, REFRESH_UPSTREAM_BACKOFF_MS * 2 ** (attempt - 1)),
       );
     }
     let response: Response;
@@ -624,7 +624,8 @@ async function refreshUpstream(refreshToken: string): Promise<UpstreamRefreshOut
         signal: AbortSignal.timeout(REFRESH_UPSTREAM_ATTEMPT_TIMEOUT_MS),
       });
     } catch (error) {
-      lastNetworkDetail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      lastNetworkDetail =
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       continue;
     }
     const text = await response.text();
