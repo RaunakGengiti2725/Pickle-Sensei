@@ -116,6 +116,10 @@ function fakeApi(overrides: Partial<TrainingApi> = {}): TrainingApi {
   };
 }
 
+async function flush(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+}
+
 afterEach(() => {
   clearTrainingStoreConfiguration();
   mockRecordDrillCompletion.mockClear();
@@ -198,6 +202,139 @@ describe('real training state', () => {
       status: 'completed',
       reassessmentShotId: shotId,
       scoreDelta: 0.7,
+    });
+  });
+
+  it('keeps the remaining saved drills when the refresh after a server-accepted unsave fails transiently', async () => {
+    const other: SavedDrill = {
+      ...saved,
+      id: '0b96363e-4a11-47c5-9d2c-3f5b8e6f2a17',
+      slug: 'dink-ladder',
+      title: 'Dink Target Ladder',
+    };
+    const listSavedDrills = jest
+      .fn<Promise<SavedDrill[]>, []>()
+      .mockResolvedValueOnce([saved, other])
+      .mockRejectedValueOnce(new Error('network down'));
+    const api = fakeApi({ listSavedDrills });
+    configureTrainingStore(api);
+    await useTrainingStore.getState().loadSavedDrills();
+
+    const result = await useTrainingStore
+      .getState()
+      .setDrillSaved(saved.slug, false);
+
+    expect(api.unsaveDrill).toHaveBeenCalledWith(saved.slug);
+    expect(result).toBe(true);
+    expect(useTrainingStore.getState()).toMatchObject({
+      mutation: 'idle',
+      savedStatus: 'ready',
+      savedDrills: [{ slug: other.slug }],
+      savedError: null,
+    });
+  });
+
+  it('a failed cold load still reports the error state (nothing valid to keep)', async () => {
+    configureTrainingStore(
+      fakeApi({
+        listSavedDrills: jest.fn(async () => {
+          throw new Error('network down');
+        }),
+      }),
+    );
+    const result = await useTrainingStore.getState().loadSavedDrills();
+    expect(result).toBe(false);
+    expect(useTrainingStore.getState()).toMatchObject({
+      savedStatus: 'error',
+      savedDrills: [],
+      savedError: { code: 'training.unavailable', retryable: true },
+    });
+  });
+
+  it('overlapping saved-drill reloads settle newest-wins, not in arrival order', async () => {
+    const other: SavedDrill = {
+      ...saved,
+      id: '0b96363e-4a11-47c5-9d2c-3f5b8e6f2a17',
+      slug: 'dink-ladder',
+    };
+    const pending: Array<(value: SavedDrill[]) => void> = [];
+    const listSavedDrills = jest
+      .fn<Promise<SavedDrill[]>, []>()
+      .mockResolvedValueOnce([saved, other])
+      .mockImplementation(
+        () => new Promise<SavedDrill[]>(resolve => pending.push(resolve)),
+      );
+    configureTrainingStore(fakeApi({ listSavedDrills }));
+    await useTrainingStore.getState().loadSavedDrills();
+
+    const unsaveFirst = useTrainingStore
+      .getState()
+      .setDrillSaved(saved.slug, false);
+    await flush();
+    const unsaveSecond = useTrainingStore
+      .getState()
+      .setDrillSaved(other.slug, false);
+    await flush();
+    expect(pending).toHaveLength(2);
+
+    // The later reload (server truth: nothing saved) arrives first; the
+    // earlier one (server truth then: [other]) must not resurrect it.
+    pending[1]!([]);
+    await flush();
+    pending[0]!([other]);
+    await Promise.all([unsaveFirst, unsaveSecond]);
+
+    expect(useTrainingStore.getState()).toMatchObject({
+      savedStatus: 'ready',
+      savedDrills: [],
+      savedError: null,
+    });
+  });
+
+  it('a stale plan load does not overwrite a newer plan load under the same configuration', async () => {
+    const pending: Array<(value: TrainingPlan | null) => void> = [];
+    configureTrainingStore(
+      fakeApi({
+        getCurrentPlan: jest.fn(
+          () =>
+            new Promise<TrainingPlan | null>(resolve => pending.push(resolve)),
+        ),
+      }),
+    );
+    const first = useTrainingStore.getState().loadCurrentPlan();
+    const second = useTrainingStore.getState().loadCurrentPlan();
+    expect(pending).toHaveLength(2);
+    pending[1]!(null);
+    await flush();
+    pending[0]!(plan);
+    await Promise.all([first, second]);
+    expect(useTrainingStore.getState()).toMatchObject({
+      planStatus: 'ready',
+      currentPlan: null,
+      planError: null,
+    });
+  });
+
+  it('a stale plan load does not overwrite a plan the user just created', async () => {
+    let resolveLoad!: (value: TrainingPlan | null) => void;
+    configureTrainingStore(
+      fakeApi({
+        getCurrentPlan: jest.fn(
+          () =>
+            new Promise<TrainingPlan | null>(resolve => {
+              resolveLoad = resolve;
+            }),
+        ),
+      }),
+    );
+    const loading = useTrainingStore.getState().loadCurrentPlan();
+    await useTrainingStore.getState().createPlan(sourceShotId);
+    expect(useTrainingStore.getState().currentPlan?.id).toBe(plan.id);
+    resolveLoad(null);
+    await loading;
+    expect(useTrainingStore.getState()).toMatchObject({
+      planStatus: 'ready',
+      currentPlan: { id: plan.id },
     });
   });
 
