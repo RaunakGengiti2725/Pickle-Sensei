@@ -120,6 +120,20 @@ function nextDayKey(day: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** "Thursday, January 15" for a YYYY-MM-DD key. The key is a calendar day,
+ * not an instant, so it is formatted in UTC — the device zone must never
+ * shift it onto a neighbouring day. */
+function formatDayHeading(day: string): string {
+  const parsed = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return day;
+  return parsed.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 /** Today's YYYY-MM-DD in the device zone — the same clock the engine keys
  * days by. */
 function localTodayKey(now: Date): string {
@@ -603,10 +617,7 @@ export function StreakCalendarScreen() {
             testID="streak-day-detail"
           >
             <Text style={[type.h3, { color: color.ink }]}>
-              {new Date(`${selectedDay}T12:00:00Z`).toLocaleDateString(
-                undefined,
-                { weekday: 'long', month: 'long', day: 'numeric' },
-              )}
+              {formatDayHeading(selectedDay)}
             </Text>
             {selectedLog ? (
               selectedLog.shielded ? (

@@ -126,12 +126,16 @@ function Shimmer(props: { active: boolean }) {
   return <Animated.View pointerEvents="none" style={[styles.shimmer, style]} />;
 }
 
+/** "Jan 15" for an engine YYYY-MM-DD key. The key is a calendar day, not an
+ * instant, so it is formatted in UTC — the device zone must never shift it
+ * onto a neighbouring day. */
 function formatEarnedDay(day: string): string {
   const parsed = new Date(`${day}T12:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return day;
   return parsed.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
