@@ -32,11 +32,7 @@ function fakeSupabaseAccessToken(sub = TEST_USER_ID, salt = ""): string {
   return `${header}.${payload}.sig`;
 }
 
-const jsonResponse = (
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {},
-) =>
+const jsonResponse = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...headers },

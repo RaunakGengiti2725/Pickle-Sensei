@@ -23,12 +23,8 @@ const USER = "11111111-1111-4111-8111-111111111111";
 const AUTH_CACHE_MAX_TTL_SECONDS = 600;
 
 async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(input),
-  );
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 const authCacheKey = async (token: string) => `auth:${await sha256Hex(token)}`;
 const revokedKey = (sessionId: string) => `auth:revoked:${sessionId}`;
@@ -36,9 +32,9 @@ const revokedKey = (sessionId: string) => `auth:revoked:${sessionId}`;
 const b64url = (value: string): string =>
   btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const jwt = (payload: Record<string, unknown>): string =>
-  `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${
-    b64url(JSON.stringify(payload))
-  }.${b64url("sig")}`;
+  `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(
+    JSON.stringify(payload),
+  )}.${b64url("sig")}`;
 const decodePayload = (token: string): Record<string, unknown> =>
   JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
 
@@ -194,16 +190,10 @@ function runRedis(command: Array<string | number>): { result: unknown } {
 
 // ─── fetch layer ────────────────────────────────────────────────────────────
 
-async function fakeFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
+async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const request = new Request(input, init);
   const url = new URL(request.url);
-  const bearer = (request.headers.get("authorization") ?? "").replace(
-    /^Bearer /,
-    "",
-  );
+  const bearer = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
   const text = await request.text().catch(() => "");
   let body: Record<string, unknown> = {};
   try {
@@ -220,17 +210,12 @@ async function fakeFetch(
     const grant = url.searchParams.get("grant_type");
     calls.push(`auth:token:${grant}`);
     if (grant === "id_token") {
-      const session = newSession(
-        String(decodePayload(String(body.id_token ?? "")).sub),
-      );
+      const session = newSession(String(decodePayload(String(body.id_token ?? "")).sub));
       return json(200, sessionJson(session, mintAccessToken(session)));
     }
     if (grant === "refresh_token") {
       for (const session of sessions.values()) {
-        if (
-          !session.revoked &&
-          session.refreshToken === String(body.refresh_token ?? "")
-        ) {
+        if (!session.revoked && session.refreshToken === String(body.refresh_token ?? "")) {
           counter += 1;
           session.refreshToken = `rt-${counter}`;
           return json(200, sessionJson(session, mintAccessToken(session)));
@@ -276,30 +261,29 @@ async function fakeFetch(
     calls.push(`rest:${request.method}:${table}`);
     if (request.method === "GET" && table === "profiles") {
       const id = (url.searchParams.get("id") ?? "").replace(/^eq\./, "");
-      return json(200, [{
-        id,
-        email: null,
-        onboarding_state: "complete",
-        provider: "google",
-        skill_level: null,
-        handedness: null,
-        primary_goal: null,
-        biggest_problem: null,
-        focus_checkpoint: null,
-        first_name: null,
-        gender: null,
-      }]);
+      return json(200, [
+        {
+          id,
+          email: null,
+          onboarding_state: "complete",
+          provider: "google",
+          skill_level: null,
+          handedness: null,
+          primary_goal: null,
+          biggest_problem: null,
+          focus_checkpoint: null,
+          first_name: null,
+          gender: null,
+        },
+      ]);
     }
     if (request.method !== "GET") return new Response(null, { status: 201 });
-    const single = (request.headers.get("accept") ?? "").includes(
-      "vnd.pgrst.object+json",
-    );
+    const single = (request.headers.get("accept") ?? "").includes("vnd.pgrst.object+json");
     return json(200, single ? {} : []);
   }
-  return new Response(
-    `unexpected fetch in lifecycle test: ${request.method} ${request.url}`,
-    { status: 599 },
-  );
+  return new Response(`unexpected fetch in lifecycle test: ${request.method} ${request.url}`, {
+    status: 599,
+  });
 }
 
 // ─── handler boot ───────────────────────────────────────────────────────────
@@ -313,17 +297,15 @@ async function boot(): Promise<(request: Request) => Promise<Response>> {
   Deno.env.delete("SB_PUBLISHABLE_KEY");
   Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-lifecycle-key");
   Deno.env.set("REVENUECAT_WEBHOOK_AUTH", "lifecycle-webhook-secret");
-  for (
-    const key of [
-      "APPLE_SIGN_IN_CLIENT_ID",
-      "APPLE_SIGN_IN_TEAM_ID",
-      "APPLE_SIGN_IN_KEY_ID",
-      "APPLE_SIGN_IN_PRIVATE_KEY",
-      "APPLE_TOKEN_ENCRYPTION_KEY",
-      "REVENUECAT_SECRET_API_KEY",
-      "REVENUECAT_PUBLIC_SDK_KEY",
-    ]
-  ) {
+  for (const key of [
+    "APPLE_SIGN_IN_CLIENT_ID",
+    "APPLE_SIGN_IN_TEAM_ID",
+    "APPLE_SIGN_IN_KEY_ID",
+    "APPLE_SIGN_IN_PRIVATE_KEY",
+    "APPLE_TOKEN_ENCRYPTION_KEY",
+    "REVENUECAT_SECRET_API_KEY",
+    "REVENUECAT_PUBLIC_SDK_KEY",
+  ]) {
     Deno.env.delete(key);
   }
   Deno.env.set("UPSTASH_REDIS_REST_URL", REDIS_URL);
@@ -333,8 +315,7 @@ async function boot(): Promise<(request: Request) => Promise<Response>> {
   captureAccessLog(() => undefined);
   Deno.serve = ((...args: unknown[]) => {
     const found = args.find((arg) => typeof arg === "function") as
-      | ((request: Request) => Promise<Response>)
-      | undefined;
+      ((request: Request) => Promise<Response>) | undefined;
     if (!found) throw new Error("Deno.serve called without a handler");
     handler = found;
     return {
@@ -381,23 +362,18 @@ async function call(
   return response;
 }
 
-async function bootstrap(
-  ip: string,
-): Promise<{ accessToken: string; refreshToken: string }> {
+async function bootstrap(ip: string): Promise<{ accessToken: string; refreshToken: string }> {
   const h = await boot();
   const response = await h(
-    new Request(
-      "http://edge.lifecycle.test/functions/v1/api/v1/account/bootstrap",
-      {
-        method: "POST",
-        headers: {
-          "x-forwarded-for": ip,
-          Authorization: `Bearer ${googleIdToken(USER)}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
+    new Request("http://edge.lifecycle.test/functions/v1/api/v1/account/bootstrap", {
+      method: "POST",
+      headers: {
+        "x-forwarded-for": ip,
+        Authorization: `Bearer ${googleIdToken(USER)}`,
+        "Content-Type": "application/json",
       },
-    ),
+      body: JSON.stringify({}),
+    }),
   );
   const payload = (await response.json()) as {
     session?: { accessToken: string; refreshToken: string };
@@ -446,11 +422,7 @@ Deno.test(
 
     const newToken = await refresh(ip, refreshToken);
     assert(newToken !== oldToken, "refresh minted a new access token");
-    assertEquals(
-      sessionIdOf(newToken),
-      sessionIdOf(oldToken),
-      "…in the SAME Supabase session",
-    );
+    assertEquals(sessionIdOf(newToken), sessionIdOf(oldToken), "…in the SAME Supabase session");
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: newToken, ip })).status,
       200,
@@ -462,29 +434,14 @@ Deno.test(
       204,
       "logout",
     );
-    assertEquals(
-      liveSessionForToken(oldToken),
-      null,
-      "upstream: the whole session is revoked",
-    );
+    assertEquals(liveSessionForToken(oldToken), null, "upstream: the whole session is revoked");
 
     calls.length = 0;
     const stale = await call("GET", PROBE_ROUTE, { token: oldToken, ip });
     assertEquals(stale.status, 401, "old (sibling) token refused after logout");
-    assertEquals(
-      getUserCalls(),
-      0,
-      "…decided by the tombstone, not by Supabase Auth",
-    );
-    assert(
-      !calls.some((c) => c.startsWith("rest:")),
-      "…and nothing reached PostgREST",
-    );
-    assertEquals(
-      redisStore.has(await authCacheKey(oldToken)),
-      false,
-      "stale L2 row dropped",
-    );
+    assertEquals(getUserCalls(), 0, "…decided by the tombstone, not by Supabase Auth");
+    assert(!calls.some((c) => c.startsWith("rest:")), "…and nothing reached PostgREST");
+    assertEquals(redisStore.has(await authCacheKey(oldToken)), false, "stale L2 row dropped");
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: newToken, ip })).status,
       401,
@@ -499,11 +456,7 @@ Deno.test(
     const ip = freshIp();
     const { accessToken: at1, refreshToken } = await bootstrap(ip);
     const at2 = await refresh(ip, refreshToken);
-    assertEquals(
-      (await call("GET", PROBE_ROUTE, { token: at2, ip })).status,
-      200,
-      "AT2 cached",
-    );
+    assertEquals((await call("GET", PROBE_ROUTE, { token: at2, ip })).status, 200, "AT2 cached");
     // AT1 has never been verified at this edge: it is cold in L1 and L2.
     assertEquals(redisStore.has(await authCacheKey(at1)), false, "AT1 cold");
 
@@ -516,26 +469,19 @@ Deno.test(
 
     const beforeRevocation = calls.slice();
     assert(
-      !beforeRevocation.some((c) =>
-        c.startsWith("redis:DEL") || c.startsWith("redis:SET auth:revoked:")
+      !beforeRevocation.some(
+        (c) => c.startsWith("redis:DEL") || c.startsWith("redis:SET auth:revoked:"),
       ),
-      `nothing may be evicted or tombstoned before upstream revocation completes; saw ${
-        beforeRevocation.join(", ")
-      }`,
+      `nothing may be evicted or tombstoned before upstream revocation completes; saw ${beforeRevocation.join(
+        ", ",
+      )}`,
     );
 
     // A sibling request inside the window verifies upstream (the session is
     // still live there) and re-populates the cache with a row for AT1.
     const raced = await call("GET", PROBE_ROUTE, { token: at1, ip });
-    assertEquals(
-      raced.status,
-      200,
-      "racing sibling verifies upstream and is served",
-    );
-    assert(
-      redisStore.has(await authCacheKey(at1)),
-      "…and re-populated L2 for AT1",
-    );
+    assertEquals(raced.status, 200, "racing sibling verifies upstream and is served");
+    assert(redisStore.has(await authCacheKey(at1)), "…and re-populated L2 for AT1");
 
     releaseLogout();
     logoutGate = null;
@@ -545,9 +491,7 @@ Deno.test(
 
     const logoutAt = calls.indexOf("auth:logout:local");
     const firstDel = calls.findIndex((c) => c.startsWith("redis:DEL"));
-    const tombstoneAt = calls.findIndex((c) =>
-      c === `redis:SET ${revokedKey(sessionIdOf(at2))}`
-    );
+    const tombstoneAt = calls.findIndex((c) => c === `redis:SET ${revokedKey(sessionIdOf(at2))}`);
     assert(logoutAt >= 0, "upstream logout was called");
     assert(
       firstDel > logoutAt,
@@ -558,30 +502,18 @@ Deno.test(
       `tombstone SET (${tombstoneAt}) must follow upstream logout (${logoutAt})`,
     );
     const tombstone = redisStore.get(revokedKey(sessionIdOf(at2)));
+    assert(tombstone && tombstone.expiresAtMs !== null, "tombstone stored in L2 with a TTL");
     assert(
-      tombstone && tombstone.expiresAtMs !== null,
-      "tombstone stored in L2 with a TTL",
-    );
-    assert(
-      tombstone.expiresAtMs - Date.now() >=
-        AUTH_CACHE_MAX_TTL_SECONDS * 1000 - 5_000,
+      tombstone.expiresAtMs - Date.now() >= AUTH_CACHE_MAX_TTL_SECONDS * 1000 - 5_000,
       "tombstone outlives the longest auth-cache row",
     );
 
     calls.length = 0;
     for (const token of [at1, at2]) {
       const after = await call("GET", PROBE_ROUTE, { token, ip });
-      assertEquals(
-        after.status,
-        401,
-        "every token of the session is refused after logout",
-      );
+      assertEquals(after.status, 401, "every token of the session is refused after logout");
     }
-    assertEquals(
-      getUserCalls(),
-      0,
-      "…from the tombstone, without Supabase Auth",
-    );
+    assertEquals(getUserCalls(), 0, "…from the tombstone, without Supabase Auth");
     assertEquals(
       redisStore.has(await authCacheKey(at1)),
       false,
@@ -617,15 +549,9 @@ Deno.test(
     const stale = await call("GET", PROBE_ROUTE, { token: accessToken, ip });
     assertEquals(stale.status, 401, "L1 hit refused by the L2 tombstone");
     assertEquals(getUserCalls(), 0, "…without consulting Supabase Auth");
-    assert(
-      !calls.some((c) => c === `redis:SET ${key}`),
-      "…and without re-caching the bearer",
-    );
+    assert(!calls.some((c) => c === `redis:SET ${key}`), "…and without re-caching the bearer");
     assertEquals(redisStore.has(key), false, "L2 row stays gone");
-    assert(
-      !calls.some((c) => c.startsWith("rest:")),
-      "nothing reached PostgREST",
-    );
+    assert(!calls.some((c) => c.startsWith("rest:")), "nothing reached PostgREST");
 
     calls.length = 0;
     assertEquals(

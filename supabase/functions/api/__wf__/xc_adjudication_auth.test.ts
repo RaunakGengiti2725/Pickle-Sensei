@@ -607,11 +607,7 @@ Deno.test(
       0,
       "…without consulting Supabase Auth",
     );
-    assertEquals(
-      redisStore.has(key),
-      false,
-      "…and without re-populating L2",
-    );
+    assertEquals(redisStore.has(key), false, "…and without re-populating L2");
   },
 );
 
