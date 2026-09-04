@@ -642,6 +642,14 @@ export function AnalyzeScreen() {
     eta: ExtractionEtaState | null;
   } | null>(null);
 
+  // Live capture-window events caption the `working` surface only while
+  // `run` owns the screen. A late or racing native event never replaces a
+  // settled phase (error / saved / analyzed / free_limit).
+  const setCapturePhase = useCallback((next: Phase) => {
+    if (!operationActive.current) return;
+    setPhase(prev => (prev.kind === 'working' ? next : prev));
+  }, []);
+
   useEffect(
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
@@ -658,7 +666,7 @@ export function AnalyzeScreen() {
               attemptEvidence.current.quality,
             ),
           );
-          setPhase({
+          setCapturePhase({
             kind: 'working',
             message: READINESS_COPY[event.state] ?? 'Reading your position…',
           });
@@ -673,19 +681,22 @@ export function AnalyzeScreen() {
         } else if (event.type === 'stroke_detected') {
           usabilityFunnel.log('stroke_captured');
           setCaptureEnvelope(null);
-          setPhase({
+          setCapturePhase({
             kind: 'working',
             message: 'Motion captured — saving the motion window…',
           });
         } else if (event.type === 'processing') {
-          setPhase({ kind: 'working', message: 'Saving the private clip…' });
+          setCapturePhase({
+            kind: 'working',
+            message: 'Saving the private clip…',
+          });
         } else if (event.type === 'import') {
           const messages = {
             selecting: 'Choose one video…',
             copying: 'Copying video into private storage…',
             completed: 'Video secured on this device.',
           } as const;
-          setPhase({ kind: 'working', message: messages[event.state] });
+          setCapturePhase({ kind: 'working', message: messages[event.state] });
         } else if (event.type === 'import_pose_extraction') {
           // Native progress for the offline pose pass. Only the active state
           // updates the caption — completion/failure surfaces come from the
@@ -1527,8 +1538,8 @@ export function AnalyzeScreen() {
           <View style={styles.noteRow}>
             <Icon name="shield" color={color.mint} size={18} />
             <Text style={[type.caption, styles.noteCopy]}>
-              Camera processing and clip storage stay on this device unless you
-              explicitly enable cloud video sync.
+              Camera processing and clip storage stay on this device. Clips are
+              never uploaded.
             </Text>
           </View>
           <View style={styles.noteRow}>
