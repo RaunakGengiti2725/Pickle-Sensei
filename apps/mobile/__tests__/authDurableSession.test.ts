@@ -14,9 +14,14 @@
  *  - the ONE implicit sign-out is the server refusing the refresh token
  *    (401/403): revoked elsewhere, rotated away, or the account is gone;
  *  - explicit sign-out clears the record and revokes the session server-side;
- *  - rotated access tokens reach long-lived clients without reconfiguring.
+ *  - rotated access tokens reach long-lived clients without reconfiguring;
+ *  - a Keychain write the device refuses (sign-in or rotation) is retried on
+ *    the next foreground without spending another rotation, so a one-off
+ *    Keychain error never costs the durable sign-in;
+ *  - a device clock ahead of the server (every fresh bearer already "past")
+ *    rotates at most once a minute, never once a second.
  */
-import { NativeModules } from 'react-native';
+import { AppState, NativeModules } from 'react-native';
 import type { LocalDb } from '../src/data/db';
 import { useAuthStore } from '../src/auth/authStore';
 import {
@@ -28,7 +33,10 @@ import {
   SESSION_VAULT_SERVICE,
   loadPersistedSession,
 } from '../src/account/sessionVault';
-import { stopSessionKeeper } from '../src/account/sessionKeeper';
+import {
+  refreshSessionNow,
+  stopSessionKeeper,
+} from '../src/account/sessionKeeper';
 import {
   SIGNED_OUT_DATA_OWNER,
   getActiveDataOwner,
@@ -111,6 +119,40 @@ jest.mock('../src/account/deviceContext', () => ({
 
 const canonicalId = '7fc2c743-028f-4ec6-942c-a84508f3be38';
 const FAR_FUTURE_SECONDS = Math.floor(Date.now() / 1000) + 3600;
+
+const appStateMock = AppState as unknown as { addEventListener: jest.Mock };
+/** Delivers AppState 'active' to every listener registered so far. */
+function foreground(): void {
+  for (const [event, handler] of appStateMock.addEventListener.mock.calls) {
+    if (event === 'change') (handler as (state: string) => void)('active');
+  }
+}
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+}
+
+function callsTo(fetchMock: jest.Mock, suffix: string) {
+  return fetchMock.mock.calls.filter(([url]) => String(url).endsWith(suffix));
+}
+
+/** setGenericPassword rejects (errSecIO-style) for the first `failures`
+ * calls, then the real mock takes over again. */
+function failKeychainWrites(failures: number): jest.SpyInstance {
+  const real = Keychain.setGenericPassword;
+  let remaining = failures;
+  return jest
+    .spyOn(Keychain, 'setGenericPassword')
+    .mockImplementation((...args) => {
+      if (remaining > 0) {
+        remaining -= 1;
+        return Promise.reject(new Error('errSecIO'));
+      }
+      return real(...args);
+    });
+}
 
 function response(body: unknown, status = 200): Response {
   return {
@@ -218,6 +260,7 @@ afterEach(() => {
   clearApiSession();
   delete nativeModules.PickleAuth;
   globalThis.fetch = realFetch;
+  jest.useRealTimers();
 });
 
 // ─── Sign-in persists exactly the right material ─────────────────────────────
@@ -485,5 +528,177 @@ describe('access-token rotation', () => {
 
     await useAuthStore.getState().signOut();
     expect(bearerTokenFor(canonicalId)).toBeNull();
+  });
+});
+
+// ─── Keychain hiccups and clock skew never cost the durable sign-in ──────────
+
+describe('a refused Keychain write is retried, never forgotten', () => {
+  it('rotation: the write of the rotated token fails once → the record is written on the next foreground, without spending another rotation', async () => {
+    const fetchMock = installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/auth/refresh': () =>
+        response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
+    });
+    await useAuthStore.getState().signInWithApple();
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
+
+    const writes = failKeychainWrites(1);
+    try {
+      refreshSessionNow();
+      await settle();
+      // The in-memory session moved on; the vault could not follow yet …
+      expect(getApiSession()?.refreshToken).toBe('refresh-2');
+      expect(bearerTokenFor(canonicalId)).toBe('access-2');
+      expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
+      expect(useAuthStore.getState().error).toBeNull();
+
+      // … and catches up the moment the app is foregrounded — the refresh
+      // token the server just issued, not a fresh rotation.
+      foreground();
+      await settle();
+      expect(vaultRecord()).toEqual({
+        version: 1,
+        provider: 'apple',
+        canonicalAppUserId: canonicalId,
+        refreshToken: 'refresh-2',
+        email: 'pat@example.com',
+        displayName: 'Pat Player',
+      });
+      expect(writes.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(callsTo(fetchMock, '/v1/auth/refresh')).toHaveLength(1);
+      // Still only refresh-token + descriptor material in the Keychain.
+      const durable = JSON.stringify([...__keychainStore.values()]);
+      expect(durable).not.toContain('access-');
+      expect(durable).not.toContain('apple-identity-token');
+    } finally {
+      writes.mockRestore();
+    }
+  });
+
+  it('sign-in: the first write fails → signed in for the run with no error, and the record lands on the next foreground with zero refresh POSTs', async () => {
+    const fetchMock = installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+    });
+    const writes = failKeychainWrites(1);
+    try {
+      await useAuthStore.getState().signInWithApple();
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(vaultRecord()).toBeNull();
+
+      foreground();
+      await settle();
+      expect(vaultRecord()).toMatchObject({
+        provider: 'apple',
+        refreshToken: 'refresh-1',
+      });
+      expect(writes.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(callsTo(fetchMock, '/v1/account/bootstrap')).toHaveLength(1);
+      expect(callsTo(fetchMock, '/v1/auth/refresh')).toHaveLength(0);
+    } finally {
+      writes.mockRestore();
+    }
+  });
+
+  it('a Keychain that keeps failing never signs the user out or surfaces an error; a later rotation supersedes the pending record', async () => {
+    installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/auth/refresh': () =>
+        response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
+    });
+    const writes = failKeychainWrites(Number.POSITIVE_INFINITY);
+    try {
+      await useAuthStore.getState().signInWithApple();
+      foreground();
+      await settle();
+      refreshSessionNow();
+      await settle();
+      foreground();
+      await settle();
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(getApiSession()?.refreshToken).toBe('refresh-2');
+      expect(vaultRecord()).toBeNull();
+    } finally {
+      writes.mockRestore();
+    }
+    // Keychain back: the NEWEST token is what gets persisted.
+    foreground();
+    await settle();
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+  });
+
+  it('after sign-out a pending record is dropped, not written back', async () => {
+    installRoutes({
+      '/v1/account/bootstrap': () =>
+        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/auth/logout': () => response({}),
+    });
+    const writes = failKeychainWrites(1);
+    try {
+      await useAuthStore.getState().signInWithApple();
+      expect(vaultRecord()).toBeNull();
+      await useAuthStore.getState().signOut();
+    } finally {
+      writes.mockRestore();
+    }
+    foreground();
+    await settle();
+    expect(vaultRecord()).toBeNull();
+    expect(useAuthStore.getState().session).toBeNull();
+  });
+});
+
+describe('device clock ahead of the server', () => {
+  it('a server expiry already inside the lead window rotates at most once a minute (never once a second) and the vault follows the chain', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-04T12:00:00Z'));
+    seedVault('refresh-1', 'apple');
+    let n = 1;
+    const fetchMock = installRoutes({
+      '/v1/auth/refresh': () => {
+        n += 1;
+        // The server mints a one-hour bearer, but this device's clock is two
+        // hours ahead: every bearer reads as having expired an hour ago.
+        return response({
+          session: {
+            accessToken: `access-${n}`,
+            refreshToken: `refresh-${n}`,
+            expiresAt: Math.floor(Date.now() / 1000) - 3600,
+          },
+        });
+      },
+    });
+
+    await useAuthStore.getState().hydrate();
+    expect(getApiSession()?.bearerToken).toBe('access-2');
+    fetchMock.mockClear();
+
+    await jest.advanceTimersByTimeAsync(10 * 60_000);
+    const spent = callsTo(fetchMock, '/v1/auth/refresh').map(
+      ([, init]) =>
+        (
+          JSON.parse(String((init as RequestInit).body)) as {
+            refreshToken: string;
+          }
+        ).refreshToken,
+    );
+    expect(spent.length).toBeGreaterThanOrEqual(1);
+    expect(spent.length).toBeLessThanOrEqual(10);
+    // Every rotation spent the token issued by the one before it.
+    expect(spent).toEqual(spent.map((_token, i) => `refresh-${i + 2}`));
+    expect(getApiSession()?.bearerToken).toBe(`access-${n}`);
+    expect(vaultRecord()).toMatchObject({ refreshToken: `refresh-${n}` });
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalId,
+    );
   });
 });
