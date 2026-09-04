@@ -94,11 +94,15 @@ export interface AdvanceInput {
   note: string;
 }
 
+function isBlank(value: string): boolean {
+  return value.trim().length === 0;
+}
+
 /**
  * Advance an incident to its next required step. Throws
  * InvalidTransitionError on any skip, reorder, or transition out of "closed",
  * and IncompleteResponseError when closing a postmortem-required incident
- * without a postmortemRef.
+ * without a non-blank postmortemRef.
  */
 export function advance(incident: Incident, input: AdvanceInput): Incident {
   const current = currentStep(incident);
@@ -106,10 +110,10 @@ export function advance(incident: Incident, input: AdvanceInput): Incident {
   if (expected === null || input.step !== expected) {
     throw new InvalidTransitionError(incident.id, current, input.step, expected);
   }
-  if (input.note.trim().length === 0) {
+  if (isBlank(input.note)) {
     throw new Error(`incident ${incident.id}: step "${input.step}" requires a non-empty note`);
   }
-  if (input.step === "closed" && requiresPostmortem(incident) && incident.postmortemRef === null) {
+  if (input.step === "closed" && requiresPostmortem(incident) && !hasPostmortem(incident)) {
     throw new IncompleteResponseError(incident.id, ["postmortem"]);
   }
   const entry: TimelineEntry = {
@@ -122,11 +126,18 @@ export function advance(incident: Incident, input: AdvanceInput): Incident {
 }
 
 export function attachPostmortem(incident: Incident, postmortemRef: string): Incident {
+  if (isBlank(postmortemRef)) {
+    throw new Error(`incident ${incident.id}: postmortemRef must be a non-empty path or URL`);
+  }
   return { ...incident, postmortemRef };
 }
 
 function requiresPostmortem(incident: Incident): boolean {
   return REQUIRED_SEQUENCES[incident.severity].includes("postmortem");
+}
+
+function hasPostmortem(incident: Incident): boolean {
+  return incident.postmortemRef !== null && !isBlank(incident.postmortemRef);
 }
 
 export class InvalidEscalationError extends Error {
@@ -143,6 +154,8 @@ export class InvalidEscalationError extends Error {
  * preserved; any steps required by the new severity that were not part of the
  * old sequence must still be completed in order, so escalation re-derives the
  * remaining sequence rather than granting credit for skipped mitigations.
+ * A closed incident is terminal: escalating it throws InvalidTransitionError
+ * (declare a new incident instead of reopening the record).
  */
 export function escalate(
   incident: Incident,
@@ -152,8 +165,14 @@ export function escalate(
   if (to === incident.severity || isAtLeastAsSevere(incident.severity, to)) {
     throw new InvalidEscalationError(incident.id, incident.severity, to);
   }
+  const current = currentStep(incident);
+  if (current === "closed") {
+    throw new InvalidTransitionError(incident.id, current, current, null);
+  }
+  if (isBlank(input.note)) {
+    throw new Error(`incident ${incident.id}: escalation to ${to} requires a non-empty note`);
+  }
   const completed = new Set(incident.timeline.map((entry) => entry.step));
-  completed.delete("closed");
   const sequence = REQUIRED_SEQUENCES[to];
   // Rewind to the last step in the new sequence completed without gaps.
   let anchor: ResponseStep = "declared";
