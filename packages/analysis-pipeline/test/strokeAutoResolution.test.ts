@@ -7,10 +7,11 @@ import {
   PriorityCoachingRanker,
   Sm1TechniqueScorer,
 } from "@pickle/scoring";
-import { unavailable, type StrokeIdentity } from "@pickle/swing-domain";
+import { unavailable, type StrokeIdentity, type StrokePrediction } from "@pickle/swing-domain";
 import { GeometricPhaseSegmenter, GeometryBiomechanicsExtractor } from "@pickle/vision-geometry";
 import {
   analyzeCapture,
+  detectFlatDisagreement,
   detectHierarchicalDisagreement,
   resolvePredictedProfile,
   resolveSlugProfileId,
@@ -418,6 +419,53 @@ describe("resolution helpers (registry-terminated, conservative gate)", () => {
     expect(
       resolvePredictedProfile({ ...base, label: "BERT", leaf: "BERT", taxonomyDepth: 3 }),
     ).toMatchObject({ kind: "abstain", reason: "auto_stroke_leaf_not_in_registry" });
+  });
+
+  it("resolvePredictedProfile: a non-finite confidence never clears the floor (VG-1 route leg)", () => {
+    const backhand: HierarchicalStrokePrediction = {
+      ...base,
+      classifierVersion: "stroke-heuristic-7 (uncalibrated)",
+      label: "BACKHAND",
+      leaf: null,
+      taxonomyDepth: 2,
+      confidence: Number.NaN,
+    };
+    for (const confidence of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(resolvePredictedProfile({ ...backhand, confidence })).toEqual({
+        kind: "abstain",
+        reason: "auto_stroke_confidence_below_floor",
+      });
+      // A non-finite confidence claims no disagreement either.
+      expect(
+        detectHierarchicalDisagreement("forehand_drive", { ...backhand, confidence }),
+      ).toBeNull();
+    }
+    expect(resolvePredictedProfile({ ...backhand, confidence: 0.49 })).toEqual({
+      kind: "abstain",
+      reason: "auto_stroke_confidence_below_floor",
+    });
+    expect(resolvePredictedProfile({ ...backhand, confidence: 0.5 })).toMatchObject({
+      kind: "side",
+      side: "BACKHAND",
+      profileId: "SHARED_BACKHAND_SWING",
+    });
+  });
+
+  it("detectFlatDisagreement: a non-finite confidence claims nothing", () => {
+    const flat = (confidence: number): StrokePrediction => ({
+      shotType: "backhand_drive",
+      confidence,
+      alternatives: [],
+      producedBy: TRIGGER_MODEL,
+    });
+    for (const confidence of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(detectFlatDisagreement("forehand_drive", flat(confidence))).toBeNull();
+    }
+    expect(detectFlatDisagreement("forehand_drive", flat(0.9))).toEqual({
+      declared: "forehand_drive",
+      predictedLabel: "backhand_drive",
+      basis: "slug_vs_declared",
+    });
   });
 
   it("resolveSlugProfileId: unambiguous slugs resolve, shared slugs need the canonical", () => {

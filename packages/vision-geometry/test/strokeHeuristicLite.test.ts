@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateSwingSequence } from "@pickle/evaluation";
+import type { PoseSequence } from "@pickle/swing-domain";
 import {
   classifyStroke,
   STROKE_TAXONOMY_V3,
@@ -15,11 +16,34 @@ import {
  */
 
 /** Paddle observations pinned at a fixed point around contact. */
-function paddleAt(x: number, y: number, contactMs: number): HeuristicPaddleObservation[] {
+function paddleAt(
+  x: number,
+  y: number,
+  contactMs: number,
+  confidence?: number,
+): HeuristicPaddleObservation[] {
   return Array.from({ length: 11 }, (_, index) => ({
     timestampMs: contactMs - 200 + index * 40,
     center: { x, y },
+    ...(confidence === undefined ? {} : { confidence }),
   }));
+}
+
+/** Right wrist unmeasured (visibility 0.1) on every frame within ±8 ms of contact. */
+function withWristInvisibleAtContact(sequence: PoseSequence, contactMs: number): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames.map((frame) =>
+      Math.abs(frame.timestampMs - contactMs) <= 8
+        ? {
+            ...frame,
+            landmarks: frame.landmarks.map((mark) =>
+              mark.name === "right_wrist" ? { ...mark, visibility: 0.1 } : mark,
+            ),
+          }
+        : frame,
+    ),
+  };
 }
 
 describe("classifyStroke (ported heuristic, hierarchical)", () => {
@@ -169,6 +193,140 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     });
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain("ambidextrous_declared_side_unresolvable");
+  });
+});
+
+describe("gate: implausible paddle centers never become the contact point (VG-1)", () => {
+  const { sequence, window } = generateSwingSequence();
+  const windowArg = { startMs: window.startMs, endMs: window.endMs };
+  const blind = withWristInvisibleAtContact(sequence, window.peakMs);
+  const centers = [
+    { x: Number.NaN, y: 0.5 },
+    { x: 0.5, y: Number.NaN },
+    { x: Number.POSITIVE_INFINITY, y: 0.5 },
+    { x: 5, y: 0.5 },
+    { x: -7, y: 0.5 },
+  ];
+
+  it.each(centers)(
+    "abstains with a finite confidence for center %o when the wrist is unmeasured at contact",
+    (center) => {
+      const prediction = classifyStroke({
+        sequence: blind,
+        window: windowArg,
+        contactMs: window.peakMs,
+        handedness: "right",
+        paddle: paddleAt(center.x, center.y, window.peakMs, 0.9),
+        paddleSpeeds: null,
+        wristSpeeds: null,
+      });
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(Number.isFinite(prediction.confidence)).toBe(true);
+      expect(prediction.confidence).toBeGreaterThanOrEqual(0);
+      expect(prediction.confidence).toBeLessThanOrEqual(1);
+      expect(
+        prediction.limitingFactors.some((factor) =>
+          /paddle_center_(not_finite|out_of_image)|paddle_point_implausible/.test(factor),
+        ),
+      ).toBe(true);
+      expect(prediction.contactPointSource).not.toBe("paddle");
+    },
+  );
+
+  it.each(centers)(
+    "falls back to the visible wrist with a finite confidence for center %o",
+    (center) => {
+      const prediction = classifyStroke({
+        sequence,
+        window: windowArg,
+        contactMs: window.peakMs,
+        handedness: "right",
+        paddle: paddleAt(center.x, center.y, window.peakMs, 0.9),
+        paddleSpeeds: null,
+        wristSpeeds: null,
+      });
+      expect(prediction.contactPointSource).toBe("wrist");
+      expect(Number.isFinite(prediction.confidence)).toBe(true);
+      expect(
+        prediction.limitingFactors.some((factor) =>
+          /paddle_center_(not_finite|out_of_image)|paddle_point_implausible/.test(factor),
+        ),
+      ).toBe(true);
+    },
+  );
+});
+
+describe("contract: the classification window is validated (VG-2)", () => {
+  const { sequence, window } = generateSwingSequence();
+  const windowArg = { startMs: window.startMs, endMs: window.endMs };
+  const classifyWithWindow = (candidate: { startMs: number; endMs: number }) =>
+    classifyStroke({
+      sequence,
+      window: candidate,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: Array.from({ length: 20 }, (_, index) => ({
+        timestampMs: window.peakMs - 300 + index * 30 + 7,
+        value: 1.8,
+      })),
+    });
+
+  it.each([
+    { name: "zero-length", startMs: window.peakMs, endMs: window.peakMs },
+    { name: "inverted", startMs: window.endMs, endMs: window.startMs },
+    { name: "NaN start", startMs: Number.NaN, endMs: window.endMs },
+    { name: "infinite end", startMs: window.startMs, endMs: Number.POSITIVE_INFINITY },
+  ])("rejects a $name window as invalid_classification_window", (candidate) => {
+    const prediction = classifyWithWindow(candidate);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("invalid_classification_window");
+    expect(Number.isFinite(prediction.confidence)).toBe(true);
+  });
+
+  it("rejects a reference that lies outside the window as contact_outside_window", () => {
+    const prediction = classifyWithWindow({ startMs: 0, endMs: 300 });
+    expect(window.peakMs).toBeGreaterThan(300);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("contact_outside_window");
+  });
+
+  it("keeps the unmodified generated swing at its pre-change label and confidence", () => {
+    const prediction = classifyStroke({
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.confidence).toBe(0.8);
+    expect(prediction.limitingFactors).not.toContain("invalid_classification_window");
+    expect(prediction.limitingFactors).not.toContain("contact_outside_window");
+  });
+
+  it("never reports intensity evidence from zero in-window speed samples", () => {
+    const prediction = classifyStroke({
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      // A measured series that lies entirely BEFORE the window: 0 in-window samples.
+      wristSpeeds: Array.from({ length: 20 }, (_, index) => ({
+        timestampMs: window.startMs - 2000 + index * 30,
+        value: 1.8,
+      })),
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.evidence.some((entry) => /speed peak 0\.00 u\/s/.test(entry))).toBe(false);
+    expect(prediction.evidence.some((entry) => entry.includes("speed peak"))).toBe(false);
+    expect(prediction.limitingFactors).toContain("no_speed_samples_in_window");
+    expect(prediction.limitingFactors).not.toContain("bounce_not_observed_level3_uncommitted");
   });
 });
 

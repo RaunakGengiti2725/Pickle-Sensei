@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PhaseSpan, PoseFrame } from "@pickle/shared-types";
 import type { StrokeEvent } from "@pickle/vision-contracts";
 import { GeometricPhaseSegmenter } from "../src/phaseSegmenter.js";
 import { generateSwing } from "@pickle/evaluation";
@@ -90,5 +91,86 @@ describe("GeometricPhaseSegmenter", () => {
     const first = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
     const second = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
     expect(second).toEqual(first);
+  });
+});
+
+describe("GeometricPhaseSegmenter clamps outer spans to measured frames (VG-4)", () => {
+  // 61 frames at 60 fps (0..1000 ms), right wrist advancing along +x with a
+  // single triangular speed bump centred on frame 30 — one distinct peak.
+  const FRAME_MS = 1000 / 60;
+  const frames: PoseFrame[] = [];
+  let x = 0;
+  for (let index = 0; index < 61; index += 1) {
+    const distance = Math.abs(index - 30);
+    const step = distance <= 6 ? 1 + Math.round(((6 - distance) / 6) * 39) : 1;
+    x += step / 1024;
+    frames.push({
+      timestampMs: index * FRAME_MS,
+      space: "normalized-image",
+      confidence: 1,
+      landmarks: [{ name: "right_wrist", x, y: 0.5, visibility: 0.9 }],
+    });
+  }
+  const firstMeasuredMs = frames[0]!.timestampMs;
+  const lastMeasuredMs = frames.at(-1)!.timestampMs;
+  const request = (startMs: number, endMs: number): StrokeEvent => ({
+    startMs,
+    endMs,
+    contactMs: null,
+    shotTypeHypothesis: null,
+    confidence: 0.9,
+  });
+
+  function expectOrderedContiguousWithinMeasured(spans: readonly PhaseSpan[]): void {
+    expect(spans.map((span) => span.key)).toEqual([
+      "ready",
+      "prepare",
+      "accelerate",
+      "contact",
+      "follow_through",
+      "recover",
+    ]);
+    for (const span of spans) {
+      expect(span.startMs).toBeLessThanOrEqual(span.representativeMs);
+      expect(span.representativeMs).toBeLessThanOrEqual(span.endMs);
+      expect(span.startMs).toBeGreaterThanOrEqual(firstMeasuredMs);
+      expect(span.endMs).toBeLessThanOrEqual(lastMeasuredMs + 1e-9);
+    }
+    for (let index = 1; index < spans.length; index += 1) {
+      expect(spans[index]!.startMs).toBe(spans[index - 1]!.endMs);
+    }
+  }
+
+  it("does not extend recover past the last measured frame for window [0, 60000]", async () => {
+    const result = await new GeometricPhaseSegmenter({ aspectRatio: 1 }).segmentPhases(
+      frames,
+      [],
+      request(0, 60000),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(lastMeasuredMs).toBeLessThanOrEqual(1000.0000000000001);
+    const recover = result.value.find((span) => span.key === "recover")!;
+    const ready = result.value.find((span) => span.key === "ready")!;
+    expect(recover.endMs).toBeLessThanOrEqual(1000.0000000000001);
+    expect(ready.startMs).toBeGreaterThanOrEqual(0);
+    expectOrderedContiguousWithinMeasured(result.value);
+  });
+
+  it("does not extend ready before the first measured frame for window [-60000, 60000]", async () => {
+    const result = await new GeometricPhaseSegmenter({ aspectRatio: 1 }).segmentPhases(
+      frames,
+      [],
+      request(-60000, 60000),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const ready = result.value.find((span) => span.key === "ready")!;
+    expect(ready.startMs).toBeGreaterThanOrEqual(0);
+    expectOrderedContiguousWithinMeasured(result.value);
+  });
+
+  it("stamps the bumped phase model version (outer-span clamping changed output)", () => {
+    expect(new GeometricPhaseSegmenter({ aspectRatio: 1 }).modelVersion).toBe("phase-geometry-2");
   });
 });
