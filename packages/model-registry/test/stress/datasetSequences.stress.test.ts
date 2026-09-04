@@ -25,7 +25,7 @@ export const DATASET_SUITE: SuiteDefinition<DatasetAction> = {
   execute: executeDatasetActions(false),
 };
 
-/** Adds the two strict mutations (±Infinity statistic, substring leakage finding). */
+/** Adds the two strict mutations (±Infinity statistic — -Infinity is already caught by the `< 0` rule, +Infinity is not, substring leakage finding). */
 export const DATASET_STRICT_SUITE: SuiteDefinition<DatasetAction> = {
   suite: "dataset-release-sequences-strict",
   generate: (rng, length) => generateDatasetActions(rng, length, { strict: true }),
@@ -46,7 +46,7 @@ describe("dataset releases — seeded randomized sequences", () => {
     expect(table.broken, `${summary}\n${describeBroken(table)}`).toBe(0);
   });
 
-  it("D6/D7 pin: ±Infinity statistics and substring-matched leakage findings are accepted (every failure is D1 accept-invalid, deterministic)", () => {
+  it("D6/D7 pin: +Infinity statistics and substring-matched leakage findings are accepted (every failure is D1 accept-invalid, deterministic)", () => {
     const config = stressConfig();
     const table = runCampaign(DATASET_STRICT_SUITE, config);
     writeTable(table);

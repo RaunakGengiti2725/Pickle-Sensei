@@ -33,7 +33,7 @@ import { legalEntry } from "./registryStress.js";
  * outputs") and the leakage doc comment ("every session that spans splits must
  * be recorded"); they are generated only when the corresponding option is on so
  * the legal campaign and the defect pins stay separate:
- *  D6 a ±Infinity statistic must be rejected like NaN is.
+ *  D6 a non-finite statistic must be rejected like NaN is (+Infinity slips past `< 0 || isNaN`).
  *  D7 a leakage finding for session "s10" must not satisfy session "s1".
  */
 
