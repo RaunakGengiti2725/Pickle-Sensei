@@ -195,6 +195,48 @@ describe('Settings membership row', () => {
     expect(membershipValue(renderer)).toBe('Upgrade required');
   });
 
+  it('keeps a membership verified during the focus re-read when the older snapshot lands last', async () => {
+    let resolveAccess!: (value: CanonicalAccessState) => void;
+    const clients = backendReturning(
+      () =>
+        new Promise<CanonicalAccessState>(resolve => {
+          resolveAccess = resolve;
+        }),
+    );
+    const verified = freeAccess(1, 0, true);
+    (clients.backend.syncBilling as jest.Mock).mockResolvedValue({
+      billing: {
+        premium: true,
+        productKey: 'pickle_sensei_pro_yearly',
+        expiresAt: null,
+        verifiedAt: '2026-09-04T00:00:00.000Z',
+      },
+      access: verified,
+    });
+    configureAccessStore(clients);
+    seedStaleSnapshot(freeAccess(1));
+
+    const renderer = renderScreen();
+    await flush();
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(membershipValue(renderer)).toBe('1 free rating left');
+
+    // The server verifies a membership while the focus re-read is still on
+    // the wire (a restore or purchase finishing on another screen).
+    await act(async () => {
+      expect(await useAccessStore.getState().syncBilling()).toBe(true);
+    });
+    expect(membershipValue(renderer)).toBe('Pro active');
+
+    // The OLDER snapshot answers last: it predates the verified membership
+    // and must not displace it.
+    resolveAccess(freeAccess(1));
+    await flush();
+    expect(membershipValue(renderer)).toBe('Pro active');
+    expect(useAccessStore.getState().canonicalAccess).toEqual(verified);
+    expect(useAccessStore.getState().status).toBe('ready');
+  });
+
   it('says Upgrade required as soon as nothing is left to reserve, even while the last score is still syncing', async () => {
     // Second scored analysis saved, its permit still reserved until the
     // outbox syncs: remaining is 1 by the server's arithmetic, but nothing
