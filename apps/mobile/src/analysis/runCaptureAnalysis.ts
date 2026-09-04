@@ -4,6 +4,7 @@ import {
   analyzeCapture,
   evaluatePreAnalysisGate,
   type CaptureAnalysisRecord,
+  type FusionProviders,
   type PreAnalysisGateDecision,
   type StrokeWindowContext,
 } from '@pickle/analysis-pipeline';
@@ -30,6 +31,8 @@ import {
   ApiError,
   createAnalysisPermitClient,
   type ApiConfigState,
+  type ReleasableAnalysisOutcome,
+  type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
 import { makeUuid } from '../util/uuid';
 import {
@@ -323,16 +326,9 @@ async function runCaptureAnalysisCore(
 
   // ── Entitlement: reserve before inference (spec: permits) ─────────────
   const permits = createAnalysisPermitClient(request.apiConfig);
-  let permitId: string;
-  let freeLimitReached = false;
+  let reserved: ReservedAnalysisPermitWithAccess;
   try {
-    const reserved = await permits.reserve(makeUuid());
-    permitId = reserved.permit.id;
-    freeLimitReached =
-      reserved.permit.accessSource === 'free' &&
-      reserved.access !== null &&
-      !reserved.access.premium &&
-      reserved.access.freeRatings.availableToReserve === 0;
+    reserved = await permits.reserve(makeUuid());
   } catch (error) {
     if (error instanceof ApiError && isPaywallRequired(error)) {
       return {
@@ -347,6 +343,71 @@ async function runCaptureAnalysisCore(
         : 'The rating service could not be reached. Your capture is saved and can be scored later.';
     return { kind: 'unavailable', reason: message };
   }
+  const permitId = reserved.permit.id;
+  if (!permitId.trim()) {
+    // A permit that cannot be finalized must never gate inference or a
+    // durable write; there is nothing server-side to release either.
+    return {
+      kind: 'unavailable',
+      reason:
+        'The rating service returned an invalid analysis permit. Your capture is saved and can be scored later.',
+    };
+  }
+  const freeLimitReached =
+    reserved.permit.accessSource === 'free' &&
+    reserved.access !== null &&
+    !reserved.access.premium &&
+    reserved.access.freeRatings.availableToReserve === 0;
+
+  // From here every exit either consumes the permit (a scored rating fully
+  // promoted — the shot-sync transaction finalizes it) or releases it exactly
+  // once. A throw anywhere below releases with outcome 'failed' before it
+  // escapes, so a local write fault can never park the user's free rating
+  // on a reserved permit until the server sweep expires it.
+  let permitSettled = false;
+  const releasePermit = async (
+    outcome: ReleasableAnalysisOutcome,
+  ): Promise<void> => {
+    permitSettled = true;
+    await permits.release(permitId, outcome).catch(() => {
+      // The permit expires server-side; a lost release is not a lost rating.
+    });
+  };
+  try {
+    return await analyzeReservedCapture(request, clip, parsed.value, {
+      envelope,
+      providers: fusion.providers,
+      permitId,
+      freeLimitReached,
+      releasePermit,
+      markPermitConsumed: () => {
+        permitSettled = true;
+      },
+    });
+  } finally {
+    if (!permitSettled) await releasePermit('failed');
+  }
+}
+
+interface ReservedRunContext {
+  envelope: EnvelopeVerdict | null;
+  providers: FusionProviders;
+  permitId: string;
+  freeLimitReached: boolean;
+  releasePermit: (outcome: ReleasableAnalysisOutcome) => Promise<void>;
+  markPermitConsumed: () => void;
+}
+
+/** Inference + persistence for a run that holds a reserved permit. Only the
+ * caller's release boundary finalizes the permit on a throw; this function
+ * settles it on every typed outcome it returns. */
+async function analyzeReservedCapture(
+  request: RunCaptureAnalysisRequest,
+  clip: CapturedClip,
+  pose: PoseSequence,
+  ctx: ReservedRunContext,
+): Promise<CaptureAnalysisOutcome> {
+  const { envelope, permitId, freeLimitReached } = ctx;
 
   // Imported clips carry no measured trigger: the analysis window is
   // honestly the whole clip, and the provenance says exactly that instead
@@ -384,14 +445,12 @@ async function runCaptureAnalysisCore(
   // ── Pose-quality gate: the engine only sees measurably usable tracking ──
   const gate = evaluatePreAnalysisGate({
     frame: null,
-    pose: parsed.value,
-    poseQuality: evaluateCaptureQuality(parsed.value),
-    stroke: strokeWindowFor(clip, parsed.value),
+    pose,
+    poseQuality: evaluateCaptureQuality(pose),
+    stroke: strokeWindowFor(clip, pose),
   });
   if (!gate.analyzable) {
-    await permits.release(permitId, 'unsupported').catch(() => {
-      // Server-side expiry covers a lost release.
-    });
+    await ctx.releasePermit('unsupported');
     return {
       kind: 'quality_blocked',
       reason: poseQualityBlockedReason(gate),
@@ -402,10 +461,10 @@ async function runCaptureAnalysisCore(
 
   const analysisId = makeUuid();
   const result = await analyzeCapture(
-    fusion.providers,
+    ctx.providers,
     {
       captureId: request.captureId,
-      pose: parsed.value,
+      pose,
       paddle: unavailable('paddle_detector_not_installed'),
       ball: unavailable('ball_tracker_not_installed'),
       trigger,
@@ -432,9 +491,7 @@ async function runCaptureAnalysisCore(
   );
 
   if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
-    });
+    await ctx.releasePermit('failed');
     return { kind: 'unavailable', reason: result.failure.message };
   }
   // Attach the measured envelope so downstream Result can explain
@@ -451,6 +508,7 @@ async function runCaptureAnalysisCore(
   if (record.result && record.result.resultKind === 'scored') {
     // Promote to the product rating; the sync transaction consumes the permit.
     await saveAnalysis(request.db, record.result, permitId);
+    ctx.markPermitConsumed();
     return { kind: 'scored', analysisId, record, freeLimitReached };
   }
 
@@ -458,9 +516,7 @@ async function runCaptureAnalysisCore(
   // This branch also carries the AUTO DETECT abstained partial records — an
   // abstained run has result:null and must never burn the user's rating
   // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
-  });
+  await ctx.releasePermit('low_confidence');
   if (record.result) {
     // Local display only — abstentions are never synced as ratings.
     await saveLocalOnlyAnalysis(request.db, record.result);
