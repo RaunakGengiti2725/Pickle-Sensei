@@ -41,8 +41,10 @@
  *   <ID>.diff            — the applied mutation as a unified diff (replayable)
  *   run.json             — run metadata (HEAD sha, node, jest cmd, timings)
  *
- * Replay one mutant exactly: `--only <ID>` (same suite flag). Nothing here
- * calls git for anything but read-only status/rev-parse.
+ * Replay one mutant exactly: `--only <ID>` (same suite flag). An entry may be
+ * the full id (`LG06-device-history-default-arg`) or just its short code
+ * (`LG06`) — the part before the first `-`. Nothing here calls git for
+ * anything but read-only status/rev-parse.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -289,9 +291,13 @@ export async function main(argv = process.argv.slice(2)) {
   const startedAt = new Date().toISOString();
   const wallStart = Date.now();
 
-  const selected = args.only ? MUTANTS.filter((m) => args.only.includes(m.id)) : MUTANTS;
+  const shortCode = (id) => id.split("-")[0];
+  const matchesOnly = (m, wanted) => m.id === wanted || shortCode(m.id) === wanted;
+  const selected = args.only
+    ? MUTANTS.filter((m) => args.only.some((wanted) => matchesOnly(m, wanted)))
+    : MUTANTS;
   if (args.only) {
-    const missing = args.only.filter((id) => !MUTANTS.some((m) => m.id === id));
+    const missing = args.only.filter((wanted) => !MUTANTS.some((m) => matchesOnly(m, wanted)));
     if (missing.length) throw new Error(`unknown mutant id(s): ${missing.join(", ")}`);
   }
   const ids = new Set();
