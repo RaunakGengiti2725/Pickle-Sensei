@@ -20,6 +20,15 @@ import {
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
  * out; they just schedule another try.
+ *
+ * The expiry the server reports is sanity-checked before it drives a timer.
+ * One that is already past or inside the refresh lead (device clock ahead of
+ * the server, a stale server value) or implausibly far out (a value in the
+ * wrong unit) tells the keeper nothing about the bearer's life, so the
+ * bearer is assumed to live `ASSUMED_BEARER_LIFE_MS` from its rotation and
+ * rotated on that schedule instead; an API 401 still forces a rotation via
+ * `refreshSessionNow`. A successful rotation never re-arms sooner than
+ * `MIN_ROTATION_DELAY_MS`, and no delay ever exceeds the 32-bit timer range.
  */
 
 export interface SessionKeeperInput {
@@ -40,6 +49,15 @@ const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
 const MIN_DELAY_MS = 1_000;
+/** A completed rotation never re-arms sooner than this. */
+const MIN_ROTATION_DELAY_MS = 60_000;
+/** Bearer life assumed when the reported expiry cannot be trusted. */
+const ASSUMED_BEARER_LIFE_MS = 15 * 60_000;
+/** No server mints a bearer that outlives this; a longer life is a value in
+ * the wrong unit (milliseconds read as seconds). */
+const MAX_PLAUSIBLE_BEARER_LIFE_MS = 24 * 3600_000;
+/** setTimeout's range; beyond it the delay collapses to ~1 ms. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
 
@@ -74,6 +92,18 @@ export function retryDelayMs(attempt: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));
 }
 
+/** Whether a reported expiry says something usable about the bearer's life:
+ * finite, with more life left than the refresh lead, and not implausibly
+ * far out. */
+function isTrustedBearerExpiry(expiresAtMs: number, nowMs: number): boolean {
+  const lifeMs = expiresAtMs - nowMs;
+  return (
+    Number.isFinite(lifeMs) &&
+    lifeMs > REFRESH_LEAD_MS &&
+    lifeMs <= MAX_PLAUSIBLE_BEARER_LIFE_MS
+  );
+}
+
 export function startSessionKeeper(input: SessionKeeperInput): void {
   stopSessionKeeper();
   const myGeneration = generation;
@@ -85,7 +115,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
 
   const live = () => myGeneration === generation;
 
-  const schedule = (delayMs: number) => {
+  const schedule = (delayMs: number, floorMs: number = MIN_DELAY_MS) => {
     if (!live()) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(
@@ -93,12 +123,12 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
         timer = null;
         void refresh();
       },
-      Math.max(MIN_DELAY_MS, delayMs),
+      Math.min(MAX_TIMER_DELAY_MS, Math.max(floorMs, delayMs)),
     );
   };
 
-  const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+  const scheduleAheadOfExpiry = (floorMs?: number) => {
+    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS, floorMs);
   };
 
   const refresh = async () => {
@@ -110,11 +140,17 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
         { fetchFn: input.fetchFn },
       );
       if (!live()) return;
+      const rotatedAtMs = now();
       refreshToken = tokens.refreshToken;
-      bearerExpiresAtMs = tokens.bearerExpiresAtMs;
+      bearerExpiresAtMs = isTrustedBearerExpiry(
+        tokens.bearerExpiresAtMs,
+        rotatedAtMs,
+      )
+        ? tokens.bearerExpiresAtMs
+        : rotatedAtMs + ASSUMED_BEARER_LIFE_MS;
       failedAttempts = 0;
       await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry();
+      if (live()) scheduleAheadOfExpiry(MIN_ROTATION_DELAY_MS);
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
@@ -145,7 +181,10 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   // `schedule` to replace.
   refreshNow = () => void refresh();
 
-  if (bearerExpiresAtMs === null) {
+  if (
+    bearerExpiresAtMs === null ||
+    !isTrustedBearerExpiry(bearerExpiresAtMs, now())
+  ) {
     void refresh();
   } else {
     scheduleAheadOfExpiry();

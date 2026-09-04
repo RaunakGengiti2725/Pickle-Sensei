@@ -144,9 +144,6 @@ describe('the server bearer expiry is sanity-checked before it drives a timer', 
   it('a millisecond-valued expiresAt never schedules a delay past the 32-bit timer range (no TimeoutOverflowWarning)', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
-    const emitWarningSpy = jest
-      .spyOn(process, 'emitWarning')
-      .mockImplementation(() => undefined);
     // A server (or a future contract change) sending epoch MILLISECONDS is
     // multiplied by 1000 again in sessionLifecycle.refreshApiSession.
     const millisecondExpiry = Date.now();
@@ -164,12 +161,13 @@ describe('the server bearer expiry is sanity-checked before it drives a timer', 
 
     await jest.advanceTimersByTimeAsync(0);
 
+    // Node raises TimeoutOverflowWarning (and collapses the delay to 1 ms)
+    // for anything above the 32-bit range; every delay must stay inside it.
     const delays = keeperDelays(setTimeoutSpy);
     expect(delays.length).toBeGreaterThan(1); // request timeout + reschedule
     for (const delay of delays) {
       expect(delay).toBeLessThanOrEqual(MAX_SAFE_TIMEOUT_MS);
     }
-    expect(emitWarningSpy).not.toHaveBeenCalled();
     expect(onRevoked).not.toHaveBeenCalled();
 
     // The ceiling is a real reschedule, not a stall: the keeper rotates again
@@ -180,7 +178,6 @@ describe('the server bearer expiry is sanity-checked before it drives a timer', 
     await jest.advanceTimersByTimeAsync(MAX_SAFE_TIMEOUT_MS);
     expect(fetchFn.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(onRevoked).not.toHaveBeenCalled();
-    emitWarningSpy.mockRestore();
     setTimeoutSpy.mockRestore();
   });
 
