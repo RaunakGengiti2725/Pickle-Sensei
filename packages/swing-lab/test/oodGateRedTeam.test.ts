@@ -62,17 +62,21 @@ function gate(path: string) {
   return evaluateFrameAnalyzability(extractFrameStats(path));
 }
 
+/** Still photos cut from the dev clip at 1.2s spacing, written into `dir`. */
+function extractStills(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
+    const still = join(dir, `slide-${i}.png`);
+    ffmpeg(["-ss", String(0.5 + i * 1.2), "-i", sourceClip, "-frames:v", "1", still]);
+    return still;
+  });
+}
+
 describe(
   "OOD gate red team: adversarial near-misses (synthetic, from dev clip)",
   { timeout: 60_000 },
   () => {
     it("rejects a slideshow of pickleball still photos (1s per photo)", () => {
-      const stills: string[] = [];
-      for (let i = 0; i < 6; i += 1) {
-        const still = join(dir, `slide-${i}.png`);
-        ffmpeg(["-ss", String(0.5 + i * 1.2), "-i", sourceClip, "-frames:v", "1", still]);
-        stills.push(still);
-      }
+      const stills = extractStills(6);
       const list = join(dir, "slides.txt");
       writeFileSync(list, stills.map((s) => `file '${s}'\nduration 1`).join("\n"));
       const path = join(dir, "slideshow.mp4");
@@ -83,10 +87,7 @@ describe(
     });
 
     it("rejects a crossfading slideshow of pickleball still photos", () => {
-      const inputs: string[] = [];
-      for (let i = 0; i < 4; i += 1) {
-        inputs.push("-loop", "1", "-t", "1.5", "-i", join(dir, `slide-${i}.png`));
-      }
+      const inputs = extractStills(4).flatMap((still) => ["-loop", "1", "-t", "1.5", "-i", still]);
       const path = join(dir, "slideshow-xfade.mp4");
       ffmpeg([
         ...inputs,
