@@ -18,7 +18,10 @@ committed document:
   `pnpm install --frozen-lockfile --offline` against the `origin/main` lockfile.
 - Runner code: `packages/evaluation/src/regression/*.ts` from the PR that added
   this directory, copied into the worktree as untracked files (the runner did
-  not exist on `origin/main`; untracked files do not affect `gitDirty`). The
+  not exist on `origin/main`; untracked files outside `datasets/` do not
+  affect `gitDirty` — an untracked file under `datasets/` outside
+  `datasets/reports/` does, because bench loaders enumerate those
+  directories). The
   runner only orchestrates; every metric comes from `origin/main`'s
   `packages/swing-lab`, `packages/vision-geometry` and `datasets/**`.
 - Exact command (cwd = worktree root):
@@ -28,8 +31,11 @@ committed document:
     --out-dir <repo>/datasets/reports/regression --run-id baseline
   ```
 
-  Exit code 0. Runner-reported `totalWallClockMs: 1382`. `git status
-  --porcelain` in the worktree was identical before and after the run.
+  Exit code 0. Runner-reported `totalWallClockMs: 1157` (last regenerated
+  with the runner that records `benches[].cwd` relative to the repository
+  root; metrics and provenance were byte-identical to the previous document).
+  `git status --porcelain` in the worktree was identical before and after
+  the run.
 - Per-bench wall clocks (ms): stroke_heuristic 61, contact_replay 44,
   event_bounds_e13 11, event_recall 234, completion_bench 208,
   ownership_dual_frame 72, ball_hard_slice 501, phase_gold_d3_05 228,
@@ -66,6 +72,7 @@ moved a metric:
 
 ```sh
 git status --porcelain --untracked-files=no   # must be empty
+git ls-files --others --exclude-standard datasets | grep -v '^datasets/reports/'  # must be empty
 rm datasets/reports/regression/baseline.json  # the runner refuses to overwrite
 pnpm --filter @pickle/evaluation bench:regression --run-id baseline
 ```
