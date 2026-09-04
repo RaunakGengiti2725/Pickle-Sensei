@@ -816,6 +816,112 @@ begin
   end;
 end $$;
 
+-- E6f: the reversal is also refused through the write shapes that are not a
+-- plain UPDATE — the PostgREST upsert (`POST ... resolution=merge-duplicates`
+-- = INSERT ... ON CONFLICT DO UPDATE, on either unique key) and MERGE both
+-- route through the BEFORE UPDATE guard; a3 (released/low_confidence) stays put.
+do $$
+begin
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key)
+    values ('00000000-0000-4000-8000-0000000000a3',
+            '00000000-0000-4000-8000-00000000000a', 'permit-3')
+    on conflict (id) do update set status = 'reserved', outcome = null;
+    raise exception 'E6f: upsert-on-id reversal must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    insert into public.analysis_permits (id, user_id, idempotency_key)
+    values ('00000000-0000-4000-8000-0000000000a5',
+            '00000000-0000-4000-8000-00000000000a', 'permit-3')
+    on conflict (user_id, idempotency_key) do update set status = 'reserved', outcome = null;
+    raise exception 'E6f: upsert-on-idempotency-key reversal must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  begin
+    merge into public.analysis_permits p
+    using (select '00000000-0000-4000-8000-0000000000a3'::uuid as id) s on p.id = s.id
+    when matched then update set status = 'reserved', outcome = null;
+    raise exception 'E6f: MERGE reversal must be rejected';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000a3'
+                   and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'E6f: the permit must still be released/low_confidence';
+  end if;
+  if exists (select 1 from public.analysis_permits
+             where id = '00000000-0000-4000-8000-0000000000a5') then
+    raise exception 'E6f: the refused upsert must not have minted a permit';
+  end if;
+end $$;
+
+-- E6g: the DEFINER sync RPC cannot be used to launder an outcome either — a
+-- resultKind outside shots' vocabulary fails the shot INSERT first, and the
+-- single transaction leaves the permit reserved (no partial permit write),
+-- so the same permit is still consumable by the well-formed retry.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000a6',
+        '00000000-0000-4000-8000-00000000000a', 'permit-6');
+do $$
+declare bad text; v text;
+begin
+  foreach bad in array array['expired', 'free_limit_exceeded', 'cancelled', 'totally_made_up'] loop
+    v := public.apply_synced_shot(jsonb_build_object(
+      'id', '00000000-0000-4000-8000-0000000000e8',
+      'analysisPermitId', '00000000-0000-4000-8000-0000000000a6',
+      'resultKind', bad,
+      'shotType', 'drive', 'cameraView', 'side',
+      'capturedAt', '2026-08-31T10:00:00Z',
+      'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+      'overallScore', 7.1, 'confidence', 0.9,
+      'versionVector', jsonb_build_object(
+        'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+        'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+        'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+        'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+    ));
+    if v not like 'shot.write_failed:%' then
+      raise exception 'E6g: resultKind % must be refused by the RPC (got %)', bad, v;
+    end if;
+    if not exists (select 1 from public.analysis_permits
+                   where id = '00000000-0000-4000-8000-0000000000a6'
+                     and status = 'reserved' and outcome is null) then
+      raise exception 'E6g: a refused sync (%) must leave the permit reserved', bad;
+    end if;
+    if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000e8') then
+      raise exception 'E6g: a refused sync (%) must write no shot row', bad;
+    end if;
+  end loop;
+  -- The well-formed abstention on the same permit still lands.
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e8',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000a6',
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.4,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'E6g: the well-formed retry must be accepted (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000a6'
+                   and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'E6g: the abstention must release the permit as low_confidence';
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'E6g: an abstention must not move lifetime_scored_count() (got %)',
+      public.lifetime_scored_count();
+  end if;
+end $$;
+
 -- E7: deletion challenges re-arm through the PostgREST upsert shape (DO
 -- UPDATE sets every payload column, user_id included) but can never change
 -- owners — RLS WITH CHECK pins user_id to the caller.
