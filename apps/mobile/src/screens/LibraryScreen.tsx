@@ -45,6 +45,10 @@ export const PENDING_SECTION_PILL = 'NOT SCORED';
 export const PENDING_SECTION_NOTE =
   'Saved clips aren’t scored from the library. Record a new stroke to get a score.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
+/** Reads-tab copy when the local repository could not be read. */
+export const READS_LOAD_ERROR_TITLE = 'Your reads couldn’t be opened.';
+export const READS_LOAD_ERROR_BODY =
+  'Your saved reads and clips couldn’t be read from this device right now. Try again to reload them.';
 
 /**
  * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
@@ -100,6 +104,7 @@ export function LibraryScreen() {
   const [tab, setTab] = useState<LibraryTab>('reads');
   const [shots, setShots] = useState<LocalShotRow[] | null>(null);
   const [captures, setCaptures] = useState<PendingCapture[]>([]);
+  const [readsLoadFailed, setReadsLoadFailed] = useState(false);
   const savedStatus = useTrainingStore(state => state.savedStatus);
   const planStatus = useTrainingStore(state => state.planStatus);
   const savedDrills = useTrainingStore(state => state.savedDrills);
@@ -115,21 +120,35 @@ export function LibraryScreen() {
     state => state.clearMutationError,
   );
 
+  // A failed repository read is an error, never an empty library: the
+  // first-run empty state renders only from a successful, empty result.
+  const loadReads = useCallback(async () => {
+    try {
+      const db = getDb();
+      const [realShots, pending] = await Promise.all([
+        listShots(db, 100),
+        listPendingCaptures(db, 100),
+      ]);
+      setShots(realShots);
+      setCaptures(pending);
+      setReadsLoadFailed(false);
+    } catch {
+      setReadsLoadFailed(true);
+    }
+  }, []);
+
+  const retryReads = useCallback(() => {
+    setReadsLoadFailed(false);
+    setShots(null);
+    void loadReads();
+  }, [loadReads]);
+
   useFocusEffect(
     useCallback(() => {
-      const db = getDb();
-      void Promise.all([listShots(db, 100), listPendingCaptures(db, 100)])
-        .then(([realShots, pending]) => {
-          setShots(realShots);
-          setCaptures(pending);
-        })
-        .catch(() => {
-          setShots([]);
-          setCaptures([]);
-        });
+      void loadReads();
       void loadSavedDrills();
       void loadCurrentPlan();
-    }, [loadCurrentPlan, loadSavedDrills]),
+    }, [loadCurrentPlan, loadReads, loadSavedDrills]),
   );
 
   const openMedia = useCallback(async (media: InstructionalMedia) => {
@@ -421,6 +440,40 @@ export function LibraryScreen() {
               <Text style={[type.micro, { color: color.bad }]}>DISMISS</Text>
             </Pressable>
           ) : null}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (readsLoadFailed) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScrollView
+          contentContainerStyle={styles.readsContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {header}
+          <View accessibilityLiveRegion="assertive" accessibilityRole="alert">
+            <Card tone="soft" style={styles.messageCard}>
+              <View style={[styles.messageIcon, styles.messageIconBad]}>
+                <Icon name="close" size={22} color={color.bad} />
+              </View>
+              <Text style={[type.h2, styles.messageTitle]}>
+                {READS_LOAD_ERROR_TITLE}
+              </Text>
+              <Text style={[type.body, styles.messageBody]}>
+                {READS_LOAD_ERROR_BODY}
+              </Text>
+              <View style={styles.retryWrap}>
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={retryReads}
+                />
+              </View>
+            </Card>
+          </View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -753,6 +806,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  messageIconBad: { backgroundColor: color.badSoft },
   messageTitle: { color: color.ink, marginTop: space.lg },
   messageBody: { color: color.inkSoft, marginTop: space.sm },
   retryWrap: { marginTop: space.lg },

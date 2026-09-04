@@ -1,9 +1,12 @@
 /**
  * Adjudication reproduction for area xc-ux-a11y-i18n (Library reads tab).
  *
- *  D1 — a repository failure while loading reads/pending clips is swallowed
+ *  D1 — a repository failure while loading reads/pending clips was swallowed
  *       (`.catch(() => { setShots([]); setCaptures([]); })`) and rendered as
  *       the first-run empty state, with no error copy and no retry.
+ *       FIXED (XC-UAI-05): the reads tab now renders an error state with a
+ *       retry; the original reproduction is kept inverted (`test.failing`)
+ *       so a regression flips it back to passing and fails the suite.
  *  D2 — the header counts every pending clip but only the first three rows
  *       render, with no "show more" affordance and no copy that says so.
  *
@@ -128,17 +131,20 @@ beforeEach(() => {
 describe('D1 — Library repository failure is rendered as the first-run empty state', () => {
   const EMPTY_TITLE = 'Your measured reads, in one place.';
 
-  test('reproduction: listShots rejecting shows the first-run empty state and no error/retry copy', async () => {
-    mockListShots.mockImplementation(async () => {
-      throw new Error('SQLITE_IOERR: disk I/O error');
-    });
-    const renderer = await renderLibrary();
-    const text = renderedText(renderer);
-    expect(text).toContain(EMPTY_TITLE);
-    expect(text).toContain('Analyze your first stroke');
-    expect(text).not.toMatch(/couldn.t|try again|retry|unavailable/i);
-    act(() => renderer.unmount());
-  });
+  test.failing(
+    'reproduction (fixed, must no longer reproduce): listShots rejecting shows the first-run empty state and no error/retry copy',
+    async () => {
+      mockListShots.mockImplementation(async () => {
+        throw new Error('SQLITE_IOERR: disk I/O error');
+      });
+      const renderer = await renderLibrary();
+      const text = renderedText(renderer);
+      expect(text).toContain(EMPTY_TITLE);
+      expect(text).toContain('Analyze your first stroke');
+      expect(text).not.toMatch(/couldn.t|try again|retry|unavailable/i);
+      act(() => renderer.unmount());
+    },
+  );
 
   test('expected: a repository failure shows error copy with a retry, never the first-run empty state', async () => {
     mockListShots.mockImplementation(async () => {
