@@ -434,7 +434,11 @@ describe("resolution helpers (registry-terminated, conservative gate)", () => {
       });
       expect(detectHierarchicalDisagreement("dink", { ...leaf, confidence })).toBeNull();
       expect(
-        detectHierarchicalDisagreement("forehand_drive", { ...base, label: "BACKHAND", confidence }),
+        detectHierarchicalDisagreement("forehand_drive", {
+          ...base,
+          label: "BACKHAND",
+          confidence,
+        }),
       ).toBeNull();
       expect(
         detectFlatDisagreement("forehand_drive", {

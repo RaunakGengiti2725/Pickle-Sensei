@@ -1,6 +1,7 @@
 import type {
   CameraView,
   Handedness,
+  OperationFailure,
   PhaseKey,
   PhaseSpan,
   Result,
@@ -199,8 +200,11 @@ export async function analyzeCapture(
   // Hierarchical classification (AUTO DETECT route + disagreement check).
   // Runs whenever the provider exists: on declared runs its only power is to
   // SURFACE disagreement — declaration narrows interpretation, prediction
-  // never silently replaces it (and vice versa).
+  // never silently replaces it (and vice versa). Its failure is kept: on a
+  // declared-null run it is the only thing that could have resolved the
+  // stroke, so its failure is the run's failure.
   let autoPrediction: HierarchicalStrokePrediction | null = null;
+  let autoFailure: OperationFailure | null = null;
   if (providers.autoStrokeClassifier) {
     const prediction = await run(
       "stroke_classification",
@@ -220,6 +224,7 @@ export async function analyzeCapture(
         }),
     );
     if (prediction.ok) autoPrediction = prediction.value;
+    else autoFailure = prediction.failure;
   }
 
   const resolution = resolveStroke(identity, {
@@ -284,6 +289,12 @@ export async function analyzeCapture(
           resolution: predictedProfile,
         });
       }
+    } else if (identity.declared === null && autoFailure !== null) {
+      // The AUTO classifier ran and failed (crash, timeout, typed failure):
+      // that failure is the reason no stroke exists. Propagating it keeps
+      // the kind (a permanent crash stays permanent) and the provider's own
+      // message instead of collapsing into a low_confidence "unresolved".
+      return fail(autoFailure);
     } else {
       return fail(failure("low_confidence", "fusion.stroke_unresolved", resolution.reason));
     }

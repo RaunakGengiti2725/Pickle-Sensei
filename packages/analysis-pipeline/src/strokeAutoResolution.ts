@@ -73,6 +73,17 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
  */
 export const AUTO_RESOLUTION_MIN_CONFIDENCE = 0.5;
 
+/**
+ * The floor is a lower bound on a FINITE number. NaN and ±Infinity are not
+ * confidences a provider can legitimately report, and a plain `<` comparison
+ * lets NaN through (every comparison with NaN is false) — so the gate is
+ * phrased as "demonstrably at or above the floor", which non-finite values
+ * can never satisfy.
+ */
+export function clearsAutoConfidenceFloor(confidence: number): boolean {
+  return Number.isFinite(confidence) && confidence >= AUTO_RESOLUTION_MIN_CONFIDENCE;
+}
+
 /** How the analysis profile was chosen for this run. */
 export type StrokeResolutionBasis = "declared" | "predicted_l3" | "predicted_family" | "abstained";
 
@@ -178,7 +189,7 @@ export function resolvePredictedProfile(
   if (prediction.label === "UNKNOWN" || prediction.leaf === "UNKNOWN") {
     return { kind: "abstain", reason: "auto_stroke_prediction_unknown" };
   }
-  if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) {
+  if (!clearsAutoConfidenceFloor(prediction.confidence)) {
     return { kind: "abstain", reason: "auto_stroke_confidence_below_floor" };
   }
   if (prediction.leaf !== null) {
@@ -273,14 +284,14 @@ const SIDE_PREFIXES = ["FOREHAND_", "BACKHAND_"] as const;
  *  - a committed side when EVERY canonical of the declared slug carries an
  *    explicit side prefix and none matches (a side prediction cannot
  *    contradict a side-agnostic declaration like SERVE or RESET).
- * UNKNOWN or below-floor predictions claim nothing.
+ * UNKNOWN, below-floor, or non-finite-confidence predictions claim nothing.
  */
 export function detectHierarchicalDisagreement(
   declared: ShotTypeSlug,
   prediction: HierarchicalStrokePrediction,
 ): StrokeDisagreement | null {
   if (prediction.label === "UNKNOWN" || prediction.leaf === "UNKNOWN") return null;
-  if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) return null;
+  if (!clearsAutoConfidenceFloor(prediction.confidence)) return null;
   const declaredSet = canonicalsForSlug(declared);
   if (declaredSet.length === 0) return null;
 
@@ -315,7 +326,7 @@ export function detectFlatDisagreement(
   prediction: FlatStrokePrediction | null,
 ): StrokeDisagreement | null {
   if (!prediction || prediction.shotType === "unknown") return null;
-  if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) return null;
+  if (!clearsAutoConfidenceFloor(prediction.confidence)) return null;
   if (prediction.shotType === declared) return null;
   return { declared, predictedLabel: prediction.shotType, basis: "slug_vs_declared" };
 }
