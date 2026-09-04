@@ -16,8 +16,11 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import type { RootStackParams } from '../navigation/params';
 import {
+  dayFromOrdinal,
   dayHeatLevel,
+  dayOrdinal,
   flameIntensityForStreak,
+  formatDayKey,
   type ConsistencyDay,
   type ConsistencySnapshot,
 } from '../consistency/engine';
@@ -72,10 +75,10 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** Monday-first weekday index for a YYYY-MM-DD key (UTC-safe). */
+/** Monday-first weekday index for a YYYY-MM-DD key (zone-independent:
+ * ordinal 0 is 1970-01-01, a Thursday). */
 function mondayIndex(day: string): number {
-  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
-  return (weekday + 6) % 7;
+  return (((dayOrdinal(day) + 3) % 7) + 7) % 7;
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -109,15 +112,11 @@ function addMonths(
 }
 
 function prevDayKey(day: string): string {
-  const date = new Date(`${day}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
+  return dayFromOrdinal(dayOrdinal(day) - 1);
 }
 
 function nextDayKey(day: string): string {
-  const date = new Date(`${day}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
+  return dayFromOrdinal(dayOrdinal(day) + 1);
 }
 
 /** Today's YYYY-MM-DD in the device zone — the same clock the engine keys
@@ -603,10 +602,11 @@ export function StreakCalendarScreen() {
             testID="streak-day-detail"
           >
             <Text style={[type.h3, { color: color.ink }]}>
-              {new Date(`${selectedDay}T12:00:00Z`).toLocaleDateString(
-                undefined,
-                { weekday: 'long', month: 'long', day: 'numeric' },
-              )}
+              {formatDayKey(selectedDay, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
             </Text>
             {selectedLog ? (
               selectedLog.shielded ? (

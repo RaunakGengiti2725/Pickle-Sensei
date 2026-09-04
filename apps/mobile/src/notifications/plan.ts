@@ -44,10 +44,18 @@ const COMEBACK_MINUTES = 18 * 60 + 30;
 const WEEKLY_RECAP_WEEKDAY = 0;
 const COMEBACK_RUNG_DAYS = [3, 7, 14] as const;
 
+/** The wall-clock `minutesPastMidnight` on the local calendar day of
+ * `baseMs`. Set as hours/minutes on that day — never midnight plus an
+ * offset, which lands an hour off on a 23h/25h DST transition day. */
 function atLocalMinutes(baseMs: number, minutesPastMidnight: number): number {
   const date = new Date(baseMs);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime() + minutesPastMidnight * 60_000;
+  date.setHours(
+    Math.floor(minutesPastMidnight / 60),
+    minutesPastMidnight % 60,
+    0,
+    0,
+  );
+  return date.getTime();
 }
 
 function addDays(baseMs: number, days: number): number {

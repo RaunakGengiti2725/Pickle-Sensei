@@ -12,6 +12,7 @@
  * on 4d812e1a (a 12:00Z anchor formatted in the device zone; local midnight
  * plus minutes across a DST transition) so the trap stays documented.
  */
+import { formatDayKey } from '../src/consistency/engine';
 import { buildNotificationPlan } from '../src/notifications/plan';
 import { DEFAULT_NOTIFICATION_PREFS } from '../src/notifications/types';
 
@@ -19,10 +20,10 @@ declare const process: { env: Record<string, string | undefined> };
 const TZ = process.env.TZ ?? '';
 const inZone = (...zones: string[]) => (zones.includes(TZ) ? test : test.skip);
 
-/** Mirrors StreakCalendarScreen.tsx selected-day title and
- * AchievementsShowcase.tsx formatEarnedDay: `${day}T12:00:00Z` anchor. */
+/** The production formatter behind the StreakCalendarScreen selected-day
+ * title and AchievementsShowcase's "Earned" label. */
 function productionDayTitle(day: string): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
+  return formatDayKey(day, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
