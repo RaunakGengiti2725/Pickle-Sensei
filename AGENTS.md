@@ -216,7 +216,9 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `refreshAccess()` on every visit for synced (non-`localOnly`) sessions
   (skipped while a load is in flight; the old value stays on screen until
   the new one lands), and AnalyzeScreen re-reads it in its UNMOUNT cleanup
-  once a run called `runCaptureAnalysis` — never while mounted, because
+  once a run called `runCaptureAnalysis` — chained onto that run's promise
+  so the read sees the permit consumed/released, never the intermediate
+  reserved state — and never while mounted, because
   `useRatingRouteGate` replaces a mounted screen whose `canStartRating`
   flips false and would tear down the "last free analysis" prompt. The
   Settings membership row words "N free ratings left" from

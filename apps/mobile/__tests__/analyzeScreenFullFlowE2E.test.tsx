@@ -322,6 +322,13 @@ function processingEvent(): CameraEvent {
   return { ...eventBase(), type: 'processing', state: 'preparing_clip' };
 }
 
+/** A user cancel as the native bridge rejects it: typed by `code`. */
+function userCancel(): Error {
+  return Object.assign(new Error('Camera capture was canceled.'), {
+    code: 'camera.cancelled',
+  });
+}
+
 function deferredCapture() {
   let resolveFn!: (clip: CapturedClip) => void;
   let rejectFn!: (error: Error) => void;
@@ -655,7 +662,7 @@ describe('interrupted and cancelled attempts', () => {
     pressButton(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('no_person', 0));
-    capture.reject(new Error('Capture cancelled by user.'));
+    capture.reject(userCancel());
     await flush();
     expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE'); // back to ready
     expect(activeDb.calls).toHaveLength(0);
@@ -669,7 +676,7 @@ describe('interrupted and cancelled attempts', () => {
     const first = deferredCapture();
     pressButton(renderer, 'Open automatic camera');
     await flush();
-    first.reject(new Error('Capture cancelled by user.'));
+    first.reject(userCancel());
     await flush();
     const analysisId = await completeAttempt(renderer, 'post-cancel');
     expect(analysisId).toBeTruthy();
@@ -843,7 +850,7 @@ describe('attempt isolation of live readiness evidence', () => {
     pressButton(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('ready', 0.93));
-    first.reject(new Error('Capture cancelled by user.'));
+    first.reject(userCancel());
     await flush();
 
     // Attempt 2: the native layer produces a clip WITHOUT any readiness
