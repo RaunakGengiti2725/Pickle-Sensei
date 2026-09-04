@@ -380,7 +380,11 @@ export function OnboardingScreen(props: {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
-  const [notificationChoice, setNotificationChoice] =
+  // The choice most recently recorded with the notification store. A retry
+  // after a failed profile save records again only when the player pressed a
+  // DIFFERENT button, so the persisted choice always matches the last press
+  // and the same button never re-runs the OS permission request.
+  const [recordedNotificationChoice, setRecordedNotificationChoice] =
     useState<NotificationOnboardingChoice | null>(null);
 
   const step = STEPS[stepIndex] ?? 'notifications';
@@ -418,9 +422,9 @@ export function OnboardingScreen(props: {
     if (notificationBusy || onboardingBusy) return;
     setNotificationBusy(true);
     try {
-      if (!notificationChoice) {
+      if (recordedNotificationChoice !== choice) {
         await completeNotificationOnboarding(choice);
-        setNotificationChoice(choice);
+        setRecordedNotificationChoice(choice);
       }
       if (preAuth) {
         const ok = await completePreAuthOnboarding(answeredProfile);
