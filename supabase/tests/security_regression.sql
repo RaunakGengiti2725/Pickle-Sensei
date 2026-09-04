@@ -227,6 +227,11 @@ set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 insert into public.shot_measurements (shot_id, user_id, metric_key, value, confidence, unit)
 values ('00000000-0000-4000-8000-0000000000e1',
         '00000000-0000-4000-8000-00000000000a', 'paddle_speed', 12.5, 0.9, 'ratio');
+insert into public.user_saved_drills (user_id, slug)
+values ('00000000-0000-4000-8000-00000000000a', 'dink-ladder');
+-- captures is read-only for clients (K4), so Alice's row is seeded as the
+-- owner role; the read-isolation assertion below still runs as each client.
+reset role;
 insert into public.captures
   (id, user_id, session_id, shot_id, captured_at, duration_ms, fps,
    capture_mode, evidence_status)
@@ -235,8 +240,8 @@ values ('00000000-0000-4000-8000-0000000000c1',
         '00000000-0000-4000-8000-0000000000d1',
         '00000000-0000-4000-8000-0000000000e1',
         '2026-08-31T10:00:00Z', 1200, 30, 'automatic_pose_trigger', 'valid');
-insert into public.user_saved_drills (user_id, slug)
-values ('00000000-0000-4000-8000-00000000000a', 'dink-ladder');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 do $$
 declare
   t text;
