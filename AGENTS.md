@@ -126,6 +126,19 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   a different subject (e.g. Apple then Google) is a different identity.
   `access_state().scored_count` is therefore identity-lifetime (the exit
   survey's `scored_count` stamp inherits that meaning).
+  `20260905000100_late_linked_identity_ledger.sql`: an identity linked AFTER
+  ratings were spent inherits the account's lifetime count at link time
+  (AFTER INSERT trigger on auth.identities, definer, greatest-only, plus a
+  one-shot backfill) — live: J10/J11.
+- Table-layer permit gate (`20260905000000_scored_shot_write_gate.sql`): the
+  RPC is the intended write path, but `authenticated` also holds INSERT on
+  `public.shots`, so a BEFORE INSERT trigger refuses any client-written
+  `result_kind='scored'` row without a LIVE reserved permit and re-checks the
+  lifetime allowance under the same `access_lock_key(uid)` (premium bypasses
+  the allowance, never the permit). `shots_low_confidence_unscored` (NOT
+  VALID) makes `low_confidence ⇒ overall_score is null` a table invariant,
+  mirroring the edge parser. Both trigger functions are revoked from clients.
+  Owner/service writes (no JWT `sub`) are untouched. Live: section L.
 - 5xx bodies are generic (detail only in function logs). Free-text inputs are
   sanitized (`http.ts sanitizeUserText`). pg_cron sweeps stale permits,
   expired deletion requests, old webhook events.

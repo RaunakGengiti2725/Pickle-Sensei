@@ -18,6 +18,8 @@ const CASCADE_USER_INDEXES = "20260902130100_cascade_user_indexes.sql";
 const PERMITS_SWEEP_INDEX = "20260902130200_permits_reserved_sweep_index.sql";
 const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
+const SCORED_WRITE_GATE = "20260905000000_scored_shot_write_gate.sql";
+const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -445,6 +447,129 @@ Deno.test("captures: no client write grant survives the error-hygiene migration"
     }
   }
 });
+
+// ─── DB-02 / DB-01: table-layer permit gate and link-time ledger inheritance ──
+
+/** A later migration may drop one of these triggers only if it recreates it in
+ * the same file (the `drop trigger if exists … create trigger …` idiom). */
+function dropsTriggerWithoutRecreating(migration: Migration, trigger: string): boolean {
+  return migration.statements.some(
+    (s) =>
+      s.startsWith("drop trigger") &&
+      s.includes(trigger) &&
+      !migration.statements.some((c) => c.startsWith(`create trigger ${trigger} `)),
+  );
+}
+
+Deno.test(
+  "shots: every client-written scored row passes the permit gate, and abstentions carry no score",
+  async () => {
+    const chain = await loadChain();
+    const gate = statementsOf(chain, SCORED_WRITE_GATE);
+    const gateRaw = chain.find((m) => m.file === SCORED_WRITE_GATE)?.raw ?? "";
+    ok(
+      gate.some((s) =>
+        s.startsWith(
+          "create trigger shots_enforce_scored_permit before insert on public.shots for each row execute function public.enforce_scored_shot_permit()",
+        ),
+      ),
+      `${SCORED_WRITE_GATE} must install the BEFORE INSERT gate on public.shots`,
+    );
+    ok(
+      gate.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "the gate function must not be client-executable",
+    );
+    ok(
+      /alter table public\.shots add constraint shots_low_confidence_unscored check \(\s*result_kind = 'scored' or overall_score is null\s*\) not valid/.test(
+        gateRaw.toLowerCase(),
+      ),
+      `${SCORED_WRITE_GATE} must add shots_low_confidence_unscored (NOT VALID — no deploy-time rescan)`,
+    );
+    const [body] = functionBodies(gateRaw, "enforce_scored_shot_permit");
+    ok(body, `${SCORED_WRITE_GATE} must define enforce_scored_shot_permit()`);
+    ok(
+      body.includes("pg_advisory_xact_lock(public.access_lock_key("),
+      "the gate must serialize on the shared per-user access lock (a direct writer racing a sync must not double-spend)",
+    );
+    ok(
+      body.includes("public.lifetime_scored_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(body),
+      "the gate must decide the allowance through lifetime_scored_count(), never the raw per-account count",
+    );
+    ok(
+      /p\.status = 'reserved'/.test(body) && /interval '24 hours'/.test(body),
+      "the gate must require a LIVE reserved permit (same 24h window as apply_synced_shot)",
+    );
+    for (const migration of after(chain, SCORED_WRITE_GATE)) {
+      ok(
+        !dropsTriggerWithoutRecreating(migration, "shots_enforce_scored_permit"),
+        `${migration.file} drops shots_enforce_scored_permit without recreating it`,
+      );
+      ok(
+        !migration.statements.some(
+          (s) =>
+            s.startsWith("alter table public.shots drop constraint") &&
+            s.includes("shots_low_confidence_unscored"),
+        ),
+        `${migration.file} drops shots_low_confidence_unscored`,
+      );
+      for (const body of functionBodies(migration.raw, "enforce_scored_shot_permit")) {
+        ok(
+          body.includes("public.lifetime_scored_count()") && /p\.status = 'reserved'/.test(body),
+          `${migration.file}: enforce_scored_shot_permit must keep both the permit check and the lifetime allowance`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
+  "free ratings: an identity linked after the ratings were spent inherits the ledger at link time",
+  async () => {
+    const chain = await loadChain();
+    const link = statementsOf(chain, LATE_LINK_LEDGER);
+    const linkRaw = chain.find((m) => m.file === LATE_LINK_LEDGER)?.raw ?? "";
+    ok(
+      link.some((s) =>
+        s.startsWith(
+          "create trigger on_auth_identity_linked after insert on auth.identities for each row execute function public.inherit_free_rating_ledger()",
+        ),
+      ),
+      `${LATE_LINK_LEDGER} must install the AFTER INSERT trigger on auth.identities`,
+    );
+    ok(
+      link.includes(
+        "revoke execute on function public.inherit_free_rating_ledger() from public, anon, authenticated",
+      ),
+      "inherit_free_rating_ledger() must not be client-executable",
+    );
+    const [body] = functionBodies(linkRaw, "inherit_free_rating_ledger");
+    ok(body, `${LATE_LINK_LEDGER} must define inherit_free_rating_ledger()`);
+    ok(
+      body.includes("security definer"),
+      "the link-time writer runs as definer (GoTrue holds no ledger grant)",
+    );
+    ok(
+      /set scored_count = greatest\(led\.scored_count, excluded\.scored_count\)/.test(body),
+      "the link-time writer must never decrement a ledger row",
+    );
+    ok(
+      link.some(
+        (s) =>
+          s.startsWith("with per_user as") && s.includes("insert into public.free_rating_ledger"),
+      ),
+      `${LATE_LINK_LEDGER} must backfill existing accounts' identities to their lifetime count`,
+    );
+    for (const migration of after(chain, LATE_LINK_LEDGER)) {
+      ok(
+        !dropsTriggerWithoutRecreating(migration, "on_auth_identity_linked"),
+        `${migration.file} drops on_auth_identity_linked without recreating it`,
+      );
+    }
+  },
+);
 
 // ─── XC-SEC-6: production edge-function dependencies are exactly pinned ──────
 

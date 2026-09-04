@@ -26,7 +26,12 @@
 --      index-backed
 --   J. the free-rating limit follows the SIGN-IN IDENTITY across account
 --      deletion (delete → sign in again → still no free ratings), with no
---      false positives for new identities and no client path to the ledger
+--      false positives for new identities and no client path to the ledger —
+--      including identities linked AFTER the ratings were spent
+--   K. client-controlled input hygiene (captured_at / captures bounds)
+--   L. the permit gate binds direct table writes: a scored row cannot be
+--      INSERTed around apply_synced_shot() without a live permit or past the
+--      free limit, and an abstention cannot carry a score
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -520,6 +525,11 @@ set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 insert into public.sessions (id, user_id, started_at)
 values ('00000000-0000-4000-8000-0000000000d2',
         '00000000-0000-4000-8000-00000000000a', now());
+-- Fixture row written directly (not via the RPC) so E1 exercises the table
+-- grants themselves; it still needs a live permit — see L for the gate.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-0000000000a3',
+        '00000000-0000-4000-8000-00000000000a', 'permit-e-fixture');
 insert into public.shots (
   id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
   overall_score, analysis_confidence, result_kind,
@@ -765,8 +775,10 @@ begin
 end $$;
 
 reset role;
+set local request.jwt.claim.sub = '';
 
--- F5: the caps bind every role, not just clients (oversized guidance as owner)
+-- F5: the caps bind every role, not just clients (oversized guidance as owner —
+-- no JWT claim either, so the client-side permit gate does not apply)
 do $$
 begin
   begin
@@ -1391,6 +1403,126 @@ begin
   end if;
 end $$;
 
+-- J10: an identity linked AFTER the ratings were spent inherits the count at
+-- link time. Gina (google) scores twice, THEN an Apple identity is linked to
+-- the same account (GoTrue auto-link / linkIdentity). Before the link-time
+-- trigger, the Apple identity carried no ledger row — so after the account
+-- was deleted, signing in with Apple alone started over at zero.
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000012', 'gina@example.com',
+        '{"full_name":"Gina"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-gina', '00000000-0000-4000-8000-000000000012',
+        '{"sub":"google-sub-gina","email":"gina@example.com"}');
+do $$
+begin
+  if exists (select 1 from public.free_rating_ledger
+             where identity_hash = public.free_rating_identity_hash('google', 'google-sub-gina')) then
+    raise exception 'J10: a brand-new identity with no history must not get a ledger row at link time';
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000012';
+do $$
+declare v text; p uuid; i int;
+begin
+  for i in 1..2 loop
+    select permit_id into p from public.reserve_analysis_permit('gina-key-' || i);
+    v := public.apply_synced_shot(jsonb_build_object(
+      'id', ('00000000-0000-4000-8000-0000000000b' || i)::uuid,
+      'analysisPermitId', p,
+      'resultKind', 'scored',
+      'shotType', 'drive', 'cameraView', 'side',
+      'capturedAt', '2026-08-31T10:00:00Z',
+      'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+      'overallScore', 7.1, 'confidence', 0.9,
+      'versionVector', jsonb_build_object(
+        'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+        'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+        'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+        'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+    ));
+    if v <> 'accepted' then
+      raise exception 'J10: gina''s free rating % must be accepted (got %)', i, v;
+    end if;
+  end loop;
+end $$;
+reset role;
+-- The late link. The ledger must be brought up to 2 for the new identity
+-- immediately, without waiting for another scored shot that will never come.
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-gina', '00000000-0000-4000-8000-000000000012',
+        '{"sub":"apple-sub-gina","email":"gina@example.com"}');
+do $$
+begin
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-gina')
+                   and scored_count = 2) then
+    raise exception 'J10: an identity linked after the ratings were spent must inherit scored_count=2';
+  end if;
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('google', 'google-sub-gina')
+                   and scored_count = 2) then
+    raise exception 'J10: the original identity must still read 2 after the link';
+  end if;
+end $$;
+
+-- J11: delete the account, sign back in with ONLY the late-linked Apple
+-- identity: the free ratings stay spent (the exact bypass the link-time
+-- trigger closes), while the reverse direction — a fresh account linking an
+-- identity that carries history — inherits that history too.
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000012';
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000013', 'gina@example.com',
+        '{"full_name":"Gina"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-gina', '00000000-0000-4000-8000-000000000013',
+        '{"sub":"apple-sub-gina","email":"gina@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000013';
+do $$
+declare rec record; r record;
+begin
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 then
+    raise exception
+      'J11: an account re-created from the late-linked identity must inherit 2 scored (got %, %)',
+      rec.premium, rec.scored_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('gina-third-life-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'J11: reserve must refuse the re-created account (got %)', r.result;
+  end if;
+  begin
+    perform public.inherit_free_rating_ledger();
+    raise exception 'J11: inherit_free_rating_ledger must not be client-executable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.enforce_scored_shot_permit();
+    raise exception 'J11: enforce_scored_shot_permit must not be client-executable';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+-- Reverse direction: a genuinely new identity linked to this account is
+-- pulled up to the account's inherited history at link time.
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-gina-2', '00000000-0000-4000-8000-000000000013',
+        '{"sub":"google-sub-gina-2","email":"gina@example.com"}');
+do $$
+begin
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('google', 'google-sub-gina-2')
+                   and scored_count = 2) then
+    raise exception 'J11: an identity linked to an account with inherited history must inherit it';
+  end if;
+end $$;
+
 -- ─────────── K: client-controlled input hygiene (XC-SEC-4 / XC-SEC-5) ──────────
 -- 20260904000000_apply_synced_shot_error_hygiene.sql: apply_synced_shot's
 -- write-failure result is SQLSTATE-only (never sqlerrm, which echoes the
@@ -1622,6 +1754,242 @@ begin
   exception when check_violation then null;
   end;
 end $$;
+
+-- ─────── L: the permit gate binds DIRECT table writes (DB-02) ───────────────
+--
+-- authenticated holds INSERT on public.shots (RLS forces user_id only). The
+-- two-lifetime-free-ratings rule lived solely inside apply_synced_shot(), so a
+-- client writing the table straight through PostgREST could record a scored
+-- shot with no permit at all, past the free limit. The BEFORE INSERT trigger
+-- shots_enforce_scored_permit now requires a live reserved permit AND an
+-- unspent allowance for every client-written scored row.
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000014', 'liam@example.com',
+        '{"full_name":"Liam"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-liam', '00000000-0000-4000-8000-000000000014',
+        '{"sub":"google-sub-liam","email":"liam@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000014';
+
+-- L1: no permit → a direct scored INSERT is refused at the table layer.
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000b5',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 9.9, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'L1: a scored shot with no permit must not be INSERTable directly';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots where user_id = (select auth.uid())) then
+    raise exception 'L1: the refused row must not persist';
+  end if;
+end $$;
+
+-- L2: an abstention needs no permit (unscored attempts are free) but must not
+-- carry a score — the CHECK the edge parser already enforces on its side.
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000b6',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 9.9, 0.2, 'low_confidence',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'L2: a low_confidence shot must not carry an overall_score';
+  exception when check_violation then null;
+  end;
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000b6',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, null, 0.2, 'low_confidence',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+  if (select count(*) from public.shots where user_id = (select auth.uid())) <> 1 then
+    raise exception 'L2: an unscored abstention must still be writable without a permit';
+  end if;
+end $$;
+
+-- L3: the canonical path is untouched — reserve, then sync, twice.
+do $$
+declare v text; p uuid; i int;
+begin
+  for i in 1..2 loop
+    select permit_id into p from public.reserve_analysis_permit('liam-key-' || i);
+    v := public.apply_synced_shot(jsonb_build_object(
+      'id', ('00000000-0000-4000-8000-0000000000b' || (6 + i))::uuid,
+      'analysisPermitId', p,
+      'resultKind', 'scored',
+      'shotType', 'drive', 'cameraView', 'side',
+      'capturedAt', '2026-08-31T10:00:00Z',
+      'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+      'overallScore', 7.1, 'confidence', 0.9,
+      'versionVector', jsonb_build_object(
+        'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+        'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+        'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+        'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+    ));
+    if v <> 'accepted' then
+      raise exception 'L3: the RPC path must still accept free rating % (got %)', i, v;
+    end if;
+  end loop;
+  if (select count(*) from public.analysis_permits
+      where user_id = (select auth.uid()) and status = 'finalized') <> 2 then
+    raise exception 'L3: both permits must be finalized by the sync';
+  end if;
+end $$;
+
+-- L4: at the limit, a direct scored INSERT is refused even when the client
+-- manufactures a reserved permit for itself (the grant allows the permit row;
+-- the allowance does not).
+do $$
+begin
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000b9',
+          '00000000-0000-4000-8000-000000000014', 'liam-forged-key');
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000ba',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 9.9, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'L4: a third scored shot must be refused even with a reserved permit';
+  exception when insufficient_privilege then null;
+  end;
+  if (select count(*) from public.shots
+      where user_id = (select auth.uid()) and result_kind = 'scored') <> 2 then
+    raise exception 'L4: a free account must never exceed two scored shots by any write path';
+  end if;
+end $$;
+
+-- L5: a multi-row INSERT cannot smuggle a scored row past the gate beside an
+-- abstention — the whole statement fails.
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values
+    ('00000000-0000-4000-8000-0000000000bb',
+     '00000000-0000-4000-8000-000000000014',
+     'drive', now(), 0, 1000, null, 0.2, 'low_confidence',
+     '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+     'scoring-1', 'config-1'),
+    ('00000000-0000-4000-8000-0000000000bc',
+     '00000000-0000-4000-8000-000000000014',
+     'drive', now(), 0, 1000, 9.9, 0.9, 'scored',
+     '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+     'scoring-1', 'config-1');
+    raise exception 'L5: a batch carrying a scored row must be refused as a whole';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots
+             where id in ('00000000-0000-4000-8000-0000000000bb',
+                          '00000000-0000-4000-8000-0000000000bc')) then
+    raise exception 'L5: no row of the refused batch may persist';
+  end if;
+end $$;
+
+-- L6: the refused writes changed nothing the app can see.
+do $$
+declare rec record;
+begin
+  select * into rec from public.access_state();
+  if rec.scored_count <> 2 then
+    raise exception 'L6: access_state must report 2 scored (got %)', rec.scored_count;
+  end if;
+end $$;
+
+-- L7: premium bypasses the ALLOWANCE, never the permit: a member past the
+-- free limit may write a scored row only while a live permit exists.
+reset role;
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000014', true, null)
+on conflict (user_id) do update set premium = true, expires_at = null;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000014';
+do $$
+begin
+  -- the permit from L4 is still reserved → a member may write against it
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000bd',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+  update public.analysis_permits set status = 'finalized', outcome = 'scored'
+   where id = '00000000-0000-4000-8000-0000000000b9';
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000be',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'L7: even a member needs a live permit for a scored row';
+  exception when insufficient_privilege then null;
+  end;
+  if (select count(*) from public.shots
+      where user_id = (select auth.uid()) and result_kind = 'scored') <> 3 then
+    raise exception 'L7: exactly the permit-backed member row may persist';
+  end if;
+end $$;
+reset role;
 
 rollback;
 
