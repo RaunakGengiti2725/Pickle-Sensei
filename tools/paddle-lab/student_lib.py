@@ -16,6 +16,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+import frame_clock
+
 INPUT_SIZE = 320  # letterboxed square input
 HEATMAP_STRIDE = 8
 HEATMAP_SIZE = INPUT_SIZE // HEATMAP_STRIDE
@@ -32,33 +34,29 @@ def load_examples(release_dir: Path) -> list[dict]:
 
 
 def video_meta(path: Path) -> tuple[int, int, float]:
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height,r_frame_rate",
-            "-of",
-            "csv=p=0",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    w, h, rate = out.split(",")
-    num, den = rate.split("/")
-    return int(w), int(h), float(num) / float(den)
+    meta = frame_clock.probe_stream(str(path))
+    return meta.width, meta.height, meta.fps
 
 
 def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarray]:
-    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs."""
-    w, h, fps = video_meta(video)
+    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs.
+
+    tMs values are the detector's absolute clock (start_time + k/fps, as
+    emitted by detect_paddle.frame_iter), so the source index is
+    k = round((tMs - start_time) * fps / 1000) — the same inversion run_crops
+    uses. Raises RuntimeError if ffmpeg fails or any requested frame is not
+    decoded (index past the end of the media / truncated file) instead of
+    silently returning a partial mapping.
+    """
+    meta = frame_clock.probe_stream(str(video))
+    w, h, fps, start_time_ms = meta.width, meta.height, meta.fps, meta.start_time_ms
     frames: dict[float, np.ndarray] = {}
-    indices = sorted({round(t * fps / 1000.0) for t in t_ms_list})
+    if not t_ms_list:
+        return frames
+    index_for_t = {t: frame_clock.frame_index_for_t_ms(t, fps, start_time_ms) for t in t_ms_list}
+    indices = sorted(set(index_for_t.values()))
+    if indices[0] < 0:
+        raise ValueError(f"tMs before the stream start ({start_time_ms:.3f} ms) requested from {video}")
     expr = "+".join(f"eq(n\\,{i})" for i in indices)
     proc = subprocess.run(
         [
@@ -71,6 +69,8 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             f"select='{expr}'",
             "-vsync",
             "0",
+            "-frames:v",
+            str(len(indices)),
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -78,17 +78,23 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             "-",
         ],
         capture_output=True,
-        check=True,
     )
+    stderr_text = proc.stderr.decode("utf-8", "replace").strip()[-400:]
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}: {stderr_text}")
     raw = np.frombuffer(proc.stdout, dtype=np.uint8)
     frame_bytes = w * h * 3
     n = len(raw) // frame_bytes
+    if n < len(indices):
+        raise RuntimeError(
+            f"ffmpeg decoded {n} of {len(indices)} requested frames from {video}; "
+            f"frames {indices[n:]} are missing (past the end of the media, or truncated file). "
+            f"ffmpeg stderr: {stderr_text}"
+        )
     imgs = raw[: n * frame_bytes].reshape(n, h, w, 3)
-    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices[:n])}
+    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices)}
     for t in t_ms_list:
-        img = idx_to_img.get(round(t * fps / 1000.0))
-        if img is not None:
-            frames[t] = img
+        frames[t] = idx_to_img[index_for_t[t]]
     return frames
 
 
