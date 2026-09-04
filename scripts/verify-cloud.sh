@@ -314,12 +314,71 @@ fi
 if [ -z "$REASON" ]; then OK=true; else OK=false; fi
 
 # Machine-readable summary.
+# json_escape <string>: the JSON string-body encoding of <string> (no quotes).
+# Notes are arbitrary log lines, so this works byte-wise: every C0 control and
+# DEL becomes an escape (\n \r \t \b \f or \u00XX), valid UTF-8 passes through,
+# and a byte that is not part of a valid UTF-8 sequence is rendered as the text
+# \xNN instead of being dropped — the file must parse everywhere (jq, python,
+# node) and the note must stay readable.
 json_escape() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\n'/\\n}
-  printf '%s' "$s"
+  local LC_ALL=C
+  local s=$1 out="" esc c b b2 need lo hi i=0 j n
+  n=${#s}
+  if [[ $s =~ ^[[:print:]]*$ ]]; then
+    s=${s//\\/\\\\}
+    printf '%s' "${s//\"/\\\"}"
+    return
+  fi
+  while (( i < n )); do
+    c=${s:i:1}
+    printf -v b '%d' "'$c"
+    if (( b < 0x20 || b == 0x7f )); then
+      case $b in
+        8) out+='\b' ;;
+        9) out+='\t' ;;
+        10) out+='\n' ;;
+        12) out+='\f' ;;
+        13) out+='\r' ;;
+        *) printf -v esc '\\u%04x' "$b"; out+=$esc ;;
+      esac
+      (( i++ ))
+    elif (( b < 0x80 )); then
+      case $c in
+        '"') out+='\"' ;;
+        '\') out+='\\' ;;
+        *) out+=$c ;;
+      esac
+      (( i++ ))
+    else
+      # Multi-byte UTF-8: lead byte decides the length and the allowed range
+      # of the second byte (rejects overlongs, surrogates and > U+10FFFF).
+      need=0; lo=0x80; hi=0xbf
+      if (( b >= 0xc2 && b <= 0xdf )); then need=1
+      elif (( b == 0xe0 )); then need=2; lo=0xa0
+      elif (( b >= 0xe1 && b <= 0xef && b != 0xed )); then need=2
+      elif (( b == 0xed )); then need=2; hi=0x9f
+      elif (( b == 0xf0 )); then need=3; lo=0x90
+      elif (( b >= 0xf1 && b <= 0xf3 )); then need=3
+      elif (( b == 0xf4 )); then need=3; hi=0x8f
+      fi
+      j=1
+      while (( need > 0 && j <= need && i + j < n )); do
+        printf -v b2 '%d' "'${s:i+j:1}"
+        (( j > 1 )) && { lo=0x80; hi=0xbf; }
+        (( b2 >= lo && b2 <= hi )) || break
+        (( j++ ))
+      done
+      if (( need > 0 && j == need + 1 )); then
+        out+=${s:i:need+1}
+        (( i += need + 1 ))
+      else
+        printf -v esc '\\\\x%02x' "$b"
+        out+=$esc
+        (( i++ ))
+      fi
+    fi
+  done
+  printf '%s' "$out"
 }
 {
   echo "{"
