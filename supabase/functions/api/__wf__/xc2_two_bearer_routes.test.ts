@@ -62,11 +62,21 @@ const pick = <T>(rng: () => number, items: readonly T[]): T =>
 
 const ARTIFACT_DIR = Deno.env.get("XC2_ARTIFACT_DIR") ?? "";
 
+// Artifacts are evidence, so bearer-shaped material never lands in them, even
+// the fake's synthetic session/refresh tokens.
+const JWT_SHAPE = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+const TOKEN_KEY_SHAPE =
+  /("(?:accessToken|refreshToken|access_token|refresh_token|token)\\?"\s*:\s*\\?")([^"\\]*)(\\?")/g;
+
+function redactSecrets(text: string): string {
+  return text.replace(JWT_SHAPE, "[redacted-jwt]").replace(TOKEN_KEY_SHAPE, "$1[redacted]$3");
+}
+
 async function writeArtifact(name: string, value: unknown): Promise<string | null> {
   if (!ARTIFACT_DIR) return null;
   await Deno.mkdir(ARTIFACT_DIR, { recursive: true });
   const path = `${ARTIFACT_DIR}/${name}`;
-  await Deno.writeTextFile(path, JSON.stringify(value, null, 2) + "\n");
+  await Deno.writeTextFile(path, redactSecrets(JSON.stringify(value, null, 2)) + "\n");
   return path;
 }
 
