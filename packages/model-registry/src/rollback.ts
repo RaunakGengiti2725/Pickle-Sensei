@@ -6,9 +6,15 @@
  * envelope thresholds, auto-detect policy, …): the currently active
  * versioned artifact is tracked, a KNOWN-GOOD version can be recorded, a
  * kill switch (`disable`) removes the subsystem from service immediately,
- * and `rollback` restores the recorded known-good version. Every transition
- * is journaled with a wall-clock duration so rollback drills can measure
- * time-to-disable and time-to-rollback.
+ * and `rollback` restores the recorded known-good version. Every attempted
+ * transition — applied or failed — is journaled with a duration so rollback
+ * drills can measure time-to-disable and time-to-rollback.
+ *
+ * A transition is committed only after `apply` returns: if `apply` throws,
+ * the previously active version stays active, the failure is journaled with
+ * `outcome: "failed"`, and the error propagates to the caller. Accessors
+ * return snapshots — no caller-owned object is ever aliased into or out of
+ * the controller.
  *
  * HONESTY CONTRACT: durations measured through this controller are
  * in-process test-environment measurements (Linux CI/dev boxes). They are
@@ -23,19 +29,38 @@ export interface VersionedArtifact<T> {
 
 export type RollbackAction = "activate" | "record_known_good" | "disable" | "rollback";
 
+export type RollbackOutcome = "applied" | "failed";
+
 export interface RollbackJournalEntry {
   subsystem: string;
   action: RollbackAction;
   fromVersion: string | null;
+  /** Version the transition targeted — the attempted target when `outcome` is "failed". */
   toVersion: string | null;
+  /** Read from the controller's clock when the transition started. */
   atEpochMs: number;
   durationMs: number;
+  outcome: RollbackOutcome;
+  /** Message of the error `apply` threw; null when the transition was applied. */
+  error: string | null;
 }
 
-/** Millisecond monotonic-ish clock; injectable for deterministic tests. */
+/**
+ * Millisecond epoch clock used for every journal timestamp and duration;
+ * injectable for deterministic tests. This is the ONLY wall-clock source in
+ * this module.
+ */
 export type DurationClock = () => number;
 
 const defaultClock: DurationClock = () => Date.now();
+
+function snapshot<T>(value: VersionedArtifact<T>): VersionedArtifact<T> {
+  return { version: value.version, artifact: value.artifact };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Tracks the active artifact for one subsystem. `apply` is the ONLY path by
@@ -59,20 +84,21 @@ export class SubsystemReleaseState<T> {
     this.subsystem = options.subsystem;
     this.applyChange = options.apply;
     this.clock = options.clock ?? defaultClock;
-    this.activeState = options.initial;
-    this.applyChange(options.initial.artifact, options.initial.version);
+    const initial = snapshot(options.initial);
+    this.applyChange(initial.artifact, initial.version);
+    this.activeState = initial;
   }
 
   public active(): VersionedArtifact<T> | null {
-    return this.activeState;
+    return this.activeState === null ? null : snapshot(this.activeState);
   }
 
   public knownGood(): VersionedArtifact<T> | null {
-    return this.knownGoodState;
+    return this.knownGoodState === null ? null : snapshot(this.knownGoodState);
   }
 
   public journal(): readonly RollbackJournalEntry[] {
-    return [...this.journalEntries];
+    return this.journalEntries.map((entry) => ({ ...entry }));
   }
 
   /** Marks the CURRENTLY ACTIVE version as known-good. */
@@ -80,30 +106,28 @@ export class SubsystemReleaseState<T> {
     if (this.activeState === null) {
       throw new Error(`${this.subsystem}: cannot record known-good while disabled`);
     }
-    this.knownGoodState = this.activeState;
-    this.log("record_known_good", this.activeState.version, this.activeState.version, 0);
+    const known = snapshot(this.activeState);
+    this.knownGoodState = known;
+    this.journalEntries.push({
+      subsystem: this.subsystem,
+      action: "record_known_good",
+      fromVersion: known.version,
+      toVersion: known.version,
+      atEpochMs: this.clock(),
+      durationMs: 0,
+      outcome: "applied",
+      error: null,
+    });
   }
 
-  /** Puts a candidate version in service. */
+  /** Puts a candidate version in service. Returns duration ms. */
   public activate(candidate: VersionedArtifact<T>): number {
-    const from = this.activeState?.version ?? null;
-    const started = this.clock();
-    this.activeState = candidate;
-    this.applyChange(candidate.artifact, candidate.version);
-    const durationMs = this.clock() - started;
-    this.log("activate", from, candidate.version, durationMs);
-    return durationMs;
+    return this.transition("activate", snapshot(candidate));
   }
 
   /** Kill switch: removes the subsystem from service. Returns duration ms. */
   public disable(): number {
-    const from = this.activeState?.version ?? null;
-    const started = this.clock();
-    this.activeState = null;
-    this.applyChange(null, null);
-    const durationMs = this.clock() - started;
-    this.log("disable", from, null, durationMs);
-    return durationMs;
+    return this.transition("disable", null);
   }
 
   /** Restores the recorded known-good version. Returns duration ms. */
@@ -111,29 +135,50 @@ export class SubsystemReleaseState<T> {
     if (this.knownGoodState === null) {
       throw new Error(`${this.subsystem}: no known-good version recorded; cannot roll back`);
     }
-    const from = this.activeState?.version ?? null;
-    const started = this.clock();
-    this.activeState = this.knownGoodState;
-    this.applyChange(this.knownGoodState.artifact, this.knownGoodState.version);
-    const durationMs = this.clock() - started;
-    this.log("rollback", from, this.knownGoodState.version, durationMs);
-    return durationMs;
+    return this.transition("rollback", snapshot(this.knownGoodState));
   }
 
-  private log(
-    action: RollbackAction,
-    fromVersion: string | null,
-    toVersion: string | null,
-    durationMs: number,
-  ): void {
+  /**
+   * Applies `target` to the live side and commits it as the active state only
+   * once `apply` has returned. A throwing `apply` leaves the active state
+   * untouched, journals the failed attempt and rethrows.
+   */
+  private transition(action: RollbackAction, target: VersionedArtifact<T> | null): number {
+    const fromVersion = this.activeState?.version ?? null;
+    const toVersion = target?.version ?? null;
+    const started = this.clock();
+    try {
+      if (target === null) {
+        this.applyChange(null, null);
+      } else {
+        this.applyChange(target.artifact, target.version);
+      }
+    } catch (error) {
+      this.journalEntries.push({
+        subsystem: this.subsystem,
+        action,
+        fromVersion,
+        toVersion,
+        atEpochMs: started,
+        durationMs: this.clock() - started,
+        outcome: "failed",
+        error: errorMessage(error),
+      });
+      throw error;
+    }
+    this.activeState = target;
+    const durationMs = this.clock() - started;
     this.journalEntries.push({
       subsystem: this.subsystem,
       action,
       fromVersion,
       toVersion,
-      atEpochMs: Date.now(),
+      atEpochMs: started,
       durationMs,
+      outcome: "applied",
+      error: null,
     });
+    return durationMs;
   }
 }
 
@@ -176,6 +221,12 @@ export function runRollbackDrill<T>(
   const active = state.active();
   if (active === null) {
     throw new Error(`${state.subsystem}: drill requires an active version`);
+  }
+  if (badCandidate.version === active.version) {
+    throw new Error(
+      `${state.subsystem}: bad candidate version "${badCandidate.version}" is already the active version; ` +
+        "a drill must put a different version live to prove the kill switch and rollback",
+    );
   }
   if (!verify.knownGoodLive()) {
     throw new Error(`${state.subsystem}: pre-drill state does not match known-good behavior`);
