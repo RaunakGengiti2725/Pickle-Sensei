@@ -26,6 +26,37 @@
 > `scope=local` (this device's session), not global, and `authenticate()`
 > still accepts provider ID tokens transitionally for pre-contract app builds.
 > Live verification against the Supabase project is still pending.
+>
+> **Correction (2026-09-05, grant layer).** Three claims below held only at
+> the RLS/policy layer, not at the grant layer, until the `20260905*`
+> migrations: (1) "score/version columns not client-writable" (Case E) —
+> `20260829120000` granted INSERT on `public.shots` to `authenticated` for
+> the then-INVOKER sync RPC, so `POST /rest/v1/shots` with the user's own
+> token recorded scored rows with no permit, past the lifetime free limit,
+> with client-chosen `overall_score`/`*_version`. Fixed by
+> `20260905000000_shots_insert_only_via_rpc.sql`: the client INSERT grant
+> and INSERT policies on `shots`/`shot_phases`/`shot_checkpoints`/
+> `shot_measurements` are gone and `apply_synced_shot()` is the single
+> writer — now `SECURITY DEFINER` with `search_path=''`, every statement
+> scoped to `auth.uid()`, EXECUTE only for `authenticated`. (2) The
+> "grant layer" row and the append-only/service-only ledger claims —
+> hosted default privileges left `anon`/`authenticated` with RLS-blind
+> `TRUNCATE`, `TRIGGER` and `REFERENCES` on all 18 public tables (TRUNCATE
+> bypasses RLS and the row triggers). Fixed by
+> `20260905000001_revoke_rls_blind_privileges.sql` (revoked on every public
+> relation and from the schema's default privileges; `captures`
+> UPDATE/DELETE also revoked — no client path performs them). (3) The
+> permit "status/outcome" grant let the owner move a finalized/released
+> permit back to `reserved` (one permit consumed twice, `reserved_count`
+> inflated) and record any outcome text. Fixed by
+> `20260905000002_permit_lifecycle_one_way.sql`: a BEFORE UPDATE guard makes
+> `reserved -> finalized|released` one-way for every role, a CHECK closes the
+> outcome vocabulary (`null` exactly while reserved), client sessions may
+> record only the finalize-route outcomes, and the client INSERT is narrowed
+> to `(id, user_id, idempotency_key)` with DELETE revoked. Live pins:
+> `security_regression.sql` E0/E3/E6/K and
+> `./supabase/tests/run_adjudication_repro.sh` (ADJ-B/C/D); static pins:
+> `__wf__/db_migrations_rls_indexes.test.ts`.
 
 Scope: the Supabase deployment (Postgres/RLS, Edge Function `api`, Auth), the
 Fastify backend (`services/api`), the React Native app, CI/CD, secrets, and

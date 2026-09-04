@@ -284,7 +284,7 @@ Deno.test({
       );
 
       await t.step(
-        "INVARIANT: hot RPCs are SECURITY INVOKER; rank recompute is DEFINER, pinned, not client-executable",
+        "INVARIANT: access_state/reserve are SECURITY INVOKER; apply_synced_shot is the DEFINER writer (20260905000000); rank recompute is DEFINER, pinned, not client-executable",
         async () => {
           const r = await psql(`
           select p.proname || ':' || case when p.prosecdef then 'definer' else 'invoker' end || ':' ||
@@ -298,7 +298,7 @@ Deno.test({
           const rows = lines(r.stdout);
           const pinned = 'search_path=""';
           assert(rows.includes(`access_state:invoker:${pinned}:true`), rows.join("|"));
-          assert(rows.includes(`apply_synced_shot:invoker:${pinned}:true`), rows.join("|"));
+          assert(rows.includes(`apply_synced_shot:definer:${pinned}:true`), rows.join("|"));
           assert(rows.includes(`reserve_analysis_permit:invoker:${pinned}:true`), rows.join("|"));
           assert(rows.includes(`recompute_player_rank:definer:${pinned}:false`), rows.join("|"));
           assert(rows.includes(`handle_shot_rank_refresh:definer:${pinned}:false`), rows.join("|"));
@@ -324,7 +324,7 @@ Deno.test({
           insert into public.shot_phases (shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence)
           select sh.id, sh.user_id, 'phase' || k, 0, 50, 100, 0.9 from public.shots sh cross join generate_series(1, 6) k;
           insert into public.analysis_permits (user_id, idempotency_key, status, outcome, created_at)
-          select p.id, 'k' || g, case when g % 50 = 0 then 'reserved' else 'finalized' end, 'scored', now() - (g || ' days')::interval
+          select p.id, 'k' || g, case when g % 50 = 0 then 'reserved' else 'finalized' end, case when g % 50 = 0 then null else 'scored' end, now() - (g || ' days')::interval
           from public.profiles p cross join generate_series(1, 15) g;
           insert into public.analysis_feedback (user_id, analysis_id, rating)
           select user_id, id, 'accurate' from public.shots where random() < 0.34;

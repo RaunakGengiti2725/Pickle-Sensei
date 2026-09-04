@@ -688,10 +688,9 @@ begin
   end;
 end $$;
 
--- E6c: the lifecycle is ONE-WAY. A terminal permit (a2 above, and a1 that
--- the A5 sync finalized as scored) can never go back to reserved — which is
--- what would let one permit be consumed twice — and the attempt leaves
--- access_state().reserved_count exactly where it was.
+-- E6c: the lifecycle is ONE-WAY. A terminal permit (a2 above) can never go
+-- back to reserved — which is what would let one permit be consumed twice —
+-- and the attempt leaves access_state().reserved_count exactly where it was.
 do $$
 declare before_reserved int; after_reserved int; st text; v text;
 begin
@@ -727,7 +726,7 @@ begin
   -- And the sync RPC keeps refusing the consumed permit.
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000e7',
-    'analysisPermitId', '00000000-0000-4000-8000-0000000000a1',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000a2',
     'resultKind', 'scored',
     'shotType', 'drive', 'cameraView', 'side',
     'capturedAt', '2026-08-31T10:00:00Z',

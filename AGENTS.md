@@ -88,8 +88,15 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   outbox already treats 429 as retryable).
 - Hot paths are RPCs from `20260831000000_scale_and_security.sql`:
   `access_state()` (1 round trip) and `apply_synced_shot(jsonb)` (atomic
-  shot+details+permit write, SECURITY INVOKER so RLS applies). Rank/progress
-  responses cache 60s and are invalidated by accepted shot syncs.
+  shot+details+permit write). Since `20260905000000_shots_insert_only_via_rpc.sql`
+  the RPC is the ONLY writer of `shots`/`shot_phases`/`shot_checkpoints`/
+  `shot_measurements`: the client role holds no INSERT grant or INSERT
+  policy on them, and the function is `SECURITY DEFINER` (pinned
+  `search_path=''`, EXECUTE only for `authenticated`) with every statement
+  scoped to `auth.uid()` — never add a table read/write inside it that is
+  not filtered by `v_uid`. `access_state()`/`reserve_analysis_permit()`
+  stay INVOKER. Rank/progress responses cache 60s and are invalidated by
+  accepted shot syncs.
 - Free ratings follow the SIGN-IN IDENTITY, not the account row
   (`20260902150000_free_rating_identity_ledger.sql`, 2026-09-02). Deleting
   the account used to reset the two lifetime free ratings (every counted
@@ -130,11 +137,26 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   check clean.
 - Defense in depth (`20260831160000_defense_in_depth.sql`): column-level
   UPDATE grants sized to EXACTLY the writes the edge fn performs (shots have
-  NO client update — favorites are device-local, sync is INSERT-only via the
-  RPC; sessions move only `ended_at`; permits only `status`/`outcome`),
-  trigger-enforced append-only ledgers, NOT NULL ledger owners, NOT VALID
-  size caps, anon/public revokes. If you add a client-side column write,
-  extend the grant in a NEW migration or every 42501 shows up as a 503.
+  NO client update or INSERT — favorites are device-local, sync goes ONLY
+  through the RPC; sessions move only `ended_at`; permits only
+  `status`/`outcome`, INSERT only `(id, user_id, idempotency_key)`, no
+  DELETE; captures have no client UPDATE/DELETE), trigger-enforced
+  append-only ledgers, NOT NULL ledger owners, NOT VALID size caps,
+  anon/public revokes. `20260905000001_revoke_rls_blind_privileges.sql`
+  strips the RLS-blind `TRUNCATE`/`TRIGGER`/`REFERENCES` privileges from
+  `anon`/`authenticated` on every public relation AND from the schema's
+  default privileges (a new table inherits none of them — do not re-grant).
+  `20260905000002_permit_lifecycle_one_way.sql` makes the permit lifecycle
+  one-way for every role (`reserved -> finalized|released`, never back,
+  never rewritten; BEFORE UPDATE guard raising 23514) and closes the
+  outcome vocabulary with a CHECK — the RPC/sweep write `scored`,
+  `low_confidence`, `expired`, `free_limit_exceeded`; the finalize route
+  writes `low_confidence`, `cancelled`, `failed`, `unsupported`,
+  `incorrect_recognition`; null exactly while reserved. Adding a finalize
+  outcome means a NEW migration updating both the CHECK and the guard's
+  client list, plus `RELEASABLE_OUTCOMES` in index.ts. If you add a
+  client-side column write, extend the grant in a NEW migration or every
+  42501 shows up as a 503.
   PostgREST upserts (`resolution=merge-duplicates`) put EVERY payload column
   in DO UPDATE — the grant must include them all (see
   account_deletion_requests).
@@ -143,7 +165,10 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   absent; CI job `supabase-security`). It installs hosted-like default
   privileges first, applies every migration in order, then asserts the
   allowed AND denied paths (owner flows, RLS, anon, append-only, column
-  grants, size caps, function EXECUTE). Historical audit:
+  grants, size caps, function EXECUTE, RLS-blind privileges on every public
+  relation, permit lifecycle). `./supabase/tests/run_adjudication_repro.sh`
+  is the PASS/FAIL adjudication table for the 2026-09-05 grant-layer
+  findings (ADJ-B/C/D). Historical audit:
   `docs/SECURITY_CERTIFICATION_2026-08-30.md` (see its status addendum).
 - Load tests: `tools/loadtest/` (k6). Release gate: `docs/PRELAUNCH_CHECKLIST.md`.
 
