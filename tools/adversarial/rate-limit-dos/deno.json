@@ -2,8 +2,10 @@
   "nodeModulesDir": "none",
   "lock": false,
   "tasks": {
-    "test": "deno test -A --no-check --config deno.json .",
     "heap": "deno run -A --v8-flags=--expose-gc heap_flood.ts",
-    "all": "deno run -A run_all.ts"
+    "clientip": "deno run -A clientip_matrix.ts",
+    "limiter": "deno run -A limiter_attacks.ts",
+    "handler": "deno run -A --no-check handler_abuse.ts",
+    "serve": "deno run -A --no-check serve_local_edge.ts"
   }
 }

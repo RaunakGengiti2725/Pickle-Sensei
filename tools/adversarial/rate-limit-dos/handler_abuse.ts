@@ -8,12 +8,9 @@
 // (`--no-check` matches the repo's edge test invocation: index.ts carries the
 // documented pre-existing untyped-supabase-client errors.)
 
-const OUT = (() => {
-  const i = Deno.args.indexOf("--out");
-  return i >= 0
-    ? Deno.args[i + 1]
-    : "artifacts/xc-rate-limit-dos/handler_abuse.json";
-})();
+import { outPath, println, writeReport } from "./report.ts";
+
+const OUT = outPath("artifacts/xc-rate-limit-dos/handler_abuse.json");
 
 type Handler = (request: Request) => Response | Promise<Response>;
 
@@ -26,9 +23,7 @@ Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
 
 let captured: Handler | null = null;
 const realServe = Deno.serve;
-(Deno as unknown as { serve: unknown }).serve = (
-  ...args: unknown[]
-): unknown => {
+(Deno as unknown as { serve: unknown }).serve = (...args: unknown[]): unknown => {
   captured = args.find((a) => typeof a === "function") as Handler;
   return { finished: Promise.resolve(), shutdown: () => Promise.resolve() };
 };
@@ -50,15 +45,15 @@ async function handleFull(request: Request): Promise<Response> {
 }
 
 function b64url(value: unknown): string {
-  return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_")
-    .replaceAll("=", "");
+  return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 /** Structurally valid Google ID token with a garbage signature — the exact
  * shape tools/loadtest/auth-abuse.js stuffs. */
 function fakeIdToken(): string {
-  return `${b64url({ alg: "RS256", typ: "JWT" })}.${
-    b64url({ iss: "https://accounts.google.com", exp: 4_102_444_800 })
-  }.invalid-signature`;
+  return `${b64url({ alg: "RS256", typ: "JWT" })}.${b64url({
+    iss: "https://accounts.google.com",
+    exp: 4_102_444_800,
+  })}.invalid-signature`;
 }
 
 const SEED = 0x5eed_1337;
@@ -70,11 +65,7 @@ function lcg(seed: number): () => number {
   };
 }
 
-function req(
-  path: string,
-  headers: Record<string, string>,
-  method = "GET",
-): Request {
+function req(path: string, headers: Record<string, string>, method = "GET"): Request {
   return new Request(`${BASE}${path}`, { method, headers });
 }
 
@@ -88,21 +79,16 @@ async function unknownIdentityCollapse() {
   }
   const first429 = statuses.indexOf(429) + 1;
   // A second "distinct" caller with no headers inherits the exhausted bucket.
-  const otherCaller = await handle(
-    req("/healthz", { "user-agent": "another-client/1.0" }),
-  );
+  const otherCaller = await handle(req("/healthz", { "user-agent": "another-client/1.0" }));
   // A caller the gateway DID stamp is unaffected.
-  const stamped = await handle(
-    req("/healthz", { "cf-connecting-ip": "198.51.100.42" }),
-  );
+  const stamped = await handle(req("/healthz", { "cf-connecting-ip": "198.51.100.42" }));
   return {
     publicPageLimit: 60,
     requestsSentWithNoIpHeaders: statuses.length,
     firstRequestBlocked: first429 === 0 ? null : first429,
     secondUnrelatedHeaderlessCallerStatus: otherCaller,
     gatewayStampedCallerStatus: stamped,
-    note:
-      'every caller whose request carries no cf-connecting-ip and no x-forwarded-for shares the id "unknown"',
+    note: 'every caller whose request carries no cf-connecting-ip and no x-forwarded-for shares the id "unknown"',
   };
 }
 
@@ -137,30 +123,23 @@ async function sharedAddressLockout() {
     req("/v1/account/bootstrap", { "cf-connecting-ip": ip }, "POST"),
   );
   // Co-tenant #3: session rotation from the same address.
-  const coTenantRefresh = await handle(
-    req("/v1/auth/refresh", { "cf-connecting-ip": ip }, "POST"),
-  );
+  const coTenantRefresh = await handle(req("/v1/auth/refresh", { "cf-connecting-ip": ip }, "POST"));
   // Public pages are decided before the budget, so they still answer.
   const publicPage = await handle(req("/healthz", { "cf-connecting-ip": ip }));
   // A different address is untouched.
-  const elsewhere = await handle(
-    req("/v1/me", { "cf-connecting-ip": "203.0.113.32" }),
-  );
+  const elsewhere = await handle(req("/v1/me", { "cf-connecting-ip": "203.0.113.32" }));
   return {
     authFailureLimit: 30,
     authFailureWindowSeconds: 300,
     failuresSpentByAttacker: failures,
     coTenantWithSessionBearerStatus: coTenantBearer.status,
     coTenantRetryAfterHeader: retryAfter === null ? null : Number(retryAfter),
-    coTenantRateLimitLimitHeader: rateLimitLimit === null
-      ? null
-      : Number(rateLimitLimit),
+    coTenantRateLimitLimitHeader: rateLimitLimit === null ? null : Number(rateLimitLimit),
     coTenantBootstrapStatus: coTenantBootstrap,
     coTenantRefreshStatus: coTenantRefresh,
     publicPageStatus: publicPage,
     differentAddressStatus: elsewhere,
-    note:
-      "429 for every non-public route from the address until the 300 s bucket rolls over",
+    note: "429 for every non-public route from the address until the 300 s bucket rolls over",
   };
 }
 
@@ -191,9 +170,7 @@ async function spoofFloodWipe(floodIdentities: number) {
       sent += 1;
       await handle(
         req("/v1/me", {
-          "cf-connecting-ip": `10.${(rnd() % 255)}.${(rnd() % 255)}.${
-            sent % 255
-          }-${sent}`,
+          "cf-connecting-ip": `10.${rnd() % 255}.${rnd() % 255}.${sent % 255}-${sent}`,
         }),
       );
     }
@@ -215,8 +192,7 @@ async function spoofFloodWipe(floodIdentities: number) {
     victimUnblockedAfterFloodRequests: unblockedAfterRequests,
     floodWallMs: Math.round(wallMs),
     floodRequestsPerSecond: Math.round(sent / (wallMs / 1_000)),
-    note:
-      "429 → 401 for the victim address means its auth-failure budget was erased mid-window",
+    note: "429 → 401 for the victim address means its auth-failure budget was erased mid-window",
   };
 }
 
@@ -254,9 +230,7 @@ async function retryAfterHeaders() {
       }),
     );
   }
-  const failResponse = await handleFull(
-    req("/v1/me", { "cf-connecting-ip": failIp }),
-  );
+  const failResponse = await handleFull(req("/v1/me", { "cf-connecting-ip": failIp }));
   rows.push({
     shape: "auth-failure budget (30/300s)",
     status: failResponse.status,
@@ -270,9 +244,7 @@ async function retryAfterHeaders() {
   // refresh bucket (30/60s)
   const refreshIp = "198.51.100.63";
   for (let i = 0; i < 30; i += 1) {
-    await handle(
-      req("/v1/auth/refresh", { "cf-connecting-ip": refreshIp }, "POST"),
-    );
+    await handle(req("/v1/auth/refresh", { "cf-connecting-ip": refreshIp }, "POST"));
   }
   const refreshResponse = await handleFull(
     req("/v1/auth/refresh", { "cf-connecting-ip": refreshIp }, "POST"),
@@ -282,16 +254,15 @@ async function retryAfterHeaders() {
     status: refreshResponse.status,
     retryAfter: Number(refreshResponse.headers.get("Retry-After")),
     rateLimitLimit: Number(refreshResponse.headers.get("RateLimit-Limit")),
-    rateLimitRemaining: Number(
-      refreshResponse.headers.get("RateLimit-Remaining"),
-    ),
+    rateLimitRemaining: Number(refreshResponse.headers.get("RateLimit-Remaining")),
     cacheControl: refreshResponse.headers.get("Cache-Control"),
     windowSeconds: 60,
   });
   await refreshResponse.body?.cancel();
   return rows.map((row) => ({
     ...row,
-    retryAfterWithinWindow: Number.isInteger(row.retryAfter) &&
+    retryAfterWithinWindow:
+      Number.isInteger(row.retryAfter) &&
       (row.retryAfter as number) >= 1 &&
       (row.retryAfter as number) <= (row.windowSeconds as number),
   }));
@@ -319,8 +290,7 @@ async function oversizedIdentity() {
 
 const report = {
   harness: "tools/adversarial/rate-limit-dos/handler_abuse.ts",
-  target:
-    "supabase/functions/api/index.ts (real Deno.serve handler, Redis unconfigured)",
+  target: "supabase/functions/api/index.ts (real Deno.serve handler, Redis unconfigured)",
   deno: Deno.version.deno,
   seed: SEED,
   measuredAt: new Date().toISOString(),
@@ -331,7 +301,5 @@ const report = {
   spoofFloodWipe: await spoofFloodWipe(60_000),
 };
 
-await Deno.mkdir(OUT.slice(0, OUT.lastIndexOf("/")), { recursive: true });
-await Deno.writeTextFile(OUT, `${JSON.stringify(report, null, 2)}\n`);
-console.log(JSON.stringify(report, null, 2));
-console.log(`wrote ${OUT}`);
+println(JSON.stringify(report, null, 2));
+await writeReport(OUT, report);

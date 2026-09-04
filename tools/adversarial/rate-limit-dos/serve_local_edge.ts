@@ -11,6 +11,8 @@
 // Redis is unconfigured on purpose (the documented per-isolate memory path,
 // which is also what a project without UPSTASH_* secrets runs).
 
+import { println } from "./report.ts";
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -41,10 +43,7 @@ function fakeSupabase(request: Request): Response {
   return json(404, { message: `fake supabase: unhandled ${url.pathname}` });
 }
 
-const fake = Deno.serve(
-  { hostname: "127.0.0.1", port: 0, onListen: () => {} },
-  fakeSupabase,
-);
+const fake = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, fakeSupabase);
 Deno.env.set("SUPABASE_URL", `http://127.0.0.1:${fake.addr.port}`);
 Deno.env.set("SUPABASE_ANON_KEY", "fake-anon-key");
 Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
@@ -62,7 +61,7 @@ for (let attempt = 0; attempt < 50; attempt += 1) {
   }
   await new Promise((r) => setTimeout(r, 100));
 }
-console.log(
+println(
   `local edge function ready on http://127.0.0.1:8000 ` +
     `(fake Supabase on :${fake.addr.port} refusing all auth; stats at /__stats; no Redis)`,
 );

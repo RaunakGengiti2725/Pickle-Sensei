@@ -10,13 +10,9 @@
 // and whether that identity is attacker-chosen.
 
 import { clientIp } from "../../../supabase/functions/api/http.ts";
+import { outPath, println, writeReport } from "./report.ts";
 
-const OUT = (() => {
-  const i = Deno.args.indexOf("--out");
-  return i >= 0
-    ? Deno.args[i + 1]
-    : "artifacts/xc-rate-limit-dos/clientip_matrix.json";
-})();
+const OUT = outPath("artifacts/xc-rate-limit-dos/clientip_matrix.json");
 
 interface Case {
   name: string;
@@ -115,8 +111,7 @@ const cases: Case[] = [
     note: "can a colon-bearing id collide with another scope's key?",
   },
   {
-    name:
-      "cf-connecting-ip carrying an auth: cache prefix (key-confusion probe)",
+    name: "cf-connecting-ip carrying an auth: cache prefix (key-confusion probe)",
     headers: { "cf-connecting-ip": "auth:deadbeef" },
     attackerValue: "auth:deadbeef",
     note: "can an id escape the rl: namespace into the session cache?",
@@ -136,30 +131,23 @@ const cases: Case[] = [
 ];
 
 /** The key rateLimit.ts builds (rateLimit.ts:47-50) for a given identity. */
-function windowKey(
-  scope: string,
-  id: string,
-  windowSeconds: number,
-  nowMs: number,
-): string {
+function windowKey(scope: string, id: string, windowSeconds: number, nowMs: number): string {
   return `rl:${scope}:${Math.floor(nowMs / (windowSeconds * 1_000))}:${id}`;
 }
 
 const NOW = 1_780_000_000_000; // fixed clock so keys are reproducible
 const identities = new Map<string, string>();
 const rows = cases.map((c) => {
-  const id = clientIp(
-    new Request("https://example.test/v1/me", { headers: c.headers }),
-  );
+  const id = clientIp(new Request("https://example.test/v1/me", { headers: c.headers }));
   identities.set(c.name, id);
-  const attackerControlled = c.attackerValue !== null &&
-    id === c.attackerValue.trim();
+  const attackerControlled = c.attackerValue !== null && id === c.attackerValue.trim();
   return {
     case: c.name,
     headers: Object.fromEntries(
-      Object.entries(c.headers).map((
-        [k, v],
-      ) => [k, v.length > 48 ? `${v.slice(0, 32)}…(${v.length}B)` : v]),
+      Object.entries(c.headers).map(([k, v]) => [
+        k,
+        v.length > 48 ? `${v.slice(0, 32)}…(${v.length}B)` : v,
+      ]),
     ),
     identity: id.length > 48 ? `${id.slice(0, 32)}…(${id.length}B)` : id,
     identityBytes: new TextEncoder().encode(id).length,
@@ -174,18 +162,8 @@ const rows = cases.map((c) => {
 
 // Key-confusion check: does any attacker-chosen identity produce a key that
 // another scope (or the session cache) could also produce?
-const scopes = [
-  "ip",
-  "authfail",
-  "auth_refresh",
-  "user",
-  "healthz",
-  "legal",
-  "webhook",
-];
-const collisions: Array<
-  { identity: string; key: string; alsoProducedBy: string }
-> = [];
+const scopes = ["ip", "authfail", "auth_refresh", "user", "healthz", "legal", "webhook"];
+const collisions: Array<{ identity: string; key: string; alsoProducedBy: string }> = [];
 for (const row of rows) {
   if (!row.attackerChosenIdentity) continue;
   const raw = identities.get(row.case) ?? "";
@@ -214,8 +192,7 @@ for (const row of rows) {
 
 const report = {
   harness: "tools/adversarial/rate-limit-dos/clientip_matrix.ts",
-  target:
-    "supabase/functions/api/http.ts clientIp() + rateLimit.ts windowKey()",
+  target: "supabase/functions/api/http.ts clientIp() + rateLimit.ts windowKey()",
   deno: Deno.version.deno,
   fixedClockMs: NOW,
   measuredAt: new Date().toISOString(),
@@ -225,16 +202,14 @@ const report = {
   keyConfusionCollisions: collisions,
 };
 
-await Deno.mkdir(OUT.slice(0, OUT.lastIndexOf("/")), { recursive: true });
-await Deno.writeTextFile(OUT, `${JSON.stringify(report, null, 2)}\n`);
 for (const row of rows) {
-  console.log(
+  println(
     `${row.attackerChosenIdentity ? "ATTACKER-CHOSEN" : "gateway-derived "}  ` +
       `${row.case} → id=${row.identity} (${row.identityBytes}B)`,
   );
 }
-console.log(
+println(
   `attacker-chosen identities: ${report.attackerChosenIdentities}/${report.totalCases}; ` +
     `key-confusion collisions: ${collisions.length}`,
 );
-console.log(`wrote ${OUT}`);
+await writeReport(OUT, report);

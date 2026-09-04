@@ -14,17 +14,11 @@
 // Writes a JSON table to --out (default artifacts/xc-rate-limit-dos/heap_flood.json).
 // Deterministic: keys are generated from a fixed seed, printed in the report.
 
-import {
-  configureRedis,
-  loadIsolate,
-} from "../../../supabase/functions/api/__wf__/harness.ts";
+import { configureRedis, loadIsolate } from "../../../supabase/functions/api/__wf__/harness.ts";
+import { outPath, println, writeReport } from "./report.ts";
 
 const SEED = 0x5eed_1337;
-const OUT =
-  (Deno.args.includes("--out")
-    ? Deno.args[Deno.args.indexOf("--out") + 1]
-    : null) ??
-    "artifacts/xc-rate-limit-dos/heap_flood.json";
+const OUT = outPath("artifacts/xc-rate-limit-dos/heap_flood.json");
 
 /** Deterministic 32-bit LCG so every reported failure is replayable. */
 function lcg(seed: number): () => number {
@@ -92,20 +86,10 @@ async function runScenario(scenario: Scenario): Promise<Result> {
   // Canary: exhaust a victim's budget so it is DENIED before the flood.
   const canary = "203.0.113.7";
   for (let i = 0; i < 3; i += 1) {
-    await iso.rateLimit.enforceRateLimit(
-      scenario.scope,
-      canary,
-      3,
-      scenario.windowSeconds,
-    );
+    await iso.rateLimit.enforceRateLimit(scenario.scope, canary, 3, scenario.windowSeconds);
   }
   const deniedBefore = !(
-    await iso.rateLimit.peekRateLimit(
-      scenario.scope,
-      canary,
-      3,
-      scenario.windowSeconds,
-    )
+    await iso.rateLimit.peekRateLimit(scenario.scope, canary, 3, scenario.windowSeconds)
   ).allowed;
 
   const heapBefore = heapUsedBytes();
@@ -135,12 +119,7 @@ async function runScenario(scenario: Scenario): Promise<Result> {
         if (firstReset === null) firstReset = i + 1;
         // Re-arm the canary so further wipes are observable.
         for (let k = 0; k < 3; k += 1) {
-          await iso.rateLimit.enforceRateLimit(
-            scenario.scope,
-            canary,
-            3,
-            scenario.windowSeconds,
-          );
+          await iso.rateLimit.enforceRateLimit(scenario.scope, canary, 3, scenario.windowSeconds);
         }
         resets += 1;
       }
@@ -252,7 +231,7 @@ const results: Result[] = [];
 for (const scenario of scenarios) {
   const result = await runScenario(scenario);
   results.push(result);
-  console.log(
+  println(
     `${result.name}: heap ${result.heapBeforeMb} → at-cap ${result.heapAtCapMb} ` +
       `(retained +${result.heapRetainedAtCapMb} MiB, ${result.bytesPerKeyRetained} B/key) → ` +
       `after ${result.heapAfterFloodMb} MiB (peak ${result.heapPeakMb}), ` +
@@ -262,7 +241,7 @@ for (const scenario of scenarios) {
 }
 
 const cacheFlood = await runCacheFlood(100_000, 1_024);
-console.log(
+println(
   `${cacheFlood.name}: heap ${cacheFlood.heapBeforeMb} → ${cacheFlood.heapAfterFloodMb} MiB ` +
     `(+${cacheFlood.heapGrowthMb}), canary survived: ${cacheFlood.canarySurvived}`,
 );
@@ -281,8 +260,4 @@ const report = {
   rateLimitWindows: results,
   cacheL1: cacheFlood,
 };
-await Deno.mkdir(new URL(".", `file://${Deno.cwd()}/${OUT}`), {
-  recursive: true,
-}).catch(() => {});
-await Deno.writeTextFile(OUT, `${JSON.stringify(report, null, 2)}\n`);
-console.log(`wrote ${OUT}`);
+await writeReport(OUT, report);
