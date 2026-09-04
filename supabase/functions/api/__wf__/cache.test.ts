@@ -188,7 +188,9 @@ Deno.test(
     const redis = fakeUpstash();
     try {
       const iso = await loadIsolate();
-      for (let i = 0; i < 5_000; i += 1) await iso.cache.cacheSet(`k${i}`, "v", 600);
+      for (let i = 0; i < 5_000; i += 1) {
+        await iso.cache.cacheSet(`k${i}`, "v", 600);
+      }
       assertEquals(await iso.cache.cacheGet("k0"), "v");
       await iso.cache.cacheSet("overflow", "v", 600);
       assertEquals(await iso.cache.cacheGet("k0"), null, "oldest entries evicted");
@@ -213,6 +215,78 @@ Deno.test("expired L1 entries are dropped lazily on read", async () => {
     assertEquals(await iso.cache.cacheGet("short"), null);
     await iso.cache.cacheSet("zero", "v", 0);
     assertEquals(await iso.cache.cacheGet("zero"), null, "ttl<=0 is never stored");
+  } finally {
+    redis.restore();
+  }
+});
+
+// ─── Revocation markers (auth cache) ─────────────────────────────────────────
+
+Deno.test(
+  "cacheRevoke on one isolate is seen by cacheRevoked on ANOTHER isolate at once (L2 consulted on every miss, not L1 alone)",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      const marker = "auth-revoked:session:s1";
+      assertEquals(await b.cache.cacheRevoked([marker]), false);
+      const before = redis.calls;
+      assertEquals(await b.cache.cacheRevoked([marker]), false);
+      assertEquals(redis.calls, before + 1, "a negative answer is never cached locally");
+
+      await a.cache.cacheRevoke(marker, 660);
+      assertEquals(redis.store.get(marker)?.value, "1");
+      assertEquals(await b.cache.cacheRevoked([marker]), true, "b sees a's revocation via L2");
+      const warmed = redis.calls;
+      assertEquals(await b.cache.cacheRevoked([marker]), true);
+      assertEquals(redis.calls, warmed, "a positive marker is held in L1 (markers never lift)");
+      assertEquals(
+        await b.cache.cacheRevoked(["auth-revoked:user:u9", marker]),
+        true,
+        "any revoked marker in the set revokes",
+      );
+      assertEquals(await b.cache.cacheRevoked(["auth-revoked:user:u9"]), false);
+      assertEquals(await b.cache.cacheRevoked([]), false);
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheRevoked answers null (unknown) when Redis is configured but unreachable",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      redis.failStatus = 503;
+      assertEquals(await iso.cache.cacheRevoked(["auth-revoked:session:s1"]), null);
+      redis.failStatus = null;
+      await iso.cache.cacheRevoke("auth-revoked:session:s1", 660);
+      redis.failStatus = 503;
+      assertEquals(
+        await iso.cache.cacheRevoked(["auth-revoked:session:s1"]),
+        true,
+        "a locally held marker answers without Redis",
+      );
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test("without Redis, revocation markers live in the isolate's own L1", async () => {
+  configureRedis(false);
+  const redis = fakeUpstash();
+  try {
+    const iso = await loadIsolate();
+    assertEquals(await iso.cache.cacheRevoked(["auth-revoked:session:s1"]), false);
+    await iso.cache.cacheRevoke("auth-revoked:session:s1", 660);
+    assertEquals(await iso.cache.cacheRevoked(["auth-revoked:session:s1"]), true);
+    assertEquals(redis.calls, 0, "no Redis traffic when unconfigured");
   } finally {
     redis.restore();
   }
