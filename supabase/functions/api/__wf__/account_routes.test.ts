@@ -138,16 +138,19 @@ async function fakeSupabase(request: Request): Promise<Response> {
 }
 
 // ─── Boot the Edge Function in-process ───────────────────────────────────────
+//
+// Supabase and RevenueCat are stubbed at the fetch layer (like routesHarness.ts)
+// instead of behind a listening socket: `deno test` gives each test file its own
+// isolate, so this override is scoped to this file and there is nothing to tear
+// down — which keeps the file order-independent under `deno test --shuffle`.
 
-const fake = Deno.serve({ port: 0, onListen: () => undefined }, fakeSupabase);
-const fakeUrl = `http://127.0.0.1:${fake.addr.port}`;
+const fakeUrl = "http://fake-supabase.test";
 
 Deno.env.set("SUPABASE_URL", fakeUrl);
 Deno.env.set("SUPABASE_ANON_KEY", "anon-key");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
 Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
 
-const realFetch = globalThis.fetch;
 globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const request = new Request(input, init);
   if (request.url.startsWith("https://api.revenuecat.com/v1/subscribers/")) {
@@ -156,7 +159,10 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     assertEquals(request.headers.get("authorization"), "Bearer sk_test_revenuecat");
     return Promise.resolve(new Response(null, { status: 200 }));
   }
-  return realFetch(input, init);
+  if (request.url.startsWith(`${fakeUrl}/`)) return fakeSupabase(request);
+  return Promise.resolve(
+    new Response(`unexpected fetch in test: ${request.method} ${request.url}`, { status: 599 }),
+  );
 }) as typeof fetch;
 
 type Handler = (request: Request) => Promise<Response> | Response;
@@ -192,6 +198,27 @@ const pastIso = (msAgo: number): string => new Date(Date.now() - msAgo).toISOStr
 const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).toISOString();
 
 // ─── Baseline behavior (sanity: the harness exercises the real handlers) ─────
+
+Deno.test("bootstrap spends the provider token once and returns the Supabase session", async () => {
+  resetState();
+  const userId = crypto.randomUUID();
+  state.profileRows = [
+    { id: userId, email: "u@example.com", onboarding_state: "pending", provider: "google" },
+  ];
+  const res = await call("POST", "/v1/account/bootstrap", providerToken(userId));
+  assertEquals(res.status, 200);
+  const body = (await res.json()) as {
+    user: { id: string; email: string };
+    onboardingState: string;
+    session: { accessToken: string; refreshToken: string; expiresAt: number };
+  };
+  assertEquals(body.user, { id: userId, email: "u@example.com" });
+  assertEquals(body.onboardingState, "pending");
+  assertEquals(body.session.accessToken, `sb-access-${userId}`);
+  assertEquals(body.session.refreshToken, `sb-refresh-${userId}`);
+  assertEquals(body.session.expiresAt > Math.floor(Date.now() / 1_000), true);
+  assertEquals(state.tokenCalls, 1);
+});
 
 Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async () => {
   resetState();
@@ -346,13 +373,3 @@ Deno.test(
     );
   },
 );
-
-Deno.test({
-  name: "teardown fake supabase",
-  fn: async () => {
-    await fake.shutdown();
-    globalThis.fetch = realFetch;
-  },
-  sanitizeResources: false,
-  sanitizeOps: false,
-});
