@@ -48,11 +48,7 @@ function dependencies(
   };
 }
 
-function gate<T>(): {
-  promise: Promise<T>;
-  resolve: (v: T) => void;
-  reject: (e: Error) => void;
-} {
+function gate<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: Error) => void } {
   let resolve!: (v: T) => void;
   let reject!: (e: Error) => void;
   const promise = new Promise<T>((res, rej) => {
@@ -72,10 +68,7 @@ describe('accessStore.refreshAccess overlapping calls (audit)', () => {
     const second = gate<CanonicalAccessState>();
     const responses = [first.promise, second.promise];
     configureAccessStore(dependencies(() => responses.shift()!));
-    useAccessStore.setState({
-      status: 'ready',
-      canonicalAccess: freeAccess(0),
-    });
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
 
     // Settings focus issues refresh #1; the Analyze unmount issues #2 after
     // a scoring run consumed the last free rating.
@@ -102,10 +95,7 @@ describe('accessStore.refreshAccess overlapping calls (audit)', () => {
     const second = gate<CanonicalAccessState>();
     const responses = [first.promise, second.promise];
     configureAccessStore(dependencies(() => responses.shift()!));
-    useAccessStore.setState({
-      status: 'ready',
-      canonicalAccess: freeAccess(0),
-    });
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
 
     const refresh1 = useAccessStore.getState().refreshAccess();
     const refresh2 = useAccessStore.getState().refreshAccess();
@@ -128,10 +118,7 @@ describe('accessStore.refreshAccess overlapping calls (audit)', () => {
   it('VERIFY: overlapping refreshes of the same configuration both hit the backend (no dedupe is claimed) and the store is never left in "loading"', async () => {
     const clients = dependencies(async () => freeAccess(1));
     configureAccessStore(clients);
-    useAccessStore.setState({
-      status: 'ready',
-      canonicalAccess: freeAccess(0),
-    });
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
     await Promise.all([
       useAccessStore.getState().refreshAccess(),
       useAccessStore.getState().refreshAccess(),
@@ -144,10 +131,7 @@ describe('accessStore.refreshAccess overlapping calls (audit)', () => {
   it('VERIFY: a refresh that outlives its configuration is dropped and cannot repopulate a cleared store', async () => {
     const pending = gate<CanonicalAccessState>();
     configureAccessStore(dependencies(() => pending.promise));
-    useAccessStore.setState({
-      status: 'ready',
-      canonicalAccess: freeAccess(0),
-    });
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
     const refresh = useAccessStore.getState().refreshAccess();
     clearAccessStoreConfiguration();
     pending.resolve(freeAccess(0));

@@ -445,9 +445,7 @@ describe('capture failure vs user cancellation', () => {
     // the kind of copy a system interruption produces.
     const message =
       'Recording stopped: the capture session was cancelled by the system during a phone call.';
-    await capture.reject(
-      nativeRejection('camera.session_interrupted', message),
-    );
+    await capture.reject(nativeRejection('camera.session_interrupted', message));
     const text = textOf(renderer);
     // Expected: the error surface with this message and a retry affordance.
     expect(text).toContain('cancelled by the system');

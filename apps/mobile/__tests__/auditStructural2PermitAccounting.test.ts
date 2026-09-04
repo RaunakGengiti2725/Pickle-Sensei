@@ -64,9 +64,7 @@ function recordingDb(failWhen?: (sql: string) => boolean): {
     async execute(sql, params = []) {
       calls.push({ sql, params });
       if (failWhen?.(sql)) {
-        throw new Error(
-          `SQLITE_FULL: database or disk is full (${sql.slice(0, 32)})`,
-        );
+        throw new Error(`SQLITE_FULL: database or disk is full (${sql.slice(0, 32)})`);
       }
       return { rows: [] };
     },
@@ -248,9 +246,7 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
       }),
     ]);
     // Nothing durable was written for a run that produced no record.
-    expect(
-      calls.filter(c => c.sql.includes('INSERT INTO outbox')),
-    ).toHaveLength(0);
+    expect(calls.filter(c => c.sql.includes('INSERT INTO outbox'))).toHaveLength(0);
     // Observation only (the outer wrapper documents rethrow after telemetry):
     // the exception escapes to the caller rather than becoming `unavailable`.
     expect(settled.ok).toBe(false);
@@ -272,9 +268,7 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
     expect(server.reserved).toBe(1);
     // The rating was never promoted (no local_shot, no outbox), so the
     // reservation must not stay held: it should be finalized by the client.
-    expect(
-      calls.filter(c => c.sql.includes('INSERT INTO outbox')),
-    ).toHaveLength(0);
+    expect(calls.filter(c => c.sql.includes('INSERT INTO outbox'))).toHaveLength(0);
     expect(calls.filter(c => c.sql.includes('local_shot'))).toHaveLength(0);
     expect(server.finalized.map(f => f.permitId)).toEqual(['permit-1']);
     expect(settled.ok).toBe(false);
@@ -294,9 +288,7 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
       (error: unknown) => ({ ok: false as const, error }),
     );
     expect(server.reserved).toBe(1);
-    expect(
-      calls.filter(c => c.sql.includes('INSERT INTO outbox')),
-    ).toHaveLength(0);
+    expect(calls.filter(c => c.sql.includes('INSERT INTO outbox'))).toHaveLength(0);
     expect(server.finalized.map(f => f.permitId)).toEqual(['permit-1']);
     expect(settled.ok).toBe(false);
   });

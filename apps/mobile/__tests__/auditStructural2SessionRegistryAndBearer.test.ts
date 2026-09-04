@@ -184,9 +184,7 @@ describe('native session analysis provider bearer handling (audit)', () => {
     const fetchMock = jest.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/v1/analysis-permits')) {
         const headers = (init?.headers ?? {}) as Record<string, string>;
-        authHeaders.push(
-          headers['Authorization'] ?? headers['authorization'] ?? '',
-        );
+        authHeaders.push(headers['Authorization'] ?? headers['authorization'] ?? '');
         return {
           ok: false,
           status: 503,

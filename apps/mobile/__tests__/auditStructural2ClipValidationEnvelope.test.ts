@@ -83,7 +83,8 @@ describe('attempt evidence buffer semantics (audit)', () => {
       null,
     );
     expect(
-      attempt.dimensions.find(d => d.dimension === 'player_visibility')?.status,
+      attempt.dimensions.find(d => d.dimension === 'player_visibility')
+        ?.status,
     ).toBe('NOT_MEASURED');
   });
 
