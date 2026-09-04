@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
 import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
 
@@ -23,8 +23,19 @@ import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const sourceClip = join(root, "datasets", "paddle-bench", "bundles", "wm-volley-02", "clip.mp4");
-const dir = mkdtempSync(join(tmpdir(), "ood-redteam-"));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+/**
+ * Every red-team case gets a FRESH scratch directory. A fixture must be
+ * materialised by the test that consumes it: a case that reads a file another
+ * case wrote passes only in file order and fails under `-t <name>` or
+ * `--sequence.shuffle`. The per-test directory turns that order dependence
+ * into a deterministic failure in every order, including the default one.
+ */
+let dir = "";
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "ood-redteam-"));
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 function ffmpeg(args: string[]): void {
   execFileSync("ffmpeg", ["-v", "error", "-y", ...args]);
