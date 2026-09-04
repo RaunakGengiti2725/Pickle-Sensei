@@ -1322,6 +1322,232 @@ begin
   end if;
 end $$;
 
+-- ─────────── K: client-controlled input hygiene (XC-SEC-4 / XC-SEC-5) ──────────
+-- 20260904000000_apply_synced_shot_error_hygiene.sql: apply_synced_shot's
+-- write-failure result is SQLSTATE-only (never sqlerrm, which echoes the
+-- client's input into function logs), captured_at is range-checked (no
+-- 'infinity', no far-future) on shots AND captures, captures text columns are
+-- length-capped, and captures — which no edge route writes — is read-only for
+-- clients.
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000010', 'kim@example.com',
+        '{"full_name":"Kim"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-kim', '00000000-0000-4000-8000-000000000010',
+        '{"sub":"google-sub-kim","email":"kim@example.com"}');
+
+-- K1: a malformed capturedAt reaching the RPC directly yields a stable
+-- SQLSTATE-only code; the canary never appears in the result and no row lands.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000010';
+do $$
+declare v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('kim-k1-key');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000c1',
+    'analysisPermitId', p,
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', E'XCSEC_CANARY\n[api] forged log line',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v !~ '^shot\.write_failed:[0-9A-Z]{5}$' then
+    raise exception 'K1: write failure must be SQLSTATE-only (got %)', v;
+  end if;
+  if position('XCSEC_CANARY' in v) > 0 then
+    raise exception 'K1: client input must never be echoed in the RPC result';
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000c1') then
+    raise exception 'K1: a failed write must not leave a shot row';
+  end if;
+  if (select status from public.analysis_permits where id = p) <> 'reserved' then
+    raise exception 'K1: a failed write must leave the permit reserved for retry';
+  end if;
+end $$;
+
+-- K2: 'infinity' is not a capture instant — the RPC refuses it (non-accepted,
+-- SQLSTATE-only) and writes no shot row.
+do $$
+declare v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('kim-k2-key');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000c2',
+    'analysisPermitId', p,
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', 'infinity',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v = 'accepted' then
+    raise exception 'K2: capturedAt = infinity must not be accepted';
+  end if;
+  if v !~ '^shot\.write_failed:[0-9A-Z]{5}$' then
+    raise exception 'K2: infinity must surface as a SQLSTATE-only write failure (got %)', v;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000000c2') then
+    raise exception 'K2: an infinite captured_at must not be stored';
+  end if;
+end $$;
+
+-- K3: the far-future bound binds too (year 9999 is not a capture instant).
+do $$
+declare v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('kim-k3-key');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000c3',
+    'analysisPermitId', p,
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '9999-12-31T00:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'shot.write_failed:23514' then
+    raise exception 'K3: a far-future captured_at must fail the range check (got %)', v;
+  end if;
+end $$;
+
+-- K4: captures is read-only for clients — no edge route writes it, so
+-- authenticated holds no INSERT/UPDATE/DELETE (grants sized to the writes).
+do $$
+begin
+  begin
+    insert into public.captures (
+      user_id, captured_at, duration_ms, fps, capture_mode, evidence_status, status
+    ) values (
+      '00000000-0000-4000-8000-000000000010', now(), 1000, 30, 'automatic_pose_trigger',
+      'valid', 'analyzed'
+    );
+    raise exception 'K4: authenticated must not insert into captures';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.captures set duration_ms = 1
+      where user_id = '00000000-0000-4000-8000-000000000010';
+    raise exception 'K4: authenticated must not update captures';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.captures
+      where user_id = '00000000-0000-4000-8000-000000000010';
+    raise exception 'K4: authenticated must not delete from captures';
+  exception when insufficient_privilege then null;
+  end;
+  -- Reads keep working (practice_days / progress cards depend on them).
+  perform 1 from public.captures where user_id = auth.uid();
+end $$;
+reset role;
+
+-- K5: captures text bounds bind every role — a 65-character declared_stroke is
+-- a check_violation (23514), while 64 characters store fine.
+do $$
+begin
+  begin
+    insert into public.captures (
+      id, user_id, captured_at, duration_ms, fps, capture_mode,
+      declared_stroke, recognized_shot_type, evidence_status, status
+    ) values (
+      '00000000-0000-4000-8000-0000000000c5',
+      '00000000-0000-4000-8000-000000000010', now(), 1000, 30, 'automatic_pose_trigger',
+      repeat('x', 65), 'drive', 'valid', 'analyzed'
+    );
+    raise exception 'K5: a 65-char declared_stroke must be rejected';
+  exception when sqlstate '23514' then null;
+  end;
+  begin
+    insert into public.captures (
+      id, user_id, captured_at, duration_ms, fps, capture_mode,
+      declared_stroke, recognized_shot_type, evidence_status, status
+    ) values (
+      '00000000-0000-4000-8000-0000000000c6',
+      '00000000-0000-4000-8000-000000000010', now(), 1000, 30, 'automatic_pose_trigger',
+      'drive', repeat('y', 65), 'valid', 'analyzed'
+    );
+    raise exception 'K5: a 65-char recognized_shot_type must be rejected';
+  exception when sqlstate '23514' then null;
+  end;
+  insert into public.captures (
+    id, user_id, captured_at, duration_ms, fps, capture_mode,
+    declared_stroke, recognized_shot_type, evidence_status, status
+  ) values (
+    '00000000-0000-4000-8000-0000000000c7',
+    '00000000-0000-4000-8000-000000000010', now(), 1000, 30, 'automatic_pose_trigger',
+    repeat('x', 64), repeat('y', 64), 'valid', 'analyzed'
+  );
+end $$;
+
+-- K6: captured_at range binds every role on both tables (infinity, far future).
+do $$
+begin
+  begin
+    insert into public.captures (
+      id, user_id, captured_at, duration_ms, fps, capture_mode,
+      evidence_status, status
+    ) values (
+      '00000000-0000-4000-8000-0000000000c8',
+      '00000000-0000-4000-8000-000000000010', 'infinity', 1000, 30, 'automatic_pose_trigger',
+      'valid', 'analyzed'
+    );
+    raise exception 'K6: captures.captured_at = infinity must be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000c9',
+      '00000000-0000-4000-8000-000000000010',
+      'drive', '-infinity', 0, 1000, null, 0.2, 'low_confidence',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'K6: shots.captured_at = -infinity must be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000ca',
+      '00000000-0000-4000-8000-000000000010',
+      'drive', '2200-01-01T00:00:00Z', 0, 1000, null, 0.2, 'low_confidence',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'K6: a far-future shots.captured_at must be rejected';
+  exception when check_violation then null;
+  end;
+end $$;
+
 rollback;
 
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED
