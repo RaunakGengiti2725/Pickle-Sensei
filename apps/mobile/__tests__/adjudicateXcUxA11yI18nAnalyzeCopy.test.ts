@@ -7,7 +7,9 @@
  * video sync" that the product does not have is a release-relevant defect.
  */
 
-// The mobile tsconfig has no Node types (matches importedRealFootageAnalysis).
+// The mobile tsconfig has no Node types (matches importedRealFootageAnalysis);
+// the shims must stay module-local, so this file is explicitly a module.
+export {};
 declare const require: (id: string) => unknown;
 declare const __dirname: string;
 type Fs = { readFileSync: (path: string, encoding: 'utf8') => string };

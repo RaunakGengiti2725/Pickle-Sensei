@@ -658,10 +658,16 @@ export function AnalyzeScreen() {
               attemptEvidence.current.quality,
             ),
           );
-          setPhase({
-            kind: 'working',
-            message: READINESS_COPY[event.state] ?? 'Reading your position…',
-          });
+          // Readiness copy describes the live camera window: it drives the
+          // phase only while a capture is in flight AND the screen is on its
+          // working surface. A trailing read after the capture settled is
+          // still recorded above but never rewrites the error/saved/idle phase.
+          if (!operationActive.current) return;
+          const message =
+            READINESS_COPY[event.state] ?? 'Reading your position…';
+          setPhase(prev =>
+            prev.kind === 'working' ? { kind: 'working', message } : prev,
+          );
         } else if (event.type === 'capture_quality') {
           attemptEvidence.current.noteQuality(event.signals);
           setCaptureEnvelope(
@@ -1527,8 +1533,8 @@ export function AnalyzeScreen() {
           <View style={styles.noteRow}>
             <Icon name="shield" color={color.mint} size={18} />
             <Text style={[type.caption, styles.noteCopy]}>
-              Camera processing and clip storage stay on this device unless you
-              explicitly enable cloud video sync.
+              Camera processing and clip storage stay on this device. Clips are
+              kept in the app’s private storage and are never uploaded.
             </Text>
           </View>
           <View style={styles.noteRow}>
