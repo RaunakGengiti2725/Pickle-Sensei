@@ -202,6 +202,10 @@ Deno.test(
       observed.status !== 401,
       `refresh must not tell the app to sign out on a network error; observed 401 after ${elapsedMs}ms`,
     );
+    assert(
+      elapsedMs < 10_000,
+      `refresh on a network error must answer inside the app's 15 s budget (bounded upstream timeout); took ${elapsedMs}ms`,
+    );
   },
 );
 
