@@ -18,6 +18,9 @@
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+#   scripts    self-tests of the verification tooling: scripts/tests/test_verify_cloud.sh,
+#              test_select_simulator.sh, test_verify_cloud_bash32.sh (macOS /bin/bash 3.2
+#              contract; needs a bash 3.2 via $BASH32 or the bash:3.2 Docker image)
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
@@ -54,9 +57,9 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin e2e release)
+ALL_STAGES=(deps format lint typecheck test db mobile ml scripts edge rls security admin e2e release)
 # What .github/workflows/ci.yml gates on every PR (verify + mobile + edge + supabase-security jobs).
-PR_STAGES=(deps format lint typecheck test db mobile ml edge rls security)
+PR_STAGES=(deps format lint typecheck test db mobile ml scripts edge rls security)
 
 TIER="full"
 ONLY=""
@@ -65,7 +68,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,51p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -226,6 +229,14 @@ stage_ml() {
   python3 -m unittest discover -s ml/scripts -p 'test_*.py'
 }
 
+stage_scripts() {
+  need jq
+  need python3
+  scripts/tests/test_verify_cloud.sh
+  scripts/tests/test_select_simulator.sh
+  scripts/tests/test_verify_cloud_bash32.sh
+}
+
 stage_edge() {
   need deno
   (cd supabase/functions/api/__wf__ && deno task test)
@@ -302,14 +313,24 @@ for s in "${STAGES[@]}"; do
 done
 
 # Verdict: computed from the recorded statuses, never from a side flag.
-declare -A STATUS_COUNT=([passed]=0 [failed]=0 [unavailable]=0 [skipped]=0)
-for st in "${RESULT_STATUS[@]}"; do STATUS_COUNT[$st]=$(( ${STATUS_COUNT[$st]:-0} + 1 )); done
-EXECUTED=$(( ${#RESULT_STATUS[@]} - STATUS_COUNT[skipped] ))
+# Scalar counters (no associative arrays): this script also runs locally on
+# macOS through scripts/verify-all.sh, where /bin/bash is 3.2.
+COUNT_PASSED=0; COUNT_FAILED=0; COUNT_UNAVAILABLE=0; COUNT_SKIPPED=0
+for st in "${RESULT_STATUS[@]}"; do
+  case "$st" in
+    passed) COUNT_PASSED=$(( COUNT_PASSED + 1 )) ;;
+    failed) COUNT_FAILED=$(( COUNT_FAILED + 1 )) ;;
+    unavailable) COUNT_UNAVAILABLE=$(( COUNT_UNAVAILABLE + 1 )) ;;
+    skipped) COUNT_SKIPPED=$(( COUNT_SKIPPED + 1 )) ;;
+    *) echo "internal error: unknown stage status '$st'" >&2; exit 2 ;;
+  esac
+done
+EXECUTED=$(( ${#RESULT_STATUS[@]} - COUNT_SKIPPED ))
 REASON=""
 if [ "$EXECUTED" -eq 0 ]; then
   REASON="no stages executed (${#RESULT_STATUS[@]} selected, all skipped)"
-elif [ "${STATUS_COUNT[passed]}" -ne "${#RESULT_STATUS[@]}" ]; then
-  REASON="${STATUS_COUNT[failed]} failed, ${STATUS_COUNT[unavailable]} unavailable, ${STATUS_COUNT[skipped]} skipped of ${#RESULT_STATUS[@]} stages (only passed counts)"
+elif [ "$COUNT_PASSED" -ne "${#RESULT_STATUS[@]}" ]; then
+  REASON="$COUNT_FAILED failed, $COUNT_UNAVAILABLE unavailable, $COUNT_SKIPPED skipped of ${#RESULT_STATUS[@]} stages (only passed counts)"
 fi
 if [ -z "$REASON" ]; then OK=true; else OK=false; fi
 
@@ -332,6 +353,8 @@ json_escape() {
   while (( i < n )); do
     c=${s:i:1}
     printf -v b '%d' "'$c"
+    # bash 3.2 yields a signed char for bytes >= 0x80.
+    (( b < 0 )) && b=$(( b + 256 ))
     if (( b < 0x20 || b == 0x7f )); then
       case $b in
         8) out+='\b' ;;
@@ -364,6 +387,7 @@ json_escape() {
       j=1
       while (( need > 0 && j <= need && i + j < n )); do
         printf -v b2 '%d' "'${s:i+j:1}"
+        (( b2 < 0 )) && b2=$(( b2 + 256 ))
         (( j > 1 )) && { lo=0x80; hi=0xbf; }
         (( b2 >= lo && b2 <= hi )) || break
         (( j++ ))
