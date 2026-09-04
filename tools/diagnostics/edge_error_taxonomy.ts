@@ -26,6 +26,7 @@ import {
   userRequest,
   webhookRequest,
 } from "../../supabase/functions/api/__wf__/routesHarness.ts";
+import { captureAccessLog } from "../../supabase/functions/api/http.ts";
 
 const encoder = new TextEncoder();
 // Root eslint forbids console.log in *.ts; this probe's report IS its stdout.
@@ -71,6 +72,7 @@ const DIAG_HEADERS = [
   "ratelimit-limit",
   "ratelimit-remaining",
   "www-authenticate",
+  "x-request-id",
 ];
 const CORRELATION_HEADERS = ["x-request-id", "sb-request-id", "cf-ray", "x-correlation-id"];
 
@@ -313,12 +315,16 @@ const asJson = Deno.args.includes("--json");
 const h = await loadHarness();
 
 // Silence the handler's own console.error/warn during probes so the report is
-// readable; count them instead (they ARE the only place 5xx detail goes).
+// readable; count them instead (they ARE the only place 5xx detail goes). The
+// handler's one `{"evt":"api_request",...}` access line per request (requestId,
+// route template, status, code, durationMs) is captured through its sink.
 const logged: string[] = [];
+const accessLog: Record<string, unknown>[] = [];
 const realError = console.error;
 const realWarn = console.warn;
 console.error = (...args: unknown[]) => logged.push(`error: ${args.map(String).join(" ")}`);
 console.warn = (...args: unknown[]) => logged.push(`warn: ${args.map(String).join(" ")}`);
+const restoreAccessLog = captureAccessLog((line) => accessLog.push(JSON.parse(line)));
 
 const records: Record_[] = [];
 try {
@@ -338,10 +344,24 @@ try {
 } finally {
   console.error = realError;
   console.warn = realWarn;
+  restoreAccessLog();
 }
 
 const taxonomy = await staticTaxonomy();
-const failures = records.filter((r) => !r.pass);
+// Correlation contract: every response carries x-request-id, and the access
+// line for a request carries the same id, its status, and its error.code.
+const probeAccessLines = accessLog.filter((entry) =>
+  records.some((r) => r.headers["x-request-id"] === entry.requestId),
+);
+const correlationFailures = records.filter((r) => {
+  const id = r.headers["x-request-id"];
+  if (!id) return true;
+  const line = probeAccessLines.find((entry) => entry.requestId === id);
+  if (!line) return true;
+  return line.status !== r.status || (line.code ?? null) !== r.errorCode;
+});
+const taxonomyFailures = records.filter((r) => !r.pass);
+const failures = taxonomyFailures.length + correlationFailures.length;
 
 if (asJson) {
   print(
@@ -351,8 +371,10 @@ if (asJson) {
         target: "supabase/functions/api/index.ts (in-process, __wf__ routesHarness doubles)",
         records,
         handlerLogLines: logged,
+        accessLog: probeAccessLines,
+        correlationFailures: correlationFailures.map((r) => r.name),
         staticTaxonomy: taxonomy,
-        pass: failures.length === 0,
+        pass: failures === 0,
       },
       null,
       2,
@@ -395,15 +417,14 @@ if (asJson) {
     for (const c of t.codes) print(`    ${c}`);
   }
   print(
-    `\ncorrelation header on any response: ${
-      records.some((r) => r.correlationHeader)
-        ? "YES"
-        : "NO (none of " + CORRELATION_HEADERS.join(", ") + ")"
-    }`,
+    `\ncorrelation: x-request-id on ${records.length - correlationFailures.length}/${records.length} responses, ` +
+      `matched by an access-log line {evt:"api_request", requestId, route, status, code, durationMs}`,
   );
+  for (const r of correlationFailures) print(`  FAIL correlation: ${r.name}`);
   print(
-    `\n${failures.length === 0 ? "PASS" : "FAIL"}: ${records.length - failures.length}/${records.length} probes matched`,
+    `\n${failures === 0 ? "PASS" : "FAIL"}: ${records.length - taxonomyFailures.length}/${records.length} probes matched, ` +
+      `${records.length - correlationFailures.length}/${records.length} correlated`,
   );
 }
 
-Deno.exit(failures.length === 0 ? 0 : 1);
+Deno.exit(failures === 0 ? 0 : 1);

@@ -84,10 +84,15 @@ import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
+  accessLogEntry,
   clientIp,
   constantTimeEqual,
+  emitAccessLog,
+  errorCodeOf,
   legalTextResponse,
+  resolveRequestId,
   sanitizeUserText,
+  withRequestId,
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
@@ -2793,16 +2798,26 @@ async function bootstrapAccount(
   });
 }
 
+// Every response carries `x-request-id` and every request emits one JSON
+// access-log line (`{"evt":"api_request",...}`) so a client-visible failure
+// can be matched to the `[api] <context>:` error line logged just before it.
 Deno.serve(async (request: Request): Promise<Response> => {
+  const requestId = resolveRequestId(request);
+  const startedAt = performance.now();
+  let response: Response;
   try {
-    return await handleRequest(request);
+    response = await handleRequest(request);
   } catch (error) {
     if (error instanceof RequestBodyTooLarge) {
-      return errorJson(413, "Request body is too large.");
+      response = errorJson(413, "Request body is too large.");
+    } else {
+      console.error(`[api] unhandled error (${requestId}):`, error);
+      response = errorJson(500, "Something went wrong. Please try again.");
     }
-    console.error("[api] unhandled error:", error);
-    return errorJson(500, "Something went wrong. Please try again.");
   }
+  const code = await errorCodeOf(response);
+  emitAccessLog(accessLogEntry(request, response, requestId, startedAt, code));
+  return withRequestId(response, requestId);
 });
 
 async function handleRequest(request: Request): Promise<Response> {

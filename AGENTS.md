@@ -7,6 +7,12 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 
 ## Verify
 
+- Canonical entry points (CI runs exactly these — see `docs/devin/OPERATING_SYSTEM.md`):
+  `scripts/verify-cloud.sh --tier pr` (Linux gates, per-stage logs +
+  `summary.json` under `artifacts/verify-cloud/`), `scripts/mac-full-verify.sh`
+  (Apple gates; from Linux `--remote` pushes HEAD to a `ci/mac-*` branch that
+  runs on the self-hosted M4 runner), `scripts/verify-all.sh` (both). Skills
+  in `.agents/skills/` describe when to run which. Review rules: `REVIEW.md`.
 - Mobile: `cd apps/mobile && npx tsc --noEmit && npx jest --silent`
 - Workspace: `pnpm -r typecheck` and `pnpm --filter @pickle/shared-types test`
 - CI's `verify` job = `pnpm format:check` + `pnpm lint` + `pnpm typecheck` +
