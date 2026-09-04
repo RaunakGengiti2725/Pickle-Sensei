@@ -46,9 +46,17 @@ def _frames(timestamps, dense_index: bool, fps: float, shift: float = 0.0, conf:
     return frames
 
 
-def _write_plane(directory: str, frames, declared_fps: float, model: str, duration_ms: float, people_per_frame: int = 1):
+def _write_plane(
+    directory: str,
+    frames,
+    declared_fps: float,
+    model: str,
+    duration_ms: float,
+    people_per_frame: int = 1,
+    video_extra=None,
+):
     os.makedirs(directory, exist_ok=True)
-    video = {"w": 608, "h": 1080, "fps": declared_fps}
+    video = {"w": 608, "h": 1080, "fps": declared_fps, **(video_extra or {})}
     with open(os.path.join(directory, "pose.json"), "w", encoding="utf-8") as fh:
         json.dump(
             {
@@ -90,6 +98,28 @@ class AnalyzePlaneTests(unittest.TestCase):
             self.assertTrue(plane["frameIndexSemantics"]["isDenseCounterFromZero"])
             self.assertFalse(plane["fpsConsistency"]["consistent"])
             self.assertAlmostEqual(plane["fpsConsistency"]["ratioDeclaredOverImplied"], 0.5, places=1)
+
+    def test_cadence_derived_fps_with_recorded_nominal_discrepancy_is_consistent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # XC-CV-4 extractor contract: video.fps is the OBSERVED sample
+            # cadence; the wrong AVAsset nominalFrameRate is recorded beside it
+            # instead of being trusted. The comparison must read that as
+            # consistent and surface the recorded discrepancy verbatim.
+            timestamps = [round(1000 + i * 1000 / 24) for i in range(50)]
+            _write_plane(
+                tmp,
+                _frames(timestamps, True, 24),
+                24.0,
+                "apple-vision-bodypose-1",
+                2042,
+                video_extra={"nominalFps": 12.0, "fpsSource": "observed_sample_cadence", "fpsMismatch": True},
+            )
+            plane = cpp.analyze_plane("apple", tmp)
+            self.assertTrue(plane["fpsConsistency"]["consistent"])
+            self.assertAlmostEqual(plane["fpsConsistency"]["ratioDeclaredOverImplied"], 1.0, places=1)
+            self.assertEqual(plane["videoDeclared"]["nominalFps"], 12.0)
+            self.assertEqual(plane["videoDeclared"]["fpsSource"], "observed_sample_cadence")
+            self.assertTrue(plane["videoDeclared"]["fpsMismatch"])
 
     def test_consistent_fps_and_sparse_index(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1416,7 +1416,9 @@ if (isMain) {
       log(JSON.stringify({ row, failuresVsNative: diffAgainstNative(row, native) }, null, 2));
     });
   } else {
-    const outDir = argValue("--out") ?? join(REPO_ROOT, "artifacts/xc-cv-temporal-segmentation");
+    const outDir =
+      argValue("--out") ??
+      join(REPO_ROOT, "packages/swing-lab/artifacts/xc-cv-temporal-segmentation");
     const options: HarnessOptions = {
       sweepPhases: !process.argv.includes("--no-phase-sweep"),
       jitterMs: parseNumberList(argValue("--jitter"), [2, 4, 8]),

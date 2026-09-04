@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { proposeStrokeEvents, selectTargetEvent } from "../src/index.js";
 import { proposeStrokeEventsV2, selectTargetEventV2 } from "../src/strokeEvents.js";
 import { segmentPhasesTemporalV2 } from "../src/index.js";
+import { buildPlayerTracks, type PeopleFile } from "../src/playerTracker.js";
 
 /** Speed series with gaussian-ish bumps at given (peakMs, height, halfWidth). */
 function speedBumps(
@@ -324,5 +325,140 @@ describe("segmentPhasesTemporalV2 (anchor-or-abstain)", () => {
     expect(outcome.status).toBe("abstained");
     if (outcome.status !== "abstained") return;
     expect(outcome.reason).toContain("PHASE_NO_POST_CONTACT_EVIDENCE");
+  });
+});
+
+/** Deterministic PRNG (same generator as the fps temporal harness). */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe("XC-CV-3: timestamp-jitter stability of the wrist proposer", () => {
+  const NATIVE_INTERVAL_MS = 1000 / 60;
+  const bumps = [
+    { peakMs: 1500, height: 2.2, halfWidthMs: 140 },
+    { peakMs: 4200, height: 0.9, halfWidthMs: 180 },
+  ];
+  const trueSpeed = (t: number) =>
+    bumps.reduce(
+      (total, bump) =>
+        total + bump.height * Math.exp(-0.5 * ((t - bump.peakMs) / bump.halfWidthMs) ** 2),
+      0.08,
+    );
+
+  /** A 60 fps camera measures ONE frame interval of wrist displacement per
+   * frame; the presentation stamp it lands on wobbles by ±jitterMs (integer
+   * ms, as the native capture layer writes them). The finite-difference speed
+   * the proposer receives is that displacement over the STAMPED interval —
+   * exactly what dominantWristSpeeds computes from a jittered pose file. */
+  function stampedWristSpeeds(jitterMs: number, seed: number) {
+    const random = mulberry32(seed);
+    const series: Array<{ timestampMs: number; value: number }> = [];
+    let previousTrueMs = 0;
+    let previousStampMs = 0;
+    for (let index = 0; index < 360; index += 1) {
+      const trueMs = index * NATIVE_INTERVAL_MS;
+      const wobble = jitterMs === 0 ? 0 : (random() * 2 - 1) * jitterMs;
+      const stampMs = Math.round(trueMs + wobble);
+      if (index === 0) {
+        series.push({ timestampMs: stampMs, value: trueSpeed(trueMs) });
+      } else {
+        const displacement = (trueSpeed(trueMs) * (trueMs - previousTrueMs)) / 1000;
+        series.push({
+          timestampMs: stampMs,
+          value: (displacement * 1000) / (stampMs - previousStampMs),
+        });
+      }
+      previousTrueMs = trueMs;
+      previousStampMs = stampMs;
+    }
+    return series;
+  }
+
+  const propose = (wristSpeeds: Array<{ timestampMs: number; value: number }>) =>
+    proposeStrokeEventsV2({ paddleSpeeds: null, wristSpeeds, clipStartMs: 0, clipEndMs: 6000 })
+      .events;
+
+  it("≤2 ms presentation-stamp jitter moves no event bound by more than one native frame interval (20 seeds)", () => {
+    const reference = propose(stampedWristSpeeds(0, 0));
+    expect(reference.length).toBe(2);
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const jittered = propose(stampedWristSpeeds(2, seed));
+      expect(jittered.length, `seed ${seed} event count`).toBe(reference.length);
+      for (const [index, event] of jittered.entries()) {
+        const base = reference[index]!;
+        expect(
+          Math.abs(event.startMs - base.startMs),
+          `seed ${seed} E${index + 1} start ${base.startMs} → ${event.startMs}`,
+        ).toBeLessThanOrEqual(NATIVE_INTERVAL_MS);
+        expect(
+          Math.abs(event.endMs - base.endMs),
+          `seed ${seed} E${index + 1} end ${base.endMs} → ${event.endMs}`,
+        ).toBeLessThanOrEqual(NATIVE_INTERVAL_MS);
+      }
+    }
+  });
+
+  it("a genuinely dropped frame is NOT jitter: the doubled interval keeps its measured speed", () => {
+    // Two identical series except one frame is missing in the second; the
+    // proposer must not "repair" the doubled interval as if it were wobble.
+    const full = stampedWristSpeeds(0, 0);
+    const dropped = full.filter((_, index) => index !== 90);
+    // Speed over the doubled interval = displacement of two frames / 2 intervals.
+    dropped[90] = {
+      timestampMs: full[91]!.timestampMs,
+      value:
+        ((full[90]!.value + full[91]!.value) * NATIVE_INTERVAL_MS) /
+        (full[91]!.timestampMs - full[89]!.timestampMs),
+    };
+    const events = propose(dropped);
+    expect(events.length).toBe(2);
+    expect(Math.abs(events[0]!.peakMs - 1500)).toBeLessThanOrEqual(2 * NATIVE_INTERVAL_MS);
+  });
+});
+
+describe("XC-CV-4: playerTracker loss periods follow observed cadence, not declared fps", () => {
+  /** 24 fps single-person file whose frames 40–41 are two frame intervals
+   * apart (one real dropped detection ≈ 83 ms). */
+  function peopleFile(declaredFps: number): PeopleFile {
+    const interval = 1000 / 24;
+    const frames: PeopleFile["frames"] = [];
+    for (let index = 0; index < 96; index += 1) {
+      if (index === 41) continue;
+      const x = 0.4 + index * 0.001;
+      frames.push({
+        t: Math.round(index * interval),
+        p: [
+          {
+            c: 0.9,
+            l: [
+              { n: "left_shoulder", x: x - 0.05, y: 0.4, v: 0.9 },
+              { n: "right_shoulder", x: x + 0.05, y: 0.4, v: 0.9 },
+              { n: "left_hip", x: x - 0.04, y: 0.6, v: 0.9 },
+              { n: "right_hip", x: x + 0.04, y: 0.6, v: 0.9 },
+            ],
+          },
+        ],
+      });
+    }
+    return { schemaVersion: 1, poseModelVersion: "test", video: { w: 1080, h: 1920, fps: declaredFps }, frames };
+  }
+
+  it("identical frames with declared fps 12 vs 24 yield the same lossPeriods", () => {
+    const at12 = buildPlayerTracks(peopleFile(12));
+    const at24 = buildPlayerTracks(peopleFile(24));
+    expect(at12.length).toBe(1);
+    expect(at24.length).toBe(1);
+    expect(at12[0]!.lossPeriods).toEqual(at24[0]!.lossPeriods);
+    // The 83 ms hole in a 41.7 ms cadence IS a loss period whatever the header says.
+    expect(at24[0]!.lossPeriods.length).toBe(1);
+    expect(at12[0]!.lossPeriods.length).toBe(1);
   });
 });

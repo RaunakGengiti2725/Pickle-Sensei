@@ -304,6 +304,51 @@ describe("measurement locks on 4d812e1a (re-measure before changing)", () => {
     }
   });
 
+  it("XC-CV-3: ≤2 ms timestamp jitter at native fps never loses a natively matched target event (all bundles, seeds 1–3)", async () => {
+    for (const gold of cases) {
+      const base = await native(gold);
+      for (const seed of [1, 2, 3]) {
+        const row = await runVariant(gold, spec(gold.bundle, null, { jitterMs: 2, seed }));
+        const lost = diffAgainstNative(row, base).filter(
+          (failure) => failure.kind === "event_lost_vs_native",
+        );
+        expect(lost, `${gold.bundle} seed ${seed}: ${lost.map((f) => f.detail).join("; ")}`).toEqual(
+          [],
+        );
+      }
+    }
+  }, 60_000);
+
+  it("XC-CV-3: 2 ms jitter never breaks streaming/batch parity on a bundle whose native replay has parity", async () => {
+    for (const gold of cases) {
+      const base = await native(gold);
+      if (!base.streaming.parity) continue;
+      for (const seed of [1, 2, 3]) {
+        const row = await runVariant(gold, spec(gold.bundle, null, { jitterMs: 2, seed }));
+        expect(row.streaming.parity, `${gold.bundle} seed ${seed}: ${row.streaming.mismatch}`).toBe(
+          true,
+        );
+      }
+    }
+  }, 60_000);
+
+  it("XC-CV-3: real 60→30 and 60→24 decimation keeps streaming/batch parity wherever the native replay has it", async () => {
+    for (const gold of cases) {
+      const base = await native(gold);
+      if (!base.streaming.parity) continue;
+      for (const fps of [24, 30]) {
+        const probe = await runVariant(gold, spec(gold.bundle, fps));
+        for (let phase = 0; phase < probe.resample.phaseCount; phase += 1) {
+          const row = phase === 0 ? probe : await runVariant(gold, spec(gold.bundle, fps, { phase }));
+          expect(
+            row.streaming.parity,
+            `${gold.bundle} fps ${fps} phase ${phase}: ${row.streaming.mismatch}`,
+          ).toBe(true);
+        }
+      }
+    }
+  }, 120_000);
+
   it("marne-dig native: SessionEventEngine streams 2 events where the batch proposer returns 1", async () => {
     const base = await native(byBundle.get("wavea-marne-dig")!);
     expect(base.proposals.length).toBe(1);

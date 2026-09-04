@@ -95,6 +95,57 @@ describe("pose sequence serialization", () => {
     expect(parsed.failure.code).toBe("pose_sequence.unknown_coordinate_system");
   });
 
+  it("XC-CV-4: round-trips the additive cadence provenance (observed fps beside the declared nominal)", () => {
+    const original = sequence({
+      video: {
+        width: 608,
+        height: 1080,
+        fps: 24,
+        nominalFps: 12,
+        fpsSource: "observed_sample_cadence",
+        fpsMismatch: true,
+      },
+    });
+    const wire = JSON.parse(serializePoseSequence(original));
+    expect(wire.video).toEqual({
+      w: 608,
+      h: 1080,
+      fps: 24,
+      nominalFps: 12,
+      fpsSource: "observed_sample_cadence",
+      fpsMismatch: true,
+    });
+    const parsed = parsePoseSequence(JSON.stringify(wire), PRODUCER);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value).toEqual(original);
+  });
+
+  it("XC-CV-4: sidecars written before cadence provenance existed still parse with a bare video header", () => {
+    const wire = JSON.parse(serializePoseSequence(sequence()));
+    expect(Object.keys(wire.video).sort()).toEqual(["fps", "h", "w"]);
+    const parsed = parsePoseSequence(JSON.stringify(wire), PRODUCER);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.video).toEqual({ width: 1080, height: 1920, fps: 60 });
+  });
+
+  it("XC-CV-4: malformed cadence provenance is rejected, never coerced", () => {
+    for (const patch of [
+      { nominalFps: "12" },
+      { nominalFps: -1 },
+      { fpsSource: "guess" },
+      { fpsMismatch: "yes" },
+    ]) {
+      const wire = JSON.parse(serializePoseSequence(sequence()));
+      Object.assign(wire.video, patch);
+      const parsed = parsePoseSequence(JSON.stringify(wire), PRODUCER);
+      expect(parsed.ok, JSON.stringify(patch)).toBe(false);
+      if (parsed.ok) return;
+      expect(parsed.failure.code).toBe("pose_sequence.invalid_video");
+    }
+  });
+
   it("projects to legacy PoseFrames, preserving canonical unknown joints only canonically", () => {
     const legacy = toLegacyPoseFrames(sequence());
     expect(legacy).toHaveLength(2);
