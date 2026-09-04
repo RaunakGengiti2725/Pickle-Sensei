@@ -27,6 +27,12 @@ import {
  *
  * A signed-out process gets everything cancelled — reminders never outlive
  * the account context that asked for them.
+ *
+ * Syncs overlap freely (every foreground pass and every preference write
+ * starts one) and the context read in the middle is slow, so a sync decides
+ * what to apply from the store AS IT IS when that read completes, never from
+ * the snapshot it started with, and yields entirely once a newer sync has
+ * started — the newest intent is the only one that reaches the OS.
  */
 
 export interface NotificationStoreDeps {
@@ -128,6 +134,20 @@ async function persistPrefs(
     getDb(),
     notificationPrefsKeyForOwner(owner),
     JSON.stringify(prefs),
+  );
+}
+
+let latestSyncToken = 0;
+
+function shouldCancelSchedule(
+  owner: string,
+  state: Pick<NotificationState, 'ownerKey' | 'prefs' | 'permission'>,
+): boolean {
+  return (
+    owner === SIGNED_OUT_DATA_OWNER ||
+    state.ownerKey !== owner ||
+    !state.prefs.enabled ||
+    state.permission !== 'granted'
   );
 }
 
@@ -266,28 +286,29 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   syncNow: async deps => {
     const scheduler = deps?.scheduler ?? getScheduler();
+    const token = ++latestSyncToken;
     const owner = getActiveDataOwner();
-    const { ownerKey, prefs, permission } = get();
     try {
-      if (
-        owner === SIGNED_OUT_DATA_OWNER ||
-        ownerKey !== owner ||
-        !prefs.enabled ||
-        permission !== 'granted'
-      ) {
+      if (shouldCancelSchedule(owner, get())) {
         await scheduler.cancelAllPlanned();
-        set({ scheduleFailed: false });
+        if (token === latestSyncToken) set({ scheduleFailed: false });
         return;
       }
       const loadContext = deps?.loadContext ?? defaultLoadContext;
-      const plan = buildNotificationPlan(prefs, await loadContext());
-      if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-      await scheduler.applyPlan(plan);
-      set({ scheduleFailed: false });
+      const context = await loadContext();
+      if (token !== latestSyncToken || getActiveDataOwner() !== owner) return;
+      const current = get();
+      if (shouldCancelSchedule(owner, current)) {
+        await scheduler.cancelAllPlanned();
+        if (token === latestSyncToken) set({ scheduleFailed: false });
+        return;
+      }
+      await scheduler.applyPlan(buildNotificationPlan(current.prefs, context));
+      if (token === latestSyncToken) set({ scheduleFailed: false });
     } catch {
       // Scheduling is best-effort by design: a failed sync never breaks the
       // app, and the next foreground pass retries with fresh facts.
-      set({ scheduleFailed: true });
+      if (token === latestSyncToken) set({ scheduleFailed: true });
     }
   },
 }));

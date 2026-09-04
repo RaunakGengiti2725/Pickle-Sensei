@@ -128,10 +128,12 @@ describe('XC-NOTIF-1 syncNow vs. reminders switched off mid-flight', () => {
     });
 
     // User turns reminders off; that sync cancels the schedule.
-    await useNotificationStore.getState().setPrefs(
-      { enabled: false },
-      { scheduler, loadContext: async () => planContext },
-    );
+    await useNotificationStore
+      .getState()
+      .setPrefs(
+        { enabled: false },
+        { scheduler, loadContext: async () => planContext },
+      );
     expect(useNotificationStore.getState().prefs.enabled).toBe(false);
     expect(scheduler.live.size).toBe(0);
 
