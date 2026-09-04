@@ -235,8 +235,8 @@ if (!file) fail("test/sessionEngine.test.ts was not collected");
 const tests = file.assertionResults ?? [];
 const replay = tests.filter((t) => /session replay/i.test(t.fullName));
 if (replay.length === 0) fail("no 'session replay' tests were collected");
-if (!replay.some((t) => t.fullName.includes("afn-sasebo-rally1"))) {
-  fail("the afn-sasebo-rally1 dev-rally replay is missing");
+for (const runId of ["afn-sasebo-rally1", "afn-sasebo-rally2"]) {
+  if (!replay.some((t) => t.fullName.includes(runId))) fail(`the ${runId} dev-rally replay is missing`);
 }
 const notPassed = tests.filter((t) => t.status !== "passed");
 if (notPassed.length > 0) {

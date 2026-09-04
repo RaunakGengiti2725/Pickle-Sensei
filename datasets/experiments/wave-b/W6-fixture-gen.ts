@@ -1,8 +1,11 @@
 /**
- * W6 FIXTURE GENERATOR — exports the afn-sasebo-rally1 (dev split) wrist-speed
- * series + expected session-engine emissions into a static JSON fixture for the
- * mobile jest suite, so apps/mobile tests NEVER read run directories at test
- * time (jest has no business touching datasets/).
+ * W6 FIXTURE GENERATOR — exports a dev-split rally run's wrist-speed series +
+ * expected session-engine emissions into a static JSON fixture
+ * (apps/mobile/__tests__/fixtures/sessionReplay.<runId>.json). Both the mobile
+ * jest suite and the @pickle/swing-lab session-replay regression
+ * (packages/swing-lab/test/sessionEngine.test.ts) replay from that tracked
+ * fixture, so neither reads the gitignored run directories at test time and
+ * the replay executes on CI and on fresh clones.
  *
  * Reconstruction is the SAME path as workstream E's replay validation
  * (packages/swing-lab/test/sessionEngine.test.ts reconstructRun): canonical
@@ -10,8 +13,13 @@
  * dominantWristSpeeds mirror → wrist-only batch proposals; then the series is
  * streamed per-sample through SessionEventEngine to record expected emissions.
  *
- * Run from packages/swing-lab (its tsx + deps):
+ * Run from packages/swing-lab (its tsx + deps), on a machine holding the
+ * canonical run directory (datasets/paddle-bench/runs/<runId>, regenerated on
+ * a Mac with `pnpm lab:regen --exec`):
  *   cd packages/swing-lab && npx tsx ../../datasets/experiments/wave-b/W6-fixture-gen.ts
+ *   cd packages/swing-lab && npx tsx ../../datasets/experiments/wave-b/W6-fixture-gen.ts --run afn-sasebo-rally2
+ * The generator throws (writes nothing) when the reconstruction diverges from
+ * the recorded report.json (target identity, window) — the drift guards.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,8 +47,19 @@ import {
   type SpeedSample,
 } from "../../../packages/swing-lab/src/sessionEngine.js";
 
-const RUN_ID = "afn-sasebo-rally1";
+const runFlag = process.argv.indexOf("--run");
+const RUN_ID = runFlag >= 0 ? process.argv[runFlag + 1] : "afn-sasebo-rally1";
+if (!RUN_ID || !/^[a-z0-9][a-z0-9-]*$/.test(RUN_ID)) {
+  throw new Error(
+    "usage: W6-fixture-gen.ts [--run <runId>]  (runId: lowercase letters, digits, dashes)",
+  );
+}
 const runDir = join(REPO_ROOT, "datasets/paddle-bench/runs", RUN_ID);
+if (!existsSync(join(runDir, "report.json"))) {
+  throw new Error(
+    `${runDir}/report.json missing — the canonical run directory is gitignored; regenerate it on a Mac with \`pnpm lab:regen --exec\``,
+  );
+}
 
 interface ReportShape {
   window: { startMs: number; endMs: number; peakMotionMs: number };
@@ -198,10 +217,7 @@ const fixture = {
   qualityNotes: engine.snapshot().qualityState.notes,
 };
 
-const outPath = join(
-  REPO_ROOT,
-  "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json",
-);
+const outPath = join(REPO_ROOT, "apps/mobile/__tests__/fixtures", `sessionReplay.${RUN_ID}.json`);
 writeFileSync(outPath, `${JSON.stringify(fixture, null, 2)}\n`);
 console.log(`wrote ${outPath}`);
 console.log(

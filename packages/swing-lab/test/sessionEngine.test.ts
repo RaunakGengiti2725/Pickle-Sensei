@@ -251,15 +251,41 @@ describe("SessionEventEngine — streaming segmentation (synthetic)", () => {
   });
 });
 
-// ─── REPLAY VALIDATION on the dev multi-stroke rally runs ─────────────────
+// ─── REPLAY REGRESSION on the dev multi-stroke rally runs ─────────────────
 //
-// Reconstructs the wrist-speed series EXACTLY the way analyzeVideo.ts does
+// The wrist-speed series is reconstructed EXACTLY the way analyzeVideo.ts does
 // (parse args L241–246 · target seed L279–293 · targetPoseSequence L317 ·
 // scene restriction L352–379 · offline window L389–410 · dominantWristSpeeds
-// L922–957 · full-clip proposals L509–516), streams it through the session
-// engine one sample at a time, and diffs against the batch proposals and the
+// L922–957 · full-clip proposals L509–516), streamed through the session
+// engine one sample at a time, and diffed against the batch proposals and the
 // recorded report.json artifact. Uses DEV-split runs only (splits.json pins
 // afn-sasebo-2025-06 to dev); shadow is untouched.
+//
+// The canonical run directories (datasets/paddle-bench/runs/<runId>: Apple
+// Vision pose.json + people.json + report.json) are gitignored and can only be
+// regenerated on a Mac, so a replay that reads them can NEVER execute on CI or
+// on a fresh clone. The regression therefore runs, unconditionally, from two
+// TRACKED artifacts (a missing artifact FAILS the suite — it never skips):
+//
+//   fixture  apps/mobile/__tests__/fixtures/sessionReplay.<runId>.json —
+//            the reconstructed wrist-speed series plus the batch proposals and
+//            engine emissions measured on it, exported from the canonical run
+//            by the checked-in generator datasets/experiments/wave-b/
+//            W6-fixture-gen.ts (which runs the reconstruction above and throws
+//            on target / window drift against report.json);
+//   ledger   datasets/experiments/wave-a/E-replay-validation.json — the
+//            workstream-E measurement of every dev rally: batch proposals
+//            diffed against report.json (Δ bounds 0 · Δ peak 0 unrefined /
+//            −235.23ms on the one paddle-refined event), emissions, causal-only
+//            extras and quality notes. It is the tracked stand-in for
+//            report.json: the fixture's batch proposals must equal the ledger's
+//            report-diffed batch, so the fixture ↔ report link is asserted.
+//
+// The full pose → people → scene → window reconstruction (with its drift
+// guards) is kept below for the canonical run directories and is REQUESTED
+// explicitly with SWING_LAB_CANONICAL_RUNS=1 by an operator who has the runs
+// (`pnpm lab:regen --exec`). When requested, a missing run directory FAILS.
+// It is never registered otherwise, so nothing in this file can be skipped.
 //
 // MEASURED tolerances encoded below (2026 replay of both runs):
 //   engine-vs-batch bounds/peak: Δ = 0ms exactly (assertions are exact)
@@ -274,7 +300,76 @@ describe("SessionEventEngine — streaming segmentation (synthetic)", () => {
 //     retro-suppressed from the acausal batch once the 6.87 u/s stroke
 //     raised the relative floor; engine keeps it append-only + flags it)
 
-const PB_RUNS = join(REPO_ROOT, "datasets/paddle-bench/runs");
+const REPLAY_FIXTURES_DIR = join(REPO_ROOT, "apps/mobile/__tests__/fixtures");
+const REPLAY_LEDGER_PATH = join(REPO_ROOT, "datasets/experiments/wave-a/E-replay-validation.json");
+const PB_RUNS =
+  process.env.SWING_LAB_CANONICAL_RUNS_DIR ?? join(REPO_ROOT, "datasets/paddle-bench/runs");
+const PADDLE_PEAK_REFINEMENT_MS = 250; // strokeEvents.ts L339 refinement bound
+
+interface ReplayExpectation {
+  runId: string;
+  batchCount: number;
+  causalOnlyExtras: number;
+  closeReasons: string[];
+}
+
+/** Written by W6-fixture-gen.ts (fixtureVersion 1). */
+interface ReplayFixture {
+  fixtureVersion: number;
+  runId: string;
+  split: string;
+  provenance: string;
+  motionUnit: string;
+  wristSamples: Array<{ tMs: number; v: number }>;
+  batchProposals: Array<{ startMs: number; peakMs: number; endMs: number; peakSpeed: number }>;
+  expectedEmissions: Array<{
+    eventId: string;
+    startMs: number;
+    peakMs: number;
+    endMs: number;
+    closeReason: string;
+    closedAtMs: number;
+  }>;
+  qualityNotes: string[];
+}
+
+interface ReplayLedgerRun {
+  runId: string;
+  wristSamples: number;
+  batchProposals: number;
+  emittedEvents: number;
+  batchVsEmitted: Array<{
+    batch: { startMs: number; endMs: number; peakMs: number };
+    emitted: {
+      eventId: string;
+      startMs: number;
+      endMs: number;
+      peakMs: number;
+      closedAtMs: number;
+      closeReason: string;
+    };
+  }>;
+  causalOnlyExtras: Array<{
+    eventId: string;
+    startMs: number;
+    endMs: number;
+    peakMs: number;
+    peakSpeed: number;
+    closeReason: string;
+  }>;
+  wristOnlyBatchVsReportDeltasMs: Array<{
+    start: number;
+    end: number;
+    peak: number;
+    paddleConfirmed: boolean;
+  }>;
+  qualityNotes: string[];
+}
+
+interface ReplayLedger {
+  artifactId: string;
+  runs: ReplayLedgerRun[];
+}
 
 interface ReportShape {
   window: { startMs: number; endMs: number; peakMotionMs: number };
@@ -289,6 +384,77 @@ interface ReportShape {
       paddlePeakMs: number | null;
     }>;
   };
+}
+
+/** Expectations for every dev rally in the ledger (measured, see header). */
+const REPLAY_RUNS: ReplayExpectation[] = [
+  {
+    runId: "afn-sasebo-rally1",
+    batchCount: 3,
+    causalOnlyExtras: 0,
+    closeReasons: ["settle", "next_stroke_valley", "flush"],
+  },
+  {
+    runId: "afn-sasebo-rally2",
+    batchCount: 2,
+    causalOnlyExtras: 1,
+    closeReasons: ["settle", "settle", "flush"],
+  },
+];
+
+/** Runs whose reconstructed series is exported as a tracked fixture — these
+ * replay on every CI run and fresh clone. */
+const TRACKED_FIXTURE_RUNS = ["afn-sasebo-rally1"];
+
+/** Ledger runs with NO tracked fixture, each with the reason and the way to
+ * promote it. The coverage test below fails on any run that is neither here
+ * nor tracked, and on any run declared here whose fixture has since landed.
+ * Every behaviour such a run pins is still executed on CI: its ledger
+ * measurements are asserted against REPLAY_RUNS, and the engine mechanism it
+ * exercises (causal-only extra + SESSION_EVENT_RETRO_SUPPRESSED) is replayed
+ * on the synthetic series in the "rally2 mechanism" describe below. */
+const UNTRACKED_LEDGER_RUNS: Record<string, string> = {
+  "afn-sasebo-rally2":
+    "only measured in the ledger (batch 2 · emitted 3 · 1 causal-only extra E1 67–1401ms flagged " +
+    "SESSION_EVENT_RETRO_SUPPRESSED · paddle-refined peak Δ −235.23ms) — its Apple Vision pose was " +
+    "never exported, so the wrist series cannot be reconstructed on Linux and must not be invented. " +
+    "Promote: on a Mac with the canonical run, `cd packages/swing-lab && npx tsx " +
+    "../../datasets/experiments/wave-b/W6-fixture-gen.ts --run afn-sasebo-rally2`, commit the " +
+    "fixture, move the id to TRACKED_FIXTURE_RUNS.",
+};
+
+const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
+
+function fixturePath(runId: string): string {
+  return join(REPLAY_FIXTURES_DIR, `sessionReplay.${runId}.json`);
+}
+
+function loadLedger(): ReplayLedger {
+  const ledger = readJson<ReplayLedger>(REPLAY_LEDGER_PATH);
+  expect(ledger.artifactId).toBe("E-replay-validation");
+  return ledger;
+}
+
+function ledgerRun(ledger: ReplayLedger, runId: string): ReplayLedgerRun {
+  const run = ledger.runs.find((entry) => entry.runId === runId);
+  expect(run, `ledger has no run ${runId}`).toBeDefined();
+  return run!;
+}
+
+function loadFixture(runId: string): ReplayFixture {
+  const path = fixturePath(runId);
+  expect(existsSync(path), `tracked replay fixture missing: ${path}`).toBe(true);
+  const fixture = readJson<ReplayFixture>(path);
+  expect(fixture.fixtureVersion).toBe(1);
+  expect(fixture.runId).toBe(runId);
+  expect(fixture.split).toBe("dev");
+  expect(fixture.provenance).toContain("W6-fixture-gen.ts");
+  expect(fixture.motionUnit).toBe("normalized_image_units_per_second");
+  expect(fixture.wristSamples.length).toBeGreaterThanOrEqual(4);
+  for (let index = 1; index < fixture.wristSamples.length; index += 1) {
+    expect(fixture.wristSamples[index]!.tMs).toBeGreaterThan(fixture.wristSamples[index - 1]!.tMs);
+  }
+  return fixture;
 }
 
 /** Mirror of analyzeVideo.ts dominantWristSpeeds (L922–957) — the local
@@ -334,10 +500,8 @@ function reconstructRun(runDir: string): {
   wristSpeeds: SpeedSample[];
   batchEvents: StrokeEventProposalV2[];
 } {
-  const report = JSON.parse(readFileSync(join(runDir, "report.json"), "utf8")) as ReportShape;
-  const meta = JSON.parse(readFileSync(join(runDir, "extract-meta.json"), "utf8")) as {
-    video: { durationMs: number };
-  };
+  const report = readJson<ReportShape>(join(runDir, "report.json"));
+  const meta = readJson<{ video: { durationMs: number } }>(join(runDir, "extract-meta.json"));
   // Canonical parse — same strictness and provider args as the phone/lab.
   const parsed = parsePoseSequence(readFileSync(join(runDir, "pose.json"), "utf8"), {
     providerId: "pose.apple-vision",
@@ -349,7 +513,7 @@ function reconstructRun(runDir: string): {
   if (!parsed.ok) throw new Error("unreachable");
   // Target identity: replay the recorded run's target via a tap seed on the
   // recorded track's early torso; drift-guarded against report.player below.
-  const peopleFile = JSON.parse(readFileSync(join(runDir, "people.json"), "utf8")) as PeopleFile;
+  const peopleFile = readJson<PeopleFile>(join(runDir, "people.json"));
   const tracks = buildPlayerTracks(peopleFile);
   const base = tracks.find((track) => track.trackId === report.player.targetTrackId);
   expect(base).toBeDefined();
@@ -368,7 +532,7 @@ function reconstructRun(runDir: string): {
   const scenesPath = join(runDir, "scenes.json");
   let analysisSegment: { startMs: number; endMs: number } | null = null;
   if (existsSync(scenesPath)) {
-    const scenes = JSON.parse(readFileSync(scenesPath, "utf8")) as ScenesFile;
+    const scenes = readJson<ScenesFile>(scenesPath);
     const scene = decideScene(
       scenes,
       sequence.frames.map((frame) => frame.timestampMs),
@@ -411,31 +575,315 @@ function reconstructRun(runDir: string): {
   return { report, wristSpeeds, batchEvents: batch.events };
 }
 
-const REPLAY_RUNS: Array<{
-  runId: string;
-  batchCount: number;
-  causalOnlyExtras: number;
-  closeReasons: string[];
-}> = [
-  {
-    runId: "afn-sasebo-rally1",
-    batchCount: 3,
-    causalOnlyExtras: 0,
-    closeReasons: ["settle", "next_stroke_valley", "flush"],
-  },
-  {
-    runId: "afn-sasebo-rally2",
-    batchCount: 2,
-    causalOnlyExtras: 1,
-    closeReasons: ["settle", "settle", "flush"],
-  },
-];
+/** Batch proposals over a tracked fixture's series, same call shape as
+ * analyzeVideo L511. The clip end only feeds the ≥40% coverage gate
+ * (strokeEvents.ts L96–L111); the fixture carries the full analysed span, so
+ * its last sample is the clip end for the gate's purpose and every other
+ * output is independent of it. */
+function batchOverFixture(fixture: ReplayFixture): {
+  wristSpeeds: SpeedSample[];
+  batchEvents: StrokeEventProposalV2[];
+} {
+  const wristSpeeds = fixture.wristSamples.map((sample) => ({
+    timestampMs: sample.tMs,
+    value: sample.v,
+  }));
+  const batch = proposeStrokeEventsV2({
+    paddleSpeeds: null,
+    wristSpeeds,
+    clipStartMs: 0,
+    clipEndMs: wristSpeeds[wristSpeeds.length - 1]!.timestampMs,
+  });
+  expect(batch.source).toBe("wrist");
+  return { wristSpeeds, batchEvents: batch.events };
+}
 
-for (const expected of REPLAY_RUNS) {
-  const runDir = join(PB_RUNS, expected.runId);
-  describe.skipIf(!existsSync(join(runDir, "report.json")))(
-    `session replay — ${expected.runId} (dev split)`,
-    () => {
+const containsPeak = (event: { startMs: number; endMs: number }, peakMs: number) =>
+  event.startMs <= peakMs && peakMs <= event.endMs;
+
+/** The streamed-engine assertions shared by the fixture and canonical replays:
+ * (a) every batch event is emitted with EXACT bounds, (b) no extras beyond the
+ * measured causal-only divergence and each extra is FLAGGED, (c) closure within
+ * the +2500ms safety, then close reasons and append-only ids as measured. */
+function assertStreamedReplay(
+  expected: ReplayExpectation,
+  wristSpeeds: SpeedSample[],
+  batchEvents: StrokeEventProposalV2[],
+): { emitted: SessionStrokeEvent[]; extras: SessionStrokeEvent[]; notes: string[] } {
+  const engine = new SessionEventEngine({
+    sessionId: `replay-${expected.runId}`,
+    captureMeta: { source: "replay" },
+  });
+  const emitted = streamPerSample(engine, wristSpeeds);
+  emitted.push(...engine.flush());
+
+  // (a) every batch-proposed event is emitted with matching bounds —
+  // measured Δ 0ms on both runs, asserted exactly.
+  for (const batchEvent of batchEvents) {
+    const match = emitted.find((event) => containsPeak(event.proposal, batchEvent.peakMs));
+    expect(match).toBeDefined();
+    expect(match!.proposal.startMs).toBe(batchEvent.startMs);
+    expect(match!.proposal.endMs).toBe(batchEvent.endMs);
+    expect(match!.proposal.peakMs).toBe(batchEvent.peakMs);
+  }
+
+  // (b) no extra events beyond the measured causal-only divergence,
+  // and every causal-only extra is FLAGGED, never silent.
+  const extras = emitted.filter(
+    (event) => !batchEvents.some((batchEvent) => containsPeak(event.proposal, batchEvent.peakMs)),
+  );
+  expect(extras.length).toBe(expected.causalOnlyExtras);
+  const notes = engine.snapshot().qualityState.notes;
+  for (const extra of extras) {
+    expect(
+      notes.some(
+        (note) => note.includes("SESSION_EVENT_RETRO_SUPPRESSED") && note.includes(extra.eventId),
+      ),
+    ).toBe(true);
+  }
+
+  // (c) emission time ≤ event end + 2500ms safety, for every event.
+  for (const event of emitted) {
+    expect(event.closedAtMs).toBeLessThanOrEqual(
+      event.proposal.endMs + SESSION_COMPLETION.safetyMaxMs,
+    );
+  }
+
+  // Close reasons as measured (documents live behavior of this replay).
+  expect(emitted.map((event) => event.closeReason)).toEqual(expected.closeReasons);
+
+  // Append-only ids in emission order.
+  expect(emitted.map((event) => event.eventId)).toEqual(emitted.map((_, index) => `E${index + 1}`));
+  return { emitted, extras, notes };
+}
+
+describe("session replay — tracked fixture coverage (dev split)", () => {
+  it("every ledger run is replayed from a tracked fixture or explicitly declared untracked with a promotion path", () => {
+    const ledger = loadLedger();
+    expect(ledger.runs.map((run) => run.runId).sort()).toEqual(
+      REPLAY_RUNS.map((run) => run.runId).sort(),
+    );
+    for (const run of ledger.runs) {
+      const tracked = TRACKED_FIXTURE_RUNS.includes(run.runId);
+      const untrackedReason = UNTRACKED_LEDGER_RUNS[run.runId];
+      expect(
+        tracked !== (untrackedReason !== undefined),
+        `${run.runId} must be in exactly one of TRACKED_FIXTURE_RUNS / UNTRACKED_LEDGER_RUNS`,
+      ).toBe(true);
+      if (tracked) {
+        expect(existsSync(fixturePath(run.runId)), `missing ${fixturePath(run.runId)}`).toBe(true);
+      } else {
+        expect(untrackedReason).toMatch(/W6-fixture-gen\.ts --run /);
+        expect(
+          existsSync(fixturePath(run.runId)),
+          `${run.runId} has a tracked fixture now — move it to TRACKED_FIXTURE_RUNS`,
+        ).toBe(false);
+      }
+    }
+    expect(TRACKED_FIXTURE_RUNS.length).toBeGreaterThan(0);
+  });
+
+  it("ledger measurements match the expectations pinned here (batch count · causal-only extras · retro-suppression flags · close reasons)", () => {
+    const ledger = loadLedger();
+    for (const expected of REPLAY_RUNS) {
+      const run = ledgerRun(ledger, expected.runId);
+      expect(run.batchProposals).toBe(expected.batchCount);
+      expect(run.batchVsEmitted.length).toBe(expected.batchCount);
+      expect(run.causalOnlyExtras.length).toBe(expected.causalOnlyExtras);
+      expect(run.emittedEvents).toBe(expected.batchCount + expected.causalOnlyExtras);
+      for (const extra of run.causalOnlyExtras) {
+        expect(
+          run.qualityNotes.some(
+            (note) =>
+              note.includes("SESSION_EVENT_RETRO_SUPPRESSED") && note.includes(extra.eventId),
+          ),
+        ).toBe(true);
+      }
+      const emitted = [
+        ...run.batchVsEmitted.map((entry) => entry.emitted),
+        ...run.causalOnlyExtras,
+      ].sort((a, b) => Number(a.eventId.slice(1)) - Number(b.eventId.slice(1)));
+      expect(emitted.map((event) => event.eventId)).toEqual(
+        emitted.map((_, index) => `E${index + 1}`),
+      );
+      expect(emitted.map((event) => event.closeReason)).toEqual(expected.closeReasons);
+      // Batch-vs-report.json: bounds exact; peak exact unless paddle-refined (≤250ms).
+      expect(run.wristOnlyBatchVsReportDeltasMs.length).toBe(expected.batchCount);
+      for (const delta of run.wristOnlyBatchVsReportDeltasMs) {
+        expect(delta.start).toBe(0);
+        expect(delta.end).toBe(0);
+        if (delta.paddleConfirmed) {
+          expect(Math.abs(delta.peak)).toBeLessThanOrEqual(PADDLE_PEAK_REFINEMENT_MS);
+        } else {
+          expect(delta.peak).toBe(0);
+        }
+      }
+    }
+  });
+});
+
+for (const runId of TRACKED_FIXTURE_RUNS) {
+  const expected = REPLAY_RUNS.find((run) => run.runId === runId);
+  if (!expected) throw new Error(`no REPLAY_RUNS expectation for tracked fixture ${runId}`);
+
+  describe(`session replay — ${runId} (dev split, tracked fixture)`, () => {
+    it("wrist-only batch over the tracked series reproduces the recorded report proposals (bounds exact; peak ≤250ms paddle refinement)", () => {
+      const fixture = loadFixture(runId);
+      const ledger = ledgerRun(loadLedger(), runId);
+      expect(fixture.wristSamples.length).toBe(ledger.wristSamples);
+      const { batchEvents } = batchOverFixture(fixture);
+      expect(batchEvents.length).toBe(expected.batchCount);
+      expect(batchEvents.length).toBe(fixture.batchProposals.length);
+      expect(batchEvents.length).toBe(ledger.batchProposals);
+      for (const [index, recorded] of fixture.batchProposals.entries()) {
+        const batchEvent = batchEvents[index]!;
+        expect(batchEvent.eventId).toBe(`E${index + 1}`);
+        expect(batchEvent.startMs).toBe(recorded.startMs);
+        expect(batchEvent.endMs).toBe(recorded.endMs);
+        expect(batchEvent.peakMs).toBe(recorded.peakMs);
+        expect(batchEvent.peakSpeed).toBeCloseTo(recorded.peakSpeed, 10);
+        // The ledger diffed this exact batch against report.json: bounds Δ 0,
+        // peak Δ 0 unless paddle-refined (≤250ms) — so the tracked fixture is
+        // pinned to the recorded report, not just to itself.
+        const measured = ledger.batchVsEmitted[index]!;
+        expect(measured.batch).toEqual({
+          startMs: batchEvent.startMs,
+          endMs: batchEvent.endMs,
+          peakMs: batchEvent.peakMs,
+        });
+        const delta = ledger.wristOnlyBatchVsReportDeltasMs[index]!;
+        expect(delta.start).toBe(0);
+        expect(delta.end).toBe(0);
+        expect(Math.abs(delta.peak)).toBeLessThanOrEqual(
+          delta.paddleConfirmed ? PADDLE_PEAK_REFINEMENT_MS : 0,
+        );
+      }
+    });
+
+    it("streaming the tracked series emits every batch event with EXACT bounds, no unemitted events, closure ≤ endMs+2500", () => {
+      const fixture = loadFixture(runId);
+      const ledger = ledgerRun(loadLedger(), runId);
+      const { wristSpeeds, batchEvents } = batchOverFixture(fixture);
+      const { emitted, extras, notes } = assertStreamedReplay(expected, wristSpeeds, batchEvents);
+
+      // The live emissions equal the ones recorded when the fixture was
+      // generated (eventId · bounds · peak · closeReason · closedAt) and the
+      // ones the ledger measured against the canonical run.
+      const shape = emitted.map((event) => ({
+        eventId: event.eventId,
+        startMs: event.proposal.startMs,
+        peakMs: event.proposal.peakMs,
+        endMs: event.proposal.endMs,
+        closeReason: event.closeReason,
+        closedAtMs: event.closedAtMs,
+      }));
+      expect(shape).toEqual(fixture.expectedEmissions);
+      expect(notes).toEqual(fixture.qualityNotes);
+      expect(emitted.length).toBe(ledger.emittedEvents);
+      for (const measured of ledger.batchVsEmitted) {
+        const live = emitted.find((event) => event.eventId === measured.emitted.eventId)!;
+        expect(live).toBeDefined();
+        expect({
+          eventId: live.eventId,
+          startMs: live.proposal.startMs,
+          endMs: live.proposal.endMs,
+          peakMs: live.proposal.peakMs,
+          closedAtMs: live.closedAtMs,
+          closeReason: live.closeReason,
+        }).toEqual(measured.emitted);
+      }
+      expect(
+        extras.map((event) => ({
+          eventId: event.eventId,
+          startMs: event.proposal.startMs,
+          endMs: event.proposal.endMs,
+          peakMs: event.proposal.peakMs,
+          closeReason: event.closeReason,
+        })),
+      ).toEqual(
+        ledger.causalOnlyExtras.map(({ eventId, startMs, endMs, peakMs, closeReason }) => ({
+          eventId,
+          startMs,
+          endMs,
+          peakMs,
+          closeReason,
+        })),
+      );
+    });
+  });
+}
+
+describe("session replay — afn-sasebo-rally2 mechanism on a synthetic series (causal-only extra + retro-suppression)", () => {
+  const rally2 = REPLAY_RUNS.find((run) => run.runId === "afn-sasebo-rally2")!;
+  // Same shape as the recorded rally: a weak early movement (~0.6 u/s) that
+  // is the strongest motion seen so far, then a 6.8 u/s stroke that raises the
+  // relative proposal floor above it, then a third stroke still open at flush.
+  const series = speedBumps(
+    [
+      { peakMs: 600, height: 0.6, halfWidthMs: 150 },
+      { peakMs: 2400, height: 6.8, halfWidthMs: 120 },
+      { peakMs: 3800, height: 3.0, halfWidthMs: 120 },
+    ],
+    0,
+    4200,
+  );
+
+  it("the acausal batch proposes only the two strong strokes", () => {
+    const batch = proposeStrokeEventsV2({
+      paddleSpeeds: null,
+      wristSpeeds: series,
+      clipStartMs: 0,
+      clipEndMs: 4200,
+    });
+    expect(batch.source).toBe("wrist");
+    expect(batch.events.map((event) => event.peakMs)).toEqual([2400, 3800]);
+    expect(batch.events.length).toBe(rally2.batchCount);
+  });
+
+  it("streaming emits the weak movement live, keeps it append-only and flags it SESSION_EVENT_RETRO_SUPPRESSED; strong strokes match the batch exactly", () => {
+    const batch = proposeStrokeEventsV2({
+      paddleSpeeds: null,
+      wristSpeeds: series,
+      clipStartMs: 0,
+      clipEndMs: 4200,
+    });
+    const { emitted, extras, notes } = assertStreamedReplay(rally2, series, batch.events);
+    expect(emitted.length).toBe(rally2.batchCount + rally2.causalOnlyExtras);
+    expect(extras.map((event) => event.eventId)).toEqual(["E1"]);
+    const extra = extras[0]!;
+    expect(extra.proposal.peakMs).toBe(600);
+    expect(extra.proposal.peakSpeed).toBeLessThan(1);
+    expect(extra.closeReason).toBe("settle");
+    // The extra closed live, long before the stroke that suppressed it began.
+    expect(extra.closedAtMs).toBeLessThan(batch.events[0]!.startMs);
+    // Exactly one flag, naming the extra, and no flag for the batch-backed events.
+    const flags = notes.filter((note) => note.includes("SESSION_EVENT_RETRO_SUPPRESSED"));
+    expect(flags.length).toBe(1);
+    expect(flags[0]).toContain("E1");
+    expect(flags[0]).toContain("kept append-only");
+    expect(flags.some((note) => note.includes("E2") || note.includes("E3"))).toBe(false);
+    // The engine never re-bounds or removes the suppressed event (append-only).
+    expect(emitted.map((event) => event.eventId)).toEqual(["E1", "E2", "E3"]);
+    expect(emitted[0]!.proposal.peakMs).toBe(600);
+  });
+});
+
+// Canonical run-directory replay — operator opt-in (see header). Registered
+// ONLY when requested, so it can never appear as skipped; when requested, a
+// missing run directory fails loudly instead of being silently skipped.
+if (process.env.SWING_LAB_CANONICAL_RUNS === "1") {
+  for (const expected of REPLAY_RUNS) {
+    const runDir = join(PB_RUNS, expected.runId);
+    describe(`session replay — ${expected.runId} (dev split, canonical run directory)`, () => {
+      it("run directory is present (report.json · extract-meta.json · pose.json · people.json)", () => {
+        for (const file of ["report.json", "extract-meta.json", "pose.json", "people.json"]) {
+          expect(
+            existsSync(join(runDir, file)),
+            `${join(runDir, file)} missing — regenerate with \`pnpm lab:regen --exec\` on a Mac`,
+          ).toBe(true);
+        }
+      });
+
       it("wrist-only batch reproduces the recorded report proposals (bounds exact; peak ≤250ms paddle refinement)", () => {
         const { report, batchEvents } = reconstructRun(runDir);
         expect(batchEvents.length).toBe(report.events.proposals.length);
@@ -446,7 +894,7 @@ for (const expected of REPLAY_RUNS) {
           expect(batchEvent.endMs).toBe(reportEvent.endMs);
           const peakDelta = Math.abs(batchEvent.peakMs - reportEvent.peakMs);
           if (reportEvent.paddleConfirmed && reportEvent.paddlePeakMs !== null) {
-            expect(peakDelta).toBeLessThanOrEqual(250); // strokeEvents.ts L339 refinement bound
+            expect(peakDelta).toBeLessThanOrEqual(PADDLE_PEAK_REFINEMENT_MS);
           } else {
             expect(peakDelta).toBe(0);
           }
@@ -455,63 +903,8 @@ for (const expected of REPLAY_RUNS) {
 
       it("streaming the series emits every batch event with EXACT bounds, no unemitted events, closure ≤ endMs+2500", () => {
         const { batchEvents, wristSpeeds } = reconstructRun(runDir);
-        const engine = new SessionEventEngine({
-          sessionId: `replay-${expected.runId}`,
-          captureMeta: { source: "replay" },
-        });
-        const emitted = streamPerSample(engine, wristSpeeds);
-        emitted.push(...engine.flush());
-
-        // (a) every batch-proposed event is emitted with matching bounds —
-        // measured Δ 0ms on both runs, asserted exactly.
-        for (const batchEvent of batchEvents) {
-          const match = emitted.find(
-            (event) =>
-              event.proposal.startMs <= batchEvent.peakMs &&
-              batchEvent.peakMs <= event.proposal.endMs,
-          );
-          expect(match).toBeDefined();
-          expect(match!.proposal.startMs).toBe(batchEvent.startMs);
-          expect(match!.proposal.endMs).toBe(batchEvent.endMs);
-          expect(match!.proposal.peakMs).toBe(batchEvent.peakMs);
-        }
-
-        // (b) no extra events beyond the measured causal-only divergence,
-        // and every causal-only extra is FLAGGED, never silent.
-        const extras = emitted.filter(
-          (event) =>
-            !batchEvents.some(
-              (batchEvent) =>
-                event.proposal.startMs <= batchEvent.peakMs &&
-                batchEvent.peakMs <= event.proposal.endMs,
-            ),
-        );
-        expect(extras.length).toBe(expected.causalOnlyExtras);
-        const notes = engine.snapshot().qualityState.notes;
-        for (const extra of extras) {
-          expect(
-            notes.some(
-              (note) =>
-                note.includes("SESSION_EVENT_RETRO_SUPPRESSED") && note.includes(extra.eventId),
-            ),
-          ).toBe(true);
-        }
-
-        // (c) emission time ≤ event end + 2500ms safety, for every event.
-        for (const event of emitted) {
-          expect(event.closedAtMs).toBeLessThanOrEqual(
-            event.proposal.endMs + SESSION_COMPLETION.safetyMaxMs,
-          );
-        }
-
-        // Close reasons as measured (documents live behavior of this replay).
-        expect(emitted.map((event) => event.closeReason)).toEqual(expected.closeReasons);
-
-        // Append-only ids in emission order.
-        expect(emitted.map((event) => event.eventId)).toEqual(
-          emitted.map((_, index) => `E${index + 1}`),
-        );
+        assertStreamedReplay(expected, wristSpeeds, batchEvents);
       });
-    },
-  );
+    });
+  }
 }
