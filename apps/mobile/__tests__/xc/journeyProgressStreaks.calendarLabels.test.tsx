@@ -179,7 +179,7 @@ afterAll(() => {
     `calendar-labels.${(nodeEnv.TZ ?? ZONE).replace(/\//g, '_')}.json`,
     {
       zone: ZONE,
-      offsetMinutesAt2026_03_31: OFFSET_MIN,
+      utcOffsetMinutes: OFFSET_MIN,
       node: nodeVersion,
       labelCases: records,
       gridCases: gridRecords,

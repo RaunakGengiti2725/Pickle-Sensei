@@ -78,7 +78,7 @@ for (const zone of zones) {
     durationMs: Date.now() - started,
     jestSummary: summary,
     log: logPath,
-    offsetMinutesAt2026_03_31: labels?.offsetMinutesAt2026_03_31 ?? null,
+    utcOffsetMinutes: labels?.utcOffsetMinutes ?? null,
     calendarLabelFailures: labels?.failures?.length ?? null,
     calendarLabelSample: labels?.failures?.[0] ?? null,
     gridMisalignments:
