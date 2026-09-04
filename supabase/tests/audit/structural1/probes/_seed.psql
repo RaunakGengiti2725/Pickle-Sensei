@@ -1,0 +1,100 @@
+-- Shared fixture for the structural probes. Included with \i inside an open
+-- transaction; every probe ends with ROLLBACK so the shared container stays
+-- pristine. Runs as postgres; probes switch to `authenticated` themselves.
+--
+--   Alice 0a  google:g-alice     Bob 0b  google:g-bob
+--   pg_temp.shot_payload(id, permit_id, result_kind, score, captured_at,
+--                        start_ms, contact_ms, end_ms) -> jsonb mirroring the
+--   payload supabase/functions/api/index.ts builds for apply_synced_shot.
+--   pg_temp.check(label, ok) records + reports; pg_temp.finish() raises when
+--   any check failed (ON_ERROR_STOP turns that into the probe's exit code).
+--   pg_temp.raises(sql) / pg_temp.rpc(sql) / pg_temp.error_of(sql) run one
+--   statement under a savepoint as the current role.
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-00000000000a', 'alice@example.com', '{"full_name":"Alice"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-00000000000b', 'bob@example.com',   '{"full_name":"Bob"}',   '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data) values
+  ('google', 'g-alice', '00000000-0000-4000-8000-00000000000a', '{}'),
+  ('google', 'g-bob',   '00000000-0000-4000-8000-00000000000b', '{}');
+
+create function pg_temp.shot_payload(
+  p_id uuid, p_permit uuid, p_kind text, p_score numeric,
+  p_captured_at timestamptz default '2026-08-31T10:00:00Z',
+  p_start_ms int default 0, p_contact_ms int default 500, p_end_ms int default 1000
+) returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'id', p_id, 'analysisPermitId', p_permit, 'sessionId', null,
+    'shotType', 'drive', 'cameraView', 'side', 'capturedAt', p_captured_at,
+    'startMs', p_start_ms, 'contactMs', p_contact_ms, 'endMs', p_end_ms,
+    'overallScore', p_score, 'confidence', 0.9, 'resultKind', p_kind,
+    'phases', jsonb_build_array(jsonb_build_object(
+      'key', 'backswing', 'startMs', 0, 'representativeMs', 100, 'endMs', 200, 'confidence', 0.8)),
+    'checkpoints', jsonb_build_array(jsonb_build_object(
+      'key', 'paddle_prep', 'score', 7.0, 'confidence', 0.8, 'band', 'green',
+      'direction', 'hold', 'severity', 0.1, 'applicable', true)),
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'b', 'poseModelVersion', 'p',
+      'paddleModelVersion', 'pa', 'strokeDetectorVersion', 's', 'phaseModelVersion', 'ph',
+      'scoringModelVersion', 'sc', 'shotConfigVersion', 'c'))
+$$;
+
+-- check() records every assertion (so a log shows all of them) and finish()
+-- raises when any failed — with ON_ERROR_STOP that is the probe's exit code.
+create table pg_temp.results (label text, ok boolean);
+
+create function pg_temp.check(p_label text, p_ok boolean)
+returns void language plpgsql security definer as $$
+begin
+  insert into pg_temp.results values (p_label, coalesce(p_ok, false));
+  raise notice '%: %', case when p_ok then 'ok  ' else 'FAIL' end, p_label;
+end $$;
+
+create function pg_temp.finish()
+returns void language plpgsql security definer as $$
+declare
+  v_failed text;
+begin
+  select string_agg(label, '; ') into v_failed from pg_temp.results where not ok;
+  if v_failed is not null then
+    raise exception 'PROBE ASSERTIONS FAILED: %', v_failed;
+  end if;
+end $$;
+
+-- Query output is noise here: assertions report through NOTICE (stderr).
+\o /dev/null
+
+-- Runs one statement under a savepoint as the CURRENT role and reports
+-- whether it raised. Lets a probe assert "this write must be refused"
+-- without aborting the enclosing transaction.
+create function pg_temp.raises(p_sql text)
+returns boolean language plpgsql as $$
+begin
+  execute p_sql;
+  return false;
+exception when others then
+  return true;
+end $$;
+
+-- Evaluates a scalar-returning statement and returns its value, or
+-- 'RAISED <sqlstate>: <message>' when it threw instead of returning a status.
+create function pg_temp.rpc(p_sql text)
+returns text language plpgsql as $$
+declare
+  v text;
+begin
+  execute p_sql into v;
+  return coalesce(v, '<null>');
+exception when others then
+  return 'RAISED ' || sqlstate || ': ' || sqlerrm;
+end $$;
+
+-- Like raises() but returns the error text ('' when it succeeded).
+create function pg_temp.error_of(p_sql text)
+returns text language plpgsql as $$
+begin
+  execute p_sql;
+  return '';
+exception when others then
+  return sqlstate || ': ' || sqlerrm;
+end $$;
