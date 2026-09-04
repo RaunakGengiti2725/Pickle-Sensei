@@ -1,0 +1,133 @@
+{
+  "role": "ADVERSARIAL TESTER #1 (PASS 3 of 3) — db-schema-migrations",
+  "baseline": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "attack_branch": "devin/attack-db-schema-migrations-1",
+  "plane": "cloud (Linux, docker postgres:16.15; no pg_cron extension available locally)",
+  "database_setup": {
+    "command": "./supabase/tests/attack/setup_db.sh   (docker run postgres:16 + supabase/tests/shim_auth.sql + every supabase/migrations/*.sql sorted)",
+    "note": "shim_auth.sql installs hosted-like default privileges (GRANT ALL ON TABLES TO anon, authenticated, service_role) so grants are evaluated the way hosted Supabase would; production grant state itself was NOT read (production is off-limits)."
+  },
+  "runs": [
+    {
+      "command": "ATTACK_OUT=/home/ubuntu/attack-artifacts ./supabase/tests/attack/run_attack.sh",
+      "exit": 3,
+      "artifact": "run_attack_all.log",
+      "note": "exit code = number of BROKEN scenarios (S1, S6, S7)"
+    },
+    {
+      "command": "./supabase/tests/run_rls_tests.sh",
+      "exit": 0,
+      "artifact": "run_rls_tests.log",
+      "note": "SECURITY REGRESSION MATRIX: ALL CASES PASSED"
+    },
+    {
+      "command": "cd supabase/functions/api/__wf__ && deno test --allow-run --allow-read --allow-env --allow-net db_migrations_rls_indexes.test.ts db_migrations_rls_indexes.audit.test.ts",
+      "exit": 0,
+      "artifact": "deno_db_migrations_tests.log",
+      "note": "6 passed (7 steps), audit matrix executed against its own docker container"
+    },
+    { "command": "pnpm format:check", "exit": 0, "artifact": "pnpm_format_check.log" },
+    { "command": "pnpm lint", "exit": 0, "artifact": "pnpm_lint.log" },
+    {
+      "command": "pnpm install --frozen-lockfile && pnpm typecheck",
+      "exit": 0,
+      "artifact": "pnpm_typecheck.log",
+      "note": "first typecheck attempt failed only because packages/evaluation had no node_modules installed in this VM (TS2688 @types/node); passes after install, lockfile unchanged"
+    },
+    { "command": "bash -n supabase/tests/attack/*.sh", "exit": 0 },
+    {
+      "command": "ATTACK_CONTAINER=pickle-attack-db-verify ATTACK_HOST_PORT=55433 ./supabase/tests/attack/setup_db.sh && ATTACK_CONTAINER=pickle-attack-db-verify ./supabase/tests/attack/run_attack.sh s6 s7",
+      "exit": 2,
+      "artifact": "setup_db_verify.log, fresh-verify/",
+      "note": "S6 and S7 reproduce on a brand-new container built by setup_db.sh"
+    },
+    {
+      "command": "git diff --stat origin/main 4d812e1a -- supabase/migrations",
+      "exit": 0,
+      "note": "EMPTY — migrations are byte-identical on origin/main (7c034aa), so every finding is pre-existing: regression=no"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "S1",
+      "file": "supabase/tests/attack/s1_cascade_delete_scale.sql",
+      "result": "BROKEN",
+      "exit": 3,
+      "log": "s1_cascade_delete_scale.log"
+    },
+    {
+      "id": "S2",
+      "file": "supabase/tests/attack/s2_search_path_hijack.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "s2_search_path_hijack.log"
+    },
+    {
+      "id": "S3",
+      "file": "supabase/tests/attack/s3_orphan_finalized_permit.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "s3_orphan_finalized_permit.log"
+    },
+    {
+      "id": "S4",
+      "file": "supabase/tests/attack/s4_three_direct_reserved_permits.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "s4_three_direct_reserved_permits.log"
+    },
+    {
+      "id": "S5",
+      "file": "supabase/tests/attack/s5_reopen_finalized_permit.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "s5_reopen_finalized_permit.log"
+    },
+    {
+      "id": "S6",
+      "file": "supabase/tests/attack/s6_permit_reuse_after_reset.sql",
+      "result": "BROKEN",
+      "exit": 3,
+      "log": "s6_permit_reuse_after_reset.log"
+    },
+    {
+      "id": "S7",
+      "file": "supabase/tests/attack/s7_truncate_privileges.sql",
+      "result": "BROKEN",
+      "exit": 3,
+      "log": "s7_truncate_privileges.log"
+    },
+    {
+      "id": "X1",
+      "file": "supabase/tests/attack/x1_concurrent_reserve_and_sync.sh",
+      "result": "HELD",
+      "exit": 0,
+      "log": "x1_concurrent_reserve_and_sync.log"
+    },
+    {
+      "id": "X2",
+      "file": "supabase/tests/attack/x2_cron_sweeps_and_clock_skew.sql",
+      "result": "HELD (sweep SQL bodies); pg_cron schedule installation UNKNOWN locally",
+      "exit": 0,
+      "log": "x2_cron_sweeps_and_clock_skew.log"
+    },
+    {
+      "id": "X3",
+      "file": "supabase/tests/attack/x3_malformed_unicode_huge_denial.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "x3_malformed_unicode_huge_denial.log"
+    },
+    {
+      "id": "X4",
+      "file": "supabase/tests/attack/x4_account_deletion_identity_ledger.sql",
+      "result": "HELD",
+      "exit": 0,
+      "log": "x4_account_deletion_identity_ledger.log"
+    }
+  ],
+  "unknown": [
+    "pg_cron schedule installation/execution (extension absent in postgres:16 image; X2 ran the three sweep statements directly)",
+    "actual grant state on the production project (never accessed); S7 is VERIFIED against the hosted-like default privileges shim_auth.sql documents"
+  ]
+}
