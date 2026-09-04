@@ -2,7 +2,8 @@
 // through malformed / empty / stale / missing-data inputs and prints what happens.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   DEFAULT_MODEL_MANIFEST,
   DatasetReleaseIndex,
@@ -12,7 +13,10 @@ import {
   type DatasetReleaseManifest,
 } from "@pickle/model-registry";
 
-const ROOT = resolve(process.argv[2] ?? ".");
+// Repo root: explicit argv[2], else three levels above this file (tools/audit/<probe>/).
+const ROOT = resolve(
+  process.argv[2] ?? resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
+);
 const out: Record<string, unknown> = {};
 function probe(name: string, fn: () => unknown): void {
   try {
