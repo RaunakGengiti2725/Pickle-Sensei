@@ -1,0 +1,311 @@
+{
+  "description": "Adversarial variant mutants probing the invariants the candidate 69f1c6de claims to pin in __tests__/xc/sessionKeeperTiming.test.ts and __tests__/xc/sessionVaultAndLifecycle.test.ts. Every mutant is a neighbour of an XCM-05/XCM-06 mutant (same invariant, different edit).",
+  "mutants": [
+    {
+      "id": "AK-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "schedule() floor",
+      "description": "No 1s floor: a negative/zero delay fires the timer immediately (variant of the MIN_DELAY_MS invariant).",
+      "find": "      Math.max(MIN_DELAY_MS, delayMs),\n",
+      "replace": "      delayMs,\n"
+    },
+    {
+      "id": "AK-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "MIN_DELAY_MS",
+      "description": "Floor raised to 2s.",
+      "find": "const MIN_DELAY_MS = 1_000;",
+      "replace": "const MIN_DELAY_MS = 2_000;"
+    },
+    {
+      "id": "AK-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "AppState listener boundary",
+      "description": "Foreground re-check boundary off by one: exactly 5 min left also refreshes (< → <=).",
+      "find": "      bearerExpiresAtMs - now() < FOREGROUND_LEAD_MS\n",
+      "replace": "      bearerExpiresAtMs - now() <= FOREGROUND_LEAD_MS\n"
+    },
+    {
+      "id": "AK-04",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "FOREGROUND_LEAD_MS",
+      "description": "Foreground lead 4 min instead of 5 (variant of SK-03).",
+      "find": "const FOREGROUND_LEAD_MS = 5 * 60_000;",
+      "replace": "const FOREGROUND_LEAD_MS = 4 * 60_000;"
+    },
+    {
+      "id": "AK-05",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "FOREGROUND_LEAD_MS",
+      "description": "Foreground lead 6 min instead of 5 (variant of SK-03).",
+      "find": "const FOREGROUND_LEAD_MS = 5 * 60_000;",
+      "replace": "const FOREGROUND_LEAD_MS = 6 * 60_000;"
+    },
+    {
+      "id": "AK-06",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "REFRESH_LEAD_MS",
+      "description": "Lead 59s instead of 60s (variant of SK-01).",
+      "find": "const REFRESH_LEAD_MS = 60_000;",
+      "replace": "const REFRESH_LEAD_MS = 59_000;"
+    },
+    {
+      "id": "AK-07",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "REFRESH_LEAD_MS",
+      "description": "Lead 61s instead of 60s (variant of SK-01).",
+      "find": "const REFRESH_LEAD_MS = 60_000;",
+      "replace": "const REFRESH_LEAD_MS = 61_000;"
+    },
+    {
+      "id": "AK-08",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() catch counter",
+      "description": "Attempt counter never grows: constant 5s retry (variant of SK-11).",
+      "find": "      failedAttempts += 1;\n",
+      "replace": "      failedAttempts = 1;\n"
+    },
+    {
+      "id": "AK-09",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() success counter",
+      "description": "Backoff reset lands on 1 not 0: first failure after a success waits 10s (variant of SK-09).",
+      "find": "      failedAttempts = 0;\n",
+      "replace": "      failedAttempts = 1;\n"
+    },
+    {
+      "id": "AK-10",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "retryDelayMs",
+      "description": "Exponent off by one (attempt instead of attempt-1): 10s, 20s, 40s.",
+      "find": "  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));",
+      "replace": "  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt));"
+    },
+    {
+      "id": "AK-11",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "RETRY_MAX_MS",
+      "description": "Backoff cap 10 min instead of 5.",
+      "find": "const RETRY_MAX_MS = 5 * 60_000;",
+      "replace": "const RETRY_MAX_MS = 10 * 60_000;"
+    },
+    {
+      "id": "AK-12",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "RETRY_BASE_MS",
+      "description": "Backoff base 1s instead of 5s (the hot loop the header forbids).",
+      "find": "const RETRY_BASE_MS = 5_000;",
+      "replace": "const RETRY_BASE_MS = 1_000;"
+    },
+    {
+      "id": "AK-13",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() catch generation guard",
+      "description": "A failure that lands after stop() is still processed (onRevoked / retry after sign-out) — variant of SK-10 on the error path.",
+      "find": "    } catch (error) {\n      if (!live()) return;\n",
+      "replace": "    } catch (error) {\n"
+    },
+    {
+      "id": "AK-14",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() revoke path",
+      "description": "A refusal calls onRevoked but does NOT stop the keeper: the listener/refreshNow stay live and a later foreground or refreshSessionNow() spends the dead token again → onRevoked twice.",
+      "find": "        stopSessionKeeper();\n        await input.onRevoked();\n",
+      "replace": "        await input.onRevoked();\n"
+    },
+    {
+      "id": "AK-15",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "stopSessionKeeper listener",
+      "description": "stop() leaves the AppState listener registered (subscription leak; dead listeners accumulate across sign-in/out).",
+      "find": "  removeAppStateListener?.();\n",
+      "replace": ""
+    },
+    {
+      "id": "AK-16",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refreshNow",
+      "description": "refreshSessionNow() is a silent no-op even while a keeper is running (a route 401 never triggers a rotation).",
+      "find": "  refreshNow = () => void refresh();\n",
+      "replace": "  refreshNow = () => {};\n"
+    },
+    {
+      "id": "AK-17",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() success expiry",
+      "description": "The new expiry is not adopted after a rotation: the next rotation is scheduled from the OLD expiry.",
+      "find": "      bearerExpiresAtMs = tokens.bearerExpiresAtMs;\n",
+      "replace": ""
+    },
+    {
+      "id": "AK-18",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "AppState listener state filter",
+      "description": "Every AppState transition (background/inactive too) runs the re-check.",
+      "find": "    if (nextState !== 'active' || !live()) return;\n",
+      "replace": "    if (!live()) return;\n"
+    },
+    {
+      "id": "AK-19",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "startSessionKeeper head",
+      "description": "start() does not stop the previous keeper: two keepers (two timers, two listeners) run at once after an account switch.",
+      "find": "export function startSessionKeeper(input: SessionKeeperInput): void {\n  stopSessionKeeper();\n",
+      "replace": "export function startSessionKeeper(input: SessionKeeperInput): void {\n  generation += 1;\n"
+    },
+    {
+      "id": "AK-20",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() onDeferred",
+      "description": "Transient failures are silent (no onDeferred).",
+      "find": "      input.onDeferred?.(error);\n",
+      "replace": ""
+    },
+    {
+      "id": "AK-21",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() inflight",
+      "description": "inflight flag never cleared: after the first refresh completes no further refresh ever runs.",
+      "find": "    } finally {\n      inflight = false;\n    }\n",
+      "replace": "    } finally {\n    }\n"
+    },
+    {
+      "id": "AK-22",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "startSessionKeeper tail",
+      "description": "A keeper started WITH a bearer also refreshes immediately (spends the refresh token on every launch).",
+      "find": "  if (bearerExpiresAtMs === null) {\n    void refresh();\n  } else {\n    scheduleAheadOfExpiry();\n  }\n",
+      "replace": "  void refresh();\n"
+    },
+    {
+      "id": "AK-23",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession expiresAt unit",
+      "description": "expiresAt × 1e6 instead of × 1e3.",
+      "find": "    bearerExpiresAtMs: tokens.expiresAt * 1000,",
+      "replace": "    bearerExpiresAtMs: tokens.expiresAt * 1_000_000,"
+    },
+    {
+      "id": "AK-24",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession body validation",
+      "description": "A non-finite expiresAt (Infinity/NaN via JSON edge) is accepted.",
+      "find": "    typeof tokens.expiresAt !== 'number' ||\n    !Number.isFinite(tokens.expiresAt)\n",
+      "replace": "    typeof tokens.expiresAt !== 'number'\n"
+    },
+    {
+      "id": "AK-25",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession body validation",
+      "description": "A blank refreshToken in a 200 body is accepted (next rotation spends '').",
+      "find": "    typeof tokens.refreshToken !== 'string' ||\n    !tokens.refreshToken.trim() ||\n",
+      "replace": "    typeof tokens.refreshToken !== 'string' ||\n"
+    },
+    {
+      "id": "AK-26",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession status map",
+      "description": "Only 401 is a refusal; 403 becomes retryable (SL-01 neighbour, in-cluster claim: 401/403-only sign-out).",
+      "find": "  if (response.status === 401 || response.status === 403) {",
+      "replace": "  if (response.status === 401) {"
+    },
+    {
+      "id": "AK-27",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession canonical id",
+      "description": "Empty canonical id accepted.",
+      "find": "      typeof canonicalAppUserId !== 'string' ||\n      !canonicalAppUserId ||\n",
+      "replace": "      typeof canonicalAppUserId !== 'string' ||\n"
+    },
+    {
+      "id": "AK-28",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession accessible",
+      "description": "WHEN_UNLOCKED_THIS_DEVICE_ONLY instead of AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY (a locked-phone background relaunch cannot read the vault).",
+      "find": "        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,",
+      "replace": "        accessible: keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,"
+    },
+    {
+      "id": "AK-29",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession accessible",
+      "description": "AFTER_FIRST_UNLOCK (syncable, leaves the device) instead of THIS_DEVICE_ONLY.",
+      "find": "        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,",
+      "replace": "        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,"
+    },
+    {
+      "id": "AK-30",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession accessible",
+      "description": "No accessibility class at all (library default).",
+      "find": "        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,\n",
+      "replace": ""
+    },
+    {
+      "id": "AK-31",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession version",
+      "description": "Version check widened to any number (variant of SV-02).",
+      "find": "      record['version'] !== 1 ||\n",
+      "replace": "      typeof record['version'] !== 'number' ||\n"
+    },
+    {
+      "id": "AK-32",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession provider",
+      "description": "Provider check widened to any string (variant of SV-06).",
+      "find": "      (provider !== 'apple' && provider !== 'google') ||\n",
+      "replace": "      typeof provider !== 'string' ||\n"
+    },
+    {
+      "id": "AK-33",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession email",
+      "description": "Non-string email is passed through instead of normalised to null.",
+      "find": "      email: typeof record['email'] === 'string' ? record['email'] : null,\n",
+      "replace": "      email: (record['email'] ?? null) as string | null,\n"
+    },
+    {
+      "id": "AK-34",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession payload",
+      "description": "The persisted JSON gains an extra field (an access token smuggled into the vault).",
+      "find": "      JSON.stringify(session),\n",
+      "replace": "      JSON.stringify({ ...session, accessToken: 'leak' }),\n"
+    }
+  ]
+}
