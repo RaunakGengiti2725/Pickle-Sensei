@@ -259,8 +259,10 @@ jobs:
           npm --version
           npm ci --no-audit --no-fund
 
+      # `inputs.*` is null on push events and null == false in expressions, so
+      # gate on the event type explicitly instead of `inputs.x != false`.
       - name: TypeScript + Jest (apps/mobile)
-        if: ${{ inputs.js_checks != false }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.js_checks }}
         working-directory: apps/mobile
         run: |
           set -o pipefail
@@ -310,7 +312,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
             | tee "$ARTIFACTS/xcodebuild-build.log" \
-            | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; } | tail -80
+            | { grep --line-buffered -E '^(\*\* BUILD|Ld |Libtool |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; }
           APP="$PICKLE_CI_CACHE/app-derived/Build/Products/$CONFIGURATION-iphonesimulator/PickleSensei.app"
           ls -la "$APP"
           echo "APP_PATH=$APP" >> "$GITHUB_ENV"
@@ -318,7 +320,7 @@ jobs:
           [ -f "$APP/main.jsbundle" ] || { echo "::error::main.jsbundle missing — the React Native bundle phase did not run"; exit 1; }
 
       - name: Launch the app on a simulator (alive check, screenshots, logs)
-        if: ${{ inputs.launch_check != false }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.launch_check }}
         run: |
           tools/macos-ci/simulator-launch-check.sh "$APP_PATH" "$BUNDLE_ID" "$ARTIFACTS/launch" 25
 
