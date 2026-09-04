@@ -79,7 +79,7 @@ export const font = {
   bold: 'Manrope-Bold',
 } as const;
 
-/** Platform system face, only for glyphs the brand font lacks (e.g. ). */
+/** Platform system face, only for glyphs the brand font lacks (e.g. the Apple logo, U+F8FF). */
 export const systemFont = 'System';
 
 export const type = {
