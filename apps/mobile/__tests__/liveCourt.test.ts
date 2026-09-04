@@ -16,19 +16,18 @@ process.env.PICKLE_ENV = 'development';
 // eslint-disable-next-line no-var
 var mockCueRepIndices: number[] = [];
 
+type CoachCore = typeof import('@pickle/audio-coach-core');
+type SelectCue = CoachCore['selectCue'];
+
 jest.mock('@pickle/audio-coach-core', () => {
-  const actual = jest.requireActual('@pickle/audio-coach-core');
-  return {
-    ...actual,
-    selectCue: (
-      state: Parameters<typeof actual.selectCue>[0],
-      observation: Parameters<typeof actual.selectCue>[1],
-      rules?: Parameters<typeof actual.selectCue>[2],
-    ) => {
-      mockCueRepIndices.push(observation.repIndex);
-      return actual.selectCue(state, observation, rules);
-    },
+  const actual = jest.requireActual<CoachCore>('@pickle/audio-coach-core');
+  const selectCue: SelectCue = (state, rep, rules) => {
+    mockCueRepIndices.push(rep.repIndex);
+    return rules === undefined
+      ? actual.selectCue(state, rep)
+      : actual.selectCue(state, rep, rules);
   };
+  return { ...actual, selectCue };
 });
 
 beforeEach(() => {

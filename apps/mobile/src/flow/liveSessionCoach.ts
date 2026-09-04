@@ -117,7 +117,9 @@ export class LiveSessionCoach {
   private readonly cues: SpokenCue[] = [];
   private repCounter = 0;
   private muted: boolean;
+  private started = false;
   private ended = false;
+  private disposed = false;
 
   constructor(options: LiveSessionCoachOptions) {
     this.voice = options.voice;
@@ -142,6 +144,8 @@ export class LiveSessionCoach {
   /** Opening line — lets the player confirm they can hear the coach before
    * the first swing. The replay line is honest about being a demo. */
   sessionStarted(source: 'live' | 'replay'): void {
+    if (this.started || this.quiet()) return;
+    this.started = true;
     const text =
       source === 'live'
         ? sessionStartLine()
@@ -158,7 +162,7 @@ export class LiveSessionCoach {
   /** React to every event that newly reached a terminal outcome, in event
    * order. Safe to call with every snapshot — each event speaks once. */
   consumeSnapshot(snapshot: LiveSessionSnapshot): void {
-    if (this.ended) return;
+    if (this.quiet()) return;
     for (const event of snapshot.events) {
       if (this.consumedEventIds.has(event.eventId)) continue;
       const kind = terminalKind(event);
@@ -193,19 +197,24 @@ export class LiveSessionCoach {
   sessionEnded(finalSnapshot: LiveSessionSnapshot): LiveCoachRecap {
     if (!this.ended) {
       this.ended = true;
-      const progression = sessionScoreProgression(finalSnapshot.events);
-      this.emit({
-        eventId: null,
-        category: 'SESSION_END',
-        text: sessionEndLine({
-          scoredCount: progression.scoredCount,
-          startAverage: progression.startAverage,
-          endAverage: progression.endAverage,
-          best: progression.best?.score ?? null,
-        }),
-        atMs: finalSnapshot.durationMs,
-        targetCheckpoint: null,
-      });
+      // A disposed coach has already been torn down (screen unmounted before
+      // the flow's end() landed): no closing line, but the log it kept must
+      // still reach LiveSummary.
+      if (!this.disposed) {
+        const progression = sessionScoreProgression(finalSnapshot.events);
+        this.emit({
+          eventId: null,
+          category: 'SESSION_END',
+          text: sessionEndLine({
+            scoredCount: progression.scoredCount,
+            startAverage: progression.startAverage,
+            endAverage: progression.endAverage,
+            best: progression.best?.score ?? null,
+          }),
+          atMs: finalSnapshot.durationMs,
+          targetCheckpoint: null,
+        });
+      }
       completedCoachRecaps.set(finalSnapshot.sessionId, this.recap());
     }
     return this.recap();
@@ -213,7 +222,7 @@ export class LiveSessionCoach {
 
   /** Unmount/teardown: cut any in-flight utterance. Keeps the log. */
   dispose(): void {
-    this.ended = true;
+    this.disposed = true;
     this.voice.stop();
   }
 
@@ -251,17 +260,31 @@ export class LiveSessionCoach {
     };
   }
 
+  /** True once the coach has gone silent — wrapped up or torn down. */
+  private quiet(): boolean {
+    return this.ended || this.disposed;
+  }
+
   private emit(cue: Omit<SpokenCue, 'spoken'>): void {
     const canSpeak = !this.muted && this.voice.available();
     // `spoken` records the truth: a port that suppressed the cue (reduced
     // feedback level, dispatch failure) returns false and the caption says
-    // so; simple void-returning ports keep their historical behavior.
-    const spoke = canSpeak
-      ? this.voice.speak(cue.text, { category: cue.category }) !== false
-      : false;
+    // so; simple void-returning ports keep their historical behavior. A port
+    // that throws (native bridge rejecting the utterance) did not speak
+    // either, and must not cost the cue its log record or the session its
+    // recap.
+    const spoke = canSpeak ? this.trySpeak(cue) : false;
     const record: SpokenCue = { ...cue, spoken: spoke };
     this.cues.push(record);
     this.onCue?.(record);
+  }
+
+  private trySpeak(cue: Omit<SpokenCue, 'spoken'>): boolean {
+    try {
+      return this.voice.speak(cue.text, { category: cue.category }) !== false;
+    } catch {
+      return false;
+    }
   }
 }
 

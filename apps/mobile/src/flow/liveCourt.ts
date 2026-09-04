@@ -64,7 +64,9 @@ export class LiveCourtEngine {
     width: number;
     height: number;
   }): Promise<LiveRep | null> {
-    this.repCounter += 1;
+    // Captured before the await: overlapping strokes must each keep their own
+    // arrival-ordered index, whatever order their analyses settle in.
+    const repIndex = ++this.repCounter;
     const result = await analyzeClip(this.providers, clip, {
       analysisId: this.options.makeId(),
       sessionId: this.options.sessionId,
@@ -84,7 +86,7 @@ export class LiveCourtEngine {
     );
     const previousBest = this.coachState.bestOverallScore;
     const { decision, nextState } = selectCue(this.coachState, {
-      repIndex: this.repCounter,
+      repIndex,
       resultKind: analysis.resultKind,
       overallScore: analysis.overallScore,
       focusCheckpoint: this.options.focusCheckpoint,
@@ -94,7 +96,7 @@ export class LiveCourtEngine {
     });
     this.coachState = nextState;
     const rep: LiveRep = {
-      repIndex: this.repCounter,
+      repIndex,
       analysis,
       cue: decision,
       isPersonalBest:
