@@ -70,12 +70,17 @@ export const radius = {
   pill: 999,
 } as const;
 
+// PostScript names of the bundled faces (assets/fonts/<name>.ttf): the one
+// spelling iOS resolves for every weight and Android matches by file name.
 export const font = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  regular: 'Manrope-Regular',
+  medium: 'Manrope-Medium',
+  semibold: 'Manrope-SemiBold',
+  bold: 'Manrope-Bold',
 } as const;
+
+/** Platform system face, only for glyphs the brand font lacks (e.g. ). */
+export const systemFont = 'System';
 
 export const type = {
   hero: {

@@ -80,10 +80,10 @@
 	<false/>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Manrope_400Regular.ttf</string>
-		<string>Manrope_600SemiBold.ttf</string>
-		<string>Manrope_500Medium.ttf</string>
-		<string>Manrope_700Bold.ttf</string>
+		<string>Manrope-Regular.ttf</string>
+		<string>Manrope-SemiBold.ttf</string>
+		<string>Manrope-Medium.ttf</string>
+		<string>Manrope-Bold.ttf</string>
 	</array>
 </dict>
 </plist>

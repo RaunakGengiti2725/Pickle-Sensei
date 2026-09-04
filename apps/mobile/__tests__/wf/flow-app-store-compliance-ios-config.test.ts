@@ -40,6 +40,42 @@ function plistBool(plist: string, key: string): boolean | null {
   return match ? match[1] === 'true' : null;
 }
 
+const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
+
+function pbxSection(name: string): string {
+  const match = new RegExp(
+    `/\\* Begin ${name} section \\*/([\\s\\S]*?)/\\* End ${name} section \\*/`,
+  ).exec(pbxproj);
+  if (!match) throw new Error(`pbxproj: no ${name} section`);
+  return match[1]!;
+}
+
+/** buildSettings of the app target's configurations (the ones carrying
+ * PRODUCT_BUNDLE_IDENTIFIER), keyed by configuration name. */
+function appBuildConfigurations(): Map<string, Record<string, string>> {
+  const out = new Map<string, Record<string, string>>();
+  const block =
+    /isa = XCBuildConfiguration;\s*(?:baseConfigurationReference = [^;]*;\s*)?buildSettings = \{([\s\S]*?)\n\t\t\t\};\s*name = (\w+);/g;
+  for (const m of pbxSection('XCBuildConfiguration').matchAll(block)) {
+    const settings: Record<string, string> = {};
+    for (const line of m[1]!.split('\n')) {
+      const kv = /^\s*([A-Z_][A-Z0-9_]*) = (.*);$/.exec(line);
+      if (kv) settings[kv[1]!] = kv[2]!;
+    }
+    if (settings.PRODUCT_BUNDLE_IDENTIFIER) out.set(m[2]!, settings);
+  }
+  return out;
+}
+
+/** PBXBuildFile ids listed in the (single) PBXResourcesBuildPhase. */
+function resourcesPhaseFileIds(): string[] {
+  const files = /files = \(([\s\S]*?)\);/.exec(
+    pbxSection('PBXResourcesBuildPhase'),
+  )?.[1];
+  if (files === undefined) throw new Error('pbxproj: no Resources phase');
+  return Array.from(files.matchAll(/([0-9A-F]{24})/g), m => m[1]!);
+}
+
 describe('Info.plist usage descriptions and export compliance', () => {
   const plist = readFileSync(join(IOS_APP, 'Info.plist'), 'utf8');
 
@@ -83,11 +119,17 @@ describe('Sign in with Apple entitlement (Google sign-in is offered)', () => {
   });
 
   it('wires the entitlements file into every build configuration', () => {
-    const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
-    const wired = pbxproj.match(
-      /CODE_SIGN_ENTITLEMENTS = PickleSensei\/PickleSensei\.entitlements;/g,
-    );
-    expect(wired?.length ?? 0).toBeGreaterThanOrEqual(2);
+    const configurations = appBuildConfigurations();
+    expect(Array.from(configurations.keys()).sort()).toEqual([
+      'Debug',
+      'Release',
+    ]);
+    for (const [name, settings] of configurations) {
+      expect([name, settings.CODE_SIGN_ENTITLEMENTS]).toEqual([
+        name,
+        'PickleSensei/PickleSensei.entitlements',
+      ]);
+    }
   });
 
   it('the sign-in screen offers Apple on iOS alongside Google', () => {
@@ -163,8 +205,18 @@ describe('PrivacyInfo.xcprivacy required-reason APIs', () => {
 
   it('declares no tracking and is bundled as an app resource', () => {
     expect(manifest).toMatch(/<key>NSPrivacyTracking<\/key>\s*<false\/>/);
-    const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
-    expect(pbxproj).toMatch(/PrivacyInfo\.xcprivacy in Resources/);
+    // The PBXBuildFile entry alone ships nothing: its id must be listed in the
+    // Resources build phase's `files` for Xcode to copy the manifest.
+    const fileRef =
+      /([0-9A-F]{24}) \/\* PrivacyInfo\.xcprivacy \*\/ = \{isa = PBXFileReference;/.exec(
+        pbxSection('PBXFileReference'),
+      )?.[1];
+    expect(fileRef).toBeDefined();
+    const buildFile = new RegExp(
+      `([0-9A-F]{24}) /\\* [^*]* \\*/ = \\{isa = PBXBuildFile; fileRef = ${fileRef} `,
+    ).exec(pbxSection('PBXBuildFile'))?.[1];
+    expect(buildFile).toBeDefined();
+    expect(resourcesPhaseFileIds()).toContain(buildFile);
   });
 
   it('declares RevenueCat purchase history and linked user id for functionality and analytics', () => {

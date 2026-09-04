@@ -72,10 +72,10 @@ internal class GuidedCaptureActivity : ComponentActivity(), CameraOperationRegis
     triggerAlgorithmVersion = TemporalMotionDetector.MODEL_VERSION,
   )
   private val manropeMedium by lazy {
-    loadTypeface("fonts/Manrope_500Medium.ttf", Typeface.NORMAL)
+    loadTypeface("fonts/Manrope-Medium.ttf", Typeface.NORMAL)
   }
   private val manropeSemiBold by lazy {
-    loadTypeface("fonts/Manrope_600SemiBold.ttf", Typeface.BOLD)
+    loadTypeface("fonts/Manrope-SemiBold.ttf", Typeface.BOLD)
   }
 
   private lateinit var root: FrameLayout

@@ -17,6 +17,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parsePbxproj, settingValue } from "../../apps/mobile/scripts/pbxproj.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const failures = [];
@@ -44,15 +45,25 @@ check(
   Number.isInteger(buildNumber) && buildNumber >= 1,
 );
 
-const pbxproj = read("apps/mobile/ios/PickleSensei.xcodeproj/project.pbxproj");
+// Asserted per build configuration of the app target: a Release archive is
+// what ships, and a Debug-only match must not satisfy the pin.
+const project = parsePbxproj(read("apps/mobile/ios/PickleSensei.xcodeproj/project.pbxproj"));
+const configurations = project.buildConfigurations(project.appTarget("PickleSensei"));
 check(
-  `pbxproj: MARKETING_VERSION = ${marketingVersion}`,
-  pbxproj.includes(`MARKETING_VERSION = ${marketingVersion};`),
+  "pbxproj: app target has exactly the Debug and Release configurations",
+  Array.from(configurations.keys()).sort().join(",") === "Debug,Release",
 );
-check(
-  `pbxproj: CURRENT_PROJECT_VERSION = ${buildNumber}`,
-  pbxproj.includes(`CURRENT_PROJECT_VERSION = ${buildNumber};`),
-);
+for (const name of ["Debug", "Release"]) {
+  const settings = configurations.get(name) ?? {};
+  check(
+    `pbxproj [${name}]: MARKETING_VERSION = ${marketingVersion}`,
+    settingValue(settings.MARKETING_VERSION) === marketingVersion,
+  );
+  check(
+    `pbxproj [${name}]: CURRENT_PROJECT_VERSION = ${buildNumber}`,
+    settingValue(settings.CURRENT_PROJECT_VERSION) === String(buildNumber),
+  );
+}
 
 const gradle = read("apps/mobile/android/app/build.gradle");
 check(

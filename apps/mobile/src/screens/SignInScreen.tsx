@@ -7,7 +7,7 @@ import {
   ScreenHeader,
 } from '../design/components';
 import { Icon } from '../design/icons';
-import { color, font, radius, space, type } from '../design/tokens';
+import { color, font, radius, space, systemFont, type } from '../design/tokens';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { useAuthStore } from '../auth/authStore';
 
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   providerMarkText: { ...type.caption },
   letterMark: { fontFamily: font.bold },
-  appleMark: { fontFamily: 'System', fontSize: 18, lineHeight: 20 },
+  appleMark: { fontFamily: systemFont, fontSize: 18, lineHeight: 20 },
   busyRow: {
     flexDirection: 'row',
     alignItems: 'center',
