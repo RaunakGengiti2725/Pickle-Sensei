@@ -10,7 +10,13 @@ import {
   assertEquals,
   assertStrictEquals,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "../rateLimit.ts";
+import {
+  enforceRateLimit,
+  MEMORY_WINDOW_MAX,
+  memoryWindowCount,
+  peekRateLimit,
+  rateLimitResponse,
+} from "../rateLimit.ts";
 import { redisConfigured, redisWindowGet } from "../cache.ts";
 
 const WINDOW = 300;
@@ -84,3 +90,64 @@ Deno.test("scopes and ids are isolated", async () => {
   assertStrictEquals((await peekRateLimit("authfail", freshId(), 1, WINDOW)).allowed, true);
   assertStrictEquals((await peekRateLimit("ip", id, 1, WINDOW)).allowed, true);
 });
+
+Deno.test(
+  "memory pressure: MEMORY_WINDOW_MAX+1 distinct keys never release a window that reached its limit, and the map stays capped",
+  async () => {
+    const victim = freshId();
+    const limit = 3;
+    for (let i = 0; i < limit; i += 1) await enforceRateLimit("authfail", victim, limit, WINDOW);
+    assertStrictEquals((await peekRateLimit("authfail", victim, limit, WINDOW)).allowed, false);
+
+    const flood = `flood-${crypto.randomUUID()}`;
+    for (let i = 0; i <= MEMORY_WINDOW_MAX; i += 1) {
+      await enforceRateLimit("ip", `${flood}-${i}`, 300, WINDOW);
+    }
+
+    const peek = await peekRateLimit("authfail", victim, limit, WINDOW);
+    assertStrictEquals(peek.allowed, false, "locked window survived the flood");
+    assertEquals(peek.remaining, 0);
+    assert(
+      memoryWindowCount() <= MEMORY_WINDOW_MAX,
+      `windows.size ${memoryWindowCount()} > MEMORY_WINDOW_MAX ${MEMORY_WINDOW_MAX}`,
+    );
+  },
+);
+
+Deno.test(
+  "memory pressure evicts the OLDEST unlocked windows first; recently used ones survive",
+  async () => {
+    const oldest = freshId();
+    const recent = freshId();
+    await enforceRateLimit("ip", oldest, 300, WINDOW);
+    await enforceRateLimit("ip", recent, 300, WINDOW);
+
+    const flood = `flood-${crypto.randomUUID()}`;
+    // MEMORY_WINDOW_MAX fresh keys guarantee every older unlocked window has
+    // been evicted; `recent` is touched every 500 hits so it is never among
+    // the least recently used at eviction time.
+    for (let i = 0; i < MEMORY_WINDOW_MAX; i += 1) {
+      await enforceRateLimit("ip", `${flood}-${i}`, 300, WINDOW);
+      if (i % 500 === 0) await enforceRateLimit("ip", recent, 300, WINDOW);
+    }
+
+    assert(memoryWindowCount() <= MEMORY_WINDOW_MAX);
+    assertEquals((await peekRateLimit("ip", oldest, 300, WINDOW)).remaining, 300, "oldest evicted");
+    assert(
+      (await peekRateLimit("ip", recent, 300, WINDOW)).remaining < 300,
+      "recently used window kept its count",
+    );
+  },
+);
+
+Deno.test(
+  "oversized identities are bounded to a fixed-size key but still counted consistently",
+  async () => {
+    const long = `${freshId()}-${"x".repeat(8_000)}`;
+    await enforceRateLimit("user", long, 2, WINDOW);
+    await enforceRateLimit("user", long, 2, WINDOW);
+    assertStrictEquals((await enforceRateLimit("user", long, 2, WINDOW)).allowed, false);
+    assertStrictEquals((await enforceRateLimit("user", `${long}y`, 2, WINDOW)).allowed, true);
+    assertStrictEquals((await peekRateLimit("user", long, 2, WINDOW)).allowed, false);
+  },
+);

@@ -66,6 +66,66 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "sanitizeUserText keeps ZWNJ/ZWJ (U+200C/U+200D) that Persian, Indic and emoji sequences need",
+  () => {
+    const persian = "علی\u200cرضا";
+    const sinhala = "ශ්\u200dරී";
+    const family = "👨\u200d👩\u200d👧\u200d👦";
+    assertEquals(sanitizeUserText(persian, 40), persian);
+    assertEquals(sanitizeUserText(sinhala, 40), sinhala);
+    assertEquals(sanitizeUserText(family, 40), family);
+  },
+);
+
+Deno.test("sanitizeUserText still strips ZWSP and LRM/RLM around the kept joiners", () => {
+  assertEquals(sanitizeUserText("a\u200bb\u200ec", 40), "abc");
+  assertEquals(sanitizeUserText("a\u200fb\ufeffc", 40), "abc");
+  assertEquals(sanitizeUserText("\u200dAli\u200c", 40), "Ali", "joiners without a join context go");
+});
+
+Deno.test("clientIp never returns an oversized or non-IP header value as the identity", () => {
+  const raw8k = "x".repeat(8000);
+  const oversized = clientIp(new Request("http://x/", { headers: { "cf-connecting-ip": raw8k } }));
+  assert(oversized !== raw8k);
+  assert(oversized.length <= 64, `bounded identity, got ${oversized.length} chars`);
+
+  const junk = clientIp(new Request("http://x/", { headers: { "cf-connecting-ip": "not an ip" } }));
+  assert(junk !== "not an ip");
+  assert(junk !== "unknown", "junk is not pooled into the shared 'unknown' bucket");
+  assertEquals(
+    junk,
+    clientIp(new Request("http://x/", { headers: { "cf-connecting-ip": "not an ip" } })),
+    "the same junk maps to the same bounded identity",
+  );
+  assert(
+    junk !== clientIp(new Request("http://x/", { headers: { "cf-connecting-ip": "other junk" } })),
+  );
+
+  // An invalid edge header falls through to the trusted last x-forwarded-for hop.
+  assertEquals(
+    clientIp(
+      new Request("http://x/", {
+        headers: { "cf-connecting-ip": raw8k, "x-forwarded-for": "9.9.9.9, 203.0.113.9" },
+      }),
+    ),
+    "203.0.113.9",
+  );
+});
+
+Deno.test("clientIp validates IPv4/IPv6 and normalises what it accepts", () => {
+  const ip = (value: string) =>
+    clientIp(new Request("http://x/", { headers: { "cf-connecting-ip": value } }));
+  assertEquals(ip("203.0.113.9"), "203.0.113.9");
+  assertEquals(ip("203.0.113.9:51234"), "203.0.113.9", "proxy-appended port is dropped");
+  assertEquals(ip("2001:DB8::1"), "2001:db8::1", "IPv6 is lower-cased");
+  assertEquals(ip("[2001:db8::1]:443"), "2001:db8::1");
+  assertEquals(ip("::ffff:203.0.113.9"), "::ffff:203.0.113.9");
+  assert(ip("256.1.1.1") !== "256.1.1.1", "out-of-range octet is not an IPv4");
+  assert(ip("2001:db8::1::2") !== "2001:db8::1::2", "two '::' is not an IPv6");
+  assert(ip("1.2.3") !== "1.2.3");
+});
+
 Deno.test("constantTimeEqual compares byte-wise and rejects length mismatch", () => {
   assert(constantTimeEqual("secret", "secret"));
   assert(!constantTimeEqual("secret", "secreT"));
