@@ -5,6 +5,8 @@ import {
 } from "@pickle/capture-envelope";
 import {
   analyzeCapture,
+  largestTorsoAnchorGapMs,
+  MAX_TORSO_ANCHOR_GAP_MS,
   preAnalysisGate,
   type CaptureAnalysisInput,
   type CaptureAnalysisRecord,
@@ -53,7 +55,7 @@ import { SYNTH_VERSION, synthesizeCapture, type SynthCapture } from "./synth.js"
  *   7. determinism             analyzeCapture again on the same input
  */
 
-export const HARNESS_VERSION = "xc-matrix-media-1-harness-2";
+export const HARNESS_VERSION = "xc-matrix-media-1-harness-3";
 export const DECLARED_STROKE: ShotTypeSlug = "forehand_drive";
 
 export type OutcomeKind = "scored" | "abstained" | "failed" | "threw" | "not_run";
@@ -79,12 +81,14 @@ export const DEFAULT_BUDGET: Record<"pr" | "full", CellBudget> = {
  * What the user would see for this cell on each shipping entry point
  * (apps/mobile/src/analysis/runCaptureAnalysis.ts `runCaptureAnalysisCore`):
  *  - guided capture (AnalyzeScreen.tsx:873): `attemptCaptureEnvelope` →
- *    UNSUPPORTED blocks; then sidecar parse; then analyzeCapture.
+ *    UNSUPPORTED blocks; then sidecar parse; then evaluateCaptureQuality +
+ *    evaluatePreAnalysisGate({frame: null, pose, poseQuality}) blocks; then
+ *    analyzeCapture.
  *  - imported video (AnalyzeScreen.tsx:880 passes `captureEnvelope: null`):
- *    sidecar parse; then analyzeCapture over the whole clip. No envelope,
- *    frame-analyzability, capture-quality or pre-analysis gate runs.
- * Neither entry point calls preAnalysisGate / evaluateFrameAnalyzability /
- * evaluateCaptureQuality (grep apps/mobile/src: no references).
+ *    sidecar parse; then the same pose-quality gate; then analyzeCapture
+ *    over the whole clip. No envelope or frame-analyzability gate runs.
+ * The mobile gate has no frame report, so it is mirrored here as the
+ * pose-conditioned part of the composite gate (`poseGateWouldBlock`).
  */
 export type Delivery =
   "quality_blocked" | "unavailable" | "scored" | "low_confidence" | "threw" | "not_run";
@@ -133,9 +137,8 @@ export interface CellResult {
     failure: StageFailure | null;
     /**
      * The pose-quality report refused (any reason) but the composite gate
-     * passed. By contract the composite gate only lifts the implausible-
-     * scale reasons out of captureQuality; this flags every other refusal
-     * the gate lets through so the report can count them.
+     * passed. The composite gate lifts every captureQuality reason, so this
+     * is expected to stay false; the report counts it as a cross-check.
      */
     qualityRefusedButGatePassed: boolean;
   };
@@ -345,6 +348,7 @@ export async function runCell(
   const qualityReport = evaluateCaptureQuality(pose);
   const gate = preAnalysisGate({ frame: frameReport, pose, poseQuality: qualityReport });
   checkGateOracle(spec, capture, frameReport, qualityReport, gate, violations);
+  const poseGateWouldBlock = !preAnalysisGate({ frame: null, pose, poseQuality: qualityReport }).ok;
 
   // ── 6. fusion ────────────────────────────────────────────────────────────
   const input = buildInput(spec, capture, pose);
@@ -419,9 +423,17 @@ export async function runCell(
     ? "quality_blocked"
     : !parsed.ok
       ? "unavailable"
-      : fusionDelivery;
+      : poseGateWouldBlock
+        ? "quality_blocked"
+        : fusionDelivery;
   const imported: Delivery | null =
-    spec.trigger === "full_clip" ? (!parsed.ok ? "unavailable" : fusionDelivery) : null;
+    spec.trigger === "full_clip"
+      ? !parsed.ok
+        ? "unavailable"
+        : poseGateWouldBlock
+          ? "quality_blocked"
+          : fusionDelivery
+      : null;
 
   return {
     harnessVersion: HARNESS_VERSION,
@@ -644,20 +656,20 @@ function checkGateOracle(
   expectReason(fpsTooLow, quality.reasons, "insufficient_fps", "pose_quality");
 
   // Composite-gate contract (analysis-pipeline/src/preAnalysisGate.ts):
-  // refuse when the frame report refuses, when the pose is empty, or when
-  // captureQuality carries an implausible-scale reason; pass otherwise.
-  // Other captureQuality reasons (too_few_pose_frames, insufficient_fps,
-  // dropout…) are deliberately NOT lifted — recorded per cell as
-  // `qualityRefusedButGatePassed`, not as a violation.
-  const implausibleScale = quality.reasons.some(
-    (r) => r === "player_too_small_in_frame" || r === "player_too_close_or_cropped",
-  );
+  // refuse when the frame report refuses, when the pose is empty, when
+  // captureQuality refuses for ANY reason (scale, too few frames, fps,
+  // confidence, coverage, dropout), or when the torso anchor is lost for
+  // longer than MAX_TORSO_ANCHOR_GAP_MS between two tracked frames; pass
+  // otherwise.
+  const torsoGap =
+    capture.sequence.frames.length > 0 &&
+    largestTorsoAnchorGapMs(capture.sequence) > MAX_TORSO_ANCHOR_GAP_MS;
   const componentRefused =
-    !frame.analyzable || capture.sequence.frames.length === 0 || implausibleScale;
+    !frame.analyzable || capture.sequence.frames.length === 0 || !quality.analyzable || torsoGap;
   if (gate.ok && componentRefused) {
     violations.push({
       invariant: "pre_gate_fails_closed",
-      detail: `frame.analyzable=${frame.analyzable} poseFrames=${capture.sequence.frames.length} implausibleScale=${implausibleScale} but gate ok`,
+      detail: `frame.analyzable=${frame.analyzable} poseFrames=${capture.sequence.frames.length} quality.analyzable=${quality.analyzable} torsoGap=${torsoGap} but gate ok`,
     });
   }
   if (gate.ok && (!gate.value.analyzable || gate.value.reasons.length > 0)) {

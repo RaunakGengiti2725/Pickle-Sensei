@@ -237,17 +237,19 @@ describe.skipIf(replaying)(
       }
     });
 
-    it("the envelope UNSUPPORTED block is the only shape gate on the guided path; imports have none", () => {
+    it("the envelope UNSUPPORTED block and the pose-quality gate are the shape gates on the guided path; imports have only the pose-quality gate", () => {
       for (const r of results) {
-        if (r.envelope.overall === "UNSUPPORTED") {
+        const poseGateBlocks =
+          !r.poseQuality.analyzable || r.preGate.reasons.includes("torso_tracking_gap");
+        if (r.envelope.overall === "UNSUPPORTED" || (r.sidecar.ok && poseGateBlocks)) {
           expect(r.delivery.guided, r.spec.cellId).toBe("quality_blocked");
         } else if (r.sidecar.ok) {
-          // Guided delivery follows the fusion outcome exactly: no other gate
-          // between the envelope and analyzeCapture exists on that path.
+          // Guided delivery follows the fusion outcome exactly once the
+          // envelope and the pose-quality gate have passed.
           expect(r.delivery.guided, r.spec.cellId).not.toBe("quality_blocked");
         }
         if (r.spec.trigger === "full_clip" && r.sidecar.ok) {
-          expect(r.delivery.imported, r.spec.cellId).not.toBe("quality_blocked");
+          expect(r.delivery.imported === "quality_blocked", r.spec.cellId).toBe(poseGateBlocks);
         }
       }
     });
