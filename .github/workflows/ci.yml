@@ -103,8 +103,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Supabase RLS + security regression matrix
-        run: scripts/verify-cloud.sh --only rls
+        with:
+          fetch-depth: 0 # scripts/security-scan.sh scans the full history for leaked secrets
+      - name: Supabase RLS + security regression matrix + secret scan
+        run: scripts/verify-cloud.sh --only rls,security
         env:
           VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
       - uses: actions/upload-artifact@v4
