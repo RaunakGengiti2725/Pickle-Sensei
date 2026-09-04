@@ -93,12 +93,6 @@ if [ "$REMOTE" = 1 ]; then
     *) TRIGGER="ci/mac-$(printf '%s' "$SRC" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-60)" ;;
   esac
   echo "pushing $SHA to trigger branch $TRIGGER (self-hosted M4 runner)…"
-  # A push that CREATES a branch does not evaluate as a change GitHub will run
-  # on reliably; create it at main's merge-base first, then move it to HEAD.
-  if [ -z "$(git ls-remote --heads origin "$TRIGGER")" ]; then
-    git fetch -q origin main
-    git push -q origin "$(git merge-base HEAD origin/main):refs/heads/$TRIGGER"
-  fi
   git push -q --force-with-lease origin "HEAD:refs/heads/$TRIGGER" || exit 1
   RUN_ID=""
   for _ in $(seq 1 24); do
