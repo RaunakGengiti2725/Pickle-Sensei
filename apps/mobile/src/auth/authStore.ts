@@ -195,8 +195,21 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
   }
 }
 
+/**
+ * The Keychain record the live ApiSession still owes the vault: set whenever
+ * the refresh token changes hands (sign-in, rotation) and cleared only once
+ * a write has succeeded. A write the Keychain refuses (device not yet
+ * unlocked, disk pressure) leaves the in-memory refresh token as the only
+ * copy — so the record is retried on the next foreground, and superseded by
+ * the next rotation's record, instead of being forgotten. Writes are
+ * serialized so a retry can never overwrite a newer record with an older one.
+ */
+let unsavedSession: PersistedSession | null = null;
+let vaultWrites: Promise<void> = Promise.resolve();
+
 function clearSyncedRuntime(): void {
   stopSessionKeeper();
+  unsavedSession = null;
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
@@ -237,21 +250,47 @@ function installApiSession(apiSession: ApiSession): void {
   setApiUnauthorizedListener(handleApiUnauthorized);
 }
 
+/** Writes the pending record if the ApiSession it describes is still the
+ * live one; resolves once this attempt (success or not) has completed. */
+function flushUnsavedSession(): Promise<void> {
+  vaultWrites = vaultWrites.then(async () => {
+    const record = unsavedSession;
+    if (!record) return;
+    const live = getApiSession();
+    if (
+      live?.canonicalAppUserId !== record.canonicalAppUserId ||
+      live.refreshToken !== record.refreshToken
+    ) {
+      // Signed out, or rotated again since: this record is no longer the
+      // one to make durable.
+      if (unsavedSession === record) unsavedSession = null;
+      return;
+    }
+    if ((await savePersistedSession(record)) && unsavedSession === record) {
+      unsavedSession = null;
+    }
+  });
+  return vaultWrites;
+}
+
 /** The Keychain record for a synced session — only when the server minted a
  * refresh token (a legacy provider-token session has nothing durable). */
-async function persistSession(
+function persistSession(
   session: AuthSession,
   apiSession: ApiSession,
 ): Promise<void> {
-  if (!apiSession.refreshToken || !session.canonicalAppUserId) return;
-  await savePersistedSession({
+  if (!apiSession.refreshToken || !session.canonicalAppUserId) {
+    return Promise.resolve();
+  }
+  unsavedSession = {
     version: 1,
     provider: apiSession.provider,
     canonicalAppUserId: session.canonicalAppUserId,
     refreshToken: apiSession.refreshToken,
     email: session.email,
     displayName: session.displayName,
-  });
+  };
+  return flushUnsavedSession();
 }
 
 /**
@@ -331,6 +370,7 @@ function keepSessionAlive(
       onOutcome?.('revoked');
     },
     onDeferred: () => onOutcome?.('offline'),
+    onForeground: () => void flushUnsavedSession(),
   });
 }
 

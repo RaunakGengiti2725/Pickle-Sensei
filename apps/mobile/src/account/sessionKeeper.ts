@@ -16,6 +16,16 @@ import {
  * overnight is refreshed the moment the app is opened). Started without a
  * bearer (a persisted session at launch) it refreshes immediately.
  *
+ * Expiry is tracked on the device's clock from the bearer's LIFETIME (how
+ * long the server said it lives from receipt), never from the server's
+ * absolute `expiresAt`: a device clock ahead of the server would otherwise
+ * make every fresh bearer look expired already. A rotation that just
+ * succeeded is additionally never followed by another scheduled one within
+ * `MIN_ROTATION_INTERVAL_MS`, so even a lifetime that reads as already spent
+ * (no `Date` header to correct the skew) cannot degrade into a refresh per
+ * second; a bearer the server genuinely rejects earlier is still rotated at
+ * once through `refreshSessionNow`.
+ *
  * The ONE outcome that ends the session is the server refusing the refresh
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
@@ -31,6 +41,10 @@ export interface SessionKeeperInput {
   onRevoked: () => void | Promise<void>;
   /** A refresh failed for a transient reason and a retry is scheduled. */
   onDeferred?: (error: unknown) => void;
+  /** Every return to the foreground, ahead of the bearer check — the hook for
+   * work the app could not finish while suspended or that failed and is
+   * waiting to be redone (e.g. a Keychain write). */
+  onForeground?: () => void;
   fetchFn?: SessionFetch;
   now?: () => number;
 }
@@ -39,6 +53,11 @@ export interface SessionKeeperInput {
 const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
+/** After a SUCCESSFUL rotation, the next one the keeper schedules waits at
+ * least this long, whatever the new bearer's lifetime reads as on this
+ * device. Foreground checks and `refreshSessionNow` (the server actually
+ * rejected the bearer) are not held back: each is a one-off, not a loop. */
+const MIN_ROTATION_INTERVAL_MS = 60_000;
 const MIN_DELAY_MS = 1_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
@@ -80,10 +99,14 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   const now = input.now ?? Date.now;
   let refreshToken = input.refreshToken;
   let bearerExpiresAtMs = input.bearerExpiresAtMs;
+  let rotatedAtMs: number | null = null;
   let failedAttempts = 0;
   let inflight = false;
 
   const live = () => myGeneration === generation;
+
+  const rotationCooldownMs = () =>
+    rotatedAtMs === null ? 0 : rotatedAtMs + MIN_ROTATION_INTERVAL_MS - now();
 
   const schedule = (delayMs: number) => {
     if (!live()) return;
@@ -98,7 +121,12 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   };
 
   const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+    schedule(
+      Math.max(
+        (bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS,
+        rotationCooldownMs(),
+      ),
+    );
   };
 
   const refresh = async () => {
@@ -111,7 +139,8 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       );
       if (!live()) return;
       refreshToken = tokens.refreshToken;
-      bearerExpiresAtMs = tokens.bearerExpiresAtMs;
+      rotatedAtMs = now();
+      bearerExpiresAtMs = rotatedAtMs + tokens.bearerLifetimeMs;
       failedAttempts = 0;
       await input.onRotated(tokens);
       if (live()) scheduleAheadOfExpiry();
@@ -132,6 +161,8 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
 
   const subscription = AppState.addEventListener('change', nextState => {
     if (nextState !== 'active' || !live()) return;
+    input.onForeground?.();
+    if (!live()) return;
     if (
       bearerExpiresAtMs === null ||
       bearerExpiresAtMs - now() < FOREGROUND_LEAD_MS

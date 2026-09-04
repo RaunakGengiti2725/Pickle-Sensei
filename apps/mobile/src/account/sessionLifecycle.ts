@@ -53,7 +53,24 @@ async function post(
 export interface RefreshedTokens {
   bearerToken: string;
   refreshToken: string;
+  /** The server's absolute expiry, as issued (the server's wall clock). */
   bearerExpiresAtMs: number;
+  /** How long the bearer lives from the moment it was received. Measured on
+   * the server's clock when the response carries a `Date` header, otherwise
+   * on the device's — a device clock far ahead of the server makes this
+   * negative, which is the caller's cue that the absolute expiry cannot be
+   * trusted for scheduling. */
+  bearerLifetimeMs: number;
+}
+
+/** The server's clock at the time of the response (`Date` header), or null
+ * when it sent none (or one that does not parse). */
+function serverClockMs(response: Response): number | null {
+  const headers: Headers | undefined = response.headers;
+  const date = typeof headers?.get === 'function' ? headers.get('date') : null;
+  if (!date) return null;
+  const parsed = Date.parse(date);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /**
@@ -111,10 +128,13 @@ export async function refreshApiSession(
       true,
     );
   }
+  const bearerExpiresAtMs = tokens.expiresAt * 1000;
   return {
     bearerToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
-    bearerExpiresAtMs: tokens.expiresAt * 1000,
+    bearerExpiresAtMs,
+    bearerLifetimeMs:
+      bearerExpiresAtMs - (serverClockMs(response) ?? Date.now()),
   };
 }
 

@@ -13,7 +13,9 @@
  *
  * Every operation fails soft: a build without the native module, or a
  * Keychain error, degrades to "nothing persisted" — the user stays signed in
- * for this run and is asked again next launch — never to a crash.
+ * for this run — never to a crash. `savePersistedSession` reports whether the
+ * write took, so the caller (authStore) can keep the record and try again
+ * later rather than let a one-off Keychain error cost the durable sign-in.
  */
 
 export const SESSION_VAULT_SERVICE = 'com.picklesensei.auth.session';
