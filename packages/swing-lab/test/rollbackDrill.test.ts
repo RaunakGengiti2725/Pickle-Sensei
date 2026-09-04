@@ -235,3 +235,98 @@ describe("cross-subsystem rollback drills (linux-test measurements)", () => {
     expect(actions).toEqual(["record_known_good", "activate", "disable", "rollback"]);
   });
 });
+
+describe("rollback drill candidate validation against shipped artifacts (ADJ-05)", () => {
+  function scoringState() {
+    const knownGoodConfig = getShotScoringConfig("forehand_drive");
+    let live: ShotScoringConfig | null = null;
+    const state = new SubsystemReleaseState<ShotScoringConfig>({
+      subsystem: "scoring-model",
+      initial: { version: SCORING_MODEL_VERSION, artifact: knownGoodConfig },
+      apply: (artifact) => {
+        live = artifact;
+      },
+    });
+    const verify = {
+      knownGoodLive: () => live !== null && live.scoringModelVersion === SCORING_MODEL_VERSION,
+      badLive: () => live !== null && live.scoringModelVersion !== SCORING_MODEL_VERSION,
+    };
+    return { state, verify, knownGoodConfig };
+  }
+
+  it("refuses a drill whose bad candidate is the active artifact itself", () => {
+    const { state, verify } = scoringState();
+    const active = state.active()!;
+    expect(() => runRollbackDrill(state, active, verify)).toThrow(
+      new RegExp(`bad candidate version "${SCORING_MODEL_VERSION}" is already the active version`),
+    );
+    // Nothing was recorded or transitioned: the drill aborted before touching state.
+    expect(state.journal()).toHaveLength(0);
+    expect(state.knownGood()).toBeNull();
+    expect(state.active()?.version).toBe(SCORING_MODEL_VERSION);
+  });
+
+  it("refuses a bad candidate that reuses the active version string", () => {
+    const { state, verify, knownGoodConfig } = scoringState();
+    const disguised: ShotScoringConfig = { ...knownGoodConfig, minAnalysisConfidence: 0 };
+    expect(() =>
+      runRollbackDrill(state, { version: SCORING_MODEL_VERSION, artifact: disguised }, verify),
+    ).toThrow(/already the active version/);
+    expect(state.journal()).toHaveLength(0);
+    expect(state.active()?.artifact).toBe(knownGoodConfig);
+  });
+
+  it("a bad candidate that fails to apply never displaces sm-v1 and the failure is journaled", () => {
+    const knownGoodConfig = getShotScoringConfig("forehand_drive");
+    let live: ShotScoringConfig | null = null;
+    const state = new SubsystemReleaseState<ShotScoringConfig>({
+      subsystem: "scoring-model",
+      initial: { version: SCORING_MODEL_VERSION, artifact: knownGoodConfig },
+      clock: () => 1_000,
+      apply: (artifact) => {
+        if (artifact !== null && artifact.minAnalysisConfidence <= 0) {
+          throw new Error("scoring config rejected: minAnalysisConfidence must be positive");
+        }
+        live = artifact;
+      },
+    });
+    const badConfig: ShotScoringConfig = {
+      ...knownGoodConfig,
+      scoringModelVersion: "sm-v99-bad-candidate",
+      minAnalysisConfidence: 0,
+    };
+    expect(() =>
+      runRollbackDrill(
+        state,
+        { version: "sm-v99-bad-candidate", artifact: badConfig },
+        {
+          knownGoodLive: () => live !== null && live.scoringModelVersion === SCORING_MODEL_VERSION,
+          badLive: () => live !== null && live.minAnalysisConfidence === 0,
+        },
+      ),
+    ).toThrow(/minAnalysisConfidence must be positive/);
+
+    expect(live).toBe(knownGoodConfig);
+    expect(state.active()?.version).toBe(SCORING_MODEL_VERSION);
+    expect(state.knownGood()?.version).toBe(SCORING_MODEL_VERSION);
+    expect(state.journal()).toEqual([
+      expect.objectContaining({
+        action: "record_known_good",
+        outcome: "applied",
+        atEpochMs: 1_000,
+      }),
+      expect.objectContaining({
+        action: "activate",
+        fromVersion: SCORING_MODEL_VERSION,
+        toVersion: "sm-v99-bad-candidate",
+        outcome: "failed",
+        atEpochMs: 1_000,
+      }),
+    ]);
+    // The kill switch and rollback still work after the failed activation.
+    state.disable();
+    expect(live).toBeNull();
+    state.rollback();
+    expect(live).toBe(knownGoodConfig);
+  });
+});
