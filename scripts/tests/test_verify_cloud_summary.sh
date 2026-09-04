@@ -23,9 +23,9 @@ cd "$REPO_ROOT"
 FAILURES=0
 pass() { printf 'ok   - %s\n' "$*"; }
 fail() { printf 'FAIL - %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
-check() { # check <description> <command...>
+check() { # check <description> <command...>  (stdout of the command is discarded)
   local desc="$1"; shift
-  if "$@"; then pass "$desc"; else fail "$desc"; fi
+  if "$@" >/dev/null; then pass "$desc"; else fail "$desc"; fi
 }
 for tool in jq python3 node; do
   command -v "$tool" >/dev/null 2>&1 || { echo "missing required tool: $tool" >&2; exit 2; }
@@ -46,9 +46,9 @@ rc=$?
 check "e2e stage is reported unavailable, run exits non-zero (exit $rc)" [ "$rc" -ne 0 ]
 check "summary.json parses with jq, python3 -m json.tool and node JSON.parse" parses_everywhere "$art/summary.json"
 check "e2e stage status is 'unavailable'" \
-  jq -e '.stages[] | select(.name == "e2e") | .status == "unavailable"' "$art/summary.json" >/dev/null
+  jq -e '.stages[] | select(.name == "e2e") | .status == "unavailable"' "$art/summary.json"
 check "note is a readable rendering of the line (keeps the path text, not emptied)" \
-  jq -e '.stages[] | select(.name == "e2e") | .note | test("nonexistent/with") and test("tab") and test("carriage") and test("bytes")' "$art/summary.json" >/dev/null
+  jq -e '.stages[] | select(.name == "e2e") | .note | test("nonexistent/with") and test("tab") and test("carriage") and test("bytes")' "$art/summary.json"
 check "summary.json is valid UTF-8" python3 -c 'import sys; open(sys.argv[1], encoding="utf-8").read()' "$art/summary.json"
 
 echo "# --- unit: json_escape round-trips every C0 control through jq ---"
@@ -96,7 +96,7 @@ escaped="$(json_escape "$(cat "$WORK/bad.raw")")"
 printf '{"note": "%s"}' "$escaped" >"$WORK/bad.json"
 check "invalid UTF-8 bytes: output parses with jq, python3 and node" parses_everywhere "$WORK/bad.json"
 check "invalid UTF-8 bytes: surrounding text is kept" \
-  jq -e '.note | test("abc") and test("def")' "$WORK/bad.json" >/dev/null
+  jq -e '.note | test("abc") and test("def")' "$WORK/bad.json"
 
 echo
 if [ "$FAILURES" -ne 0 ]; then

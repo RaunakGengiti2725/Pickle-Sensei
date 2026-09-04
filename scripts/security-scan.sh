@@ -3,12 +3,21 @@
 #
 #   scripts/security-scan.sh                 # working tree + full git history of HEAD
 #   scripts/security-scan.sh --tree          # working tree only (tracked, untracked, unignored)
-#   scripts/security-scan.sh --history       # git history only
+#   scripts/security-scan.sh --history       # git history only (HEAD's ancestry)
+#   scripts/security-scan.sh --history --all-refs   # audit: every ref in the clone, not just HEAD
 #   scripts/security-scan.sh --history --log-opts "origin/main..HEAD"   # only this branch's commits
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
 # with a justification). Findings are ALWAYS redacted in output and reports.
+#
+# Scope: the verdict is a function of the commit under test. The default
+# history scan covers exactly HEAD's ancestry — gitleaks is pointed at an
+# ephemeral bare repository that shares this clone's object store (alternates)
+# but holds a single ref = HEAD, so no other branch, tag or remote-tracking ref
+# exists for it to walk. Unrelated branches in the clone (CI fetches every
+# remote branch) can therefore neither fail nor pass a run; use --all-refs for
+# a repository-wide audit. The log states the scanned range and commit count.
 #
 # Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
 #
@@ -34,7 +43,8 @@ CONFIG="$REPO_ROOT/.gitleaks.toml"
 CACHE_DIR="${SECURITY_SCAN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/pickle-sensei}"
 
 DOWNLOAD_TMP=""
-trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"' EXIT
+HISTORY_VIEW=""
+trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"; [ -z "$HISTORY_VIEW" ] || rm -rf "$HISTORY_VIEW"' EXIT
 
 log() { printf '[security-scan] %s\n' "$*" >&2; }
 die() {
@@ -49,6 +59,7 @@ usage() {
 
 SCAN_TREE=1
 SCAN_HISTORY=1
+ALL_REFS=0
 LOG_OPTS=""
 REPORT_DIR=""
 VERBOSE=0
@@ -56,6 +67,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --tree) SCAN_HISTORY=0 ;;
     --history) SCAN_TREE=0 ;;
+    --all-refs) ALL_REFS=1 ;;
     --log-opts)
       [ $# -ge 2 ] || die "--log-opts needs a value"
       LOG_OPTS="$2"
@@ -73,6 +85,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$SCAN_TREE" = 1 ] || [ "$SCAN_HISTORY" = 1 ] || die "--tree and --history are mutually exclusive"
+[ "$ALL_REFS" = 0 ] || [ -z "$LOG_OPTS" ] || die "--all-refs and --log-opts are mutually exclusive (put --all in --log-opts instead)"
+[ "$ALL_REFS" = 0 ] || [ "$SCAN_HISTORY" = 1 ] || die "--all-refs only applies to the history scan"
 
 [ -f "$CONFIG" ] || die "missing $CONFIG"
 cd "$REPO_ROOT"
@@ -167,16 +181,17 @@ COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --config "$CONFIG")
 [ "$VERBOSE" = 1 ] && COMMON_ARGS+=(--verbose)
 
 run_scan() {
-  # $1 = label, $2 = gitleaks subcommand, remaining = extra args
-  local label="$1" sub="$2"
-  shift 2
+  # $1 = label, $2 = gitleaks subcommand, $3 = source path, remaining = extra args
+  local label="$1" sub="$2" source="$3"
+  shift 3
   local args=("$sub" "${COMMON_ARGS[@]}")
   if [ -n "$REPORT_DIR" ]; then
     args+=(--report-format json --report-path "$REPORT_DIR/gitleaks-${label}.json")
   fi
-  # Scan "." from the repo root so findings carry repo-relative paths (the
-  # allowlists in .gitleaks.toml are anchored on them).
-  args+=("$@" .)
+  # The tree scan runs on "." from the repo root and git scans report the
+  # paths in the diff headers, so findings always carry repo-relative paths
+  # (the allowlists in .gitleaks.toml are anchored on them).
+  args+=("$@" "$source")
   log "scanning ${label}…"
   local start end rc=0
   start=$(date +%s)
@@ -190,16 +205,57 @@ run_scan() {
   return "$rc"
 }
 
+make_head_ancestry_view() {
+  # Sets HISTORY_VIEW to a bare repository whose ONLY ref is $1 (HEAD of this
+  # clone). It borrows this clone's objects through objects/info/alternates
+  # (nothing is copied) and inherits its shallow boundary, so `git log --all`
+  # inside it is exactly `git log HEAD` here — the scope is enforced by
+  # construction rather than by the scanner's revision-selection flags.
+  local rev="$1" common alt
+  common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+  HISTORY_VIEW="$(mktemp -d)"
+  git init -q --bare "$HISTORY_VIEW" || die "could not create the HEAD-ancestry view"
+  {
+    printf '%s\n' "$common/objects"
+    if [ -f "$common/objects/info/alternates" ]; then
+      while IFS= read -r alt; do
+        case "$alt" in
+          "" | /*) printf '%s\n' "$alt" ;;
+          *) printf '%s/objects/%s\n' "$common" "$alt" ;;
+        esac
+      done <"$common/objects/info/alternates"
+    fi
+  } >"$HISTORY_VIEW/objects/info/alternates"
+  [ ! -f "$common/shallow" ] || cp "$common/shallow" "$HISTORY_VIEW/shallow"
+  git -C "$HISTORY_VIEW" update-ref refs/heads/head-ancestry "$rev" || die "could not pin $rev in the HEAD-ancestry view"
+  [ "$(git -C "$HISTORY_VIEW" rev-list --count --all)" = "$(git rev-list --count "$rev")" ] \
+    || die "HEAD-ancestry view does not match this clone's HEAD history"
+}
+
+scan_history() {
+  local rev count
+  if [ -n "$LOG_OPTS" ]; then
+    log "history: custom revision selection (git log $LOG_OPTS) over the whole clone"
+    run_scan history git . --log-opts "$LOG_OPTS"
+  elif [ "$ALL_REFS" = 1 ]; then
+    count="$(git rev-list --count --all)"
+    log "history: all refs in this clone, $count commits — AUDIT MODE: this verdict depends on refs other than HEAD"
+    run_scan history git .
+  else
+    rev="$(git rev-parse --verify -q 'HEAD^{commit}')" || die "HEAD does not point at a commit"
+    count="$(git rev-list --count "$rev")"
+    log "history: HEAD ancestry (${rev:0:12}), $count commits — refs other than HEAD are not visible to this scan"
+    make_head_ancestry_view "$rev"
+    run_scan history git "$HISTORY_VIEW"
+  fi
+}
+
 overall=0
 if [ "$SCAN_TREE" = 1 ]; then
-  run_scan tree dir || overall=1
+  run_scan tree dir . || overall=1
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  if [ -n "$LOG_OPTS" ]; then
-    run_scan history git --log-opts "$LOG_OPTS" || overall=1
-  else
-    run_scan history git || overall=1
-  fi
+  scan_history || overall=1
 fi
 
 if [ "$overall" = 0 ]; then

@@ -20,9 +20,9 @@ trap 'rm -rf "$WORK"' EXIT
 FAILURES=0
 pass() { printf 'ok   - %s\n' "$*"; }
 fail() { printf 'FAIL - %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
-check() { # check <description> <command...>
+check() { # check <description> <command...>  (stdout of the command is discarded)
   local desc="$1"; shift
-  if "$@"; then pass "$desc"; else fail "$desc"; fi
+  if "$@" >/dev/null; then pass "$desc"; else fail "$desc"; fi
 }
 
 # Synthetic Supabase-style secret key: prefix + 40 random [A-Za-z0-9] chars,
@@ -69,7 +69,7 @@ art="$WORK/vc-clean"
 rc=$?
 check "verify-cloud --only security exits 0 on the clean HEAD (exit $rc)" [ "$rc" -eq 0 ]
 check "summary.json stages[security].status == passed" \
-  jq -e '.stages[] | select(.name == "security") | .status == "passed"' "$art/summary.json" >/dev/null
+  jq -e '.stages[] | select(.name == "security") | .status == "passed"' "$art/summary.json"
 
 echo "# --- repo-wide audit mode still sees the unrelated branch ---"
 (cd "$REPO" && scripts/security-scan.sh --history --all-refs) >"$WORK/history-allrefs.log" 2>&1
