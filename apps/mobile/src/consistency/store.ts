@@ -270,6 +270,56 @@ function celebrationFor(
 
 let refreshQueue: Promise<void> = Promise.resolve();
 
+/**
+ * Every durable write to `consistency:<owner>` is a read-modify-write of the
+ * whole ledger, so they take turns: each writer re-reads the ledger inside
+ * its turn and merges its change into whatever the previous writer left.
+ * Callers may read optimistically outside the queue (a refresh derives its
+ * snapshot from such a read); only the merge-and-write is serialized.
+ */
+let ledgerWriteQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Resolves to the ledger that is durable once this turn is over: the merged
+ * ledger after a write, the unchanged one when `mutate` returns null, or
+ * null when the active owner changed underneath (nothing is written for an
+ * owner who is no longer active). Rejects when the kv read or write fails.
+ */
+function mutateLedger(
+  owner: string,
+  mutate: (ledger: ConsistencyLedger) => ConsistencyLedger | null,
+): Promise<ConsistencyLedger | null> {
+  const run = async (): Promise<ConsistencyLedger | null> => {
+    const db = getDb();
+    const key = consistencyKeyForOwner(owner);
+    const ledger = parseConsistencyLedger(await getKv(db, key));
+    const next = mutate(ledger);
+    if (!next) return ledger;
+    if (getActiveDataOwner() !== owner) return null;
+    await setKv(db, key, JSON.stringify(next));
+    return next;
+  };
+  const turn = ledgerWriteQueue.then(run, run);
+  ledgerWriteQueue = turn.catch(() => undefined);
+  return turn;
+}
+
+/**
+ * The day whose "Day N secured" moment was handed out in this process, per
+ * owner. Consumption is remembered here as well as in the ledger so a
+ * refresh whose ledger read predates the marker write — or a marker write
+ * that failed outright — can never arm the same moment twice in one session.
+ */
+let consumedDaySecured: { owner: string; day: string } | null = null;
+
+function daySecuredConsumedThisSession(owner: string, day: string): boolean {
+  return (
+    consumedDaySecured !== null &&
+    consumedDaySecured.owner === owner &&
+    consumedDaySecured.day === day
+  );
+}
+
 export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
@@ -280,6 +330,11 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
 
   hydrate: async () => {
     const owner = getActiveDataOwner();
+    if (get().ownerKey !== owner) {
+      // Moments armed for the previous owner never carry over to this one.
+      consumedDaySecured = null;
+      set({ ownerKey: owner, celebration: null, daySecured: null });
+    }
     if (owner === SIGNED_OUT_DATA_OWNER) {
       set({
         hydrated: true,
@@ -291,7 +346,6 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
       });
       return;
     }
-    set({ ownerKey: owner });
     await get().refresh();
     set({ hydrated: true });
   },
@@ -331,17 +385,20 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         ledger.celebrated,
       );
       if (markCelebrated.length > 0) {
-        const celebrated = { ...ledger.celebrated };
-        for (const id of markCelebrated) celebrated[id] = snapshot.asOfDay;
-        const nextLedger: ConsistencyLedger = { ...ledger, celebrated };
+        if (getActiveDataOwner() !== owner) return;
         try {
-          if (getActiveDataOwner() !== owner) return;
-          await setKv(
-            getDb(),
-            consistencyKeyForOwner(owner),
-            JSON.stringify(nextLedger),
-          );
-          ledger = nextLedger;
+          const persisted = await mutateLedger(owner, current => {
+            const celebrated = { ...current.celebrated };
+            let changed = false;
+            for (const id of markCelebrated) {
+              if (celebrated[id]) continue;
+              celebrated[id] = snapshot.asOfDay;
+              changed = true;
+            }
+            return changed ? { ...current, celebrated } : null;
+          });
+          if (!persisted) return;
+          ledger = persisted;
         } catch {
           // Could not persist: skip the ceremony rather than risk replaying
           // it forever. The next successful refresh retries.
@@ -355,7 +412,9 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
       const today = snapshot.asOfDay;
       const todayLog = snapshot.days[today];
       const daySecured: DaySecuredMoment | null =
-        snapshot.trainedToday && ledger.daySecuredShownDay !== today
+        snapshot.trainedToday &&
+        ledger.daySecuredShownDay !== today &&
+        !daySecuredConsumedThisSession(owner, today)
           ? {
               day: today,
               streak: snapshot.currentStreak,
@@ -386,18 +445,22 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   recordDrillCompletion: async record => {
     const owner = getActiveDataOwner();
     if (owner === SIGNED_OUT_DATA_OWNER) return;
+    const isRecorded = (ledger: ConsistencyLedger) =>
+      ledger.drills.some(existing => existing.id === record.id);
     try {
-      const db = getDb();
-      const ledger = parseConsistencyLedger(
-        await getKv(db, consistencyKeyForOwner(owner)),
+      // Optimistic read: a repeat completion never waits for the queue. The
+      // authoritative check happens against the ledger inside the turn.
+      const current = parseConsistencyLedger(
+        await getKv(getDb(), consistencyKeyForOwner(owner)),
       );
-      if (ledger.drills.some(existing => existing.id === record.id)) return;
-      const drills = [...ledger.drills, record].slice(-MAX_LEDGER_DRILLS);
-      if (getActiveDataOwner() !== owner) return;
-      await setKv(
-        db,
-        consistencyKeyForOwner(owner),
-        JSON.stringify({ ...ledger, drills }),
+      if (isRecorded(current)) return;
+      await mutateLedger(owner, ledger =>
+        isRecorded(ledger)
+          ? null
+          : {
+              ...ledger,
+              drills: [...ledger.drills, record].slice(-MAX_LEDGER_DRILLS),
+            },
       );
     } catch {
       // A drill that could not be recorded still completed server-side; the
@@ -407,28 +470,23 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   },
 
   consumeDaySecured: () => {
-    const pending = get().daySecured;
+    const { daySecured: pending, ownerKey } = get();
     if (!pending) return null;
     set({ daySecured: null });
     const owner = getActiveDataOwner();
-    if (owner === SIGNED_OUT_DATA_OWNER) return null;
+    // A moment armed for another owner is discarded, never handed out and
+    // never stamped into the active owner's ledger.
+    if (owner === SIGNED_OUT_DATA_OWNER || ownerKey !== owner) return null;
+    consumedDaySecured = { owner, day: pending.day };
     // Persist the consumption so the moment shows once per day, ever.
-    void (async () => {
-      try {
-        const db = getDb();
-        const ledger = parseConsistencyLedger(
-          await getKv(db, consistencyKeyForOwner(owner)),
-        );
-        if (getActiveDataOwner() !== owner) return;
-        await setKv(
-          db,
-          consistencyKeyForOwner(owner),
-          JSON.stringify({ ...ledger, daySecuredShownDay: pending.day }),
-        );
-      } catch {
-        // Worst case the moment could repeat after a restart — harmless.
-      }
-    })();
+    void mutateLedger(owner, ledger =>
+      ledger.daySecuredShownDay === pending.day
+        ? null
+        : { ...ledger, daySecuredShownDay: pending.day },
+    ).catch(() => {
+      // Worst case the moment could repeat after a restart — harmless; this
+      // session already remembers it in consumedDaySecured.
+    });
     return pending;
   },
 

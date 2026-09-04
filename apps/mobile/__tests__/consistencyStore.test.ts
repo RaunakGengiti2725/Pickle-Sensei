@@ -18,9 +18,12 @@ jest.mock('../src/data/db', () => ({
   getDb: () => ({}),
 }));
 
+const mockControl = { failSetKv: false };
+
 jest.mock('../src/data/repository', () => ({
   getKv: async (_db: unknown, key: string) => mockKv.get(key) ?? null,
   setKv: async (_db: unknown, key: string, value: string) => {
+    if (mockControl.failSetKv) throw new Error('disk full');
     mockKv.set(key, value);
   },
   listActivityShots: async () => [...mockShots],
@@ -36,6 +39,7 @@ import {
 } from '../src/consistency/store';
 
 const owner = '22222222-2222-4222-8222-222222222222';
+const otherOwner = '33333333-3333-4333-8333-333333333333';
 
 /** Day 0 = one second ago (always inside today, never "future"); earlier
  * days pin to local noon, which is always inside that local calendar day. */
@@ -61,6 +65,7 @@ function addShot(daysAgo: number, score = 6) {
 beforeEach(() => {
   mockKv.clear();
   mockShots.length = 0;
+  mockControl.failSetKv = false;
   useConsistencyStore.setState({
     hydrated: false,
     ownerKey: null,
@@ -164,5 +169,60 @@ describe('useConsistencyStore', () => {
         useConsistencyStore.getState().snapshot!.asOfDay
       ]?.drillCount,
     ).toBe(1);
+  });
+
+  it('keeps every completion when several land at once', async () => {
+    await useConsistencyStore.getState().hydrate();
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        useConsistencyStore.getState().recordDrillCompletion({
+          id: `completion-${i}`,
+          slug: 'contact-shadow',
+          title: 'Contact Shadow Reps',
+          completedAtIso: isoDaysAgo(0),
+        }),
+      ),
+    );
+    const ledger = JSON.parse(mockKv.get(consistencyKeyForOwner(owner))!) as {
+      drills: Array<{ id: string }>;
+    };
+    expect(ledger.drills.map(d => d.id).sort()).toEqual(
+      Array.from({ length: 10 }, (_, i) => `completion-${i}`).sort(),
+    );
+    const snapshot = useConsistencyStore.getState().snapshot;
+    expect(snapshot?.days[snapshot.asOfDay]?.drillCount).toBe(10);
+  });
+
+  it('remembers a consumed moment for the session even when the marker write fails', async () => {
+    addShot(0);
+    await useConsistencyStore.getState().hydrate();
+    mockControl.failSetKv = true;
+    expect(useConsistencyStore.getState().consumeDaySecured()).toMatchObject({
+      streak: 1,
+    });
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
+    mockControl.failSetKv = false;
+
+    await useConsistencyStore.getState().refresh();
+    expect(useConsistencyStore.getState().daySecured).toBeNull();
+  });
+
+  it('discards a moment consumed after the owner changed instead of stamping the new owner', async () => {
+    addShot(0);
+    await useConsistencyStore.getState().hydrate();
+    expect(useConsistencyStore.getState().daySecured).not.toBeNull();
+
+    setActiveDataOwner(otherOwner);
+    expect(useConsistencyStore.getState().consumeDaySecured()).toBeNull();
+    expect(useConsistencyStore.getState().daySecured).toBeNull();
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
+    expect(mockKv.has(consistencyKeyForOwner(otherOwner))).toBe(false);
+
+    // The moment was never shown to its owner: it is still armed for them.
+    setActiveDataOwner(owner);
+    await useConsistencyStore.getState().hydrate();
+    expect(useConsistencyStore.getState().daySecured).toMatchObject({
+      streak: 1,
+    });
   });
 });

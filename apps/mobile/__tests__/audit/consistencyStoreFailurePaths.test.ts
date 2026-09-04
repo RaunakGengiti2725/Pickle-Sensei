@@ -211,13 +211,17 @@ describe('audit: consistency store failure paths', () => {
     expect(useConsistencyStore.getState().consumeDaySecured()).toBeNull();
     await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     expect(consoleError).not.toHaveBeenCalled();
-    // Without the durable marker, the moment re-arms on the next refresh
-    // (documented "may repeat after restart" worst case).
+    // The durable marker never landed, but the consumption is remembered in
+    // this process: the next refresh must not hand the same day out again
+    // (the documented worst case is a repeat after a RESTART, not in-session).
     mockFlags.failSetKv = false;
     await useConsistencyStore.getState().refresh();
-    expect(useConsistencyStore.getState().daySecured?.day).toBe(
-      useConsistencyStore.getState().snapshot?.asOfDay,
+    expect(useConsistencyStore.getState().snapshot?.trainedToday).toBe(true);
+    expect(useConsistencyStore.getState().daySecured).toBeNull();
+    const ledger = parseConsistencyLedger(
+      mockKv.get(consistencyKeyForOwner(owner)) ?? null,
     );
+    expect(ledger.daySecuredShownDay).toBeNull();
   });
 
   it('consumeDaySecured for a signed-out owner returns null and persists nothing', async () => {
