@@ -8,6 +8,7 @@ import { drillCatalog } from "../drills.ts";
 import { drillInstructionalMedia } from "../drillMedia.ts";
 import {
   activeSubscriber,
+  captureConsole,
   fakeGoogleIdToken,
   loadHarness,
   OTHER_USER_ID,
@@ -302,6 +303,35 @@ Deno.test(
     const outage = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.9" }));
     assertEquals(outage.status, 502);
     assertEquals((await outage.json()).error.code, "billing_unavailable");
+  },
+);
+
+Deno.test(
+  "billing sync: RevenueCat 401 → 502 billing_unavailable with a console.error naming RevenueCat and 401; the API key never appears in the log",
+  async () => {
+    const h = await loadHarness();
+    const log = captureConsole();
+    try {
+      h.rcStatus = 401;
+      h.rpcs["access_state"] = ACCESS_ROW;
+      const res = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.19" }));
+      assertEquals(res.status, 502);
+      const body = await res.json();
+      assertEquals(body.error.code, "billing_unavailable");
+      assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0, "no verdict is persisted");
+
+      const diagnostic = log.lines.find((line) => /revenuecat/i.test(line) && line.includes("401"));
+      assert(diagnostic, `expected a RevenueCat 401 diagnostic, got ${JSON.stringify(log.lines)}`);
+      assertStringIncludes(diagnostic, "7225");
+      const key = Deno.env.get("REVENUECAT_SECRET_API_KEY");
+      assert(key, "harness must install REVENUECAT_SECRET_API_KEY");
+      for (const line of log.lines) {
+        assertEquals(line.includes(key), false, `secret leaked into log: ${line}`);
+      }
+      assertEquals(JSON.stringify(body).includes("401"), false, "client body stays generic");
+    } finally {
+      log.restore();
+    }
   },
 );
 

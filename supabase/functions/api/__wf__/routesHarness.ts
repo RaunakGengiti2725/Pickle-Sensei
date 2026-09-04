@@ -10,6 +10,29 @@ export interface RecordedCall {
   body: unknown;
 }
 
+/** A PostgREST error body (what supabase-js folds into `error.code` /
+ * `error.message`). */
+export interface PostgrestFailure {
+  status: number;
+  code: string;
+  message: string;
+}
+
+/** Stateful billing tables. When installed (`h.useBillingStore()`), the
+ * PostgREST stub PERSISTS `webhook_events` (id-keyed, ignore-duplicates) and
+ * `billing_entitlements` (user_id-keyed) rows instead of answering a blind
+ * 201, so idempotency / replay / partial-persistence behaviour is observable.
+ * Every call is still recorded in `h.calls`. */
+export interface BillingStore {
+  webhookEvents: Map<string, Record<string, unknown>>;
+  entitlements: Map<string, Record<string, unknown>>;
+  /** Every billing_entitlements upsert payload, in order (failed ones too). */
+  entitlementUpserts: Record<string, unknown>[];
+  /** Consulted before the Nth (0-based) billing_entitlements upsert; a
+   * returned failure is answered instead of persisting the row. */
+  failEntitlementUpsert: (n: number, row: Record<string, unknown>) => PostgrestFailure | null;
+}
+
 export interface Harness {
   handler: (request: Request) => Promise<Response>;
   realFetch: typeof fetch;
@@ -17,14 +40,23 @@ export interface Harness {
   calls: RecordedCall[];
   /** Subscriber JSON RevenueCat returns (null → HTTP 500 from RevenueCat). */
   subscriber: Record<string, unknown> | null;
+  /** When set, RevenueCat answers this HTTP status with its documented
+   * `{code: 7225, message: "Invalid API key."}` error body. */
+  rcStatus: number | null;
+  /** When set, the RevenueCat fetch rejects with this error (network failure
+   * / AbortSignal timeout). */
+  rcError: Error | null;
   /** Rows returned for PostgREST GET by table name. */
   tables: Record<string, unknown[]>;
   /** Rows returned for PostgREST RPC POST by function name. */
   rpcs: Record<string, unknown>;
+  /** Stateful webhook_events / billing_entitlements (null → stateless 201). */
+  billing: BillingStore | null;
   /** Test-only copy of the generated AES key used by the lazy edge config. */
   appleTokenEncryptionKey: string;
   reset(): void;
   callsTo(fragment: string): RecordedCall[];
+  useBillingStore(): BillingStore;
 }
 
 export const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -114,17 +146,33 @@ export async function loadHarness(): Promise<Harness> {
     realServe,
     calls: [],
     subscriber: {},
+    rcStatus: null,
+    rcError: null,
     tables: {},
     rpcs: {},
+    billing: null,
     appleTokenEncryptionKey,
     reset() {
       state.calls = [];
       state.subscriber = {};
+      state.rcStatus = null;
+      state.rcError = null;
       state.tables = {};
       state.rpcs = {};
+      state.billing = null;
     },
     callsTo(fragment: string) {
       return state.calls.filter((call) => call.url.includes(fragment));
+    },
+    useBillingStore() {
+      const store: BillingStore = {
+        webhookEvents: new Map(),
+        entitlements: new Map(),
+        entitlementUpserts: [],
+        failEntitlementUpsert: () => null,
+      };
+      state.billing = store;
+      return store;
     },
   };
 
@@ -133,6 +181,54 @@ export async function loadHarness(): Promise<Harness> {
       status,
       headers: { "Content-Type": "application/json" },
     });
+
+  const pgFailure = (failure: PostgrestFailure): Response =>
+    jsonResponse(failure.status, {
+      code: failure.code,
+      message: failure.message,
+      details: null,
+      hint: null,
+    });
+
+  // maybeSingle(): PostgREST answers 406/PGRST116 for 0 rows; supabase-js
+  // folds that into data:null, error:null.
+  const noRows = (): Response => pgFailure({ status: 406, code: "PGRST116", message: "0 rows" });
+
+  const statefulBilling = (
+    table: string,
+    request: Request,
+    headers: Record<string, string>,
+    body: unknown,
+  ): Response | null => {
+    const store = state.billing;
+    if (!store) return null;
+    if (table === "webhook_events") {
+      if (request.method === "GET") {
+        const filter = new URL(request.url).searchParams.get("id") ?? "";
+        const id = filter.startsWith("eq.") ? filter.slice(3) : filter;
+        const row = store.webhookEvents.get(id);
+        if ((headers["accept"] ?? "").includes("application/vnd.pgrst.object+json")) {
+          return row ? jsonResponse(200, { id: row.id }) : noRows();
+        }
+        return jsonResponse(200, row ? [{ id: row.id }] : []);
+      }
+      if (request.method === "POST" && isRecord(body)) {
+        const id = String(body.id);
+        if (!store.webhookEvents.has(id)) store.webhookEvents.set(id, body);
+        return new Response(null, { status: 201 });
+      }
+      return null;
+    }
+    if (table === "billing_entitlements" && request.method === "POST" && isRecord(body)) {
+      const n = store.entitlementUpserts.length;
+      store.entitlementUpserts.push(body);
+      const failure = store.failEntitlementUpsert(n, body);
+      if (failure) return pgFailure(failure);
+      store.entitlements.set(String(body.user_id), body);
+      return new Response(null, { status: 201 });
+    }
+    return null;
+  };
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
@@ -151,6 +247,10 @@ export async function loadHarness(): Promise<Harness> {
     state.calls.push({ url, method: request.method, headers, body });
 
     if (url.startsWith(RC_URL)) {
+      if (state.rcError) throw state.rcError;
+      if (state.rcStatus !== null) {
+        return jsonResponse(state.rcStatus, { code: 7225, message: "Invalid API key." });
+      }
       if (!state.subscriber) {
         return new Response("upstream error", { status: 500 });
       }
@@ -213,6 +313,8 @@ export async function loadHarness(): Promise<Harness> {
         }
         return jsonResponse(200, state.rpcs[fn]);
       }
+      const stateful = statefulBilling(table, request, headers, body);
+      if (stateful) return stateful;
       if (request.method === "GET") {
         const rows = state.tables[table] ?? [];
         const accept = headers["accept"] ?? "";
@@ -263,6 +365,27 @@ export async function loadHarness(): Promise<Harness> {
   await import("../index.ts");
   harness = state;
   return state;
+}
+
+/** Capture console.error / console.warn lines (joined args) until restored.
+ * Use to assert that a failure path leaves an operator diagnostic — and that
+ * no diagnostic leaks a secret. */
+export function captureConsole(): { lines: string[]; restore: () => void } {
+  const lines: string[] = [];
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const record = (...args: unknown[]) => {
+    lines.push(args.map((arg) => (arg instanceof Error ? `${arg.name}: ${arg.message}` : String(arg))).join(" "));
+  };
+  console.error = record;
+  console.warn = record;
+  return {
+    lines,
+    restore: () => {
+      console.error = originalError;
+      console.warn = originalWarn;
+    },
+  };
 }
 
 export function webhookRequest(
