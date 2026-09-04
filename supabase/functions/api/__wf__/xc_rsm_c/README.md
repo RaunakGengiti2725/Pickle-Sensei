@@ -32,6 +32,14 @@ Every request record carries seed, idx, PRNG draw count, phase, isolate, IP,
 route, bearer kind, SAFE token reference (never the token), virtual
 timestamps, expected vs observed, upstream call state and a replay command.
 
+Replay is exact: `deterministicDigest.ts` swaps `crypto.subtle.digest` for a
+synchronous `node:crypto` hash behind a settled promise, so the auth-cache
+key hashes in `cache.ts` no longer resolve in worker-pool order and the whole
+interleaving of phases B/C is a function of the seed alone (checked: two
+processes running seed 3000/3002/3006 produced identical per-request
+`idx:phase:route:kind:isolate:status:virtualTime:reason` traces). A seed
+must run in a fresh process — isolates are shared and never reset.
+
 ## Commands
 
 ```sh

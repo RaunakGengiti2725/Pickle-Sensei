@@ -8,6 +8,7 @@ import {
   type SeedResult,
   SeedRun,
 } from "./campaign.ts";
+import { installDeterministicDigest } from "./deterministicDigest.ts";
 import { type EdgeIsolate, loadEdgeIsolate } from "./edgeIsolates.ts";
 import { installVirtualClock, type VirtualClock } from "./virtualClock.ts";
 
@@ -36,7 +37,10 @@ export function isolates(): Promise<Isolates> {
 let clock: VirtualClock | null = null;
 
 export function virtualClock(): VirtualClock {
-  clock ??= installVirtualClock(Date.now());
+  if (!clock) {
+    installDeterministicDigest();
+    clock = installVirtualClock(Date.now());
+  }
   return clock;
 }
 
