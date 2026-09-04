@@ -114,7 +114,7 @@ final class AdversarialSyntheticMediaTests: XCTestCase {
       return
     }
     let (reader, stats) = try await AdversarialExtraction.run(url: url, includeTrajectories: false)
-    record(["fixture": recipe, "source": spec.recipe, "codec": clip.codec, "outcome": "decoded", "readerStatus": reader.reader.status.rawValue, "readerError": reader.reader.AdversarialSupport.describeOrNull(error), "stats": stats.json])
+    record(["fixture": recipe, "source": spec.recipe, "codec": clip.codec, "outcome": "decoded", "readerStatus": reader.reader.status.rawValue, "readerError": AdversarialSupport.describeOrNull(reader.reader.error), "stats": stats.json])
     XCTAssertLessThanOrEqual(stats.framesDecoded, spec.frames, "a truncated clip cannot yield more frames than were encoded")
     XCTAssertEqual(stats.landmarksNonFinite, 0)
     XCTAssertEqual(stats.landmarksOutOfUnitRange, 0)
@@ -132,7 +132,7 @@ final class AdversarialSyntheticMediaTests: XCTestCase {
     let started = Date()
     let (reader, stats) = try await AdversarialExtraction.run(url: url, includeTrajectories: false)
     let wallMs = Int(Date().timeIntervalSince(started) * 1000)
-    record(["fixture": recipe, "source": spec.recipe, "codec": clip.codec, "outcome": "decoded", "readerStatus": reader.reader.status.rawValue, "readerError": reader.reader.AdversarialSupport.describeOrNull(error), "stats": stats.json, "wallMs": wallMs])
+    record(["fixture": recipe, "source": spec.recipe, "codec": clip.codec, "outcome": "decoded", "readerStatus": reader.reader.status.rawValue, "readerError": AdversarialSupport.describeOrNull(reader.reader.error), "stats": stats.json, "wallMs": wallMs])
     XCTAssertLessThanOrEqual(stats.framesDecoded, spec.frames)
     XCTAssertEqual(stats.landmarksNonFinite, 0, "corrupted pixels must never leak non-finite landmarks")
     XCTAssertEqual(stats.landmarksOutOfUnitRange, 0, "landmarks must stay inside the unit square")
