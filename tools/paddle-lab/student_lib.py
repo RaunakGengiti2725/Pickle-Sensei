@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+import frame_clock
 
 INPUT_SIZE = 320  # letterboxed square input
 HEATMAP_STRIDE = 8
@@ -32,33 +35,47 @@ def load_examples(release_dir: Path) -> list[dict]:
 
 
 def video_meta(path: Path) -> tuple[int, int, float]:
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height,r_frame_rate",
-            "-of",
-            "csv=p=0",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    w, h, rate = out.split(",")
-    num, den = rate.split("/")
-    return int(w), int(h), float(num) / float(den)
+    meta = frame_clock.probe_stream(str(path))
+    return meta.width, meta.height, meta.fps
 
 
 def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarray]:
-    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs."""
-    w, h, fps = video_meta(video)
+    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs.
+
+    tMs values are the detector's absolute clock (start_time + k/fps, as
+    emitted by detect_paddle.frame_iter), so the source index is
+    k = round((tMs - start_time) * fps / 1000) — the same inversion run_crops
+    uses. Legacy relative-clock labels (paddle-distill-v0.1 `clockCaveat`:
+    afn-sasebo-rally1 labelled at tMs=0.0 with start_time 33.367 ms) may sit up
+    to one frame period before the stream start; those map to frame 0 with one
+    LegacyClockWarning per clip, anything earlier raises ValueError. Raises
+    RuntimeError if ffmpeg fails, reports partial/corrupt media, or any
+    requested frame is not decoded (index past the end of the media /
+    truncated file) instead of silently returning a partial mapping.
+    """
+    meta = frame_clock.probe_stream(str(video))
+    w, h, fps, start_time_ms = meta.width, meta.height, meta.fps, meta.start_time_ms
     frames: dict[float, np.ndarray] = {}
-    indices = sorted({round(t * fps / 1000.0) for t in t_ms_list})
+    if not t_ms_list:
+        return frames
+    index_for_t: dict[float, int] = {}
+    legacy_t_ms: list[float] = []
+    for t in t_ms_list:
+        try:
+            index_for_t[t], legacy = frame_clock.frame_index_for_labelled_t_ms(t, fps, start_time_ms)
+        except ValueError as exc:
+            raise ValueError(f"{exc} (requested from {video})") from None
+        if legacy:
+            legacy_t_ms.append(t)
+    if legacy_t_ms:
+        warnings.warn(
+            f"{video}: {len(legacy_t_ms)} label timestamp(s) (tMs {min(legacy_t_ms):.3f}..{max(legacy_t_ms):.3f}) "
+            f"lie within one frame period before the stream start ({start_time_ms:.3f} ms); "
+            "mapped to frame 0 (legacy relative-clock labels, see the dataset clockCaveat)",
+            frame_clock.LegacyClockWarning,
+            stacklevel=2,
+        )
+    indices = sorted(set(index_for_t.values()))
     expr = "+".join(f"eq(n\\,{i})" for i in indices)
     proc = subprocess.run(
         [
@@ -71,6 +88,8 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             f"select='{expr}'",
             "-vsync",
             "0",
+            "-frames:v",
+            str(len(indices)),
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -78,17 +97,22 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             "-",
         ],
         capture_output=True,
-        check=True,
     )
+    stderr_text = proc.stderr.decode("utf-8", "replace").strip()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, str(video))
     raw = np.frombuffer(proc.stdout, dtype=np.uint8)
     frame_bytes = w * h * 3
     n = len(raw) // frame_bytes
+    if n < len(indices):
+        raise RuntimeError(
+            f"ffmpeg decoded {n} of {len(indices)} requested frames from {video}; "
+            f"frames {indices[n:]} are missing (past the end of the media, or truncated file). "
+            f"ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
+        )
     imgs = raw[: n * frame_bytes].reshape(n, h, w, 3)
-    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices[:n])}
+    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices)}
     for t in t_ms_list:
-        img = idx_to_img.get(round(t * fps / 1000.0))
-        if img is not None:
-            frames[t] = img
+        frames[t] = idx_to_img[index_for_t[t]]
     return frames
 
 
