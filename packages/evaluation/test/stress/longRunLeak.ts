@@ -23,6 +23,7 @@
  */
 import { execFileSync } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -292,11 +293,18 @@ export function resourceDeltas(baseline: ResourceProbe, final: ResourceProbe): R
 // Campaign scaffolding
 // ---------------------------------------------------------------------------
 
+/** In-memory row: fixed-size fields only, so the harness's own bookkeeping
+ *  adds a few dozen bytes per iteration and cannot masquerade as a leak of
+ *  the unit. Free-text detail goes to the JSONL sidecar (`rowsPath`) and is
+ *  kept in memory only for rows with an unexpected outcome. */
 export interface IterationRow {
   index: number;
   seed: number;
   outcome: string;
   durationMs: number;
+}
+
+export interface FailingRow extends IterationRow {
   detail: string;
 }
 
@@ -310,9 +318,11 @@ export interface CampaignReport {
   gcSource: string;
   expectedOutcomes: string[];
   outcomeCounts: Record<string, number>;
-  failingSeeds: IterationRow[];
+  failingSeeds: FailingRow[];
   /** Full seed -> outcome table, one row per executed iteration. */
   rows: IterationRow[];
+  /** JSONL sidecar with per-row detail, when `rowsPath` was given. */
+  rowsPath: string | null;
   probes: ResourceProbe[];
   baselineProbe: ResourceProbe;
   finalProbe: ResourceProbe;
@@ -331,6 +341,8 @@ export interface CampaignOptions {
   probeEvery?: number;
   /** Heap samples ignored for the slope (module caches / JIT warm-up). */
   warmupSamples?: number;
+  /** Append one JSON line per iteration (index, seed, outcome, ms, detail). */
+  rowsPath?: string;
   log?: (line: string) => void;
 }
 
@@ -353,10 +365,15 @@ async function runCampaign(spec: CampaignSpec, options: CampaignOptions): Promis
   const warmupSamples = options.warmupSamples ?? 2;
   const { gc, source } = obtainGc();
 
+  const rowsPath = options.rowsPath ?? null;
+  if (rowsPath !== null) writeFileSync(rowsPath, "");
+  const expected = new Set(spec.expectedOutcomes);
+
   await spec.warmup(mulberry32(deriveSeed(options.campaignSeed, -1)));
   const baselineProbe = await probe(gc, 0);
   const probes: ResourceProbe[] = [baselineProbe];
   const rows: IterationRow[] = [];
+  const failingSeeds: FailingRow[] = [];
   const durations: number[] = [];
 
   for (let index = 0; index < options.iterations; index += 1) {
@@ -373,7 +390,11 @@ async function runCampaign(spec: CampaignSpec, options: CampaignOptions): Promis
     }
     const durationMs = Number(process.hrtime.bigint() - t0) / 1e6;
     durations.push(durationMs);
-    rows.push({ index, seed, outcome, durationMs, detail });
+    rows.push({ index, seed, outcome, durationMs });
+    if (!expected.has(outcome)) failingSeeds.push({ index, seed, outcome, durationMs, detail });
+    if (rowsPath !== null) {
+      appendFileSync(rowsPath, `${JSON.stringify({ index, seed, outcome, durationMs, detail })}\n`);
+    }
     if ((index + 1) % probeEvery === 0) {
       const p = await probe(gc, index + 1);
       probes.push(p);
@@ -387,8 +408,6 @@ async function runCampaign(spec: CampaignSpec, options: CampaignOptions): Promis
 
   const outcomeCounts: Record<string, number> = {};
   for (const row of rows) outcomeCounts[row.outcome] = (outcomeCounts[row.outcome] ?? 0) + 1;
-  const expected = new Set(spec.expectedOutcomes);
-  const failingSeeds = rows.filter((row) => !expected.has(row.outcome));
   const deltas = resourceDeltas(baselineProbe, finalProbe);
   const heap = analyseHeap(probes, warmupSamples);
   const timing = analyseTiming(durations);
@@ -425,6 +444,7 @@ async function runCampaign(spec: CampaignSpec, options: CampaignOptions): Promis
     outcomeCounts,
     failingSeeds,
     rows,
+    rowsPath,
     probes,
     baselineProbe,
     finalProbe,
@@ -1095,8 +1115,8 @@ export async function campaignComparator(options: CampaignOptions): Promise<Camp
       return { outcome: "cli_report_mismatch", detail };
     }
     return {
-      outcome: "ok",
-      detail: `${detail} exit=${first.exitCode} regressions=${first.regressions.length}`,
+      outcome: `ok_exit${first.exitCode}`,
+      detail: `${detail} regressions=${first.regressions.length}`,
     };
   };
   try {
@@ -1104,7 +1124,7 @@ export async function campaignComparator(options: CampaignOptions): Promise<Camp
       {
         campaign: "comparator",
         unit: "compareSummaries + formatCompareReport + cli main(compare --json) over seeded candidates",
-        expectedOutcomes: ["ok"],
+        expectedOutcomes: ["ok_exit0", "ok_exit1", "ok_exit3"],
         warmup: async (rng) => {
           await iterate(-1, -1, rng);
         },
@@ -1353,6 +1373,7 @@ async function cli(argv: string[]): Promise<number> {
       iterations: args.iterations,
       campaignSeed: args.seed,
       probeEvery: args.probeEvery,
+      rowsPath: join(args.outDir, `${name}.rows.jsonl`),
       log,
     });
     reports.push(report);

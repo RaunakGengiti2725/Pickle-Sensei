@@ -179,8 +179,7 @@ describe("long-run leak: campaigns (STRESS_ITER overrides the iteration count)",
     });
     expectHeld(report, iterations);
     // The seeded candidate space must actually exercise every exit path.
-    const exits = new Set(report.rows.map((row) => /exit=(\d)/.exec(row.detail)?.[1]));
-    expect([...exits].sort()).toEqual(["0", "1", "3"]);
+    expect(Object.keys(report.outcomeCounts).sort()).toEqual(["ok_exit0", "ok_exit1", "ok_exit3"]);
   }, 120_000);
 
   it("validator fuzz: validateRegressionSummary/validateToleranceConfig never throw", async () => {
