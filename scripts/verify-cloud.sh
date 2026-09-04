@@ -244,7 +244,9 @@ stage_security() {
     echo "scripts/security-scan.sh not present in this checkout"
     exit 75
   fi
-  scripts/security-scan.sh
+  # Redacted JSON reports land beside security.log so CI uploads them with the
+  # rest of the artifacts and a red gate can be traced to rule/file/commit.
+  scripts/security-scan.sh --report-dir "$ARTIFACTS/security"
 }
 
 stage_admin() { pnpm --filter @pickle/admin-web build; }

@@ -8,9 +8,17 @@
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
-# with a justification). Findings are ALWAYS redacted in output and reports.
+# with a justification). Findings are ALWAYS redacted in output and reports, and
+# every finding is attributed in the output (RuleID, File, Line, Commit,
+# Fingerprint) so a red gate names what tripped it without the report file.
 #
-# Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
+# The history range is validated BEFORE scanning: `--log-opts` must resolve
+# (gitleaks itself swallows git's "bad revision" error and reports a clean scan
+# of 0 commits) and must select at least one commit; a scan that ends up
+# covering 0 commits is a setup failure, never a pass.
+#
+# Exit codes: 0 = no findings, 1 = findings (or gitleaks error),
+#             2 = setup failure (missing tool, invalid/empty history range).
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary instead of the pinned download
@@ -34,7 +42,8 @@ CONFIG="$REPO_ROOT/.gitleaks.toml"
 CACHE_DIR="${SECURITY_SCAN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/pickle-sensei}"
 
 DOWNLOAD_TMP=""
-trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"' EXIT
+SCAN_STDERR="$(mktemp)"
+trap '[ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"; rm -f "$SCAN_STDERR"' EXIT
 
 log() { printf '[security-scan] %s\n' "$*" >&2; }
 die() {
@@ -51,7 +60,6 @@ SCAN_TREE=1
 SCAN_HISTORY=1
 LOG_OPTS=""
 REPORT_DIR=""
-VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --tree) SCAN_HISTORY=0 ;;
@@ -66,7 +74,8 @@ while [ $# -gt 0 ]; do
       REPORT_DIR="$2"
       shift
       ;;
-    --verbose | -v) VERBOSE=1 ;;
+    # Per-finding attribution is always on; accepted so older invocations keep working.
+    --verbose | -v) ;;
     --help | -h) usage 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
@@ -77,6 +86,29 @@ done
 [ -f "$CONFIG" ] || die "missing $CONFIG"
 cd "$REPO_ROOT"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$REPO_ROOT is not a git work tree"
+
+strip_ansi() { sed "s/$(printf '\033')\\[[0-9;]*m//g"; }
+
+# gitleaks hands --log-opts to `git log` split on single spaces (no shell
+# quoting); mirror that so the range we validate is the range it scans. With no
+# --log-opts gitleaks walks every ref (`git log --all`).
+HISTORY_RANGE=()
+HISTORY_COMMITS=0
+HISTORY_RANGE_DESC="--all (every ref)"
+if [ "$SCAN_HISTORY" = 1 ]; then
+  if [ -n "$LOG_OPTS" ]; then
+    IFS=' ' read -r -a HISTORY_RANGE <<<"$LOG_OPTS"
+    HISTORY_RANGE_DESC="'$LOG_OPTS'"
+  else
+    HISTORY_RANGE=(--all)
+  fi
+  if ! range_commits="$(git log --no-patch --format=%H "${HISTORY_RANGE[@]}" 2>&1)"; then
+    die "setup error: invalid history range --log-opts ${HISTORY_RANGE_DESC}: ${range_commits%%$'\n'*}"
+  fi
+  # (mawk lacks {n} interval regexes; count 40-hex lines by length instead.)
+  HISTORY_COMMITS="$(printf '%s\n' "$range_commits" | awk 'length($0) == 40 && /^[0-9a-f]+$/ { n++ } END { print n + 0 }')"
+  [ "$HISTORY_COMMITS" -gt 0 ] || die "setup error: empty history range --log-opts ${HISTORY_RANGE_DESC} selects 0 commits — nothing to scan is not a pass"
+fi
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -163,16 +195,19 @@ if [ -n "$REPORT_DIR" ]; then
   REPORT_DIR="$(cd "$REPORT_DIR" && pwd)"
 fi
 
-COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --config "$CONFIG")
-[ "$VERBOSE" = 1 ] && COMMON_ARGS+=(--verbose)
+# --verbose prints each finding (RuleID, File, Line, Commit, Fingerprint);
+# --redact=100 replaces the secret itself with REDACTED in that output and in
+# every report, so attribution never costs a plaintext value.
+COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --verbose --config "$CONFIG")
 
 run_scan() {
   # $1 = label, $2 = gitleaks subcommand, remaining = extra args
   local label="$1" sub="$2"
   shift 2
-  local args=("$sub" "${COMMON_ARGS[@]}")
+  local args=("$sub" "${COMMON_ARGS[@]}") report=""
   if [ -n "$REPORT_DIR" ]; then
-    args+=(--report-format json --report-path "$REPORT_DIR/gitleaks-${label}.json")
+    report="$REPORT_DIR/gitleaks-${label}.json"
+    args+=(--report-format json --report-path "$report")
   fi
   # Scan "." from the repo root so findings carry repo-relative paths (the
   # allowlists in .gitleaks.toml are anchored on them).
@@ -180,13 +215,21 @@ run_scan() {
   log "scanning ${label}…"
   local start end rc=0
   start=$(date +%s)
-  "$GITLEAKS" "${args[@]}" || rc=$?
+  # Findings stay on stdout; gitleaks' log (stderr) is also copied to
+  # SCAN_STDERR so the commit count it reports can be checked below.
+  { "$GITLEAKS" "${args[@]}" 2>&1 1>&3 | tee "$SCAN_STDERR" >&2; } 3>&1 || rc=$?
   end=$(date +%s)
+  if [ "$label" = history ] && [ "$rc" = 0 ]; then
+    local scanned
+    scanned="$(strip_ansi <"$SCAN_STDERR" | sed -n 's/.* \([0-9][0-9]*\) commits scanned\..*/\1/p' | tail -n 1)"
+    [ "${scanned:-0}" -gt 0 ] || die "history scan covered ${scanned:-an unknown number of} commits although the range ${HISTORY_RANGE_DESC} holds ${HISTORY_COMMITS} — gitleaks got no patches from git (see any [git] lines above; merge/empty commits carry no diff); not a pass"
+  fi
   case "$rc" in
     0) log "${label}: clean ($((end - start))s)" ;;
-    1) log "${label}: FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
+    1) log "${label}: FINDINGS — each is attributed above (RuleID, File, Line, Commit, Fingerprint; secret redacted) ($((end - start))s)" ;;
     *) log "${label}: gitleaks failed with exit $rc" ;;
   esac
+  [ -z "$report" ] || log "${label} report: $report"
   return "$rc"
 }
 
@@ -195,6 +238,7 @@ if [ "$SCAN_TREE" = 1 ]; then
   run_scan tree dir || overall=1
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
+  log "history: ${HISTORY_COMMITS} commits in range ${HISTORY_RANGE_DESC}"
   if [ -n "$LOG_OPTS" ]; then
     run_scan history git --log-opts "$LOG_OPTS" || overall=1
   else
