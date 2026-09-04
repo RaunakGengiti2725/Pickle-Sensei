@@ -1,0 +1,14 @@
+# x14_manifest_huge_hook_list — manifest padded with 20,000 extra well-formed monitoring hooks (huge input)
+# HEAD 4d812e1aa699014cc0521fd92fde66908043aaa8  seed 20260904
+# invariant: checker still terminates and still passes a well-formed manifest
+# expect: release:check=pass check:distribution=pass
+# verdict: HELD
+
+$ node tools/release/check-release-manifest.mjs   # exit 0
+ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+ok   fastlane: Appfile identifies app + team without secrets
+ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+
+All Linux-validatable distribution preconditions passed.
+NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+

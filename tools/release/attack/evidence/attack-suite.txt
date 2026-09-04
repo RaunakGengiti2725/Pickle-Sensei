@@ -1,0 +1,846 @@
+TAP version 13
+# Subtest: baseline sandbox: both checkers pass an unmodified copy
+ok 1 - baseline sandbox: both checkers pass an unmodified copy
+  ---
+  duration_ms: 50.379512
+  ...
+# Subtest: rapid repeat: 5 back-to-back sandbox runs stay deterministic
+ok 2 - rapid repeat: 5 back-to-back sandbox runs stay deterministic
+  ---
+  duration_ms: 218.939063
+  ...
+# Subtest: s01_fastfile_hardcoded_password: check:distribution rejects hardcoded Fastlane credentials [seed 20260904]
+ok 3 - s01_fastfile_hardcoded_password: check:distribution rejects hardcoded Fastlane credentials [seed 20260904]
+  ---
+  duration_ms: 44.106075
+  ...
+# Subtest: s02_pbxproj_device_family_1_2_one_config: check:distribution enforces the iPhone-only v1 pin [seed 20260904]
+ok 4 - s02_pbxproj_device_family_1_2_one_config: check:distribution enforces the iPhone-only v1 pin [seed 20260904]
+  ---
+  duration_ms: 42.901859
+  ...
+# Subtest: s03_manifest_duplicate_silent_failure_rate_P1: release:check keeps silent_failure_rate at P0 (every() spans duplicates) [seed 20260904]
+ok 5 - s03_manifest_duplicate_silent_failure_rate_P1: release:check keeps silent_failure_rate at P0 (every() spans duplicates) [seed 20260904]
+  ---
+  duration_ms: 43.22959
+  ...
+# Subtest: s03b_manifest_duplicate_silent_failure_rate_P0: monitoringHooks ids are unique (a duplicate is a corrupt manifest) [seed 20260904]
+not ok 6 - s03b_manifest_duplicate_silent_failure_rate_P0: monitoringHooks ids are unique (a duplicate is a corrupt manifest) [seed 20260904]
+  ---
+  duration_ms: 44.657441
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: s03c_manifest_duplicate_rollback_and_irreversible_ids: rollbackHooks / irreversibleActions ids are unique [seed 20260904]
+not ok 7 - s03c_manifest_duplicate_rollback_and_irreversible_ids: rollbackHooks / irreversibleActions ids are unique [seed 20260904]
+  ---
+  duration_ms: 44.228148
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: s04_build_2_everywhere_except_manifest: release:check catches version-triple drift; check:distribution does not consult the manifest (by design) [seed 20260904]
+ok 8 - s04_build_2_everywhere_except_manifest: release:check catches version-triple drift; check:distribution does not consult the manifest (by design) [seed 20260904]
+  ---
+  duration_ms: 43.156438
+  ...
+# Subtest: s05_runtime_app_store_id_changed: APP_STORE_ID must stay 6806918402 (dossier §1 / knowledge); a release gate must pin it [seed 20260904]
+not ok 9 - s05_runtime_app_store_id_changed: APP_STORE_ID must stay 6806918402 (dossier §1 / knowledge); a release gate must pin it [seed 20260904]
+  ---
+  duration_ms: 44.73784
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: s05b_runtime_app_store_id_null: dossier §2.6 marks APP_STORE_ID as set; reverting it silently would break rate-us / store links [seed 20260904]
+not ok 10 - s05b_runtime_app_store_id_null: dossier §2.6 marks APP_STORE_ID as set; reverting it silently would break rate-us / store links [seed 20260904]
+  ---
+  duration_ms: 44.366149
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: s06_appfile_team_mismatch: check:distribution rejects Appfile team != DEVELOPMENT_TEAM [seed 20260904]
+ok 11 - s06_appfile_team_mismatch: check:distribution rejects Appfile team != DEVELOPMENT_TEAM [seed 20260904]
+  ---
+  duration_ms: 49.594842
+  ...
+# Subtest: s07_release_config_build_3_only: manifest buildNumber MUST equal CURRENT_PROJECT_VERSION (RELEASE_OPERATIONS §1); Debug/Release must agree [seed 20260904]
+not ok 12 - s07_release_config_build_3_only: manifest buildNumber MUST equal CURRENT_PROJECT_VERSION (RELEASE_OPERATIONS §1); Debug/Release must agree [seed 20260904]
+  ---
+  duration_ms: 44.691262
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x01_release_config_marketing_1_1_only: manifest marketingVersion MUST equal MARKETING_VERSION in every configuration [seed 20260904]
+not ok 13 - x01_release_config_marketing_1_1_only: manifest marketingVersion MUST equal MARKETING_VERSION in every configuration [seed 20260904]
+  ---
+  duration_ms: 42.978221
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    release:check: expected exit 1 (fail), got 0
+    ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+    ok   manifest: buildNumber is a positive integer
+    ok   pbxproj: MARKETING_VERSION = 1.0
+    ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+    ok   build.gradle: versionName "1.0"
+    ok   build.gradle: versionCode 1
+    ok   runtimeConfig.ts: APP_VERSION = '1.0'
+    ok   environments: development defined
+    ok   environments: staging defined
+    ok   environments: production defined
+    ok   environments: development has no API origin (local-first default)
+    ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+    ok   environments: only production carries real user data
+    ok   monitoringHooks: silent_failure_rate present
+    ok   monitoringHooks: target_wrong_lock present
+    ok   monitoringHooks: excess_abstention present
+    ok   monitoringHooks: envelope_verdict_distribution present
+    ok   monitoringHooks: crash_free_sessions present
+    ok   monitoringHooks: pipeline_latency present
+    ok   monitoringHooks: session_engine_states present
+    ok   monitoringHooks: consent_ledger_integrity present
+    ok   monitoringHooks: flag_drift present
+    ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+    ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+    ok   monitoringHooks: excess_abstention has signal, alarm, severity
+    ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+    ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+    ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+    ok   monitoringHooks: session_engine_states has signal, alarm, severity
+    ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+    ok   monitoringHooks: flag_drift has signal, alarm, severity
+    ok   monitoringHooks: consent integrity and silent-failure lines are P0
+    ok   rollbackHooks: mobile_pause_phased_release present
+    ok   rollbackHooks: mobile_expedited_resubmission present
+    ok   rollbackHooks: server_side_kill_switch present
+    ok   rollbackHooks: backend_image_rollback present
+    ok   rollbackHooks: db_forward_fix present
+    ok   rollbackHooks: db_snapshot_restore present
+    ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+    ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+    ok   irreversibleActions: non-empty
+    ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+    ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+    ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+    ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+    ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+    ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+    ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+    
+    All release-manifest checks passed.
+    NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:56:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x02_pbxproj_team_changed_in_one_config: check:distribution rejects any configuration signed by a foreign team [seed 20260904]
+not ok 14 - x02_pbxproj_team_changed_in_one_config: check:distribution rejects any configuration signed by a foreign team [seed 20260904]
+  ---
+  duration_ms: 43.722708
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    check:distribution: expected exit 1 (fail), got 0
+    ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+    ok   pbxproj: MARKETING_VERSION set
+    ok   pbxproj: CURRENT_PROJECT_VERSION set
+    ok   pbxproj: DEVELOPMENT_TEAM set
+    ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+    ok   pbxproj: entitlements wired
+    ok   Info.plist: camera usage description present
+    ok   Info.plist: microphone usage description present
+    ok   Info.plist: photo library usage description present (video import)
+    ok   Info.plist: ATS arbitrary loads disabled
+    ok   Info.plist: version pulled from build settings
+    ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+    ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+    ok   entitlements file exists
+    ok   entitlements: Sign in with Apple capability declared
+    ok   Podfile.lock committed (deterministic pods)
+    ok   fastlane: beta (TestFlight) lane defined
+    ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+    ok   fastlane: internal-only distribution (no external without review)
+    ok   fastlane: no hardcoded credentials
+    ok   fastlane: Appfile identifies app + team without secrets
+    ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+    
+    All Linux-validatable distribution preconditions passed.
+    NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:57:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x03_pbxproj_device_family_2_one_config: iPhone-only pin must hold for every configuration, not just one [seed 20260904]
+not ok 15 - x03_pbxproj_device_family_2_one_config: iPhone-only pin must hold for every configuration, not just one [seed 20260904]
+  ---
+  duration_ms: 42.292833
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    check:distribution: expected exit 1 (fail), got 0
+    ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+    ok   pbxproj: MARKETING_VERSION set
+    ok   pbxproj: CURRENT_PROJECT_VERSION set
+    ok   pbxproj: DEVELOPMENT_TEAM set
+    ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+    ok   pbxproj: entitlements wired
+    ok   Info.plist: camera usage description present
+    ok   Info.plist: microphone usage description present
+    ok   Info.plist: photo library usage description present (video import)
+    ok   Info.plist: ATS arbitrary loads disabled
+    ok   Info.plist: version pulled from build settings
+    ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+    ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+    ok   entitlements file exists
+    ok   entitlements: Sign in with Apple capability declared
+    ok   Podfile.lock committed (deterministic pods)
+    ok   fastlane: beta (TestFlight) lane defined
+    ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+    ok   fastlane: internal-only distribution (no external without review)
+    ok   fastlane: no hardcoded credentials
+    ok   fastlane: Appfile identifies app + team without secrets
+    ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+    
+    All Linux-validatable distribution preconditions passed.
+    NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:57:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x04_fastfile_distribute_external_true_keeps_comment: check:distribution rejects external TestFlight distribution [seed 20260904]
+not ok 16 - x04_fastfile_distribute_external_true_keeps_comment: check:distribution rejects external TestFlight distribution [seed 20260904]
+  ---
+  duration_ms: 49.800411
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    check:distribution: expected exit 1 (fail), got 0
+    ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+    ok   pbxproj: MARKETING_VERSION set
+    ok   pbxproj: CURRENT_PROJECT_VERSION set
+    ok   pbxproj: DEVELOPMENT_TEAM set
+    ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+    ok   pbxproj: entitlements wired
+    ok   Info.plist: camera usage description present
+    ok   Info.plist: microphone usage description present
+    ok   Info.plist: photo library usage description present (video import)
+    ok   Info.plist: ATS arbitrary loads disabled
+    ok   Info.plist: version pulled from build settings
+    ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+    ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+    ok   entitlements file exists
+    ok   entitlements: Sign in with Apple capability declared
+    ok   Podfile.lock committed (deterministic pods)
+    ok   fastlane: beta (TestFlight) lane defined
+    ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+    ok   fastlane: internal-only distribution (no external without review)
+    ok   fastlane: no hardcoded credentials
+    ok   fastlane: Appfile identifies app + team without secrets
+    ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+    
+    All Linux-validatable distribution preconditions passed.
+    NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:57:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x05_fastfile_base64_key_content: check:distribution rejects hardcoded credentials of any encoding [seed 20260904]
+not ok 17 - x05_fastfile_base64_key_content: check:distribution rejects hardcoded credentials of any encoding [seed 20260904]
+  ---
+  duration_ms: 48.320658
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    check:distribution: expected exit 1 (fail), got 0
+    ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+    ok   pbxproj: MARKETING_VERSION set
+    ok   pbxproj: CURRENT_PROJECT_VERSION set
+    ok   pbxproj: DEVELOPMENT_TEAM set
+    ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+    ok   pbxproj: entitlements wired
+    ok   Info.plist: camera usage description present
+    ok   Info.plist: microphone usage description present
+    ok   Info.plist: photo library usage description present (video import)
+    ok   Info.plist: ATS arbitrary loads disabled
+    ok   Info.plist: version pulled from build settings
+    ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+    ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+    ok   entitlements file exists
+    ok   entitlements: Sign in with Apple capability declared
+    ok   Podfile.lock committed (deterministic pods)
+    ok   fastlane: beta (TestFlight) lane defined
+    ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+    ok   fastlane: internal-only distribution (no external without review)
+    ok   fastlane: no hardcoded credentials
+    ok   fastlane: Appfile identifies app + team without secrets
+    ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+    
+    All Linux-validatable distribution preconditions passed.
+    NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:57:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x06_manifest_severity_lowercase: severity must be exactly P0 or P1 [seed 20260904]
+ok 18 - x06_manifest_severity_lowercase: severity must be exactly P0 or P1 [seed 20260904]
+  ---
+  duration_ms: 47.160782
+  ...
+# Subtest: x07_manifest_production_origin_provisioned: staging/production origins stay tbd until a human provisions them [seed 20260904]
+ok 19 - x07_manifest_production_origin_provisioned: staging/production origins stay tbd until a human provisions them [seed 20260904]
+  ---
+  duration_ms: 47.746129
+  ...
+# Subtest: x08_manifest_build_number_string: buildNumber must be an integer >= 1 [seed 20260904]
+ok 20 - x08_manifest_build_number_string: buildNumber must be an integer >= 1 [seed 20260904]
+  ---
+  duration_ms: 49.481145
+  ...
+# Subtest: x09_manifest_staging_real_user_data: only production may carry real user data [seed 20260904]
+ok 21 - x09_manifest_staging_real_user_data: only production may carry real user data [seed 20260904]
+  ---
+  duration_ms: 47.05221
+  ...
+# Subtest: x10_manifest_irreversible_no_human_auth: every irreversible action requires human authorization [seed 20260904]
+ok 22 - x10_manifest_irreversible_no_human_auth: every irreversible action requires human authorization [seed 20260904]
+  ---
+  duration_ms: 47.84503
+  ...
+# Subtest: x11_appfile_apple_id: Appfile must not carry an Apple ID / password [seed 20260904]
+ok 23 - x11_appfile_apple_id: Appfile must not carry an Apple ID / password [seed 20260904]
+  ---
+  duration_ms: 48.604773
+  ...
+# Subtest: x12_pbxproj_bundle_id_one_config: bundle id com.picklesensei must hold in every configuration [seed 20260904]
+not ok 24 - x12_pbxproj_bundle_id_one_config: bundle id com.picklesensei must hold in every configuration [seed 20260904]
+  ---
+  duration_ms: 48.85063
+  location: '/home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:51:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    check:distribution: expected exit 1 (fail), got 0
+    ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+    ok   pbxproj: MARKETING_VERSION set
+    ok   pbxproj: CURRENT_PROJECT_VERSION set
+    ok   pbxproj: DEVELOPMENT_TEAM set
+    ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+    ok   pbxproj: entitlements wired
+    ok   Info.plist: camera usage description present
+    ok   Info.plist: microphone usage description present
+    ok   Info.plist: photo library usage description present (video import)
+    ok   Info.plist: ATS arbitrary loads disabled
+    ok   Info.plist: version pulled from build settings
+    ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+    ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+    ok   entitlements file exists
+    ok   entitlements: Sign in with Apple capability declared
+    ok   Podfile.lock committed (deterministic pods)
+    ok   fastlane: beta (TestFlight) lane defined
+    ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+    ok   fastlane: internal-only distribution (no external without review)
+    ok   fastlane: no hardcoded credentials
+    ok   fastlane: Appfile identifies app + team without secrets
+    ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+    
+    All Linux-validatable distribution preconditions passed.
+    NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    assertExpectation (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:18:10)
+    TestContext.<anonymous> (file:///home/ubuntu/repos/Pickle-Sensei/tools/release/attack/release-config-attacks.test.mjs:57:7)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:934:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:633:18)
+    Test.postRun (node:internal/test_runner/test:1045:19)
+    Test.run (node:internal/test_runner/test:973:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:633:7)
+  ...
+# Subtest: x13_manifest_unicode_lookalike_hook_id: required monitoring ids are matched byte-exactly [seed 20260904]
+ok 25 - x13_manifest_unicode_lookalike_hook_id: required monitoring ids are matched byte-exactly [seed 20260904]
+  ---
+  duration_ms: 49.198521
+  ...
+# Subtest: x14_manifest_huge_hook_list: checker still terminates and still passes a well-formed manifest [seed 20260904]
+ok 26 - x14_manifest_huge_hook_list: checker still terminates and still passes a well-formed manifest [seed 20260904]
+  ---
+  duration_ms: 141.509049
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 15
+# fail 11
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1524.021232

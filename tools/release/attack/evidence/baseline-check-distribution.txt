@@ -1,0 +1,25 @@
+ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+ok   pbxproj: MARKETING_VERSION set
+ok   pbxproj: CURRENT_PROJECT_VERSION set
+ok   pbxproj: DEVELOPMENT_TEAM set
+ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+ok   pbxproj: entitlements wired
+ok   Info.plist: camera usage description present
+ok   Info.plist: microphone usage description present
+ok   Info.plist: photo library usage description present (video import)
+ok   Info.plist: ATS arbitrary loads disabled
+ok   Info.plist: version pulled from build settings
+ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+ok   entitlements file exists
+ok   entitlements: Sign in with Apple capability declared
+ok   Podfile.lock committed (deterministic pods)
+ok   fastlane: beta (TestFlight) lane defined
+ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+ok   fastlane: internal-only distribution (no external without review)
+ok   fastlane: no hardcoded credentials
+ok   fastlane: Appfile identifies app + team without secrets
+ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+
+All Linux-validatable distribution preconditions passed.
+NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.

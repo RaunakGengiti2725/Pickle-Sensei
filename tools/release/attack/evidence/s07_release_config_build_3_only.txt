@@ -1,0 +1,92 @@
+# s07_release_config_build_3_only — Only the Release configuration CURRENT_PROJECT_VERSION set to 3 (dossier build 3)
+# HEAD 4d812e1aa699014cc0521fd92fde66908043aaa8  seed 20260904
+# invariant: manifest buildNumber MUST equal CURRENT_PROJECT_VERSION (RELEASE_OPERATIONS §1); Debug/Release must agree
+# expect: release:check=fail check:distribution=any
+# verdict: BROKEN
+
+$ node tools/release/check-release-manifest.mjs   # exit 0
+ok   manifest: marketingVersion is MAJOR.MINOR[.PATCH]
+ok   manifest: buildNumber is a positive integer
+ok   pbxproj: MARKETING_VERSION = 1.0
+ok   pbxproj: CURRENT_PROJECT_VERSION = 1
+ok   build.gradle: versionName "1.0"
+ok   build.gradle: versionCode 1
+ok   runtimeConfig.ts: APP_VERSION = '1.0'
+ok   environments: development defined
+ok   environments: staging defined
+ok   environments: production defined
+ok   environments: development has no API origin (local-first default)
+ok   environments: staging origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+ok   environments: production origin/bucket still "tbd" (BLOCKED_EXTERNAL — no real URL committed)
+ok   environments: only production carries real user data
+ok   monitoringHooks: silent_failure_rate present
+ok   monitoringHooks: target_wrong_lock present
+ok   monitoringHooks: excess_abstention present
+ok   monitoringHooks: envelope_verdict_distribution present
+ok   monitoringHooks: crash_free_sessions present
+ok   monitoringHooks: pipeline_latency present
+ok   monitoringHooks: session_engine_states present
+ok   monitoringHooks: consent_ledger_integrity present
+ok   monitoringHooks: flag_drift present
+ok   monitoringHooks: silent_failure_rate has signal, alarm, severity
+ok   monitoringHooks: target_wrong_lock has signal, alarm, severity
+ok   monitoringHooks: excess_abstention has signal, alarm, severity
+ok   monitoringHooks: envelope_verdict_distribution has signal, alarm, severity
+ok   monitoringHooks: crash_free_sessions has signal, alarm, severity
+ok   monitoringHooks: pipeline_latency has signal, alarm, severity
+ok   monitoringHooks: session_engine_states has signal, alarm, severity
+ok   monitoringHooks: consent_ledger_integrity has signal, alarm, severity
+ok   monitoringHooks: flag_drift has signal, alarm, severity
+ok   monitoringHooks: consent integrity and silent-failure lines are P0
+ok   rollbackHooks: mobile_pause_phased_release present
+ok   rollbackHooks: mobile_expedited_resubmission present
+ok   rollbackHooks: server_side_kill_switch present
+ok   rollbackHooks: backend_image_rollback present
+ok   rollbackHooks: db_forward_fix present
+ok   rollbackHooks: db_snapshot_restore present
+ok   rollbackHooks: mobile_pause_phased_release has action + explicit requiresHumanAuthorization
+ok   rollbackHooks: mobile_expedited_resubmission has action + explicit requiresHumanAuthorization
+ok   rollbackHooks: server_side_kill_switch has action + explicit requiresHumanAuthorization
+ok   rollbackHooks: backend_image_rollback has action + explicit requiresHumanAuthorization
+ok   rollbackHooks: db_forward_fix has action + explicit requiresHumanAuthorization
+ok   rollbackHooks: db_snapshot_restore has action + explicit requiresHumanAuthorization
+ok   irreversibleActions: non-empty
+ok   irreversibleActions: app_store_submission requiresHumanAuthorization === true
+ok   irreversibleActions: testflight_external_distribution requiresHumanAuthorization === true
+ok   irreversibleActions: production_db_migration requiresHumanAuthorization === true
+ok   irreversibleActions: production_snapshot_restore requiresHumanAuthorization === true
+ok   irreversibleActions: signing_certificate_rotation requiresHumanAuthorization === true
+ok   irreversibleActions: enable_distribute_external_flag requiresHumanAuthorization === true
+ok   irreversibleActions: external_accuracy_or_latency_claim requiresHumanAuthorization === true
+
+All release-manifest checks passed.
+NOT validated here (external/Mac-only): signing, archive, TestFlight upload, store submission, live monitoring wiring.
+
+
+$ (cd apps/mobile && node scripts/check-ios-distribution.mjs)   # exit 0
+ok   pbxproj: PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei
+ok   pbxproj: MARKETING_VERSION set
+ok   pbxproj: CURRENT_PROJECT_VERSION set
+ok   pbxproj: DEVELOPMENT_TEAM set
+ok   pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)
+ok   pbxproj: entitlements wired
+ok   Info.plist: camera usage description present
+ok   Info.plist: microphone usage description present
+ok   Info.plist: photo library usage description present (video import)
+ok   Info.plist: ATS arbitrary loads disabled
+ok   Info.plist: version pulled from build settings
+ok   Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)
+ok   PrivacyInfo.xcprivacy: accessed-API declarations present
+ok   entitlements file exists
+ok   entitlements: Sign in with Apple capability declared
+ok   Podfile.lock committed (deterministic pods)
+ok   fastlane: beta (TestFlight) lane defined
+ok   fastlane: release (App Store) lane defined, binary-only, no auto-submit
+ok   fastlane: internal-only distribution (no external without review)
+ok   fastlane: no hardcoded credentials
+ok   fastlane: Appfile identifies app + team without secrets
+ok   fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj
+
+All Linux-validatable distribution preconditions passed.
+NOT validated here (Mac-only): pod install, archive, signing, TestFlight upload.
+
