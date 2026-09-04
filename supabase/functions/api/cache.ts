@@ -120,6 +120,30 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   await redisPipeline([["DEL", ...keys]]);
 }
 
+/** Presence check for a revocation MARKER (a key whose existence, not value,
+ * is the signal — e.g. "this auth session was signed out"). L1 is consulted
+ * first; a miss there goes to Redis every time, because a marker written by
+ * another isolate must be honoured within one request, so a negative answer is
+ * never memoized. A positive answer is warmed into L1 like any cache hit.
+ * Returns `null` when Redis is configured but unreachable: the caller cannot
+ * tell "no marker" from "unknown" and must fall back to the source of truth. */
+export async function cacheHas(key: string): Promise<boolean | null> {
+  if (memoryGet(key) !== null) return true;
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline([
+    ["GET", key],
+    ["TTL", key],
+  ]);
+  if (!results) return null;
+  const value = results[0]?.result;
+  if (typeof value !== "string") return false;
+  const ttl = Number(results[1]?.result);
+  if (Number.isFinite(ttl) && ttl > 0) {
+    memorySet(key, value, Math.min(ttl, 60));
+  }
+  return true;
+}
+
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */

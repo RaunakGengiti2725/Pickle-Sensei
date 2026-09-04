@@ -80,7 +80,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
-import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
+import { cacheDel, cacheGet, cacheHas, cacheSet, sha256Hex } from "./cache.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
@@ -317,6 +317,22 @@ interface CachedAuthSession {
 
 const AUTH_CACHE_MAX_TTL_SECONDS = 600;
 
+/** Session-wide sign-out marker, keyed by the `session_id` claim every access
+ * token of one Supabase session carries (the current bearer, its pre-refresh
+ * siblings, and copies cached by other isolates all share it). Written by
+ * logout AFTER upstream revocation succeeded; consulted before any auth-cache
+ * hit is trusted. It outlives the longest possible auth-cache row (a row
+ * written by a request that verified upstream just before the revocation
+ * landed lives at most AUTH_CACHE_MAX_TTL from then), so no cached token of
+ * the session can be served after the marker expires. */
+const SESSION_REVOKED_TTL_SECONDS = AUTH_CACHE_MAX_TTL_SECONDS + 60;
+
+const sessionRevokedKey = (sessionId: string): string => `auth:revoked:${sessionId}`;
+
+function sessionIdOf(payload: Record<string, unknown> | null): string | null {
+  return typeof payload?.session_id === "string" && payload.session_id ? payload.session_id : null;
+}
+
 function userScopedClient(accessToken: string): ReturnType<typeof createClient> {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -491,8 +507,21 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   }
 
   const cacheKey = await authCacheKey(token);
-  const cached = await readAuthCache(cacheKey, provider);
-  if (cached) return cached;
+
+  // A signed-out session is refused from its marker — for every access token
+  // it ever issued, in every isolate — before the auth cache is trusted. If
+  // the marker cannot be read (Redis unreachable) the cache is bypassed and
+  // Supabase Auth, which knows the session is gone, decides.
+  const sessionId = sessionIdOf(payload);
+  const revoked = sessionId ? await cacheHas(sessionRevokedKey(sessionId)) : false;
+  if (revoked) {
+    await cacheDel(cacheKey);
+    return errorJson(401, "The session has been signed out. Sign in again.");
+  }
+  if (revoked !== null) {
+    const cached = await readAuthCache(cacheKey, provider);
+    if (cached) return cached;
+  }
 
   if (provider) {
     const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
@@ -568,19 +597,36 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
- * its refresh token dies now; other devices stay signed in) and drop this
- * bearer from the auth cache so it stops working at this edge immediately. */
+ * its refresh token dies now; other devices stay signed in), then drop this
+ * bearer from the auth cache and mark the whole session signed out so every
+ * access token it issued stops working at every edge isolate immediately.
+ *
+ * Order matters: the cache is touched only once Supabase Auth has confirmed
+ * the revocation. Evicting first would let a request racing the logout
+ * re-verify the still-live session upstream and re-cache it for up to
+ * AUTH_CACHE_MAX_TTL; once the session is gone upstream nothing can re-cache
+ * it, and the marker refuses the rows that already exist. */
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
-  await cacheDel(await authCacheKey(token));
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
-    method: "POST",
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    return serviceUnavailable("Sign-out", error instanceof Error ? error.message : error);
+  }
+  await response.body?.cancel().catch(() => undefined);
   // 401/403/404 here mean the session is already gone — the outcome the
   // caller wanted. Only a server-side failure is worth reporting.
   if (!response.ok && response.status >= 500) {
     return serviceUnavailable("Sign-out", `status ${response.status}`);
+  }
+  await cacheDel(await authCacheKey(token));
+  const sessionId = sessionIdOf(decodeJwtPayload(token));
+  if (sessionId) {
+    await cacheSet(sessionRevokedKey(sessionId), "1", SESSION_REVOKED_TTL_SECONDS);
   }
   return noContent();
 }

@@ -54,7 +54,16 @@ refreshToken, expiresAt}` beside the account. Every other route takes the
   `auth.getUser`, cached like before); `POST /v1/auth/refresh {refreshToken}`
   rotates it (per-IP budget, 401 counts as an auth failure);
   `POST /v1/auth/logout` revokes THIS device's session (`scope=local` — other
-  devices stay signed in) and drops the bearer from the auth cache.
+  devices stay signed in) and only THEN drops the bearer from the auth cache
+  and writes a session tombstone `auth:revoked:<session_id>` (TTL >
+  AUTH_CACHE_MAX_TTL). `authenticate()` checks the tombstone (L1, then L2
+  every time — never memoize a miss) BEFORE trusting any cached row, so every
+  access token of that session (pre-refresh siblings, rows in other isolates,
+  rows re-cached by a request racing the logout) is 401 within one request;
+  if Redis is configured but unreachable the cache is bypassed and
+  `auth.getUser` decides. Auth unreachable during logout → 503 (retryable),
+  nothing evicted. Pinned by `__wf__/be-auth-session-lifecycle.test.ts`,
+  `xc_adjudication_auth.test.ts`, `auth_logout_test.ts`.
   `authenticate()` still accepts a raw provider ID token TRANSITIONALLY for
   app builds that predate the contract — remove that branch once none are in
   the field. Deploy the edge fn BEFORE shipping the app build (an old server

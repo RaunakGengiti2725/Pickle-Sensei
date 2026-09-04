@@ -204,16 +204,78 @@ begin
   end;
 end $$;
 
+-- A10: seed the remaining user-owned relations so B1 can prove EVERY one of
+-- them is invisible to a second user (not just the subset the sync path
+-- happens to write). Owner inserts for the client-writable tables; billing
+-- is service-written, so it is seeded with the table owner's privileges.
+insert into public.shot_measurements
+  (shot_id, user_id, metric_key, value, confidence, unit)
+values ('00000000-0000-4000-8000-0000000000e1',
+        '00000000-0000-4000-8000-00000000000a', 'contact_height', 0.42, 0.9,
+        'normalized');
+insert into public.captures
+  (id, user_id, session_id, shot_id, captured_at, duration_ms, fps,
+   capture_mode, evidence_status)
+values ('00000000-0000-4000-8000-0000000000c1',
+        '00000000-0000-4000-8000-00000000000a',
+        '00000000-0000-4000-8000-0000000000d1',
+        '00000000-0000-4000-8000-0000000000e1',
+        '2026-08-31T10:00:00Z', 1200, 30, 'automatic_pose_trigger', 'valid');
+insert into public.user_saved_drills (user_id, slug)
+values ('00000000-0000-4000-8000-00000000000a', 'dink-wall-reps');
+insert into public.account_deletion_requests (user_id)
+values ('00000000-0000-4000-8000-00000000000a');
+reset role;
+insert into public.billing_entitlements (user_id, premium)
+values ('00000000-0000-4000-8000-00000000000a', false);
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+
+-- A11: precondition for B1 — the owner sees at least one row on every
+-- user-owned relation (tables AND the security_invoker views), so the
+-- zero-row assertions below are proving isolation, not emptiness.
+do $$
+declare t text; n int;
+begin
+  foreach t in array array[
+    'sessions','shots','shot_phases','shot_measurements','shot_checkpoints',
+    'captures','analysis_permits','consent_records','evaluation_trials',
+    'analysis_feedback','user_saved_drills','player_rank_state',
+    'billing_entitlements','account_deletion_requests',
+    'progress_daily','practice_days','player_technique_rating'
+  ] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n < 1 then
+      raise exception 'A11: owner must see their own rows in public.% (got 0)', t;
+    end if;
+  end loop;
+end $$;
+
 -- ──────────────────────── B: cross-user is denied ──────────────────────────
 
--- B1: Bob cannot see Alice's rows
+-- B1: Bob sees ZERO of Alice's rows on every user-owned relation — every
+-- RLS table and every security_invoker view (a definer view would run as
+-- the table owner and leak the whole aggregate).
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000b';
 do $$
+declare t text; n int;
 begin
-  if exists (select 1 from public.sessions) or exists (select 1 from public.shots)
-     or exists (select 1 from public.consent_records)
-     or exists (select 1 from public.player_rank_state) then
-    raise exception 'B1: cross-user rows must be invisible';
+  foreach t in array array[
+    'sessions','shots','shot_phases','shot_measurements','shot_checkpoints',
+    'captures','analysis_permits','consent_records','evaluation_trials',
+    'analysis_feedback','user_saved_drills','player_rank_state',
+    'billing_entitlements','account_deletion_requests',
+    'progress_daily','practice_days','player_technique_rating'
+  ] loop
+    execute format('select count(*) from public.%I', t) into n;
+    if n <> 0 then
+      raise exception 'B1: cross-user rows must be invisible in public.% (got %)', t, n;
+    end if;
+  end loop;
+  if (select count(*) from public.profiles) <> 1
+     or exists (select 1 from public.profiles
+                where id = '00000000-0000-4000-8000-00000000000a') then
+    raise exception 'B1: cross-user profile must be invisible';
   end if;
 end $$;
 
