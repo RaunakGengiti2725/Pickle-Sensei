@@ -4,7 +4,12 @@ import {
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
-import { getKv, saveSession, setKv } from '../data/repository';
+import {
+  detachShotFromSession,
+  getKv,
+  saveSession,
+  setKv,
+} from '../data/repository';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -232,6 +237,104 @@ export async function commitPracticeSet(
     startedAtIso: plan.startedAtIso,
     lastActivityAtIso: now.iso,
   });
+}
+
+/** How many times each commit write is tried before it is given up on. */
+export const PRACTICE_SET_COMMIT_ATTEMPTS = 3;
+
+export type PracticeSetCommitOutcome =
+  /** Session row (new sets) and activity stamp are durable; `attempts` is
+   * the most tries any single write needed (1 = clean). */
+  | { kind: 'committed'; attempts: number }
+  /** The new set's session could not be persisted: the already-durable
+   * shot was reassigned to no set (local row + queued payload together) so
+   * it still syncs; nothing of the set exists locally. */
+  | { kind: 'detached'; attempts: number; error: string }
+  /** The set is durable but the kv activity stamp could not be written: the
+   * shot keeps its sessionId and syncs behind the session; the set may end
+   * early. */
+  | { kind: 'activity_not_recorded'; attempts: number; error: string };
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function retryWrite(
+  write: () => Promise<void>,
+): Promise<{ attempts: number; error: unknown | null }> {
+  let error: unknown = null;
+  for (let attempt = 1; attempt <= PRACTICE_SET_COMMIT_ATTEMPTS; attempt += 1) {
+    try {
+      await write();
+      return { attempts: attempt, error: null };
+    } catch (caught) {
+      error = caught;
+    }
+  }
+  return { attempts: PRACTICE_SET_COMMIT_ATTEMPTS, error };
+}
+
+/**
+ * Commits a plan for a scored analysis that is ALREADY durable with the
+ * plan's sessionId (saveAnalysis ran). The shot and its session must never
+ * disagree: a shot naming a session that does not exist anywhere is rejected
+ * by the server (`shot.session_not_found`) until its budget is spent. So a
+ * new set's session write is retried, and if it still fails the shot is
+ * detached from the set instead (local row and queued payload in one
+ * transaction) so it syncs as a set-less rating. Only when neither the
+ * session nor the detachment can be written does this throw — the caller
+ * surfaces that, because the durable shot is then knowingly inconsistent.
+ * The kv activity stamp is retried too and reported, never thrown: the set
+ * itself is durable by then.
+ */
+export async function commitPracticeSetForAnalysis(
+  db: LocalDb,
+  plan: PracticeSetPlan,
+  shotId: string,
+  nowIso?: string,
+): Promise<PracticeSetCommitOutcome> {
+  const now = resolveNow(nowIso ?? plan.nowIso);
+  let attempts = 1;
+  if (!plan.resumed) {
+    const session = await retryWrite(() =>
+      saveSession(db, {
+        id: plan.sessionId,
+        mode: PRACTICE_SET_MODE,
+        shotType: plan.shotType,
+        focusCheckpoint: null,
+        startedAt: plan.startedAtIso,
+      }),
+    );
+    if (session.error !== null) {
+      try {
+        await detachShotFromSession(db, shotId);
+      } catch {
+        throw session.error;
+      }
+      return {
+        kind: 'detached',
+        attempts: session.attempts,
+        error: errorMessage(session.error),
+      };
+    }
+    attempts = session.attempts;
+  }
+  const stamp = await retryWrite(() =>
+    writeStoredSet(db, plan.owner, {
+      sessionId: plan.sessionId,
+      shotType: plan.shotType,
+      startedAtIso: plan.startedAtIso,
+      lastActivityAtIso: now.iso,
+    }),
+  );
+  if (stamp.error !== null) {
+    return {
+      kind: 'activity_not_recorded',
+      attempts: stamp.attempts,
+      error: errorMessage(stamp.error),
+    };
+  }
+  return { kind: 'committed', attempts: Math.max(attempts, stamp.attempts) };
 }
 
 /**

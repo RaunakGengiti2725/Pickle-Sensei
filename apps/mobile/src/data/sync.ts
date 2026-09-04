@@ -91,22 +91,93 @@ export function isPermanentSyncFailure(error: unknown): boolean {
 
 /**
  * Per-item rejections the server itself labels as retryable (its own write
- * failed, or the bearer must be refreshed), plus the ordering artifact of a
- * shot whose practice-set session has not reached the server yet (the
- * session.create row drains ahead of it on the next pass — it was queued
- * moments after the shot). They record the reason but keep the row's attempt
- * budget intact, matching how a whole-request 5xx is treated; every other
- * rejection code is a contract verdict that will not change on replay.
+ * failed, or the bearer must be refreshed). They record the reason but keep
+ * the row's attempt budget intact, matching how a whole-request 5xx is
+ * treated; every other rejection code is a contract verdict that will not
+ * change on replay. `shot.session_not_found` is decided per row by
+ * resolveSessionNotFound: transient only while the session's own
+ * session.create row is still retryable.
  */
 export const TRANSIENT_SYNC_REJECTION_CODES: ReadonlySet<string> = new Set([
   'shot.write_failed',
   'evaluation.trial_write_failed',
   'auth.required',
-  SESSION_NOT_FOUND_REJECTION,
 ]);
 
 export function isTransientSyncRejection(code: string): boolean {
   return TRANSIENT_SYNC_REJECTION_CODES.has(code);
+}
+
+/**
+ * A shot the server rejected because it does not know the shot's sessionId.
+ * That is an ordering artifact only while a retryable session.create row for
+ * that session still exists (it drained ahead of the shot in this pass and
+ * failed transiently, or was queued behind it): the shot keeps its budget and
+ * is re-sent once the session lands. Otherwise nothing in the outbox will
+ * ever make the session exist, so the shot is charged — and when the device
+ * still holds the durable local_session row but no session.create row at all
+ * (the practice-set commit was lost after the shot became durable, or the
+ * server later forgot an accepted session), the drain re-enqueues exactly one
+ * session.create from that row so the next pass can converge; every shot of
+ * that session in this pass is charged, including the ones after the repair.
+ * An exhausted session.create row is a permanent verdict and is never
+ * re-enqueued.
+ */
+async function resolveSessionNotFound(
+  db: LocalDb,
+  owner: string,
+  sessionId: string | null,
+  repairedSessions: Set<string>,
+): Promise<{ transient: boolean }> {
+  if (sessionId === null || repairedSessions.has(sessionId)) {
+    return { transient: false };
+  }
+  const { rows: sessionRows } = await db.execute(
+    `SELECT payload, attempts FROM outbox
+     WHERE owner_key = ? AND kind = 'session.create'`,
+    [owner],
+  );
+  let queued = false;
+  for (const r of sessionRows) {
+    let id: unknown;
+    try {
+      id = (JSON.parse(String(r['payload'])) as Record<string, unknown>)['id'];
+    } catch {
+      continue;
+    }
+    if (id !== sessionId) continue;
+    queued = true;
+    if (Number(r['attempts']) < OUTBOX_MAX_ATTEMPTS) return { transient: true };
+  }
+  if (queued) return { transient: false };
+  const { rows: local } = await db.execute(
+    `SELECT id, mode, shot_type, focus_checkpoint, started_at
+     FROM local_session WHERE owner_key = ? AND id = ?`,
+    [owner, sessionId],
+  );
+  const session = local[0];
+  if (session !== undefined) {
+    await db.execute(
+      `INSERT INTO outbox (owner_key, kind, payload)
+       VALUES (?, 'session.create', ?)`,
+      [
+        owner,
+        JSON.stringify({
+          id: String(session['id']),
+          mode: String(session['mode']),
+          shotType:
+            session['shot_type'] === null ? null : String(session['shot_type']),
+          focusCheckpoint:
+            session['focus_checkpoint'] === null
+              ? null
+              : String(session['focus_checkpoint']),
+          startedAt: String(session['started_at']),
+        }),
+      ],
+    );
+    repairedSessions.add(sessionId);
+  }
+  return { transient: false };
 }
 
 async function recordRowFailure(
@@ -190,6 +261,7 @@ export async function drainOutbox(
   const entries: Array<{
     row: (typeof shotRows)[number];
     shotId: string;
+    sessionId: string | null;
     payload: Record<string, unknown>;
   }> = [];
   for (const r of shotRows) {
@@ -203,6 +275,8 @@ export async function drainOutbox(
       entries.push({
         row: r,
         shotId: analysis.id,
+        sessionId:
+          typeof analysis.sessionId === 'string' ? analysis.sessionId : null,
         payload: toSyncPayload(analysis, analysis.analysisPermitId),
       });
     } catch (error) {
@@ -219,6 +293,7 @@ export async function drainOutbox(
       const rejected = new Map(
         response.rejected.map(item => [item.id, item] as const),
       );
+      const repairedSessions = new Set<string>();
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
           await db.execute('BEGIN IMMEDIATE');
@@ -245,6 +320,19 @@ export async function drainOutbox(
           continue;
         }
         const rejection = rejected.get(entry.shotId);
+        let transient = false;
+        if (rejection && rejection.code === SESSION_NOT_FOUND_REJECTION) {
+          transient = (
+            await resolveSessionNotFound(
+              db,
+              owner,
+              entry.sessionId,
+              repairedSessions,
+            )
+          ).transient;
+        } else if (rejection) {
+          transient = isTransientSyncRejection(rejection.code);
+        }
         await recordRowFailure(
           db,
           owner,
@@ -252,7 +340,7 @@ export async function drainOutbox(
           rejection
             ? `${rejection.code}: ${rejection.message}`
             : 'shot.sync_unacknowledged',
-          !rejection || !isTransientSyncRejection(rejection.code),
+          !transient,
         );
         failed++;
       }

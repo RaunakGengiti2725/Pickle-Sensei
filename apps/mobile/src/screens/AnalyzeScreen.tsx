@@ -55,7 +55,7 @@ import {
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import {
-  commitPracticeSet,
+  commitPracticeSetForAnalysis,
   planPracticeSet,
   type PracticeSetPlan,
 } from '../analysis/practiceSet';
@@ -842,7 +842,8 @@ export function AnalyzeScreen() {
         // joins the set it came from; otherwise the live set is resumed or a
         // new one starts. The plan is only READ here — it is committed
         // (session row + outbox + kv) after a score exists, so an abstained
-        // or failed run bookkeeps nothing. Set errors never fail an analysis.
+        // or failed run bookkeeps nothing. A plan that cannot be read simply
+        // means no set for this run.
         let practiceSet: PracticeSetPlan | null = null;
         try {
           practiceSet = await planPracticeSet(getDb(), {
@@ -885,9 +886,26 @@ export function AnalyzeScreen() {
         const paywallRequired =
           outcome.kind === 'unavailable' &&
           outcome.cause === 'paywall_required';
-        // A new rating leaves for the server right away; the access snapshot
-        // is deliberately NOT re-read here — see ratingLedgerTouched.
-        if (outcome.kind === 'scored') triggerOutboxSync();
+        if (outcome.kind === 'scored') {
+          // The scored analysis is durable with the plan's sessionId: commit
+          // the set BEFORE the outbox is kicked so the session.create row
+          // drains ahead of the shot. A session that cannot be persisted
+          // detaches the shot from the set instead; only a shot left naming
+          // a session that exists nowhere throws, into the error surface
+          // below. Happens even when the screen was abandoned — the durable
+          // shot must not be left inconsistent.
+          if (practiceSet) {
+            await commitPracticeSetForAnalysis(
+              getDb(),
+              practiceSet,
+              outcome.analysisId,
+            );
+          }
+          // A new rating leaves for the server right away; the access
+          // snapshot is deliberately NOT re-read here — see
+          // ratingLedgerTouched.
+          triggerOutboxSync();
+        }
         if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('saving'));
         if (outcome.kind === 'unavailable') {
@@ -913,13 +931,6 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
