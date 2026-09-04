@@ -61,7 +61,7 @@ assert_eq() { # assert_eq <desc> <expected> <actual>
 # --- fake toolchain --------------------------------------------------------
 # Fixture files (all under $FIXTURES):
 #   devices-available.json  → xcrun simctl list devices available -j
-#   devices-all.json        → xcrun simctl list devices -j
+#                             (the ONLY device listing the picker may use)
 #   runtimes.json           → xcrun simctl list runtimes -j
 #   devicetypes.json        → xcrun simctl list devicetypes -j
 #   list-available.exit     → (optional) exit code for `list devices available`
@@ -80,8 +80,6 @@ case "$1 ${2:-} ${3:-} ${4:-}" in
   "list devices available -j")
     [ -f "$FIXTURES/list-available.exit" ] && exit "$(cat "$FIXTURES/list-available.exit")"
     cat "$FIXTURES/devices-available.json" ;;
-  "list devices -j ")
-    cat "$FIXTURES/devices-all.json" ;;
   "list runtimes -j ")
     cat "$FIXTURES/runtimes.json" ;;
   "list devicetypes -j ")
@@ -106,7 +104,6 @@ chmod +x "$FAKE_BIN/xcode-select"
 reset_fixtures() {
   rm -f "$FIXTURES"/*
   echo NEW-CREATED-UDID >"$FIXTURES/create.udid"
-  echo '{"devices":{}}' >"$FIXTURES/devices-all.json"
   echo '{"runtimes":[]}' >"$FIXTURES/runtimes.json"
   echo '{"devicetypes":[]}' >"$FIXTURES/devicetypes.json"
 }
@@ -154,7 +151,6 @@ write_mac_like_devices() { # write_mac_like_devices <state of iPhone 17 Pro Max>
   ]
 }}
 JSON
-  cp "$FIXTURES/devices-available.json" "$FIXTURES/devices-all.json"
 }
 
 write_runtimes() { # write_runtimes <with supportedDeviceTypes: yes|no>
@@ -232,7 +228,6 @@ reset_fixtures
 cat >"$FIXTURES/devices-available.json" <<JSON
 {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[$(dev - "iPhone 16 Pro" UDID-BOOTED-16PRO Booted true)]}}
 JSON
-cp "$FIXTURES/devices-available.json" "$FIXTURES/devices-all.json"
 write_runtimes yes
 write_devicetypes
 run_sut
@@ -255,6 +250,17 @@ check "exit code is non-zero" [ "$RC" -ne 0 ]
 assert_eq "nothing on stdout" "" "$OUT"
 assert_not_contains "picker failure is not masked by the create fallback" "simctl create" "$LOG"
 assert_contains "stderr names the failing command" "simctl list devices available -j" "$ERR"
+
+CURRENT="wrong-json-shape-fails"
+reset_fixtures
+echo '[]' >"$FIXTURES/devices-available.json"
+write_runtimes yes
+write_devicetypes
+run_sut
+check "exit code is non-zero" [ "$RC" -ne 0 ]
+assert_eq "nothing on stdout" "" "$OUT"
+assert_not_contains "no python traceback" "Traceback" "$ERR"
+assert_not_contains "picker failure is not masked by the create fallback" "simctl create" "$LOG"
 
 CURRENT="picker-command-failure-fails"
 reset_fixtures
@@ -300,7 +306,6 @@ cat >"$FIXTURES/devices-available.json" <<JSON
   "com.apple.CoreSimulator.SimRuntime.iOS-26-10":[$(dev - "iPhone 17 Pro" UDID-UNAVAILABLE Shutdown false)]
 }}
 JSON
-cp "$FIXTURES/devices-available.json" "$FIXTURES/devices-all.json"
 write_runtimes yes
 write_devicetypes
 run_sut
@@ -348,14 +353,11 @@ assert_not_contains "nothing is created" "simctl create" "$LOG"
 CURRENT="stale-ci-devices-are-deleted"
 reset_fixtures
 cat >"$FIXTURES/devices-available.json" <<JSON
-{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[$(dev - "iPhone 17 Pro Max" UDID-17PROMAX Booted true)]}}
-JSON
-cat >"$FIXTURES/devices-all.json" <<JSON
 {"devices":{
   "com.apple.CoreSimulator.SimRuntime.iOS-26-4":[
     $(dev - "iPhone 17 Pro Max" UDID-17PROMAX Booted true),
     $(dev - "PickleSensei-CI" UDID-STALE-1 Booted true com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro),
-    $(dev - "PickleSensei-CI" UDID-STALE-2 Shutdown false com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro),
+    $(dev - "PickleSensei-CI" UDID-STALE-2 Shutdown true com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro),
     $(dev - "PickleSensei-CI-keepsake" UDID-OTHER Shutdown true)
   ]
 }}
@@ -365,6 +367,7 @@ write_devicetypes
 run_sut
 assert_eq "exit 0" 0 "$RC"
 assert_eq "stdout is the selected UDID" UDID-17PROMAX "$OUT"
+assert_contains "a booted stale device is shut down first" "simctl shutdown UDID-STALE-1" "$LOG"
 assert_contains "stale device 1 deleted" "simctl delete UDID-STALE-1" "$LOG"
 assert_contains "stale device 2 deleted" "simctl delete UDID-STALE-2" "$LOG"
 assert_not_contains "differently named devices are left alone" "UDID-OTHER" "$LOG"
@@ -374,11 +377,8 @@ assert_contains "deletion is logged" "deleting stale simulator PickleSensei-CI U
 CURRENT="selected-ci-device-is-kept"
 reset_fixtures
 cat >"$FIXTURES/devices-available.json" <<JSON
-{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[$(dev - "PickleSensei-CI" UDID-CI-KEEP Shutdown true com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro)]}}
-JSON
-cat >"$FIXTURES/devices-all.json" <<JSON
 {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[
-  $(dev - "PickleSensei-CI" UDID-CI-KEEP Shutdown true com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro),
+  $(dev - "PickleSensei-CI" UDID-CI-KEEP Booted true com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro),
   $(dev - "PickleSensei-CI" UDID-CI-STALE Shutdown true com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro)
 ]}}
 JSON
@@ -397,7 +397,6 @@ reset_fixtures
 cat >"$FIXTURES/devices-available.json" <<JSON
 {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[$(dev - "iPhone 17 Pro" UDID-17PRO Shutdown true)]}}
 JSON
-cp "$FIXTURES/devices-available.json" "$FIXTURES/devices-all.json"
 write_runtimes yes
 write_devicetypes
 run_sut --boot
@@ -412,7 +411,6 @@ reset_fixtures
 cat >"$FIXTURES/devices-available.json" <<JSON
 {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-4":[$(dev - "iPhone 17 Pro" UDID-17PRO Booted true)]}}
 JSON
-cp "$FIXTURES/devices-available.json" "$FIXTURES/devices-all.json"
 write_runtimes yes
 write_devicetypes
 run_sut --boot
