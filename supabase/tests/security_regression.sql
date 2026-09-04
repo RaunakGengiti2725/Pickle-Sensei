@@ -133,9 +133,14 @@ end $$;
 
 -- A5: permit reserve, then the full apply_synced_shot() sync path — shot +
 -- phases + checkpoints + permit consumption in one atomic invoker call.
+-- Fixed-id permits are seeded by the owner: since 20260907000000 the client
+-- role cannot name a permit id (section Q); the RPC path is exercised in H.
+reset role;
 insert into public.analysis_permits (id, user_id, idempotency_key)
 values ('00000000-0000-4000-8000-0000000000a1',
         '00000000-0000-4000-8000-00000000000a', 'permit-1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 do $$
 declare v text;
 begin
@@ -544,9 +549,13 @@ values ('00000000-0000-4000-8000-0000000000d2',
         '00000000-0000-4000-8000-00000000000a', now());
 -- Fixture row written directly (not via the RPC) so E1 exercises the table
 -- grants themselves; it still needs a live permit — see L for the gate.
+-- (Owner-seeded fixed id: the client cannot name one since 20260907000000.)
+reset role;
 insert into public.analysis_permits (id, user_id, idempotency_key)
 values ('00000000-0000-4000-8000-0000000000a3',
         '00000000-0000-4000-8000-00000000000a', 'permit-e-fixture');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 insert into public.shots (
   id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
   overall_score, analysis_confidence, result_kind,
@@ -653,9 +662,13 @@ begin
 end $$;
 
 -- E6: permits — lifecycle columns only; the idempotency identity is fixed
+-- (Owner-seeded fixed id: the client cannot name one since 20260907000000.)
+reset role;
 insert into public.analysis_permits (id, user_id, idempotency_key)
 values ('00000000-0000-4000-8000-0000000000a2',
         '00000000-0000-4000-8000-00000000000a', 'permit-2');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
 update public.analysis_permits set status = 'finalized', outcome = 'scored'
   where id = '00000000-0000-4000-8000-0000000000a2';
 do $$
@@ -915,7 +928,7 @@ end $$;
 -- produces — and require it to refuse the third scored shot and release the
 -- permit rather than record a third free rating.
 do $$
-declare v text; p uuid; i int;
+declare v text; p uuid; p_id uuid; i int;
 begin
   for i in 1..2 loop
     select permit_id into p from public.reserve_analysis_permit('carol-key-' || i);
@@ -938,14 +951,15 @@ begin
     end if;
   end loop;
 
-  -- Simulate the over-issued permit a lost race would leave behind.
-  insert into public.analysis_permits (id, user_id, idempotency_key)
-  values ('00000000-0000-4000-8000-0000000000af',
-          '00000000-0000-4000-8000-00000000000c', 'carol-raced-key');
+  -- Simulate the over-issued permit a lost race would leave behind (the
+  -- client may still write a reservation row; the id is server-assigned).
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-00000000000c', 'carol-raced-key')
+  returning id into p_id;
 
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000c9',
-    'analysisPermitId', '00000000-0000-4000-8000-0000000000af',
+    'analysisPermitId', p_id,
     'resultKind', 'scored',
     'shotType', 'drive', 'cameraView', 'side',
     'capturedAt', '2026-08-31T10:00:00Z',
@@ -967,7 +981,7 @@ begin
     raise exception 'H3: a free account must never exceed two scored shots';
   end if;
   if not exists (select 1 from public.analysis_permits
-                 where id = '00000000-0000-4000-8000-0000000000af'
+                 where id = p_id
                    and status = 'released' and outcome = 'free_limit_exceeded') then
     raise exception 'H3: the refused permit must be released, not left reserved';
   end if;
@@ -976,14 +990,14 @@ end $$;
 -- H4: an abstention still costs nothing — the backstop must not turn
 -- low_confidence into a paywall (unscored attempts are free, by contract).
 do $$
-declare v text;
+declare v text; p_id uuid;
 begin
-  insert into public.analysis_permits (id, user_id, idempotency_key)
-  values ('00000000-0000-4000-8000-0000000000ae',
-          '00000000-0000-4000-8000-00000000000c', 'carol-abstain-key');
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-00000000000c', 'carol-abstain-key')
+  returning id into p_id;
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000ca',
-    'analysisPermitId', '00000000-0000-4000-8000-0000000000ae',
+    'analysisPermitId', p_id,
     'resultKind', 'low_confidence',
     'shotType', 'drive', 'cameraView', 'side',
     'capturedAt', '2026-08-31T10:00:00Z',
@@ -999,7 +1013,7 @@ begin
     raise exception 'H4: an abstention must sync even at the free limit (got %)', v;
   end if;
   if not exists (select 1 from public.analysis_permits
-                 where id = '00000000-0000-4000-8000-0000000000ae'
+                 where id = p_id
                    and status = 'released' and outcome = 'low_confidence') then
     raise exception 'H4: an abstention must RELEASE its permit, never consume it';
   end if;
@@ -1199,14 +1213,14 @@ end $$;
 -- (the over-issue artifact H3 simulates) still cannot become a free rating
 -- for the re-created account.
 do $$
-declare v text;
+declare v text; p_id uuid;
 begin
-  insert into public.analysis_permits (id, user_id, idempotency_key)
-  values ('00000000-0000-4000-8000-0000000000d1',
-          '00000000-0000-4000-8000-00000000000d', 'carol-second-life-forged');
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-00000000000d', 'carol-second-life-forged')
+  returning id into p_id;
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000d2',
-    'analysisPermitId', '00000000-0000-4000-8000-0000000000d1',
+    'analysisPermitId', p_id,
     'resultKind', 'scored',
     'shotType', 'drive', 'cameraView', 'side',
     'capturedAt', '2026-08-31T10:00:00Z',
@@ -1226,7 +1240,7 @@ begin
     raise exception 'J3: no scored shot may be recorded for the re-created account';
   end if;
   if not exists (select 1 from public.analysis_permits
-                 where id = '00000000-0000-4000-8000-0000000000d1'
+                 where id = p_id
                    and status = 'released' and outcome = 'free_limit_exceeded') then
     raise exception 'J3: the refused permit must be released, not left reserved';
   end if;
@@ -1236,14 +1250,14 @@ end $$;
 -- attempts never cost a rating, before or after deletion) and does not move
 -- the ledger.
 do $$
-declare v text;
+declare v text; p_id uuid;
 begin
-  insert into public.analysis_permits (id, user_id, idempotency_key)
-  values ('00000000-0000-4000-8000-0000000000d3',
-          '00000000-0000-4000-8000-00000000000d', 'carol-second-life-abstain');
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-00000000000d', 'carol-second-life-abstain')
+  returning id into p_id;
   v := public.apply_synced_shot(jsonb_build_object(
     'id', '00000000-0000-4000-8000-0000000000d4',
-    'analysisPermitId', '00000000-0000-4000-8000-0000000000d3',
+    'analysisPermitId', p_id,
     'resultKind', 'low_confidence',
     'shotType', 'drive', 'cameraView', 'side',
     'capturedAt', '2026-08-31T10:00:00Z',
@@ -1890,9 +1904,8 @@ end $$;
 -- the allowance does not).
 do $$
 begin
-  insert into public.analysis_permits (id, user_id, idempotency_key)
-  values ('00000000-0000-4000-8000-0000000000b9',
-          '00000000-0000-4000-8000-000000000014', 'liam-forged-key');
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-000000000014', 'liam-forged-key');
   begin
     insert into public.shots (
       id, user_id, shot_type, captured_at, start_ms, end_ms,
@@ -1983,7 +1996,8 @@ begin
       'scoring-1', 'config-1'
     );
   update public.analysis_permits set status = 'finalized', outcome = 'scored'
-   where id = '00000000-0000-4000-8000-0000000000b9';
+   where user_id = '00000000-0000-4000-8000-000000000014'
+     and idempotency_key = 'liam-forged-key';
   begin
     insert into public.shots (
       id, user_id, shot_type, captured_at, start_ms, end_ms,
@@ -2024,11 +2038,11 @@ values ('00000000-0000-4000-8000-000000000015', 'mara@example.com',
 insert into auth.identities (provider, provider_id, user_id, identity_data)
 values ('google', 'google-sub-mara', '00000000-0000-4000-8000-000000000015',
         '{"sub":"google-sub-mara","email":"mara@example.com"}');
-set local role authenticated;
-set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000015';
 insert into public.analysis_permits (id, user_id, idempotency_key)
 values ('00000000-0000-4000-8000-0000000000fa',
         '00000000-0000-4000-8000-000000000015', 'permit-m1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000015';
 do $$
 declare v text;
 begin
@@ -2959,6 +2973,525 @@ begin
   if r <> '23514:access.permit_transition_rejected' then
     raise exception 'P5: the owner cannot re-label released/NULL into acceptable backing either (got %)', r;
   end if;
+end $$;
+
+-- ============================================================================
+-- Q. a settled permit is terminal for the CLIENT ROLE too, and one permit
+-- backs at most one shot in the DATA, whatever the permit row says
+-- (20260907000000_permit_terminal_client_role.sql,
+-- ADV7-PERMIT-REUSE-DELETE-REINSERT / OFF-24H-02 follow-up)
+-- ============================================================================
+--
+-- Q1  owner DELETE of an own permit — reserved, finalized, released — is
+--     42501; anon too; every row stays
+-- Q2  owner INSERT naming `id` (any status) or `created_at`/`updated_at` is
+--     42501; the product shape (user_id, idempotency_key[, status, outcome])
+--     is still allowed with a server-assigned id, and a client-written
+--     finalized/scored row is not a rating anywhere and backs nothing
+-- Q3  THE ATTACK, as the owner: reserve → sync accepted → DELETE 42501 →
+--     re-INSERT the id 42501 → second sync on the permit is
+--     access.permit_not_reserved → exactly one shot, linked to the permit,
+--     the permit still finalized/scored
+-- Q4  no resurrection by any role: after the owner removes the consumed
+--     permit row, re-creating its id is 23514 + access.permit_transition_
+--     rejected (definer BEFORE INSERT guard); a second shot on the consumed
+--     permit id is 23505 for the owner; the RPC answers permit_not_found
+-- Q5  shots.analysis_permit_id is the RPC's column: a client INSERT naming it
+--     (live permit, scored or abstention, with or without a mismatched
+--     vouch) is 42501 + access.permit_not_reserved and writes nothing
+-- Q6  legitimate writers still work: same-shot replay stays accepted with
+--     one row and the link intact; an abstention records the link and
+--     releases; the sweep + late sync consume a swept permit once and refuse
+--     it the second time; edge finalize/release UPDATEs go through; a
+--     client-written released/expired row is still capped by the allowance
+-- Q7  premium / no-permit rows are untouched: several link-less direct
+--     scored rows coexist (partial index), a member's sync records the link
+-- Q8  auth.users delete still cascades permits (including the one linked to
+--     a shot) and the identity ledger row survives; the freed id may then be
+--     re-issued by the owner (no tombstone leak)
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000021', 'sam@example.com',
+   '{"full_name":"Sam"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000022', 'tess@example.com',
+   '{"full_name":"Tess"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-sam', '00000000-0000-4000-8000-000000000021',
+   '{"sub":"google-sub-sam","email":"sam@example.com"}'),
+  ('apple', 'apple-sub-tess', '00000000-0000-4000-8000-000000000022',
+   '{"sub":"apple-sub-tess","email":"tess@example.com"}');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000022', true, null);
+-- Sam: one of each settled state plus a live reservation, seeded by the owner
+-- (the client cannot name an id — Q2).
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000021', 'sam-p1', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000021', 'sam-p2', 'finalized', 'cancelled', now()),
+  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000021', 'sam-p3', 'released', 'expired', now() - interval '25 hours');
+
+-- Runs one statement as the current role and returns 'allowed <n>' or
+-- '<SQLSTATE>:<hint>'.
+create function pg_temp.q_try(p_sql text) returns text
+language plpgsql as $$
+declare n integer; v_state text; v_hint text;
+begin
+  execute p_sql;
+  get diagnostics n = row_count;
+  return 'allowed ' || n;
+exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  return v_state || ':' || coalesce(v_hint, '');
+end $$;
+
+create function pg_temp.q_direct_shot(p_id uuid, p_user uuid, p_kind text, p_permit uuid)
+returns text language plpgsql as $$
+begin
+  return pg_temp.q_try(format(
+    $q$insert into public.shots (
+         id, user_id, analysis_permit_id, shot_type, captured_at, start_ms, end_ms,
+         overall_score, analysis_confidence, result_kind,
+         app_version, model_bundle_version, pose_model_version,
+         paddle_model_version, stroke_detector_version, phase_model_version,
+         scoring_model_version, shot_config_version
+       ) values (%L, %L, %L, 'drive', now(), 0, 1000, %s, %s, %L,
+         '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+         'scoring-1', 'config-1')$q$,
+    p_id, p_user, p_permit,
+    case when p_kind = 'scored' then '8.0' else 'null' end,
+    case when p_kind = 'scored' then '0.9' else '0.2' end,
+    p_kind));
+end $$;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000021';
+
+-- Q1: the owner cannot DELETE any of its permits.
+do $$
+declare r text; pid text;
+begin
+  foreach pid in array array[
+    '00000000-0000-4000-8000-000000000201',
+    '00000000-0000-4000-8000-000000000202',
+    '00000000-0000-4000-8000-000000000203']
+  loop
+    r := pg_temp.q_try(format('delete from public.analysis_permits where id = %L', pid));
+    if r <> '42501:' then
+      raise exception 'Q1: owner DELETE of permit % must be 42501 (got %)', pid, r;
+    end if;
+  end loop;
+  r := pg_temp.q_try('delete from public.analysis_permits');
+  if r <> '42501:' then
+    raise exception 'Q1: an unfiltered owner DELETE must be 42501 (got %)', r;
+  end if;
+  if (select count(*) from public.analysis_permits
+      where user_id = '00000000-0000-4000-8000-000000000021') <> 3 then
+    raise exception 'Q1: every permit row must survive the refused DELETEs';
+  end if;
+end $$;
+set local role anon;
+do $$
+declare r text;
+begin
+  r := pg_temp.q_try('delete from public.analysis_permits');
+  if r <> '42501:' then
+    raise exception 'Q1: anon DELETE must be 42501 (got %)', r;
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000021';
+
+-- Q2: the owner cannot name a permit id (reserved or settled) or back-date
+-- one; the product shape still works and a client-written settled row
+-- confers nothing.
+do $$
+declare r text; p_id uuid; v text; rec record; n_before integer;
+begin
+  r := pg_temp.q_try($q$insert into public.analysis_permits (id, user_id, idempotency_key)
+    values ('00000000-0000-4000-8000-000000000211', '00000000-0000-4000-8000-000000000021', 'sam-forge-1')$q$);
+  if r <> '42501:' then
+    raise exception 'Q2: INSERT naming id (reserved) must be 42501 (got %)', r;
+  end if;
+  r := pg_temp.q_try($q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+    values ('00000000-0000-4000-8000-000000000212', '00000000-0000-4000-8000-000000000021', 'sam-forge-2', 'finalized', 'scored')$q$);
+  if r <> '42501:' then
+    raise exception 'Q2: INSERT naming id (finalized/scored) must be 42501 (got %)', r;
+  end if;
+  r := pg_temp.q_try($q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+    values ('00000000-0000-4000-8000-000000000213', '00000000-0000-4000-8000-000000000021', 'sam-forge-3', 'released', 'expired')$q$);
+  if r <> '42501:' then
+    raise exception 'Q2: INSERT naming id (released/expired) must be 42501 (got %)', r;
+  end if;
+  r := pg_temp.q_try($q$insert into public.analysis_permits (user_id, idempotency_key, created_at)
+    values ('00000000-0000-4000-8000-000000000021', 'sam-forge-4', now() - interval '3 days')$q$);
+  if r <> '42501:' then
+    raise exception 'Q2: INSERT naming created_at must be 42501 (got %)', r;
+  end if;
+  r := pg_temp.q_try($q$insert into public.analysis_permits (user_id, idempotency_key, updated_at)
+    values ('00000000-0000-4000-8000-000000000021', 'sam-forge-5', now())$q$);
+  if r <> '42501:' then
+    raise exception 'Q2: INSERT naming updated_at must be 42501 (got %)', r;
+  end if;
+  if exists (select 1 from public.analysis_permits
+             where idempotency_key like 'sam-forge-%') then
+    raise exception 'Q2: no forged permit row may exist';
+  end if;
+
+  -- the product shape (what reserve_analysis_permit() writes as the caller)
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-000000000021', 'sam-shape-ok')
+  returning id into p_id;
+  if p_id is null or exists (select 1 from public.analysis_permits
+                             where id = p_id and (status <> 'reserved' or outcome is not null)) then
+    raise exception 'Q2: the product-shape INSERT must yield a reserved/NULL row with a server id';
+  end if;
+  -- and the edge finalize UPDATE settles it like any reservation (frees the
+  -- live slot for Q3)
+  r := pg_temp.q_try(format($q$update public.analysis_permits
+    set status = 'finalized', outcome = 'cancelled' where id = %L$q$, p_id));
+  if r <> 'allowed 1' then
+    raise exception 'Q2: the edge finalize UPDATE must still be allowed (got %)', r;
+  end if;
+
+  -- a client-written finalized/scored row is not a rating anywhere
+  select public.lifetime_scored_count() into n_before;
+  insert into public.analysis_permits (user_id, idempotency_key, status, outcome)
+  values ('00000000-0000-4000-8000-000000000021', 'sam-settled-forge', 'finalized', 'scored');
+  select * into rec from public.access_state();
+  if public.lifetime_scored_count() <> n_before or rec.scored_count <> n_before then
+    raise exception 'Q2: a client-written finalized/scored permit must not count as a rating';
+  end if;
+  -- and it never backs a shot
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000221',
+    (select id from public.analysis_permits where idempotency_key = 'sam-settled-forge'), 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q2: a client-written finalized/scored permit must not back a shot (got %)', v;
+  end if;
+end $$;
+
+-- Q3: THE ATTACK (ADV-10), as the owner through the client role.
+do $$
+declare r record; v text; p_id uuid; d text; i text; n integer;
+begin
+  select * into r from public.reserve_analysis_permit('sam-attack');
+  if r.result <> 'accepted' then
+    raise exception 'Q3 precondition: reserve must succeed (got %)', r.result;
+  end if;
+  p_id := r.permit_id;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000231', p_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'Q3 precondition: first sync must be accepted (got %)', v;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-000000000231'
+                   and analysis_permit_id = p_id) then
+    raise exception 'Q3: the synced shot must record the permit it consumed';
+  end if;
+
+  d := pg_temp.q_try(format('delete from public.analysis_permits where id = %L', p_id));
+  i := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values (%L, '00000000-0000-4000-8000-000000000021', 'sam-attack-again')$q$, p_id));
+  if d <> '42501:' or i <> '42501:' then
+    raise exception 'Q3: DELETE + re-INSERT of the consumed permit must both be 42501 (got % / %)', d, i;
+  end if;
+
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000232', p_id, 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q3: a second shot on the consumed permit must be access.permit_not_reserved (got %)', v;
+  end if;
+  select count(*) into n from public.shots where analysis_permit_id = p_id;
+  if n <> 1 then
+    raise exception 'Q3: exactly one shot may be linked to the permit (got %)', n;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = p_id and status = 'finalized' and outcome = 'scored') then
+    raise exception 'Q3: the consumed permit must still be finalized/scored';
+  end if;
+end $$;
+
+-- Q4: no resurrection for ANY role. The owner (cascade/maintenance path, no
+-- JWT claim) removes the consumed permit row; its id can never be created
+-- again while the shot exists, a second shot on the id is refused by the
+-- index, and the RPC reports the row gone.
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+declare p_id uuid; r text;
+begin
+  select analysis_permit_id into p_id from public.shots
+   where id = '00000000-0000-4000-8000-000000000231';
+  delete from public.analysis_permits where id = p_id;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values (%L, '00000000-0000-4000-8000-000000000021', 'sam-resurrect')$q$, p_id));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'Q4: re-creating a consumed permit id must be 23514 + access.permit_transition_rejected even for the owner (got %)', r;
+  end if;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+       values (%L, '00000000-0000-4000-8000-000000000021', 'sam-resurrect-2', 'released', 'expired')$q$, p_id));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'Q4: re-creating a consumed permit id as released/expired must be refused too (got %)', r;
+  end if;
+  r := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000233',
+    '00000000-0000-4000-8000-000000000021', 'scored', p_id);
+  if r <> '23505:' then
+    raise exception 'Q4: a second shot on a consumed permit id must be 23505 for the owner (got %)', r;
+  end if;
+  if (select count(*) from public.shots where analysis_permit_id = p_id) <> 1 then
+    raise exception 'Q4: still exactly one shot on the permit id';
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000021';
+do $$
+declare p_id uuid; v text;
+begin
+  select analysis_permit_id into p_id from public.shots
+   where id = '00000000-0000-4000-8000-000000000231';
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000234', p_id, 'scored'));
+  if v <> 'access.permit_not_found' then
+    raise exception 'Q4: the RPC must report the removed permit as not found (got %)', v;
+  end if;
+  -- replay of the shot that consumed it is still an idempotent accept
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000231', p_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'Q4: replaying the held shot must stay accepted (got %)', v;
+  end if;
+end $$;
+
+-- Q5: shots.analysis_permit_id is written only under the RPC's vouch.
+do $$
+declare r text;
+begin
+  -- live reserved permit (201), scored, client names it directly
+  r := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000241',
+    '00000000-0000-4000-8000-000000000021', 'scored', '00000000-0000-4000-8000-000000000201');
+  if r <> '42501:access.permit_not_reserved' then
+    raise exception 'Q5: a client INSERT naming analysis_permit_id must be 42501 + access.permit_not_reserved (got %)', r;
+  end if;
+  -- abstention rows too — the link is never the client's to write
+  r := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000242',
+    '00000000-0000-4000-8000-000000000021', 'low_confidence', '00000000-0000-4000-8000-000000000201');
+  if r <> '42501:access.permit_not_reserved' then
+    raise exception 'Q5: an abstention naming analysis_permit_id must be refused too (got %)', r;
+  end if;
+  -- white-box: a vouch for one permit cannot be used to link another
+  perform set_config('pickle.sync_permit_id', '00000000-0000-4000-8000-000000000201', true);
+  r := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000243',
+    '00000000-0000-4000-8000-000000000021', 'scored', '00000000-0000-4000-8000-000000000203');
+  perform set_config('pickle.sync_permit_id', '', true);
+  if r <> '42501:access.permit_not_reserved' then
+    raise exception 'Q5: a mismatched vouch/link pair must be refused (got %)', r;
+  end if;
+  if exists (select 1 from public.shots where id in (
+      '00000000-0000-4000-8000-000000000241',
+      '00000000-0000-4000-8000-000000000242',
+      '00000000-0000-4000-8000-000000000243')) then
+    raise exception 'Q5: no refused row may persist';
+  end if;
+  -- the pre-fix direct path (no link, live permit) is unchanged and records
+  -- no link
+  r := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000244',
+    '00000000-0000-4000-8000-000000000021', 'scored', null);
+  if r <> 'allowed 1' then
+    raise exception 'Q5: the link-less direct INSERT under a live permit must still be allowed (got %)', r;
+  end if;
+  if (select analysis_permit_id from public.shots
+      where id = '00000000-0000-4000-8000-000000000244') is not null then
+    raise exception 'Q5: a direct INSERT must not acquire a permit link';
+  end if;
+end $$;
+
+-- Q6: legitimate writers. Sam has spent both free ratings by now (Q3 + Q5),
+-- so the remaining flows are proven on Tess (member) and on Sam's abstention.
+do $$
+declare v text; p record;
+begin
+  -- abstention on the live reservation: link recorded, permit released
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000251', '00000000-0000-4000-8000-000000000201', 'low_confidence'));
+  if v <> 'accepted' then
+    raise exception 'Q6: an abstention sync must be accepted (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000201';
+  if p.status <> 'released' or p.outcome <> 'low_confidence' then
+    raise exception 'Q6: the abstention must release its permit (got %/%)', p.status, p.outcome;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-000000000251'
+                   and analysis_permit_id = '00000000-0000-4000-8000-000000000201') then
+    raise exception 'Q6: the abstention row must record its permit';
+  end if;
+  -- a second abstention on the same permit is refused (index + state)
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000252', '00000000-0000-4000-8000-000000000201', 'low_confidence'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q6: a second shot on a released permit must be refused (got %)', v;
+  end if;
+  -- same-shot replay: accepted, one row, link intact
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000251', '00000000-0000-4000-8000-000000000201', 'low_confidence'));
+  if v <> 'accepted' then
+    raise exception 'Q6: same-shot replay must stay accepted (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where analysis_permit_id = '00000000-0000-4000-8000-000000000201') <> 1 then
+    raise exception 'Q6: the replay must not duplicate the linked row';
+  end if;
+  -- the edge finalize replay (no-op on a settled row) still works
+  if pg_temp.q_try($q$update public.analysis_permits set status = 'finalized', outcome = 'cancelled'
+      where id = '00000000-0000-4000-8000-000000000202'$q$) <> 'allowed 1' then
+    raise exception 'Q6: the edge finalize no-op replay must be allowed';
+  end if;
+  -- a client-written released/expired row is acceptable backing in shape
+  -- (round 6) but buys nothing past the allowance: Sam is at the limit
+  insert into public.analysis_permits (user_id, idempotency_key, status, outcome)
+  values ('00000000-0000-4000-8000-000000000021', 'sam-expired-forge', 'released', 'expired');
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000253',
+    (select id from public.analysis_permits where idempotency_key = 'sam-expired-forge'), 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'Q6: a client-written released/expired permit past the limit must hit the backstop (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where idempotency_key = 'sam-expired-forge';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded' then
+    raise exception 'Q6: the refused forged permit must end released/free_limit_exceeded (got %/%)', p.status, p.outcome;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000253') then
+    raise exception 'Q6: no third scored row for a free account';
+  end if;
+end $$;
+
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000022';
+do $$
+declare r record; v text; p record; p_live uuid; p_stale uuid;
+begin
+  select * into r from public.reserve_analysis_permit('tess-live');
+  if r.result <> 'accepted' then
+    raise exception 'Q6 precondition: member reserve must succeed (got %)', r.result;
+  end if;
+  p_live := r.permit_id;
+  select * into r from public.reserve_analysis_permit('tess-stale');
+  if r.result <> 'accepted' then
+    raise exception 'Q6 precondition: second member reserve must succeed (got %)', r.result;
+  end if;
+  p_stale := r.permit_id;
+  -- edge release: reserved → released/cancelled
+  if pg_temp.q_try(format($q$update public.analysis_permits set status = 'released', outcome = 'cancelled'
+      where id = %L$q$, p_live)) <> 'allowed 1' then
+    raise exception 'Q6: the edge release UPDATE must be allowed';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000261', p_live, 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q6: a released/cancelled permit must not back a shot (got %)', v;
+  end if;
+  perform set_config('pickle.q_stale', p_stale::text, true);
+end $$;
+-- the pg_cron sweep, as the job owner, on a reservation aged past 24h
+reset role;
+update public.analysis_permits set created_at = now() - interval '25 hours'
+ where id = current_setting('pickle.q_stale', true)::uuid;
+update public.analysis_permits set status = 'released', outcome = 'expired' where status = 'reserved' and created_at < now() - interval '24 hours';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000022';
+do $$
+declare v text; p record; p_stale uuid := current_setting('pickle.q_stale', true)::uuid;
+begin
+  select * into p from public.analysis_permits where id = p_stale;
+  if p.status <> 'released' or p.outcome <> 'expired' then
+    raise exception 'Q6: the sweep must still expire a stale reservation (got %/%)', p.status, p.outcome;
+  end if;
+  -- late sync on the swept permit: accepted once, linked, finalized/scored
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000262', p_stale, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'Q6: a swept permit must still back its late shot (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = p_stale;
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'Q6: the late-synced permit must end finalized/scored (got %/%)', p.status, p.outcome;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-000000000262' and analysis_permit_id = p_stale) then
+    raise exception 'Q6: the late shot must record its permit';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000263', p_stale, 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q6: the swept-then-consumed permit must refuse a second shot (got %)', v;
+  end if;
+end $$;
+
+-- Q7: premium / no-permit rows: several link-less direct scored rows coexist
+-- under one live permit (the partial index ignores NULL), and a member's
+-- sync records the link like anyone else's.
+do $$
+declare r record; v text; a text; b text;
+begin
+  select * into r from public.reserve_analysis_permit('tess-direct');
+  if r.result <> 'accepted' then
+    raise exception 'Q7 precondition: member reserve must succeed (got %)', r.result;
+  end if;
+  a := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000271',
+    '00000000-0000-4000-8000-000000000022', 'scored', null);
+  b := pg_temp.q_direct_shot('00000000-0000-4000-8000-000000000272',
+    '00000000-0000-4000-8000-000000000022', 'scored', null);
+  if a <> 'allowed 1' or b <> 'allowed 1' then
+    raise exception 'Q7: link-less member rows must not collide (got % / %)', a, b;
+  end if;
+  if (select count(*) from public.shots
+      where user_id = '00000000-0000-4000-8000-000000000022' and analysis_permit_id is null) <> 2 then
+    raise exception 'Q7: both link-less rows must persist';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000273', r.permit_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'Q7: a member sync past the free count must be accepted (got %)', v;
+  end if;
+  if not exists (select 1 from public.shots
+                 where id = '00000000-0000-4000-8000-000000000273'
+                   and analysis_permit_id = r.permit_id) then
+    raise exception 'Q7: the member sync must record its permit';
+  end if;
+end $$;
+
+-- Q8: account deletion (Auth admin deleteUser → auth.users cascade) still
+-- removes every permit, including the one linked to a shot, and the identity
+-- ledger row survives; the freed id is then re-creatable by the owner.
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+declare p_id uuid;
+begin
+  select analysis_permit_id into p_id from public.shots
+   where id = '00000000-0000-4000-8000-000000000262';
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-tess')) then
+    raise exception 'Q8 precondition: the member''s identity must have a ledger row';
+  end if;
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000022';
+  if exists (select 1 from public.analysis_permits where user_id = '00000000-0000-4000-8000-000000000022')
+     or exists (select 1 from public.shots where user_id = '00000000-0000-4000-8000-000000000022') then
+    raise exception 'Q8: deleting the auth user must cascade permits and shots';
+  end if;
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-tess')) then
+    raise exception 'Q8: the identity ledger row must survive account deletion';
+  end if;
+  -- with the shot gone, nothing tombstones the id: the owner may re-issue it
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values (p_id, '00000000-0000-4000-8000-000000000021', 'sam-reissued');
 end $$;
 
 rollback;

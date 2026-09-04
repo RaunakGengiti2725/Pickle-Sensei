@@ -22,6 +22,7 @@ const SCORED_WRITE_GATE = "20260905000000_scored_shot_write_gate.sql";
 const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
 const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
 const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
+const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -773,6 +774,157 @@ Deno.test(
           );
         }
       }
+    }
+  },
+);
+
+// ─── ADV7-PERMIT-REUSE-DELETE-REINSERT: settled permits are terminal for the
+// client role; one-permit-one-shot is a data-layer invariant ─────────────────
+
+function grantsOnPermits(statement: string, privilege: string): boolean {
+  if (!statement.startsWith("grant ")) return false;
+  const [privileges, objects = ""] = statement.split(" on ", 2);
+  if (!new RegExp(`\\b${privilege}\\b`).test(privileges) && !/\ball\b/.test(privileges)) {
+    return false;
+  }
+  return /\bpublic\.analysis_permits\b/.test(objects);
+}
+
+function createsPolicyOnPermits(statement: string, command: string): boolean {
+  return (
+    statement.startsWith("create policy") &&
+    /\bon public\.analysis_permits\b/.test(statement) &&
+    new RegExp(`\\bfor (${command}|all)\\b`).test(statement)
+  );
+}
+
+Deno.test(
+  "permits: the client cannot DELETE a permit or name its id/timestamps, a consumed permit id can never be re-created, and every shot records the one permit it consumed",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_TERMINAL);
+    ok(migration, `${PERMIT_TERMINAL} must exist in the migration chain`);
+    ok(
+      PERMIT_TERMINAL > PERMIT_LIFECYCLE,
+      "the terminality migration must follow the lifecycle migration",
+    );
+    const { statements } = migration;
+    const raw = stripSqlComments(migration.raw);
+
+    // 1. No client DELETE, ever again.
+    ok(
+      statements.includes(
+        'drop policy if exists "analysis_permits_delete_own" on public.analysis_permits',
+      ) &&
+        statements.includes(
+          "revoke delete on public.analysis_permits from public, anon, authenticated",
+        ),
+      "the owner DELETE policy must be dropped and the DELETE grant revoked from every client role",
+    );
+
+    // 2. Client INSERT sized to the product shape: id / created_at / updated_at
+    //    are server-assigned. The reservation RPC is SECURITY INVOKER, so the
+    //    column grant (not a revoke) is the closure.
+    ok(
+      statements.includes(
+        "revoke insert on public.analysis_permits from public, anon, authenticated",
+      ) &&
+        statements.includes(
+          "grant insert (user_id, idempotency_key, status, outcome) on public.analysis_permits to authenticated",
+        ),
+      "the table-level INSERT grant must be replaced by a column grant without id/created_at/updated_at",
+    );
+    const reserveDefs = chain.flatMap((m) =>
+      functionBodies(stripSqlComments(m.raw), "reserve_analysis_permit"),
+    );
+    ok(reserveDefs.length > 0, "reserve_analysis_permit must be defined in the chain");
+    for (const def of reserveDefs) {
+      ok(
+        !/security definer/.test(def) &&
+          /insert into public\.analysis_permits \(user_id, idempotency_key\)/.test(def),
+        "reserve_analysis_permit stays SECURITY INVOKER and inserts exactly (user_id, idempotency_key) — the column grant must keep covering it",
+      );
+    }
+
+    // 3. The durable link + one-permit-one-shot index.
+    ok(
+      statements.includes(
+        "alter table public.shots add column if not exists analysis_permit_id uuid",
+      ) &&
+        statements.includes(
+          "create unique index if not exists shots_analysis_permit_unique on public.shots (analysis_permit_id) where analysis_permit_id is not null",
+        ),
+      "shots.analysis_permit_id must exist with a partial UNIQUE index (NULL rows — premium/no-permit/pre-fix — stay free)",
+    );
+
+    // 4. Resurrection guard: definer BEFORE INSERT, refuses an id already on a
+    //    shot with the lifecycle SQLSTATE/hint, non-executable by clients.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_resurrection");
+    ok(guard, `${PERMIT_TERMINAL} must define public.guard_analysis_permit_resurrection`);
+    ok(
+      /security definer/.test(guard) &&
+        guard.includes("where s.analysis_permit_id = new.id") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the resurrection guard must be SECURITY DEFINER and answer 23514 + access.permit_transition_rejected for a consumed id",
+    );
+    ok(
+      statements.includes(
+        "create trigger analysis_permits_guard_resurrection before insert on public.analysis_permits for each row execute function public.guard_analysis_permit_resurrection()",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_analysis_permit_resurrection() from public, anon, authenticated",
+        ),
+      "the resurrection guard must be a BEFORE INSERT row trigger, revoked from clients",
+    );
+
+    // 5. The RPC records the link and refuses a permit that already backs a
+    //    shot; the gate lets only the vouched permit into the column.
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_TERMINAL} must recreate public.apply_synced_shot`);
+    ok(
+      rpc.includes("where s.analysis_permit_id = v_permit_id") &&
+        rpc.includes("return 'access.permit_not_reserved'") &&
+        /insert into public\.shots \([^)]*\banalysis_permit_id\b/.test(rpc) &&
+        /when unique_violation then[\s\S]*?analysis_permit_id = v_permit_id[\s\S]*?return 'access\.permit_not_reserved'/.test(
+          rpc,
+        ),
+      "apply_synced_shot must refuse a permit id already recorded on a shot, write the link, and map the index race to access.permit_not_reserved",
+    );
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${PERMIT_TERMINAL} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes(
+        "if new.analysis_permit_id is not null\n     and (v_vouched is null or new.analysis_permit_id <> v_vouched) then",
+      ) && gate.includes("new.analysis_permit_id := v_vouched"),
+      "the gate must refuse a client-written analysis_permit_id (42501) and always write the vouched permit",
+    );
+
+    // Later migrations must not reopen any of it.
+    for (const later of after(chain, PERMIT_TERMINAL)) {
+      for (const statement of later.statements) {
+        ok(
+          !grantsOnPermits(statement, "delete"),
+          `${later.file} re-grants DELETE on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !createsPolicyOnPermits(statement, "delete"),
+          `${later.file} recreates a DELETE policy on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !(grantsOnPermits(statement, "insert") && !/^grant insert \([^)]*\)/.test(statement)) &&
+            !/^grant insert \([^)]*\b(id|created_at|updated_at)\b/.test(statement),
+          `${later.file} widens the client INSERT on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !/^drop index .*shots_analysis_permit_unique/.test(statement),
+          `${later.file} drops shots_analysis_permit_unique`,
+        );
+      }
+      ok(
+        !dropsTriggerWithoutRecreating(later, "analysis_permits_guard_resurrection"),
+        `${later.file} drops analysis_permits_guard_resurrection without recreating it`,
+      );
     }
   },
 );
