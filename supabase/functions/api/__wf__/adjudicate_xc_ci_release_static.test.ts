@@ -479,3 +479,37 @@ Deno.test(
     }
   },
 );
+||||||| parent of 3faa19a (test(edge): pin logout session revocation + 503 on Auth network error (failing on 4d812e1a))
+
+// ── LOGOUT-1: logoutRoute() maps a 5xx from Auth to 503 but a THROWN fetch
+// error (DNS, reset, timeout) must not escape to the generic 500 either.
+Deno.test("LOGOUT-1 /v1/auth/logout answers 503 (not 500) when Auth is unreachable", async () => {
+  const h = await loadHarness();
+  const ip = "10.4.0.1";
+  const bearer = fakeSupabaseAccessToken(TEST_USER_ID, "logout");
+  const observed = await withFault(
+    (request) => {
+      if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`)) {
+        return jsonResponse(200, healthyUser());
+      }
+      if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/logout`)) {
+        return Promise.reject(new TypeError("connection reset"));
+      }
+      return null;
+    },
+    () =>
+      statusOf(h.handler, {
+        method: "POST",
+        path: "/v1/auth/logout",
+        ip,
+        bearer,
+      }),
+  );
+  console.log(`  [LOGOUT-1] observed ${observed.status} ${observed.body}`);
+  assertEquals(
+    observed.status,
+    503,
+    `logout on Auth network error must be the generic 503 'temporarily unavailable', observed ${observed.status}`,
+  );
+});
+>>>>>>> 3faa19a (test(edge): pin logout session revocation + 503 on Auth network error (failing on 4d812e1a))
