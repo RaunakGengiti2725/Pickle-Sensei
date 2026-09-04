@@ -170,6 +170,80 @@ else
   RC=1; flunk "unavailable stage: exit=$CODE status=$(jq -r '.stages[0].status' "$SUMMARY")"; tail -n 3 "$OUT" >&2
 fi
 
+# ---------------------------------------------------------------- CI-04 ----
+# summary.json must be valid JSON whatever bytes a stage's last log line has.
+
+parses_everywhere() {
+  # parses_everywhere <label> <file>
+  local label="$1" file="$2" ok=1
+  jq . "$file" >/dev/null 2>"$WORK/jq.err" || { ok=0; flunk "$label: jq rejects it: $(cat "$WORK/jq.err")"; }
+  python3 -m json.tool "$file" >/dev/null 2>"$WORK/py.err" || { ok=0; flunk "$label: python3 -m json.tool rejects it: $(tail -n 1 "$WORK/py.err")"; }
+  node -e 'JSON.parse(require("fs").readFileSync(process.argv[1]))' "$file" 2>"$WORK/node.err" || { ok=0; flunk "$label: node JSON.parse rejects it: $(head -n 1 "$WORK/node.err")"; }
+  if [ $ok = 1 ]; then pass "$label: jq, python3 json.tool and node JSON.parse all accept it"; else RC=1; fi
+}
+
+# 1. A stage note with a tab, ESC, CR and raw non-UTF-8 bytes (the e2e stage
+#    echoes PLAYWRIGHT_BROWSERS_PATH in its last line when Chromium is missing).
+run ctrl-note PLAYWRIGHT_BROWSERS_PATH=$'/nonexistent/with\ttab\x1besc\rcr\xff\xfebytes' -- --only e2e
+if [ "$CODE" -ne 0 ] && [ -s "$SUMMARY" ]; then
+  pass "only e2e with a control-character browsers path: exit $CODE, summary written"
+else
+  RC=1; flunk "only e2e with a control-character browsers path: exit=$CODE summary=$( [ -s "$SUMMARY" ] && echo present || echo missing)"
+fi
+parses_everywhere "summary.json with tab/ESC/CR/non-UTF-8 in a note" "$SUMMARY"
+contains_all() {
+  # contains_all <haystack> <needle...>
+  local hay="$1" w; shift
+  for w in "$@"; do grep -qF -- "$w" <<<"$hay" || return 1; done
+}
+note="$(jq -r '.stages[0].note' "$SUMMARY" 2>/dev/null)"
+if [ -n "$note" ] && contains_all "$note" nonexistent with tab esc cr bytes; then
+  pass "note keeps a readable rendering of the line: $(printf '%q' "$note")"
+else
+  RC=1; flunk "note lost content — got $(printf '%q' "$note")"
+fi
+check_invariants "only e2e (control-character note)"
+
+# 2. json_escape unit test: every C0 control (0x01–0x1F; bash strings cannot
+#    hold NUL), DEL, quote, backslash, valid UTF-8 and an invalid byte must each
+#    produce a JSON string that jq accepts and that round-trips byte-for-byte
+#    (the invalid byte is rendered readably rather than dropped).
+eval "$(sed -n '/^json_escape() {/,/^}/p' "$SCRIPT")"
+declare -F json_escape >/dev/null || { RC=1; flunk "could not extract json_escape() from $SCRIPT"; }
+escape_failures=0
+for ((code = 1; code <= 31; code++)); do
+  printf -v ch "\\x%02x" "$code"
+  printf -v ch "$ch"
+  input="a${ch}b"
+  printf '{"s":"%s"}' "$(json_escape "$input")" >"$WORK/esc.json"
+  if ! jq -e . "$WORK/esc.json" >/dev/null 2>&1; then
+    escape_failures=$((escape_failures + 1)); flunk "json_escape: control 0x$(printf '%02x' "$code") yields invalid JSON: $(cat "$WORK/esc.json" | od -c | head -n 2)"
+    continue
+  fi
+  back="$(jq -j '.s' "$WORK/esc.json")"
+  if [ "$back" != "$input" ]; then
+    escape_failures=$((escape_failures + 1)); flunk "json_escape: control 0x$(printf '%02x' "$code") does not round-trip"
+  fi
+done
+for input in $'\x7f' 'quote " and \ backslash' $'multi\nline' $'caf\xc3\xa9 \xe2\x9c\x93 utf8'; do
+  printf '{"s":"%s"}' "$(json_escape "$input")" >"$WORK/esc.json"
+  if ! jq -e . "$WORK/esc.json" >/dev/null 2>&1 || [ "$(jq -j '.s' "$WORK/esc.json")" != "$input" ]; then
+    escape_failures=$((escape_failures + 1)); flunk "json_escape: $(printf '%q' "$input") does not round-trip"
+  fi
+done
+if [ $escape_failures -eq 0 ]; then
+  pass "json_escape round-trips every C0 control 0x01–0x1F, DEL, quotes, backslashes, newlines and UTF-8 through jq"
+else
+  RC=1; flunk "json_escape: $escape_failures case(s) do not round-trip through jq"
+fi
+printf '{"s":"%s"}' "$(json_escape $'bad\xffbyte')" >"$WORK/esc-invalid.json"
+parses_everywhere "json_escape of an invalid UTF-8 byte" "$WORK/esc-invalid.json"
+if grep -q 'bad' "$WORK/esc-invalid.json" && grep -q 'byte' "$WORK/esc-invalid.json"; then
+  pass "json_escape keeps the text around an invalid byte"
+else
+  RC=1; flunk "json_escape dropped text around an invalid byte: $(cat "$WORK/esc-invalid.json")"
+fi
+
 if [ $RC -eq 0 ]; then
   pass "verify-cloud.sh verdict and summary.json behave as specified"
 else
