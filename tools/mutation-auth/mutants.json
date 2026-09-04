@@ -577,9 +577,9 @@
       "file": "supabase/functions/api/index.ts",
       "symbol": "logoutRoute",
       "category": "auth-cache",
-      "description": "Logout does not evict the bearer from the auth cache: a logged-out bearer keeps authenticating at this edge for up to 10 min.",
-      "find": "  await cacheDel(await authCacheKey(token));\n  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`",
-      "replace": "  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`"
+      "description": "Logout does not evict the bearer from the auth cache nor fence its session: a logged-out bearer keeps authenticating at this edge for up to 10 min.",
+      "find": "  await fenceRevokedSession(token);\n  return noContent();",
+      "replace": "  return noContent();"
     },
     {
       "id": "ED-07",
@@ -588,8 +588,8 @@
       "symbol": "logoutRoute",
       "category": "revocation",
       "description": "Logout never calls Supabase: the device's refresh token stays valid server-side.",
-      "find": "  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {\n    method: \"POST\",\n    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },\n  });",
-      "replace": "  const response = new Response(null, { status: 204 });"
+      "find": "    response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {\n      method: \"POST\",\n      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },\n    });",
+      "replace": "    response = new Response(null, { status: 204 });"
     },
     {
       "id": "ED-08",
@@ -608,8 +608,8 @@
       "symbol": "refreshSessionRoute",
       "category": "refresh-route",
       "description": "Every refresh failure (including a refused/rotated-away token, GoTrue 400) is reported as 503: the app never signs out a revoked session.",
-      "find": "    if (status !== undefined && status >= 500) {\n      return serviceUnavailable(\"Session refresh\"",
-      "replace": "    if (status !== undefined) {\n      return serviceUnavailable(\"Session refresh\""
+      "find": "  if (rotated.kind === \"refused\") {\n    return errorJson(401, \"The session could not be refreshed. Sign in again.\");\n  }",
+      "replace": "  if (rotated.kind === \"refused\") {\n    return serviceUnavailable(\"Session refresh\", rotated.detail, AUTH_RETRY_AFTER_SECONDS);\n  }"
     },
     {
       "id": "ED-10",
@@ -618,8 +618,8 @@
       "symbol": "refreshSessionRoute",
       "category": "refresh-route",
       "description": "A GoTrue outage (5xx) during refresh is reported as 401: the app signs every user out during an outage.",
-      "find": "    if (status !== undefined && status >= 500) {\n      return serviceUnavailable(\"Session refresh\"",
-      "replace": "    if (false) {\n      return serviceUnavailable(\"Session refresh\""
+      "find": "  if (rotated.kind === \"unavailable\") {\n    return serviceUnavailable(\"Session refresh\", rotated.detail, rotated.retryAfterSeconds);\n  }",
+      "replace": "  if (rotated.kind === \"unavailable\") {\n    return errorJson(401, \"The session could not be refreshed. Sign in again.\");\n  }"
     },
     {
       "id": "ED-11",
@@ -628,8 +628,8 @@
       "symbol": "authenticate() session branch",
       "category": "authenticate",
       "description": "AUTH BYPASS: a Supabase-issued access token is trusted from its unverified JWT payload instead of auth.getUser().",
-      "find": "  const verified = await anonAuthClient().auth.getUser(token);\n  if (verified.error || !verified.data.user) {",
-      "replace": "  const verified = {\n    error: null,\n    data: {\n      user: {\n        id: String(payload?.sub ?? \"\"),\n        email: null,\n        app_metadata: { provider: \"google\" },\n      },\n    },\n  };\n  if (verified.error || !verified.data.user) {"
+      "find": "  const verified = await verifyAccessToken(token);\n  if (verified.kind === \"unavailable\") {",
+      "replace": "  const verified: AuthVerdict<AuthUserLike> = {\n    kind: \"ok\",\n    value: {\n      id: String(payload?.sub ?? \"\"),\n      email: null,\n      app_metadata: { provider: \"google\", providers: [\"google\"] },\n    } as unknown as AuthUserLike,\n  };\n  if (verified.kind === \"unavailable\") {"
     },
     {
       "id": "ED-12",
@@ -718,8 +718,8 @@
       "symbol": "confirmAccountDeletion cacheDel",
       "category": "auth-cache",
       "description": "Account deletion does not evict the deleting bearer's verified-auth cache entry.",
-      "find": "    progressCacheKey(authed.id),\n    await authCacheKey(bearerOf(request)),\n  );",
-      "replace": "    progressCacheKey(authed.id),\n  );"
+      "find": "  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));\n  await fenceRevokedSession(bearerOf(request));\n  console.warn(`[api] account deleted: ${authed.id}`);",
+      "replace": "  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));\n  console.warn(`[api] account deleted: ${authed.id}`);"
     },
     {
       "id": "ED-21",
@@ -738,8 +738,8 @@
       "symbol": "authenticateProviderToken bearerExpired",
       "category": "bootstrap",
       "description": "Bootstrap accepts an already-expired provider ID token (sent to Supabase anyway).",
-      "find": "  if (bearerExpired(payload)) return errorJson(401, \"The identity token has expired.\");",
-      "replace": "  if (false) return errorJson(401, \"The identity token has expired.\");"
+      "find": "  if (bearerExpired(payload)) {\n    return errorJson(401, \"The identity token has expired.\");\n  }",
+      "replace": "  if (false) {\n    return errorJson(401, \"The identity token has expired.\");\n  }"
     }
   ]
 }
