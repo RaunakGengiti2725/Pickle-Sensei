@@ -162,7 +162,7 @@ function installRoutes(
 }
 
 /** A route that records each request and answers like a struggling server. */
-function recordingRoute(): jest.Mock<Response, [RequestInit | undefined]> {
+function recordingRoute(): jest.Mock<Response, [init?: RequestInit]> {
   return jest.fn((init?: RequestInit) => {
     void init;
     return response({}, 500);
@@ -539,9 +539,9 @@ describe('access-token rotation', () => {
     await useTrainingStore.getState().loadSavedDrills();
 
     expect(accessCalls).toHaveBeenCalledTimes(1);
-    expect(bearerOf(accessCalls.mock.calls[0][0])).toBe('Bearer access-2');
+    expect(bearerOf(accessCalls.mock.calls[0]?.[0])).toBe('Bearer access-2');
     expect(trainingCalls).toHaveBeenCalledTimes(1);
-    expect(bearerOf(trainingCalls.mock.calls[0][0])).toBe('Bearer access-2');
+    expect(bearerOf(trainingCalls.mock.calls[0]?.[0])).toBe('Bearer access-2');
   });
 
   it('after an in-session rotation (401 → keeper refresh) both clients follow the new bearer', async () => {
