@@ -34,6 +34,15 @@ export interface AccessStoreState {
 
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
+/**
+ * Monotonic ticket for canonical-access reads. `initialize()` and
+ * `refreshAccess()` each take a ticket when issued; only the holder of the
+ * latest ticket may commit its snapshot (or its failure). A billing operation
+ * that installs a fresh server snapshot also advances it, so an older read
+ * still in flight cannot roll that snapshot back. Reads are never deduplicated:
+ * every call still reaches the backend.
+ */
+let accessReadTicket = 0;
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -76,6 +85,20 @@ function isCurrentConfiguration(
   return dependencies === clients && configurationVersion === version;
 }
 
+function issueAccessRead(): number {
+  accessReadTicket += 1;
+  return accessReadTicket;
+}
+
+function isLatestAccessRead(ticket: number): boolean {
+  return accessReadTicket === ticket;
+}
+
+/** Call before installing a server snapshot obtained outside a read ticket. */
+function supersedeAccessReads(): void {
+  accessReadTicket += 1;
+}
+
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
   if (!plans) return null;
   switch (period) {
@@ -113,6 +136,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return;
     }
     const version = configurationVersion;
+    const ticket = issueAccessRead();
     set({ status: 'loading', error: null });
     let storeConfigurationError: BillingError | null = null;
     try {
@@ -164,17 +188,24 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     // purchase presentation; it never erases a verified free allowance.
     const error = accessError ?? plansError;
     const plans = plansResult.value;
+    const selectedPeriod: BillingPeriod = plans?.annual
+      ? 'annual'
+      : plans?.lifetime
+        ? 'lifetime'
+        : plans?.monthly
+          ? 'monthly'
+          : 'annual';
+    if (!isLatestAccessRead(ticket)) {
+      // A newer read owns the access snapshot, status and error. Store plans
+      // are not part of that snapshot, so the ones this call loaded still land.
+      if (plans) set({ plans, selectedPeriod });
+      return;
+    }
     set({
       status: error ? statusFor(error) : 'ready',
       operation: 'idle',
       plans,
-      selectedPeriod: plans?.annual
-        ? 'annual'
-        : plans?.lifetime
-          ? 'lifetime'
-          : plans?.monthly
-            ? 'monthly'
-            : 'annual',
+      selectedPeriod,
       canonicalAccess: accessResult.value,
       error: error?.toState() ?? null,
     });
@@ -192,14 +223,17 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const ticket = issueAccessRead();
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!isLatestAccessRead(ticket)) return false;
       set({ status: 'ready', canonicalAccess, error: null });
       return true;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!isLatestAccessRead(ticket)) return false;
       const error = billingError(
         cause,
         'billing.backend_unavailable',
@@ -231,6 +265,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       set({
         status: 'ready',
         operation: 'idle',
@@ -240,6 +275,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return synced.access.premium;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const source = billingError(
         cause,
         'billing.backend_unavailable',
@@ -312,6 +348,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.backend_verification_pending',
@@ -335,6 +372,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
@@ -377,6 +415,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.restore_failed',
@@ -400,6 +439,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'Restored purchases could not be verified yet. Please try again.',
