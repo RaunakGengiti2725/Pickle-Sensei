@@ -247,7 +247,10 @@ async function runCaptureAnalysisCore(
     };
   }
 
-  const fusion = createFusionProviders(request.declaredStroke);
+  const fusion = createFusionProviders(
+    request.declaredStroke,
+    parsed.value.video,
+  );
   if (fusion.kind === 'unavailable') {
     return { kind: 'unavailable', reason: fusion.reason };
   }

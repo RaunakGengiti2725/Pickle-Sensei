@@ -30,6 +30,7 @@ import type {
   FusionProviders,
   IHierarchicalStrokeClassifier,
 } from '@pickle/analysis-pipeline';
+import type { PoseSequence } from '@pickle/swing-domain';
 
 /**
  * Centralized provider composition (directive §5/§61).
@@ -134,10 +135,32 @@ class HeuristicHierarchicalStrokeClassifier implements IHierarchicalStrokeClassi
   }
 }
 
+/** Recorded pose video dimensions — the one aspect every provider measures with. */
+export type RecordedVideoDimensions = Pick<
+  PoseSequence['video'],
+  'width' | 'height'
+>;
+
+/**
+ * Aspect ratio of the recorded pose video, derived exactly as
+ * GeometryBiomechanicsExtractor derives it so every provider in one fusion
+ * set scales normalized landmarks identically.
+ */
+export function recordedVideoAspectRatio(
+  video: RecordedVideoDimensions,
+): number {
+  return video.height > 0 ? video.width / video.height : 1;
+}
+
 /**
  * Fusion provider bundle resolved through the model registry. Returns an
  * honest unavailability when a REQUIRED task has no production entry for
  * this platform/stroke; optional modalities resolve to null.
+ *
+ * `video` is the recorded pose sequence's frame size. Landmarks are
+ * normalized per axis, so distance-based providers need the capture's
+ * aspect ratio to measure real geometry; iPhone guided captures are
+ * portrait, never square.
  *
  * `shotType` is the DECLARED stroke; null means AUTO DETECT. A declared
  * stroke keeps the per-stroke scorer release gate (a stroke we cannot score
@@ -149,6 +172,7 @@ class HeuristicHierarchicalStrokeClassifier implements IHierarchicalStrokeClassi
  */
 export function createFusionProviders(
   shotType: ShotTypeSlug | null,
+  video: RecordedVideoDimensions,
 ):
   | { kind: 'real'; providers: FusionProviders }
   | { kind: 'unavailable'; reason: string } {
@@ -212,7 +236,9 @@ export function createFusionProviders(
   return {
     kind: 'real',
     providers: {
-      phase: new GeometricPhaseSegmenter({ aspectRatio: 1 }),
+      phase: new GeometricPhaseSegmenter({
+        aspectRatio: recordedVideoAspectRatio(video),
+      }),
       biomechanics: new GeometryBiomechanicsExtractor(),
       scorer: new Sm1TechniqueScorer(),
       faultDetector: new CheckpointThresholdFaultDetector(),
