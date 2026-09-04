@@ -50,7 +50,7 @@ import {
  * receive fabricated values.
  */
 
-export const FEATURE_EXTRACTOR_VERSION = "features-geometry-1";
+export const FEATURE_EXTRACTOR_VERSION = "features-geometry-2";
 
 const PADDLE_PROXY_FACTOR = 0.75;
 const SIDE_VIEW_TURN_FACTOR = 0.7;
@@ -331,8 +331,18 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       "normalized",
       this.spanWristVisibility(poseFrames, followSpan),
     );
+    // Recovery is measured only across pose frames that were actually observed
+    // after follow-through; a recover span that outruns the measured frames
+    // (an imported clip's full-file window) cannot be timed.
     const recoverSpan = phase("recover");
-    add("recovery_time_ms", recoverSpan.endMs - followSpan.endMs, "ms", recoverSpan.confidence);
+    let lastMeasuredMs = Number.NEGATIVE_INFINITY;
+    for (const frame of poseFrames) {
+      lastMeasuredMs = Math.max(lastMeasuredMs, frame.timestampMs);
+    }
+    const recoveryEndMs = Math.min(recoverSpan.endMs, lastMeasuredMs);
+    if (recoveryEndMs > followSpan.endMs) {
+      add("recovery_time_ms", recoveryEndMs - followSpan.endMs, "ms", recoverSpan.confidence);
+    }
 
     if (measurements.length === 0) {
       return fail(

@@ -312,7 +312,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "phase.geometry",
-      version: "phase-geometry-1",
+      version: "phase-geometry-2",
       task: "phase_segmentation",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -338,7 +338,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "biomech.geometry",
-      version: "features-geometry-1",
+      version: "features-geometry-2",
       task: "biomechanics_extraction",
       runtime: "deterministic",
       executionTarget: "on_device",

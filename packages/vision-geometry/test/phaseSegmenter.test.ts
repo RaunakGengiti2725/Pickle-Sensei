@@ -84,6 +84,30 @@ describe("GeometricPhaseSegmenter", () => {
     expect(result.failure.code).toBe("phase.too_few_pose_frames");
   });
 
+  it("bounds the outer phases by the measured frames, not the requested window", async () => {
+    const swing = generateSwing();
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const tight = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
+    const imported = await segmenter.segmentPhases(
+      swing.frames,
+      [],
+      stroke({ ...swing.window, startMs: 0, endMs: 60_000 }),
+    );
+    expect(tight.ok && imported.ok).toBe(true);
+    if (!tight.ok || !imported.ok) return;
+
+    const timestamps = swing.frames.map((frame) => frame.timestampMs);
+    const firstMs = Math.min(...timestamps);
+    const lastMs = Math.max(...timestamps);
+    for (const span of imported.value) {
+      expect(span.startMs).toBeGreaterThanOrEqual(firstMs);
+      expect(span.endMs).toBeLessThanOrEqual(lastMs);
+    }
+    expect(imported.value[0]!.startMs).toBe(firstMs);
+    expect(imported.value[imported.value.length - 1]!.endMs).toBe(lastMs);
+    expect(imported.value).toEqual(tight.value);
+  });
+
   it("is deterministic frame for frame", async () => {
     const swing = generateSwing();
     const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });

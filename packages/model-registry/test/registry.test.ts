@@ -135,7 +135,7 @@ describe("ModelRegistry", () => {
       ["ball_detection", "server", "ball-candidate-gate-1"],
       ["ball_tracking", "server", "ball-track-2"],
       ["contact_estimation", "server", "contact-evidence-4.4"],
-      ["phase_segmentation", "ios", "phase-geometry-1"],
+      ["phase_segmentation", "ios", "phase-geometry-2"],
       ["stroke_classification", "ios", "stroke-heuristic-7"],
       ["stroke_auto_resolution", "ios", "fusion-1"],
       ["capture_completion", "ios", "capture-completion-params-v1"],

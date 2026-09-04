@@ -165,6 +165,51 @@ describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
     }
   });
 
+  it("measures recovery only across measured frames after follow-through", async () => {
+    const swing = generateSwing();
+    const stroke: StrokeEvent = {
+      startMs: swing.window.startMs,
+      endMs: swing.window.endMs,
+      contactMs: swing.window.peakMs,
+      shotTypeHypothesis: null,
+      confidence: 0.9,
+    };
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const phases = await segmenter.segmentPhases(swing.frames, [], stroke);
+    expect(phases.ok).toBe(true);
+    if (!phases.ok) return;
+    const follow = phases.value.find((span) => span.key === "follow_through")!;
+    const lastMs = Math.max(...swing.frames.map((frame) => frame.timestampMs));
+
+    const extract = async (frames: typeof swing.frames, spans: typeof phases.value) => {
+      const extractor = new PoseGeometryFeatureExtractor({ aspectRatio: 1 });
+      const measured = await extractor.extractMeasurements({
+        poseFrames: frames,
+        paddleFrames: [],
+        phases: spans,
+        shotType: "forehand_drive",
+        handedness: "right",
+        cameraView: "side",
+      });
+      expect(measured.ok).toBe(true);
+      if (!measured.ok) throw new Error("feature extraction failed");
+      return measured.value.find((entry) => entry.metricKey === "recovery_time_ms");
+    };
+
+    // A recover span inflated past the measured frames cannot lengthen recovery.
+    const inflated = phases.value.map((span) =>
+      span.key === "recover" ? { ...span, endMs: 60_000 } : span,
+    );
+    const bounded = await extract(swing.frames, inflated);
+    expect(bounded).toBeDefined();
+    expect(bounded!.value).toBeLessThanOrEqual(lastMs - follow.endMs);
+    expect(bounded!.value).toBe((await extract(swing.frames, phases.value))!.value);
+
+    // No measured frame after follow-through: recovery is withheld, not zero.
+    const truncated = swing.frames.filter((frame) => frame.timestampMs <= follow.endMs);
+    expect(await extract(truncated, phases.value)).toBeUndefined();
+  });
+
   it("is deterministic across repeated runs", async () => {
     const first = await measure({});
     const second = await measure({});

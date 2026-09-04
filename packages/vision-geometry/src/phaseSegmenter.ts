@@ -23,7 +23,7 @@ import {
  * measured frames, instead of guessing.
  */
 export class GeometricPhaseSegmenter implements IPhaseSegmenter {
-  public readonly modelVersion = "phase-geometry-1";
+  public readonly modelVersion = "phase-geometry-2";
   public readonly source = "real" as const;
 
   private readonly aspectRatio: number;
@@ -48,6 +48,16 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
           `Only ${windowFrames.length} measured pose frames inside the stroke window; at least 6 are required.`,
         ),
       );
+    }
+
+    // Phases describe measured motion, so their outer edges are the first and
+    // last measured frame — never the requested window, which for an imported
+    // clip is the whole file.
+    let measuredStartMs = Number.POSITIVE_INFINITY;
+    let measuredEndMs = Number.NEGATIVE_INFINITY;
+    for (const frame of windowFrames) {
+      measuredStartMs = Math.min(measuredStartMs, frame.timestampMs);
+      measuredEndMs = Math.max(measuredEndMs, frame.timestampMs);
     }
 
     // The swinging hand is the wrist that travels farthest inside the window —
@@ -164,7 +174,7 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
     }
 
     const timeAt = (index: number): number =>
-      speeds[Math.min(Math.max(index, 0), speeds.length - 1)]?.timestampMs ?? stroke.startMs;
+      speeds[Math.min(Math.max(index, 0), speeds.length - 1)]?.timestampMs ?? measuredStartMs;
 
     const halfSample = Math.max(8, sampleIntervalMs / 2);
     const confidence = this.trackingConfidence(windowFrames);
@@ -179,7 +189,7 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
     };
 
     const spans: PhaseSpan[] = [
-      span("ready", stroke.startMs, boundaries.prepareStart, confidence),
+      span("ready", measuredStartMs, boundaries.prepareStart, confidence),
       span("prepare", boundaries.prepareStart, boundaries.accelerateStart, confidence),
       span("accelerate", boundaries.accelerateStart, boundaries.contactStart, confidence),
       {
@@ -190,14 +200,14 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
         confidence,
       },
       span("follow_through", boundaries.contactEnd, boundaries.followEnd, confidence),
-      span("recover", boundaries.followEnd, stroke.endMs, confidence),
+      span("recover", boundaries.followEnd, measuredEndMs, confidence),
     ];
 
-    // Guarantee ordered, non-negative spans even at the window edges.
-    let cursor = stroke.startMs;
+    // Guarantee ordered, non-negative spans bounded by the measured frames.
+    let cursor = measuredStartMs;
     for (const entry of spans) {
-      entry.startMs = Math.max(entry.startMs, cursor);
-      entry.endMs = Math.max(entry.endMs, entry.startMs);
+      entry.startMs = Math.min(Math.max(entry.startMs, cursor), measuredEndMs);
+      entry.endMs = Math.min(Math.max(entry.endMs, entry.startMs), measuredEndMs);
       entry.representativeMs = Math.min(
         Math.max(entry.representativeMs, entry.startMs),
         entry.endMs,
