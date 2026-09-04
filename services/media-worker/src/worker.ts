@@ -21,6 +21,14 @@ export interface ObjectDeleter {
   listObjects?(prefix: string): Promise<string[]>;
 }
 
+/**
+ * How long a purged object key stays re-reapable. A presigned upload URL the
+ * API issued (services/api media routes: 900 s TTL) outlives the purge it was
+ * uploaded for, so the same key can be written again once nothing in the DB
+ * references it; this window must stay longer than that TTL.
+ */
+const PURGED_KEY_REAP_WINDOW = "1 hour";
+
 /** Deletes the master object and every derived artifact under its prefix. */
 async function deleteObjectAndDerived(store: ObjectDeleter, objectKey: string): Promise<number> {
   let deleted = 0;
@@ -47,6 +55,22 @@ async function removeDatasetItemsForMedia(pool: pg.Pool, mediaAssetId: string): 
     [mediaAssetId],
   );
   return result.rowCount ?? 0;
+}
+
+/**
+ * Records the key a purge just emptied, so `sweepResurrectedObjects` can reap
+ * it again while a stale presigned upload URL for it may still be live.
+ */
+async function recordPurgedKey(
+  pool: pg.Pool,
+  mediaAssetId: string,
+  objectKey: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO audit_log (actor_service, action, target_kind, target_id, metadata)
+     VALUES ('media-worker', 'media.object_purged', 'media_asset', $1, $2)`,
+    [mediaAssetId, JSON.stringify({ objectKey })],
+  );
 }
 
 export interface WorkerDeps {
@@ -180,6 +204,7 @@ export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<Job
         "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
         [mediaAssetId],
       );
+      await recordPurgedKey(deps.pool, mediaAssetId, objectKey);
       const itemsRemoved = await removeDatasetItemsForMedia(deps.pool, mediaAssetId);
       return {
         handled: true,
@@ -242,6 +267,7 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
               "UPDATE media_asset SET object_key = NULL, status = 'deleted', deleted_at = COALESCE(deleted_at, now()) WHERE id = $1",
               [asset.id],
             );
+            await recordPurgedKey(deps.pool, asset.id, asset.object_key);
           }
           break;
         }
@@ -335,10 +361,57 @@ export async function sweepDeletedMedia(deps: WorkerDeps): Promise<number> {
       "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
       [row.id],
     );
+    await recordPurgedKey(deps.pool, row.id, row.object_key);
     await removeDatasetItemsForMedia(deps.pool, row.id);
     swept++;
   }
   return swept;
+}
+
+/**
+ * Resurrection sweep: a presigned upload URL stays valid for its whole TTL, so
+ * a client can write its key again after the purge nulled the media row's
+ * object_key — an object no DB row references, which the deleted-media sweep
+ * can no longer see. Every key purged inside `PURGED_KEY_REAP_WINDOW` is
+ * therefore re-checked and, if something is there again, deleted.
+ */
+export async function sweepResurrectedObjects(deps: WorkerDeps): Promise<number> {
+  const store = deps.objectStore;
+  if (!store) return 0;
+  const { rows } = await deps.pool.query(
+    `SELECT DISTINCT target_id, metadata->>'objectKey' AS object_key FROM audit_log
+     WHERE action = 'media.object_purged' AND created_at > now() - $1::interval
+     LIMIT 200`,
+    [PURGED_KEY_REAP_WINDOW],
+  );
+  let reaped = 0;
+  for (const row of rows as Array<{ target_id: string; object_key: string | null }>) {
+    const objectKey = row.object_key;
+    if (!objectKey) continue;
+    // One unreachable object must not abort the sweep: the key stays eligible
+    // until its window closes, so the next cycle retries it.
+    try {
+      if (!store.listObjects) {
+        // No listing capability: the delete is idempotent, so issue it blind
+        // rather than leaving a possible orphan behind.
+        await store.deleteObject(objectKey);
+        continue;
+      }
+      for (const key of await store.listObjects(objectKey)) {
+        await store.deleteObject(key);
+        reaped++;
+      }
+    } catch (error) {
+      deps.log(`resurrection sweep of media_asset ${row.target_id} failed: ${String(error)}`);
+      deps.analytics?.track({
+        name: "media_storage_failure",
+        at: new Date().toISOString(),
+        platform: "service",
+        operation: "sweep",
+      });
+    }
+  }
+  return reaped;
 }
 
 /**
@@ -409,9 +482,13 @@ export async function enforceMediaRetention(
   return expiredIds.length;
 }
 
-export async function runOnce(
-  deps: WorkerDeps,
-): Promise<{ jobs: number; deletions: number; swept: number; expired: number }> {
+export async function runOnce(deps: WorkerDeps): Promise<{
+  jobs: number;
+  deletions: number;
+  swept: number;
+  expired: number;
+  resurrected: number;
+}> {
   const received = await deps.queue.receive(10);
   let jobs = 0;
   for (const { job, ack } of received) {
@@ -447,6 +524,10 @@ export async function runOnce(
   const deletions = await processDeletionTasks(deps);
   const expired = await enforceMediaRetention(deps);
   const swept = await sweepDeletedMedia(deps);
+  const resurrected = await sweepResurrectedObjects(deps);
+  if (resurrected > 0) {
+    deps.log(`resurrection sweep: ${resurrected} object(s) recreated after purge were deleted`);
+  }
   const depth = await deps.queue.size();
   const oldestJobAgeMs = await deps.queue.oldestJobAgeMs();
   if (deps.analytics) {
@@ -498,7 +579,7 @@ export async function runOnce(
     }
   }
   await deps.analytics?.flush();
-  return { jobs, deletions, swept, expired };
+  return { jobs, deletions, swept, expired, resurrected };
 }
 
 /**

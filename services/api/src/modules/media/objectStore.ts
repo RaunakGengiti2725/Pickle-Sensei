@@ -99,9 +99,13 @@ class S3ObjectStore implements IObjectStore {
       }),
       {
         expiresIn: expiresSeconds,
-        // Binds the declared type and byte count into the signature: storage
-        // itself rejects a spoofed content type or a larger body.
-        signableHeaders: new Set(["content-type", "content-length"]),
+        // Binds the declared type, byte count and content hash into the
+        // signature: storage itself rejects a spoofed content type, a larger
+        // body, or any bytes other than the ones whose SHA-256 was declared.
+        signableHeaders: new Set(["content-type", "content-length", "x-amz-checksum-sha256"]),
+        // The presigner otherwise hoists x-amz-* headers into the query string,
+        // where storage treats the checksum as advisory rather than signed.
+        unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
       },
     );
   }

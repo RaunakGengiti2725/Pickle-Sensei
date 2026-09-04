@@ -278,7 +278,7 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
       expect((await complete(up.mediaAssetId)).statusCode).toBe(422);
     });
 
-    it("S4c: a different body with a re-hashed checksum header or NO checksum header is ACCEPTED by MinIO; /complete must catch it and purge", async () => {
+    it("S4c: the checksum header is part of the signature — re-hashing it or omitting it is refused before any bytes are stored", async () => {
       const declared = Buffer.from("D".repeat(256));
       const evil = Buffer.from("E".repeat(256));
       for (const variant of ["rehashed", "omitted"] as const) {
@@ -292,22 +292,28 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
               };
         const put = await putPresigned(up.uploadUrl, evil, headers);
         console.log(`S4c ${variant} PUT → ${put.status} ${put.text}`);
-        // MinIO stores it: the query-string checksum in the signed URL is NOT enforced.
-        expect(put.status, variant).toBe(200);
-        const head = await store.headObject(up.objectKey);
-        console.log(`S4c ${variant} head → ${JSON.stringify(head)}`);
-        expect(head, variant).not.toBeNull();
+        if (variant === "rehashed") {
+          // A different checksum value is a different signature.
+          expect(put.status, variant).toBe(403);
+          expect(put.text, variant).toContain("SignatureDoesNotMatch");
+        } else {
+          // Dropping a signed header is refused too (MinIO answers 400
+          // AccessDenied: "headers present in the request were not signed").
+          expect(put.status, variant).toBe(400);
+          expect(put.text, variant).toContain("AccessDenied");
+        }
+        expect(await store.headObject(up.objectKey), `${variant}: stored`).toBeNull();
 
+        // Nothing was stored, so completion fails on the missing object and the
+        // asset stays 'uploading' — the client may retry with the real bytes.
         const done = await complete(up.mediaAssetId);
         expect(done.statusCode, `${variant}: ${done.body}`).toBe(422);
-        expect(done.body, variant).toContain("media.checksum_mismatch");
-        const row = await assetRow(up.mediaAssetId);
-        expect(row.status, variant).toBe("deleted");
-        expect(row.deleted_at, variant).not.toBeNull();
-        // The queued purge removes the spoofed object from MinIO.
-        await runOnce(workerDeps);
-        expect(await store.headObject(up.objectKey), `${variant}: purged`).toBeNull();
-        expect((await assetRow(up.mediaAssetId)).object_key, variant).toBeNull();
+        expect(done.body, variant).toContain("media.object_missing");
+        expect((await assetRow(up.mediaAssetId)).status, variant).toBe("uploading");
+
+        const honest = await putPresigned(up.uploadUrl, declared, up.requiredHeaders);
+        expect(honest.status, variant).toBe(200);
+        expect((await complete(up.mediaAssetId)).statusCode, variant).toBe(200);
       }
     }, 30_000);
 
@@ -348,7 +354,14 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
         ...up.requiredHeaders,
         "x-amz-checksum-sha256": sha256B64(evil),
       });
-      console.log(`S2 post-complete overwrite PUT → ${overwrite.status} ${overwrite.text}`);
+      const overwriteNoChecksum = await putPresigned(up.uploadUrl, evil, {
+        "content-type": up.requiredHeaders["content-type"]!,
+        "content-length": up.requiredHeaders["content-length"]!,
+      });
+      console.log(
+        `S2 post-complete overwrite PUT → ${overwrite.status} ${overwrite.text}; ` +
+          `no-checksum variant → ${overwriteNoChecksum.status}`,
+      );
       const head = await store.headObject(up.objectKey);
       const row = await assetRow(up.mediaAssetId);
       const after = await playbackBytes(up.mediaAssetId);
@@ -356,19 +369,21 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
         `S2 after overwrite: head=${JSON.stringify(head)} row=${JSON.stringify(row)} playback=${JSON.stringify(after)}`,
       );
 
-      // Checksum binding: the stored checksum no longer matches what /complete accepted.
-      expect(head?.checksumSha256).not.toBe(sha256B64(good));
-      // Yet the asset is still 'ready' with the ORIGINAL sha256 recorded...
+      // The checksum is a signature term, so neither variant is even stored.
+      expect(overwrite.status).toBe(403);
+      expect(overwriteNoChecksum.status).toBe(400);
+      // The validated bytes are still the ones under the key...
+      expect(head?.checksumSha256).toBe(sha256B64(good));
       expect(row.status).toBe("ready");
       expect(row.sha256).toBe(sha256Hex(good));
-      // ...so playback must still serve the bytes /complete validated.
+      // ...and playback still serves exactly what /complete validated.
       expect(after.status).toBe(200);
       expect(after.bytes, "playback serves bytes that were never checksum-validated").toBe(
         good.toString(),
       );
     });
 
-    it("S2b: the presigned URL survives DELETE + purge — a re-PUT resurrects an orphan object no DB row points at", async () => {
+    it("S2b: the presigned URL survives DELETE + purge — an object a re-PUT resurrects must not outlive the next sweeps", async () => {
       const good = Buffer.from("G".repeat(64));
       const up = await createUpload(good);
       expect((await putPresigned(up.uploadUrl, good, up.requiredHeaders)).status).toBe(200);
@@ -387,14 +402,15 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
       console.log(`S2b re-PUT after purge → ${resurrect.status}`);
       const orphan = await store.headObject(up.objectKey);
       console.log(`S2b orphan head → ${JSON.stringify(orphan)}`);
-      // Two more sweeps: nothing in the DB references the key, so nothing purges it.
+      // Nothing in the DB references the key any more, so the resurrected
+      // object can only be found through the purge record the worker kept.
       await runOnce(workerDeps);
       await runOnce(workerDeps);
       const stillThere = await store.headObject(up.objectKey);
       expect(stillThere, "orphan object survives every sweep").toBeNull();
     });
 
-    it("S2c: rapid interleaving — PUT good, PUT evil (rehashed), then /complete once: the checksum check must see the LAST bytes", async () => {
+    it("S2c: rapid interleaving — PUT good and PUT evil (rehashed) at once: only the declared bytes can win the race", async () => {
       const good = Buffer.from("GOOD".repeat(64));
       const evil = Buffer.from("EVIL".repeat(64));
       const up = await createUpload(good);
@@ -406,7 +422,7 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
         }),
       ]);
       expect(a.status).toBe(200);
-      expect(b.status).toBe(200);
+      expect(b.status).toBe(403);
       const head = await store.headObject(up.objectKey);
       const stored = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: up.objectKey }));
       const bytes = await stored.Body!.transformToString();
@@ -414,12 +430,9 @@ describe.skipIf(!testUrl || s3Endpoint === "")(
       console.log(
         `S2c last-writer bytes=${bytes.slice(0, 4)} head=${JSON.stringify(head)} complete=${done.statusCode}`,
       );
-      if (bytes === good.toString()) {
-        expect(done.statusCode).toBe(200);
-      } else {
-        expect(done.statusCode).toBe(422);
-        expect(done.body).toContain("media.checksum_mismatch");
-      }
+      expect(bytes).toBe(good.toString());
+      expect(head?.checksumSha256).toBe(sha256B64(good));
+      expect(done.statusCode, done.body).toBe(200);
     });
   },
 );
