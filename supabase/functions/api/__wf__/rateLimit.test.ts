@@ -100,12 +100,13 @@ Deno.test(
 );
 
 Deno.test(
-  "[defect] memory fallback: 20 000 distinct ids wipe EVERY live window, un-blocking a limited client",
+  "memory fallback: 20 000 distinct ids cannot un-block a limited client (exhausted windows survive the cap)",
   async () => {
-    // rateLimit.ts memoryIncr(): when the map is full and nothing has expired it
-    // calls windows.clear(). Any client that can present >= 20 000 distinct
-    // ids (spoofed X-Forwarded-For — clientIp() trusts the first hop) resets
-    // all in-flight budgets on that isolate, including its own.
+    // rateLimit.ts memoryIncr(): when the map is full and nothing has expired,
+    // the LEAST-USED live window is evicted (fewest hits, then soonest reset).
+    // A client presenting >= 20 000 distinct ids (spoofed X-Forwarded-For —
+    // clientIp() trusts the first hop) therefore only ever evicts its own
+    // single-hit flood windows, never a budget that is already exhausted.
     configureRedis(false);
     const redis = fakeUpstash();
     try {
@@ -121,8 +122,65 @@ Deno.test(
         await iso.rateLimit.enforceRateLimit("ip", `flood-${i}`, 300, 60);
       }
       const after = await iso.rateLimit.enforceRateLimit("ip", "victim-limited-me", 3, 60);
-      assertEquals(after.allowed, true, "window was cleared: the limited client is allowed again");
-      assertEquals(after.remaining, 2, "counter restarted from 1");
+      assertEquals(after.allowed, false, "the limited client stays limited");
+      assertEquals(after.remaining, 0, "its counter kept counting up (5/3), not restarted");
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "memory fallback: at MEMORY_WINDOW_MAX live windows a new key evicts exactly one least-used window; size never exceeds the cap",
+  async () => {
+    configureRedis(false);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      const MAX = iso.rateLimit.MEMORY_WINDOW_MAX;
+      assertEquals(MAX, 20_000);
+
+      // One exhausted budget (authfail-shaped: 30 per 300 s) …
+      for (let i = 0; i < 31; i += 1)
+        await iso.rateLimit.enforceRateLimit("authfail", "victim", 30, 300);
+      assertEquals(
+        (await iso.rateLimit.peekRateLimit("authfail", "victim", 30, 300)).allowed,
+        false,
+      );
+      // … plus enough single-hit live windows to fill the map exactly.
+      for (let i = 1; i < MAX; i += 1) {
+        await iso.rateLimit.enforceRateLimit("ip", `flood-${i}`, 300, 60);
+      }
+      assertEquals(iso.rateLimit.memoryWindowCount(), MAX, "map is full of LIVE windows");
+      // flood-1 is the least-used window with the soonest reset → the eviction target.
+      assertEquals((await iso.rateLimit.peekRateLimit("ip", "flood-1", 300, 60)).remaining, 299);
+
+      const newcomer = await iso.rateLimit.enforceRateLimit("ip", "newcomer", 300, 60);
+      assertEquals(newcomer.allowed, true, "a new key is still admitted at capacity");
+      assertEquals(newcomer.remaining, 299);
+      assert(
+        iso.rateLimit.memoryWindowCount() <= MAX,
+        `size ${iso.rateLimit.memoryWindowCount()} > cap`,
+      );
+      assertEquals(iso.rateLimit.memoryWindowCount(), MAX, "exactly one window was evicted");
+
+      assertEquals(
+        (await iso.rateLimit.peekRateLimit("ip", "flood-1", 300, 60)).remaining,
+        300,
+        "flood-1 evicted",
+      );
+      assertEquals(
+        (await iso.rateLimit.peekRateLimit("ip", "flood-2", 300, 60)).remaining,
+        299,
+        "flood-2 kept",
+      );
+      const victim = await iso.rateLimit.peekRateLimit("authfail", "victim", 30, 300);
+      assertEquals(victim.allowed, false, "the exhausted budget is untouched");
+      assertEquals(victim.remaining, 0);
+      const charged = await iso.rateLimit.enforceRateLimit("authfail", "victim", 30, 300);
+      assertEquals(charged.allowed, false);
+      assertEquals(charged.remaining, 0);
+      assertEquals(redis.calls, 0);
     } finally {
       redis.restore();
     }

@@ -9,6 +9,25 @@
 
 import { assert, assertEquals, configureRedis, fakeUpstash, loadIsolate } from "./harness.ts";
 
+/** cache.ts and the fake Upstash both read Date.now(); pin it so TTL bounds
+ * can be crossed deterministically instead of sleeping. */
+function withClock(startMs: number) {
+  const realNow = Date.now;
+  let now = startMs;
+  Date.now = () => now;
+  return {
+    advance(ms: number) {
+      now += ms;
+    },
+    restore() {
+      Date.now = realNow;
+    },
+  };
+}
+
+/** The documented cross-isolate revocation bound (cache.ts L1_MAX_TTL_SECONDS). */
+const L1_BOUND_SECONDS = 60;
+
 /** The auth-failure counter exactly as index.ts (router, lines ~2152-2175)
  * maintains it: non-atomic GET → +1 → SET through the layered cache. */
 async function recordAuthFailure(
@@ -58,14 +77,16 @@ Deno.test("cacheGet does NOT warm L1 from a Redis value without a TTL", async ()
 });
 
 Deno.test(
-  "[defect] cross-isolate cacheDel leaves the OTHER isolate's L1 copy alive for the full TTL",
+  "cross-isolate cacheDel: the OTHER isolate's L1 copy outlives the DEL by at most one L1 window",
   async () => {
     // index.ts busts rank:/progress: keys on every accepted shot sync and on
     // account deletion (cacheDel), but cacheDel only reaches the caller's own L1
-    // map + Redis. Any other isolate that served the user in the last 60 s keeps
-    // returning the pre-write payload from its L1 until that entry ages out.
+    // map + Redis. Any other isolate that served the user keeps returning the
+    // pre-write payload from its L1 until that entry ages out — which is
+    // bounded by L1_MAX_TTL_SECONDS, never by the entry's own TTL.
     configureRedis(true);
     const redis = fakeUpstash();
+    const clock = withClock(1_800_000_000_000);
     try {
       const a = await loadIsolate();
       const b = await loadIsolate();
@@ -78,9 +99,57 @@ Deno.test(
       assertEquals(
         await b.cache.cacheGet("rank:u1"),
         "stale",
-        "b still serves the pre-write payload",
+        "b still serves the pre-write payload inside the L1 window",
       );
+      clock.advance(L1_BOUND_SECONDS * 1_000);
+      assertEquals(await b.cache.cacheGet("rank:u1"), null, "b's L1 copy aged out; L2 is gone");
     } finally {
+      clock.restore();
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "auth entry revoked on another isolate: set in A, del in B, get in A → null within L1_MAX_TTL_SECONDS (L2 keeps the full TTL)",
+  async () => {
+    // writeAuthCache() stores the verified bearer for 570 s (600 − 30 s). The
+    // isolate that verified it must not honour that TTL locally once ANY
+    // isolate has revoked the entry: L1 is a ≤ 60 s shadow of L2.
+    configureRedis(true);
+    const redis = fakeUpstash();
+    const clock = withClock(1_800_000_000_000);
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      const key = `auth:${await a.cache.sha256Hex("access-token")}`;
+      await a.cache.cacheSet(key, "verified", 570);
+      assertEquals(a.cache.L1_MAX_TTL_SECONDS, L1_BOUND_SECONDS);
+
+      const l2 = redis.store.get(key);
+      assert(l2 && l2.expiresAtMs !== null, "L2 entry carries a TTL");
+      assertEquals(
+        Math.round((l2.expiresAtMs - Date.now()) / 1_000),
+        570,
+        "L2 keeps the FULL auth TTL — the cap is L1-only",
+      );
+
+      // Still valid on every isolate while nobody revoked it.
+      clock.advance(L1_BOUND_SECONDS * 1_000);
+      assertEquals(await a.cache.cacheGet(key), "verified", "re-read from L2 after the L1 window");
+      assertEquals(await b.cache.cacheGet(key), "verified");
+
+      await b.cache.cacheDel(key); // logout / account deletion handled by isolate b
+      assertEquals(redis.store.has(key), false);
+      assertEquals(await b.cache.cacheGet(key), null, "b refuses at once");
+
+      // Inside the window a may still hold its L1 shadow; that is the bound.
+      clock.advance(L1_BOUND_SECONDS * 1_000);
+      assertEquals(await a.cache.cacheGet(key), null, "a refuses within one L1 window");
+      clock.advance(300_000);
+      assertEquals(await a.cache.cacheGet(key), null, "…and never resurrects it");
+    } finally {
+      clock.restore();
       redis.restore();
     }
   },
