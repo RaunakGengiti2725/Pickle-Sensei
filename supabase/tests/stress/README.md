@@ -6,11 +6,11 @@ production code or the applied migrations; every file is additive.
 
 ## Lens `boundary-malformed`
 
-| File                          | Purpose                                                                                                                            |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `boundary_malformed.mjs`      | node-pg harness: seeded RNG, 5 scenario families, parallel sessions, JSON seed→outcome table, `--replay <seed>`.                   |
-| `boundary_malformed_repro.sql` | Exact `psql` repros of every boundary observation, asserted (`ON_ERROR_STOP`), fully rolled back. Doubles as a regression pin.     |
-| `run_boundary_malformed.sh`   | Throwaway `postgres:16` on `:5499` (or `PGURL`), shim + all migrations, then the SQL repros and the harness. Small default (200). |
+| File                           | Purpose                                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `boundary_malformed.mjs`       | node-pg harness: seeded RNG, 5 scenario families, parallel sessions, JSON seed→outcome table, `--replay <seed>`.                  |
+| `boundary_malformed_repro.sql` | Exact `psql` repros of every boundary observation, asserted (`ON_ERROR_STOP`), fully rolled back. Doubles as a regression pin.    |
+| `run_boundary_malformed.sh`    | Throwaway `postgres:16` on `:5499` (or `PGURL`), shim + all migrations, then the SQL repros and the harness. Small default (200). |
 
 ### Run
 
