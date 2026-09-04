@@ -171,3 +171,72 @@ describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
     expect([...second.byKey.entries()]).toEqual([...first.byKey.entries()]);
   });
 });
+
+describe("PoseGeometryFeatureExtractor ground line (VG-8)", () => {
+  // The ground line is measured from the ankle pair or not at all: a metric
+  // whose joints were never measured is OMITTED (module contract), never
+  // computed against a defaulted image-bottom ground under source:"real".
+  async function measureWithout(names: ReadonlySet<string>) {
+    const swing = generateSwing();
+    const frames = swing.frames.map((frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.filter((mark) => !names.has(mark.name)),
+    }));
+    const stroke: StrokeEvent = {
+      startMs: swing.window.startMs,
+      endMs: swing.window.endMs,
+      contactMs: swing.window.peakMs,
+      shotTypeHypothesis: null,
+      confidence: 0.9,
+    };
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const phases = await segmenter.segmentPhases(frames, [], stroke);
+    expect(phases.ok).toBe(true);
+    if (!phases.ok) throw new Error("phase segmentation failed");
+    const extractor = new PoseGeometryFeatureExtractor({ aspectRatio: 1 });
+    return extractor.extractMeasurements({
+      poseFrames: frames,
+      paddleFrames: [],
+      phases: phases.value,
+      shotType: "forehand_drive",
+      handedness: "right",
+      cameraView: "side",
+    });
+  }
+
+  it("control: with ankles measured, contact_height_ratio reproduces the constructed 0.40", async () => {
+    const { byKey } = await measure({});
+    const contactHeight = byKey.get("contact_height_ratio");
+    expect(contactHeight).toBeDefined();
+    expect(Math.abs(contactHeight!.value - DEFAULT_TRUTH.contactHeightRatio)).toBeLessThanOrEqual(
+      1e-6,
+    );
+  });
+
+  it("with ankles never present, contact_height_ratio is omitted and the other metrics survive", async () => {
+    const measured = await measureWithout(new Set(["left_ankle", "right_ankle"]));
+    expect(measured.ok).toBe(true);
+    if (!measured.ok) return;
+    const byKey = new Map(measured.value.map((entry) => [entry.metricKey, entry]));
+    expect(byKey.has("contact_height_ratio")).toBe(false);
+    // Ankle-free metrics are still measured against truth.
+    const contactForward = byKey.get("contact_forward_of_hip_norm");
+    expect(contactForward, "contact_forward_of_hip_norm missing").toBeDefined();
+    expect(Math.abs(contactForward!.value - DEFAULT_TRUTH.contactForwardNorm)).toBeLessThanOrEqual(
+      0.06,
+    );
+    expect(byKey.get("shoulder_turn_deg"), "shoulder_turn_deg missing").toBeDefined();
+    expect(byKey.get("backswing_length_norm"), "backswing_length_norm missing").toBeDefined();
+    for (const entry of byKey.values()) {
+      expect(entry.source).toBe("real");
+      expect(Number.isFinite(entry.value)).toBe(true);
+    }
+  });
+
+  it("a single measured ankle is not a ground line", async () => {
+    const measured = await measureWithout(new Set(["left_ankle"]));
+    expect(measured.ok).toBe(true);
+    if (!measured.ok) return;
+    expect(measured.value.some((entry) => entry.metricKey === "contact_height_ratio")).toBe(false);
+  });
+});
