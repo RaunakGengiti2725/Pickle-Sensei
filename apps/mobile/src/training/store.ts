@@ -40,6 +40,11 @@ export interface TrainingStoreState {
 
 let trainingApi: TrainingApi | null = null;
 let trainingConfigurationVersion = 0;
+// Per-call sequence numbers: within one configuration only the newest issued
+// load (or a later committed mutation) may write its slice of state, so an
+// earlier response that settles late can never overwrite newer truth.
+let savedLoadSequence = 0;
+let planLoadSequence = 0;
 
 function isCurrentConfiguration(api: TrainingApi, version: number): boolean {
   return trainingApi === api && trainingConfigurationVersion === version;
@@ -121,14 +126,21 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
       return false;
     }
     const version = trainingConfigurationVersion;
-    set({ savedStatus: 'loading', savedError: null });
+    savedLoadSequence += 1;
+    const sequence = savedLoadSequence;
+    const isLatest = () =>
+      isCurrentConfiguration(api, version) && sequence === savedLoadSequence;
+    // A refresh keeps the already-verified list on screen while it runs; only
+    // a cold load shows the loading state.
+    const refreshing = get().savedStatus === 'ready';
+    if (!refreshing) set({ savedStatus: 'loading', savedError: null });
     try {
       const savedDrills = await api.listSavedDrills();
       const drillDetails = await loadDetails(
         api,
         savedDrills.map(drill => drill.slug),
       );
-      if (!isCurrentConfiguration(api, version)) return false;
+      if (!isLatest()) return false;
       set(state => ({
         savedStatus: 'ready',
         savedDrills,
@@ -137,8 +149,11 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
       }));
       return true;
     } catch (cause) {
-      if (!isCurrentConfiguration(api, version)) return false;
+      if (!isLatest()) return false;
       const error = toError(cause);
+      // A transient refresh failure leaves the last verified list in place;
+      // the next focus or mutation refreshes it again.
+      if (refreshing && error.retryable) return false;
       set({
         savedStatus: statusFor(error),
         savedDrills: [],
@@ -160,7 +175,12 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
       return false;
     }
     const version = trainingConfigurationVersion;
-    set({ planStatus: 'loading', planError: null });
+    planLoadSequence += 1;
+    const sequence = planLoadSequence;
+    const isLatest = () =>
+      isCurrentConfiguration(api, version) && sequence === planLoadSequence;
+    const refreshing = get().planStatus === 'ready';
+    if (!refreshing) set({ planStatus: 'loading', planError: null });
     try {
       const currentPlan = await api.getCurrentPlan();
       const details = currentPlan
@@ -171,7 +191,7 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
             ),
           )
         : {};
-      if (!isCurrentConfiguration(api, version)) return false;
+      if (!isLatest()) return false;
       set(state => ({
         planStatus: 'ready',
         currentPlan,
@@ -180,8 +200,9 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
       }));
       return true;
     } catch (cause) {
-      if (!isCurrentConfiguration(api, version)) return false;
+      if (!isLatest()) return false;
       const error = toError(cause);
+      if (refreshing && error.retryable) return false;
       set({
         planStatus: statusFor(error),
         currentPlan: null,
@@ -210,6 +231,7 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
         ),
       );
       if (!isCurrentConfiguration(api, version)) return false;
+      planLoadSequence += 1;
       set(state => ({
         mutation: 'idle',
         planStatus: 'ready',
@@ -250,6 +272,7 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
     try {
       const currentPlan = await api.reassessPlan(plan.id, shotId);
       if (!isCurrentConfiguration(api, version)) return false;
+      planLoadSequence += 1;
       set({
         mutation: 'idle',
         planStatus: 'ready',
@@ -303,8 +326,10 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
           : state.savedDrills.filter(drill => drill.slug !== slug),
         mutationError: null,
       }));
+      // The server accepted the write, so the call succeeds; the follow-up
+      // reload only refreshes the ledger and never undoes the commit above.
       await get().loadSavedDrills();
-      return true;
+      return isCurrentConfiguration(api, version);
     } catch (cause) {
       if (!isCurrentConfiguration(api, version)) return false;
       const error = toError(cause);
@@ -350,6 +375,7 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
         actualDurationSeconds: seconds === null ? null : sets * seconds,
       });
       if (!isCurrentConfiguration(api, version)) return false;
+      planLoadSequence += 1;
       set(state => ({
         mutation: 'idle',
         currentPlan: state.currentPlan
