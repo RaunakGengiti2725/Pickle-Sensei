@@ -1342,6 +1342,163 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "xc S5d: a rating synced after a day offline — permit 25h old (still reserved) or already swept to released/expired — is accepted through the route; the late permit backs exactly one shot and the lifetime backstop still caps free ratings",
+  async () => {
+    // OFF-24H-01 (migration 20260906130000): permit AGE never refuses a sync;
+    // only the lifetime scored count does. The harness mirrors the RPC; the
+    // real-Postgres pin is security_regression.sql section N.
+    const report = await scenario(
+      "s5d_late_permit_sync_durability",
+      "xc S5d",
+      { burst: 1, rounds: XC_ROUNDS },
+      async (h, prng, rows, invariants, inputs, _observations) => {
+        const users: Array<Record<string, unknown>> = [];
+        for (let r = 0; r < XC_ROUNDS; r++) {
+          const sub = prng.uuid();
+          const boot = await bootstrap(h, sub, ip(r, 0));
+          const hoursAgo = (hrs: number) => new Date(Date.now() - hrs * 3600 * 1000).toISOString();
+          const late = prng.uuid();
+          const swept = prng.uuid();
+          const consumed = prng.uuid();
+          h.fake.tables.analysis_permits.push(
+            {
+              id: late,
+              user_id: sub,
+              idempotency_key: `late-${r}`,
+              status: "reserved",
+              outcome: null,
+              created_at: hoursAgo(25),
+            },
+            {
+              id: swept,
+              user_id: sub,
+              idempotency_key: `swept-${r}`,
+              status: "released",
+              outcome: "expired",
+              created_at: hoursAgo(72),
+            },
+            {
+              id: consumed,
+              user_id: sub,
+              idempotency_key: `consumed-${r}`,
+              status: "finalized",
+              outcome: "scored",
+              created_at: hoursAgo(1),
+            },
+          );
+          const sync = (shotId: string, permitId: string, lane: number) =>
+            timed(rows, r, lane, "shots.sync.scored", () =>
+              h.handler(
+                edgeRequest("POST", "/v1/shots:sync", {
+                  token: boot.accessToken,
+                  ip: ip(r, 2),
+                  body: { shots: [syncShotPayload(shotId, permitId)] },
+                }),
+              ),
+            );
+          const codeOf = (x: { body: Record<string, unknown> }) =>
+            ((x.body.rejected ?? []) as Array<{ code: string }>).map((y) => y.code).join(",") ||
+            (((x.body.acceptedIds ?? []) as string[]).length === 1 ? "accepted" : "none");
+
+          // Stale holds hand their slot back: the user sees 2 remaining …
+          const before = await timed(rows, r, 0, "me.access", () =>
+            h.handler(
+              edgeRequest("GET", "/v1/me/access", { token: boot.accessToken, ip: ip(r, 3) }),
+            ),
+          );
+          const frBefore = (before.body.freeRatings ?? {}) as Record<string, number>;
+          // … but the ratings captured against them are not lost.
+          const lateShot = prng.uuid();
+          const sweptShot = prng.uuid();
+          const lateResult = codeOf(await sync(lateShot, late, 1));
+          const sweptResult = codeOf(await sync(sweptShot, swept, 2));
+          // One late permit backs one shot; a consumed permit backs none.
+          const secondOnLate = codeOf(await sync(prng.uuid(), late, 3));
+          const onConsumed = codeOf(await sync(prng.uuid(), consumed, 4));
+          // Both lifetime ratings are now spent, so a further (fresh-looking,
+          // over-issued) permit hits the backstop, not a third free rating.
+          const extra = prng.uuid();
+          h.fake.tables.analysis_permits.push({
+            id: extra,
+            user_id: sub,
+            idempotency_key: `extra-${r}`,
+            status: "reserved",
+            outcome: null,
+            created_at: new Date().toISOString(),
+          });
+          const overLimit = codeOf(await sync(prng.uuid(), extra, 5));
+          // Replay of the late shot is still idempotent-accepted.
+          const replay = codeOf(await sync(lateShot, late, 6));
+
+          const permits = h.fake.tables.analysis_permits.filter((p) => p.user_id === sub);
+          const stateOf = (id: string) => {
+            const p = permits.find((x) => x.id === id);
+            return `${p?.status}/${p?.outcome}`;
+          };
+          const scored = h.fake.tables.shots.filter(
+            (s) => s.user_id === sub && s.result_kind === "scored",
+          ).length;
+          const after = await timed(rows, r, 7, "me.access", () =>
+            h.handler(
+              edgeRequest("GET", "/v1/me/access", { token: boot.accessToken, ip: ip(r, 3) }),
+            ),
+          );
+          const frAfter = (after.body.freeRatings ?? {}) as Record<string, number>;
+          users.push({
+            round: r,
+            user: sub,
+            lateResult,
+            sweptResult,
+            secondOnLate,
+            onConsumed,
+            overLimit,
+            replay,
+            permits: { late: stateOf(late), swept: stateOf(swept), extra: stateOf(extra) },
+            freeRatings: { before: frBefore, after: frAfter },
+          });
+          inv(
+            invariants,
+            `round ${r}: stale holds do not count — before any sync used=0 remaining=2`,
+            frBefore.used === 0 && frBefore.remaining === 2,
+            JSON.stringify(frBefore),
+          );
+          inv(
+            invariants,
+            `round ${r}: 25h reserved permit and swept released/expired permit both back their shot`,
+            lateResult === "accepted" && sweptResult === "accepted" && scored === 2,
+            `late=${lateResult} swept=${sweptResult} scored=${scored}`,
+          );
+          inv(
+            invariants,
+            `round ${r}: accepted late permits are finalized/scored (one shot each); consumed permit refused`,
+            stateOf(late) === "finalized/scored" &&
+              stateOf(swept) === "finalized/scored" &&
+              secondOnLate === "access.permit_not_reserved" &&
+              onConsumed === "access.permit_not_reserved",
+            `late=${stateOf(late)} swept=${stateOf(swept)} second=${secondOnLate} consumed=${onConsumed}`,
+          );
+          inv(
+            invariants,
+            `round ${r}: the lifetime backstop still caps at two — extra permit → access.paywall_required, released free_limit_exceeded; replay accepted`,
+            overLimit === "access.paywall_required" &&
+              stateOf(extra) === "released/free_limit_exceeded" &&
+              replay === "accepted" &&
+              frAfter.used === 2 &&
+              frAfter.remaining === 0,
+            `over=${overLimit} extra=${stateOf(extra)} replay=${replay} after=${JSON.stringify(frAfter)}`,
+          );
+        }
+        inputs.rounds = users;
+        inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
+      },
+    );
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
+  },
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // S6 — duplicate webhook delivery
 // ─────────────────────────────────────────────────────────────────────────────

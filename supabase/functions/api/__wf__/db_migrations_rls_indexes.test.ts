@@ -20,6 +20,7 @@ const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
 const SCORED_WRITE_GATE = "20260905000000_scored_shot_write_gate.sql";
 const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
+const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -567,6 +568,83 @@ Deno.test(
         !dropsTriggerWithoutRecreating(migration, "on_auth_identity_linked"),
         `${migration.file} drops on_auth_identity_linked without recreating it`,
       );
+    }
+  },
+);
+
+// ─── OFF-24H-01: a late permit backs its shot; the direct-INSERT gate stays shut ──
+
+/** The exact backing rule for a late sync: reserved at any age, or swept to
+ * released/expired. Anything else is refused. */
+const LATE_BACKING_RULE =
+  /status = 'reserved'\s+or \(\s*\S*status = 'released' and \S*outcome = 'expired'\s*\)/;
+
+Deno.test(
+  "apply_synced_shot: permit age never refuses a sync, and the shots gate honours only the RPC's vouch",
+  async () => {
+    const chain = await loadChain();
+    const late = chain.find((m) => m.file === LATE_PERMIT_SYNC);
+    ok(late, `${LATE_PERMIT_SYNC} must exist in the migration chain`);
+    const raw = stripSqlComments(late.raw);
+
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${LATE_PERMIT_SYNC} must recreate public.apply_synced_shot`);
+    ok(
+      !rpc.includes("access.permit_expired") && !/created_at <= now\(\)/.test(rpc),
+      "apply_synced_shot must not refuse a permit on age (access.permit_expired is retired)",
+    );
+    ok(
+      LATE_BACKING_RULE.test(rpc) && rpc.includes("return 'access.permit_not_reserved'"),
+      "apply_synced_shot must accept exactly reserved | released+expired and refuse every other state",
+    );
+    ok(
+      rpc.includes("set_config('pickle.sync_permit_id', v_permit_id::text, true)") &&
+        rpc.includes("set_config('pickle.sync_permit_id', '', true)"),
+      "apply_synced_shot must vouch for the validated permit transaction-locally and clear the vouch",
+    );
+    ok(
+      rpc.includes("public.lifetime_scored_count() >= 2") &&
+        rpc.includes("return 'access.paywall_required'"),
+      "the free-limit backstop must remain the guard that caps free ratings",
+    );
+
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${LATE_PERMIT_SYNC} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes("current_setting('pickle.sync_permit_id', true)") &&
+        gate.includes("p.id = v_vouched") &&
+        LATE_BACKING_RULE.test(gate),
+      "the gate must honour the vouch only for the one permit the RPC validated, under the same backing rule",
+    );
+    ok(
+      /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(gate),
+      "the gate must keep the live-permit rule for direct client INSERTs (no vouch → 24h window)",
+    );
+    ok(
+      late.statements.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "the recreated gate function must stay non-executable by clients",
+    );
+
+    // Later definitions must not reintroduce an age refusal in the RPC or
+    // loosen the gate's direct-INSERT rule.
+    for (const migration of after(chain, LATE_PERMIT_SYNC)) {
+      for (const body of functionBodies(stripSqlComments(migration.raw), "apply_synced_shot")) {
+        ok(
+          !body.includes("access.permit_expired") && LATE_BACKING_RULE.test(body),
+          `${migration.file}: apply_synced_shot must keep accepting reserved | released+expired permits at any age`,
+        );
+      }
+      for (const body of functionBodies(
+        stripSqlComments(migration.raw),
+        "enforce_scored_shot_permit",
+      )) {
+        ok(
+          /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(body),
+          `${migration.file}: enforce_scored_shot_permit must keep the 24h live-permit rule for direct INSERTs`,
+        );
+      }
     }
   },
 );

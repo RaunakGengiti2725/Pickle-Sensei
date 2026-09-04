@@ -1023,10 +1023,14 @@ async function readProfile(user: AuthedUser): Promise<ProfileRow | Response> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Advisory permit lifetime, mirroring services/api PERMIT_LIFETIME_HOURS.
- * Expiry is enforced in three layers: access counting ignores reserved
- * permits older than this window, apply_synced_shot refuses to consume one
- * (access.permit_expired), and an hourly pg_cron sweep releases stragglers
- * (migration 20260831000000) — so the advertised expiresAt is honest. */
+ * The window governs RESERVATION accounting only: access counting ignores
+ * reserved permits older than it and an hourly pg_cron sweep releases
+ * stragglers as expired (migration 20260831000000), so the advertised
+ * expiresAt is honest about when the slot is handed back. It does NOT gate
+ * sync: a shot captured against a permit this user reserved is accepted by
+ * apply_synced_shot at any age — still reserved or already swept — because
+ * the free allowance is enforced by the lifetime-count backstop, not by
+ * permit age (migration 20260906130000; the device may be offline for days). */
 const PERMIT_LIFETIME_HOURS = 24;
 const PERMIT_COLUMNS = "id, status, outcome, created_at";
 
@@ -1579,6 +1583,9 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
   "auth.required": "Sign in again to sync analyses.",
   "access.permit_not_found": "Analysis permit not found.",
   "access.permit_not_reserved": "Analysis permit is no longer reserved.",
+  // Retired by migration 20260906130000 (a late permit backs its shot at any
+  // age); kept so an edge deployed ahead of that migration still renders the
+  // old RPC's verdict instead of collapsing it into shot.write_failed.
   "access.permit_expired": "Analysis permit expired.",
   // Free-limit backstop in apply_synced_shot: the permit was valid but the
   // account is already at its two lifetime scored ratings, so the scored shot

@@ -442,14 +442,18 @@ export class FakeSupabase {
         (p) => p.id === permitId && p.user_id === userId,
       );
       if (!permit) return "access.permit_not_found";
-      if (permit.status !== "reserved") {
-        this.log("rpc.apply", `user=${userId} shot=${id} → permit_not_reserved (${permit.status})`);
+      // 20260906130000: a permit this user reserved backs the shot at ANY age —
+      // still reserved, or swept to released/expired while offline. Every
+      // other state (finalized, free_limit_exceeded, cancelled, …) is refused.
+      const acceptableBacking =
+        permit.status === "reserved" ||
+        (permit.status === "released" && permit.outcome === "expired");
+      if (!acceptableBacking) {
+        this.log(
+          "rpc.apply",
+          `user=${userId} shot=${id} → permit_not_reserved (${permit.status}/${permit.outcome})`,
+        );
         return "access.permit_not_reserved";
-      }
-      if (new Date(permit.created_at as string).getTime() <= Date.now() - 24 * 3600 * 1000) {
-        permit.status = "released";
-        permit.outcome = "expired";
-        return "access.permit_expired";
       }
       if (resultKind === "scored") {
         if (!this.premium(userId) && this.lifetimeScoredCount(userId) >= 2) {
