@@ -262,6 +262,13 @@ for s in "${STAGES[@]}"; do
 done
 
 # Machine-readable summary.
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  printf '%s' "$s"
+}
 {
   echo "{"
   echo "  \"tool\": \"verify-cloud\","
@@ -275,8 +282,9 @@ done
   echo "  \"stages\": ["
   for i in "${!RESULT_NAMES[@]}"; do
     sep=","; [ "$i" -eq $((${#RESULT_NAMES[@]} - 1)) ] && sep=""
-    note="${RESULT_NOTES[$i]//\"/\\\"}"
-    echo "    {\"name\": \"${RESULT_NAMES[$i]}\", \"status\": \"${RESULT_STATUS[$i]}\", \"seconds\": ${RESULT_SECONDS[$i]}, \"note\": \"$note\", \"log\": \"$ARTIFACTS/${RESULT_NAMES[$i]}.log\"}$sep"
+    printf '    {"name": "%s", "status": "%s", "seconds": %s, "note": "%s", "log": "%s"}%s\n' \
+      "${RESULT_NAMES[$i]}" "${RESULT_STATUS[$i]}" "${RESULT_SECONDS[$i]}" "$(json_escape "${RESULT_NOTES[$i]}")" \
+      "$(json_escape "$ARTIFACTS/${RESULT_NAMES[$i]}.log")" "$sep"
   done
   echo "  ]"
   echo "}"
