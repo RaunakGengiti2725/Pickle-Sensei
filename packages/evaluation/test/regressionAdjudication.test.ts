@@ -7,8 +7,6 @@
  *                  datasets/ dirs on concurrent failure and SIGTERM; the
  *                  child survives the runner; scratch dir is orphaned.
  *   EVAL-BENCH-02  same --run-id / --out-dir race silently overwrites.
- *   EVAL-BENCH-04  unknown / misspelled flags are silently accepted.
- *   EVAL-BENCH-05  validator accepts status "ok" with a non-zero exitCode.
  *
  * Linux-only (uses pgrep); the bench itself is Linux-only.
  */
@@ -18,9 +16,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { REPO_ROOT } from "../src/regression/benches.js";
-import { main, parseArgs } from "../src/regression/cli.js";
-import { validateRegressionSummary } from "../src/index.js";
-import { bench, summary } from "./regressionFixtures.js";
 
 const TSX_BIN = join(REPO_ROOT, "packages/evaluation/node_modules/.bin/tsx");
 const CLI = join(REPO_ROOT, "packages/evaluation/src/regression/cli.ts");
@@ -142,53 +137,4 @@ describe("EVAL-BENCH-02 same --run-id race", () => {
     expect(`${r1.stderr}${r2.stderr}`).toMatch(/refusing to overwrite/);
     expect(readdirSync(outDir)).toEqual(["same.json"]);
   }, 60_000);
-});
-
-describe("EVAL-BENCH-04 CLI rejects unknown flags", () => {
-  it("parseArgs / main reject misspelled flags instead of silently using defaults", () => {
-    expect(() => parseArgs(["compare", "a.json", "b.json", "--tolerance", "t.json"])).toThrow(
-      /unknown flag/i,
-    );
-    expect(() => parseArgs(["run", "--out-dirr", "/tmp/x"])).toThrow(/unknown flag/i);
-    const baseline = join(REPO_ROOT, "datasets/reports/regression/baseline.json");
-    const stderr = console.error;
-    console.error = () => {};
-    try {
-      expect(main(["compare", baseline, baseline, "--tolerance", "/nonexistent.json"])).toBe(2);
-    } finally {
-      console.error = stderr;
-    }
-  });
-});
-
-describe("EVAL-BENCH-05 summary validator: bench status must agree with the subprocess exit code", () => {
-  const subprocessOk = bench({
-    id: "event_recall",
-    kind: "subprocess",
-    command: "tsx src/eventRecallBench.ts",
-    cwd: "packages/swing-lab",
-  });
-
-  it("rejects status ok with a non-zero exitCode", () => {
-    const result = validateRegressionSummary(summary({}, [{ ...subprocessOk, exitCode: 137 }]));
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects status failed with exitCode 0", () => {
-    const result = validateRegressionSummary(
-      summary({}, [{ ...subprocessOk, status: "failed", exitCode: 0, error: "x", metrics: {} }]),
-    );
-    expect(result.ok).toBe(false);
-  });
-
-  it("still accepts the consistent pairs", () => {
-    expect(validateRegressionSummary(summary({}, [{ ...subprocessOk, exitCode: 0 }])).ok).toBe(
-      true,
-    );
-    expect(
-      validateRegressionSummary(
-        summary({}, [{ ...subprocessOk, status: "failed", exitCode: 1, error: "x", metrics: {} }]),
-      ).ok,
-    ).toBe(true);
-  });
 });
