@@ -29,8 +29,10 @@ export { focusForGoal, type Gender, type Profile } from './profile';
  * "Start your first read" and answered every question meant those answers to
  * apply. (Returning players who don't want that take "I already have an
  * account", which never writes a stash.) If the server save fails the stash
- * is kept for the next hydrate and the owner keeps their existing profile
- * meanwhile.
+ * is kept for the next hydrate; an owner with an existing profile keeps it
+ * meanwhile, and an owner without one sees the retryable hydrateError (never
+ * a fresh questionnaire over answers that are still on disk). Any later
+ * completeOnboarding is newer intent than the stash and supersedes it.
  */
 export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
 
@@ -156,25 +158,41 @@ export const useAppStore = create<AppState>(set => ({
       // hydrates, REPLACING whatever profile it had (the answers just given
       // on this device are the newest intent); synced accounts save through
       // the canonical endpoint first (server focusCheckpoint wins) exactly
-      // like completeOnboarding. A failed save keeps both the stash (retried
-      // next hydrate) and the existing profile.
+      // like completeOnboarding. A failed save keeps the stash for the next
+      // hydrate: an existing profile stands in meanwhile, and without one the
+      // Gate must offer Retry rather than re-ask the questionnaire.
       if (
         pending &&
         owner !== SIGNED_OUT_DATA_OWNER &&
         getActiveDataOwner() === owner
       ) {
+        const syncsCanonically =
+          apiSession !== null &&
+          canonicalDataOwner(apiSession.canonicalAppUserId) === owner;
         try {
-          const adopted =
-            apiSession &&
-            canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-              ? await saveCanonicalOnboardingProfile(apiSession, pending)
-              : pending;
+          const adopted = syncsCanonically
+            ? await saveCanonicalOnboardingProfile(apiSession, pending)
+            : pending;
           raw = JSON.stringify(adopted);
           await setKv(db, profileKeyForOwner(owner), raw);
           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
           pending = null;
-        } catch {
-          // Stash and existing profile both survive for the next attempt.
+        } catch (error) {
+          if (raw) {
+            // The existing profile stands in; the stash is retried next time.
+          } else if (syncsCanonically) {
+            if (getActiveDataOwner() === owner) {
+              set({
+                hydrated: true,
+                ownerKey: owner,
+                profile: null,
+                hydrateError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+              });
+            }
+            return;
+          } else {
+            throw error;
+          }
         }
       }
       if (getActiveDataOwner() !== owner) return;
@@ -211,11 +229,15 @@ export const useAppStore = create<AppState>(set => ({
         canonicalDataOwner(apiSession.canonicalAppUserId) === owner
           ? await saveCanonicalOnboardingProfile(apiSession, profile)
           : profile;
+      const db = getDb();
       await setKv(
-        getDb(),
+        db,
         profileKeyForOwner(owner),
         JSON.stringify(canonicalProfile),
       );
+      // This completion is newer intent than any pre-auth stash still
+      // waiting for adoption; drop it so no later hydrate resurrects it.
+      await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
       if (getActiveDataOwner() === owner) {
         set({
           profile: canonicalProfile,
