@@ -150,6 +150,9 @@ export async function probe(gc: GcFn, iteration: number): Promise<ResourceProbe>
 
 export const HEAP_SLOPE_LIMIT_PCT_PER_100 = 5;
 export const TIME_DRIFT_LIMIT_RATIO = 1.5;
+/** Below this median an iteration is dominated by hrtime/GC/scheduler jitter
+ *  (tens of microseconds), so a ratio there is reported but not judged. */
+export const TIME_DRIFT_MIN_MEDIAN_MS = 1;
 
 export interface HeapAnalysis {
   samples: number;
@@ -223,7 +226,7 @@ export interface TimingAnalysis {
   medianFirstFifthMs: number | null;
   medianLastFifthMs: number | null;
   driftRatio: number | null;
-  verdict: "HELD" | "DRIFT" | "INSUFFICIENT_SAMPLES";
+  verdict: "HELD" | "DRIFT" | "INSUFFICIENT_SAMPLES" | "BELOW_RESOLUTION";
 }
 
 function median(values: number[]): number {
@@ -247,12 +250,18 @@ export function analyseTiming(durationsMs: number[]): TimingAnalysis {
   const head = median(durationsMs.slice(1, 1 + fifth));
   const tail = median(durationsMs.slice(-fifth));
   const ratio = head === 0 ? (tail === 0 ? 1 : Number.POSITIVE_INFINITY) : tail / head;
+  let verdict: TimingAnalysis["verdict"];
+  if (head < TIME_DRIFT_MIN_MEDIAN_MS && tail < TIME_DRIFT_MIN_MEDIAN_MS) {
+    verdict = "BELOW_RESOLUTION";
+  } else {
+    verdict = ratio > TIME_DRIFT_LIMIT_RATIO ? "DRIFT" : "HELD";
+  }
   return {
     iterations: durationsMs.length,
     medianFirstFifthMs: head,
     medianLastFifthMs: tail,
     driftRatio: ratio,
-    verdict: ratio > TIME_DRIFT_LIMIT_RATIO ? "DRIFT" : "HELD",
+    verdict,
   };
 }
 

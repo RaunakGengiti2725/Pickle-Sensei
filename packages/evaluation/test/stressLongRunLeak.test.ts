@@ -81,8 +81,12 @@ function expectHeld(report: CampaignReport, expectedIterations: number): void {
     expect(report.heap.slopePctPer100Iterations).toBeLessThanOrEqual(HEAP_SLOPE_LIMIT_PCT_PER_100);
   }
   // Timing drift is reported, and only enforced once the sample is large
-  // enough for medians to be meaningful.
-  if (report.timing.verdict !== "INSUFFICIENT_SAMPLES" && report.iterationsExecuted >= 100) {
+  // enough for medians to be meaningful and above timer resolution.
+  if (
+    report.timing.verdict !== "INSUFFICIENT_SAMPLES" &&
+    report.timing.verdict !== "BELOW_RESOLUTION" &&
+    report.iterationsExecuted >= 100
+  ) {
     expect(report.timing.verdict, describeFailure(report)).toBe("HELD");
   }
   expect(report.verdict, describeFailure(report)).toBe("HELD");
@@ -128,6 +132,10 @@ describe("long-run leak: analysis helpers", () => {
     const drift = analyseTiming(drifting);
     expect(drift.verdict).toBe("DRIFT");
     expect(drift.driftRatio).toBeGreaterThan(1.5);
+    // Sub-millisecond medians are timer jitter: ratio reported, not judged.
+    const micro = Array.from({ length: 50 }, (_, i) => 0.03 + i * 0.001);
+    expect(analyseTiming(micro).verdict).toBe("BELOW_RESOLUTION");
+    expect(analyseTiming(micro).driftRatio).toBeGreaterThan(1.5);
   });
 
   it("derives replayable per-iteration seeds and a deterministic RNG", () => {
