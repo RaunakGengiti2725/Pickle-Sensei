@@ -163,11 +163,10 @@ Deno.test("LOGOUT-1 /v1/auth/logout answers 503 (not 500) when Auth is unreachab
     () => h.handler(userRequest("POST", "/v1/auth/logout", { token, ip })),
   );
   const body = await response.text();
-  console.log(`  [LOGOUT-1] observed ${response.status} ${body}`);
   assertEquals(
     response.status,
     503,
-    `logout on an Auth network error must be the retryable 503, observed ${response.status}`,
+    `logout on an Auth network error must be the retryable 503, observed ${response.status} ${body}`,
   );
   assertEquals(
     JSON.parse(body),
