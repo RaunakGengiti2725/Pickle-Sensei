@@ -1,6 +1,6 @@
 # Canonical Apple verification on the self-hosted Apple Silicon (M4) runner.
 # All logic lives in scripts/mac-full-verify.sh — this file only schedules it
-# and uploads the artifacts. Run it from Linux with:
+# and uploads the artifacts. From Linux, dispatch it with:
 #   scripts/mac-full-verify.sh --remote [--ref <branch>]
 #
 # No pull_request trigger on purpose: this is a PUBLIC repository and the
