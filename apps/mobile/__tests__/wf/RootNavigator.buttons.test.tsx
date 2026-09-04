@@ -10,6 +10,8 @@
  *   ConnectAccountRoute onBack -> navigation.goBack(); provider effect -> goBack
  *   AnalyzeRoute        useRatingRouteGate -> replace('ConnectAccount') |
  *                       replace('Paywall', { source: 'rating' }) | initialize()
+ *                       | refreshAccess() (status 'error' with no server
+ *                       answer re-fetches; "Try again" -> refreshAccess())
  *   MainTabs            tabBar -> <PremiumTabBar/> (tab items + Coach FAB)
  *   RootNavigator       notification press -> navigationRef.navigate('Tabs')
  *
@@ -457,6 +459,7 @@ function renderRoute(
 }
 
 const realInitialize = useAccessStore.getState().initialize;
+const realRefreshAccess = useAccessStore.getState().refreshAccess;
 
 describe('RootNavigator button ledger', () => {
   let openURL: jest.SpyInstance;
@@ -469,7 +472,10 @@ describe('RootNavigator button ledger', () => {
     mockSubscribeToNotificationPresses.mockReset();
     mockSubscribeToNotificationPresses.mockReturnValue(jest.fn());
     clearAccessStoreConfiguration();
-    useAccessStore.setState({ initialize: realInitialize });
+    useAccessStore.setState({
+      initialize: realInitialize,
+      refreshAccess: realRefreshAccess,
+    });
     useAuthStore.setState({ session: syncedSession, busy: false, error: null });
   });
 
@@ -861,39 +867,166 @@ describe('RootNavigator button ledger', () => {
       unmount();
     });
 
-    it.each(['error', 'unconfigured'] as const)(
-      'access %s with no canonical state -> replace(Paywall, rating) (fail closed)',
-      status => {
+    it('access unconfigured with no canonical state -> replace(Paywall, rating) (fail closed)', () => {
+      useAccessStore.setState({
+        status: 'unconfigured',
+        canonicalAccess: null,
+        initialize: jest.fn(async () => undefined),
+      });
+      const navigation = fakeNavigation();
+      const { unmount } = renderAnalyze(navigation);
+      expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
+        source: 'rating',
+      });
+      expect(navigation.replace).toHaveBeenCalledTimes(1);
+      unmount();
+    });
+
+    it('access error with a real server answer (paywallRequired) -> replace(Paywall, rating)', () => {
+      useAccessStore.setState({
+        status: 'error',
+        canonicalAccess: exhaustedAccess,
+        initialize: jest.fn(async () => undefined),
+        refreshAccess: jest.fn(async () => false),
+      });
+      const navigation = fakeNavigation();
+      const { unmount } = renderAnalyze(navigation);
+      expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
+        source: 'rating',
+      });
+      expect(useAccessStore.getState().refreshAccess).not.toHaveBeenCalled();
+      unmount();
+    });
+
+    // XCF-06: status 'error' with canonicalAccess null is NOT a server answer
+    // (401 before the bearer rotated, backend 5xx, offline). The gate must not
+    // send a player who may well be allowed to rate to the Paywall; it asks
+    // the server again and routes only on what the server says.
+    describe('status error with no server answer (XCF-06)', () => {
+      it('does NOT replace to Paywall; re-invokes refreshAccess() once and renders AnalyzeScreen when the server then allows the rating', async () => {
+        const refreshAccess = jest.fn(async () => {
+          useAccessStore.setState({
+            status: 'ready',
+            canonicalAccess: freeAccess,
+            error: null,
+          });
+          return true;
+        });
         useAccessStore.setState({
-          status,
+          status: 'error',
+          canonicalAccess: null,
+          error: {
+            code: 'billing.backend_unavailable',
+            message: 'Membership verification is temporarily unavailable.',
+            retryable: true,
+          },
+          initialize: jest.fn(async () => undefined),
+          refreshAccess,
+        });
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation);
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(useAccessStore.getState().initialize).not.toHaveBeenCalled();
+        expect(refreshAccess).toHaveBeenCalledTimes(1);
+        await flushAsync();
+        expect(
+          analyze.root.findByProps({ testID: 'analyze-screen' }),
+        ).toBeTruthy();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        unmount();
+      });
+
+      it('routes to Paywall only once the re-fetch brings a real server answer that requires it', async () => {
+        const refreshAccess = jest.fn(async () => {
+          useAccessStore.setState({
+            status: 'ready',
+            canonicalAccess: exhaustedAccess,
+            error: null,
+          });
+          return true;
+        });
+        useAccessStore.setState({
+          status: 'error',
           canonicalAccess: null,
           initialize: jest.fn(async () => undefined),
+          refreshAccess,
         });
         const navigation = fakeNavigation();
         const { unmount } = renderAnalyze(navigation);
+        expect(navigation.replace).not.toHaveBeenCalled();
+        await flushAsync();
+        expect(refreshAccess).toHaveBeenCalledTimes(1);
         expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
           source: 'rating',
         });
         expect(navigation.replace).toHaveBeenCalledTimes(1);
         unmount();
-      },
-    );
-
-    it('initialize() failure lands on the paywall, never an endless spinner', async () => {
-      const deps = billingDependencies();
-      (deps.backend.getAccess as jest.Mock).mockRejectedValue(
-        new Error('backend down'),
-      );
-      configureAccessStore(deps);
-      const navigation = fakeNavigation();
-      const { analyze, unmount } = renderAnalyze(navigation);
-      expect(allText(analyze)).toContain('Checking access…');
-      await flushAsync();
-      expect(useAccessStore.getState().status).toBe('error');
-      expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
-        source: 'rating',
       });
-      unmount();
+
+      it('when the re-fetch fails too it shows a retryable error state (never Paywall, never an endless spinner); Try again -> refreshAccess()', async () => {
+        const refreshAccess = jest.fn(async () => {
+          useAccessStore.setState({
+            status: 'error',
+            canonicalAccess: null,
+            error: {
+              code: 'billing.backend_unavailable',
+              message: 'Membership verification is temporarily unavailable.',
+              retryable: true,
+            },
+          });
+          return false;
+        });
+        useAccessStore.setState({
+          status: 'error',
+          canonicalAccess: null,
+          error: {
+            code: 'billing.backend_unavailable',
+            message: 'Membership verification is temporarily unavailable.',
+            retryable: true,
+          },
+          initialize: jest.fn(async () => undefined),
+          refreshAccess,
+        });
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation);
+        await flushAsync();
+        expect(refreshAccess).toHaveBeenCalledTimes(1);
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(allText(analyze)).not.toContain('Checking access…');
+        expect(allText(analyze)).toContain(
+          'Membership verification is temporarily unavailable.',
+        );
+        await press(analyze, { label: 'Try again' });
+        expect(refreshAccess).toHaveBeenCalledTimes(2);
+        expect(navigation.replace).not.toHaveBeenCalled();
+        unmount();
+      });
+
+      it('initialize() failure (backend down) re-fetches once, then rests on the retryable error state — not the Paywall', async () => {
+        const deps = billingDependencies();
+        (deps.backend.getAccess as jest.Mock).mockRejectedValue(
+          new Error('backend down'),
+        );
+        configureAccessStore(deps);
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation);
+        expect(allText(analyze)).toContain('Checking access…');
+        await flushAsync();
+        expect(useAccessStore.getState().status).toBe('error');
+        // initialize() + one automatic re-fetch, no spinning loop.
+        expect(deps.backend.getAccess).toHaveBeenCalledTimes(2);
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(allText(analyze)).toContain('Try again');
+        // The server answering on the retry routes on the answer.
+        (deps.backend.getAccess as jest.Mock).mockResolvedValue(freeAccess);
+        await press(analyze, { label: 'Try again' });
+        await flushAsync();
+        expect(
+          analyze.root.findByProps({ testID: 'analyze-screen' }),
+        ).toBeTruthy();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        unmount();
+      });
     });
   });
 
