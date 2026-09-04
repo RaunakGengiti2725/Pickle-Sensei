@@ -255,3 +255,150 @@ describe('accessStore', () => {
     expect(selectHasPremium(state)).toBe(false);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flush(): Promise<void> {
+  for (let i = 0; i < 8; i += 1) await Promise.resolve();
+}
+
+/** Dependencies whose every getAccess() call is a separately gated promise. */
+function gatedDependencies() {
+  const accesses: ReturnType<typeof deferred<CanonicalAccessState>>[] = [];
+  const clients = dependencies({
+    getAccess: () => {
+      const gate = deferred<CanonicalAccessState>();
+      accesses.push(gate);
+      return gate.promise;
+    },
+  });
+  return { clients, accesses };
+}
+
+describe('accessStore read sequencing (latest issued read wins)', () => {
+  it('a superseded refresh that succeeds returns false and leaves the newer snapshot untouched', async () => {
+    const { clients, accesses } = gatedDependencies();
+    configureAccessStore(clients);
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess });
+
+    const older = useAccessStore.getState().refreshAccess();
+    const newer = useAccessStore.getState().refreshAccess();
+    expect(accesses).toHaveLength(2);
+
+    accesses[1]!.resolve(paidAccess);
+    await expect(newer).resolves.toBe(true);
+    const afterNewer = useAccessStore.getState();
+    expect(afterNewer.status).toBe('ready');
+    expect(afterNewer.canonicalAccess).toEqual(paidAccess);
+
+    accesses[0]!.resolve(freeAccess);
+    await expect(older).resolves.toBe(false);
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.error).toBeNull();
+    expect(state.canonicalAccess).toEqual(paidAccess);
+  });
+
+  it('a superseded refresh that fails returns false and neither nulls the snapshot nor surfaces an error', async () => {
+    const { clients, accesses } = gatedDependencies();
+    configureAccessStore(clients);
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess });
+
+    const older = useAccessStore.getState().refreshAccess();
+    const newer = useAccessStore.getState().refreshAccess();
+
+    accesses[1]!.resolve(paidAccess);
+    await expect(newer).resolves.toBe(true);
+
+    accesses[0]!.reject(new Error('network timeout'));
+    await expect(older).resolves.toBe(false);
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.error).toBeNull();
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('an initialize overtaken by a refresh still installs store plans but never its stale access snapshot', async () => {
+    const { clients, accesses } = gatedDependencies();
+    configureAccessStore(clients);
+
+    const init = useAccessStore.getState().initialize();
+    expect(useAccessStore.getState().status).toBe('loading');
+    // Analyze's unmount refresh only skips 'idle', so it can overlap a
+    // loading initialize().
+    const refresh = useAccessStore.getState().refreshAccess();
+    await flush();
+    expect(accesses).toHaveLength(2);
+    // getAccess order: the refresh read fires synchronously, initialize's
+    // read waits for store.configure().
+    const refreshRead = accesses[0]!;
+    const initializeRead = accesses[1]!;
+
+    refreshRead.resolve(paidAccess);
+    await expect(refresh).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    initializeRead.resolve(freeAccess);
+    await init;
+
+    const state = useAccessStore.getState();
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(state.status).toBe('ready');
+    expect(state.error).toBeNull();
+    expect(state.plans).toEqual(plans);
+    expect(state.selectedPeriod).toBe('annual');
+  });
+
+  it('a refresh issued after a superseded initialize is not blocked by it (only the newest read commits)', async () => {
+    const { clients, accesses } = gatedDependencies();
+    configureAccessStore(clients);
+    const init = useAccessStore.getState().initialize();
+    const refresh = useAccessStore.getState().refreshAccess();
+    await flush();
+    // Older initialize read lands first with the pre-run ledger.
+    accesses[1]!.resolve(freeAccess);
+    await init;
+    expect(useAccessStore.getState().status).toBe('loading');
+    expect(useAccessStore.getState().canonicalAccess).toBeNull();
+    // Newest read lands last and is the one that commits.
+    accesses[0]!.resolve(paidAccess);
+    await expect(refresh).resolves.toBe(true);
+    expect(useAccessStore.getState().status).toBe('ready');
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+  });
+
+  it('a canonical billing sync that commits while an older refresh is in flight is not overwritten by that read', async () => {
+    const { clients, accesses } = gatedDependencies();
+    configureAccessStore(clients);
+    useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess });
+
+    const older = useAccessStore.getState().refreshAccess();
+    await expect(useAccessStore.getState().syncBilling()).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    accesses[0]!.resolve(freeAccess);
+    await expect(older).resolves.toBe(false);
+    const state = useAccessStore.getState();
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(state.status).toBe('ready');
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('a refresh issued after a billing sync commits still wins over that sync', async () => {
+    configureAccessStore(dependencies());
+    await useAccessStore.getState().initialize();
+    await expect(useAccessStore.getState().syncBilling()).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess);
+  });
+});
