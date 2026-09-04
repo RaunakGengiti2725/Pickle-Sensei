@@ -458,5 +458,49 @@ describe('AnalyzeScreen access re-read for a run abandoned mid-flight', () => {
     await flush();
     expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
+    expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
+      true,
+    );
+    // The failed read is still reported; only the snapshot is preserved.
+    expect(useAccessStore.getState().status).toBe('error');
+    expect(useAccessStore.getState().error?.code).toBe(
+      'billing.backend_unavailable',
+    );
+  });
+
+  it('does not repopulate a store that was reset while the re-read was in flight', async () => {
+    clearAccessStoreConfiguration();
+    let settleRead!: () => void;
+    clients = backendReturning(
+      () =>
+        new Promise<never>((_, reject) => {
+          settleRead = () => reject(new Error('access read failed'));
+        }),
+    );
+    configureAccessStore(clients);
+    useAccessStore.setState({
+      status: 'ready',
+      canonicalAccess: freeAccess(1),
+    });
+
+    mockOutcome = async () => scoredOutcome(false);
+    const renderer = await renderScreen();
+    await runOneAnalysis(renderer);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length > 0,
+      'Result navigation',
+    );
+    await act(async () => renderer.unmount());
+    await flush();
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+
+    // Sign-out resets the store before the read fails.
+    clearAccessStoreConfiguration();
+    await act(async () => {
+      settleRead();
+    });
+    await flush();
+    expect(useAccessStore.getState().status).toBe('idle');
+    expect(useAccessStore.getState().canonicalAccess).toBeNull();
   });
 });

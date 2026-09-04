@@ -486,7 +486,11 @@ describe('AnalyzeScreen button ledger', () => {
     });
 
     it('Open automatic camera: user cancel returns to ready, no error surface', async () => {
-      capture.mockRejectedValue(new Error('User cancelled the camera.'));
+      capture.mockRejectedValue(
+        Object.assign(new Error('Camera capture was canceled.'), {
+          code: 'camera.cancelled',
+        }),
+      );
       const renderer = await renderScreen('camera');
       await pressButton(renderer, 'Open automatic camera');
       expect(rendered(renderer)).not.toContain('Nothing was rated.');
@@ -880,7 +884,9 @@ describe('AnalyzeScreen button ledger', () => {
       expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
 
       importVideo.mockRejectedValueOnce(
-        new Error('User cancelled the video picker.'),
+        Object.assign(new Error('Video import was canceled.'), {
+          code: 'camera.cancelled',
+        }),
       );
       await pressButton(renderer, 'Import another');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);

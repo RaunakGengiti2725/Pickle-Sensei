@@ -30,6 +30,8 @@ import {
   extractImportedPoseSequence,
   importedPoseExtractionAvailable,
   importStrokeVideo,
+  isCameraCancellation,
+  nativeErrorCode,
   subscribeToCameraEvents,
   type CameraEvent,
   type CameraReadinessState,
@@ -53,7 +55,10 @@ import {
   setCaptureTargetSeed,
   setDeclaredStroke,
 } from '../data/repository';
-import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
+import {
+  runCaptureAnalysis,
+  type CaptureAnalysisOutcome,
+} from '../analysis/runCaptureAnalysis';
 import {
   commitPracticeSet,
   planPracticeSet,
@@ -510,10 +515,7 @@ export function strokeIntentPresentation(
  * these paths.
  */
 export function importedPoseExtractionFailureMessage(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code ?? '')
-      : '';
+  const code = nativeErrorCode(error);
   if (code === 'camera.import_too_long') {
     return (
       'This video is too long to analyze. Trim it to the single stroke — ' +
@@ -529,6 +531,26 @@ export function importedPoseExtractionFailureMessage(error: unknown): string {
   return error instanceof Error && error.message.trim().length > 0
     ? error.message
     : 'Reading player movement from this video failed.';
+}
+
+/**
+ * Post-run ledger re-read. Nothing here decides admission — the server does
+ * at reserve time — so this background read is additive only: it can move
+ * the app from the pre-run snapshot to the settled one, never from a
+ * server-verified snapshot to "no access". When the read fails
+ * (`refreshAccess` resolves false and fails closed) the known-good snapshot
+ * is put back while the read's error state stays for Settings to show. A
+ * store that was reset (sign-out) or re-populated meanwhile is left alone.
+ */
+async function reReadAccessAfterRun(): Promise<void> {
+  const access = useAccessStore.getState();
+  if (access.status === 'idle') return;
+  const knownGood = access.canonicalAccess;
+  const refreshed = await access.refreshAccess();
+  if (refreshed || knownGood === null) return;
+  const after = useAccessStore.getState();
+  if (after.status !== 'error' || after.canonicalAccess !== null) return;
+  useAccessStore.setState({ canonicalAccess: knownGood });
 }
 
 /** Start-region lock outcome for the funnel's T4 (select starting location). */
@@ -611,23 +633,30 @@ export function AnalyzeScreen() {
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
   const abandoned = useRef(false);
+  const unmounted = useRef(false);
+  // Native work (camera sheet, library picker, imported pose extraction) is
+  // cancelled at most once per operation: the working-surface X and the
+  // unmount that follows it both reach cancelNativeWork.
+  const nativeCancelIssued = useRef(false);
   const autoLaunchStarted = useRef(false);
-  // Every scoring run reserves a permit that is then consumed or released,
-  // so the access snapshot the rest of the app reads (Settings membership
-  // row, tab-bar rating gate, Paywall allowance) is stale the moment a run
-  // starts. It is re-read from the server once this screen is GONE — never
-  // while it is mounted: the route gate replaces a screen whose
-  // canStartRating flips false, and the "last free analysis" prompt has to
-  // finish on top of the saved score first.
-  const ratingLedgerTouched = useRef(false);
-  useEffect(
-    () => () => {
-      const access = useAccessStore.getState();
-      if (!ratingLedgerTouched.current || access.status === 'idle') return;
-      void access.refreshAccess();
-    },
-    [],
+  // Every scoring run reserves a permit that is then consumed or released
+  // INSIDE runCaptureAnalysis, so the access snapshot the rest of the app
+  // reads (Settings membership row, tab-bar rating gate, Paywall allowance)
+  // is stale the moment a run starts. It is re-read from the server exactly
+  // once per touched run, and only when BOTH hold: this screen is GONE —
+  // never while it is mounted, because the route gate replaces a screen
+  // whose canStartRating flips false and the "last free analysis" prompt has
+  // to finish on top of the saved score first — and the run has SETTLED, so
+  // the read observes the consumed/released permit rather than the reserved
+  // one a mid-run exit would otherwise freeze into the store.
+  const ratingLedgerRun = useRef<'untouched' | 'in_flight' | 'settled'>(
+    'untouched',
   );
+  const reReadAccessIfDue = useCallback(() => {
+    if (!unmounted.current || ratingLedgerRun.current !== 'settled') return;
+    ratingLedgerRun.current = 'untouched';
+    void reReadAccessAfterRun();
+  }, []);
   // Honest progress surface for the scoring flow (parallel to `phase`, so
   // every existing message/transition stays byte-identical). Non-null only
   // while scoreCapture is in flight.
@@ -795,6 +824,7 @@ export function AnalyzeScreen() {
           // starts so its very first event finds the active run. The bar
           // stays indeterminate until native reports a real fraction.
           extractionRun.current = { nativeCaptureId: null, eta: null };
+          nativeCancelIssued.current = false;
           setAnalysisProgress(extractionProgress(null));
           try {
             const extraction = await extractImportedPoseSequence(
@@ -853,32 +883,40 @@ export function AnalyzeScreen() {
           practiceSet = null;
         }
         const sessionId = practiceSet?.sessionId ?? null;
-        ratingLedgerTouched.current = true;
-        const outcome = await runCaptureAnalysis({
-          db: getDb(),
-          captureId,
-          clip: analysisClip,
-          declaredStroke,
-          declaredCanonical: techniqueIntent?.canonical ?? null,
-          handedness: profile?.handedness ?? 'right',
-          cameraView: 'side',
-          apiConfig: {
-            baseUrl: session?.apiBaseUrl ?? '',
-            token: session?.bearerToken ?? null,
-          },
-          appVersion: getRuntimePublicConfig().appVersion,
-          sessionId,
-          focusCheckpoint: profile?.focusCheckpoint,
-          targetSeed,
-          captureEnvelope:
-            clip.captureMode === 'automatic_pose_trigger'
-              ? attemptCaptureEnvelope(
-                  clip,
-                  attemptEvidence.current.quality,
-                  attemptEvidence.current.readiness,
-                )
-              : null,
-        });
+        ratingLedgerRun.current = 'in_flight';
+        let outcome: CaptureAnalysisOutcome;
+        try {
+          outcome = await runCaptureAnalysis({
+            db: getDb(),
+            captureId,
+            clip: analysisClip,
+            declaredStroke,
+            declaredCanonical: techniqueIntent?.canonical ?? null,
+            handedness: profile?.handedness ?? 'right',
+            cameraView: 'side',
+            apiConfig: {
+              baseUrl: session?.apiBaseUrl ?? '',
+              token: session?.bearerToken ?? null,
+            },
+            appVersion: getRuntimePublicConfig().appVersion,
+            sessionId,
+            focusCheckpoint: profile?.focusCheckpoint,
+            targetSeed,
+            captureEnvelope:
+              clip.captureMode === 'automatic_pose_trigger'
+                ? attemptCaptureEnvelope(
+                    clip,
+                    attemptEvidence.current.quality,
+                    attemptEvidence.current.readiness,
+                  )
+                : null,
+          });
+        } finally {
+          // Settled either way (permit consumed, released, or the call
+          // failed): a screen that was left mid-run re-reads the ledger now.
+          ratingLedgerRun.current = 'settled';
+          reReadAccessIfDue();
+        }
         // The measured/saved boundary lives inside runCaptureAnalysis (no
         // incremental signal is exposed); once it returns, the remaining
         // work is routing the already-persisted outcome.
@@ -886,7 +924,7 @@ export function AnalyzeScreen() {
           outcome.kind === 'unavailable' &&
           outcome.cause === 'paywall_required';
         // A new rating leaves for the server right away; the access snapshot
-        // is deliberately NOT re-read here — see ratingLedgerTouched.
+        // is deliberately NOT re-read here — see ratingLedgerRun.
         if (outcome.kind === 'scored') triggerOutboxSync();
         if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('saving'));
@@ -970,12 +1008,20 @@ export function AnalyzeScreen() {
         setAnalysisProgress(null);
       }
     },
-    [declaredStroke, navigation, profile, rearm, techniqueIntent],
+    [
+      declaredStroke,
+      navigation,
+      profile,
+      rearm,
+      reReadAccessIfDue,
+      techniqueIntent,
+    ],
   );
 
   const run = useCallback(async () => {
     if (operationActive.current) return;
     operationActive.current = true;
+    nativeCancelIssued.current = false;
     // Each capture attempt starts with a clean envelope verdict, live
     // evidence buffer, target seed, and live-window signals: all of them
     // describe ONE clip's live window and must never carry into the next one.
@@ -1033,8 +1079,9 @@ export function AnalyzeScreen() {
       setPhase({ kind: 'saved', clip, captureId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.toLowerCase().includes('cancel')) {
-        // User cancel is not a startup failure.
+      if (isCameraCancellation(error)) {
+        // User cancel (by native code, never by message text) is not a
+        // startup failure.
         usabilityFunnel.log('attempt_abandoned');
         if (source === 'library') navigation.goBack();
         else setPhase({ kind: 'ready' });
@@ -1078,12 +1125,26 @@ export function AnalyzeScreen() {
     return () => clearTimeout(timer);
   }, [rearm, run]);
 
+  // One native cancel per operation, whichever exit reaches it first.
+  const cancelNativeWork = useCallback(() => {
+    if (nativeCancelIssued.current) return;
+    nativeCancelIssued.current = true;
+    cancelCameraOperation();
+  }, []);
+
   useEffect(
     () => () => {
       abandoned.current = true;
-      if (operationActive.current) cancelCameraOperation();
+      unmounted.current = true;
+      // Native work this screen started must not outlive it: the camera
+      // sheet / library picker (operationActive) or the imported pose
+      // extraction, which begins AFTER the picker has returned.
+      if (operationActive.current || extractionRun.current !== null) {
+        cancelNativeWork();
+      }
+      reReadAccessIfDue();
     },
-    [],
+    [cancelNativeWork, reReadAccessIfDue],
   );
 
   if (phase.kind === 'working') {
@@ -1095,7 +1156,7 @@ export function AnalyzeScreen() {
           title={source === 'library' ? 'Import video' : 'Auto Analyze'}
           onClose={() => {
             abandoned.current = true;
-            cancelCameraOperation();
+            cancelNativeWork();
             navigation.goBack();
           }}
         />

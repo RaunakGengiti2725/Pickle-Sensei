@@ -670,6 +670,32 @@ export function cancelCameraOperation(): void {
   native?.cancel?.();
 }
 
+/**
+ * The structured code a native rejection carries (React Native's promise
+ * `reject(code, message)` surfaces it as `error.code`), or null for a plain
+ * JS error. Callers classify on this, never on the message text.
+ */
+export function nativeErrorCode(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return null;
+  }
+  const code = (error as { code: unknown }).code;
+  return typeof code === 'string' && code.length > 0 ? code : null;
+}
+
+/**
+ * Every user-cancel path of the bridge — guided capture dismissed, the
+ * library picker closed without a pick, `cancel()` from JS — rejects with
+ * this code on both platforms.
+ */
+export const CAMERA_CANCELLED_CODE = 'camera.cancelled';
+
+/** True only for a native user cancellation; any other rejection (including
+ * one whose message happens to mention "cancel") is a failure. */
+export function isCameraCancellation(error: unknown): boolean {
+  return nativeErrorCode(error) === CAMERA_CANCELLED_CODE;
+}
+
 export function subscribeToCameraEvents(
   listener: (event: CameraEvent) => void,
 ): () => void {

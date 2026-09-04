@@ -140,7 +140,9 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
 
   it('user cancellation recovers cleanly without an error surface', async () => {
     (importStrokeVideo as jest.Mock).mockRejectedValue(
-      new Error('User cancelled the video picker.'),
+      Object.assign(new Error('Video import was canceled.'), {
+        code: 'camera.cancelled',
+      }),
     );
     const renderer = await renderLibraryScreen();
     expect(textContents(renderer)).not.toContain('Nothing was rated.');
