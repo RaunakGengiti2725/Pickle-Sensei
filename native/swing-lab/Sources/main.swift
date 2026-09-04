@@ -59,8 +59,12 @@ struct UprightVideoReader {
   let output: AVAssetReaderVideoCompositionOutput
   let width: Int
   let height: Int
-  let fps: Double
-  let durationMs: Int
+  /// The track's DECLARED `nominalFrameRate` — metadata, not a measurement.
+  /// `runExtract` resolves the effective rate from the decoded sample
+  /// timestamps (`VideoTiming.resolve`) and only records this beside it.
+  let nominalFps: Double
+  /// The container's declared duration; cross-checked the same way.
+  let assetDurationMs: Int
 
   init(url: URL) async throws {
     let asset = AVURLAsset(url: url)
@@ -90,8 +94,8 @@ struct UprightVideoReader {
     self.output = output
     self.width = Int(renderSize.width.rounded())
     self.height = Int(renderSize.height.rounded())
-    self.fps = Double(nominalFps)
-    self.durationMs = Int((CMTimeGetSeconds(duration) * 1000).rounded())
+    self.nominalFps = Double(nominalFps)
+    self.assetDurationMs = Int((CMTimeGetSeconds(duration) * 1000).rounded())
   }
 
   func next() -> (buffer: CVPixelBuffer, sample: CMSampleBuffer, timestampMs: Int)? {
@@ -134,6 +138,9 @@ func runExtract(videoPath: String, outDir: String) async throws {
   var framesSeen = 0
   var poseMisses = 0
   var lastTimestampMs = Int.min
+  // Every decoded sample's presentation stamp: the cadence the decoder
+  // actually delivered, independent of what the container declares.
+  var sampleTimestampsMs: [Int] = []
 
   // SCENE VALIDITY: a coarse luma histogram per frame; large chi-square
   // distance between consecutive frames = shot boundary. Analysis must never
@@ -145,6 +152,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
 
   while let frame = readerBox.next() {
     framesSeen += 1
+    sampleTimestampsMs.append(frame.timestampMs)
     if let histogram = lumaHistogram(frame.buffer) {
       if let previous = previousHistogram {
         var distance = 0.0
@@ -193,14 +201,17 @@ func runExtract(videoPath: String, outDir: String) async throws {
     }
   }
 
-  let effectiveFps: Double
-  if frames.count >= 2,
-     let first = frames.first?["t"] as? Int,
-     let last = frames.last?["t"] as? Int,
-     last > first {
-    effectiveFps = Double(frames.count - 1) * 1000 / Double(last - first)
-  } else {
-    effectiveFps = readerBox.fps
+  let timing = VideoTiming.resolve(
+    nominalFps: readerBox.nominalFps,
+    sampleTimestampsMs: sampleTimestampsMs,
+    assetDurationMs: readerBox.assetDurationMs
+  )
+  let videoMetadata = timing.videoMetadata(width: readerBox.width, height: readerBox.height)
+  if timing.fpsMismatch || timing.durationMismatch {
+    print(
+      "extract: container declares \(readerBox.nominalFps) fps / \(readerBox.assetDurationMs) ms, "
+        + "decoded samples run at \(timing.fps) fps / \(timing.durationMs) ms — using the observed cadence"
+    )
   }
 
   let poseWire: [String: Any] = [
@@ -208,7 +219,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     "format": "pickle.pose-sequence.v1",
     "coordinateSystem": "normalized_image_top_left",
     "poseModelVersion": pose.modelVersion,
-    "video": ["w": readerBox.width, "h": readerBox.height, "fps": readerBox.fps > 0 ? readerBox.fps : effectiveFps],
+    "video": videoMetadata,
     "frames": frames,
   ]
   // Segment the clip into shots from the detected cuts.
@@ -218,7 +229,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     segments.append(["startMs": segmentStart, "endMs": cut])
     segmentStart = cut
   }
-  segments.append(["startMs": segmentStart, "endMs": readerBox.durationMs])
+  segments.append(["startMs": segmentStart, "endMs": timing.durationMs])
   try writeJSON(
     [
       "schemaVersion": 1,
@@ -234,7 +245,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     [
       "schemaVersion": 1,
       "poseModelVersion": pose.modelVersion,
-      "video": ["w": readerBox.width, "h": readerBox.height, "fps": readerBox.fps > 0 ? readerBox.fps : effectiveFps],
+      "video": videoMetadata,
       "frames": peopleFrames,
     ],
     to: "\(outDir)/people.json"
@@ -272,10 +283,20 @@ func runExtract(videoPath: String, outDir: String) async throws {
     to: "\(outDir)/ball.json"
   )
 
+  var metaVideo: [String: Any] = [
+    "path": videoPath, "w": readerBox.width, "h": readerBox.height,
+    "fps": timing.fps, "fpsSource": timing.fpsSource.rawValue,
+    "nominalFps": readerBox.nominalFps, "fpsMismatch": timing.fpsMismatch,
+    "durationMs": timing.durationMs, "assetDurationMs": readerBox.assetDurationMs,
+    "durationMismatch": timing.durationMismatch,
+  ]
+  if let cadence = timing.cadence {
+    metaVideo["observedFrameIntervalMs"] = cadence.intervalMs
+    metaVideo["observedIntervalCount"] = cadence.intervalCount
+  }
   try writeJSON(
     [
-      "video": ["path": videoPath, "w": readerBox.width, "h": readerBox.height,
-                "nominalFps": readerBox.fps, "durationMs": readerBox.durationMs],
+      "video": metaVideo,
       "framesSeen": framesSeen,
       "framesWithPose": frames.count,
       "poseMisses": poseMisses,

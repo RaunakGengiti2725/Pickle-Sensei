@@ -280,15 +280,30 @@ enum ClipMediaStore {
     let height = Int(abs(transformed.height).rounded())
     guard width > 0, height > 0 else { throw ClipMediaStoreError.invalidMedia }
 
+    // fps/duration follow the samples the container actually holds; the
+    // declared nominalFrameRate/duration are recorded beside them (imported
+    // media has declared 12 fps and a 2× duration for a 24 fps clip).
+    let timing = VideoTiming.resolve(
+      nominalFps: Double(track.nominalFrameRate),
+      sampleTimestampsMs: sampleTimestampsMs(of: track, in: asset),
+      assetDurationMs: Int((durationSeconds * 1000).rounded())
+    )
+    guard timing.durationMs > 0 else { throw ClipMediaStoreError.invalidMedia }
+
     var payload: [String: Any] = [
       "uri": url.absoluteString,
-      "durationMs": Int((durationSeconds * 1000).rounded()),
+      "durationMs": timing.durationMs,
       "width": width,
       "height": height,
-      "fps": Double(track.nominalFrameRate),
+      "fps": timing.fps,
       "capturedAtIso": ISO8601DateFormatter().string(from: Date()),
       "captureMode": captureMode,
     ]
+    if timing.cadence != nil {
+      payload["nominalFps"] = timing.nominalFps
+      payload["fpsSource"] = timing.fpsSource.rawValue
+      payload["fpsMismatch"] = timing.fpsMismatch
+    }
     if let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber {
       payload["byteSize"] = size.int64Value
     }
@@ -359,16 +374,20 @@ enum ClipMediaStore {
     }
     guard !frames.isEmpty else { return nil }
 
+    // `video.fps` is the cadence the pose frames were actually sampled at
+    // (Vision runs on the camera's delivered frames), with the track's
+    // declared rate recorded beside it — see VideoTiming.
+    let timing = VideoTiming.resolve(
+      nominalFps: Double(track.nominalFrameRate),
+      sampleTimestampsMs: frames.compactMap { $0["t"] as? Int },
+      assetDurationMs: nil
+    )
     let document: [String: Any] = [
       "schemaVersion": 1,
       "format": "pickle.pose-sequence.v1",
       "coordinateSystem": "normalized_image_top_left",
       "poseModelVersion": poseModelVersion,
-      "video": [
-        "w": width,
-        "h": height,
-        "fps": Double(track.nominalFrameRate),
-      ],
+      "video": timing.videoMetadata(width: width, height: height),
       "frames": frames,
     ]
     let data = try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
@@ -385,6 +404,30 @@ enum ClipMediaStore {
       "coordinateSystem": "normalized_image_top_left",
       "poseModelVersion": poseModelVersion,
     ]
+  }
+
+  /// Presentation timestamps (ms) of every sample in `track`, read as
+  /// passthrough (no decode) so a full pass over a clip costs a container
+  /// walk, not a transcode. Empty when the track cannot be read — the caller
+  /// then falls back to the declared rate.
+  private static func sampleTimestampsMs(of track: AVAssetTrack, in asset: AVAsset) -> [Int] {
+    guard let reader = try? AVAssetReader(asset: asset) else { return [] }
+    let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+    output.alwaysCopiesSampleData = false
+    guard reader.canAdd(output) else { return [] }
+    reader.add(output)
+    guard reader.startReading() else { return [] }
+    var timestamps: [Int] = []
+    while let sample = output.copyNextSampleBuffer() {
+      let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+      guard pts.isNumeric else { continue }
+      timestamps.append(Int((CMTimeGetSeconds(pts) * 1000).rounded()))
+    }
+    reader.cancelReading()
+    // Passthrough delivers samples in DECODE order; presentation order is
+    // what cadence and duration are measured over.
+    timestamps.sort()
+    return timestamps
   }
 
   private static func recognitionPayload(_ recognition: StrokeRecognition) -> [String: Any] {

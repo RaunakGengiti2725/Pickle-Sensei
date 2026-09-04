@@ -312,9 +312,10 @@ describe("measurement locks on 4d812e1a (re-measure before changing)", () => {
         const lost = diffAgainstNative(row, base).filter(
           (failure) => failure.kind === "event_lost_vs_native",
         );
-        expect(lost, `${gold.bundle} seed ${seed}: ${lost.map((f) => f.detail).join("; ")}`).toEqual(
-          [],
-        );
+        expect(
+          lost,
+          `${gold.bundle} seed ${seed}: ${lost.map((f) => f.detail).join("; ")}`,
+        ).toEqual([]);
       }
     }
   }, 60_000);
@@ -339,7 +340,8 @@ describe("measurement locks on 4d812e1a (re-measure before changing)", () => {
       for (const fps of [24, 30]) {
         const probe = await runVariant(gold, spec(gold.bundle, fps));
         for (let phase = 0; phase < probe.resample.phaseCount; phase += 1) {
-          const row = phase === 0 ? probe : await runVariant(gold, spec(gold.bundle, fps, { phase }));
+          const row =
+            phase === 0 ? probe : await runVariant(gold, spec(gold.bundle, fps, { phase }));
           expect(
             row.streaming.parity,
             `${gold.bundle} fps ${fps} phase ${phase}: ${row.streaming.mismatch}`,

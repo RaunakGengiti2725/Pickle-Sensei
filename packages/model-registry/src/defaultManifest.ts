@@ -113,7 +113,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "target.player-tracker",
-      version: "player-track-1",
+      version: "player-track-1.1",
       task: "target_player_tracking",
       runtime: "deterministic",
       executionTarget: "server",

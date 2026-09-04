@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { proposeStrokeEvents, selectTargetEvent } from "../src/index.js";
-import { proposeStrokeEventsV2, selectTargetEventV2 } from "../src/strokeEvents.js";
+import {
+  observedCadence,
+  proposeStrokeEventsV2,
+  selectTargetEventV2,
+} from "../src/strokeEvents.js";
 import { segmentPhasesTemporalV2 } from "../src/index.js";
 import { buildPlayerTracks, type PeopleFile } from "../src/playerTracker.js";
 
@@ -406,6 +410,20 @@ describe("XC-CV-3: timestamp-jitter stability of the wrist proposer", () => {
     }
   });
 
+  it("an exactly regular grid is re-timed to ITS OWN rate (25 fps is not snapped to 24) — values untouched", () => {
+    expect(observedCadence(speedBumps([], 0, 4000, 40))).toEqual({ intervalMs: 40, spreadMs: 0 });
+    expect(observedCadence(speedBumps([], 0, 4000, 1000 / 60))?.intervalMs).toBeCloseTo(
+      1000 / 60,
+      9,
+    );
+    // Integer-ms stamps of a 59.94 fps capture alternate 16/17 ms: snapped to 60 fps.
+    const stamped = Array.from({ length: 200 }, (_, index) => ({
+      timestampMs: Math.round(index * (1000 / 59.94)),
+      value: 0.1,
+    }));
+    expect(observedCadence(stamped)).toEqual({ intervalMs: 1000 / 60, spreadMs: 1 });
+  });
+
   it("a genuinely dropped frame is NOT jitter: the doubled interval keeps its measured speed", () => {
     // Two identical series except one frame is missing in the second; the
     // proposer must not "repair" the doubled interval as if it were wobble.
@@ -448,7 +466,12 @@ describe("XC-CV-4: playerTracker loss periods follow observed cadence, not decla
         ],
       });
     }
-    return { schemaVersion: 1, poseModelVersion: "test", video: { w: 1080, h: 1920, fps: declaredFps }, frames };
+    return {
+      schemaVersion: 1,
+      poseModelVersion: "test",
+      video: { w: 1080, h: 1920, fps: declaredFps },
+      frames,
+    };
   }
 
   it("identical frames with declared fps 12 vs 24 yield the same lossPeriods", () => {

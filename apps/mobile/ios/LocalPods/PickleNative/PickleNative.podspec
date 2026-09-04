@@ -20,6 +20,7 @@ Pod::Spec.new do |s|
     "Sources/Core/PoseMotionTrail.swift",
     "Sources/Core/PoseReadinessEvaluator.swift",
     "Sources/Core/TemporalStrokeDetector.swift",
+    "Sources/Core/VideoTiming.swift",
     "Sources/Core/VisionCoreContracts.swift"
   ]
   s.swift_version = "5.9"

@@ -2,11 +2,14 @@ import type { PoseFrame, Result } from "@pickle/shared-types";
 import { fail, failure, ok } from "@pickle/shared-types";
 import {
   COORDINATE_SYSTEMS,
+  POSE_FPS_SOURCES,
   POSE_SEQUENCE_FORMAT,
   POSE_SEQUENCE_SCHEMA_VERSION,
   type CanonicalPoseFrame,
   type CoordinateSystem,
+  type PoseFpsSource,
   type PoseSequence,
+  type PoseSequenceVideo,
 } from "./observations.js";
 import type { ModelRef } from "./provenance.js";
 
@@ -19,8 +22,14 @@ import type { ModelRef } from "./provenance.js";
  * Wire shape (keys shortened deliberately; documented here, versioned by
  * `schemaVersion` + `format`):
  *   { schemaVersion, format, coordinateSystem, poseModelVersion,
- *     video: { w, h, fps },
+ *     video: { w, h, fps, nominalFps?, fpsSource?, fpsMismatch? },
  *     frames: [ { i, t, c, l: [ { n, x, y, v, z? } ] } ] }
+ *
+ * `video.fps` is the effective sample rate of `frames`. The three optional
+ * cadence-provenance keys are additive (files written before them parse
+ * unchanged): writers that measure the cadence from sample timestamps record
+ * the asset's declared rate as `nominalFps` and flag `fpsMismatch` when the
+ * two disagree, so a wrong nominalFrameRate is disclosed instead of trusted.
  */
 
 interface WireFrame {
@@ -30,12 +39,21 @@ interface WireFrame {
   l: Array<{ n: string; x: number; y: number; v: number; z?: number }>;
 }
 
+interface WireVideo {
+  w: number;
+  h: number;
+  fps: number;
+  nominalFps?: number;
+  fpsSource?: PoseFpsSource;
+  fpsMismatch?: boolean;
+}
+
 interface WireSequence {
   schemaVersion: number;
   format: string;
   coordinateSystem: string;
   poseModelVersion: string;
-  video: { w: number; h: number; fps: number };
+  video: WireVideo;
   frames: WireFrame[];
 }
 
@@ -52,6 +70,11 @@ export function serializePoseSequence(sequence: PoseSequence): string {
       w: sequence.video.width,
       h: sequence.video.height,
       fps: sequence.video.fps,
+      ...(sequence.video.nominalFps !== undefined ? { nominalFps: sequence.video.nominalFps } : {}),
+      ...(sequence.video.fpsSource !== undefined ? { fpsSource: sequence.video.fpsSource } : {}),
+      ...(sequence.video.fpsMismatch !== undefined
+        ? { fpsMismatch: sequence.video.fpsMismatch }
+        : {}),
     },
     frames: sequence.frames.map((frame) => ({
       i: frame.frameIndex,
@@ -116,6 +139,38 @@ export function parsePoseSequence(
   ) {
     return invalid("pose_sequence.invalid_video", "video {w,h,fps} must be positive numbers.");
   }
+  if (
+    video.nominalFps !== undefined &&
+    (!isFiniteNumber(video.nominalFps) || video.nominalFps < 0)
+  ) {
+    return invalid(
+      "pose_sequence.invalid_video",
+      "video.nominalFps must be a non-negative number when present.",
+    );
+  }
+  if (
+    video.fpsSource !== undefined &&
+    !POSE_FPS_SOURCES.includes(video.fpsSource as PoseFpsSource)
+  ) {
+    return invalid(
+      "pose_sequence.invalid_video",
+      `video.fpsSource must be one of ${POSE_FPS_SOURCES.join(", ")} when present.`,
+    );
+  }
+  if (video.fpsMismatch !== undefined && typeof video.fpsMismatch !== "boolean") {
+    return invalid(
+      "pose_sequence.invalid_video",
+      "video.fpsMismatch must be a boolean when present.",
+    );
+  }
+  const parsedVideo: PoseSequenceVideo = {
+    width: video.w,
+    height: video.h,
+    fps: video.fps,
+    ...(video.nominalFps !== undefined ? { nominalFps: video.nominalFps } : {}),
+    ...(video.fpsSource !== undefined ? { fpsSource: video.fpsSource } : {}),
+    ...(video.fpsMismatch !== undefined ? { fpsMismatch: video.fpsMismatch } : {}),
+  };
   if (!Array.isArray(wire.frames)) {
     return invalid("pose_sequence.invalid_frames", "frames must be an array.");
   }
@@ -179,7 +234,7 @@ export function parsePoseSequence(
     format: POSE_SEQUENCE_FORMAT,
     coordinateSystem: wire.coordinateSystem as CoordinateSystem,
     producedBy: { ...producedBy, modelVersion: wire.poseModelVersion },
-    video: { width: video.w, height: video.h, fps: video.fps },
+    video: parsedVideo,
     frames,
   });
 }

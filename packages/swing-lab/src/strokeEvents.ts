@@ -87,6 +87,127 @@ const GLUE_GATES = {
   distinctPeakRatio: 0.6,
 } as const;
 
+/** Timestamp de-jitter. Every speed sample is a finite difference —
+ * displacement over the interval since the previous sample (see
+ * dominantWristSpeeds) — so the clock the samples were stamped with leaks
+ * straight into the signal: a 2 ms wobble on a 16.7 ms interval moves a
+ * speed by 12%, enough to flip the 25% boundary walk, the 60% merge valley
+ * and the 350 ms fragment glue on real wrist series. A frame emitted by a
+ * fixed-rate camera measured ONE frame interval of displacement regardless
+ * of where its presentation stamp landed, so before any gate sees the
+ * series each sample whose interval deviates from the observed cadence by
+ * at most the jitter tolerance is re-timed to that cadence (displacement
+ * preserved: value × interval / nominal). Presentation-stamp wobble is a
+ * few milliseconds whatever the frame rate, so the tolerance is absolute
+ * (`jitterToleranceMs`), capped to a fraction of the interval for very
+ * fast cadences; a larger deviation is a real cadence change — a whole
+ * skipped or duplicated frame, or the 2:3 pull-down cadence of a 60 fps
+ * capture decimated to 24 fps — whose measured speed is correct as is. The
+ * cadence is the inter-quartile mean of the observed positive intervals
+ * (a median would flip between the two interval lengths of a decimated
+ * 60→24 fps series depending on the window), snapped to a standard frame
+ * rate when within `standardRateSnapFraction` — never taken from declared
+ * metadata (XC-CV-4: nominalFrameRate can be wrong). A series whose
+ * inter-quartile interval range itself exceeds the jitter tolerance has no
+ * single cadence to re-time to (pull-down, variable rate) and is left as
+ * measured — for every prefix of it alike, which is what keeps the
+ * streaming engine (proposer over the accumulated series) in parity with
+ * the batch proposer. */
+const CADENCE = {
+  /** Mirrors dominantWristSpeeds: no emitter produces one speed over a
+   * longer gap, so longer intervals are dropouts, not cadence. */
+  maxSampleIntervalMs: 150,
+  jitterToleranceMs: 5,
+  jitterToleranceFraction: 0.35,
+  standardRatesFps: [24, 25, 30, 48, 50, 60, 90, 120, 240],
+  standardRateSnapFraction: 0.05,
+} as const;
+
+type SpeedPoint = { timestampMs: number; value: number };
+
+export interface ObservedCadence {
+  /** Inter-quartile mean interval, snapped to a standard frame rate. */
+  intervalMs: number;
+  /** Inter-quartile interval range: the spread of the regular cadence. */
+  spreadMs: number;
+}
+
+/** Observed sample cadence of a time-sorted series, or null when no two
+ * samples are within `maxSampleIntervalMs` of each other. */
+export function observedCadence(
+  sorted: ReadonlyArray<{ timestampMs: number }>,
+): ObservedCadence | null {
+  const intervals: number[] = [];
+  for (let index = 1; index < sorted.length; index += 1) {
+    const interval = sorted[index]!.timestampMs - sorted[index - 1]!.timestampMs;
+    if (interval > 0 && interval <= CADENCE.maxSampleIntervalMs) intervals.push(interval);
+  }
+  if (intervals.length === 0) return null;
+  const ranked = [...intervals].sort((a, b) => a - b);
+  const lower = ranked[Math.floor(ranked.length * 0.25)]!;
+  const upper = ranked[Math.floor(ranked.length * 0.75)]!;
+  let total = 0;
+  let count = 0;
+  for (const interval of ranked) {
+    if (interval >= lower && interval <= upper) {
+      total += interval;
+      count += 1;
+    }
+  }
+  const observed = total / count;
+  let nearestStandard = observed;
+  let nearestDistance = Infinity;
+  for (const fps of CADENCE.standardRatesFps) {
+    const standard = 1000 / fps;
+    const distance = Math.abs(observed - standard);
+    if (distance <= standard * CADENCE.standardRateSnapFraction && distance < nearestDistance) {
+      nearestStandard = standard;
+      nearestDistance = distance;
+    }
+  }
+  return { intervalMs: nearestStandard, spreadMs: upper - lower };
+}
+
+/** Observed sample interval of a time-sorted series (see observedCadence). */
+export function observedSampleIntervalMs(
+  sorted: ReadonlyArray<{ timestampMs: number }>,
+): number | null {
+  return observedCadence(sorted)?.intervalMs ?? null;
+}
+
+function jitterToleranceMs(nominalMs: number): number {
+  return Math.min(CADENCE.jitterToleranceMs, nominalMs * CADENCE.jitterToleranceFraction);
+}
+
+function retimeToCadence(sorted: ReadonlyArray<SpeedPoint>, nominalMs: number): SpeedPoint[] {
+  const tolerance = jitterToleranceMs(nominalMs);
+  return sorted.map((sample, index) => {
+    if (index === 0) return { timestampMs: sample.timestampMs, value: sample.value };
+    const interval = sample.timestampMs - sorted[index - 1]!.timestampMs;
+    if (interval <= 0 || Math.abs(interval - nominalMs) > tolerance) {
+      return { timestampMs: sample.timestampMs, value: sample.value };
+    }
+    return { timestampMs: sample.timestampMs, value: (sample.value * interval) / nominalMs };
+  });
+}
+
+/** De-jitter (see CADENCE), then light 3-sample smoothing to suppress
+ * single-frame noise. */
+function smoothSpeedSeries(sorted: ReadonlyArray<SpeedPoint>): SpeedPoint[] {
+  const cadence = observedCadence(sorted);
+  const series =
+    cadence !== null && cadence.spreadMs <= jitterToleranceMs(cadence.intervalMs)
+      ? retimeToCadence(sorted, cadence.intervalMs)
+      : sorted;
+  return series.map((sample, index) => {
+    const window = series.slice(Math.max(0, index - 1), index + 2);
+    return {
+      timestampMs: sample.timestampMs,
+      value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
+    };
+  });
+}
+
 export function proposeStrokeEvents(input: {
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
@@ -110,14 +231,7 @@ export function proposeStrokeEvents(input: {
     return { events: [], source: "none" };
   }
   const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
-  // Light smoothing (3-sample) to suppress single-frame jitter.
-  const smoothed = sorted.map((sample, index) => {
-    const window = sorted.slice(Math.max(0, index - 1), index + 2);
-    return {
-      timestampMs: sample.timestampMs,
-      value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
-    };
-  });
+  const smoothed = smoothSpeedSeries(sorted);
   const globalPeak = smoothed.reduce((best, sample) => Math.max(best, sample.value), 0);
   const threshold = Math.max(
     EVENT_GATES.minPeakSpeed,
@@ -279,7 +393,7 @@ export function proposeStrokeEvents(input: {
  *              (source "paddle", confidence penalty) — recorded, not silent.
  */
 export const STROKE_EVENT_VERSION_2 =
-  "stroke-event-2 (body proposes · paddle confirms; heuristic, uncalibrated)";
+  "stroke-event-2.1 (body proposes · paddle confirms; cadence de-jittered; heuristic, uncalibrated)";
 
 export interface StrokeEventProposalV2 extends StrokeEventProposal {
   /** True when a paddle-speed peak lands inside the proposal (±80ms). */
@@ -337,13 +451,7 @@ export function proposeStrokeEventsV2(input: {
   // within the same reach cap. Peaks and event identity are untouched.
   if (input.wristSpeeds && input.wristSpeeds.length >= 4) {
     const sorted = [...input.wristSpeeds].sort((a, b) => a.timestampMs - b.timestampMs);
-    const smoothed = sorted.map((sample, index) => {
-      const window = sorted.slice(Math.max(0, index - 1), index + 2);
-      return {
-        timestampMs: sample.timestampMs,
-        value: window.reduce((total, entry) => total + entry.value, 0) / window.length,
-      };
-    });
+    const smoothed = smoothSpeedSeries(sorted);
     for (const event of glued) {
       const relax = Math.max(0.12 * event.peakSpeed, 0.08);
       let startIndex = smoothed.findIndex((sample) => sample.timestampMs >= event.startMs);

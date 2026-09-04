@@ -125,7 +125,7 @@ describe("ModelRegistry", () => {
   it("registers every named production pipeline component with a concrete version", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
     const expected: Array<[Parameters<ModelRegistry["resolve"]>[0]["task"], string, string]> = [
-      ["target_player_tracking", "server", "player-track-1"],
+      ["target_player_tracking", "server", "player-track-1.1"],
       ["stroke_event_detection", "server", "stroke-event-1"],
       ["paddle_detection", "server", "dfine-medium-coco@transformers"],
       ["paddle_tracking", "server", "paddle-track-2"],

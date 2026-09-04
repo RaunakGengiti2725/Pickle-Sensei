@@ -5,6 +5,7 @@ import {
   POSE_SEQUENCE_SCHEMA_VERSION,
   type PoseSequence,
 } from "@pickle/swing-domain";
+import { observedSampleIntervalMs } from "./strokeEvents.js";
 
 /**
  * PLAYER IDENTITY as a first-class temporal track.
@@ -29,7 +30,25 @@ import {
  * lookalike detections; it can and now does refuse to be silent about it.
  */
 
-export const PLAYER_TRACKER_VERSION = "player-track-1";
+export const PLAYER_TRACKER_VERSION = "player-track-1.1";
+
+/** Loss-period reference when a file has no two frames within a cadence
+ * window of each other (single frame, or every gap a dropout). */
+const FALLBACK_FRAME_INTERVAL_MS = 40;
+
+/**
+ * Frame interval the loss-period rule measures gaps against: the OBSERVED
+ * cadence of the file's frame timestamps, never `video.fps`. The declared
+ * rate is writer metadata (AVAsset nominalFrameRate on the Apple planes) and
+ * can be wrong by 2× for imported media (XC-CV-4), which would silently
+ * turn every real one-frame hole into "continuous".
+ */
+export function observedFrameIntervalMs(file: Pick<PeopleFile, "frames">): number {
+  return (
+    observedSampleIntervalMs(file.frames.map((frame) => ({ timestampMs: frame.t }))) ??
+    FALLBACK_FRAME_INTERVAL_MS
+  );
+}
 
 export interface PeopleFile {
   schemaVersion: 1;
@@ -173,7 +192,7 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
   finished.push(...active);
 
   const clipFrameCount = Math.max(1, file.frames.length);
-  const frameIntervalMs = file.video.fps > 0 ? 1000 / file.video.fps : 40;
+  const frameIntervalMs = observedFrameIntervalMs(file);
   return finished
     .filter((track) => track.frames.length >= GATES.minFrames)
     .map((track) => {

@@ -55,9 +55,27 @@ export interface PoseSequence {
   format: typeof POSE_SEQUENCE_FORMAT;
   coordinateSystem: CoordinateSystem;
   producedBy: ModelRef;
-  video: { width: number; height: number; fps: number };
+  video: PoseSequenceVideo;
   /** Ascending by timestampMs; gaps are real (missed inference), never filled. */
   frames: CanonicalPoseFrame[];
+}
+
+/** How a writer arrived at `PoseSequenceVideo.fps`. */
+export const POSE_FPS_SOURCES = ["observed_sample_cadence", "nominal_frame_rate"] as const;
+export type PoseFpsSource = (typeof POSE_FPS_SOURCES)[number];
+
+export interface PoseSequenceVideo {
+  width: number;
+  height: number;
+  /** Effective sample rate of `frames` — the observed cadence when the writer
+   * could measure it (`fpsSource`), else the container's nominal rate. */
+  fps: number;
+  /** Container/track nominal frame rate as declared by the asset, recorded
+   * beside the effective rate so a wrong declaration stays visible. */
+  nominalFps?: number;
+  fpsSource?: PoseFpsSource;
+  /** True when `nominalFps` and the observed cadence disagree materially. */
+  fpsMismatch?: boolean;
 }
 
 /** Durable pointer to a pose sequence stored beside its clip. */
