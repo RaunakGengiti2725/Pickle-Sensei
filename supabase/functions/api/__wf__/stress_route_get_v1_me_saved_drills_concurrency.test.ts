@@ -830,8 +830,8 @@ async function runIteration(
       if (!slug) kind = "get.A1";
       else dels.add(slug);
     } else if (kind === "put.B.sameSlug") {
-      // B saves a slug that A holds — same slug, different owner. It is NOT in
-      // B's universe, so I6 (disjoint universes) is asserted with it excluded.
+      // B saves a slug that A holds — same slug, different owner. It joins
+      // B's expected set below; every other A slug stays foreign to B (I6).
       slug = initialA[prng.int(0, initialA.length - 1)];
     }
     const lane: Lane = { i, kind, startAfterMs: jitter(), slug };
