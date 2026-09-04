@@ -476,6 +476,139 @@ Deno.test({
   },
 });
 
+// ─── Permit backing is NULL-safe; the lifecycle is closed (OFF-24H-02) ──────
+// 20260906140000_permit_lifecycle_null_safe.sql. A released/NULL permit was
+// client-reachable and the round-6 backing predicate evaluated to NULL on it,
+// so the RPC fell through: 42501 → shot.write_failed (retried forever), or —
+// beside an unrelated live reservation — an ACCEPTED shot, twice.
+
+/** Puts an existing permit into the pre-fix released/NULL state the way only
+ * legacy rows can be in it now: as the owner with the lifecycle guard off.
+ * Restores the authenticated session afterwards. */
+async function forceReleasedNull(tx: Sql, userId: string, permitId: string): Promise<void> {
+  await tx.unsafe(`reset role`);
+  await tx.unsafe(
+    `alter table public.analysis_permits disable trigger analysis_permits_guard_lifecycle`,
+  );
+  await tx.unsafe(
+    `update public.analysis_permits set status = 'released', outcome = null where id = '${permitId}'`,
+  );
+  await tx.unsafe(
+    `alter table public.analysis_permits enable trigger analysis_permits_guard_lifecycle`,
+  );
+  await tx.unsafe(`set local role authenticated`);
+  await tx.unsafe(`set local request.jwt.claim.sub = '${userId}'`);
+}
+
+async function shotCount(tx: Sql, userId: string): Promise<number> {
+  const rows = await tx.unsafe(
+    `select count(*)::int as n from public.shots where user_id = '${userId}'`,
+  );
+  return Number(rows[0].n);
+}
+
+Deno.test({
+  name: "apply_synced_shot: a released/NULL permit is refused with access.permit_not_reserved — alone, beside an unrelated live reservation, and on a second shot — and never backs a row",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL);
+    const user = "00000000-0000-4000-8000-00000000002a";
+    try {
+      await withUserTx(sql, user, async (tx) => {
+        const stale = await reserve(tx, "off24h02-stale");
+        await forceReleasedNull(tx, user, stale);
+
+        // no other permit: the verdict, not shot.write_failed:42501
+        assertEquals(
+          await apply(tx, shotPayload({ analysisPermitId: stale })),
+          "access.permit_not_reserved",
+        );
+        assertEquals(await shotCount(tx, user), 0);
+
+        // an unrelated LIVE reservation must not rescue the named permit
+        const live = await reserve(tx, "off24h02-live");
+        const first = crypto.randomUUID();
+        assertEquals(
+          await apply(tx, shotPayload({ id: first, analysisPermitId: stale })),
+          "access.permit_not_reserved",
+        );
+        assertEquals(
+          await apply(tx, shotPayload({ analysisPermitId: stale })),
+          "access.permit_not_reserved",
+          "second shot on the same released/NULL permit",
+        );
+        assertEquals(await shotCount(tx, user), 0);
+        const permit = await tx.unsafe(
+          `select status, outcome from public.analysis_permits where id = '${stale}'`,
+        );
+        assertEquals(permit[0].status, "released");
+        assertEquals(permit[0].outcome, null);
+
+        // the live reservation still backs ITS OWN shot exactly once
+        assertEquals(await apply(tx, shotPayload({ analysisPermitId: live })), "accepted");
+        assertEquals(
+          await apply(tx, shotPayload({ analysisPermitId: live })),
+          "access.permit_not_reserved",
+          "one permit backs one shot",
+        );
+        assertEquals(await shotCount(tx, user), 1);
+      });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "analysis_permits lifecycle guard: a client UPDATE to released/NULL is refused with 23514 + access.permit_transition_rejected, a legal finalize still lands, and a settled permit is terminal",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL);
+    const user = "00000000-0000-4000-8000-00000000002b";
+    try {
+      await withUserTx(sql, user, async (tx) => {
+        const permitId = await reserve(tx, "off24h02-guard");
+        const forge = async (set: string) => {
+          // savepoint so the refused statement does not abort the outer tx
+          await tx.unsafe(`savepoint forge`);
+          try {
+            await tx.unsafe(`update public.analysis_permits set ${set} where id = '${permitId}'`);
+          } catch (error) {
+            await tx.unsafe(`rollback to savepoint forge`);
+            const pgError = error as { code?: string; hint?: string };
+            assertEquals(pgError.code, "23514", set);
+            assertEquals(pgError.hint, "access.permit_transition_rejected", set);
+            return;
+          }
+          throw new Error(`expected 23514 for: ${set}`);
+        };
+        await forge(`status = 'released', outcome = null`);
+        await forge(`status = 'finalized', outcome = null`);
+        await forge(`status = 'released', outcome = 'bogus'`);
+        const untouched = await tx.unsafe(
+          `select status, outcome from public.analysis_permits where id = '${permitId}'`,
+        );
+        assertEquals(untouched[0].status, "reserved");
+        assertEquals(untouched[0].outcome, null);
+
+        // exactly what POST /v1/analysis-permits/:id/finalize writes
+        await tx.unsafe(
+          `update public.analysis_permits set status = 'finalized', outcome = 'cancelled'
+            where id = '${permitId}' and status = 'reserved'`,
+        );
+        await forge(`status = 'reserved', outcome = null`);
+        await forge(`status = 'released', outcome = 'expired'`);
+        assertEquals(
+          await apply(tx, shotPayload({ analysisPermitId: permitId })),
+          "access.permit_not_reserved",
+        );
+      });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
 // ─── Rank/progress cache vs accepted shots:sync (EDR-3) ─────────────────────
 // These cases drive the REAL edge handler through routesHarness (PostgREST /
 // GoTrue stubbed at fetch level) and therefore run without PICKLE_AUDIT_PG_URL.
@@ -659,5 +792,91 @@ Deno.test(
     assertEquals(await a.json(), { rank: null });
     assertEquals(await b.json(), { rank: null });
     assertEquals(h.callsTo("/rest/v1/player_technique_rating").length, 1);
+  },
+);
+
+// ─── POST /v1/analysis-permits/:id/finalize vs the lifecycle guard ──────────
+// analysis_permits_guard_lifecycle refuses an illegal permit transition with
+// SQLSTATE 23514 + hint access.permit_transition_rejected; PostgREST relays
+// it as a 400 with that body. The edge must answer a 4xx conflict the app
+// treats as a verdict — never a 503 the outbox would retry.
+
+const PERMIT_ID = "eeeeeeee-0001-4eee-8eee-eeeeeeeeeeee";
+
+function finalizeUser(userId: string) {
+  h.reset();
+  h.tables.profiles = [{ id: userId, email: "u@example.com", provider: "google" }];
+  h.tables.analysis_permits = [
+    {
+      id: PERMIT_ID,
+      status: "reserved",
+      outcome: null,
+      created_at: new Date().toISOString(),
+    },
+  ];
+  h.rpcs.access_state = { scored_count: 0, reserved_count: 0, premium: false, premium_until: null };
+  return { token: fakeGoogleIdToken(userId) };
+}
+
+Deno.test(
+  "POST /v1/analysis-permits/:id/finalize: a transition the lifecycle guard refuses (23514 + hint) is a 409 access.permit_transition_rejected, not a 503",
+  async () => {
+    const auth = finalizeUser("eeeeeeee-0002-4eee-8eee-eeeeeeeeeeee");
+    const ip = "203.0.113.71";
+    const res = await withFetchIntercept(
+      async (request) => {
+        if (request.method !== "PATCH" || !request.url.includes("/rest/v1/analysis_permits")) {
+          return null;
+        }
+        return jsonResponse(400, {
+          code: "23514",
+          message:
+            "analysis_permits: illegal permit transition finalized/scored -> finalized/cancelled",
+          details: null,
+          hint: "access.permit_transition_rejected",
+        });
+      },
+      () =>
+        h.handler(
+          userRequest("POST", `/v1/analysis-permits/${PERMIT_ID}/finalize`, {
+            ...auth,
+            ip,
+            body: { outcome: "cancelled", ratingId: null },
+          }),
+        ),
+    );
+    assertEquals(res.status, 409);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    assertEquals(body.error.code, "access.permit_transition_rejected");
+  },
+);
+
+Deno.test(
+  "POST /v1/analysis-permits/:id/finalize: any other PostgREST write error is still the generic retryable 503",
+  async () => {
+    const auth = finalizeUser("eeeeeeee-0003-4eee-8eee-eeeeeeeeeeee");
+    const ip = "203.0.113.72";
+    const res = await withFetchIntercept(
+      async (request) => {
+        if (request.method !== "PATCH" || !request.url.includes("/rest/v1/analysis_permits")) {
+          return null;
+        }
+        return jsonResponse(400, {
+          code: "23514",
+          message: "some other check constraint",
+          details: null,
+          hint: null,
+        });
+      },
+      () =>
+        h.handler(
+          userRequest("POST", `/v1/analysis-permits/${PERMIT_ID}/finalize`, {
+            ...auth,
+            ip,
+            body: { outcome: "cancelled", ratingId: null },
+          }),
+        ),
+    );
+    assertEquals(res.status, 503);
   },
 );

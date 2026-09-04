@@ -1208,6 +1208,14 @@ const RELEASABLE_OUTCOMES = new Set([
   "incorrect_recognition",
 ]);
 
+// analysis_permits_guard_lifecycle (20260906140000) refuses an illegal permit
+// transition with check_violation and this hint; PostgREST relays both.
+const PERMIT_TRANSITION_REJECTED = "access.permit_transition_rejected";
+
+function isPermitTransitionRejected(error: { code?: string; hint?: string | null }): boolean {
+  return error.code === "23514" && error.hint === PERMIT_TRANSITION_REJECTED;
+}
+
 /** POST /v1/analysis-permits/:id/finalize — mirrors apps/mobile/src/data/
  * api.ts:136-147. The client ignores the response body; { permit, access }
  * is returned for parity with services/api. */
@@ -1276,6 +1284,16 @@ async function finalizeAnalysisPermitRoute(
     .select(PERMIT_COLUMNS)
     .maybeSingle();
   if (updated.error) {
+    if (isPermitTransitionRejected(updated.error)) {
+      // The table's lifecycle guard refused the move: the permit is settled
+      // and this request cannot change it — a client-side conflict, not an
+      // outage.
+      return codedError(
+        409,
+        PERMIT_TRANSITION_REJECTED,
+        "Analysis permit is already settled and cannot be finalized again.",
+      );
+    }
     return serviceUnavailable("Rating finalize", updated.error.message);
   }
   if (!updated.data) {

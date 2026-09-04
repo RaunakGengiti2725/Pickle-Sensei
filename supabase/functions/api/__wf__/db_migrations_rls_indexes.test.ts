@@ -21,6 +21,7 @@ const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
 const SCORED_WRITE_GATE = "20260905000000_scored_shot_write_gate.sql";
 const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
 const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
+const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -628,11 +629,14 @@ Deno.test(
     );
 
     // Later definitions must not reintroduce an age refusal in the RPC or
-    // loosen the gate's direct-INSERT rule.
+    // loosen the gate's direct-INSERT rule. From 20260906140000 on the backing
+    // rule lives in permit_backs_sync() (pinned below) — a later RPC either
+    // delegates to it or spells the same rule inline.
     for (const migration of after(chain, LATE_PERMIT_SYNC)) {
       for (const body of functionBodies(stripSqlComments(migration.raw), "apply_synced_shot")) {
         ok(
-          !body.includes("access.permit_expired") && LATE_BACKING_RULE.test(body),
+          !body.includes("access.permit_expired") &&
+            (LATE_BACKING_RULE.test(body) || body.includes("public.permit_backs_sync(")),
           `${migration.file}: apply_synced_shot must keep accepting reserved | released+expired permits at any age`,
         );
       }
@@ -644,6 +648,130 @@ Deno.test(
           /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(body),
           `${migration.file}: enforce_scored_shot_permit must keep the 24h live-permit rule for direct INSERTs`,
         );
+      }
+    }
+  },
+);
+
+// ─── OFF-24H-02: NULL-safe backing, closed permit lifecycle, vouch-only gate ──
+
+/** permit_backs_sync(): the late backing rule wrapped so NULL → false. */
+const NULL_SAFE_BACKING_RULE =
+  /coalesce\(\s*p_status = 'reserved'\s+or \(p_status = 'released' and p_outcome = 'expired'\),\s*false\)/;
+
+Deno.test(
+  "permits: backing is decided by the NULL-safe permit_backs_sync(), the lifecycle is a table invariant, and the sync gate never falls back to an unrelated permit",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_LIFECYCLE);
+    ok(migration, `${PERMIT_LIFECYCLE} must exist in the migration chain`);
+    const raw = stripSqlComments(migration.raw);
+
+    const [rule] = functionBodies(raw, "permit_backs_sync");
+    ok(rule, `${PERMIT_LIFECYCLE} must define public.permit_backs_sync`);
+    ok(
+      NULL_SAFE_BACKING_RULE.test(rule),
+      "permit_backs_sync must be coalesce(reserved | released+expired, false): a NULL outcome is refused",
+    );
+
+    // Every status/outcome decision in the RPC and the gate goes through it;
+    // the 3VL-prone inline comparison is gone from both.
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_LIFECYCLE} must recreate public.apply_synced_shot`);
+    ok(
+      rpc.includes("if not public.permit_backs_sync(v_permit.status, v_permit.outcome) then") &&
+        rpc.includes("return 'access.permit_not_reserved'") &&
+        !rpc.includes("outcome = 'expired'"),
+      "apply_synced_shot must validate the named permit through permit_backs_sync only",
+    );
+    ok(
+      (rpc.match(/and public\.permit_backs_sync\(status, outcome\)/g) ?? []).length === 2,
+      "both permit UPDATEs in apply_synced_shot (free-limit release, finalize) must use the NULL-safe rule",
+    );
+    ok(
+      rpc.includes("get diagnostics v_consumed = row_count") &&
+        rpc.includes("if v_consumed <> 1 then"),
+      "apply_synced_shot must assert the finalize UPDATE consumed exactly the one named permit",
+    );
+    ok(
+      /when sqlstate 'pkp01' then\s+(--[^\n]*\s+)*return 'access\.permit_not_reserved';/.test(
+        rpc,
+      ) && /when sqlstate 'pkp02' then\s+return 'access\.paywall_required';/.test(rpc),
+      "a shots-gate refusal inside the RPC must surface as its contract verdict by SQLSTATE alone, never shot.write_failed:42501",
+    );
+
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${PERMIT_LIFECYCLE} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes("if v_vouched is not null then") &&
+        gate.includes("p.id = v_vouched") &&
+        gate.includes("and public.permit_backs_sync(p.status, p.outcome)") &&
+        !gate.includes("outcome = 'expired'"),
+      "with a vouch the gate must decide on the vouched permit through permit_backs_sync",
+    );
+    ok(
+      !/\)\s*and not exists\s*\(/.test(gate),
+      "the gate must not OR the vouched permit with any other live reservation (no fallback)",
+    );
+    ok(
+      /errcode = 'pkp01',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/.test(gate) &&
+        gate.includes(
+          "errcode = case when v_vouched is not null then 'pkp02' else 'insufficient_privilege' end",
+        ) &&
+        /errcode = 'insufficient_privilege',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/.test(
+          gate,
+        ),
+      "vouched refusals must raise the verdict SQLSTATEs (PKP01 permit / PKP02 allowance); direct-INSERT refusals stay 42501",
+    );
+
+    // The lifecycle guard: every role, INSERT and UPDATE, non-executable by clients.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_lifecycle");
+    ok(guard, `${PERMIT_LIFECYCLE} must define public.guard_analysis_permit_lifecycle`);
+    ok(
+      guard.includes("(new.status = 'reserved') <> (new.outcome is null)") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the guard must pin released ⇒ outcome IS NOT NULL and answer 23514 + the contract hint",
+    );
+    ok(
+      guard.includes("if old.status = 'reserved' then") &&
+        guard.includes("if old.status = 'released' and old.outcome = 'expired'") &&
+        guard.includes("('finalized', 'scored')") &&
+        guard.includes("('released', 'low_confidence')") &&
+        guard.includes("('released', 'free_limit_exceeded')"),
+      "the guard must allow exactly reserved → settled and released/expired → the late-sync outcomes",
+    );
+    ok(
+      migration.statements.includes(
+        "create trigger analysis_permits_guard_lifecycle before insert or update on public.analysis_permits for each row execute function public.guard_analysis_permit_lifecycle()",
+      ),
+      "the guard must be a BEFORE INSERT OR UPDATE row trigger on public.analysis_permits",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke execute on function public.guard_analysis_permit_lifecycle() from public, anon, authenticated",
+      ) &&
+        migration.statements.includes(
+          "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+        ),
+      "trigger functions must stay non-executable by clients",
+    );
+
+    // Later migrations must keep the guard and never spell the backing rule
+    // inline again.
+    for (const later of after(chain, PERMIT_LIFECYCLE)) {
+      ok(
+        !dropsTriggerWithoutRecreating(later, "analysis_permits_guard_lifecycle"),
+        `${later.file} drops analysis_permits_guard_lifecycle without recreating it`,
+      );
+      const body = stripSqlComments(later.raw);
+      for (const fn of ["apply_synced_shot", "enforce_scored_shot_permit"]) {
+        for (const def of functionBodies(body, fn)) {
+          ok(
+            def.includes("public.permit_backs_sync(") && !def.includes("outcome = 'expired'"),
+            `${later.file}: ${fn} must decide permit backing through permit_backs_sync()`,
+          );
+        }
       }
     }
   },

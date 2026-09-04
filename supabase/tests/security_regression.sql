@@ -2917,11 +2917,15 @@ begin
       'scoring-1', 'config-1'
     );
     raise exception 'P5: the gate must not fall back to an unrelated live reservation when the vouched permit is unacceptable';
-  exception when insufficient_privilege then
-    get stacked diagnostics v_hint = pg_exception_hint;
-    if v_hint <> 'access.permit_not_reserved' then
-      raise exception 'P5: the vouched-permit refusal must carry the contract verdict (got hint %)', v_hint;
-    end if;
+  exception
+    when sqlstate 'PKP01' then
+      -- the verdict SQLSTATE the RPC maps to access.permit_not_reserved
+      get stacked diagnostics v_hint = pg_exception_hint;
+      if v_hint <> 'access.permit_not_reserved' then
+        raise exception 'P5: the vouched-permit refusal must carry the contract verdict (got hint %)', v_hint;
+      end if;
+    when insufficient_privilege then
+      raise exception 'P5: a vouched-permit refusal must raise the verdict SQLSTATE PKP01, not 42501 (the RPC would return shot.write_failed:42501)';
   end;
   perform set_config('pickle.sync_permit_id', '', true);
 

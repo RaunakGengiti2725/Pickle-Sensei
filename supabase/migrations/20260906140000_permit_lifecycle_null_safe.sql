@@ -56,10 +56,13 @@
 --      vouch) uses the unchanged live-permit rule (reserved, < 24h). The RPC
 --      also asserts its finalize UPDATE consumed exactly one row.
 --   4. A gate refusal inside the RPC is a contract verdict, never a grant
---      error: the gate raises 42501 with hint = the verdict code, and the
---      RPC's handler returns that verdict (access.permit_not_reserved /
---      access.paywall_required). Any other 42501 stays shot.write_failed:42501
---      (a real grant regression must keep the rating on the device).
+--      error: when the RPC vouches, the gate raises the verdict-specific
+--      SQLSTATEs PKP01 (access.permit_not_reserved) / PKP02
+--      (access.paywall_required) and the RPC's handler returns the verdict by
+--      SQLSTATE alone (no message/hint text is ever read — error-hygiene pin).
+--      A direct client INSERT (no vouch) keeps 42501 → PostgREST 403. Any
+--      other 42501 stays shot.write_failed:42501 (a real grant regression must
+--      keep the rating on the device).
 --
 -- Round-6 behaviour is preserved: reserved at any age and swept
 -- released/expired permits back their shot; the free-limit backstop still
@@ -174,7 +177,8 @@ create trigger analysis_permits_guard_lifecycle
 -- ---------------------------------------------------------------------------
 -- 3. The shots gate: the vouched permit alone decides for the sync RPC; the
 --    unchanged live-permit rule applies only to direct client INSERTs.
---    Refusals carry the contract verdict in the hint (layer 4).
+--    Refusals inside a vouched (RPC) insert raise the verdict SQLSTATEs
+--    PKP01/PKP02; direct INSERTs keep 42501 (layer 4).
 -- ---------------------------------------------------------------------------
 create or replace function public.enforce_scored_shot_permit()
 returns trigger
@@ -211,7 +215,7 @@ begin
         and public.permit_backs_sync(p.status, p.outcome)
     ) then
       raise exception using
-        errcode = 'insufficient_privilege',
+        errcode = 'PKP01',
         message = 'shots: the permit named for this synced shot is not acceptable backing',
         hint = 'access.permit_not_reserved';
     end if;
@@ -237,7 +241,7 @@ begin
 
   if not v_premium and public.lifetime_scored_count() >= 2 then
     raise exception using
-      errcode = 'insufficient_privilege',
+      errcode = case when v_vouched is not null then 'PKP02' else 'insufficient_privilege' end,
       message = 'shots: the lifetime free-rating limit is spent (access.paywall_required)',
       hint = 'access.paywall_required';
   end if;
@@ -247,7 +251,7 @@ end;
 $$;
 
 comment on function public.enforce_scored_shot_permit() is
-  'BEFORE INSERT gate on public.shots: a scored row written from a client session must be backed by a live reserved permit (direct INSERT, < 24h) — or, when apply_synced_shot() vouches through the transaction-local pickle.sync_permit_id setting, by THAT permit alone (permit_backs_sync: reserved at any age, or released/expired; no fallback to other reservations) — and fit the lifetime free-rating allowance (premium bypasses the allowance, never the permit). Refusals raise 42501 with the contract verdict in the hint so the RPC returns a verdict, not a grant error. Runs under the same per-user advisory lock as reserve_analysis_permit()/apply_synced_shot().';
+  'BEFORE INSERT gate on public.shots: a scored row written from a client session must be backed by a live reserved permit (direct INSERT, < 24h) — or, when apply_synced_shot() vouches through the transaction-local pickle.sync_permit_id setting, by THAT permit alone (permit_backs_sync: reserved at any age, or released/expired; no fallback to other reservations) — and fit the lifetime free-rating allowance (premium bypasses the allowance, never the permit). A refusal inside a vouched insert raises SQLSTATE PKP01 (permit) / PKP02 (allowance) so apply_synced_shot() returns the contract verdict, not a grant error; a direct INSERT refusal stays 42501 (PostgREST 403). Runs under the same per-user advisory lock as reserve_analysis_permit()/apply_synced_shot().';
 
 revoke execute on function public.enforce_scored_shot_permit()
   from public, anon, authenticated;
@@ -271,7 +275,6 @@ declare
   v_permit public.analysis_permits%rowtype;
   v_premium boolean;
   v_consumed integer;
-  v_hint text;
   entry jsonb;
 begin
   if v_uid is null then
@@ -456,16 +459,13 @@ begin
         return 'accepted';
       end if;
       return 'shot.id_conflict';
-    when insufficient_privilege then
-      -- The shots gate refused THIS permit or the allowance: a contract
-      -- verdict the outbox settles, never a transient grant error. A 42501
-      -- from anywhere else (a real grant regression) stays retryable so the
-      -- rating remains on the device.
-      get stacked diagnostics v_hint = pg_exception_hint;
-      if v_hint in ('access.permit_not_reserved', 'access.paywall_required') then
-        return v_hint;
-      end if;
-      return 'shot.write_failed:' || sqlstate;
+    when sqlstate 'PKP01' then
+      -- The shots gate refused THIS permit under the vouch: a contract
+      -- verdict the outbox settles, never a transient grant error. (Any real
+      -- 42501 falls through to write_failed and keeps the rating on-device.)
+      return 'access.permit_not_reserved';
+    when sqlstate 'PKP02' then
+      return 'access.paywall_required';
     when others then
       -- SQLSTATE ONLY: sqlerrm echoes the client's input for cast failures
       -- and would carry it into the edge function's logs. The five-char class
