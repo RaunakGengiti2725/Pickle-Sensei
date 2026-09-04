@@ -700,7 +700,9 @@ Deno.test("xc S2c: a TRANSIENT GoTrue refresh failure (429 / network error / 5xx
         ["gotrue_network_failure", "gotrue_502"].every(
           (name) =>
             observed[name] !== 503 ||
-            (!/bad gateway|fetch|ECONN|TypeError|stack/i.test(observedBodies[name]) &&
+            (!/bad gateway|fetch|ECONN|TypeError|stack/i.test(
+              observedBodies[name],
+            ) &&
               /temporarily unavailable/i.test(observedBodies[name])),
         ),
         `→ ${JSON.stringify(observedBodies)}`,

@@ -186,6 +186,7 @@ describe('buildEvaluationTrial', () => {
         kind: 'quality_blocked',
         reason: 'unsupported envelope',
         envelope: { overall: 'UNSUPPORTED', dimensions: [] } as never,
+        poseQualityReasons: [],
       }),
     );
     expect(blocked!.outcomeKind).toBe('quality_blocked');

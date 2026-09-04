@@ -34,7 +34,7 @@ import {
   GOOGLE_WEB_CLIENT_ID,
 } from '../config/authConfig';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
-import { getDb } from '../data/db';
+import { getDb, type LocalDb } from '../data/db';
 import { getKv, purgeOwnerData, setKv } from '../data/repository';
 import {
   GUEST_DATA_OWNER,
@@ -112,6 +112,13 @@ interface AuthState {
   session: AuthSession | null;
   busy: boolean;
   error: AuthError | null;
+  /**
+   * True when the most recent hydrate() could not open or read local SQLite
+   * (the launch flags it keeps there were unreadable). Reported BESIDE the
+   * sign-in decision, never instead of it: the durable session comes from
+   * the Keychain and does not depend on the local database.
+   */
+  localDataUnavailable: boolean;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
   hydrate: () => Promise<void>;
@@ -305,6 +312,46 @@ function adoptRotatedTokens(
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
+
+/**
+ * The launch flags hydrate() reads from SQLite (guest mode, the legacy
+ * Google silent-restore provider, the pre-vault session blob to blank).
+ * Every statement is issued against the database individually: a failure
+ * only hides that one flag and marks local data unavailable — it never
+ * decides the sign-in state, which the Keychain vault owns.
+ */
+class LaunchFlags {
+  private db: LocalDb | null = null;
+  unavailable = false;
+
+  open(): void {
+    try {
+      this.db = getDb();
+    } catch {
+      this.db = null;
+      this.unavailable = true;
+    }
+  }
+
+  async read(key: string): Promise<string | null> {
+    if (!this.db) return null;
+    try {
+      return await getKv(this.db, key);
+    } catch {
+      this.unavailable = true;
+      return null;
+    }
+  }
+
+  async write(key: string, value: string): Promise<void> {
+    if (!this.db) return;
+    try {
+      await setKv(this.db, key, value);
+    } catch {
+      this.unavailable = true;
+    }
+  }
+}
 
 function keepSessionAlive(
   session: AuthSession,
@@ -543,65 +590,84 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   busy: false,
   error: null,
+  localDataUnavailable: false,
   deletionCleanup: null,
 
   hydrate: async () => {
     clearSyncedRuntime();
-    try {
-      const db = getDb();
-      // Earlier builds wrote provider subjects to SQLite. Blank that legacy
-      // value during migration instead of hydrating it into a trusted session.
-      if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
-        await setKv(db, LEGACY_SESSION_KV_KEY, '');
+    const flags = new LaunchFlags();
+    flags.open();
+    // Earlier builds wrote provider subjects to SQLite. Blank that legacy
+    // value during migration instead of hydrating it into a trusted session.
+    if (await flags.read(LEGACY_SESSION_KV_KEY)) {
+      await flags.write(LEGACY_SESSION_KV_KEY, '');
+    }
+    if ((await flags.read(LOCAL_MODE_KV_KEY)) === LOCAL_GUEST_VALUE) {
+      setActiveDataOwner(GUEST_DATA_OWNER);
+      set({
+        session: localGuestSession(),
+        hydrated: true,
+        localDataUnavailable: flags.unavailable,
+      });
+      return;
+    }
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    // The durable session: whoever signed in on this device last stays
+    // signed in across relaunches, backgrounding and reboots, for any
+    // provider, until they sign out or the server refuses the refresh
+    // token. No provider SDK and no local database is consulted for this.
+    const persisted = await loadPersistedSession();
+    if (persisted) {
+      let outcome: RestoreOutcome | 'unusable';
+      try {
+        outcome = await restorePersistedSession(persisted);
+      } catch {
+        // The record parsed but cannot scope local data (its account id is
+        // not a canonical UUID): nothing to sign in as.
+        outcome = 'unusable';
       }
-      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      if (raw === LOCAL_GUEST_VALUE) {
-        setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
+      if (outcome === 'online' || outcome === 'offline') {
+        set({ hydrated: true, localDataUnavailable: flags.unavailable });
         return;
       }
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      // The durable session: whoever signed in on this device last stays
-      // signed in across relaunches, backgrounding and reboots, for any
-      // provider, until they sign out or the server refuses the refresh
-      // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
-      if (persisted) {
-        const outcome = await restorePersistedSession(persisted);
-        if (outcome !== 'revoked') {
-          set({ hydrated: true });
+      if (outcome === 'unusable') {
+        clearSyncedRuntime();
+        setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+        set({ session: null });
+      }
+    }
+    // Legacy fallback for devices that signed in before sessions were
+    // persisted: silent restore is Google-only (see
+    // restoreGoogleSessionSilently for why Apple cannot have one) and only
+    // worth attempting when the web client id needed for a
+    // backend-verifiable token is configured. A success bootstraps a new
+    // session, which IS persisted — so this path runs at most once.
+    const lastProvider = await flags.read(LAST_PROVIDER_KV_KEY);
+    if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
+      try {
+        const session =
+          await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
+        if (session) {
+          set({
+            session,
+            hydrated: true,
+            localDataUnavailable: flags.unavailable,
+          });
           return;
         }
+      } catch {
+        // Opportunistic restore only: offline bootstrap or SDK failures
+        // land signed-out with no surfaced error. The last-provider flag is
+        // kept so the next launch retries silently.
+        clearSyncedRuntime();
+        setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       }
-      // Legacy fallback for devices that signed in before sessions were
-      // persisted: silent restore is Google-only (see
-      // restoreGoogleSessionSilently for why Apple cannot have one) and only
-      // worth attempting when the web client id needed for a
-      // backend-verifiable token is configured. A success bootstraps a new
-      // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
-      if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
-        try {
-          const session =
-            await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
-          if (session) {
-            set({ session, hydrated: true });
-            return;
-          }
-        } catch {
-          // Opportunistic restore only: offline bootstrap or SDK failures
-          // land signed-out with no surfaced error. The last-provider flag is
-          // kept so the next launch retries silently.
-          clearSyncedRuntime();
-          setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-        }
-      }
-      set({ session: null, hydrated: true });
-    } catch {
-      clearSyncedRuntime();
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ session: null, hydrated: true });
     }
+    set({
+      session: null,
+      hydrated: true,
+      localDataUnavailable: flags.unavailable,
+    });
   },
 
   signInWithApple: async () => {

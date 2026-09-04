@@ -77,7 +77,11 @@
 // TypeScript is Deno-targeted (not part of the pnpm workspace typecheck).
 // Verify with `supabase functions serve api` + a real Google ID token.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  createClient,
+  isAuthApiError,
+  isAuthSessionMissingError,
+} from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
@@ -545,26 +549,91 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   };
 }
 
+/** GoTrue statuses that REFUSE the refresh token itself (invalid_grant /
+ * refresh_token_not_found / refresh_token_already_used / session_not_found
+ * on 400, bad_jwt on 401, user_banned on 403). Nothing else may be answered
+ * with the 401 the app treats as "revoked → sign out". */
+const REFRESH_REFUSAL_STATUSES = new Set([400, 401, 403]);
+
+/** Pacing hint when GoTrue rate-limits the refresh without a Retry-After of
+ * its own; the app's session keeper backs off on any 429 regardless. */
+const REFRESH_RATE_LIMIT_FALLBACK_RETRY_AFTER = "30";
+
+const upstreamRateLimited = (retryAfter: string | null): Response =>
+  new Response(
+    JSON.stringify({
+      error: {
+        code: "rate_limited",
+        message: "Too many requests. Please slow down and try again shortly.",
+      },
+    }),
+    {
+      status: 429,
+      headers: {
+        ...JSON_SECURITY_HEADERS,
+        "Retry-After": retryAfter ?? REFRESH_RATE_LIMIT_FALLBACK_RETRY_AFTER,
+      },
+    },
+  );
+
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
- * session. 401 means the refresh token was revoked or already rotated away:
- * the app must sign in again. Anything else is transient for the app. */
+ * session. 401 means GoTrue REFUSED the refresh token (revoked, already
+ * rotated away, session gone, user banned): the app must sign in again.
+ * Everything else is transient for the app and must never look like a
+ * refusal: a GoTrue rate limit is relayed as 429 with its Retry-After, and a
+ * GoTrue 5xx, a network failure between this edge and GoTrue, or a 2xx that
+ * carries no usable session is a generic 503. */
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
   if (typeof refreshToken !== "string" || !refreshToken.trim()) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const refreshed = await anonAuthClient().auth.refreshSession({
+  // supabase-js absorbs transient edge↔GoTrue network errors with its own
+  // retries and folds the upstream status into the error it returns. The
+  // wrapped fetch keeps GoTrue's LAST answer (status + Retry-After) so the
+  // classification below is made on what GoTrue actually said.
+  const upstream: { last: { status: number; retryAfter: string | null } | null } = {
+    last: null,
+  };
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: async (input, init) => {
+        const response = await fetch(input, init);
+        upstream.last = {
+          status: response.status,
+          retryAfter: response.headers.get("Retry-After"),
+        };
+        return response;
+      },
+    },
+  });
+  const refreshed = await client.auth.refreshSession({
     refresh_token: refreshToken.trim(),
   });
-  if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
-    }
+  if (!refreshed.error && refreshed.data.session) {
+    return json(200, { session: sessionView(refreshed.data.session) });
+  }
+  const error = refreshed.error;
+  const answered = upstream.last;
+  if (answered?.status === 429) {
+    return upstreamRateLimited(answered.retryAfter);
+  }
+  if (
+    error &&
+    answered !== null &&
+    REFRESH_REFUSAL_STATUSES.has(answered.status) &&
+    (isAuthApiError(error) || isAuthSessionMissingError(error))
+  ) {
     return errorJson(401, "The session could not be refreshed. Sign in again.");
   }
-  return json(200, { session: sessionView(refreshed.data.session) });
+  return serviceUnavailable(
+    "Session refresh",
+    error
+      ? `${error.name} (upstream ${answered?.status ?? "unreachable"}): ${error.message}`
+      : `upstream ${answered?.status ?? "unreachable"} carried no session`,
+  );
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:

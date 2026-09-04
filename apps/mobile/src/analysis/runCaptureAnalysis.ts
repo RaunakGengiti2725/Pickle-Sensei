@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  evaluatePreAnalysisGate,
   type CaptureAnalysisRecord,
 } from '@pickle/analysis-pipeline';
 import {
@@ -9,6 +10,7 @@ import {
   sha256Hex,
   unavailable,
 } from '@pickle/swing-domain';
+import { evaluateCaptureQuality } from '@pickle/vision-geometry';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
@@ -37,6 +39,12 @@ import { stabilitySlo } from './stabilityTelemetry';
  * - Analysis runs only on the real recorded pose sequence (hash-addressed
  *   sidecar written at capture time, or by the explicit native extraction
  *   pass for imported videos). No sequence → no analysis.
+ * - The pose-quality gate (`evaluateCaptureQuality` →
+ *   `evaluatePreAnalysisGate`) is decided on the parsed sequence BEFORE
+ *   `analyzeCapture`: a stream that was not measured well enough (tracking
+ *   dropout through the stroke, player too small, low pose confidence, body
+ *   not fully visible, torso lost) is withheld as `quality_blocked`, never
+ *   scored and never presented as a normal result.
  * - A server-reserved analysis permit is consumed exactly as the entitlement
  *   system requires; abstentions release the permit instead of burning it.
  * - Every run appends an immutable AnalysisRecord; scored runs additionally
@@ -70,13 +78,18 @@ export type CaptureAnalysisOutcome =
     }
   | {
       /**
-       * The capture envelope is UNSUPPORTED: analysis is honestly withheld
-       * BEFORE inference — poor input never becomes a confident score. No
-       * permit is reserved and nothing is recorded as an analysis.
+       * Analysis is honestly withheld BEFORE inference — poor input never
+       * becomes a confident score. Either the capture envelope is
+       * UNSUPPORTED (no permit is reserved) or the recorded pose sequence
+       * fails the pose-quality gate (`poseQualityReasons` non-empty; the
+       * reserved permit is released as `unsupported`). Nothing is recorded
+       * as an analysis in either case.
        */
       kind: 'quality_blocked';
       reason: string;
-      envelope: EnvelopeVerdict;
+      envelope: EnvelopeVerdict | null;
+      /** Machine-readable pose-quality gate reasons; empty for envelope blocks. */
+      poseQualityReasons: string[];
     };
 
 export interface RunCaptureAnalysisRequest {
@@ -194,6 +207,7 @@ async function runCaptureAnalysisCore(
         `quality is outside the supported envelope (${blocking}). ` +
         'Nothing was rated.',
       envelope,
+      poseQualityReasons: [],
     };
   }
   // ── Recorded-pose gate: analysis runs ONLY on a real recorded sequence ──
@@ -247,6 +261,14 @@ async function runCaptureAnalysisCore(
     };
   }
 
+  // ── Pose-quality gate: decided on the recorded sequence, before scoring ──
+  const poseQuality = evaluateCaptureQuality(parsed.value);
+  const gate = evaluatePreAnalysisGate({
+    frame: null,
+    pose: parsed.value,
+    poseQuality,
+  });
+
   const fusion = createFusionProviders(request.declaredStroke);
   if (fusion.kind === 'unavailable') {
     return { kind: 'unavailable', reason: fusion.reason };
@@ -277,6 +299,23 @@ async function runCaptureAnalysisCore(
         ? error.message
         : 'The rating service could not be reached. Your capture is saved and can be scored later.';
     return { kind: 'unavailable', reason: message };
+  }
+
+  if (!gate.analyzable) {
+    // Unmeasurable footage is not a rating: hand the reservation back so
+    // the allowance is not spent, and record nothing as an analysis.
+    await permits.release(permitId, 'unsupported').catch(() => {
+      // The permit expires server-side; a lost release is not a lost rating.
+    });
+    return {
+      kind: 'quality_blocked',
+      reason:
+        'This capture cannot be analyzed honestly — the player was not ' +
+        'tracked well enough through the stroke ' +
+        `(${gate.reasons.join(', ')}). Nothing was rated.`,
+      envelope,
+      poseQualityReasons: gate.reasons,
+    };
   }
 
   // Imported clips carry no measured trigger: the analysis window is

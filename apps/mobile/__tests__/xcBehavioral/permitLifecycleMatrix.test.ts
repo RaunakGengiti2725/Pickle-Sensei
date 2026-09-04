@@ -87,11 +87,7 @@ function fixture(
   const generated = generateSwingSequence({ handed });
   const { window } = generated;
   const sequence = degrade
-    ? dropFramesThroughContact(
-        generated.sequence,
-        window,
-        degrade.dropoutGapMs,
-      )
+    ? dropFramesThroughContact(generated.sequence, window, degrade.dropoutGapMs)
     : generated.sequence;
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {

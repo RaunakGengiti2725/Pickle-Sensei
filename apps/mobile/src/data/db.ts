@@ -91,8 +91,13 @@ const LOCAL_MIGRATIONS: string[] = [
      ON local_analysis_record (owner_key, capture_id, created_at DESC)`,
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
-  // into history, scores, trends, session summaries, or sync.
-  `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_extract(payload, '$.source') <> 'real'`,
+  // into history, scores, trends, session summaries, or sync. A payload that
+  // is not JSON is not this sweep's to judge (json_extract would raise
+  // `malformed JSON` and fail the whole open); it is left for the outbox.
+  `DELETE FROM outbox
+   WHERE kind = 'shot.sync'
+     AND json_valid(payload)
+     AND json_extract(payload, '$.source') <> 'real'`,
   `DELETE FROM local_shot WHERE source <> 'real'`,
   `DELETE FROM local_session
    WHERE id NOT IN (SELECT DISTINCT session_id FROM local_shot WHERE session_id IS NOT NULL)

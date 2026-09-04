@@ -546,7 +546,6 @@ type DeviationId = keyof typeof KNOWN_DEVIATIONS;
 function classifyDeviation(
   scenario: AuthScenario,
   invariant: string,
-  exp: ReturnType<typeof expectedProfile>,
 ): DeviationId | null {
   if (
     invariant === 'unusableRecordDiscarded' &&
@@ -756,7 +755,7 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
   const knownDeviations: string[] = [];
   const failed: string[] = [];
   for (const name of allFailed) {
-    const deviation = classifyDeviation(scenario, name, exp);
+    const deviation = classifyDeviation(scenario, name);
     if (deviation) knownDeviations.push(`${deviation}:${name}`);
     else failed.push(name);
   }
