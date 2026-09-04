@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability, type FrameStats } from "@pickle/vision-geometry";
 import { preAnalysisGate } from "@pickle/analysis-pipeline";
-import { extractFrameStats, extractFrameStatsAsync } from "../../src/frameStats.js";
+import {
+  FrameStatsError,
+  extractFrameStats,
+  extractFrameStatsAsync,
+} from "../../src/frameStats.js";
 
 /**
  * Adversarial pass 3 (tester #4) — S6: the OOD/frame gate on a single-frame
@@ -163,7 +167,7 @@ describe("S6 — single-frame video must abstain", () => {
     }
   });
 
-  it("with ffmpeg/ffprobe absent from PATH the gate abstains (never 'analyzable')", () => {
+  it("with ffmpeg/ffprobe absent from PATH extraction fails as toolchain_unavailable; the gate never sees a verdict", async () => {
     // Symlink farm mirroring PATH minus ffmpeg/ffprobe.
     const farm = join(dir, "path-without-ffmpeg");
     mkdirSync(farm);
@@ -196,18 +200,39 @@ describe("S6 — single-frame video must abstain", () => {
 
     const savedPath = process.env["PATH"];
     process.env["PATH"] = farm;
+    let sync: unknown = null;
+    let async: unknown = null;
     try {
-      const stats = extractFrameStats(realClip);
-      const { frame, gateOk, failure } = gate(stats);
-      record("no-ffmpeg-in-path", { stats, frame, gateOk, failure });
-      expect(stats.frameCount).toBe(0);
-      expect(frame.analyzable).toBe(false);
-      expect(gateOk).toBe(false);
-      // The abstention must be typed as a media/decode problem, not a
-      // "single frame clip" misdiagnosis of a perfectly good 60-frame clip.
-      expect(frame.reasons).toContain("undecodable_media");
+      try {
+        extractFrameStats(realClip);
+      } catch (error) {
+        sync = error;
+      }
+      async = await extractFrameStatsAsync(realClip).then(
+        () => null,
+        (error: unknown) => error,
+      );
     } finally {
       process.env["PATH"] = savedPath;
     }
+    record("no-ffmpeg-in-path", { sync: String(sync), async: String(async) });
+    // A perfectly good 60-frame clip with no decoder is an infrastructure
+    // failure: the extractor throws instead of handing the gate a
+    // {frameCount:0, decode:{errorCount:1}} that reads as corrupt media.
+    for (const error of [sync, async]) {
+      expect(error).toBeInstanceOf(FrameStatsError);
+      expect(error).toMatchObject({
+        kind: "toolchain_unavailable",
+        tool: "ffmpeg",
+        videoPath: realClip,
+      });
+    }
+    expect((sync as FrameStatsError).message).toBe((async as FrameStatsError).message);
+    // Control: the same clip with the toolchain restored decodes cleanly —
+    // 60 frames, zero decode errors — so it is never undecodable media.
+    const stats = extractFrameStats(realClip);
+    expect(stats.frameCount).toBe(60);
+    expect(stats.decode?.errorCount).toBe(0);
+    expect(gate(stats).frame.reasons).not.toContain("undecodable_media");
   });
 });

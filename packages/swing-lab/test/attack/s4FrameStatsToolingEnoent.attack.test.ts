@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { extractFrameStats, extractFrameStatsAsync } from "../../src/frameStats.js";
+import {
+  FrameStatsError,
+  extractFrameStats,
+  extractFrameStatsAsync,
+} from "../../src/frameStats.js";
 
 /**
  * ADVERSARIAL S4 — ffmpeg missing (ENOENT) must not masquerade as a decode
@@ -108,9 +112,20 @@ describe("ADVERSARIAL S4: extractFrameStats with ffmpeg ENOENT", () => {
     expect(namesToolingFailure(stats)).toBe(true);
   });
 
-  it("EVIDENCE: today's shape under ENOENT is {frameCount:0, decode:{errorCount:1}} — identical to a corrupt file", () => {
+  it("EVIDENCE: ENOENT is a typed toolchain failure while a corrupt file is still a media verdict", async () => {
+    // On 4d812e1a both collapsed to {frameCount:0, decode:{errorCount:1}} →
+    // `undecodable_media`; the healthy clip must now never reach the gate.
     process.env.PATH = "";
-    const enoent = extractFrameStats(healthyClip);
+    let enoentSync: unknown = null;
+    try {
+      extractFrameStats(healthyClip);
+    } catch (error) {
+      enoentSync = error;
+    }
+    const enoentAsync = await extractFrameStatsAsync(healthyClip).then(
+      () => null,
+      (error: unknown) => error,
+    );
     process.env.PATH = originalPath;
 
     // A genuinely corrupt "video": 64 KiB of deterministic garbage bytes.
@@ -123,18 +138,34 @@ describe("ADVERSARIAL S4: extractFrameStats with ffmpeg ENOENT", () => {
     }
     writeFileSync(corrupt, bytes);
     const corruptStats = extractFrameStats(corrupt);
-
-    const enoentReport = evaluateFrameAnalyzability(enoent);
     const corruptReport = evaluateFrameAnalyzability(corruptStats);
     writeFileSync(
       join(dir, "enoent-vs-corrupt.json"),
-      JSON.stringify({ enoent, enoentReport, corruptStats, corruptReport }, null, 2),
+      JSON.stringify(
+        {
+          enoentSync: String(enoentSync),
+          enoentAsync: String(enoentAsync),
+          corruptStats,
+          corruptReport,
+        },
+        null,
+        2,
+      ),
     );
-    // This assertion documents the collision; it is expected to FAIL on
-    // 4d812e1a (both verdicts are the same `undecodable_media`).
-    expect({ frameCount: enoent.frameCount, reasons: enoentReport.reasons }).not.toEqual({
-      frameCount: corruptStats.frameCount,
-      reasons: corruptReport.reasons,
-    });
+
+    for (const enoent of [enoentSync, enoentAsync]) {
+      expect(enoent).toBeInstanceOf(FrameStatsError);
+      expect(enoent).toMatchObject({
+        kind: "toolchain_unavailable",
+        tool: "ffmpeg",
+        videoPath: healthyClip,
+      });
+      expect(namesToolingFailure(String(enoent))).toBe(true);
+    }
+    expect((enoentSync as FrameStatsError).message).toBe((enoentAsync as FrameStatsError).message);
+    // The corrupt file is real media that ffmpeg ran on and rejected.
+    expect(corruptStats.frameCount).toBe(0);
+    expect(corruptStats.decode?.errorCount).toBeGreaterThan(0);
+    expect(corruptReport.reasons).toContain("undecodable_media");
   });
 });

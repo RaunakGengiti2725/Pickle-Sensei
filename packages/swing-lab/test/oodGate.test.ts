@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
 import { preAnalysisGate } from "@pickle/analysis-pipeline";
-import { extractFrameStats } from "../src/frameStats.js";
+import { FrameStatsError, extractFrameStats } from "../src/frameStats.js";
 
 /**
  * OOD gate against REAL negative fixtures constructed locally with ffmpeg.
@@ -99,6 +99,22 @@ describe("OOD gate on ffmpeg-constructed negatives", () => {
     if (result.ok) return;
     expect(result.failure.kind).toBe("corrupted_media");
     expect(result.failure.code).toMatch(/^capture\.not_analyzable\./);
+  });
+
+  it("never reaches the gate for a nonexistent input: extraction fails as input_missing", () => {
+    const missing = join(dir, "never-written.mp4");
+    expect(existsSync(missing)).toBe(false);
+    // On 4d812e1a this produced {frameCount:0, decode:{errorCount:1}} and the
+    // gate scored a file that was never there as corrupted_media.
+    expect(() => extractFrameStats(missing)).toThrow(
+      expect.objectContaining({
+        name: "FrameStatsError",
+        kind: "input_missing",
+        tool: null,
+        videoPath: missing,
+      }),
+    );
+    expect(() => extractFrameStats(missing)).toThrow(FrameStatsError);
   });
 
   it("passes the real committed bundle clip (positive control)", () => {

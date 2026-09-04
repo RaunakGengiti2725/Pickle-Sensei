@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability, type FrameStats } from "@pickle/vision-geometry";
-import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
+import { FrameStatsError, extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
 
 /**
  * Adversarial pass #2, scenarios S6 + S7 (attack branch devin/attack-pkg-swing-lab-2).
@@ -347,10 +347,23 @@ describe.skipIf(!ffmpegAvailable)("attack2 S7: clip truncated mid-GOP with head 
 });
 
 describe.skipIf(!ffmpegAvailable)("attack2 extras: hostile paths and unreadable inputs", () => {
-  it("HELD: missing file / empty file / 4 KiB of zeros → undecodable_media, never analyzable", async () => {
+  it("HELD: missing file → typed input_missing failure (sync and async agree), not a media verdict", async () => {
     const missing = join(dir, "does-not-exist.mp4");
     expect(existsSync(missing)).toBe(false);
-    for (const path of [missing, join(dir, "empty.mp4"), join(dir, "zeros.mp4")]) {
+    const expected = {
+      name: "FrameStatsError",
+      kind: "input_missing",
+      tool: null,
+      videoPath: missing,
+    };
+    expect(() => extractFrameStats(missing)).toThrow(FrameStatsError);
+    expect(() => extractFrameStats(missing)).toThrow(expect.objectContaining(expected));
+    await expect(extractFrameStatsAsync(missing)).rejects.toBeInstanceOf(FrameStatsError);
+    await expect(extractFrameStatsAsync(missing)).rejects.toMatchObject(expected);
+  });
+
+  it("HELD: empty file / 4 KiB of zeros → undecodable_media, never analyzable", async () => {
+    for (const path of [join(dir, "empty.mp4"), join(dir, "zeros.mp4")]) {
       if (path.endsWith("empty.mp4")) writeFileSync(path, "");
       if (path.endsWith("zeros.mp4")) writeFileSync(path, Buffer.alloc(4096));
       const stats = await extractFrameStatsAsync(path);
@@ -388,10 +401,12 @@ describe.skipIf(!ffmpegAvailable)("attack2 extras: hostile paths and unreadable 
     expect(record("unicode-path", stats).analyzable).toBe(true);
   });
 
-  it("HELD: a path that starts with '-' is not parsed as an ffmpeg option", () => {
-    // execFile passes it as the value after `-i`, so ffmpeg treats it as a filename.
-    const stats = extractFrameStats("-v");
-    expect(stats.frameCount).toBe(0);
-    expect(record("dash-path", stats).analyzable).toBe(false);
+  it("HELD: a path that starts with '-' is treated as a filename, never as an ffmpeg option", () => {
+    // The existence check runs on the literal path, so "-v" (no such file in
+    // cwd) is an input_missing failure rather than a parsed ffmpeg flag.
+    expect(existsSync("-v")).toBe(false);
+    expect(() => extractFrameStats("-v")).toThrow(
+      expect.objectContaining({ name: "FrameStatsError", kind: "input_missing", videoPath: "-v" }),
+    );
   });
 });

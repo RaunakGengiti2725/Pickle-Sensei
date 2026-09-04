@@ -1,4 +1,6 @@
 import { execFile, spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import type { FrameStats } from "@pickle/vision-geometry";
 
 /**
@@ -6,7 +8,79 @@ import type { FrameStats } from "@pickle/vision-geometry";
  * once with ffmpeg to a small grayscale raster and measures inter-frame
  * change, spatial texture, and letterbox bars. Deterministic over the same
  * file + ffmpeg build; feeds vision-geometry's evaluateFrameAnalyzability.
+ *
+ * A FrameStats value is always a statement about the media: it exists only
+ * when the input file was found and ffmpeg/ffprobe actually ran on it. When
+ * the host cannot run the toolchain or the path does not exist, both
+ * extractors throw {@link FrameStatsError} instead, so an infrastructure
+ * failure can never be scored as `undecodable_media`.
  */
+
+export type FrameStatsTool = "ffmpeg" | "ffprobe";
+
+export type FrameStatsFailureKind =
+  /** ffmpeg/ffprobe could not be spawned (ENOENT, EACCES, ...). */
+  | "toolchain_unavailable"
+  /** The input path does not exist. */
+  | "input_missing";
+
+export class FrameStatsError extends Error {
+  constructor(
+    readonly kind: FrameStatsFailureKind,
+    readonly videoPath: string,
+    /** The binary that could not be spawned; null for input_missing. */
+    readonly tool: FrameStatsTool | null,
+    cause: unknown,
+  ) {
+    super(describeFailure(kind, videoPath, tool, cause), { cause });
+    this.name = "FrameStatsError";
+  }
+}
+
+function errnoCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null || !("code" in error)) return null;
+  const { code } = error as { code: unknown };
+  return typeof code === "string" ? code : null;
+}
+
+function describeFailure(
+  kind: FrameStatsFailureKind,
+  videoPath: string,
+  tool: FrameStatsTool | null,
+  cause: unknown,
+): string {
+  const code = errnoCode(cause);
+  const suffix = code === null ? "" : ` (${code})`;
+  return kind === "input_missing"
+    ? `${kind}: input file does not exist: ${videoPath}${suffix}`
+    : `${kind}: could not spawn ${tool ?? "decoder toolchain"}${suffix} while extracting frame stats for ${videoPath}`;
+}
+
+const MISSING_INPUT_CODES = new Set(["ENOENT", "ENOTDIR"]);
+
+function assertInputExists(videoPath: string): void {
+  try {
+    statSync(videoPath);
+  } catch (error) {
+    if (MISSING_INPUT_CODES.has(errnoCode(error) ?? "")) {
+      throw new FrameStatsError("input_missing", videoPath, null, error);
+    }
+    throw error;
+  }
+}
+
+async function assertInputExistsAsync(videoPath: string): Promise<void> {
+  try {
+    await stat(videoPath);
+  } catch (error) {
+    if (MISSING_INPUT_CODES.has(errnoCode(error) ?? "")) {
+      throw new FrameStatsError("input_missing", videoPath, null, error);
+    }
+    throw error;
+  }
+}
+
+const MAX_BUFFER = 1024 * 1024 * 1024;
 
 const STAT_WIDTH = 64;
 const STAT_HEIGHT = 36;
@@ -36,20 +110,44 @@ const DECODE_ARGS = (videoPath: string) => [
 ];
 
 /**
- * Runs a subprocess to completion off the event loop, resolving with whatever
- * stdout/stderr it produced whether or not it exited cleanly (matching the
- * spawnSync callers, which read partial output from failed processes too).
+ * Output of a tool that actually ran (it got a pid). Anything that stopped it
+ * from producing a clean exit — non-zero status, signal, output cap — is a
+ * statement about the media and stays in `exitedNonZero`; partial output is
+ * kept. Only a process that never started is a toolchain failure.
  */
-function execFileCollect(
-  command: string,
+interface ToolOutput {
+  stdout: Buffer;
+  stderr: Buffer;
+  exitedNonZero: boolean;
+}
+
+function runTool(tool: FrameStatsTool, args: string[], videoPath: string): ToolOutput {
+  const result = spawnSync(tool, args, { maxBuffer: MAX_BUFFER });
+  if (result.error !== undefined && result.pid === 0) {
+    throw new FrameStatsError("toolchain_unavailable", videoPath, tool, result.error);
+  }
+  return {
+    stdout: result.stdout ?? Buffer.alloc(0),
+    stderr: result.stderr ?? Buffer.alloc(0),
+    exitedNonZero: result.status !== 0,
+  };
+}
+
+function runToolAsync(
+  tool: FrameStatsTool,
   args: string[],
-): Promise<{ stdout: Buffer; stderr: Buffer; exitedNonZero: boolean }> {
-  return new Promise((resolve) => {
-    execFile(
-      command,
+  videoPath: string,
+): Promise<ToolOutput> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      tool,
       args,
-      { maxBuffer: 1024 * 1024 * 1024, encoding: "buffer" },
+      { maxBuffer: MAX_BUFFER, encoding: "buffer" },
       (error, stdout, stderr) => {
+        if (error !== null && child.pid === undefined) {
+          reject(new FrameStatsError("toolchain_unavailable", videoPath, tool, error));
+          return;
+        }
         resolve({ stdout, stderr, exitedNonZero: error !== null });
       },
     );
@@ -63,26 +161,32 @@ function countDecodeErrors(stderrText: string, exitedNonZero: boolean): number {
   return exitedNonZero && count === 0 ? 1 : count;
 }
 
+/** @throws FrameStatsError when the input is missing or the toolchain cannot run. */
 export function extractFrameStats(videoPath: string): FrameStats {
-  const decode = spawnSync("ffmpeg", DECODE_ARGS(videoPath), { maxBuffer: 1024 * 1024 * 1024 });
-  const raw = decode.stdout ?? Buffer.alloc(0);
-  const stderrText = decode.stderr?.toString("utf8") ?? "";
-  const decodeErrorCount = countDecodeErrors(stderrText, decode.status !== 0);
-  const source = probeSource(videoPath);
-  const durationMs = probeDurationMs(videoPath);
-  return computeFrameStats(raw, decodeErrorCount, source, durationMs);
+  assertInputExists(videoPath);
+  const decode = runTool("ffmpeg", DECODE_ARGS(videoPath), videoPath);
+  const decodeErrorCount = countDecodeErrors(decode.stderr.toString("utf8"), decode.exitedNonZero);
+  const source = parseSourceProbe(runTool("ffprobe", SOURCE_PROBE_ARGS(videoPath), videoPath));
+  const durationMs = parseDurationProbe(
+    runTool("ffprobe", DURATION_PROBE_ARGS(videoPath), videoPath),
+  );
+  return computeFrameStats(decode.stdout, decodeErrorCount, source, durationMs);
 }
 
 /**
  * Same statistics as extractFrameStats but with the ffmpeg/ffprobe subprocess
- * waits off the event loop; byte-identical inputs produce identical outputs.
+ * waits off the event loop; byte-identical inputs produce identical outputs
+ * and the same FrameStatsError failures.
  */
 export async function extractFrameStatsAsync(videoPath: string): Promise<FrameStats> {
-  const decode = await execFileCollect("ffmpeg", DECODE_ARGS(videoPath));
+  await assertInputExistsAsync(videoPath);
+  const decode = await runToolAsync("ffmpeg", DECODE_ARGS(videoPath), videoPath);
   const decodeErrorCount = countDecodeErrors(decode.stderr.toString("utf8"), decode.exitedNonZero);
-  const source = parseSourceProbe(await execFileCollect("ffprobe", SOURCE_PROBE_ARGS(videoPath)));
+  const source = parseSourceProbe(
+    await runToolAsync("ffprobe", SOURCE_PROBE_ARGS(videoPath), videoPath),
+  );
   const durationMs = parseDurationProbe(
-    await execFileCollect("ffprobe", DURATION_PROBE_ARGS(videoPath)),
+    await runToolAsync("ffprobe", DURATION_PROBE_ARGS(videoPath), videoPath),
   );
   return computeFrameStats(decode.stdout, decodeErrorCount, source, durationMs);
 }
@@ -201,18 +305,9 @@ const DURATION_PROBE_ARGS = (videoPath: string) => [
 ];
 
 /** Container-declared source dimensions and frame rate; null when unprobeable. */
-function probeSource(
-  videoPath: string,
+function parseSourceProbe(
+  probe: ToolOutput,
 ): { width: number; height: number; fps: number | null } | null {
-  const probe = spawnSync("ffprobe", SOURCE_PROBE_ARGS(videoPath), { encoding: "utf8" });
-  if (probe.status !== 0) return null;
-  return parseSourceStdout(probe.stdout ?? "");
-}
-
-function parseSourceProbe(probe: {
-  stdout: Buffer;
-  exitedNonZero: boolean;
-}): { width: number; height: number; fps: number | null } | null {
   if (probe.exitedNonZero) return null;
   return parseSourceStdout(probe.stdout.toString("utf8"));
 }
@@ -312,13 +407,7 @@ function findBottomFrozenComponents(
   return components;
 }
 
-function probeDurationMs(videoPath: string): number {
-  const probe = spawnSync("ffprobe", DURATION_PROBE_ARGS(videoPath), { encoding: "utf8" });
-  if (probe.status !== 0) return 0;
-  return parseDurationStdout(probe.stdout ?? "");
-}
-
-function parseDurationProbe(probe: { stdout: Buffer; exitedNonZero: boolean }): number {
+function parseDurationProbe(probe: ToolOutput): number {
   if (probe.exitedNonZero) return 0;
   return parseDurationStdout(probe.stdout.toString("utf8"));
 }
