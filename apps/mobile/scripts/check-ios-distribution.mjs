@@ -13,7 +13,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parsePbxproj, settingValue } from './pbxproj.mjs';
+import { parsePbxproj } from './pbxproj.js';
 
 const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileRoot, '..', '..');
@@ -32,84 +32,137 @@ function readText(relPath) {
 // --- project.pbxproj: the app target's Debug AND Release configurations ------
 // A Release archive is what TestFlight/App Review receive, so every shipping
 // setting is asserted per configuration (never "appears somewhere in the
-// file", which the Debug block alone satisfies).
+// file", which the Debug block alone satisfies) and against EVERY definition
+// Xcode can evaluate for it: the target's own value, `KEY[sdk=iphoneos*]`
+// conditionals, and the project-level value the target inherits when it does
+// not override the key (or says `$(inherited)`).
 const project = parsePbxproj(
   readText('ios/PickleSensei.xcodeproj/project.pbxproj') ?? '',
 );
 const appTarget = project.appTarget('PickleSensei');
-const configurations = project.buildConfigurations(appTarget);
+const configurations = project.effectiveSettings(appTarget);
 check(
   'pbxproj: app target has exactly the Debug and Release configurations',
   Array.from(configurations.keys()).sort().join(',') === 'Debug,Release',
 );
 
+const EMPTY_CONFIGURATION = {
+  baseConfigurations: [],
+  definitions: () => [],
+  values: () => [],
+  describe: key => `${key} undefined`,
+};
+function configuration(name) {
+  return configurations.get(name) ?? EMPTY_CONFIGURATION;
+}
 function perConfiguration(label, predicate) {
   for (const name of ['Debug', 'Release']) {
-    const settings = configurations.get(name) ?? {};
-    check(`pbxproj [${name}]: ${label}`, predicate(settings, name));
+    check(`pbxproj [${name}]: ${label}`, predicate(configuration(name), name));
   }
+}
+/** Every definition of `key` (all levels, all conditions) satisfies `test`
+ * and at least one exists. */
+function pinnedSetting(label, key, test) {
+  perConfiguration(label, s => {
+    const values = s.values(key);
+    const ok = values.length > 0 && values.every(test);
+    if (!ok) console.log(`     ${s.describe(key)}`);
+    return ok;
+  });
 }
 function agreesAcrossConfigurations(key) {
   const values = new Set(
-    Array.from(configurations.values(), s => settingValue(s[key])),
+    Array.from(configurations.values()).flatMap(s => s.values(key)),
   );
-  return values.size === 1 && !values.has(undefined);
+  return values.size === 1;
 }
 
-perConfiguration(
+pinnedSetting(
   'PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei',
-  s => settingValue(s.PRODUCT_BUNDLE_IDENTIFIER) === 'com.picklesensei',
+  'PRODUCT_BUNDLE_IDENTIFIER',
+  v => v === 'com.picklesensei',
 );
-perConfiguration('MARKETING_VERSION set', s =>
-  /^\d+\.\d+(\.\d+)?$/.test(settingValue(s.MARKETING_VERSION) ?? ''),
+pinnedSetting('MARKETING_VERSION set', 'MARKETING_VERSION', v =>
+  /^\d+\.\d+(\.\d+)?$/.test(v),
 );
 check(
   'pbxproj: MARKETING_VERSION identical in Debug and Release',
   agreesAcrossConfigurations('MARKETING_VERSION'),
 );
-perConfiguration('CURRENT_PROJECT_VERSION set', s =>
-  /^\d+$/.test(settingValue(s.CURRENT_PROJECT_VERSION) ?? ''),
+pinnedSetting('CURRENT_PROJECT_VERSION set', 'CURRENT_PROJECT_VERSION', v =>
+  /^\d+$/.test(v),
 );
 check(
   'pbxproj: CURRENT_PROJECT_VERSION identical in Debug and Release',
   agreesAcrossConfigurations('CURRENT_PROJECT_VERSION'),
 );
-perConfiguration('DEVELOPMENT_TEAM set', s =>
-  /^[A-Z0-9]{10}$/.test(settingValue(s.DEVELOPMENT_TEAM) ?? ''),
+pinnedSetting('DEVELOPMENT_TEAM set', 'DEVELOPMENT_TEAM', v =>
+  /^[A-Z0-9]{10}$/.test(v),
 );
 check(
   'pbxproj: DEVELOPMENT_TEAM identical in Debug and Release',
   agreesAcrossConfigurations('DEVELOPMENT_TEAM'),
 );
-perConfiguration(
+pinnedSetting(
   'iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)',
-  s => settingValue(s.TARGETED_DEVICE_FAMILY) === '1',
+  'TARGETED_DEVICE_FAMILY',
+  v => v === '1',
 );
-perConfiguration(
+pinnedSetting(
   'IPHONEOS_DEPLOYMENT_TARGET = 15.1 (dossier: iOS 15.1+)',
-  s => settingValue(s.IPHONEOS_DEPLOYMENT_TARGET) === '15.1',
+  'IPHONEOS_DEPLOYMENT_TARGET',
+  v => v === '15.1',
 );
-perConfiguration(
+pinnedSetting(
   'entitlements wired (CODE_SIGN_ENTITLEMENTS = PickleSensei/PickleSensei.entitlements)',
-  s =>
-    settingValue(s.CODE_SIGN_ENTITLEMENTS) ===
-    'PickleSensei/PickleSensei.entitlements',
+  'CODE_SIGN_ENTITLEMENTS',
+  v => v === 'PickleSensei/PickleSensei.entitlements',
 );
-perConfiguration(
+pinnedSetting(
   'INFOPLIST_FILE = PickleSensei/Info.plist',
-  s => settingValue(s.INFOPLIST_FILE) === 'PickleSensei/Info.plist',
+  'INFOPLIST_FILE',
+  v => v === 'PickleSensei/Info.plist',
+);
+// The only xcconfig layer Xcode may add on top is the CocoaPods-generated
+// one for this target (not committed; generated from the Podfile). Any other
+// base configuration is a place settings could hide from this gate.
+perConfiguration(
+  'base xcconfig is only the CocoaPods one for this target (project level: none)',
+  (s, name) =>
+    s.baseConfigurations.every(
+      ({ level, path }) =>
+        level === 'target' &&
+        path ===
+          `Target Support Files/Pods-PickleSensei/Pods-PickleSensei.${name.toLowerCase()}.xcconfig`,
+    ),
 );
 {
-  const release = configurations.get('Release') ?? {};
+  const release = configuration('Release');
+  const debugDefinitions = [
+    ...release
+      .values('GCC_PREPROCESSOR_DEFINITIONS')
+      .filter(v => /\bDEBUG(=1)?\b/.test(v)),
+    ...release
+      .values('SWIFT_ACTIVE_COMPILATION_CONDITIONS')
+      .filter(v => /\bDEBUG\b/.test(v)),
+  ];
   check(
-    'pbxproj [Release]: no DEBUG preprocessor definition or Swift compilation condition',
-    !/\bDEBUG(=1)?\b/.test(release.GCC_PREPROCESSOR_DEFINITIONS ?? '') &&
-      !/\bDEBUG\b/.test(release.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? ''),
+    'pbxproj [Release]: no DEBUG preprocessor definition or Swift compilation condition (target, project, or conditional)',
+    debugDefinitions.length === 0,
   );
+  if (debugDefinitions.length > 0) {
+    console.log(`     ${release.describe('GCC_PREPROCESSOR_DEFINITIONS')}`);
+    console.log(
+      `     ${release.describe('SWIFT_ACTIVE_COMPILATION_CONDITIONS')}`,
+    );
+  }
+  const optimisation = release.values('SWIFT_OPTIMIZATION_LEVEL');
   check(
-    'pbxproj [Release]: Swift optimisation not -Onone',
-    settingValue(release.SWIFT_OPTIMIZATION_LEVEL) !== '-Onone',
+    'pbxproj [Release]: Swift optimisation not -Onone (target, project, or conditional)',
+    optimisation.every(v => v !== '-Onone'),
   );
+  if (optimisation.includes('-Onone'))
+    console.log(`     ${release.describe('SWIFT_OPTIMIZATION_LEVEL')}`);
 }
 
 // --- SwiftPM: every linked product is imported by compiled Swift -------------
@@ -273,9 +326,10 @@ check(
     appfileTeam !== null &&
     !/password|apple_id\(/.test(appfile),
 );
-perConfiguration(
+pinnedSetting(
   'DEVELOPMENT_TEAM matches fastlane Appfile team_id',
-  s => appfileTeam !== null && settingValue(s.DEVELOPMENT_TEAM) === appfileTeam,
+  'DEVELOPMENT_TEAM',
+  v => appfileTeam !== null && v === appfileTeam,
 );
 
 if (failures.length > 0) {

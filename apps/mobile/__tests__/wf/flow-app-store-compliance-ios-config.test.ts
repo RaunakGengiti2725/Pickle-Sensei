@@ -50,21 +50,26 @@ function pbxSection(name: string): string {
   return match[1]!;
 }
 
-/** buildSettings of the app target's configurations (the ones carrying
- * PRODUCT_BUNDLE_IDENTIFIER), keyed by configuration name. */
-function appBuildConfigurations(): Map<string, Record<string, string>> {
-  const out = new Map<string, Record<string, string>>();
-  const block =
-    /isa = XCBuildConfiguration;\s*(?:baseConfigurationReference = [^;]*;\s*)?buildSettings = \{([\s\S]*?)\n\t\t\t\};\s*name = (\w+);/g;
-  for (const m of pbxSection('XCBuildConfiguration').matchAll(block)) {
-    const settings: Record<string, string> = {};
-    for (const line of m[1]!.split('\n')) {
-      const kv = /^\s*([A-Z_][A-Z0-9_]*) = (.*);$/.exec(line);
-      if (kv) settings[kv[1]!] = kv[2]!;
-    }
-    if (settings.PRODUCT_BUNDLE_IDENTIFIER) out.set(m[2]!, settings);
-  }
-  return out;
+// The structural reader the Linux release gates use: settings are resolved
+// per configuration across the target's own block, `KEY[sdk=…]` conditional
+// variants and the inherited project-level configuration.
+type PbxObject = Record<string, string | undefined>;
+type EffectiveConfiguration = { values: (key: string) => string[] };
+const { parsePbxproj } = require(
+  join(MOBILE_ROOT, 'scripts', 'pbxproj.js'),
+) as {
+  parsePbxproj: (text: string) => {
+    appTarget: (name?: string) => PbxObject;
+    effectiveSettings: (
+      target: PbxObject,
+    ) => Map<string, EffectiveConfiguration>;
+  };
+};
+
+/** Effective build settings of the app target, keyed by configuration name. */
+function appBuildConfigurations(): Map<string, EffectiveConfiguration> {
+  const project = parsePbxproj(pbxproj);
+  return project.effectiveSettings(project.appTarget('PickleSensei'));
 }
 
 /** PBXBuildFile ids listed in the (single) PBXResourcesBuildPhase. */
@@ -125,10 +130,10 @@ describe('Sign in with Apple entitlement (Google sign-in is offered)', () => {
       'Release',
     ]);
     for (const [name, settings] of configurations) {
-      expect([name, settings.CODE_SIGN_ENTITLEMENTS]).toEqual([
+      expect([
         name,
-        'PickleSensei/PickleSensei.entitlements',
-      ]);
+        Array.from(new Set(settings.values('CODE_SIGN_ENTITLEMENTS'))),
+      ]).toEqual([name, ['PickleSensei/PickleSensei.entitlements']]);
     }
   });
 

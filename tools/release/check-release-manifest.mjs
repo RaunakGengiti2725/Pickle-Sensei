@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parsePbxproj, settingValue } from "../../apps/mobile/scripts/pbxproj.mjs";
+import { parsePbxproj } from "../../apps/mobile/scripts/pbxproj.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const failures = [];
@@ -45,24 +45,26 @@ check(
   Number.isInteger(buildNumber) && buildNumber >= 1,
 );
 
-// Asserted per build configuration of the app target: a Release archive is
-// what ships, and a Debug-only match must not satisfy the pin.
+// Asserted per build configuration of the app target and against every
+// definition Xcode can evaluate (target value, `KEY[sdk=iphoneos*]`
+// conditionals, inherited project-level value): a Release archive is what
+// ships, and a Debug-only or unconditional-only match must not satisfy the pin.
 const project = parsePbxproj(read("apps/mobile/ios/PickleSensei.xcodeproj/project.pbxproj"));
-const configurations = project.buildConfigurations(project.appTarget("PickleSensei"));
+const configurations = project.effectiveSettings(project.appTarget("PickleSensei"));
 check(
   "pbxproj: app target has exactly the Debug and Release configurations",
   Array.from(configurations.keys()).sort().join(",") === "Debug,Release",
 );
+function pinnedSetting(name, key, expected) {
+  const settings = configurations.get(name);
+  const values = settings?.values(key) ?? [];
+  const ok = values.length > 0 && values.every((v) => v === expected);
+  check(`pbxproj [${name}]: ${key} = ${expected}`, ok);
+  if (!ok && settings) console.log(`     ${settings.describe(key)}`);
+}
 for (const name of ["Debug", "Release"]) {
-  const settings = configurations.get(name) ?? {};
-  check(
-    `pbxproj [${name}]: MARKETING_VERSION = ${marketingVersion}`,
-    settingValue(settings.MARKETING_VERSION) === marketingVersion,
-  );
-  check(
-    `pbxproj [${name}]: CURRENT_PROJECT_VERSION = ${buildNumber}`,
-    settingValue(settings.CURRENT_PROJECT_VERSION) === String(buildNumber),
-  );
+  pinnedSetting(name, "MARKETING_VERSION", marketingVersion);
+  pinnedSetting(name, "CURRENT_PROJECT_VERSION", String(buildNumber));
 }
 
 const gradle = read("apps/mobile/android/app/build.gradle");

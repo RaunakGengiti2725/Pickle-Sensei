@@ -8,7 +8,9 @@
  * suites, tools/release/check-release-manifest.mjs) stays green when:
  *   IOSCFG-3  only the Release build configuration drifts (bundle id, team,
  *             MARKETING_VERSION, CURRENT_PROJECT_VERSION, device family,
- *             entitlements, DEBUG preprocessor/Swift flags),
+ *             entitlements, DEBUG preprocessor/Swift flags) — in the target's
+ *             own block, as a `KEY[sdk=iphoneos*]` conditional, or at the
+ *             project level the target inherits from,
  *   IOSCFG-4  PrivacyInfo.xcprivacy is dropped from the PBXResourcesBuildPhase
  *             (its PBXBuildFile entry alone keeps the text-match test green),
  *   IOSCFG-5  app.json `name` no longer matches AppDelegate's withModuleName
@@ -33,6 +35,28 @@ const MOBILE_ROOT = path.resolve(__dirname, '..', '..');
 const read = (rel: string): string =>
   fs.readFileSync(path.join(MOBILE_ROOT, rel), 'utf8');
 
+// The structural reader the Linux gates (check:distribution, release:check)
+// use; the suite asserts the SAME resolution they do.
+type EffectiveConfiguration = {
+  name: string;
+  baseConfigurations: Array<{ level: 'target' | 'project'; path: string }>;
+  definitions: (key: string) => Array<{
+    level: 'target' | 'project';
+    condition: string | null;
+    value: string;
+  }>;
+  values: (key: string) => string[];
+  describe: (key: string) => string;
+};
+type PbxObject = Record<string, string | undefined>;
+type Pbxproj = {
+  appTarget: (name?: string) => PbxObject;
+  effectiveSettings: (target: PbxObject) => Map<string, EffectiveConfiguration>;
+};
+const { parsePbxproj } = require(
+  path.join(MOBILE_ROOT, 'scripts', 'pbxproj.js'),
+) as { parsePbxproj: (text: string) => Pbxproj };
+
 const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
 const appDelegate = read('ios/PickleSensei/AppDelegate.swift');
 const appJson = JSON.parse(read('app.json')) as { name: string };
@@ -45,25 +69,10 @@ function pbxSection(name: string): string {
   return match[1]!;
 }
 
-/** buildSettings of every XCBuildConfiguration, keyed by configuration name. */
-function appBuildConfigurations(): Map<string, Record<string, string>> {
-  const out = new Map<string, Record<string, string>>();
-  const section = pbxSection('XCBuildConfiguration');
-  const block =
-    /isa = XCBuildConfiguration;\s*(baseConfigurationReference = [^;]*;\s*)?buildSettings = \{([\s\S]*?)\n\t\t\t\};\s*name = (\w+);/g;
-  for (const m of section.matchAll(block)) {
-    const settings: Record<string, string> = {};
-    for (const line of m[2]!.split('\n')) {
-      const kv = /^\s*([A-Z_][A-Z0-9_]*) = (.*);$/.exec(line);
-      if (kv) settings[kv[1]!] = kv[2]!;
-    }
-    // Only the app target's configurations carry PRODUCT_BUNDLE_IDENTIFIER.
-    if (settings.PRODUCT_BUNDLE_IDENTIFIER) out.set(m[3]!, settings);
-  }
-  return out;
-}
-
-const configurations = appBuildConfigurations();
+const project = parsePbxproj(pbxproj);
+const configurations = project.effectiveSettings(
+  project.appTarget('PickleSensei'),
+);
 
 describe('IOSCFG-3: Release build configuration is pinned, not just Debug', () => {
   const PINNED: Record<string, string> = {
@@ -84,20 +93,44 @@ describe('IOSCFG-3: Release build configuration is pinned, not just Debug', () =
     ]);
   });
 
+  // Every definition Xcode can evaluate for the key — the target's own,
+  // any `KEY[…]` conditional variant, and the inherited project-level one —
+  // must be the pinned value; a single unconditional match is not enough.
   it.each(['Debug', 'Release'])('%s carries every pinned setting', name => {
     const settings = configurations.get(name)!;
     for (const [key, value] of Object.entries(PINNED)) {
-      expect([name, key, settings[key]]).toEqual([name, key, value]);
+      const distinct = Array.from(new Set(settings.values(key)));
+      expect([name, settings.describe(key), distinct]).toEqual([
+        name,
+        settings.describe(key),
+        [value],
+      ]);
     }
   });
 
-  it('Release defines no DEBUG preprocessor or Swift compilation condition', () => {
+  it('Release defines no DEBUG preprocessor or Swift compilation condition at any level', () => {
     const release = configurations.get('Release')!;
-    expect(release.GCC_PREPROCESSOR_DEFINITIONS ?? '').not.toMatch(/DEBUG=1/);
-    expect(release.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? '').not.toMatch(
-      /\bDEBUG\b/,
-    );
-    expect(release.SWIFT_OPTIMIZATION_LEVEL ?? '').not.toBe('"-Onone"');
+    const debugDefinitions = [
+      ...release
+        .values('GCC_PREPROCESSOR_DEFINITIONS')
+        .filter(v => /\bDEBUG(=1)?\b/.test(v)),
+      ...release
+        .values('SWIFT_ACTIVE_COMPILATION_CONDITIONS')
+        .filter(v => /\bDEBUG\b/.test(v)),
+    ];
+    expect(debugDefinitions).toEqual([]);
+    expect(release.values('SWIFT_OPTIMIZATION_LEVEL')).not.toContain('-Onone');
+  });
+
+  it('only the CocoaPods xcconfig layers on top of the app target', () => {
+    for (const [name, settings] of configurations) {
+      expect(settings.baseConfigurations).toEqual([
+        {
+          level: 'target',
+          path: `Target Support Files/Pods-PickleSensei/Pods-PickleSensei.${name.toLowerCase()}.xcconfig`,
+        },
+      ]);
+    }
   });
 });
 
