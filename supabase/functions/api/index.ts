@@ -2559,6 +2559,58 @@ interface BillingVerdict {
   productKey: string | null;
   expiresAt: string | null;
   activeEntitlements: string[];
+  /** When this verdict was true — RevenueCat's `request_date_ms` (one
+   * server clock, so verdicts from different isolates order correctly even
+   * when their own clocks disagree) or, when RevenueCat omits it or reports
+   * a clock implausibly far from ours (REVENUECAT_CLOCK_MAX_AHEAD_MS /
+   * REVENUECAT_CLOCK_MAX_BEHIND_MS), this isolate's clock read BEFORE the
+   * round trip. Drives the monotonic verified_at guard on
+   * billing_entitlements. */
+  verifiedAt: string;
+}
+
+/** Largest millisecond value `Date` can represent (±100 000 000 days). */
+const MAX_EPOCH_MS = 8.64e15;
+
+/** How far AHEAD of this isolate's pre-request clock a RevenueCat
+ * `request_date_ms` may sit and still be trusted as the verdict's timestamp.
+ * RevenueCat evaluates the subscriber after our pre-request read, so a
+ * genuine value exceeds that read only by clock skew between two
+ * NTP-disciplined servers (seconds); 5 minutes is the customary allowance.
+ * Anything further ahead is not a clock this row can be ordered by — and,
+ * because billing_entitlements keeps the NEWEST verified_at, trusting it
+ * would make every later real verdict (EXPIRATION, a later sync) lose as
+ * "stale" for as long as the bogus value lies in the future: a wedge with
+ * no self-heal. Tight bound on purpose. */
+const REVENUECAT_CLOCK_MAX_AHEAD_MS = 5 * 60_000;
+
+/** How far BEHIND this isolate's pre-request clock a RevenueCat
+ * `request_date_ms` may sit and still be trusted. A value older than this
+ * cannot describe the evaluation RevenueCat just performed; trusting it would
+ * stamp a fresh verdict older than it is, so a row carrying anything newer
+ * would drop it and the truth we just fetched would not land until the next
+ * verdict. Unlike the ahead case that is self-limiting (the next sane verdict
+ * lands), so the bound only needs to reject values no live clock could
+ * produce while keeping every plausibly-skewed answer on RevenueCat's single
+ * clock (cross-isolate ordering). 24 hours. */
+const REVENUECAT_CLOCK_MAX_BEHIND_MS = 24 * 60 * 60_000;
+
+/** RevenueCat's `request_date_ms` as an ISO timestamp, or null when the
+ * response carries none, a value no clock could have produced, or a value
+ * implausibly far from the local clock read BEFORE the round trip
+ * (`startedAtMs`). Callers fall back to that pre-request clock, which can
+ * never outrank a verdict evaluated after this request began. */
+function revenueCatRequestDate(
+  payload: Record<string, unknown>,
+  startedAtMs: number,
+): string | null {
+  const raw = payload.request_date_ms;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0 || raw > MAX_EPOCH_MS) {
+    return null;
+  }
+  if (raw > startedAtMs + REVENUECAT_CLOCK_MAX_AHEAD_MS) return null;
+  if (raw < startedAtMs - REVENUECAT_CLOCK_MAX_BEHIND_MS) return null;
+  return new Date(raw).toISOString();
 }
 
 /** Fetch + fold the subscriber's entitlements from RevenueCat. Returns null
@@ -2568,11 +2620,18 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
   if (!rcKey) return null;
 
+  // Fallback timestamp, read BEFORE the round trip: a slow answer must never
+  // look newer than a verification that started after it. Also the reference
+  // RevenueCat's own clock is judged against.
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
+
   // The RevenueCat app_user_id IS the canonical account id (the mobile SDK
   // logs in with the same uuid). GET auto-creates unknown subscribers
   // (200/201), so a user who never purchased still resolves to an honest
   // premium:false — never an error.
   let subscriber: Record<string, unknown> | null = null;
+  let requestDate: string | null = null;
   try {
     const rcResponse = await fetch(
       `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`,
@@ -2587,6 +2646,7 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     if (rcResponse.ok) {
       const parsed = (await rcResponse.json().catch(() => null)) as unknown;
       subscriber = isRecord(parsed) && isRecord(parsed.subscriber) ? parsed.subscriber : null;
+      requestDate = isRecord(parsed) ? revenueCatRequestDate(parsed, startedAtMs) : null;
     } else {
       await rcResponse.text().catch(() => undefined);
     }
@@ -2605,6 +2665,7 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     productKey: null,
     expiresAt: null,
     activeEntitlements: [],
+    verifiedAt: requestDate ?? startedAt,
   };
   for (const name of PREMIUM_ENTITLEMENT_KEYS) {
     const entitlement = entitlementMap[name];
@@ -2629,28 +2690,138 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   return verdict;
 }
 
+interface PersistBillingError {
+  /** PostgREST/Postgres SQLSTATE (e.g. "23503"), or null when the write
+   * never reached the database (service role unavailable). */
+  code: string | null;
+  message: string;
+}
+
+const SERVICE_ROLE_UNAVAILABLE: PersistBillingError = {
+  code: null,
+  message: "service role unavailable",
+};
+
+/** Postgres FK violation: the user has no profiles row (never bootstrapped). */
+const FK_VIOLATION = "23503";
+
+/** The billing_entitlements state a caller may answer with: the verdict it
+ * just landed, or — when that verdict was dropped as stale — the newer row
+ * already stored. */
+interface PersistedBilling {
+  premium: boolean;
+  productKey: string | null;
+  expiresAt: string | null;
+  verifiedAt: string;
+}
+
+type PersistBillingOutcome =
+  | { ok: true; billing: PersistedBilling; superseded: boolean }
+  | { ok: false; error: PersistBillingError };
+
+/** The ONE effective-premium rule, identical to what every database decision
+ * point applies to a billing_entitlements row — `access_state()`,
+ * `reserve_analysis_permit()`, `apply_synced_shot()`, the scored-shot write
+ * gate: `premium AND (expires_at IS NULL OR expires_at > now())`. A stored
+ * `premium=true` whose `expires_at` has passed is NOT premium; anything the
+ * edge fn answers about a persisted row must go through here so it can never
+ * disagree with `GET /v1/me/access`. */
+function effectivePremium(row: PersistedBilling, nowMs = Date.now()): boolean {
+  if (!row.premium) return false;
+  if (row.expiresAt === null) return true;
+  const expiresMs = Date.parse(row.expiresAt);
+  return Number.isFinite(expiresMs) && expiresMs > nowMs;
+}
+
+const BILLING_ENTITLEMENT_COLUMNS = "premium, product_key, expires_at, verified_at";
+
+const isoTimestamp = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : value;
+};
+
+function persistedBillingOf(row: unknown): PersistedBilling | null {
+  if (!isRecord(row)) return null;
+  const verifiedAt = isoTimestamp(row.verified_at);
+  if (!verifiedAt) return null;
+  return {
+    premium: row.premium === true,
+    productKey: typeof row.product_key === "string" ? row.product_key : null,
+    expiresAt: isoTimestamp(row.expires_at),
+    verifiedAt,
+  };
+}
+
 /** Persist the verified verdict — premium AND not-premium alike, so a lapsed
  * subscription revokes saved access on its next sync. Written with the
  * service-role client: billing_entitlements has no user write policies, so
- * verified paths are the ONLY writers. */
+ * verified paths are the ONLY writers.
+ *
+ * billing_entitlements keeps the NEWEST verified_at (BEFORE UPDATE trigger,
+ * migration 20260906120000): a verdict older than the stored row is dropped
+ * rather than overwriting fresher truth, and PostgREST returns no row for
+ * it. A dropped write is not an error — but the caller must not answer with
+ * the dropped verdict either, so the stored row is re-read and returned as
+ * the state to report (`superseded: true`). */
 async function persistBillingVerdict(
   userId: string,
   verdict: BillingVerdict,
-  verifiedAt: string,
-): Promise<string | null> {
+): Promise<PersistBillingOutcome> {
   const adminDb = billingAdminDb();
-  if (!adminDb) return "service role unavailable";
-  const upserted = await adminDb.from("billing_entitlements").upsert(
-    {
-      user_id: userId,
-      premium: verdict.premium,
-      product_key: verdict.productKey,
-      expires_at: verdict.expiresAt,
-      verified_at: verifiedAt,
-    },
-    { onConflict: "user_id" },
+  if (!adminDb) return { ok: false, error: SERVICE_ROLE_UNAVAILABLE };
+  const upserted = await adminDb
+    .from("billing_entitlements")
+    .upsert(
+      {
+        user_id: userId,
+        premium: verdict.premium,
+        product_key: verdict.productKey,
+        expires_at: verdict.expiresAt,
+        verified_at: verdict.verifiedAt,
+      },
+      { onConflict: "user_id" },
+    )
+    .select(BILLING_ENTITLEMENT_COLUMNS);
+  if (upserted.error) {
+    return {
+      ok: false,
+      error: { code: upserted.error.code || null, message: upserted.error.message },
+    };
+  }
+  const landed: PersistedBilling = {
+    premium: verdict.premium,
+    productKey: verdict.productKey,
+    expiresAt: verdict.expiresAt,
+    verifiedAt: verdict.verifiedAt,
+  };
+  if (!Array.isArray(upserted.data) || upserted.data.length > 0) {
+    return { ok: true, billing: landed, superseded: false };
+  }
+  console.warn(
+    `[api] billing verdict superseded by a newer verification: ${userId} @ ${verdict.verifiedAt}`,
   );
-  return upserted.error ? upserted.error.message : null;
+  const stored = await adminDb
+    .from("billing_entitlements")
+    .select(BILLING_ENTITLEMENT_COLUMNS)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (stored.error) {
+    return {
+      ok: false,
+      error: { code: stored.error.code || null, message: stored.error.message },
+    };
+  }
+  const persisted = persistedBillingOf(stored.data);
+  if (!persisted) {
+    // The row that outranked us is gone (deleted between the two statements):
+    // nothing durable to report — retryable.
+    return {
+      ok: false,
+      error: { code: null, message: `superseding billing row for ${userId} not found` },
+    };
+  }
+  return { ok: true, billing: persisted, superseded: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2663,7 +2834,48 @@ async function persistBillingVerdict(
 // API. A forged request therefore cannot grant premium — at worst it makes
 // the server re-check a real subscriber. Events are logged (webhook_events)
 // for audit + replay analysis.
+//
+// Idempotency is INSERT-FIRST: the event id is reserved in webhook_events
+// (ON CONFLICT DO NOTHING) before RevenueCat is consulted, so of N concurrent
+// deliveries exactly one owns the row. `processed_at` is set only once every
+// entitlement write landed; a retryable failure (RevenueCat down, transient
+// DB error) DELETEs the reservation and answers 503 so RevenueCat redelivers
+// and the event is fully re-processed. Any audit-plane error is itself a 503
+// (fail closed) — a 200 is only ever sent for a durably recorded outcome.
+//
+// A delivery that LOSES the reservation never verifies: it polls the row
+// until the owner marks it processed (→ 200 duplicate:true, no RevenueCat
+// call, no second audit row) for a bounded wait, and only when the owner has
+// not finalized inside that bound (crash, stall) answers 503 + Retry-After so
+// RevenueCat redelivers. Bursts therefore complete without 5xx whenever the
+// owner does, and no copy is ever acknowledged before the outcome is durable.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** How long an in-flight reservation is honoured before a redelivery may
+ * take it over (an isolate that died mid-flight never sets processed_at).
+ * Generously above the function's wall-clock budget. */
+const WEBHOOK_CLAIM_LEASE_MS = 5 * 60_000;
+
+/** How long a duplicate delivery waits for the owner of its event id to
+ * finalize before answering 503 (RevenueCat's own client timeout is far
+ * longer). `WEBHOOK_DUPLICATE_WAIT_MS` overrides it (positive integer,
+ * milliseconds; tests shorten it to exercise the stall path). */
+const WEBHOOK_DUPLICATE_WAIT_MS_DEFAULT = 2_000;
+/** Interval between reservation-row polls while waiting.
+ * `WEBHOOK_DUPLICATE_POLL_MS` overrides it (positive integer, milliseconds). */
+const WEBHOOK_DUPLICATE_POLL_MS_DEFAULT = 75;
+/** Retry hint when the owner has not finalized within the wait. */
+const WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS = 30;
+
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const configured = Number(Deno.env.get(name));
+  return Number.isInteger(configured) && configured > 0 ? configured : fallback;
+}
+
+interface WebhookEventState {
+  claimed_at: string;
+  processed_at: string | null;
+}
 
 async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const secret = Deno.env.get("REVENUECAT_WEBHOOK_AUTH") ?? "";
@@ -2706,37 +2918,123 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     return errorJson(503, "Webhook processing is not configured.");
   }
 
-  // The audit row is written only once an event has been handled to
-  // completion, so its presence means "already processed": replays are
-  // acknowledged without another RevenueCat round trip, while a delivery
-  // that failed (503 below) leaves no row and is fully re-processed.
-  const seen = await adminDb.from("webhook_events").select("id").eq("id", eventId).maybeSingle();
-  if (seen.error) {
-    console.error("[api] webhook event lookup failed:", seen.error.message);
-  } else if (seen.data) {
-    return json(200, { received: true, duplicate: true });
-  }
-  const logEvent = async () => {
-    const logged = await adminDb.from("webhook_events").upsert(
+  // Reserve the event id. The row's primary key is the atomic dedupe: with
+  // ignoreDuplicates the insert returns the row only when THIS delivery
+  // created it, so concurrent deliveries of one id elect exactly one owner.
+  const claimedAt = new Date().toISOString();
+  const reserved = await adminDb
+    .from("webhook_events")
+    .upsert(
       {
         id: eventId,
         provider: "revenuecat",
         event_type: eventType,
         app_user_id: appUserId,
         payload: body,
+        claimed_at: claimedAt,
+        processed_at: null,
       },
       { onConflict: "id", ignoreDuplicates: true },
+    )
+    .select("id");
+  if (reserved.error) {
+    return serviceUnavailable("Webhook event reservation", reserved.error.message);
+  }
+  if (!Array.isArray(reserved.data) || reserved.data.length === 0) {
+    // Someone else holds (or held) this id. Poll its row: processed →
+    // duplicate ack; in flight → keep waiting up to the bound, then
+    // retryable, so an owner that dies mid-flight cannot turn RevenueCat's
+    // redelivery into a false "already processed"; lease lapsed → take it
+    // over (guarded so only one redelivery wins) and process it here.
+    const waitMs = positiveIntegerEnv(
+      "WEBHOOK_DUPLICATE_WAIT_MS",
+      WEBHOOK_DUPLICATE_WAIT_MS_DEFAULT,
     );
-    if (logged.error) {
-      console.error("[api] webhook event log failed:", logged.error.message);
+    const pollMs = positiveIntegerEnv(
+      "WEBHOOK_DUPLICATE_POLL_MS",
+      WEBHOOK_DUPLICATE_POLL_MS_DEFAULT,
+    );
+    const deadline = Date.now() + waitMs;
+    let reclaimedHere = false;
+    while (!reclaimedHere) {
+      const existing = await adminDb
+        .from("webhook_events")
+        .select("claimed_at, processed_at")
+        .eq("id", eventId)
+        .maybeSingle();
+      if (existing.error) {
+        return serviceUnavailable("Webhook event lookup", existing.error.message);
+      }
+      const state = existing.data as WebhookEventState | null;
+      if (!state) {
+        // Released by the failing owner: RevenueCat's redelivery re-processes.
+        return serviceUnavailable("Webhook event lookup", `${eventId} released mid-flight`, 5);
+      }
+      if (state.processed_at) {
+        return json(200, { received: true, duplicate: true });
+      }
+      const leaseExpired = Date.parse(state.claimed_at) + WEBHOOK_CLAIM_LEASE_MS <= Date.now();
+      if (leaseExpired) {
+        const reclaimed = await adminDb
+          .from("webhook_events")
+          .update({ claimed_at: claimedAt })
+          .eq("id", eventId)
+          .eq("claimed_at", state.claimed_at)
+          .is("processed_at", null)
+          .select("id");
+        if (reclaimed.error) {
+          return serviceUnavailable("Webhook event reclaim", reclaimed.error.message);
+        }
+        if (Array.isArray(reclaimed.data) && reclaimed.data.length > 0) {
+          reclaimedHere = true;
+          break;
+        }
+        // Another redelivery reclaimed it first; wait for that one like any owner.
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return serviceUnavailable(
+          "Webhook event processing",
+          `${eventId} in flight`,
+          WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS,
+        );
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(pollMs, remaining)));
     }
+  }
+
+  // Hand the id back so RevenueCat's redelivery is fully re-processed. Best
+  // effort: if the delete itself fails the row stays in flight and is
+  // reclaimed once its lease lapses.
+  const release = async () => {
+    const released = await adminDb
+      .from("webhook_events")
+      .delete()
+      .eq("id", eventId)
+      .eq("claimed_at", claimedAt)
+      .is("processed_at", null);
+    if (released.error) {
+      console.error("[api] webhook event release failed:", released.error.message);
+    }
+  };
+  const complete = async (verified: boolean): Promise<Response> => {
+    const marked = await adminDb
+      .from("webhook_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("id", eventId)
+      .eq("claimed_at", claimedAt);
+    if (marked.error) {
+      // The verdict IS persisted; keep the reservation so the redelivery
+      // waits out the lease instead of re-verifying, then marks it again.
+      return serviceUnavailable("Webhook event completion", marked.error.message, 30);
+    }
+    return json(200, { received: true, verified });
   };
 
   if (!appUserId) {
     // Nothing to verify (e.g. an anonymous-only subscriber). Acknowledge so
     // RevenueCat stops retrying; the audit row preserves the event.
-    await logEvent();
-    return json(200, { received: true, verified: false });
+    return await complete(false);
   }
 
   const verdicts: Array<{ userId: string; verdict: BillingVerdict }> = [];
@@ -2744,23 +3042,28 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     const verdict = await verifyRevenueCatSubscriber(userId);
     if (!verdict) {
       // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
+      await release();
       return errorJson(503, "Verification is temporarily unavailable.");
     }
     verdicts.push({ userId, verdict });
   }
-  const verifiedAt = new Date().toISOString();
   let verified = true;
   for (const { userId, verdict } of verdicts) {
-    const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
-    if (persistError) {
+    const persisted = await persistBillingVerdict(userId, verdict);
+    if (persisted.ok) continue;
+    if (persisted.error.code === FK_VIOLATION) {
       // A user who has never bootstrapped has no profiles row (FK target); log
       // and acknowledge — their state will be written on first billing sync.
-      console.error("[api] webhook verdict persist failed:", persistError);
+      console.error("[api] webhook verdict persist failed:", persisted.error.message);
       verified = false;
+      continue;
     }
+    // Anything else is transient: all-or-nothing across the subjects — the
+    // reservation is released and RevenueCat retries the whole event.
+    await release();
+    return serviceUnavailable("Webhook verdict persist", persisted.error.message);
   }
-  await logEvent();
-  return json(200, { received: true, verified });
+  return await complete(verified);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3621,32 +3924,40 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
 
-      const verifiedAt = new Date().toISOString();
-      const persistError = await persistBillingVerdict(authed.id, verdict, verifiedAt);
-      if (persistError === "service role unavailable") {
-        return codedError(
-          503,
-          "billing_unconfigured",
-          "Billing verification is not configured on the server.",
-        );
-      }
-      if (persistError) {
-        return serviceUnavailable("Billing verification", persistError);
+      const persisted = await persistBillingVerdict(authed.id, verdict);
+      if (!persisted.ok) {
+        if (persisted.error === SERVICE_ROLE_UNAVAILABLE) {
+          return codedError(
+            503,
+            "billing_unconfigured",
+            "Billing verification is not configured on the server.",
+          );
+        }
+        return serviceUnavailable("Billing verification", persisted.error.message);
       }
 
-      // Build access from the state just verified (not a re-read) so
-      // billing.premium === access.premium holds by construction.
+      // Build BOTH billing and access from the state that is durably stored
+      // (the verdict just landed, or the newer row that outranked it — never
+      // a dropped verdict), evaluated with the same effective-premium rule
+      // access_state() applies (a stored premium row past its expires_at is
+      // not premium), so billing.premium === access.premium holds and the
+      // client is never told something the database does not say.
+      const { billing } = persisted;
+      const premium = effectivePremium(billing);
       const access = await accessPayload(authed, {
-        premium: verdict.premium,
-        activeEntitlements: verdict.activeEntitlements,
+        premium,
+        // Entitlement identifiers are known only for the verdict just
+        // verified; a superseded verdict reports the stored row exactly as
+        // GET /v1/me/access does.
+        activeEntitlements: persisted.superseded ? [] : verdict.activeEntitlements,
       });
       if (access instanceof Response) return access;
       return json(200, {
         billing: {
-          premium: verdict.premium,
-          productKey: verdict.productKey,
-          expiresAt: verdict.expiresAt,
-          verifiedAt,
+          premium,
+          productKey: billing.productKey,
+          expiresAt: billing.expiresAt,
+          verifiedAt: billing.verifiedAt,
         },
         access,
       });
