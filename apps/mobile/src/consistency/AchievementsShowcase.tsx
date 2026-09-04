@@ -12,7 +12,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { PressableScale, useReducedMotion } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
-import { specialistTitle, type ConsistencySnapshot } from './engine';
+import {
+  formatDayKey,
+  specialistTitle,
+  type ConsistencySnapshot,
+} from './engine';
 import {
   RARITY_LABEL,
   STREAK_MILESTONES,
@@ -127,12 +131,7 @@ function Shimmer(props: { active: boolean }) {
 }
 
 function formatEarnedDay(day: string): string {
-  const parsed = new Date(`${day}T12:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return day;
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDayKey(day, { month: 'short', day: 'numeric' });
 }
 
 export function AchievementsShowcase(props: {
