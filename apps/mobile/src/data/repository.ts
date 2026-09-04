@@ -839,10 +839,15 @@ export async function getShotOutboxStatus(
   shotId: string,
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
+  // The id is read out of every sibling row's payload, so the extraction is
+  // guarded per row: json_extract() raises "malformed JSON" on a corrupt
+  // payload, and one such row must not make every healthy shot's lookup
+  // throw. CASE evaluates in order, unlike a bare AND.
   const { rows } = await db.execute(
     `SELECT attempts, last_error FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
+       AND CASE WHEN json_valid(payload)
+                THEN json_extract(payload, '$.id') END = ?
      ORDER BY id DESC LIMIT 1`,
     [owner, shotId],
   );
