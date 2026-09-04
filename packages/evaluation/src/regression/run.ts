@@ -192,7 +192,9 @@ function errorText(error: unknown): string {
  * Runs one bench, timing it and turning any thrown error into a `failed`
  * record. `lastSubprocessExit` reports the exit code of the most recent
  * subprocess the bench spawned (null when it spawned none); in-process
- * benches always record `exitCode: null`.
+ * benches always record `exitCode: null`. A failed subprocess bench whose
+ * last subprocess exited 0 (the failure happened after it, e.g. unreadable
+ * output) records -1 so `exitCode` is never 0 alongside `status: "failed"`.
  */
 export function executeBench(
   definition: BenchDefinition,
@@ -225,7 +227,7 @@ export function executeBench(
     return {
       ...base,
       status: "failed",
-      exitCode: definition.kind === "subprocess" ? (lastSubprocessExit() ?? -1) : null,
+      exitCode: definition.kind === "subprocess" ? lastSubprocessExit() || -1 : null,
       wallClockMs,
       error: errorText(error),
       metrics: {},

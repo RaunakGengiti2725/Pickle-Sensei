@@ -66,7 +66,8 @@ artifacts already committed under `datasets/`. Nine benches, in this order
 
 Whole run including provenance collection: 1385 ms in the baseline run, 1187 ms
 in the PR-branch determinism check (VERIFIED, `totalWallClockMs`).
-All nine are cheap enough for every CI run; none needs nightly scheduling.
+All nine are cheap enough for every CI run; none needs nightly scheduling, and
+the `bench` verify-cloud stage (§1.6) runs them on every PR.
 
 Design constraints the runner enforces (`src/regression/run.ts`, `benches.ts`):
 
@@ -161,13 +162,26 @@ listed for the record.
 Exit codes: `0` clean, `1` regressions beyond declared tolerances, `2` usage
 or invalid input (either document fails schema validation), `3` non-comparable.
 
+CLI flags are allow-listed per command — `run` takes only `--out-dir`,
+`--only`, `--run-id`; `compare` only `--tolerances`, `--json`. Anything else
+(a typo such as `--tolerance` or `--out-dirr`), a repeated flag, an empty
+value (`--only ''`, `--run-id ''`) or an empty id inside `--only a,,b` is a
+usage error: the CLI prints the usage text and exits 2 without running a
+bench, writing a file or falling back to a default. A subprocess bench's
+`status` and `exitCode` must agree (`ok` ⇔ `exitCode` 0, `failed` ⇔ non-zero);
+the validator rejects the other pairings with `bench_exit_code_status`, so a
+killed bench (`exitCode` 137) can never compare as clean.
+
 ### 1.4 Tests
 
 `packages/evaluation/test/regressionSummary.test.ts`,
-`regressionCompare.test.ts`, `regressionRun.test.ts` (VERIFIED:
-`pnpm --filter @pickle/evaluation test` → 5 files, 61 tests passed). They pin:
+`regressionCompare.test.ts`, `regressionRun.test.ts`,
+`regressionAdjudication.test.ts` (VERIFIED:
+`pnpm --filter @pickle/evaluation test` → 6 files, 72 tests passed). They pin:
 every schema failure code (missing/malformed provenance, non-hex SHAs, bench
-kind ↔ exitCode coupling, failed-bench-with-metrics, flattened-view mismatch),
+kind ↔ exitCode coupling, status ↔ exitCode agreement for subprocess benches,
+failed-bench-with-metrics, flattened-view mismatch), the per-command CLI flag
+allowlist and empty-value rejection (exit 2, nothing written),
 the JSON Schema staying in lock-step with the validator's key/enum lists
 (unknown keys rejected at every closed object), run-id validation, untracked
 dataset inputs marking the tree dirty, the
@@ -189,6 +203,39 @@ metrics identical, `bench:compare` exit 0) are recorded in
 `datasets/reports/regression/README.md`. Regenerate it only from a clean
 checkout and commit the new document alongside the change that intentionally
 moved a metric. Never edit numbers in it by hand.
+
+### 1.6 CI gate: the `bench` verify-cloud stage
+
+`scripts/verify-cloud.sh` has a `bench` stage, part of `PR_STAGES` (so
+`--tier pr` and the `verify` job in `.github/workflows/ci.yml`, which passes
+`--only deps,format,lint,typecheck,test,db,ml,bench`, both run it). It executes,
+from the repository root:
+
+```
+pnpm -s --filter @pickle/evaluation bench:regression --out-dir <artifacts>/regression --run-id ci
+pnpm -s --filter @pickle/evaluation bench:compare datasets/reports/regression/baseline.json <artifacts>/regression/ci.json --json > <artifacts>/regression/compare.json
+```
+
+where `<artifacts>` is the run's `artifacts/verify-cloud/<UTC>/` directory
+(`artifacts/verify-cloud/ci/` in CI, uploaded as the `verify-cloud-verify`
+artifact). Both JSON documents are archived next to `bench.log` and
+`summary.json`. The stage fails on any non-zero exit of either command —
+`bench:regression` 1 (a bench failed) or 2 (usage/invalid summary),
+`bench:compare` 1 (regression beyond tolerance), 2 (invalid document) or 3
+(non-comparable) — and never masks it; `summary.json` records the stage as
+`failed` with `note: "exit <code>"`. Reproduce locally with
+`scripts/verify-cloud.sh --only bench` (≈2–3 s; VERIFIED exit 0 with 104
+unchanged + 96 informational metrics, 0 regressions, against the committed
+baseline).
+
+Known, accepted confound: `baseline.json` was produced on Node v22.23.2 while
+CI runs Node 20, so every CI comparison prints `CONFOUND runner.node`. This is
+a warning, not a failure — the benches replay committed artifacts and produce
+identical values across runtimes (VERIFIED on 2026-09-04: `bench:regression`
+under Node v20.20.2 and under v22.12.0 both compared to the baseline with all
+200 metric values identical, exit 0). The baseline is regenerated only by the
+runner, on a clean checkout, when a metric is meant to move (§1.5); until then
+the Node discrepancy is documented here rather than papered over.
 
 ---
 

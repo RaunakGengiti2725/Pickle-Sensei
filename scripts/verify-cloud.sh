@@ -22,6 +22,11 @@
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
 #   security   scripts/security-scan.sh (secret/dependency scan) when present
+#   bench      @pickle/evaluation bench:regression (9 Linux replay benches) into
+#              <artifacts>/regression/ci.json, then bench:compare against the
+#              committed datasets/reports/regression/baseline.json (report:
+#              <artifacts>/regression/compare.json); exit 1 regressions beyond
+#              tolerance, 2 invalid summary, 3 non-comparable — all fail the stage
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
@@ -50,9 +55,11 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security admin e2e release)
+ALL_STAGES=(deps format lint typecheck test db mobile ml edge rls security bench admin e2e release)
 # What .github/workflows/ci.yml gates on every PR (verify + mobile + edge + supabase-security jobs).
-PR_STAGES=(deps format lint typecheck test db mobile ml edge rls security)
+PR_STAGES=(deps format lint typecheck test db mobile ml edge rls security bench)
+# The accepted regression reference the bench stage compares every run against.
+BENCH_BASELINE="datasets/reports/regression/baseline.json"
 
 TIER="full"
 ONLY=""
@@ -61,7 +68,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -245,6 +252,39 @@ stage_security() {
     exit 75
   fi
   scripts/security-scan.sh
+}
+
+# bench_compare <candidate.json> <compare.json> — the exact comparison the bench
+# stage gates on; the JSON report is archived and the comparator's exit code
+# (1 regressions, 2 invalid input, 3 non-comparable) is returned unchanged.
+bench_compare() {
+  local candidate="$1" report="$2" rc=0
+  # Capture the exit code instead of letting errexit cut the report short; it is returned below.
+  pnpm -s --filter @pickle/evaluation bench:compare "$REPO_ROOT/$BENCH_BASELINE" "$candidate" --json >"$report" || rc=$?
+  echo "bench:compare $BENCH_BASELINE vs $candidate → exit $rc (report: $report)"
+  if [ -s "$report" ]; then
+    node -e '
+const r = require(process.argv[1]);
+console.log(`comparable=${r.comparable} regressions=${r.regressions.length} improvements=${r.improvements.length} counts=${JSON.stringify(r.counts)}`);
+for (const line of [...r.warnings, ...r.regressions]) console.log(`  ${line}`);' "$report"
+  fi
+  return $rc
+}
+
+stage_bench() {
+  need pnpm
+  need node
+  [ -d packages/evaluation/node_modules ] || { echo "packages/evaluation deps missing — run the deps stage"; exit 75; }
+  [ -f "$BENCH_BASELINE" ] || { echo "missing committed baseline $BENCH_BASELINE"; exit 1; }
+  local out
+  out="$(cd "$ARTIFACTS" && pwd)/regression"
+  mkdir -p "$out"
+  # A stale summary would make bench:regression refuse to overwrite it.
+  rm -f "$out/ci.json" "$out/compare.json"
+  # bench:regression exits 1 when any bench failed (summary still written) and 2
+  # on usage/setup errors; both must fail the stage, so no compare on failure.
+  pnpm -s --filter @pickle/evaluation bench:regression --out-dir "$out" --run-id ci
+  bench_compare "$out/ci.json" "$out/compare.json"
 }
 
 stage_admin() { pnpm --filter @pickle/admin-web build; }

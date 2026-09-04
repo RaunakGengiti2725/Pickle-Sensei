@@ -105,7 +105,7 @@
           "cwd": { "type": "string", "minLength": 1 },
           "status": { "enum": ["ok", "failed"] },
           "exitCode": {
-            "description": "Subprocess exit code; null for in_process benches.",
+            "description": "Subprocess exit code; null for in_process benches. Must agree with status: 0 exactly when ok, non-zero (the failing subprocess's code, or -1 when the failure was not a subprocess exit) when failed.",
             "type": ["integer", "null"]
           },
           "wallClockMs": { "type": "integer", "minimum": 0 },
@@ -126,7 +126,29 @@
             "type": "object",
             "additionalProperties": { "type": "string" }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "in_process" } } },
+            "then": { "properties": { "exitCode": { "type": "null" } } }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "subprocess" } } },
+            "then": { "properties": { "exitCode": { "type": "integer" } } }
+          },
+          {
+            "if": {
+              "properties": { "kind": { "const": "subprocess" }, "status": { "const": "ok" } }
+            },
+            "then": { "properties": { "exitCode": { "const": 0 } } }
+          },
+          {
+            "if": {
+              "properties": { "kind": { "const": "subprocess" }, "status": { "const": "failed" } }
+            },
+            "then": { "properties": { "exitCode": { "type": "integer", "not": { "const": 0 } } } }
+          }
+        ]
       }
     },
     "metrics": {

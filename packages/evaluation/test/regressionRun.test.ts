@@ -16,7 +16,13 @@ import {
   collectModelVersions,
   contactReplayMetrics,
 } from "../src/regression/benches.js";
-import { main, parseArgs, resolveUserPath } from "../src/regression/cli.js";
+import {
+  COMMAND_FLAGS,
+  assertKnownFlags,
+  main,
+  parseArgs,
+  resolveUserPath,
+} from "../src/regression/cli.js";
 import {
   assertValidRunId,
   collectDatasetReleases,
@@ -183,7 +189,33 @@ describe("executeBench", () => {
     );
     expect(record.exitCode).toBe(-1);
   });
+
+  it("uses -1 when a subprocess bench failed after its last subprocess exited 0", () => {
+    const record = executeBench(
+      {
+        ...definition,
+        kind: "subprocess",
+        run: () => {
+          throw new Error("expected exactly one new file, found 0");
+        },
+      },
+      () => 0,
+    );
+    expect(record.status).toBe("failed");
+    expect(record.exitCode).toBe(-1);
+    expect(
+      validateRegressionSummary({ ...baselineShell(), benches: [record], metrics: {} }).ok,
+    ).toBe(true);
+  });
 });
+
+/** A committed baseline with its benches stripped, for wrapping a single record. */
+function baselineShell(): Record<string, unknown> {
+  const doc = JSON.parse(
+    readFileSync(join(REPO_ROOT, "datasets/reports/regression/baseline.json"), "utf8"),
+  ) as Record<string, unknown>;
+  return { ...doc, benches: [], metrics: {} };
+}
 
 describe("contactReplayMetrics", () => {
   it("keeps abstentions as abstentions and nulls the percentiles when nothing was estimated", () => {
@@ -243,6 +275,35 @@ describe("parseArgs", () => {
   it("rejects a value flag without a value", () => {
     expect(() => parseArgs(["run", "--only"])).toThrow("--only requires a value");
     expect(() => parseArgs(["run", "--only", "--json"])).toThrow("--only requires a value");
+  });
+
+  it("rejects empty values and repeated flags", () => {
+    expect(() => parseArgs(["run", "--only", ""])).toThrow("--only requires a non-empty value");
+    expect(() => parseArgs(["run", "--run-id", "  "])).toThrow(
+      "--run-id requires a non-empty value",
+    );
+    expect(() => parseArgs(["run", "--only", "a", "--only", "b"])).toThrow(
+      "--only given more than once",
+    );
+    expect(() => parseArgs(["compare", "--json", "--json"])).toThrow("--json given more than once");
+  });
+
+  it("assertKnownFlags names the offending flag and the per-command allowlist", () => {
+    expect(() => assertKnownFlags(new Map([["tolerance", "x"]]), COMMAND_FLAGS.compare)).toThrow(
+      "unknown flag(s): --tolerance (allowed: --tolerances --json)",
+    );
+    expect(() => assertKnownFlags(new Map([["json", true]]), COMMAND_FLAGS.run)).toThrow(
+      "unknown flag(s): --json (allowed: --out-dir --only --run-id)",
+    );
+    expect(() =>
+      assertKnownFlags(
+        new Map<string, unknown>([
+          ["only", "a"],
+          ["run-id", "b"],
+        ]),
+        COMMAND_FLAGS.run,
+      ),
+    ).not.toThrow();
   });
 });
 

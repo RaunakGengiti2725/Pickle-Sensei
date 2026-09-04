@@ -66,7 +66,9 @@ export interface BenchRecord {
   command: string;
   cwd: string;
   status: BenchStatus;
-  /** Subprocess exit code; null for in-process benches. */
+  /** Subprocess exit code; null for in-process benches. Must agree with
+   *  `status`: 0 exactly when `ok`, non-zero (the failing subprocess's code,
+   *  or -1 when the failure was not a subprocess exit) when `failed`. */
   exitCode: number | null;
   wallClockMs: number;
   /** Committed inputs read by the bench. */
@@ -358,6 +360,18 @@ function validateBench(raw: unknown, index: number): Result<BenchRecord> {
   }
   if (raw.kind === "subprocess" && raw.exitCode === null) {
     return invalid("bench_exit_code", `${at}.exitCode is required for subprocess benches`);
+  }
+  if (raw.kind === "subprocess" && raw.status === "ok" && raw.exitCode !== 0) {
+    return invalid(
+      "bench_exit_code_status",
+      `${at}: ok subprocess benches must have exitCode 0 (got ${String(raw.exitCode)})`,
+    );
+  }
+  if (raw.kind === "subprocess" && raw.status === "failed" && raw.exitCode === 0) {
+    return invalid(
+      "bench_exit_code_status",
+      `${at}: failed subprocess benches must have a non-zero exitCode`,
+    );
   }
   if (!isNonNegativeInt(raw.wallClockMs)) {
     return invalid("bench_wall_clock", `${at}.wallClockMs must be a non-negative integer`);
