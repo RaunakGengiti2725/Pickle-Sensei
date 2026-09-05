@@ -56,11 +56,18 @@ Deno.test(
       n.includes("webhook_reservation_and_monotonic_verified_at"),
     );
     assert(candidate, "candidate migration present");
-    const later = names.filter((n) => n > candidate);
+    // Newest migration on the integration branch (3bd08da5) when the candidate was introduced.
+    const newestOn3bd08da5 = "20260906000000_apply_synced_shot_replay_after_lock.sql";
+    assert(
+      names.includes(newestOn3bd08da5),
+      `${newestOn3bd08da5} (newest on 3bd08da5) must still exist`,
+    );
+    const earlierOrEqual = names.filter((n) => n <= newestOn3bd08da5);
+    const misordered = earlierOrEqual.filter((n) => n >= candidate);
     assertEquals(
-      later,
+      misordered,
       [],
-      `observed: ${candidate} sorts BEFORE ${later.join(", ")} which already exist on 3bd08da5; ` +
+      `observed: ${candidate} sorts BEFORE ${misordered.join(", ")} which already exist on 3bd08da5; ` +
         `expected: a migration introduced on top of the integration branch is timestamped after its newest migration ` +
         `(hosted db push applies in filename order and refuses out-of-order local files without --include-all)`,
     );
