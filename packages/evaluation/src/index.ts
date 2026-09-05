@@ -5,3 +5,6 @@ export * from "./synthetic/swingGenerator.js";
 export * from "./synthetic/adversarialStrokeFixtures.js";
 export * from "./synthetic/adversarialStrokeV4Fixtures.js";
 export * from "./synthetic/adversarialContactFixtures.js";
+export * from "./regression/summarySchema.js";
+export * from "./regression/tolerances.js";
+export * from "./regression/compare.js";

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
 import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
 
@@ -23,8 +23,19 @@ import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const sourceClip = join(root, "datasets", "paddle-bench", "bundles", "wm-volley-02", "clip.mp4");
-const dir = mkdtempSync(join(tmpdir(), "ood-redteam-"));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+/**
+ * Every red-team case gets a FRESH scratch directory. A fixture must be
+ * materialised by the test that consumes it: a case that reads a file another
+ * case wrote passes only in file order and fails under `-t <name>` or
+ * `--sequence.shuffle`. The per-test directory turns that order dependence
+ * into a deterministic failure in every order, including the default one.
+ */
+let dir = "";
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "ood-redteam-"));
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 function ffmpeg(args: string[]): void {
   execFileSync("ffmpeg", ["-v", "error", "-y", ...args]);
@@ -51,17 +62,21 @@ function gate(path: string) {
   return evaluateFrameAnalyzability(extractFrameStats(path));
 }
 
+/** Still photos cut from the dev clip at 1.2s spacing, written into `dir`. */
+function extractStills(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
+    const still = join(dir, `slide-${i}.png`);
+    ffmpeg(["-ss", String(0.5 + i * 1.2), "-i", sourceClip, "-frames:v", "1", still]);
+    return still;
+  });
+}
+
 describe(
   "OOD gate red team: adversarial near-misses (synthetic, from dev clip)",
   { timeout: 60_000 },
   () => {
     it("rejects a slideshow of pickleball still photos (1s per photo)", () => {
-      const stills: string[] = [];
-      for (let i = 0; i < 6; i += 1) {
-        const still = join(dir, `slide-${i}.png`);
-        ffmpeg(["-ss", String(0.5 + i * 1.2), "-i", sourceClip, "-frames:v", "1", still]);
-        stills.push(still);
-      }
+      const stills = extractStills(6);
       const list = join(dir, "slides.txt");
       writeFileSync(list, stills.map((s) => `file '${s}'\nduration 1`).join("\n"));
       const path = join(dir, "slideshow.mp4");
@@ -72,10 +87,7 @@ describe(
     });
 
     it("rejects a crossfading slideshow of pickleball still photos", () => {
-      const inputs: string[] = [];
-      for (let i = 0; i < 4; i += 1) {
-        inputs.push("-loop", "1", "-t", "1.5", "-i", join(dir, `slide-${i}.png`));
-      }
+      const inputs = extractStills(4).flatMap((still) => ["-loop", "1", "-t", "1.5", "-i", still]);
       const path = join(dir, "slideshow-xfade.mp4");
       ffmpeg([
         ...inputs,

@@ -7,6 +7,12 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 
 ## Verify
 
+- Canonical entry points (CI runs exactly these — see `docs/devin/OPERATING_SYSTEM.md`):
+  `scripts/verify-cloud.sh --tier pr` (Linux gates, per-stage logs +
+  `summary.json` under `artifacts/verify-cloud/`), `scripts/mac-full-verify.sh`
+  (Apple gates; from Linux `--remote` pushes HEAD to a `ci/mac-*` branch that
+  runs on the self-hosted M4 runner), `scripts/verify-all.sh` (both). Skills
+  in `.agents/skills/` describe when to run which. Review rules: `REVIEW.md`.
 - Mobile: `cd apps/mobile && npx tsc --noEmit && npx jest --silent`
 - Workspace: `pnpm -r typecheck` and `pnpm --filter @pickle/shared-types test`
 - CI's `verify` job = `pnpm format:check` + `pnpm lint` + `pnpm typecheck` +
@@ -25,6 +31,17 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   `YYYYMMDDHHMMSS_description.sql`; remote history is tracked — never edit an
   applied migration, add a new one)
 - API: `supabase functions deploy api --no-verify-jwt`
+- Edge dependencies are pinned EXACTLY: `index.ts` imports
+  `npm:@supabase/supabase-js@2.112.4` and the function-local
+  `supabase/functions/api/deno.json` + `deno.lock` fix the resolution the
+  deploy bundles (a bare `@2` would resolve the latest 2.x, unreviewed, on
+  every deploy). Static pin: `__wf__/db_migrations_rls_indexes.test.ts`
+  ("edge deps"). To bump: change the version in the `index.ts` import, then
+  `cd supabase/functions/api && rm deno.lock && deno install --entrypoint
+index.ts` (regenerates `deno.lock`), update the `SUPABASE_JS_PIN` constant
+  in that test, run `(cd supabase/functions/api/__wf__ && deno task test)`
+  and `deno check cache.ts rateLimit.ts http.ts legal.ts`, and commit the
+  import, the lockfile and the test together.
 - Secrets: `supabase secrets set REVENUECAT_SECRET_API_KEY=…` (billing sync falls
   back to `REVENUECAT_PUBLIC_SDK_KEY`, currently set to the Test Store key),
   `REVENUECAT_WEBHOOK_AUTH=…` (shared secret the RevenueCat webhook must send
@@ -63,7 +80,10 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   Google alike, no provider SDK): the user is signed in from the record, the
   refresh token is exchanged (launch waits ≤ 8s, then proceeds signed-in with
   local data while the refresh continues), and `sessionKeeper.ts` rotates
-  the bearer 60s before expiry, retries transient failures with backoff, and
+  the bearer 60s before expiry (never sooner than 30s after the previous
+  rotation — a short-lived or clock-skewed `expiresAt` must not become a
+  once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts`),
+  retries transient failures with backoff, and
   re-checks on every foreground (timers don't fire while suspended). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
   legacy Google silent-restore flag is only a fallback for devices that
@@ -109,6 +129,19 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   a different subject (e.g. Apple then Google) is a different identity.
   `access_state().scored_count` is therefore identity-lifetime (the exit
   survey's `scored_count` stamp inherits that meaning).
+  `20260905000100_late_linked_identity_ledger.sql`: an identity linked AFTER
+  ratings were spent inherits the account's lifetime count at link time
+  (AFTER INSERT trigger on auth.identities, definer, greatest-only, plus a
+  one-shot backfill) — live: J10/J11.
+- Table-layer permit gate (`20260905000000_scored_shot_write_gate.sql`): the
+  RPC is the intended write path, but `authenticated` also holds INSERT on
+  `public.shots`, so a BEFORE INSERT trigger refuses any client-written
+  `result_kind='scored'` row without a LIVE reserved permit and re-checks the
+  lifetime allowance under the same `access_lock_key(uid)` (premium bypasses
+  the allowance, never the permit). `shots_low_confidence_unscored` (NOT
+  VALID) makes `low_confidence ⇒ overall_score is null` a table invariant,
+  mirroring the edge parser. Both trigger functions are revoked from clients.
+  Owner/service writes (no JWT `sub`) are untouched. Live: section L.
 - 5xx bodies are generic (detail only in function logs). Free-text inputs are
   sanitized (`http.ts sanitizeUserText`). pg_cron sweeps stale permits,
   expired deletion requests, old webhook events.
@@ -178,6 +211,20 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   still preferred — the fallback only covers subscriber reads.
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
+- Entitlement row semantics (2026-09-06): the row keeps the NEWEST
+  `verified_at` (`billing_entitlements_keep_newest_verdict`, a stale verdict
+  is dropped and the edge fn re-reads the stored row). `verified_at` is
+  RevenueCat's `request_date_ms` only when it lies within
+  `REVENUECAT_CLOCK_MAX_AHEAD_MS` (5 min) ahead / `REVENUECAT_CLOCK_MAX_BEHIND_MS`
+  (24 h) behind the isolate clock read BEFORE the RC round trip; otherwise
+  (and when absent/NaN/≤0/out of range) that pre-request clock is used — a
+  far-future provider clock must never become a key that outranks every later
+  real verdict. Anything the edge fn answers about a stored row goes through
+  `effectivePremium()` — premium AND (expires_at IS NULL OR expires_at >
+  now()), the same predicate `access_state()` and every other DB decision
+  point apply — so a stored `premium=true` past its `expires_at` is NOT
+  premium.
+  Pinned by `__wf__/fix6_billing.test.ts` + `attack_fix5_billing.test.ts`.
 - Free-rating ledger freshness (2026-09-02): `accessStore.canonicalAccess`
   is a server snapshot, and `GET /v1/me/access` derives `used` from SYNCED
   scored shots and `reserved` from live permits — so it goes stale the
@@ -186,7 +233,9 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `refreshAccess()` on every visit for synced (non-`localOnly`) sessions
   (skipped while a load is in flight; the old value stays on screen until
   the new one lands), and AnalyzeScreen re-reads it in its UNMOUNT cleanup
-  once a run called `runCaptureAnalysis` — never while mounted, because
+  once a run called `runCaptureAnalysis` — chained onto that run's promise
+  so the read sees the permit consumed/released, never the intermediate
+  reserved state — and never while mounted, because
   `useRatingRouteGate` replaces a mounted screen whose `canStartRating`
   flips false and would tear down the "last free analysis" prompt. The
   Settings membership row words "N free ratings left" from

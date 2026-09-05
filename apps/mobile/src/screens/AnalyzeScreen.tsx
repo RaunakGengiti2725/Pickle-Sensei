@@ -531,6 +531,25 @@ export function importedPoseExtractionFailureMessage(error: unknown): string {
     : 'Reading player movement from this video failed.';
 }
 
+/** The rejection code both native bridges emit when the user backs out of
+ * the guided camera or the video picker. */
+const CAMERA_USER_CANCELLED_CODE = 'camera.cancelled';
+
+/**
+ * True only for a rejection the native bridge typed as a user cancel. Every
+ * other capture rejection is a real failure — including ones whose message
+ * happens to contain "cancel" (AVFoundation/Vision word interrupted sessions
+ * that way) — and must reach the error surface.
+ */
+export function isUserCancelledCapture(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === CAMERA_USER_CANCELLED_CODE
+  );
+}
+
 /** Start-region lock outcome for the funnel's T4 (select starting location). */
 export function captureSavedDetail(clip: CapturedClip): string {
   if (clip.captureMode !== 'automatic_pose_trigger') return 'imported';
@@ -618,13 +637,20 @@ export function AnalyzeScreen() {
   // starts. It is re-read from the server once this screen is GONE — never
   // while it is mounted: the route gate replaces a screen whose
   // canStartRating flips false, and the "last free analysis" prompt has to
-  // finish on top of the saved score first.
+  // finish on top of the saved score first. The re-read waits for the run
+  // that touched the ledger to settle (permit consumed or released): a read
+  // issued while the permit is still reserved would pin the snapshot on an
+  // intermediate state nothing else refreshes.
   const ratingLedgerTouched = useRef(false);
+  const ledgerRunSettled = useRef<Promise<void>>(Promise.resolve());
   useEffect(
     () => () => {
-      const access = useAccessStore.getState();
-      if (!ratingLedgerTouched.current || access.status === 'idle') return;
-      void access.refreshAccess();
+      if (!ratingLedgerTouched.current) return;
+      void ledgerRunSettled.current.then(() => {
+        const access = useAccessStore.getState();
+        if (access.status === 'idle') return;
+        void access.refreshAccess();
+      });
     },
     [],
   );
@@ -852,9 +878,12 @@ export function AnalyzeScreen() {
         } catch {
           practiceSet = null;
         }
+        // The player may have left while the planner read was pending; a run
+        // started now would spend a rating nobody is waiting on.
+        if (abandoned.current) return;
         const sessionId = practiceSet?.sessionId ?? null;
         ratingLedgerTouched.current = true;
-        const outcome = await runCaptureAnalysis({
+        const analysisRun = runCaptureAnalysis({
           db: getDb(),
           captureId,
           clip: analysisClip,
@@ -879,6 +908,11 @@ export function AnalyzeScreen() {
                 )
               : null,
         });
+        ledgerRunSettled.current = analysisRun.then(
+          () => undefined,
+          () => undefined,
+        );
+        const outcome = await analysisRun;
         // The measured/saved boundary lives inside runCaptureAnalysis (no
         // incremental signal is exposed); once it returns, the remaining
         // work is routing the already-persisted outcome.
@@ -989,10 +1023,36 @@ export function AnalyzeScreen() {
         source === 'library' ? 'Opening video library…' : 'Opening camera…',
     });
     try {
-      const clip =
-        source === 'library'
-          ? await importStrokeVideo()
-          : await captureStrokeVideo();
+      let clip: CapturedClip;
+      try {
+        clip =
+          source === 'library'
+            ? await importStrokeVideo()
+            : await captureStrokeVideo();
+      } catch (error) {
+        if (isUserCancelledCapture(error)) {
+          // User cancel is not a startup failure.
+          usabilityFunnel.log('attempt_abandoned');
+          if (source === 'library') navigation.goBack();
+          else setPhase({ kind: 'ready' });
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        if (source === 'camera') {
+          stabilitySlo.record({
+            kind: 'camera_startup_failed',
+            reason: 'guided_capture_error',
+          });
+        }
+        usabilityFunnel.log('error_shown', message);
+        setPhase({
+          kind: 'error',
+          message,
+          stage: 'capture',
+          recovery: 'retry',
+        });
+        return;
+      }
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
@@ -1032,27 +1092,16 @@ export function AnalyzeScreen() {
       usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
       setPhase({ kind: 'saved', clip, captureId });
     } catch (error) {
+      // The clip exists: this is a local persistence failure after a
+      // successful capture, never a camera startup failure.
       const message = error instanceof Error ? error.message : String(error);
-      if (message.toLowerCase().includes('cancel')) {
-        // User cancel is not a startup failure.
-        usabilityFunnel.log('attempt_abandoned');
-        if (source === 'library') navigation.goBack();
-        else setPhase({ kind: 'ready' });
-      } else {
-        if (source === 'camera') {
-          stabilitySlo.record({
-            kind: 'camera_startup_failed',
-            reason: 'guided_capture_error',
-          });
-        }
-        usabilityFunnel.log('error_shown', message);
-        setPhase({
-          kind: 'error',
-          message,
-          stage: 'capture',
-          recovery: 'retry',
-        });
-      }
+      usabilityFunnel.log('error_shown', message);
+      setPhase({
+        kind: 'error',
+        message,
+        stage: 'capture',
+        recovery: 'retry',
+      });
     } finally {
       operationActive.current = false;
     }

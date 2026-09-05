@@ -1,9 +1,12 @@
 {
   "nodeModulesDir": "none",
   "lock": false,
+  "fmt": {
+    "lineWidth": 100
+  },
   "imports": {
     "postgres": "npm:postgres@3.4.5",
-    "@std/assert": "jsr:@std/assert@1"
+    "@std/assert": "jsr:@std/assert@1.0.19"
   },
   "tasks": {
     "test": "deno test -A --no-check --config deno.json ."

@@ -18,6 +18,12 @@ const CASCADE_USER_INDEXES = "20260902130100_cascade_user_indexes.sql";
 const PERMITS_SWEEP_INDEX = "20260902130200_permits_reserved_sweep_index.sql";
 const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 const IDENTITY_LEDGER = "20260902150000_free_rating_identity_ledger.sql";
+const SCORED_WRITE_GATE = "20260905000000_scored_shot_write_gate.sql";
+const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
+const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
+const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
+const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
+const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -302,6 +308,875 @@ Deno.test(
           `${migration.file} grants client access to public.free_rating_ledger: ${statement}`,
         );
       }
+    }
+  },
+);
+
+// ─── XC-SEC-4 / XC-SEC-5: error hygiene and captures hardening ───────────────
+
+const PROGRESS_DATA = "20260829120000_progress_data.sql";
+const ERROR_HYGIENE = "20260904000000_apply_synced_shot_error_hygiene.sql";
+
+function stripSqlComments(raw: string): string {
+  return raw
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+}
+
+/** Column names declared `text` inside `create table if not exists public.<table> (…)`. */
+function textColumnsOf(raw: string, table: string): string[] {
+  const start = raw.search(new RegExp(`create table if not exists public\\.${table}\\s*\\(`, "i"));
+  ok(start >= 0, `create table public.${table} must exist`);
+  const body = raw.slice(start);
+  const end = body.search(/\n\);/);
+  ok(end >= 0, `create table public.${table} must be terminated`);
+  const columns: string[] = [];
+  for (const line of body.slice(0, end).split("\n")) {
+    const match = line.replace(/--.*$/, "").match(/^\s{2}([a-z_]+)\s+text\b/);
+    if (match) columns.push(match[1]);
+  }
+  return columns;
+}
+
+/** `alter table public.<table> add constraint <name>_text_bounds check (…)`
+ * statements anywhere in the chain (the defense-in-depth DO-block style is
+ * split by `;` too, so each add-constraint lands in its own statement). */
+function textBoundsConstraintsOn(chain: Migration[], table: string): string[] {
+  const found: string[] = [];
+  for (const migration of chain) {
+    for (const statement of migration.statements) {
+      const match = statement.match(
+        new RegExp(
+          `alter table public\\.${table} add constraint ([a-z_]+_text_bounds) check \\((.*)\\)(?: not valid)?$`,
+        ),
+      );
+      if (match) found.push(match[2]);
+    }
+  }
+  return found;
+}
+
+Deno.test(
+  "apply_synced_shot: the write-failure result is SQLSTATE-only from the error-hygiene migration on",
+  async () => {
+    const chain = await loadChain();
+    const hygiene = chain.find((m) => m.file === ERROR_HYGIENE);
+    ok(hygiene, `${ERROR_HYGIENE} must exist in the migration chain`);
+    const hygieneBodies = functionBodies(stripSqlComments(hygiene.raw), "apply_synced_shot");
+    ok(hygieneBodies.length === 1, `${ERROR_HYGIENE} must recreate public.apply_synced_shot`);
+    ok(
+      /when others then\s+return 'shot\.write_failed:' \|\| sqlstate;/.test(hygieneBodies[0]),
+      "the WHEN OTHERS handler must return 'shot.write_failed:' || sqlstate",
+    );
+
+    // Every later definition keeps the contract: no sqlerrm (which echoes the
+    // client's input) and no message text in any return value.
+    const index = chain.findIndex((m) => m.file === ERROR_HYGIENE);
+    for (const migration of chain.slice(index)) {
+      for (const body of functionBodies(stripSqlComments(migration.raw), "apply_synced_shot")) {
+        ok(!/\bsqlerrm\b/.test(body), `${migration.file}: apply_synced_shot must not use sqlerrm`);
+        ok(
+          !/\bpg_exception_detail\b|\bpg_exception_hint\b|\bmessage_text\b/.test(body),
+          `${migration.file}: apply_synced_shot must not surface error message text`,
+        );
+      }
+    }
+    // The pre-fix chain is the one the fix was written against.
+    const ledger = chain.find((m) => m.file === IDENTITY_LEDGER);
+    ok(ledger, `${IDENTITY_LEDGER} must exist`);
+    ok(
+      functionBodies(ledger.raw, "apply_synced_shot")[0]?.includes("|| sqlerrm"),
+      `${IDENTITY_LEDGER} is the defective definition the hygiene migration supersedes`,
+    );
+  },
+);
+
+Deno.test("captures: every text column is covered by a *_text_bounds constraint", async () => {
+  const chain = await loadChain();
+  const progress = chain.find((m) => m.file === PROGRESS_DATA);
+  ok(progress, `${PROGRESS_DATA} must exist in the migration chain`);
+  const columns = textColumnsOf(progress.raw, "captures");
+  ok(
+    columns.includes("declared_stroke") && columns.includes("recognized_shot_type"),
+    `captures text columns must include the client-authored ones; got ${columns.join(", ")}`,
+  );
+  const bounds = textBoundsConstraintsOn(chain, "captures");
+  ok(bounds.length >= 1, "some migration must add a captures *_text_bounds constraint");
+  for (const column of columns) {
+    ok(
+      bounds.some((check) => new RegExp(`length\\(${column}\\)`).test(check)),
+      `captures.${column} has no length cap in any *_text_bounds constraint`,
+    );
+  }
+});
+
+Deno.test("captured_at: shots and captures carry a finite, sane-range check", async () => {
+  const chain = await loadChain();
+  const hygiene = statementsOf(chain, ERROR_HYGIENE);
+  for (const table of ["shots", "captures"]) {
+    const check = hygiene.find((s) =>
+      new RegExp(
+        `alter table public\\.${table} add constraint ${table}_captured_at_bounds check \\(`,
+      ).test(s),
+    );
+    ok(check, `${ERROR_HYGIENE} must add ${table}_captured_at_bounds`);
+    ok(
+      /captured_at >= '2000-01-01'/.test(check) && /captured_at < '2100-01-01'/.test(check),
+      `${table}_captured_at_bounds must bound captured_at to [2000-01-01, 2100-01-01): ${check}`,
+    );
+  }
+});
+
+Deno.test("captures: no client write grant survives the error-hygiene migration", async () => {
+  const chain = await loadChain();
+  const hygiene = statementsOf(chain, ERROR_HYGIENE);
+  ok(
+    hygiene.includes("revoke insert, update, delete on public.captures from anon, authenticated"),
+    `${ERROR_HYGIENE} must revoke client writes on public.captures`,
+  );
+  for (const migration of after(chain, ERROR_HYGIENE)) {
+    for (const statement of migration.statements) {
+      if (!statement.startsWith("grant ")) continue;
+      const [privileges, rest = ""] = statement.split(" on ", 2);
+      if (!/\bpublic\.captures\b/.test(rest.split(" to ")[0] ?? "")) continue;
+      const grantees = rest.split(" to ").pop() ?? "";
+      ok(
+        !(
+          /\b(insert|update|delete|all)\b/.test(privileges) &&
+          /\b(anon|authenticated|public)\b/.test(grantees)
+        ),
+        `${migration.file} re-grants client writes on public.captures: ${statement}`,
+      );
+    }
+  }
+});
+
+// ─── DB-02 / DB-01: table-layer permit gate and link-time ledger inheritance ──
+
+/** A later migration may drop one of these triggers only if it recreates it in
+ * the same file (the `drop trigger if exists … create trigger …` idiom). */
+function dropsTriggerWithoutRecreating(migration: Migration, trigger: string): boolean {
+  return migration.statements.some(
+    (s) =>
+      s.startsWith("drop trigger") &&
+      s.includes(trigger) &&
+      !migration.statements.some((c) => c.startsWith(`create trigger ${trigger} `)),
+  );
+}
+
+Deno.test(
+  "shots: every client-written scored row passes the permit gate, and abstentions carry no score",
+  async () => {
+    const chain = await loadChain();
+    const gate = statementsOf(chain, SCORED_WRITE_GATE);
+    const gateRaw = chain.find((m) => m.file === SCORED_WRITE_GATE)?.raw ?? "";
+    ok(
+      gate.some((s) =>
+        s.startsWith(
+          "create trigger shots_enforce_scored_permit before insert on public.shots for each row execute function public.enforce_scored_shot_permit()",
+        ),
+      ),
+      `${SCORED_WRITE_GATE} must install the BEFORE INSERT gate on public.shots`,
+    );
+    ok(
+      gate.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "the gate function must not be client-executable",
+    );
+    ok(
+      /alter table public\.shots add constraint shots_low_confidence_unscored check \(\s*result_kind = 'scored' or overall_score is null\s*\) not valid/.test(
+        gateRaw.toLowerCase(),
+      ),
+      `${SCORED_WRITE_GATE} must add shots_low_confidence_unscored (NOT VALID — no deploy-time rescan)`,
+    );
+    const [body] = functionBodies(gateRaw, "enforce_scored_shot_permit");
+    ok(body, `${SCORED_WRITE_GATE} must define enforce_scored_shot_permit()`);
+    ok(
+      body.includes("pg_advisory_xact_lock(public.access_lock_key("),
+      "the gate must serialize on the shared per-user access lock (a direct writer racing a sync must not double-spend)",
+    );
+    ok(
+      body.includes("public.lifetime_scored_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(body),
+      "the gate must decide the allowance through lifetime_scored_count(), never the raw per-account count",
+    );
+    ok(
+      /p\.status = 'reserved'/.test(body) && /interval '24 hours'/.test(body),
+      "the gate must require a LIVE reserved permit (same 24h window as apply_synced_shot)",
+    );
+    for (const migration of after(chain, SCORED_WRITE_GATE)) {
+      ok(
+        !dropsTriggerWithoutRecreating(migration, "shots_enforce_scored_permit"),
+        `${migration.file} drops shots_enforce_scored_permit without recreating it`,
+      );
+      ok(
+        !migration.statements.some(
+          (s) =>
+            s.startsWith("alter table public.shots drop constraint") &&
+            s.includes("shots_low_confidence_unscored"),
+        ),
+        `${migration.file} drops shots_low_confidence_unscored`,
+      );
+      for (const body of functionBodies(migration.raw, "enforce_scored_shot_permit")) {
+        ok(
+          body.includes("public.lifetime_scored_count()") && /p\.status = 'reserved'/.test(body),
+          `${migration.file}: enforce_scored_shot_permit must keep both the permit check and the lifetime allowance`,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
+  "free ratings: an identity linked after the ratings were spent inherits the ledger at link time",
+  async () => {
+    const chain = await loadChain();
+    const link = statementsOf(chain, LATE_LINK_LEDGER);
+    const linkRaw = chain.find((m) => m.file === LATE_LINK_LEDGER)?.raw ?? "";
+    ok(
+      link.some((s) =>
+        s.startsWith(
+          "create trigger on_auth_identity_linked after insert on auth.identities for each row execute function public.inherit_free_rating_ledger()",
+        ),
+      ),
+      `${LATE_LINK_LEDGER} must install the AFTER INSERT trigger on auth.identities`,
+    );
+    ok(
+      link.includes(
+        "revoke execute on function public.inherit_free_rating_ledger() from public, anon, authenticated",
+      ),
+      "inherit_free_rating_ledger() must not be client-executable",
+    );
+    const [body] = functionBodies(linkRaw, "inherit_free_rating_ledger");
+    ok(body, `${LATE_LINK_LEDGER} must define inherit_free_rating_ledger()`);
+    ok(
+      body.includes("security definer"),
+      "the link-time writer runs as definer (GoTrue holds no ledger grant)",
+    );
+    ok(
+      /set scored_count = greatest\(led\.scored_count, excluded\.scored_count\)/.test(body),
+      "the link-time writer must never decrement a ledger row",
+    );
+    ok(
+      link.some(
+        (s) =>
+          s.startsWith("with per_user as") && s.includes("insert into public.free_rating_ledger"),
+      ),
+      `${LATE_LINK_LEDGER} must backfill existing accounts' identities to their lifetime count`,
+    );
+    for (const migration of after(chain, LATE_LINK_LEDGER)) {
+      ok(
+        !dropsTriggerWithoutRecreating(migration, "on_auth_identity_linked"),
+        `${migration.file} drops on_auth_identity_linked without recreating it`,
+      );
+    }
+  },
+);
+
+// ─── OFF-24H-01: a late permit backs its shot; the direct-INSERT gate stays shut ──
+
+/** The exact backing rule for a late sync: reserved at any age, or swept to
+ * released/expired. Anything else is refused. */
+const LATE_BACKING_RULE =
+  /status = 'reserved'\s+or \(\s*\S*status = 'released' and \S*outcome = 'expired'\s*\)/;
+
+Deno.test(
+  "apply_synced_shot: permit age never refuses a sync, and the shots gate honours only the RPC's vouch",
+  async () => {
+    const chain = await loadChain();
+    const late = chain.find((m) => m.file === LATE_PERMIT_SYNC);
+    ok(late, `${LATE_PERMIT_SYNC} must exist in the migration chain`);
+    const raw = stripSqlComments(late.raw);
+
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${LATE_PERMIT_SYNC} must recreate public.apply_synced_shot`);
+    ok(
+      !rpc.includes("access.permit_expired") && !/created_at <= now\(\)/.test(rpc),
+      "apply_synced_shot must not refuse a permit on age (access.permit_expired is retired)",
+    );
+    ok(
+      LATE_BACKING_RULE.test(rpc) && rpc.includes("return 'access.permit_not_reserved'"),
+      "apply_synced_shot must accept exactly reserved | released+expired and refuse every other state",
+    );
+    ok(
+      rpc.includes("set_config('pickle.sync_permit_id', v_permit_id::text, true)") &&
+        rpc.includes("set_config('pickle.sync_permit_id', '', true)"),
+      "apply_synced_shot must vouch for the validated permit transaction-locally and clear the vouch",
+    );
+    ok(
+      rpc.includes("public.lifetime_scored_count() >= 2") &&
+        rpc.includes("return 'access.paywall_required'"),
+      "the free-limit backstop must remain the guard that caps free ratings",
+    );
+
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${LATE_PERMIT_SYNC} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes("current_setting('pickle.sync_permit_id', true)") &&
+        gate.includes("p.id = v_vouched") &&
+        LATE_BACKING_RULE.test(gate),
+      "the gate must honour the vouch only for the one permit the RPC validated, under the same backing rule",
+    );
+    ok(
+      /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(gate),
+      "the gate must keep the live-permit rule for direct client INSERTs (no vouch → 24h window)",
+    );
+    ok(
+      late.statements.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "the recreated gate function must stay non-executable by clients",
+    );
+
+    // Later definitions must not reintroduce an age refusal in the RPC or
+    // loosen the gate's direct-INSERT rule. From 20260906140000 on the backing
+    // rule lives in permit_backs_sync() (pinned below) — a later RPC either
+    // delegates to it or spells the same rule inline.
+    for (const migration of after(chain, LATE_PERMIT_SYNC)) {
+      for (const body of functionBodies(stripSqlComments(migration.raw), "apply_synced_shot")) {
+        ok(
+          !body.includes("access.permit_expired") &&
+            (LATE_BACKING_RULE.test(body) || body.includes("public.permit_backs_sync(")),
+          `${migration.file}: apply_synced_shot must keep accepting reserved | released+expired permits at any age`,
+        );
+      }
+      for (const body of functionBodies(
+        stripSqlComments(migration.raw),
+        "enforce_scored_shot_permit",
+      )) {
+        ok(
+          /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(body),
+          `${migration.file}: enforce_scored_shot_permit must keep the 24h live-permit rule for direct INSERTs`,
+        );
+      }
+    }
+  },
+);
+
+// ─── OFF-24H-02: NULL-safe backing, closed permit lifecycle, vouch-only gate ──
+
+/** permit_backs_sync(): the late backing rule wrapped so NULL → false. */
+const NULL_SAFE_BACKING_RULE =
+  /coalesce\(\s*p_status = 'reserved'\s+or \(p_status = 'released' and p_outcome = 'expired'\),\s*false\)/;
+
+Deno.test(
+  "permits: backing is decided by the NULL-safe permit_backs_sync(), the lifecycle is a table invariant, and the sync gate never falls back to an unrelated permit",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_LIFECYCLE);
+    ok(migration, `${PERMIT_LIFECYCLE} must exist in the migration chain`);
+    const raw = stripSqlComments(migration.raw);
+
+    const [rule] = functionBodies(raw, "permit_backs_sync");
+    ok(rule, `${PERMIT_LIFECYCLE} must define public.permit_backs_sync`);
+    ok(
+      NULL_SAFE_BACKING_RULE.test(rule),
+      "permit_backs_sync must be coalesce(reserved | released+expired, false): a NULL outcome is refused",
+    );
+
+    // Every status/outcome decision in the RPC and the gate goes through it;
+    // the 3VL-prone inline comparison is gone from both.
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_LIFECYCLE} must recreate public.apply_synced_shot`);
+    ok(
+      rpc.includes("if not public.permit_backs_sync(v_permit.status, v_permit.outcome) then") &&
+        rpc.includes("return 'access.permit_not_reserved'") &&
+        !rpc.includes("outcome = 'expired'"),
+      "apply_synced_shot must validate the named permit through permit_backs_sync only",
+    );
+    ok(
+      (rpc.match(/and public\.permit_backs_sync\(status, outcome\)/g) ?? []).length === 2,
+      "both permit UPDATEs in apply_synced_shot (free-limit release, finalize) must use the NULL-safe rule",
+    );
+    ok(
+      rpc.includes("get diagnostics v_consumed = row_count") &&
+        rpc.includes("if v_consumed <> 1 then"),
+      "apply_synced_shot must assert the finalize UPDATE consumed exactly the one named permit",
+    );
+    ok(
+      /when sqlstate 'pkp01' then\s+(--[^\n]*\s+)*return 'access\.permit_not_reserved';/.test(
+        rpc,
+      ) && /when sqlstate 'pkp02' then\s+return 'access\.paywall_required';/.test(rpc),
+      "a shots-gate refusal inside the RPC must surface as its contract verdict by SQLSTATE alone, never shot.write_failed:42501",
+    );
+
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${PERMIT_LIFECYCLE} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes("if v_vouched is not null then") &&
+        gate.includes("p.id = v_vouched") &&
+        gate.includes("and public.permit_backs_sync(p.status, p.outcome)") &&
+        !gate.includes("outcome = 'expired'"),
+      "with a vouch the gate must decide on the vouched permit through permit_backs_sync",
+    );
+    ok(
+      !/\)\s*and not exists\s*\(/.test(gate),
+      "the gate must not OR the vouched permit with any other live reservation (no fallback)",
+    );
+    ok(
+      /errcode = 'pkp01',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/.test(gate) &&
+        gate.includes(
+          "errcode = case when v_vouched is not null then 'pkp02' else 'insufficient_privilege' end",
+        ) &&
+        /errcode = 'insufficient_privilege',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/.test(
+          gate,
+        ),
+      "vouched refusals must raise the verdict SQLSTATEs (PKP01 permit / PKP02 allowance); direct-INSERT refusals stay 42501",
+    );
+
+    // The lifecycle guard: every role, INSERT and UPDATE, non-executable by clients.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_lifecycle");
+    ok(guard, `${PERMIT_LIFECYCLE} must define public.guard_analysis_permit_lifecycle`);
+    ok(
+      guard.includes("(new.status = 'reserved') <> (new.outcome is null)") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the guard must pin released ⇒ outcome IS NOT NULL and answer 23514 + the contract hint",
+    );
+    ok(
+      guard.includes("if old.status = 'reserved' then") &&
+        guard.includes("if old.status = 'released' and old.outcome = 'expired'") &&
+        guard.includes("('finalized', 'scored')") &&
+        guard.includes("('released', 'low_confidence')") &&
+        guard.includes("('released', 'free_limit_exceeded')"),
+      "the guard must allow exactly reserved → settled and released/expired → the late-sync outcomes",
+    );
+    ok(
+      migration.statements.includes(
+        "create trigger analysis_permits_guard_lifecycle before insert or update on public.analysis_permits for each row execute function public.guard_analysis_permit_lifecycle()",
+      ),
+      "the guard must be a BEFORE INSERT OR UPDATE row trigger on public.analysis_permits",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke execute on function public.guard_analysis_permit_lifecycle() from public, anon, authenticated",
+      ) &&
+        migration.statements.includes(
+          "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+        ),
+      "trigger functions must stay non-executable by clients",
+    );
+
+    // Later migrations must keep the guard and never spell the backing rule
+    // inline again.
+    for (const later of after(chain, PERMIT_LIFECYCLE)) {
+      ok(
+        !dropsTriggerWithoutRecreating(later, "analysis_permits_guard_lifecycle"),
+        `${later.file} drops analysis_permits_guard_lifecycle without recreating it`,
+      );
+      const body = stripSqlComments(later.raw);
+      for (const fn of ["apply_synced_shot", "enforce_scored_shot_permit"]) {
+        for (const def of functionBodies(body, fn)) {
+          ok(
+            def.includes("public.permit_backs_sync(") && !def.includes("outcome = 'expired'"),
+            `${later.file}: ${fn} must decide permit backing through permit_backs_sync()`,
+          );
+        }
+      }
+    }
+  },
+);
+
+// ─── ADV7-PERMIT-REUSE-DELETE-REINSERT: settled permits are terminal for the
+// client role; one-permit-one-shot is a data-layer invariant ─────────────────
+
+function grantsOnPermits(statement: string, privilege: string): boolean {
+  if (!statement.startsWith("grant ")) return false;
+  const [privileges, objects = ""] = statement.split(" on ", 2);
+  if (!new RegExp(`\\b${privilege}\\b`).test(privileges) && !/\ball\b/.test(privileges)) {
+    return false;
+  }
+  return /\bpublic\.analysis_permits\b/.test(objects);
+}
+
+function createsPolicyOnPermits(statement: string, command: string): boolean {
+  return (
+    statement.startsWith("create policy") &&
+    /\bon public\.analysis_permits\b/.test(statement) &&
+    new RegExp(`\\bfor (${command}|all)\\b`).test(statement)
+  );
+}
+
+Deno.test(
+  "permits: the client cannot DELETE a permit or name its id/timestamps, a consumed permit id can never be re-created, and every shot records the one permit it consumed",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_TERMINAL);
+    ok(migration, `${PERMIT_TERMINAL} must exist in the migration chain`);
+    ok(
+      PERMIT_TERMINAL > PERMIT_LIFECYCLE,
+      "the terminality migration must follow the lifecycle migration",
+    );
+    const { statements } = migration;
+    const raw = stripSqlComments(migration.raw);
+
+    // 1. No client DELETE, ever again.
+    ok(
+      statements.includes(
+        'drop policy if exists "analysis_permits_delete_own" on public.analysis_permits',
+      ) &&
+        statements.includes(
+          "revoke delete on public.analysis_permits from public, anon, authenticated",
+        ),
+      "the owner DELETE policy must be dropped and the DELETE grant revoked from every client role",
+    );
+
+    // 2. Client INSERT sized to the product shape: id / created_at / updated_at
+    //    are server-assigned. The reservation RPC is SECURITY INVOKER, so the
+    //    column grant (not a revoke) is the closure.
+    ok(
+      statements.includes(
+        "revoke insert on public.analysis_permits from public, anon, authenticated",
+      ) &&
+        statements.includes(
+          "grant insert (user_id, idempotency_key, status, outcome) on public.analysis_permits to authenticated",
+        ),
+      "the table-level INSERT grant must be replaced by a column grant without id/created_at/updated_at",
+    );
+    const reserveDefs = chain.flatMap((m) =>
+      functionBodies(stripSqlComments(m.raw), "reserve_analysis_permit"),
+    );
+    ok(reserveDefs.length > 0, "reserve_analysis_permit must be defined in the chain");
+    for (const def of reserveDefs) {
+      ok(
+        !/security definer/.test(def) &&
+          /insert into public\.analysis_permits \(user_id, idempotency_key\)/.test(def),
+        "reserve_analysis_permit stays SECURITY INVOKER and inserts exactly (user_id, idempotency_key) — the column grant must keep covering it",
+      );
+    }
+
+    // 3. The durable link + one-permit-one-shot index.
+    ok(
+      statements.includes(
+        "alter table public.shots add column if not exists analysis_permit_id uuid",
+      ) &&
+        statements.includes(
+          "create unique index if not exists shots_analysis_permit_unique on public.shots (analysis_permit_id) where analysis_permit_id is not null",
+        ),
+      "shots.analysis_permit_id must exist with a partial UNIQUE index (NULL rows — premium/no-permit/pre-fix — stay free)",
+    );
+
+    // 4. Resurrection guard: definer BEFORE INSERT, refuses an id already on a
+    //    shot with the lifecycle SQLSTATE/hint, non-executable by clients.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_resurrection");
+    ok(guard, `${PERMIT_TERMINAL} must define public.guard_analysis_permit_resurrection`);
+    ok(
+      /security definer/.test(guard) &&
+        guard.includes("where s.analysis_permit_id = new.id") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the resurrection guard must be SECURITY DEFINER and answer 23514 + access.permit_transition_rejected for a consumed id",
+    );
+    ok(
+      statements.includes(
+        "create trigger analysis_permits_guard_resurrection before insert on public.analysis_permits for each row execute function public.guard_analysis_permit_resurrection()",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_analysis_permit_resurrection() from public, anon, authenticated",
+        ),
+      "the resurrection guard must be a BEFORE INSERT row trigger, revoked from clients",
+    );
+
+    // 5. The RPC records the link and refuses a permit that already backs a
+    //    shot; the gate lets only the vouched permit into the column.
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_TERMINAL} must recreate public.apply_synced_shot`);
+    ok(
+      rpc.includes("where s.analysis_permit_id = v_permit_id") &&
+        rpc.includes("return 'access.permit_not_reserved'") &&
+        /insert into public\.shots \([^)]*\banalysis_permit_id\b/.test(rpc) &&
+        /when unique_violation then[\s\S]*?analysis_permit_id = v_permit_id[\s\S]*?return 'access\.permit_not_reserved'/.test(
+          rpc,
+        ),
+      "apply_synced_shot must refuse a permit id already recorded on a shot, write the link, and map the index race to access.permit_not_reserved",
+    );
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${PERMIT_TERMINAL} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes(
+        "if new.analysis_permit_id is not null\n     and (v_vouched is null or new.analysis_permit_id <> v_vouched) then",
+      ) && gate.includes("new.analysis_permit_id := v_vouched"),
+      "the gate must refuse a client-written analysis_permit_id (42501) and always write the vouched permit",
+    );
+
+    // Later migrations must not reopen any of it.
+    for (const later of after(chain, PERMIT_TERMINAL)) {
+      for (const statement of later.statements) {
+        ok(
+          !grantsOnPermits(statement, "delete"),
+          `${later.file} re-grants DELETE on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !createsPolicyOnPermits(statement, "delete"),
+          `${later.file} recreates a DELETE policy on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !(grantsOnPermits(statement, "insert") && !/^grant insert \([^)]*\)/.test(statement)) &&
+            !/^grant insert \([^)]*\b(id|created_at|updated_at)\b/.test(statement),
+          `${later.file} widens the client INSERT on public.analysis_permits: ${statement}`,
+        );
+        ok(
+          !/^drop index .*shots_analysis_permit_unique/.test(statement),
+          `${later.file} drops shots_analysis_permit_unique`,
+        );
+      }
+      ok(
+        !dropsTriggerWithoutRecreating(later, "analysis_permits_guard_resurrection"),
+        `${later.file} drops analysis_permits_guard_resurrection without recreating it`,
+      );
+    }
+  },
+);
+
+// ─── ADV-11-PREFIX-RESURRECTION + ADV-17-SETTLED-UNRESTORABLE (round 9):
+// settled permits are terminal for the OWNER role across DELETE ──────────────
+
+function grantsOnTombstones(statement: string): boolean {
+  return (
+    statement.startsWith("grant ") &&
+    /\bpublic\.analysis_permit_tombstones\b/.test(statement.split(" on ", 2)[1] ?? "")
+  );
+}
+
+Deno.test(
+  "permits: an owner-role DELETE of a settled or shot-linked permit leaves a tombstone the id can only be restored into (BEFORE DELETE definer guard, revoked from clients, never dropped later); the account cascade is exempt; the lifecycle guard stays",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_SETTLED_NO_DELETE);
+    ok(migration, `${PERMIT_SETTLED_NO_DELETE} must exist in the migration chain`);
+    ok(
+      PERMIT_SETTLED_NO_DELETE > PERMIT_TERMINAL,
+      "the owner-role terminality migration must follow the client-role one",
+    );
+    const { statements } = migration;
+    const raw = stripSqlComments(migration.raw);
+
+    // 1. The tombstone table is service-only: RLS on, every client grant
+    //    revoked, no policy, cascades away with the profile.
+    ok(
+      statements.some((s) =>
+        /^create table if not exists public\.analysis_permit_tombstones \( permit_id uuid primary key, user_id uuid not null references public\.profiles \(id\) on delete cascade,/.test(
+          s,
+        ),
+      ) &&
+        statements.includes(
+          "alter table public.analysis_permit_tombstones enable row level security",
+        ) &&
+        statements.includes(
+          "revoke all on public.analysis_permit_tombstones from public, anon, authenticated",
+        ) &&
+        !statements.some((s) =>
+          /^create policy .* on public\.analysis_permit_tombstones\b/.test(s),
+        ),
+      "analysis_permit_tombstones must be keyed by permit id, cascade from profiles, have RLS on, no client grants and no policies",
+    );
+
+    // 2. BEFORE DELETE guard: definer, pinned search_path, exempts the account
+    //    cascade (profile already gone) and reserved+unlinked rows, remembers
+    //    everything else, revoked from clients.
+    const [del] = functionBodies(raw, "guard_analysis_permit_delete");
+    ok(del, `${PERMIT_SETTLED_NO_DELETE} must define public.guard_analysis_permit_delete`);
+    ok(
+      /security definer/.test(del) &&
+        /set search_path = pg_catalog, public/.test(del) &&
+        del.includes(
+          "if not exists (select 1 from public.profiles p where p.id = old.user_id) then\n    return old;",
+        ) &&
+        del.includes("if old.status = 'reserved'") &&
+        del.includes(
+          "not exists (select 1 from public.shots s where s.analysis_permit_id = old.id) then\n    return old;",
+        ) &&
+        del.includes("insert into public.analysis_permit_tombstones") &&
+        del.includes(
+          "(old.id, old.user_id, old.idempotency_key, old.status, old.outcome, old.created_at, now())",
+        ) &&
+        !/raise exception/.test(del),
+      "the delete guard must be SECURITY DEFINER with search_path = pg_catalog, public; let the account cascade and reserved/unlinked rows through; and tombstone every settled or linked permit",
+    );
+    ok(
+      statements.includes(
+        "create trigger analysis_permits_guard_delete before delete on public.analysis_permits for each row execute function public.guard_analysis_permit_delete()",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_analysis_permit_delete() from public, anon, authenticated",
+        ),
+      "the delete guard must be a BEFORE DELETE row trigger on public.analysis_permits, revoked from clients",
+    );
+
+    // 3. Resurrection guard, same trigger: a tombstoned id is re-creatable only
+    //    as the identical settled row (consuming the tombstone); every other
+    //    shape, and an id on a shot without a tombstone, is 23514.
+    const [res] = functionBodies(raw, "guard_analysis_permit_resurrection");
+    ok(res, `${PERMIT_SETTLED_NO_DELETE} must redefine public.guard_analysis_permit_resurrection`);
+    ok(
+      /security definer/.test(res) &&
+        res.includes(
+          "from public.analysis_permit_tombstones x\n  where x.permit_id = new.id\n  for update",
+        ) &&
+        res.includes(
+          "if new.user_id = t.user_id\n       and new.idempotency_key = t.idempotency_key\n       and new.status = t.status\n       and new.outcome is not distinct from t.outcome then",
+        ) &&
+        res.includes(
+          "delete from public.analysis_permit_tombstones x where x.permit_id = new.id;\n      return new;",
+        ) &&
+        res.includes("where s.analysis_permit_id = new.id") &&
+        (res.match(/errcode = 'check_violation'/g) ?? []).length === 2 &&
+        (res.match(/hint = 'access\.permit_transition_rejected'/g) ?? []).length === 2,
+      "the resurrection guard must allow exactly the identical restore of a tombstoned id and answer 23514 + access.permit_transition_rejected to every other re-creation",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.guard_analysis_permit_resurrection() from public, anon, authenticated",
+      ) && !dropsTriggerWithoutRecreating(migration, "analysis_permits_guard_resurrection"),
+      "the redefined resurrection guard stays non-executable by clients and keeps its trigger",
+    );
+
+    // 4. The RPC answers permit_not_reserved for the caller's tombstoned id
+    //    through the auth.uid()-scoped definer reader.
+    const [reader] = functionBodies(raw, "permit_tombstoned");
+    ok(reader, `${PERMIT_SETTLED_NO_DELETE} must define public.permit_tombstoned`);
+    ok(
+      /security definer/.test(reader) &&
+        reader.includes("and t.user_id = (select auth.uid())") &&
+        statements.includes(
+          "revoke all on function public.permit_tombstoned(uuid) from public, anon",
+        ) &&
+        statements.includes(
+          "grant execute on function public.permit_tombstoned(uuid) to authenticated",
+        ),
+      "permit_tombstoned() must be a definer reader scoped to auth.uid(), executable by authenticated only",
+    );
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_SETTLED_NO_DELETE} must recreate public.apply_synced_shot`);
+    ok(
+      /if not found then\s+if public\.permit_tombstoned\(v_permit_id\) then\s+return 'access\.permit_not_reserved';\s+end if;\s+return 'access\.permit_not_found';/.test(
+        rpc,
+      ) &&
+        rpc.includes("where s.analysis_permit_id = v_permit_id") &&
+        rpc.includes("public.permit_backs_sync(") &&
+        rpc.includes("public.lifetime_scored_count() >= 2"),
+      "apply_synced_shot must answer access.permit_not_reserved for a tombstoned own permit and keep the round-8 link / backing / lifetime-count rules",
+    );
+
+    // 5. No FK with SET NULL on the link (it recreates the ADV-11 blind spot).
+    for (const m of chain) {
+      for (const s of m.statements) {
+        ok(
+          !(/\banalysis_permit_id\b/.test(s) && /\bon delete set null\b/.test(s)),
+          `${m.file}: shots.analysis_permit_id must never be ON DELETE SET NULL: ${s}`,
+        );
+      }
+    }
+
+    // 6. Later migrations keep every guard and never open the tombstones.
+    for (const later of after(chain, PERMIT_SETTLED_NO_DELETE)) {
+      for (const statement of later.statements) {
+        ok(
+          !grantsOnTombstones(statement),
+          `${later.file} grants on public.analysis_permit_tombstones: ${statement}`,
+        );
+        ok(
+          !/^create policy .* on public\.analysis_permit_tombstones\b/.test(statement) &&
+            !/^drop table .*analysis_permit_tombstones/.test(statement) &&
+            !/^alter table public\.analysis_permit_tombstones disable row level security/.test(
+              statement,
+            ),
+          `${later.file} opens public.analysis_permit_tombstones: ${statement}`,
+        );
+        ok(
+          !/^alter table public\.analysis_permits disable trigger/.test(statement),
+          `${later.file} disables a trigger on public.analysis_permits: ${statement}`,
+        );
+      }
+      for (const trigger of [
+        "analysis_permits_guard_delete",
+        "analysis_permits_guard_resurrection",
+        "analysis_permits_guard_lifecycle",
+      ]) {
+        ok(
+          !dropsTriggerWithoutRecreating(later, trigger),
+          `${later.file} drops ${trigger} without recreating it`,
+        );
+      }
+    }
+    // The lifecycle guard is what makes UPDATE terminal for the owner role too;
+    // it must still be the BEFORE INSERT OR UPDATE trigger 20260906140000
+    // installed, in every migration that (re)creates it.
+    for (const m of chain) {
+      for (const s of m.statements) {
+        if (s.startsWith("create trigger analysis_permits_guard_lifecycle ")) {
+          ok(
+            s ===
+              "create trigger analysis_permits_guard_lifecycle before insert or update on public.analysis_permits for each row execute function public.guard_analysis_permit_lifecycle()",
+            `${m.file}: analysis_permits_guard_lifecycle must stay a BEFORE INSERT OR UPDATE row trigger: ${s}`,
+          );
+        }
+      }
+    }
+  },
+);
+
+// ─── XC-SEC-6: production edge-function dependencies are exactly pinned ──────
+
+const FUNCTION_DIR = new URL("../", import.meta.url);
+const EXACT_SEMVER_SPECIFIER = /^(npm|jsr):(@[a-z0-9-]+\/)?[a-z0-9._-]+@\d+\.\d+\.\d+(\/.*)?$/;
+const SUPABASE_JS_PIN = "npm:@supabase/supabase-js@2.112.4";
+
+async function productionModules(): Promise<string[]> {
+  const files: string[] = [];
+  for await (const entry of Deno.readDir(FUNCTION_DIR)) {
+    if (entry.isFile && entry.name.endsWith(".ts")) files.push(entry.name);
+  }
+  return files.sort();
+}
+
+Deno.test(
+  "edge deps: every npm:/jsr: specifier in supabase/functions/api/*.ts is an exact x.y.z",
+  async () => {
+    const specifiers: Array<{ file: string; specifier: string }> = [];
+    for (const file of await productionModules()) {
+      const source = await Deno.readTextFile(new URL(file, FUNCTION_DIR));
+      for (const match of source.matchAll(/["']((?:npm|jsr):[^"']+)["']/g)) {
+        specifiers.push({ file, specifier: match[1] });
+      }
+    }
+    ok(
+      specifiers.some(
+        (s) => s.file === "index.ts" && s.specifier.startsWith("npm:@supabase/supabase-js@"),
+      ),
+      "index.ts must import supabase-js through an npm: specifier",
+    );
+    for (const { file, specifier } of specifiers) {
+      ok(
+        EXACT_SEMVER_SPECIFIER.test(specifier),
+        `${file}: ${specifier} must carry an exact x.y.z version (a bare major floats every deploy)`,
+      );
+    }
+    ok(
+      specifiers.some((s) => s.specifier === SUPABASE_JS_PIN),
+      `index.ts must pin ${SUPABASE_JS_PIN} (bump the pin AND deno.lock together — see AGENTS.md Deploy)`,
+    );
+  },
+);
+
+Deno.test(
+  "edge deps: supabase/functions/api/deno.json + deno.lock pin the deploy-time resolution",
+  async () => {
+    const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", FUNCTION_DIR)));
+    ok(config.lock !== false, "supabase/functions/api/deno.json must not disable the lockfile");
+    const lock = JSON.parse(await Deno.readTextFile(new URL("deno.lock", FUNCTION_DIR)));
+    const specifiers = lock.specifiers ?? {};
+    ok(
+      specifiers[SUPABASE_JS_PIN] === SUPABASE_JS_PIN.split("@").pop(),
+      `deno.lock must resolve ${SUPABASE_JS_PIN} to itself; got ${JSON.stringify(specifiers)}`,
+    );
+    for (const key of Object.keys(specifiers)) {
+      ok(
+        !/^npm:@supabase\/supabase-js@(\d+|\^|~)/.test(key) || key === SUPABASE_JS_PIN,
+        `deno.lock records a floating supabase-js specifier: ${key}`,
+      );
     }
   },
 );

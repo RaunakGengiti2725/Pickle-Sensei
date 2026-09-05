@@ -2,13 +2,22 @@ import { Platform } from 'react-native';
 import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  evaluatePreAnalysisGate,
   type CaptureAnalysisRecord,
+  type FusionProviders,
+  type PreAnalysisGateDecision,
+  type StrokeWindowContext,
 } from '@pickle/analysis-pipeline';
 import {
   parsePoseSequence,
   sha256Hex,
   unavailable,
+  type PoseSequence,
 } from '@pickle/swing-domain';
+import {
+  detectOfflineStrokeWindow,
+  evaluateCaptureQuality,
+} from '@pickle/vision-geometry';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
@@ -22,6 +31,8 @@ import {
   ApiError,
   createAnalysisPermitClient,
   type ApiConfigState,
+  type ReleasableAnalysisOutcome,
+  type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
 import { makeUuid } from '../util/uuid';
 import {
@@ -37,11 +48,41 @@ import { stabilitySlo } from './stabilityTelemetry';
  * - Analysis runs only on the real recorded pose sequence (hash-addressed
  *   sidecar written at capture time, or by the explicit native extraction
  *   pass for imported videos). No sequence → no analysis.
+ * - The pose-quality gate (`evaluateCaptureQuality` + `evaluatePreAnalysisGate`
+ *   over the parsed sidecar and the stroke window) is decided BEFORE the
+ *   analysis engine sees the sequence: footage whose tracking is measurably
+ *   unusable is an honest abstention, never a rating.
  * - A server-reserved analysis permit is consumed exactly as the entitlement
  *   system requires; abstentions release the permit instead of burning it.
- * - Every run appends an immutable AnalysisRecord; scored runs additionally
- *   promote the product rating (local_shot + sync outbox).
+ * - Every analyzed run appends an immutable AnalysisRecord; scored runs
+ *   additionally promote the product rating (local_shot + sync outbox).
  */
+
+/**
+ * The measured motion span the continuity gate inspects. Live captures carry
+ * the trigger's movement window. Imported clips carry none — the container
+ * legitimately starts before the player steps in and keeps rolling after the
+ * swing — so the offline detector's motion core stands in; when it finds no
+ * distinct stroke the signal is honestly not evaluated and the engine's own
+ * stroke resolution decides.
+ */
+function strokeWindowFor(
+  clip: CapturedClip,
+  pose: PoseSequence,
+): StrokeWindowContext | null {
+  if (clip.captureMode === 'automatic_pose_trigger') {
+    return {
+      windowStartMs: clip.trigger.startMs,
+      windowEndMs: clip.trigger.endMs,
+    };
+  }
+  const detected = detectOfflineStrokeWindow(pose);
+  if (!detected.ok) return null;
+  return {
+    windowStartMs: detected.value.motionStartMs,
+    windowEndMs: detected.value.motionEndMs,
+  };
+}
 
 export type CaptureAnalysisOutcome =
   | {
@@ -70,13 +111,16 @@ export type CaptureAnalysisOutcome =
     }
   | {
       /**
-       * The capture envelope is UNSUPPORTED: analysis is honestly withheld
-       * BEFORE inference — poor input never becomes a confident score. No
-       * permit is reserved and nothing is recorded as an analysis.
+       * Analysis is honestly withheld BEFORE inference — poor input never
+       * becomes a confident score, and nothing is recorded as an analysis.
+       * Either the capture envelope is UNSUPPORTED (no permit is reserved), or
+       * the recorded pose sequence failed the pose-quality gate (`poseQuality`
+       * carries the measured reasons; the reserved permit was released).
        */
       kind: 'quality_blocked';
       reason: string;
-      envelope: EnvelopeVerdict;
+      envelope: EnvelopeVerdict | null;
+      poseQuality?: PreAnalysisGateDecision;
     };
 
 export interface RunCaptureAnalysisRequest {
@@ -172,6 +216,34 @@ export async function runCaptureAnalysis(
 
 export const PAYWALL_REQUIRED_CODE = 'access.paywall_required';
 
+type CaptureTrigger = Parameters<typeof analyzeCapture>[1]['trigger'];
+
+const POSE_QUALITY_REASON_COPY: Record<string, string> = {
+  no_person_found: 'no player was tracked',
+  too_few_pose_frames: 'too few tracked frames',
+  insufficient_fps: 'the tracking frame rate was too low',
+  low_pose_confidence: 'the player could not be tracked with confidence',
+  body_not_fully_visible: 'the full body was not in view',
+  person_implausible_scale:
+    'the player was too small or too close in the frame',
+  tracking_dropout_gap: 'tracking dropped out during the clip',
+  stroke_window_tracking_gap: 'tracking dropped out during the stroke',
+  torso_not_measured: 'the torso could not be measured',
+};
+
+function poseQualityBlockedReason(gate: PreAnalysisGateDecision): string {
+  const measured = gate.reasons
+    .map(
+      reason => POSE_QUALITY_REASON_COPY[reason] ?? reason.replace(/_/g, ' '),
+    )
+    .join(', ');
+  return (
+    'This capture cannot be analyzed honestly — the recorded motion could ' +
+    `not be measured well enough to rate (${measured}). Nothing was rated. ` +
+    'Keep your whole body in frame through the stroke and try again.'
+  );
+}
+
 function isPaywallRequired(error: ApiError): boolean {
   return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
 }
@@ -254,16 +326,9 @@ async function runCaptureAnalysisCore(
 
   // ── Entitlement: reserve before inference (spec: permits) ─────────────
   const permits = createAnalysisPermitClient(request.apiConfig);
-  let permitId: string;
-  let freeLimitReached = false;
+  let reserved: ReservedAnalysisPermitWithAccess;
   try {
-    const reserved = await permits.reserve(makeUuid());
-    permitId = reserved.permit.id;
-    freeLimitReached =
-      reserved.permit.accessSource === 'free' &&
-      reserved.access !== null &&
-      !reserved.access.premium &&
-      reserved.access.freeRatings.availableToReserve === 0;
+    reserved = await permits.reserve(makeUuid());
   } catch (error) {
     if (error instanceof ApiError && isPaywallRequired(error)) {
       return {
@@ -278,12 +343,77 @@ async function runCaptureAnalysisCore(
         : 'The rating service could not be reached. Your capture is saved and can be scored later.';
     return { kind: 'unavailable', reason: message };
   }
+  const permitId = reserved.permit.id;
+  if (!permitId.trim()) {
+    // A permit that cannot be finalized must never gate inference or a
+    // durable write; there is nothing server-side to release either.
+    return {
+      kind: 'unavailable',
+      reason:
+        'The rating service returned an invalid analysis permit. Your capture is saved and can be scored later.',
+    };
+  }
+  const freeLimitReached =
+    reserved.permit.accessSource === 'free' &&
+    reserved.access !== null &&
+    !reserved.access.premium &&
+    reserved.access.freeRatings.availableToReserve === 0;
+
+  // From here every exit either consumes the permit (a scored rating fully
+  // promoted — the shot-sync transaction finalizes it) or releases it exactly
+  // once. A throw anywhere below releases with outcome 'failed' before it
+  // escapes, so a local write fault can never park the user's free rating
+  // on a reserved permit until the server sweep expires it.
+  let permitSettled = false;
+  const releasePermit = async (
+    outcome: ReleasableAnalysisOutcome,
+  ): Promise<void> => {
+    permitSettled = true;
+    await permits.release(permitId, outcome).catch(() => {
+      // The permit expires server-side; a lost release is not a lost rating.
+    });
+  };
+  try {
+    return await analyzeReservedCapture(request, clip, parsed.value, {
+      envelope,
+      providers: fusion.providers,
+      permitId,
+      freeLimitReached,
+      releasePermit,
+      markPermitConsumed: () => {
+        permitSettled = true;
+      },
+    });
+  } finally {
+    if (!permitSettled) await releasePermit('failed');
+  }
+}
+
+interface ReservedRunContext {
+  envelope: EnvelopeVerdict | null;
+  providers: FusionProviders;
+  permitId: string;
+  freeLimitReached: boolean;
+  releasePermit: (outcome: ReleasableAnalysisOutcome) => Promise<void>;
+  markPermitConsumed: () => void;
+}
+
+/** Inference + persistence for a run that holds a reserved permit. Only the
+ * caller's release boundary finalizes the permit on a throw; this function
+ * settles it on every typed outcome it returns. */
+async function analyzeReservedCapture(
+  request: RunCaptureAnalysisRequest,
+  clip: CapturedClip,
+  pose: PoseSequence,
+  ctx: ReservedRunContext,
+): Promise<CaptureAnalysisOutcome> {
+  const { envelope, permitId, freeLimitReached } = ctx;
 
   // Imported clips carry no measured trigger: the analysis window is
   // honestly the whole clip, and the provenance says exactly that instead
   // of impersonating the live temporal-motion detector. Phase segmentation
   // still finds (or honestly fails to find) the stroke inside that window.
-  const trigger =
+  const trigger: CaptureTrigger =
     clip.captureMode === 'automatic_pose_trigger'
       ? {
           startMs: clip.trigger.startMs,
@@ -312,12 +442,29 @@ async function runCaptureAnalysisCore(
           },
         };
 
+  // ── Pose-quality gate: the engine only sees measurably usable tracking ──
+  const gate = evaluatePreAnalysisGate({
+    frame: null,
+    pose,
+    poseQuality: evaluateCaptureQuality(pose),
+    stroke: strokeWindowFor(clip, pose),
+  });
+  if (!gate.analyzable) {
+    await ctx.releasePermit('unsupported');
+    return {
+      kind: 'quality_blocked',
+      reason: poseQualityBlockedReason(gate),
+      envelope,
+      poseQuality: gate,
+    };
+  }
+
   const analysisId = makeUuid();
   const result = await analyzeCapture(
-    fusion.providers,
+    ctx.providers,
     {
       captureId: request.captureId,
-      pose: parsed.value,
+      pose,
       paddle: unavailable('paddle_detector_not_installed'),
       ball: unavailable('ball_tracker_not_installed'),
       trigger,
@@ -344,9 +491,7 @@ async function runCaptureAnalysisCore(
   );
 
   if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
-    });
+    await ctx.releasePermit('failed');
     return { kind: 'unavailable', reason: result.failure.message };
   }
   // Attach the measured envelope so downstream Result can explain
@@ -363,6 +508,7 @@ async function runCaptureAnalysisCore(
   if (record.result && record.result.resultKind === 'scored') {
     // Promote to the product rating; the sync transaction consumes the permit.
     await saveAnalysis(request.db, record.result, permitId);
+    ctx.markPermitConsumed();
     return { kind: 'scored', analysisId, record, freeLimitReached };
   }
 
@@ -370,9 +516,7 @@ async function runCaptureAnalysisCore(
   // This branch also carries the AUTO DETECT abstained partial records — an
   // abstained run has result:null and must never burn the user's rating
   // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
-  });
+  await ctx.releasePermit('low_confidence');
   if (record.result) {
     // Local display only — abstentions are never synced as ratings.
     await saveLocalOnlyAnalysis(request.db, record.result);

@@ -160,6 +160,89 @@ describe('buildNotificationPlan', () => {
     }
   });
 
+  // 2026 DST transition days (EU 03-29 / 10-25, US 03-08 / 11-01, NZ 04-05 /
+  // 09-27). In a zone without a transition on the day these are ordinary
+  // days; in the zone that switches, midnight-relative math is off by 1h.
+  const transitionDays: ReadonlyArray<[number, number, number]> = [
+    [2026, 2, 29],
+    [2026, 9, 25],
+    [2026, 2, 8],
+    [2026, 10, 1],
+    [2026, 3, 5],
+    [2026, 8, 27],
+  ];
+
+  it('keeps the streak defense at 19:30 wall-clock on a DST transition day', () => {
+    const springForward = new Date(2026, 2, 29, 9, 0, 0).getTime();
+    const plan = buildNotificationPlan(
+      allOn,
+      context({ nowMs: springForward, streakDays: 3, practicedToday: false }),
+    );
+    const streak = plan.find(item => item.id === 'ps.reminder.streak')!;
+    const at = new Date(streak.timestampMs);
+    expect(at.getDate()).toBe(29);
+    expect(at.getHours() === 19 && at.getMinutes() === 30).toBe(true);
+    const practice = plan.find(item => item.id === 'ps.reminder.practice')!;
+    expect(localParts(practice.timestampMs)).toMatchObject({
+      dayOfMonth: 29,
+      hour: 17,
+      minute: 30,
+    });
+  });
+
+  it('keeps every reminder at its configured wall-clock time across DST transitions', () => {
+    for (const [year, month, day] of transitionDays) {
+      const morning = new Date(year, month, day, 9, 0, 0).getTime();
+      const plan = buildNotificationPlan(
+        allOn,
+        context({
+          nowMs: morning,
+          streakDays: 3,
+          practicedToday: false,
+          hasAnyHistory: true,
+        }),
+      );
+      const byId = new Map<string, number>(
+        plan.map(item => [item.id, item.timestampMs]),
+      );
+      expect(localParts(byId.get('ps.reminder.practice')!)).toMatchObject({
+        hour: 17,
+        minute: 30,
+        dayOfMonth: day,
+      });
+      expect(localParts(byId.get('ps.reminder.streak')!)).toMatchObject({
+        hour: 19,
+        minute: 30,
+        dayOfMonth: day,
+      });
+      expect(localParts(byId.get('ps.reminder.weekly')!)).toMatchObject({
+        hour: 18,
+        minute: 0,
+        day: 0,
+      });
+      for (const rung of ['ps.comeback.1', 'ps.comeback.2', 'ps.comeback.3']) {
+        expect(localParts(byId.get(rung)!)).toMatchObject({
+          hour: 18,
+          minute: 30,
+        });
+      }
+      // The eve of a transition: "tomorrow" is the transition day itself.
+      const eve = new Date(year, month, day - 1, 9, 0, 0).getTime();
+      const tomorrowPlan = buildNotificationPlan(
+        allOn,
+        context({ nowMs: eve, streakDays: 3, practicedToday: true }),
+      );
+      const tomorrow = tomorrowPlan.find(
+        item => item.id === 'ps.reminder.streak',
+      )!;
+      expect(localParts(tomorrow.timestampMs)).toMatchObject({
+        hour: 19,
+        minute: 30,
+        dayOfMonth: day,
+      });
+    }
+  });
+
   it('omits disabled types and keeps ids unique under the app prefix', () => {
     const someOff = buildNotificationPlan(
       { ...allOn, weeklyRecap: false, comeback: false },

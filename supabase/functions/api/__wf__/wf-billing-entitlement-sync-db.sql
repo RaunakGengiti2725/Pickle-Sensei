@@ -174,26 +174,53 @@ begin
   if not s.premium then raise exception 'lifetime (null expires_at) not premium'; end if;
 end $$;
 
--- 7. Stale reservations (>24h) neither count against the allowance nor can
---    be consumed; the user regains the slot without any sweep having run.
+-- 7. Stale reservations (>24h) do not count against the allowance — the user
+--    regains the slot for reserve/access_state without any sweep having run —
+--    but a rating captured against one is NOT lost: a late sync (device offline
+--    for a day) is still accepted, whether the permit is still 'reserved' or
+--    the hourly sweep already flipped it to released/expired. The lifetime
+--    scored count — not permit age — is what caps free ratings: once the two
+--    late shots are recorded, the fresh reservation hits the backstop.
 reset role;
 insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
 values
   ('30000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-0000000000a2', 'old1', now() - interval '25 hours'),
   ('30000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-0000000000a2', 'old2', now() - interval '25 hours');
+update public.analysis_permits set status = 'released', outcome = 'expired'
+ where id = '30000000-0000-4000-8000-000000000002';
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-0000000000a2';
 do $$
-declare s record; r record; res text;
+declare s record; r record; res text; p record;
 begin
   select * into s from public.access_state();
   if s.reserved_count <> 0 then raise exception 'stale permits counted: %', s; end if;
   select * into r from public.reserve_analysis_permit('fresh1');
   if r.result <> 'accepted' then raise exception 'reserve with stale holds: %', r.result; end if;
+  -- 25h-old, still reserved (sweep has not run yet)
   res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000001', 'scored'));
-  if res <> 'access.permit_expired' then raise exception 'expired permit consumed: %', res; end if;
-  if (select status from public.analysis_permits where id = '30000000-0000-4000-8000-000000000001') <> 'released' then
-    raise exception 'expired permit not released on sync';
+  if res <> 'accepted' then raise exception 'late reserved permit refused: %', res; end if;
+  select * into p from public.analysis_permits where id = '30000000-0000-4000-8000-000000000001';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'late permit not finalized like a fresh one: %/%', p.status, p.outcome;
+  end if;
+  -- swept by expire-stale-analysis-permits before the device came back online
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-000000000009', '30000000-0000-4000-8000-000000000002', 'scored'));
+  if res <> 'accepted' then raise exception 'swept (released/expired) permit refused: %', res; end if;
+  select * into p from public.analysis_permits where id = '30000000-0000-4000-8000-000000000002';
+  if p.status <> 'finalized' or p.outcome <> 'scored' then
+    raise exception 'swept permit not finalized like a fresh one: %/%', p.status, p.outcome;
+  end if;
+  -- a second, different shot on the consumed late permit is refused
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-00000000000a', '30000000-0000-4000-8000-000000000001', 'scored'));
+  if res <> 'access.permit_not_reserved' then raise exception 'late permit backed two shots: %', res; end if;
+  -- both free ratings are now spent: the fresh reservation hits the backstop
+  select * into s from public.access_state();
+  if s.scored_count <> 2 then raise exception 'late syncs must count: %', s; end if;
+  res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-00000000000b', r.permit_id, 'scored'));
+  if res <> 'access.paywall_required' then raise exception 'third scored via fresh permit after late syncs: %', res; end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid()) and result_kind = 'scored') <> 2 then
+    raise exception 'free account exceeded two scored shots';
   end if;
 end $$;
 
@@ -210,6 +237,57 @@ declare res text;
 begin
   res := public.apply_synced_shot(pg_temp.wf_shot('10000000-0000-4000-8000-000000000008', current_setting('wf.foreign_permit')::uuid, 'scored'));
   if res <> 'access.permit_not_found' then raise exception 'foreign permit consumed: %', res; end if;
+end $$;
+
+-- 9. verified_at is monotonic: the exact upsert the edge function issues
+--    (PostgREST `on_conflict=user_id`, merge-duplicates) with an OLDER
+--    verified_at must not overwrite a newer verdict, an EQUAL one is an
+--    idempotent replay, and a NEWER one wins. Guards the race where a slow
+--    RevenueCat round trip lands after a faster, fresher one.
+reset role;
+do $$
+declare row_ record;
+begin
+  -- newest verdict first: expired at T
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', false, null, null, '2026-09-04T12:00:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+
+  -- stale verdict (T - 5 min) says premium: must be dropped
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', true, 'pickle_sensei_pro_monthly', '2026-10-04T12:00:00Z', '2026-09-04T11:55:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if row_.premium or row_.verified_at <> '2026-09-04T12:00:00Z'::timestamptz or row_.product_key is not null then
+    raise exception 'stale verdict overwrote the newer one: %', row_;
+  end if;
+
+  -- equal verified_at (redelivery of the same verification) is accepted
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', false, null, null, '2026-09-04T12:00:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if row_.premium or row_.verified_at <> '2026-09-04T12:00:00Z'::timestamptz then
+    raise exception 'equal-timestamp replay rejected: %', row_;
+  end if;
+
+  -- newer verdict (T + 1 min) says premium again: must win
+  insert into public.billing_entitlements as be (user_id, premium, product_key, expires_at, verified_at)
+  values ('00000000-0000-4000-8000-0000000000a2', true, 'pickle_sensei_pro_monthly', '2026-10-04T12:00:00Z', '2026-09-04T12:01:00Z')
+  on conflict (user_id) do update set
+    premium = excluded.premium, product_key = excluded.product_key,
+    expires_at = excluded.expires_at, verified_at = excluded.verified_at;
+  select * into row_ from public.billing_entitlements where user_id = '00000000-0000-4000-8000-0000000000a2';
+  if not row_.premium or row_.verified_at <> '2026-09-04T12:01:00Z'::timestamptz
+     or row_.product_key <> 'pickle_sensei_pro_monthly' then
+    raise exception 'newer verdict did not win: %', row_;
+  end if;
 end $$;
 
 rollback;

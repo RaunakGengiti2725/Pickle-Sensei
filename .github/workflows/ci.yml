@@ -1,5 +1,11 @@
 name: CI
 
+# Every job is a thin wrapper around the canonical script so CI and local
+# runs execute IDENTICAL commands: `scripts/verify-cloud.sh --tier pr` on a
+# developer machine or Devin session reproduces this workflow end to end.
+# Apple verification runs separately on the self-hosted M4 runner
+# (.github/workflows/mac-full-verify.yml -> scripts/mac-full-verify.sh).
+
 on:
   pull_request:
   push:
@@ -27,6 +33,12 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      elasticmq:
+        # SQS-compatible broker so @pickle/queue's SQS integration tests run in CI
+        # instead of self-skipping (they gate on SQS_ENDPOINT_TEST).
+        image: softwaremill/elasticmq-native:1.7.1
+        ports:
+          - 9324:9324
     steps:
       - uses: actions/checkout@v7
 
@@ -42,32 +54,21 @@ jobs:
       - name: Install ffmpeg (synthetic test fixtures)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Format check
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Unit + integration tests (sequential — suites share the DB service)
-        run: pnpm test
+      - name: deps + format + lint + typecheck + test + migrate/seed + ml + scripts
+        run: scripts/verify-cloud.sh --only deps,format,lint,typecheck,test,db,ml,scripts
         env:
+          # `test` and `db` share the single CI Postgres service (suites run sequentially).
           DATABASE_URL_TEST: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
-
-      - name: Migration apply + seed check (fresh database)
-        run: |
-          pnpm --filter @pickle/database migrate
-          pnpm --filter @pickle/database seed
-        env:
           DATABASE_URL: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
+          SQS_ENDPOINT_TEST: http://localhost:9324
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
 
-      - name: ML annotation validator tests
-        run: python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-verify
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   mobile:
     runs-on: ubuntu-latest
@@ -76,22 +77,51 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: Install app deps (npm-managed — see DECISIONS D-013)
-        working-directory: apps/mobile
-        run: npm ci
-      - name: Typecheck
-        working-directory: apps/mobile
-        run: npx tsc --noEmit
-      - name: Jest (logic suites)
-        working-directory: apps/mobile
-        run: npm test
+      - name: apps/mobile deps (npm — DECISIONS D-013) + tsc + jest
+        run: scripts/verify-cloud.sh --only deps,mobile
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-mobile
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
+
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Supabase edge function tests + module typecheck
+        run: scripts/verify-cloud.sh --only edge
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-edge
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   supabase-security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Supabase RLS + security regression matrix
-        run: ./supabase/tests/run_rls_tests.sh
+        with:
+          fetch-depth: 0 # scripts/security-scan.sh scans the full history for leaked secrets
+      - name: Supabase RLS + security regression matrix + secret scan
+        run: scripts/verify-cloud.sh --only rls,security
+        env:
+          VERIFY_ARTIFACTS: artifacts/verify-cloud/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-cloud-rls
+          path: artifacts/verify-cloud/ci/
+          if-no-files-found: ignore
 
   containers:
     if: github.ref == 'refs/heads/main'
@@ -105,3 +135,22 @@ jobs:
         run: docker build -f services/media-worker/Dockerfile -t pickle-media-worker:${{ github.sha }} .
       # Push to ECR + Terraform plan/deploy gate on AWS credentials being
       # configured as repo secrets; see docs/DEPLOYMENT.md.
+
+  # Single pass/fail check per commit. Branch protection and the Devin
+  # "CI failure investigator" automation key off THIS check name only, so one
+  # red commit produces one investigation instead of one per failing job.
+  ci-gate:
+    if: always()
+    needs: [verify, mobile, edge, supabase-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success") | .key')
+          if [ -n "$failed" ]; then
+            echo "::error::required jobs did not succeed: $failed"
+            exit 1
+          fi

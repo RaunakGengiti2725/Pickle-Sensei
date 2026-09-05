@@ -188,7 +188,9 @@ Deno.test(
     const redis = fakeUpstash();
     try {
       const iso = await loadIsolate();
-      for (let i = 0; i < 5_000; i += 1) await iso.cache.cacheSet(`k${i}`, "v", 600);
+      for (let i = 0; i < 5_000; i += 1) {
+        await iso.cache.cacheSet(`k${i}`, "v", 600);
+      }
       assertEquals(await iso.cache.cacheGet("k0"), "v");
       await iso.cache.cacheSet("overflow", "v", 600);
       assertEquals(await iso.cache.cacheGet("k0"), null, "oldest entries evicted");
@@ -213,6 +215,310 @@ Deno.test("expired L1 entries are dropped lazily on read", async () => {
     assertEquals(await iso.cache.cacheGet("short"), null);
     await iso.cache.cacheSet("zero", "v", 0);
     assertEquals(await iso.cache.cacheGet("zero"), null, "ttl<=0 is never stored");
+  } finally {
+    redis.restore();
+  }
+});
+
+// ─── cacheGetUnlessRevoked / cacheIsRevoked (session revocation fence) ───────
+
+const isWrite = (cmd: Array<string | number>): boolean =>
+  ["SET", "DEL"].includes(String(cmd[0]).toUpperCase());
+
+Deno.test(
+  "cacheGetUnlessRevoked: a row whose own L2 write Upstash refused keeps serving from L1 (no per-request miss)",
+  async () => {
+    // Upstash refusing writes (quota / read-only replica) answers HTTP 200
+    // with a per-command error; the row then exists in L1 only. L2 answering
+    // TTL -2 for it means "never landed", not "another isolate revoked it".
+    configureRedis(true);
+    const redis = fakeUpstash();
+    redis.commandError = (cmd) => (isWrite(cmd) ? "ERR max requests limit exceeded" : null);
+    try {
+      const iso = await loadIsolate();
+      await iso.cache.cacheSet("auth:t1", "row", 600);
+      assertEquals(redis.store.has("auth:t1"), false, "L2 write was refused");
+      for (let i = 0; i < 3; i += 1) {
+        const hit = await iso.cache.cacheGetUnlessRevoked("auth:t1", "auth:revoked:s1");
+        assertEquals(hit, { value: "row", revoked: false }, `read ${i} is an L1 hit`);
+      }
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheGetUnlessRevoked: a read-through L1 copy whose L2 row another isolate deleted is a miss",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      await a.cache.cacheSet("auth:t2", "row", 600);
+      assertEquals(await b.cache.cacheGetUnlessRevoked("auth:t2", "auth:revoked:s2"), {
+        value: "row",
+        revoked: false,
+      });
+      redis.store.delete("auth:t2"); // an isolate on the old code path: DEL, no marker
+      assertEquals(
+        await b.cache.cacheGetUnlessRevoked("auth:t2", "auth:revoked:s2"),
+        { value: null, revoked: false },
+        "b's L1 copy is not trusted on its own",
+      );
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheGetUnlessRevoked: a per-command error on the marker read never means 'not revoked' — the row is not served",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      await iso.cache.cacheSet("auth:t3", "row", 600);
+      redis.commandError = (cmd) =>
+        String(cmd[0]).toUpperCase() === "GET" && cmd[1] === "auth:revoked:s3" ? "ERR oom" : null;
+      assertEquals(
+        await iso.cache.cacheGetUnlessRevoked("auth:t3", "auth:revoked:s3"),
+        { value: null, revoked: false },
+        "L2 could not say whether the session is revoked → re-verify instead of serving",
+      );
+      redis.commandError = null;
+      assertEquals(
+        await iso.cache.cacheGetUnlessRevoked("auth:t3", "auth:revoked:s3"),
+        { value: "row", revoked: false },
+        "the L1 copy itself was kept for when L2 answers again",
+      );
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheGetUnlessRevoked: a short pipeline reply is 'unknown', not 'absent' — the row is not served",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      await a.cache.cacheSet("auth:t4", "row", 600);
+      redis.truncateRepliesTo = 1;
+      assertEquals(
+        await b.cache.cacheGetUnlessRevoked("auth:t4", "auth:revoked:s4"),
+        { value: null, revoked: false },
+        "cold isolate: reply lacks the row",
+      );
+      assertEquals(
+        await a.cache.cacheGetUnlessRevoked("auth:t4", "auth:revoked:s4"),
+        { value: null, revoked: false },
+        "warm isolate: reply lacks the liveness probe",
+      );
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheGetUnlessRevoked: Redis unreachable degrades to the L1 answer (outage never signs users out)",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      await iso.cache.cacheSet("auth:t5", "row", 600);
+      redis.failStatus = 503;
+      assertEquals(await iso.cache.cacheGetUnlessRevoked("auth:t5", "auth:revoked:s5"), {
+        value: "row",
+        revoked: false,
+      });
+      assertEquals(await iso.cache.cacheGetUnlessRevoked("auth:miss", "auth:revoked:s5"), {
+        value: null,
+        revoked: false,
+      });
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test("cacheGetUnlessRevoked: an L1 marker refuses without any Redis traffic", async () => {
+  configureRedis(true);
+  const redis = fakeUpstash();
+  try {
+    const iso = await loadIsolate();
+    await iso.cache.cacheSet("auth:t6", "row", 600);
+    await iso.cache.cacheSet("auth:revoked:s6", "1", 660);
+    const before = redis.calls;
+    assertEquals(await iso.cache.cacheGetUnlessRevoked("auth:t6", "auth:revoked:s6"), {
+      value: null,
+      revoked: true,
+    });
+    assertEquals(redis.calls, before, "answered from L1");
+    redis.store.delete("auth:t6");
+    assertEquals(await iso.cache.cacheGet("auth:t6"), null, "fenced row dropped from L1");
+  } finally {
+    redis.restore();
+  }
+});
+
+Deno.test(
+  "cacheIsRevoked: L2 marker is copied into L1; errors and outages are 'unknown' (null)",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      assertEquals(await a.cache.cacheIsRevoked("auth:revoked:s7"), false);
+      await a.cache.cacheSet("auth:revoked:s7", "1", 660);
+      assertEquals(await b.cache.cacheIsRevoked("auth:revoked:s7"), true);
+      const before = redis.calls;
+      assertEquals(await b.cache.cacheIsRevoked("auth:revoked:s7"), true);
+      assertEquals(redis.calls, before, "second answer from b's L1 copy");
+      redis.commandError = () => "ERR oom";
+      assertEquals(
+        await b.cache.cacheIsRevoked("auth:revoked:s8"),
+        null,
+        "per-command error → unknown",
+      );
+      redis.commandError = null;
+      redis.truncateRepliesTo = 0;
+      assertEquals(await b.cache.cacheIsRevoked("auth:revoked:s8"), null, "short reply → unknown");
+      redis.truncateRepliesTo = null;
+      redis.failStatus = 500;
+      assertEquals(await b.cache.cacheIsRevoked("auth:revoked:s8"), null, "outage → unknown");
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+// ─── cacheFence / cacheSetFenced (invalidation fence for derived state) ──────
+// index.ts builds rank/progress payloads from the database and caches them
+// for 60 s; an accepted shots:sync busts the keys with cacheDel. A build that
+// read the database BEFORE the sync and writes AFTER it would re-cache the
+// pre-sync payload — the fence taken before the read makes that write a no-op.
+
+Deno.test(
+  "cacheSetFenced: a cacheDel between the fence and the write drops the write (same isolate)",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const iso = await loadIsolate();
+      const fence = await iso.cache.cacheFence("rank:u1");
+      await iso.cache.cacheDel("rank:u1"); // accepted sync lands mid-build
+      assertEquals(await iso.cache.cacheSetFenced(fence, '{"rank":null}', 60), false);
+      assertEquals(redis.store.has("rank:u1"), false, "stale payload never reached L2");
+      assertEquals(await iso.cache.cacheGet("rank:u1"), null, "stale payload never reached L1");
+
+      const fresh = await iso.cache.cacheFence("rank:u1");
+      assertEquals(await iso.cache.cacheSetFenced(fresh, '{"rank":{"tier":"Bronze"}}', 60), true);
+      assertEquals(redis.store.get("rank:u1")?.value, '{"rank":{"tier":"Bronze"}}');
+      assertEquals(await iso.cache.cacheGet("rank:u1"), '{"rank":{"tier":"Bronze"}}');
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheSetFenced: a cacheDel issued by ANOTHER isolate between the fence and the write is honoured through L2",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      const fence = await a.cache.cacheFence("progress:u1");
+      await b.cache.cacheDel("progress:u1"); // sync handled elsewhere
+      assertEquals(await a.cache.cacheSetFenced(fence, "stale", 60), false);
+      assertEquals(redis.store.has("progress:u1"), false, "stale payload never reached L2");
+      assertEquals(
+        await a.cache.cacheGet("progress:u1"),
+        null,
+        "a does not serve it locally either",
+      );
+      assertEquals(await b.cache.cacheGet("progress:u1"), null);
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheSetFenced: without an intervening cacheDel it behaves exactly like cacheSet (L1 + L2 with TTL)",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    try {
+      const a = await loadIsolate();
+      const b = await loadIsolate();
+      const fence = await a.cache.cacheFence("rank:u2");
+      assertEquals(await a.cache.cacheSetFenced(fence, "payload", 60), true);
+      const stored = redis.store.get("rank:u2");
+      assertEquals(stored?.value, "payload");
+      assert(
+        stored?.expiresAtMs !== null && stored!.expiresAtMs > Date.now(),
+        "L2 row carries the TTL",
+      );
+      const before = redis.calls;
+      assertEquals(await a.cache.cacheGet("rank:u2"), "payload");
+      assertEquals(redis.calls, before, "writer serves its own row from L1");
+      assertEquals(await b.cache.cacheGet("rank:u2"), "payload", "other isolates read it from L2");
+      assertEquals(
+        await a.cache.cacheSetFenced(fence, "ignored", 0),
+        false,
+        "ttl<=0 is never stored",
+      );
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "cacheSetFenced: Redis outage degrades to L1 like cacheSet, and the local fence still holds",
+  async () => {
+    configureRedis(true);
+    const redis = fakeUpstash();
+    redis.failStatus = 500;
+    try {
+      const iso = await loadIsolate();
+      const fence = await iso.cache.cacheFence("rank:u3");
+      await iso.cache.cacheSetFenced(fence, "v", 30);
+      assertEquals(await iso.cache.cacheGet("rank:u3"), "v", "served from L1 while Redis is down");
+
+      const staleFence = await iso.cache.cacheFence("rank:u3");
+      await iso.cache.cacheDel("rank:u3");
+      assertEquals(await iso.cache.cacheSetFenced(staleFence, "stale", 30), false);
+      assertEquals(await iso.cache.cacheGet("rank:u3"), null, "local invalidation still wins");
+    } finally {
+      redis.restore();
+    }
+  },
+);
+
+Deno.test("cacheDel still deletes the row itself in L1 and L2", async () => {
+  configureRedis(true);
+  const redis = fakeUpstash();
+  try {
+    const iso = await loadIsolate();
+    await iso.cache.cacheSet("rank:u4", "v", 60);
+    await iso.cache.cacheSet("progress:u4", "v", 60);
+    await iso.cache.cacheDel("rank:u4", "progress:u4");
+    assertEquals(redis.store.has("rank:u4"), false);
+    assertEquals(redis.store.has("progress:u4"), false);
+    assertEquals(await iso.cache.cacheGet("rank:u4"), null);
+    assertEquals(await iso.cache.cacheGet("progress:u4"), null);
   } finally {
     redis.restore();
   }

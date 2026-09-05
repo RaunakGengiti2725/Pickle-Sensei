@@ -21,6 +21,13 @@ export interface AppleTokenGrant {
   subject: string;
 }
 
+/** `kind` sorts failures by what a retry can do about them:
+ *  - configuration / unavailable — retryable once the operator or the
+ *    provider recovers (missing secret, client-secret refusal, transport
+ *    failure, 5xx, 429);
+ *  - invalid_grant / invalid_response — the provider (or our own
+ *    decryption) refused THIS credential deterministically; the same call
+ *    fails the same way forever. */
 export class ExternalAccountError extends Error {
   constructor(
     readonly kind: "configuration" | "invalid_grant" | "invalid_response" | "unavailable",
@@ -30,6 +37,15 @@ export class ExternalAccountError extends Error {
     super(message);
     this.name = "ExternalAccountError";
   }
+}
+
+/** True when retrying the failed call with the same stored credential can
+ * never succeed. Unknown errors are treated as retryable (fail closed). */
+export function isPermanentExternalAccountError(error: unknown): boolean {
+  return (
+    error instanceof ExternalAccountError &&
+    (error.kind === "invalid_grant" || error.kind === "invalid_response")
+  );
 }
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -275,8 +291,13 @@ export async function revokeAppleRefreshToken(
   );
   if (!response.ok) {
     const code = await appleErrorCode(response);
+    // Only `invalid_grant` speaks about the stored token. Every other Apple
+    // ErrorResponse code (invalid_client, invalid_request, unauthorized_client,
+    // unsupported_grant_type, invalid_scope) describes OUR client secret or
+    // request, so the same token revokes fine once the operator repairs it;
+    // code-less 4xx, 429 and 5xx are transport/provider trouble.
     throw new ExternalAccountError(
-      "unavailable",
+      code === "invalid_grant" ? "invalid_grant" : "unavailable",
       "apple",
       `Apple token revocation failed (${response.status}${code ? ` ${code}` : ""}).`,
     );

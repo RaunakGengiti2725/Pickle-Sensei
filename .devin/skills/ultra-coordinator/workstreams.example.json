@@ -1,0 +1,46 @@
+{
+  "$schema": "./workstreams.schema.json",
+  "objective": "Make stroke classification and contact estimation more reliable without regressing latency.",
+  "base_branch": "main",
+  "workstreams": [
+    {
+      "id": "contact-estimator",
+      "title": "Improve contact-frame estimation on ball_hard_slice / contact_replay benches",
+      "plane": "bench",
+      "scope_paths": [
+        "packages/vision-geometry/src/contact/**",
+        "packages/evaluation/benches/contact*"
+      ],
+      "acceptance": [
+        "bench:compare shows >= 1 declared metric improved beyond tolerance on contact_replay or ball_hard_slice",
+        "zero regressions beyond tolerance on any other bench",
+        "estimator version bumped per docs/EVALUATION.md"
+      ],
+      "competing": 2
+    },
+    {
+      "id": "edge-upload-errors",
+      "title": "Surface explicit error codes for failed media uploads in the Edge Function",
+      "plane": "cloud",
+      "scope_paths": ["supabase/functions/api/**", "tools/diagnostics/edge_error_taxonomy.ts"],
+      "acceptance": [
+        "tools/diagnostics/edge_error_taxonomy.ts gains a probe for each new error code and passes",
+        "scripts/verify-cloud.sh --only edge,rls exits 0",
+        "no 5xx body leaks internal detail (REVIEW.md)"
+      ],
+      "competing": 1
+    },
+    {
+      "id": "ios-pose-latency",
+      "title": "Reduce per-frame Apple Vision pose extraction latency in native/",
+      "plane": "mac",
+      "scope_paths": ["native/**", "apps/mobile/ios/**"],
+      "acceptance": [
+        "scripts/mac-full-verify.sh --remote succeeds and its vision summary shows lower median frame latency than the baseline run",
+        "all Swift/XCTest targets pass",
+        "no change to uploaded data (pose stays on-device)"
+      ],
+      "competing": 1
+    }
+  ]
+}

@@ -10,13 +10,17 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:regression": "tsx src/regression/cli.ts run",
+    "bench:compare": "tsx src/regression/cli.ts compare"
   },
   "dependencies": {
     "@pickle/shared-types": "workspace:*",
     "@pickle/swing-domain": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

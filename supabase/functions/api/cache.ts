@@ -56,6 +56,10 @@ async function redisPipeline(
 interface MemoryEntry {
   value: string;
   expiresAtMs: number;
+  /** False once this isolate KNOWS its L2 write of the row was refused: the
+   * row then lives in L1 only, and L2 reporting it absent says nothing about
+   * another isolate having deleted it. */
+  inL2: boolean;
 }
 
 const MEMORY_MAX_ENTRIES = 5_000;
@@ -71,7 +75,17 @@ function memoryGet(key: string): string | null {
   return entry.value;
 }
 
-function memorySet(key: string, value: string, ttlSeconds: number): void {
+/** A per-command slot of a pipeline reply that actually answered (present and
+ * without a Redis-side error). Anything else is an unknown, never an absence. */
+function answered(results: RedisPipelineResult, index: number): { result?: unknown } | null {
+  const slot = results[index];
+  if (!slot || typeof slot !== "object" || slot.error !== undefined) {
+    return null;
+  }
+  return slot;
+}
+
+function memorySet(key: string, value: string, ttlSeconds: number, inL2 = true): void {
   if (memory.size >= MEMORY_MAX_ENTRIES) {
     // Evict expired entries first; if none expired, drop the oldest third so
     // a hot isolate can never grow without bound.
@@ -87,8 +101,16 @@ function memorySet(key: string, value: string, ttlSeconds: number): void {
       }
     }
   }
-  memory.set(key, { value, expiresAtMs: Date.now() + ttlSeconds * 1_000 });
+  memory.set(key, {
+    value,
+    expiresAtMs: Date.now() + ttlSeconds * 1_000,
+    inL2,
+  });
 }
+
+/** How long an L2 row read through into L1 may be served locally before L2
+ * is consulted again — the longest a per-isolate copy can outlive its L2 row. */
+export const L1_READTHROUGH_TTL_SECONDS = 60;
 
 // ─── Public cache API ────────────────────────────────────────────────────────
 
@@ -103,21 +125,247 @@ export async function cacheGet(key: string): Promise<string | null> {
   if (typeof value !== "string") return null;
   const ttl = Number(results?.[1]?.result);
   if (Number.isFinite(ttl) && ttl > 0) {
-    memorySet(key, value, Math.min(ttl, 60));
+    memorySet(key, value, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
   }
   return value;
 }
 
-export async function cacheSet(key: string, value: string, ttlSeconds: number): Promise<void> {
-  if (ttlSeconds <= 0) return;
-  memorySet(key, value, ttlSeconds);
-  await redisPipeline([["SET", key, value, "EX", Math.ceil(ttlSeconds)]]);
+export interface GuardedCacheHit {
+  /** The cached value, or null when absent or revoked. */
+  value: string | null;
+  /** True when the revocation marker exists (the value, if any, was dropped). */
+  revoked: boolean;
 }
 
+/** Read `key` unless the revocation marker `revokedKey` exists.
+ *
+ * With Redis configured, L2 is the authority for whether a row is still
+ * alive and L1 only a copy of its payload: every hit — L1 included — costs
+ * one L2 round trip that fetches the marker and, for an L1 hit, confirms the
+ * row still exists in L2 (a local copy of a row another isolate deleted is a
+ * miss, not a hit). So a revocation published anywhere is honoured here on
+ * the next request, not when the local copy ages out. A marker found in L2
+ * is copied into L1 so the refusal stays cheap while the row it fences would
+ * still be alive, and the fenced row is dropped from L1.
+ *
+ * Two degraded modes are told apart. Redis UNREACHABLE (HTTP failure,
+ * timeout) degrades to the L1 answer, like every other read here — an
+ * outage must not sign users out. Redis REACHED but not answering the
+ * question (a per-command error, a short reply) is "unknown": the row is
+ * not served and not dropped, so the caller re-verifies with the source of
+ * truth and the copy is there again once L2 answers. A row this isolate
+ * wrote but L2 refused to store is served from L1 for its lifetime: L2 has
+ * no row for another isolate to have deleted. */
+export async function cacheGetUnlessRevoked(
+  key: string,
+  revokedKey: string,
+): Promise<GuardedCacheHit> {
+  if (memoryGet(revokedKey) !== null) {
+    memory.delete(key);
+    return { value: null, revoked: true };
+  }
+  const local = memoryGet(key);
+  if (!redisConfigured()) return { value: local, revoked: false };
+
+  // TTL doubles as the liveness probe: -2 means the row is gone from L2.
+  const commands: Array<Array<string | number>> = [["GET", revokedKey]];
+  if (local === null) commands.push(["GET", key]);
+  commands.push(["TTL", key]);
+  const results = await redisPipeline(commands);
+  if (!results) return { value: local, revoked: false };
+
+  const markerSlot = answered(results, 0);
+  if (!markerSlot) return { value: null, revoked: false };
+  if (typeof markerSlot.result === "string") {
+    memorySet(revokedKey, markerSlot.result, L1_READTHROUGH_TTL_SECONDS);
+    memory.delete(key);
+    return { value: null, revoked: true };
+  }
+  const ttlSlot = answered(results, commands.length - 1);
+  if (!ttlSlot) return { value: null, revoked: false };
+  const ttl = Number(ttlSlot.result);
+
+  if (local !== null) {
+    if (ttl !== -2) return { value: local, revoked: false };
+    if (memory.get(key)?.inL2 === false) {
+      return { value: local, revoked: false };
+    }
+    memory.delete(key);
+    return { value: null, revoked: false };
+  }
+
+  const valueSlot = answered(results, 1);
+  if (!valueSlot || typeof valueSlot.result !== "string") {
+    return { value: null, revoked: false };
+  }
+  if (Number.isFinite(ttl) && ttl > 0) {
+    memorySet(key, valueSlot.result, Math.min(ttl, L1_READTHROUGH_TTL_SECONDS));
+  }
+  return { value: valueSlot.result, revoked: false };
+}
+
+/** Whether the revocation marker `revokedKey` exists, L1 first, then L2
+ * (copied into L1 when found). Null when it is absent locally and L2 did
+ * not answer (unreachable, per-command error, short reply) — the caller
+ * decides what "unknown" means for it. */
+export async function cacheIsRevoked(revokedKey: string): Promise<boolean | null> {
+  if (memoryGet(revokedKey) !== null) return true;
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline([["GET", revokedKey]]);
+  if (!results) return null;
+  const slot = answered(results, 0);
+  if (!slot) return null;
+  if (typeof slot.result !== "string") return false;
+  memorySet(revokedKey, slot.result, L1_READTHROUGH_TTL_SECONDS);
+  return true;
+}
+
+/** Write L1 and L2. Resolves to whether the L2 write is KNOWN to have landed
+ * (false when Redis is unconfigured, unreachable, or refused the command). */
+export async function cacheSet(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+  if (ttlSeconds <= 0) return false;
+  memorySet(key, value, ttlSeconds);
+  if (!redisConfigured()) return false;
+  const results = await redisPipeline([["SET", key, value, "EX", Math.ceil(ttlSeconds)]]);
+  const landed = results !== null && answered(results, 0)?.result === "OK";
+  if (!landed) {
+    const entry = memory.get(key);
+    // Only annotate the row this call wrote; a concurrent overwrite is its own write's business.
+    if (entry && entry.value === value) entry.inL2 = false;
+  }
+  return landed;
+}
+
+// ─── Invalidation fence ──────────────────────────────────────────────────────
+//
+// Derived-state rows (rank:/progress:) are BUILT from the database and then
+// written here, while the writes they derive from (accepted shot syncs) bust
+// the key with cacheDel. The two race: a build that read the database before
+// the sync and writes after the sync's cacheDel would re-cache the pre-sync
+// payload for the full TTL. Every cacheDel therefore bumps a per-key
+// invalidation generation — locally (L1) and in Redis (L2) — and a fenced
+// write compares the generation it captured BEFORE its database read with
+// the generation at write time. A mismatch means the payload is already
+// stale and the write is dropped; the next reader rebuilds from the database.
+
+const GENERATION_KEY_PREFIX = "gen:";
+/** Longer than any single build can take; a generation that has aged out
+ * reads as "unknown" and refuses the write (a miss, never a stale hit). */
+const GENERATION_TTL_SECONDS = 15 * 60;
+const GENERATION_MAX_ENTRIES = MEMORY_MAX_ENTRIES;
+
+const generationKey = (key: string): string => `${GENERATION_KEY_PREFIX}${key}`;
+
+/** Per-isolate invalidation counters (0 when a key was never invalidated
+ * here). Bounded: when the map is full it is cleared and the epoch below
+ * advances, which invalidates EVERY outstanding fence — a forgotten counter
+ * must never read as "unchanged". */
+const generations = new Map<string, number>();
+let generationEpoch = 0;
+
+function bumpGeneration(key: string): void {
+  if (generations.size >= GENERATION_MAX_ENTRIES && !generations.has(key)) {
+    generations.clear();
+    generationEpoch += 1;
+  }
+  generations.set(key, (generations.get(key) ?? 0) + 1);
+}
+
+/** This isolate's invalidation generation for `key`: changes on every
+ * cacheDel here. Opaque — compare for equality only. */
+export function cacheLocalGeneration(key: string): string {
+  return `${generationEpoch}:${generations.get(key) ?? 0}`;
+}
+
+export interface CacheFence {
+  readonly key: string;
+  /** L1 generation when the fence was taken. */
+  readonly local: string;
+  /** L2 generation when the fence was taken ("0" when the key was never
+   * invalidated there); null when Redis is off or did not answer. */
+  readonly shared: string | null;
+}
+
+function sharedGeneration(results: RedisPipelineResult | null, index: number): string | null {
+  const slot = results ? answered(results, index) : null;
+  if (!slot) return null;
+  return typeof slot.result === "string" ? slot.result : "0";
+}
+
+/** Capture `key`'s invalidation generation. Take it BEFORE reading the
+ * source of truth the value is derived from, then write with cacheSetFenced. */
+export async function cacheFence(key: string): Promise<CacheFence> {
+  const local = cacheLocalGeneration(key);
+  if (!redisConfigured()) return { key, local, shared: null };
+  const results = await redisPipeline([["GET", generationKey(key)]]);
+  return { key, local, shared: sharedGeneration(results, 0) };
+}
+
+/** Write L1 and L2 unless `fence.key` was invalidated (cacheDel, in any
+ * isolate) since the fence was taken. Resolves to whether the value is now
+ * being served (false when dropped as stale or when ttlSeconds <= 0). The L2
+ * write is verified against the shared generation in the same pipeline and
+ * undone when it lost the race; when the shared generation is unknown (Redis
+ * off/unreachable at fence time) the value stays in this isolate's L1 only,
+ * exactly as an unreachable Redis degrades cacheSet. */
+export async function cacheSetFenced(
+  fence: CacheFence,
+  value: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  if (ttlSeconds <= 0) return false;
+  if (cacheLocalGeneration(fence.key) !== fence.local) return false;
+  const canWriteShared = redisConfigured() && fence.shared !== null;
+  memorySet(fence.key, value, ttlSeconds, canWriteShared);
+  if (!canWriteShared) return true;
+
+  // SET then GET the generation in one pipeline: cacheDel bumps the
+  // generation BEFORE deleting the row, so a bump we do not observe here
+  // happened after our SET and its DEL removes our row; a bump we do observe
+  // is undone by the compensating DEL below. Either way no stale row survives.
+  const results = await redisPipeline([
+    ["SET", fence.key, value, "EX", Math.ceil(ttlSeconds)],
+    ["GET", generationKey(fence.key)],
+  ]);
+  if (results === null) {
+    // Redis unreachable: the row lives in L1 only, as after a failed cacheSet.
+    const entry = memory.get(fence.key);
+    if (entry && entry.value === value) entry.inL2 = false;
+    return true;
+  }
+  const landed = answered(results, 0)?.result === "OK";
+  const shared = sharedGeneration(results, 1);
+  if (shared === fence.shared) {
+    if (!landed) {
+      const entry = memory.get(fence.key);
+      if (entry && entry.value === value) entry.inL2 = false;
+    }
+    return true;
+  }
+  // Invalidated meanwhile (or unknown, which is never trusted): drop the row.
+  const entry = memory.get(fence.key);
+  if (entry && entry.value === value) memory.delete(fence.key);
+  if (landed) await redisPipeline([["DEL", fence.key]]);
+  return false;
+}
+
+/** Delete rows from L1 and L2 and bump their invalidation generation so any
+ * in-flight fenced write derived from pre-deletion state is dropped. */
 export async function cacheDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  for (const key of keys) memory.delete(key);
-  await redisPipeline([["DEL", ...keys]]);
+  for (const key of keys) {
+    bumpGeneration(key);
+    memory.delete(key);
+  }
+  const commands: Array<Array<string | number>> = [];
+  for (const key of keys) {
+    commands.push(
+      ["INCR", generationKey(key)],
+      ["EXPIRE", generationKey(key), GENERATION_TTL_SECONDS],
+    );
+  }
+  commands.push(["DEL", ...keys]);
+  await redisPipeline(commands);
 }
 
 /** Increment a fixed-window counter, creating it with the window's TTL.

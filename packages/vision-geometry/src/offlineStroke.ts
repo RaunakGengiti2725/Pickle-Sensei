@@ -18,8 +18,16 @@ import {
 export const OFFLINE_TRIGGER_VERSION = "offline-trigger-1";
 
 export interface OfflineStrokeWindow {
+  /** Padded analysis window (preparation and recovery kept for the phase segmenter). */
   startMs: number;
   endMs: number;
+  /**
+   * Unpadded motion core: the span where the striking wrist stayed above the
+   * quiet threshold. This is the stretch the player was measurably swinging;
+   * tracking lost here is lost during the stroke.
+   */
+  motionStartMs: number;
+  motionEndMs: number;
   peakMotionMs: number;
   confidence: number;
 }
@@ -112,14 +120,18 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
   }
   const firstMs = frames[0]!.timestampMs;
   const lastMs = frames[frames.length - 1]!.timestampMs;
-  const startMs = Math.max(firstMs, chosen[startIndex]!.timestampMs - 900);
-  const endMs = Math.min(lastMs, chosen[endIndex]!.timestampMs + 700);
+  const motionStartMs = chosen[startIndex]!.timestampMs;
+  const motionEndMs = chosen[endIndex]!.timestampMs;
+  const startMs = Math.max(firstMs, motionStartMs - 900);
+  const endMs = Math.min(lastMs, motionEndMs + 700);
 
   const prominence = Math.min(1, peakValue / (baseline * 6 + 1e-9));
   const coverage = Math.min(1, chosen.length / frames.length);
   return ok({
     startMs,
     endMs,
+    motionStartMs,
+    motionEndMs,
     peakMotionMs: peakMs,
     confidence: Math.max(0.05, Math.min(0.95, 0.5 * prominence + 0.5 * coverage)),
   });

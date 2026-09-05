@@ -42,7 +42,15 @@ const CORE_JOINTS = [
 
 export const QUALITY_THRESHOLDS = {
   minFrames: 24,
-  minEffectiveFps: 24,
+  /**
+   * Effective tracked-frame rate floor. Mirrors the capture envelope's
+   * frame-rate DEGRADED floor (`frame-rate-avg-v0.2`: supported ≥ 24,
+   * degraded ≥ 15): the envelope already analyzes degraded 15–23 fps footage,
+   * so this gate blocks only what the envelope also refuses. Pinned against
+   * `CAPTURE_ENVELOPE_THRESHOLDS.frame_rate.degraded.min` in
+   * packages/capture-envelope/test.
+   */
+  minEffectiveFps: 15,
   minMeanFrameConfidence: 0.35,
   minFullBodyFrameRate: 0.5,
   /** Torso shorter than this fraction of image height = player too small. */
@@ -58,6 +66,13 @@ export function evaluateCaptureQuality(sequence: PoseSequence): CaptureQualityRe
   const durationMs =
     frames.length >= 2 ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs : 0;
   const effectiveFps = durationMs > 0 ? ((frames.length - 1) * 1000) / durationMs : 0;
+  // Timestamps are whole milliseconds (native `Int(elapsedMs.rounded())`), so
+  // the true span lies within ±1 ms of `durationMs`; the highest frame rate
+  // consistent with the stamps is measured against `durationMs - 1`. A clip is
+  // only `insufficient_fps` when no rounding of its stamps could reach the
+  // floor — a 24 fps clip whose span rounds to 23.996 fps is not.
+  const effectiveFpsUpperBound =
+    durationMs > 1 ? ((frames.length - 1) * 1000) / (durationMs - 1) : effectiveFps;
 
   let largestGapMs = 0;
   for (let index = 1; index < frames.length; index += 1) {
@@ -94,7 +109,7 @@ export function evaluateCaptureQuality(sequence: PoseSequence): CaptureQualityRe
   if (frames.length < QUALITY_THRESHOLDS.minFrames) {
     reasons.push("too_few_pose_frames");
   }
-  if (effectiveFps > 0 && effectiveFps < QUALITY_THRESHOLDS.minEffectiveFps) {
+  if (effectiveFps > 0 && effectiveFpsUpperBound < QUALITY_THRESHOLDS.minEffectiveFps) {
     reasons.push("insufficient_fps");
   }
   if (meanConfidence < QUALITY_THRESHOLDS.minMeanFrameConfidence) {

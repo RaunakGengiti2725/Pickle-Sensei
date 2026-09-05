@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import { dominantWristSpeeds } from "./engine/minerCore.js";
 import { buildPlayerTracks, targetPoseSequence, type PeopleFile } from "./playerTracker.js";
@@ -10,7 +10,11 @@ import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
  * EVENT RECALL BENCH (wave-e e01) — proposal recall, bounds quality and
  * false-proposal pressure on the Linux-replayable DEV gold.
  *
- *   pnpm --filter @pickle/swing-lab exec tsx src/eventRecallBench.ts
+ *   pnpm --filter @pickle/swing-lab exec tsx src/eventRecallBench.ts [out.json]
+ *
+ * Without `out.json` the report lands in datasets/experiments/wave-e/
+ * as event-recall-<ts>.json; with it, the report is written to that path
+ * only (the regression runner passes a scratch path).
  *
  * Replays every DEV case with a committed wrist signal (windowed wave-a
  * people.json runDirs plus the W6 replay-validated rally1 fixture) through
@@ -262,9 +266,10 @@ if (isMain) {
     eventRows,
     caseRows,
   };
-  const outDir = join(REPO_ROOT, "datasets/experiments/wave-e");
-  mkdirSync(outDir, { recursive: true });
-  const outPath = join(outDir, `event-recall-${Date.now()}.json`);
+  const outPath = process.argv[2]
+    ? resolve(process.argv[2])
+    : join(REPO_ROOT, "datasets/experiments/wave-e", `event-recall-${Date.now()}.json`);
+  mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify(report, null, 2));
   console.log("═".repeat(74));
   console.log(`EVENT RECALL BENCH — n=${summary.goldTargetEvents} DEV gold target events`);

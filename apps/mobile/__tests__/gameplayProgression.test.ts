@@ -175,8 +175,11 @@ describe('buildGameplayProgression', () => {
 });
 
 describe('sessionDayLabel', () => {
-  it('renders a short day label and never throws on bad input', () => {
-    expect(sessionDayLabel('2026-08-31T10:00:00.000Z')).toMatch(/Aug \d+/);
+  it('renders the device-local day and never throws on bad input', () => {
+    const localNoon = new Date(2026, 7, 31, 12, 0, 0);
+    expect(sessionDayLabel(localNoon.toISOString())).toBe('Aug 31');
+    const nearMidnight = new Date(2026, 11, 31, 23, 59, 59);
+    expect(sessionDayLabel(nearMidnight.toISOString())).toBe('Dec 31');
     expect(sessionDayLabel('garbage')).toBe('garbage'.slice(0, 10));
   });
 });

@@ -79,3 +79,100 @@ export function constantTimeEqual(a: string, b: string): boolean {
   for (let i = 0; i < bufA.length; i += 1) diff |= bufA[i] ^ bufB[i];
   return diff === 0;
 }
+
+/** Request-id contract: honour a well-formed client `x-request-id`
+ * (opaque token, ≤ 64 chars of [A-Za-z0-9._-]) so a failure can be traced
+ * from the client through the function logs; otherwise mint one. Never
+ * echoes arbitrary client input. */
+export const REQUEST_ID_HEADER = "x-request-id";
+const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
+export function resolveRequestId(request: Request): string {
+  const incoming = request.headers.get(REQUEST_ID_HEADER)?.trim() ?? "";
+  return REQUEST_ID_RE.test(incoming) ? incoming : crypto.randomUUID();
+}
+
+/** Route template for logs: UUIDs and long digit runs collapse to `:id` so
+ * lines never carry a user, shot, or session identifier. */
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DIGITS_SEGMENT = /^\d{4,}$/;
+export function routeTemplate(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((segment) =>
+      UUID_SEGMENT.test(segment) || DIGITS_SEGMENT.test(segment) ? ":id" : segment,
+    )
+    .join("/");
+}
+
+export interface AccessLogEntry {
+  evt: "api_request";
+  requestId: string;
+  method: string;
+  route: string;
+  status: number;
+  durationMs: number;
+  code?: string;
+}
+
+/** One machine-readable line per request (stdout → Supabase function logs).
+ * Categorical only: no user id, bearer, body, query string, or IP. */
+export function accessLogEntry(
+  request: Request,
+  response: Response,
+  requestId: string,
+  startedAt: number,
+  code?: string,
+): AccessLogEntry {
+  const entry: AccessLogEntry = {
+    evt: "api_request",
+    requestId,
+    method: request.method,
+    route: routeTemplate(new URL(request.url).pathname),
+    status: response.status,
+    durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+  };
+  if (code) entry.code = code;
+  return entry;
+}
+
+type AccessLogSink = (line: string) => void;
+// Supabase Function logs capture console.* only (not raw stdout); this is the
+// single structured, categorical line per request — not debug output.
+// eslint-disable-next-line no-console
+const printAccessLog: AccessLogSink = (line) => console.log(line);
+let accessLogSink: AccessLogSink = printAccessLog;
+
+export function emitAccessLog(entry: AccessLogEntry): void {
+  accessLogSink(JSON.stringify(entry));
+}
+
+/** Tests/diagnostics: capture access lines instead of printing them. Returns
+ * the restore function. */
+export function captureAccessLog(sink: AccessLogSink): () => void {
+  accessLogSink = sink;
+  return () => {
+    accessLogSink = printAccessLog;
+  };
+}
+
+/** Copy of `response` carrying the request id header (Response headers may be
+ * immutable; a fresh Response with the same body/status/headers is not). */
+export function withRequestId(response: Response, requestId: string): Response {
+  const out = new Response(response.body, response);
+  out.headers.set(REQUEST_ID_HEADER, requestId);
+  return out;
+}
+
+/** Extract `error.code` from an error body clone without consuming the
+ * response the client receives. Returns undefined for non-JSON / no code. */
+export async function errorCodeOf(response: Response): Promise<string | undefined> {
+  if (response.status < 400) return undefined;
+  if (!(response.headers.get("content-type") ?? "").includes("application/json")) return undefined;
+  try {
+    const body = await response.clone().json();
+    const code = body?.error?.code;
+    return typeof code === "string" ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}

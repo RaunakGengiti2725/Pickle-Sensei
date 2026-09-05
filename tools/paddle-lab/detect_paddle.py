@@ -71,7 +71,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import subprocess
 import sys
 import time
@@ -80,6 +79,8 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
+
+import frame_clock
 
 MODEL_ID = "ustc-community/dfine-medium-coco"
 DETECTOR_VERSION = "dfine-medium-coco@transformers"
@@ -93,25 +94,9 @@ DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 def ffprobe_meta(video: str) -> tuple[int, int, float, float, float]:
-    out = subprocess.run(
-        [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,avg_frame_rate,duration,start_time",
-            "-of", "json", video,
-        ],
-        capture_output=True, text=True, check=True,
-    )
-    stream = json.loads(out.stdout)["streams"][0]
-    num, den = stream["avg_frame_rate"].split("/")
-    fps = float(num) / float(den)
-    try:
-        start_time_ms = float(stream.get("start_time", 0)) * 1000
-    except (TypeError, ValueError):
-        start_time_ms = 0.0
-    return (
-        int(stream["width"]), int(stream["height"]), fps,
-        float(stream.get("duration", 0)) * 1000, start_time_ms,
-    )
+    """(width, height, fps, duration_ms, start_time_ms) — one probe shared by every tool."""
+    meta = frame_clock.probe_stream(video)
+    return meta.width, meta.height, meta.fps, meta.duration_ms, meta.start_time_ms
 
 
 def plan_window_seek(start_ms: float, fps: float, start_time_ms: float = 0.0) -> tuple[int, float]:
@@ -122,11 +107,15 @@ def plan_window_seek(start_ms: float, fps: float, start_time_ms: float = 0.0) ->
     frame whose pts >= target — so the seek value is expressed relative to
     stream start: frame index ceil((start - start_time) * fps), sought at
     index/fps floored to ffmpeg's millisecond CLI precision so the seek lands
-    exactly on the frame's pts (never rounding up past it).
+    exactly on the frame's pts (never rounding up past it). Shared with
+    ball_candidates / student_lib / the g03 miner through frame_clock.
     """
-    first_index = max(0, math.ceil((start_ms - start_time_ms) * fps / 1000.0 - 1e-6))
-    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
-    return first_index, seek_sec
+    return frame_clock.plan_window_seek(start_ms, fps, start_time_ms)
+
+
+def frame_index_for_t_ms(t_ms: float, fps: float, start_time_ms: float = 0.0) -> int:
+    """Absolute source frame k named by an emitted tMs: round((tMs - start_time) * fps / 1000)."""
+    return frame_clock.frame_index_for_t_ms(t_ms, fps, start_time_ms)
 
 
 def frame_iter(
@@ -140,11 +129,22 @@ def frame_iter(
     decode_size: tuple[int, int] | None = None,
     legacy: bool = False,
     start_time_ms: float = 0.0,
+    duration_ms: float | None = None,
+    nb_frames: int | None = None,
 ):
     """Decode upright RGB frames via ffmpeg rawvideo pipe (applies rotation).
 
     Yields (source_frame_index, t_ms, rgb) for frames the caller should run
     inference on, i.e. source indices 0, stride, 2*stride, … of the window.
+
+    Decode completeness is enforced: the window is validated up front
+    (ValueError for end <= start or start at/after the clip end) and, after
+    the pipe drains, a RuntimeError is raised if ffmpeg exited non-zero,
+    reported partial/corrupt media on stderr (it exits 0 for that), or yielded
+    fewer frames than the window implies — frame_clock.clip_frame_count for a
+    whole-clip decode (no `-to`), one boundary frame tolerated when end_ms
+    bounds it, no count (one stderr notice) when the clip duration is unknown.
+    `duration_ms` (and `nb_frames`) are probed when the caller passes neither.
 
     Default path: skipped frames are dropped inside ffmpeg (`select`), so only
     needed frames are rgb24-converted and piped; with `decode_size`, frames
@@ -152,13 +152,23 @@ def frame_iter(
     the original behavior byte-for-byte: no -vf, every window frame piped at
     full resolution, stride applied Python-side.
     """
-    first_index, seek_sec = plan_window_seek(start_ms, fps, start_time_ms)
+    if duration_ms is None:
+        meta = frame_clock.probe_stream(video)
+        duration_ms, nb_frames = meta.duration_ms, meta.nb_frames
+    first_index, last_exclusive = frame_clock.window_frame_range(
+        start_ms, end_ms, fps, start_time_ms, duration_ms, nb_frames,
+    )
+    min_frames = frame_clock.min_frames_for_window(
+        first_index, last_exclusive, stride, bounded_end=end_ms > 0, video=video,
+    )
+    seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
         args += ["-ss", f"{seek_sec:.3f}"]
     if end_ms > 0:
-        # -to is adjusted by the input start_time exactly like -ss.
-        args += ["-to", f"{max((end_ms - start_time_ms) / 1000, seek_sec + 0.001):.3f}"]
+        # -to is adjusted by the input start_time exactly like -ss; aim at the
+        # midpoint after the last wanted frame so ms rounding cannot clip it.
+        args += ["-to", f"{frame_clock.window_to_sec(last_exclusive, fps, seek_sec):.3f}"]
     args += ["-i", video]
     out_w, out_h = width, height
     if legacy:
@@ -179,28 +189,47 @@ def frame_iter(
     # stdin=DEVNULL: ffmpeg reads inherited stdin for interactive commands and
     # would otherwise consume queued serve-mode request lines off the shared
     # protocol stdin (losing the request and hanging its client).
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    stderr_reader = frame_clock.stderr_reader(proc)
     frame_bytes = out_w * out_h * 3
     index = 0
+    yielded = 0
+    drained = False
     assert proc.stdout is not None
-    while True:
-        chunk = proc.stdout.read(frame_bytes)
-        if len(chunk) < frame_bytes:
-            break
-        # Piped frame k is source frame k*stride (ffmpeg select) — or, on the
-        # legacy path, source frame k with Python-side stride skip below.
-        source_index = index if legacy else index * stride
-        if not (legacy and source_index % stride != 0):
-            # Constant-frame-rate assumption (our lab transcodes are CFR); the
-            # timestamp model is recorded in the output for auditability.
-            # tMs is the ABSOLUTE frame pts under the CFR model —
-            # start_time + frame_index/fps: the first emitted frame is the
-            # first frame with pts >= start, not a frame at exactly start_ms.
-            t_ms = start_time_ms + (first_index + source_index) * 1000.0 / fps
-            yield source_index, t_ms, np.frombuffer(chunk, dtype=np.uint8).reshape(out_h, out_w, 3)
-        index += 1
-    if proc.wait() != 0:
-        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
+    try:
+        while True:
+            chunk = proc.stdout.read(frame_bytes)
+            if len(chunk) < frame_bytes:
+                drained = True
+                break
+            # Piped frame k is source frame k*stride (ffmpeg select) — or, on the
+            # legacy path, source frame k with Python-side stride skip below.
+            source_index = index if legacy else index * stride
+            if not (legacy and source_index % stride != 0):
+                # Constant-frame-rate assumption (our lab transcodes are CFR); the
+                # timestamp model is recorded in the output for auditability.
+                # tMs is the ABSOLUTE frame pts under the CFR model —
+                # start_time + frame_index/fps: the first emitted frame is the
+                # first frame with pts >= start, not a frame at exactly start_ms.
+                t_ms = frame_clock.t_ms_for_frame_index(first_index + source_index, fps, start_time_ms)
+                yielded += 1
+                yield source_index, t_ms, np.frombuffer(chunk, dtype=np.uint8).reshape(out_h, out_w, 3)
+            index += 1
+    finally:
+        if not drained:
+            # Consumer closed the generator early: stop ffmpeg instead of
+            # leaving it blocked on a broken pipe.
+            proc.kill()
+        proc.stdout.close()
+        proc.wait()
+    stderr_text = stderr_reader()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, video)
+    if yielded < min_frames:
+        raise RuntimeError(frame_clock.shortfall_message(
+            yielded, min_frames, first_index, last_exclusive, start_ms, end_ms, video, stderr_text, stride,
+        ))
+    if stderr_text:
+        print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
 
 def load_model() -> tuple[object, object, float]:
@@ -256,7 +285,8 @@ def run_window(
     Output schema is identical to the pre-W2 script; box/score values on the
     default path are bit-equal to the legacy path (same decoded pixels, same
     model, batched instead of per-value GPU->CPU transfer)."""
-    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(video)
+    meta = frame_clock.probe_stream(video)
+    width, height, fps, duration_ms, start_time_ms = meta.width, meta.height, meta.fps, meta.duration_ms, meta.start_time_ms
     frames_out = []
     infer_sec_total = 0.0
     wall_started = time.perf_counter()
@@ -276,7 +306,7 @@ def run_window(
     for _, t_ms, rgb in frame_iter(
         video, start_ms, end_ms, width, height, fps,
         stride=stride, decode_size=decode_size, legacy=legacy_decode,
-        start_time_ms=start_time_ms,
+        start_time_ms=start_time_ms, duration_ms=duration_ms, nb_frames=meta.nb_frames,
     ):
         dec_h, dec_w = rgb.shape[0], rgb.shape[1]
         crop_x0 = crop_y0 = 0
@@ -379,7 +409,7 @@ def run_window(
         },
         "frames": frames_out,
     }
-    Path(out).write_text(json.dumps(payload))
+    Path(out).write_text(json.dumps(payload, allow_nan=False))
     return payload
 
 
@@ -414,12 +444,15 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
     the seek target is derived FROM the frame index, not from an annotation
     timestamp). The select expression is rebased to post-seek output ordinals,
     and `-frames:v` stops the decode right after the last wanted frame instead
-    of draining the rest of the clip."""
+    of draining the rest of the clip. Raises RuntimeError if ffmpeg fails or
+    any requested frame is not decoded (index past the end of the media)."""
     wanted = sorted(set(frame_indices))
     if not wanted:
         return
+    if wanted[0] < 0:
+        raise ValueError(f"negative frame index {wanted[0]} requested from {video}")
     first_index = wanted[0]
-    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
+    seek_sec = frame_clock.seek_sec_for_frame_index(first_index, fps)
     args = ["ffmpeg", "-v", "error"]
     if first_index > 0:
         args += ["-ss", f"{seek_sec:.3f}"]
@@ -433,18 +466,35 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
     ]
     # stdin=DEVNULL: see decode path above — never let ffmpeg read the
     # serve-mode protocol stdin.
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    stderr_reader = frame_clock.stderr_reader(proc)
     frame_bytes = width * height * 3
     assert proc.stdout is not None
     position = 0
-    while position < len(wanted):
-        chunk = proc.stdout.read(frame_bytes)
-        if len(chunk) < frame_bytes:
-            break
-        yield wanted[position], np.frombuffer(chunk, dtype=np.uint8).reshape(height, width, 3)
-        position += 1
-    if proc.wait() != 0:
-        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
+    drained = False
+    try:
+        while position < len(wanted):
+            chunk = proc.stdout.read(frame_bytes)
+            if len(chunk) < frame_bytes:
+                break
+            yield wanted[position], np.frombuffer(chunk, dtype=np.uint8).reshape(height, width, 3)
+            position += 1
+        drained = True
+    finally:
+        if not drained:
+            proc.kill()
+        proc.stdout.close()
+        proc.wait()
+    stderr_text = stderr_reader()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, video)
+    if position < len(wanted):
+        raise RuntimeError(
+            f"ffmpeg decoded {position} of {len(wanted)} requested frames from {video}; "
+            f"frames {wanted[position:]} are missing (past the end of the media, or truncated file). "
+            f"ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
+        )
+    if stderr_text:
+        print(f"ffmpeg: {frame_clock.stderr_tail(stderr_text)}", file=sys.stderr)
 
 
 def run_crops(
@@ -460,11 +510,13 @@ def run_crops(
     """Crop-mode inference (crop-recovery-v1): detect on explicit rectangles,
     map boxes back to full-frame pixels, tag every detection source="crop"
     with its cropRect, and NMS-union across the rects of each frame."""
-    width, height, fps, duration_ms, _start_time_ms = ffprobe_meta(video)
+    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(video)
     plan = json.loads(Path(crops_path).read_text())["crops"]
     by_frame: dict[int, dict] = {}
     for entry in plan:
-        index = int(round(float(entry["tMs"]) * fps / 1000.0))
+        # Crop tMs values are frame_iter's absolute clock (start_time + k/fps);
+        # invert it exactly so the crop lands on the frame the detector saw.
+        index = frame_index_for_t_ms(float(entry["tMs"]), fps, start_time_ms)
         by_frame.setdefault(index, {"tMs": float(entry["tMs"]), "rects": []})
         for rect in entry["rects"]:
             if isinstance(rect, dict):
@@ -549,7 +601,7 @@ def run_crops(
         },
         "frames": frames_out,
     }
-    Path(out).write_text(json.dumps(payload))
+    Path(out).write_text(json.dumps(payload, allow_nan=False))
     return payload
 
 
@@ -631,10 +683,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=False)
     parser.add_argument("--out", required=False)
-    parser.add_argument("--start-ms", type=float, default=0)
-    parser.add_argument("--end-ms", type=float, default=0)
-    parser.add_argument("--stride", type=int, default=1)
-    parser.add_argument("--floor", type=float, default=0.08)
+    parser.add_argument("--start-ms", type=frame_clock.time_ms, default=0)
+    parser.add_argument("--end-ms", type=frame_clock.time_ms, default=0)
+    parser.add_argument("--stride", type=frame_clock.positive_int, default=1)
+    parser.add_argument("--floor", type=frame_clock.non_negative_float, default=0.08)
     parser.add_argument(
         "--roi",
         default=None,

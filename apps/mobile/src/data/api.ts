@@ -149,10 +149,18 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
     ): Promise<ReservedAnalysisPermitWithAccess> {
       requireSignedIn();
       const response = await request<{
-        permit: ReservedAnalysisPermit;
-        access?: ReserveAccessSnapshot;
+        permit?: unknown;
+        access?: unknown;
       }>(config, 'POST', '/v1/analysis-permits', { idempotencyKey });
-      if (response.permit.status !== 'reserved') {
+      const permit = parseReservedPermit(response.permit);
+      if (permit === null) {
+        throw new ApiError(
+          502,
+          'access.permit_invalid',
+          'The rating service returned an invalid analysis permit. Your capture is saved and can be scored later.',
+        );
+      }
+      if (permit.status !== 'reserved') {
         throw new ApiError(
           409,
           'access.permit_not_reserved',
@@ -160,7 +168,7 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
         );
       }
       return {
-        permit: response.permit,
+        permit: { ...permit, status: 'reserved' },
         access: parseReserveAccess(response.access),
       };
     },
@@ -177,6 +185,33 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
         { outcome, ratingId: null },
       );
     },
+  };
+}
+
+/** The permit id gates inference and every durable write, and is the path
+ * segment of the later finalize call — a body without a non-empty string id
+ * is not a permit the client can ever settle. Status is checked by the
+ * caller so a consumed permit keeps its own error code. */
+function parseReservedPermit(
+  value: unknown,
+): (Omit<ReservedAnalysisPermit, 'status'> & { status: unknown }) | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const permit = value as {
+    id?: unknown;
+    accessSource?: unknown;
+    status?: unknown;
+    expiresAt?: unknown;
+  };
+  if (typeof permit.id !== 'string' || !permit.id.trim()) return null;
+  if (permit.accessSource !== 'free' && permit.accessSource !== 'premium') {
+    return null;
+  }
+  if (typeof permit.expiresAt !== 'string') return null;
+  return {
+    id: permit.id,
+    accessSource: permit.accessSource,
+    status: permit.status,
+    expiresAt: permit.expiresAt,
   };
 }
 
