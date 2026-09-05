@@ -87,31 +87,42 @@ function shotPayload(
 }
 
 /**
- * Test-only second released scoring model version (sm-v2) for forehand_drive,
- * reusing the already-published test bundle. Production releases go through
- * the audited admin release flow.
+ * Test-only second scoring model version (sm-v2) for forehand_drive: staged as
+ * `validating`, then released through the audited admin release route, which
+ * supersedes the live sm-v1 (status `superseded`, `active_to` set) so exactly
+ * one open-ended active model remains — the same path production releases take.
  */
-async function publishTestSmV2(pool: pg.Pool): Promise<void> {
+async function publishTestSmV2(
+  app: FastifyInstance,
+  pool: pg.Pool,
+  adminToken: string,
+): Promise<void> {
   await pool.query(
-    `INSERT INTO scoring_model (shot_type_id, version, model_bundle_id, status,
-       min_analysis_confidence, lower_confidence_threshold, config,
-       dataset_snapshot_id, evaluation_report_sha256, coach_validation_reference,
-       released_by, released_at, active_from)
-     SELECT st.id, 'sm-v2', mb.id, 'active', 0.65, 0.80,
-            jsonb_build_object('shotConfigVersion', 'forehand_drive@1'),
-            'test-only-dataset-snapshot', $1, 'test-only-coach-review',
-            (SELECT id FROM app_user WHERE auth_subject = 'test-only|scoring-release-actor'),
-            now(), now()
-     FROM shot_type st, model_bundle mb
-     WHERE st.slug = 'forehand_drive' AND mb.version = 'test-native-1'`,
-    ["b".repeat(64)],
+    `INSERT INTO scoring_model (shot_type_id, version, status,
+       min_analysis_confidence, lower_confidence_threshold, config)
+     SELECT st.id, 'sm-v2', 'validating', 0.65, 0.80,
+            jsonb_build_object('shotConfigVersion', 'forehand_drive@1')
+     FROM shot_type st WHERE st.slug = 'forehand_drive'`,
   );
+  const released = await app.inject({
+    method: "PUT",
+    url: "/v1/admin/scoring-models/forehand_drive/sm-v2/release",
+    headers: { authorization: `Bearer ${adminToken}` },
+    payload: {
+      modelBundleVersion: "test-native-1",
+      datasetSnapshotId: "test-only-dataset-snapshot",
+      evaluationReportSha256: "b".repeat(64),
+      coachValidationReference: "test-only-coach-review",
+    },
+  });
+  expect(released.statusCode, released.body).toBe(200);
 }
 
 describe.skipIf(!testUrl)("score-version governance (real PostgreSQL)", () => {
   let app: FastifyInstance;
   let pool: pg.Pool;
   let userToken: string;
+  let adminToken: string;
 
   beforeAll(async () => {
     const setupPool = new pg.Pool({ connectionString: testUrl });
@@ -119,7 +130,6 @@ describe.skipIf(!testUrl)("score-version governance (real PostgreSQL)", () => {
     await runMigrations(setupPool, migrationsDir);
     await seed(setupPool);
     await publishTestScoringRelease(setupPool);
-    await publishTestSmV2(setupPool);
     await setupPool.end();
 
     const config: ApiConfig = {
@@ -144,17 +154,20 @@ describe.skipIf(!testUrl)("score-version governance (real PostgreSQL)", () => {
 
     const minter = new DevTokenVerifier("test", DEV_SECRET);
     userToken = await minter.mint("auth0|sv-user");
-    const bootstrap = await app.inject({
-      method: "POST",
-      url: "/v1/account/bootstrap",
-      headers: { authorization: `Bearer ${userToken}` },
-      payload: {
-        locale: "en-US",
-        timezone: "UTC",
-        device: { platform: "ios", osVersion: "18.0", appVersion: "0.1.0", model: "iPhone16,1" },
-      },
-    });
-    expect(bootstrap.statusCode).toBe(200);
+    adminToken = await minter.mint("auth0|sv-admin", "admin");
+    for (const token of [userToken, adminToken]) {
+      const bootstrap = await app.inject({
+        method: "POST",
+        url: "/v1/account/bootstrap",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          locale: "en-US",
+          timezone: "UTC",
+          device: { platform: "ios", osVersion: "18.0", appVersion: "0.1.0", model: "iPhone16,1" },
+        },
+      });
+      expect(bootstrap.statusCode).toBe(200);
+    }
   }, 60000);
 
   afterAll(async () => {
@@ -229,6 +242,24 @@ describe.skipIf(!testUrl)("score-version governance (real PostgreSQL)", () => {
         [randomUUID(), smV1ShotId],
       ),
     ).rejects.toThrow(/scored_shots_have_scoring_version/);
+  });
+
+  it("releasing sm-v2 supersedes sm-v1 — one open-ended active model per shot type", async () => {
+    await publishTestSmV2(app, pool, adminToken);
+
+    const models = await pool.query<{
+      version: string;
+      status: string;
+      active_to: Date | null;
+    }>(
+      `SELECT sm.version, sm.status, sm.active_to
+       FROM scoring_model sm JOIN shot_type st ON st.id = sm.shot_type_id
+       WHERE st.slug = 'forehand_drive' ORDER BY sm.version`,
+    );
+    expect(models.rows.map((m) => [m.version, m.status, m.active_to === null])).toEqual([
+      ["sm-v1", "superseded", false],
+      ["sm-v2", "active", true],
+    ]);
   });
 
   it("progress series stay per-version and the version boundary is an explicit transition", async () => {

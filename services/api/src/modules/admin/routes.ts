@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import { performance } from "node:perf_hooks";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
@@ -297,9 +298,97 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
     evaluationReportSha256: z.string().regex(/^[0-9a-f]{64}$/),
     coachValidationReference: z.string().min(3).max(300),
   });
+
+  // Scoring-model release state machine: draft/validating → active; the
+  // previously open-ended active version of the same shot type becomes
+  // superseded (active_to = release time). Releases of one shot type are
+  // serialised on its shot_type row; the partial unique index
+  // scoring_model_single_open_active_per_shot_type (migration 0021) is the
+  // schema-level backstop for writers that bypass this route.
+  //
+  // A release that was already in flight when another version of the same
+  // shot type went live is a lost-update race, not a deliberate supersede: it
+  // is refused unless it arrived after that activation. Release requests for
+  // one shot type that overlap in time form a burst; every member of a burst
+  // carries the burst's start as its arrival, so a request that reaches the
+  // handler only after the burst's winner committed (TCP connections are
+  // accepted one by one) is still refused. Arrival is stamped in onRequest,
+  // before auth and body parsing, so queueing inside the process (pool waits,
+  // lock waits) cannot move it, and it is expressed on the database clock
+  // (the clock active_from is written with) by sampling clock_timestamp()
+  // once per burst and shifting it back by the elapsed monotonic time, so
+  // API/DB clock skew cannot bias the comparison. A burst ends when its last
+  // member responds; a burst older than RELEASE_BURST_MAX_MS is abandoned
+  // rather than trusted.
+  interface ReleaseBurst {
+    startedAt: Promise<number>;
+    startedMs: number;
+    inflight: Set<FastifyRequest>;
+  }
+  const RELEASE_BURST_MAX_MS = 60_000;
+  const releaseBursts = new Map<string, ReleaseBurst>();
+  const releaseArrivals = new WeakMap<FastifyRequest, Promise<number>>();
+  // Database epoch seconds at the monotonic instant `atMs`.
+  const dbClockAt = async (atMs: number): Promise<number> => {
+    const sentMs = performance.now();
+    const row = await one<{ epoch: number }>(
+      context.pool!,
+      "SELECT extract(epoch FROM clock_timestamp())::float8 AS epoch",
+      [],
+    );
+    const sampledMs = (sentMs + performance.now()) / 2;
+    return row!.epoch - (sampledMs - atMs) / 1000;
+  };
+  const releaseBurstKey = (request: FastifyRequest): string => {
+    const { shotType } = request.params as { shotType?: unknown };
+    return typeof shotType === "string" ? shotType : "";
+  };
+  const joinReleaseBurst = (request: FastifyRequest): void => {
+    const key = releaseBurstKey(request);
+    const nowMs = performance.now();
+    let burst = releaseBursts.get(key);
+    if (!burst || nowMs - burst.startedMs > RELEASE_BURST_MAX_MS) {
+      const startedAt = dbClockAt(nowMs);
+      startedAt.catch(() => undefined);
+      burst = { startedAt, startedMs: nowMs, inflight: new Set() };
+      releaseBursts.set(key, burst);
+    }
+    burst.inflight.add(request);
+    releaseArrivals.set(request, burst.startedAt);
+  };
+  const leaveReleaseBurst = (request: FastifyRequest): void => {
+    const key = releaseBurstKey(request);
+    const burst = releaseBursts.get(key);
+    if (!burst || !burst.inflight.delete(request)) return;
+    if (burst.inflight.size === 0) releaseBursts.delete(key);
+  };
+  type ReleaseOutcome =
+    | { kind: "released"; supersededVersion: string | null }
+    | { kind: "prerequisite_missing" }
+    | { kind: "invalid_state"; status: string }
+    | { kind: "conflict"; activeVersion: string | null };
+  const SINGLE_ACTIVE_INDEX = "scoring_model_single_open_active_per_shot_type";
+  const isSingleActiveViolation = (error: unknown): boolean => {
+    const pgError = error as { code?: string; constraint?: string };
+    return pgError.code === "23505" && pgError.constraint === SINGLE_ACTIVE_INDEX;
+  };
+
   app.put(
     "/v1/admin/scoring-models/:shotType/:version/release",
-    { preHandler: app.requireAdmin },
+    {
+      onRequest: (request, reply, done) => {
+        joinReleaseBurst(request);
+        // ServerResponse 'close' also fires when the connection is torn down
+        // before a response could be sent (onResponse does not run then).
+        reply.raw.once("close", () => leaveReleaseBurst(request));
+        done();
+      },
+      onResponse: (request, _reply, done) => {
+        leaveReleaseBurst(request);
+        done();
+      },
+      preHandler: app.requireAdmin,
+    },
     async (request, reply) => {
       const { shotType, version } = request.params as {
         shotType: string;
@@ -316,38 +405,86 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
           parsed.success ? "Invalid shot type or scoring version." : parsed.error.message,
         );
       }
-      const released = await withTransaction(context.pool!, async (tx) => {
-        const bundle = await one<{ id: string }>(
-          tx,
-          `SELECT id FROM model_bundle
-           WHERE version = $1 AND status = 'active' AND rollout_percent = 100
-             AND manifest_sha256 ~ '^[0-9a-f]{64}$'
-           FOR UPDATE`,
-          [parsed.data.modelBundleVersion],
-        );
-        if (!bundle) return null;
-        return one(
-          tx,
-          `UPDATE scoring_model sm SET
-             model_bundle_id = $3, status = 'active',
-             dataset_snapshot_id = $4, evaluation_report_sha256 = $5,
-             coach_validation_reference = $6, released_by = $7,
-             released_at = now(), active_from = now(), active_to = NULL
-           FROM shot_type st
-           WHERE sm.shot_type_id = st.id AND st.slug = $1 AND sm.version = $2
-           RETURNING sm.id`,
-          [
-            shotType,
-            version,
-            bundle.id,
-            parsed.data.datasetSnapshotId,
-            parsed.data.evaluationReportSha256,
-            parsed.data.coachValidationReference,
-            request.user!.id,
-          ],
-        );
-      });
-      if (!released) {
+      const arrivedAt = await (releaseArrivals.get(request) ?? dbClockAt(performance.now()));
+      let outcome: ReleaseOutcome;
+      try {
+        outcome = await withTransaction(context.pool!, async (tx): Promise<ReleaseOutcome> => {
+          const shot = await one<{ id: string }>(
+            tx,
+            "SELECT id FROM shot_type WHERE slug = $1 FOR NO KEY UPDATE",
+            [shotType],
+          );
+          if (!shot) return { kind: "prerequisite_missing" };
+          const target = await one<{
+            id: string;
+            status: string;
+            current_id: string | null;
+            current_version: string | null;
+            current_activated_after_request: boolean | null;
+            release_time: string;
+          }>(
+            tx,
+            `SELECT sm.id, sm.status,
+                    cur.id AS current_id, cur.version AS current_version,
+                    cur.active_from > to_timestamp($3::float8) AS current_activated_after_request,
+                    clock_timestamp()::text AS release_time
+             FROM scoring_model sm
+             LEFT JOIN scoring_model cur
+               ON cur.shot_type_id = sm.shot_type_id AND cur.id <> sm.id
+              AND cur.status = 'active' AND cur.active_to IS NULL
+             WHERE sm.shot_type_id = $1 AND sm.version = $2`,
+            [shot.id, version, arrivedAt],
+          );
+          if (!target) return { kind: "prerequisite_missing" };
+          if (target.status !== "draft" && target.status !== "validating") {
+            return { kind: "invalid_state", status: target.status };
+          }
+          const bundle = await one<{ id: string }>(
+            tx,
+            `SELECT id FROM model_bundle
+             WHERE version = $1 AND status = 'active' AND rollout_percent = 100
+               AND manifest_sha256 ~ '^[0-9a-f]{64}$'
+             FOR SHARE`,
+            [parsed.data.modelBundleVersion],
+          );
+          if (!bundle) return { kind: "prerequisite_missing" };
+          if (target.current_id && target.current_activated_after_request) {
+            return { kind: "conflict", activeVersion: target.current_version };
+          }
+          if (target.current_id) {
+            await tx.query(
+              `UPDATE scoring_model SET status = 'superseded', active_to = $2::timestamptz
+               WHERE id = $1 AND status = 'active' AND active_to IS NULL`,
+              [target.current_id, target.release_time],
+            );
+          }
+          const released = await one<{ id: string }>(
+            tx,
+            `UPDATE scoring_model SET
+               model_bundle_id = $2, status = 'active',
+               dataset_snapshot_id = $3, evaluation_report_sha256 = $4,
+               coach_validation_reference = $5, released_by = $6,
+               released_at = $7::timestamptz, active_from = $7::timestamptz, active_to = NULL
+             WHERE id = $1 AND status IN ('draft', 'validating')
+             RETURNING id`,
+            [
+              target.id,
+              bundle.id,
+              parsed.data.datasetSnapshotId,
+              parsed.data.evaluationReportSha256,
+              parsed.data.coachValidationReference,
+              request.user!.id,
+              target.release_time,
+            ],
+          );
+          if (!released) return { kind: "invalid_state", status: target.status };
+          return { kind: "released", supersededVersion: target.current_version };
+        });
+      } catch (error) {
+        if (!isSingleActiveViolation(error)) throw error;
+        outcome = { kind: "conflict", activeVersion: null };
+      }
+      if (outcome.kind === "prerequisite_missing") {
         return sendFailure(
           reply,
           request,
@@ -355,6 +492,28 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
           "permanent",
           "scoring.release_prerequisite_missing",
           "Release requires an existing scoring model and a 100% active hashed model bundle.",
+        );
+      }
+      if (outcome.kind === "invalid_state") {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "scoring.release_invalid_state",
+          `Scoring model ${version} is ${outcome.status}; only draft or validating versions can be released.`,
+        );
+      }
+      if (outcome.kind === "conflict") {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "scoring.release_conflict",
+          outcome.activeVersion
+            ? `Scoring model ${outcome.activeVersion} was released for ${shotType} while this request was in flight; review it before releasing again.`
+            : `Another release for ${shotType} won a concurrent activation; review the active model before releasing again.`,
         );
       }
       await audit(context.pool!, {
@@ -368,9 +527,15 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
           datasetSnapshotId: parsed.data.datasetSnapshotId,
           evaluationReportSha256: parsed.data.evaluationReportSha256,
           coachValidationReference: parsed.data.coachValidationReference,
+          supersededVersion: outcome.supersededVersion,
         },
       });
-      return { released: true, shotType, version };
+      return {
+        released: true,
+        shotType,
+        version,
+        supersededVersion: outcome.supersededVersion,
+      };
     },
   );
 
