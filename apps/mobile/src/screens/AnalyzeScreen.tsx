@@ -919,9 +919,24 @@ export function AnalyzeScreen() {
         const paywallRequired =
           outcome.kind === 'unavailable' &&
           outcome.cause === 'paywall_required';
-        // A new rating leaves for the server right away; the access snapshot
-        // is deliberately NOT re-read here — see ratingLedgerTouched.
-        if (outcome.kind === 'scored') triggerOutboxSync();
+        if (outcome.kind === 'scored') {
+          // The scored analysis is saved with the plan's sessionId: commit
+          // the set now (new sets write their session row + sync entry; the
+          // kv activity stamp keeps the set alive). This is durable
+          // bookkeeping for a shot that already exists, so it happens
+          // whether or not the screen is still mounted — without the
+          // session row the server never learns the shot's sessionId and its
+          // shot.sync row would retry forever. Best-effort — the score is
+          // already durable.
+          if (practiceSet) {
+            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+          }
+          // A new rating leaves for the server right away — after the set
+          // commit, so the session.create row is queued ahead of the drain.
+          // The access snapshot is deliberately NOT re-read here — see
+          // ratingLedgerTouched.
+          triggerOutboxSync();
+        }
         if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('saving'));
         if (outcome.kind === 'unavailable') {
@@ -947,13 +962,6 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
