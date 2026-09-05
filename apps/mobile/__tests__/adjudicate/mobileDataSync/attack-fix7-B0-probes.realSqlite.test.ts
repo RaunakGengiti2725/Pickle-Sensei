@@ -218,8 +218,10 @@ describe('attack round 7 probes (real SQLite)', () => {
     );
     const server = serverEmulator();
     const r = await drainOutbox(db, server);
+    // Re-pinned (fix9, Q1.4): both corrupt rows are quarantined — reported
+    // apart from `failed`, which only counts rows the server answered.
     expect({ r, receipt: await hasShotSyncReceipt(db, shotId(2)) }).toEqual({
-      r: { synced: 2, failed: 2, remaining: 2 },
+      r: { synced: 2, failed: 0, remaining: 2, quarantined: 2 },
       receipt: true,
     });
   });

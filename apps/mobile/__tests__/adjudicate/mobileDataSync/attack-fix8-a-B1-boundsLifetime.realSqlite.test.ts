@@ -5,6 +5,11 @@
  * set per read saved; the reset happens only for a genuinely NEW read; any
  * shot is offered ≤ OUTBOX_MAX_ATTEMPTS times over its lifetime.
  *
+ * Re-pinned (fix9): the lifetime constant is SHOT_LIFETIME_REFUSAL_BOUND =
+ * OUTBOX_MAX_ATTEMPTS charged refusals + SESSION_CREATE_REARM_BOUND uncharged
+ * revivals (a row parked at the cap is released once per accepted re-arm),
+ * = 10 — independent of how many later reads join the set.
+ *
  * Real `node:sqlite`, real modules. Every count below is measured, and the
  * bounds reported in the round-8 deliverable come from this file.
  */
@@ -32,6 +37,7 @@ import {
   OUTBOX_MAX_ATTEMPTS,
   SESSION_CREATE_REARM_BOUND,
   SESSION_NOT_FOUND_REJECTION,
+  SHOT_LIFETIME_REFUSAL_BOUND,
   drainOutbox,
   type SyncTransport,
 } from '../../../src/data/sync';
@@ -148,8 +154,10 @@ describe('attack-fix8-a B1 — re-arm bounds and per-shot lifetime offers', () =
       rearms: SESSION_CREATE_REARM_BOUND + 1,
       rows: 1,
     });
+    // Re-pinned (fix9): the shot of a paused set reports `paused`, its own
+    // state (Q1.3) — `rejected` would promise a retry no drain performs.
     expect(await getShotOutboxStatus(db, s1)).toMatchObject({
-      state: 'rejected',
+      state: 'paused',
       attempts: 3,
     });
   });
@@ -182,15 +190,26 @@ describe('attack-fix8-a B1 — re-arm bounds and per-shot lifetime offers', () =
       SESSION_CREATE_REARM_BOUND + 1,
     );
     expect(await outboxCount(db, OWNER)).toBe(5);
-    // Observed: the first shot has been offered 15 times (3 per read); its
-    // lifetime `refusals` is 15 and getShotOutboxStatus reports 15.
-    // Expected under the stated lifetime bound: ≤ OUTBOX_MAX_ATTEMPTS offers.
+    // Observed on 24fd777b: the first shot had been offered 15 times (3 per
+    // read); its lifetime `refusals` was 15 and getShotOutboxStatus reported 15.
+    // Re-pinned (fix9) to the stated constant: ≤ SHOT_LIFETIME_REFUSAL_BOUND
+    // (= OUTBOX_MAX_ATTEMPTS + SESSION_CREATE_REARM_BOUND = 10) offers, every
+    // one of them counted in `refusals`, and the row is then exhausted for good.
     const { rows } = await db.execute(
-      `SELECT refusals FROM outbox WHERE owner_key = ? AND json_extract(payload, '$.id') = ?`,
+      `SELECT refusals, attempts FROM outbox WHERE owner_key = ? AND json_extract(payload, '$.id') = ?`,
       [OWNER, s1],
     );
     expect(Number(rows[0]?.['refusals'])).toBe(offersTo(t, s1));
-    expect(offersTo(t, s1)).toBeLessThanOrEqual(OUTBOX_MAX_ATTEMPTS);
+    expect(offersTo(t, s1)).toBeLessThanOrEqual(SHOT_LIFETIME_REFUSAL_BOUND);
+    expect(SHOT_LIFETIME_REFUSAL_BOUND).toBe(
+      OUTBOX_MAX_ATTEMPTS + SESSION_CREATE_REARM_BOUND,
+    );
+    // The exhausted status carries the lifetime refusal count the server
+    // actually issued (the Result copy reads "refused N times").
+    expect(await getShotOutboxStatus(db, s1)).toMatchObject({
+      state: 'exhausted',
+      attempts: offersTo(t, s1),
+    });
   });
 
   it('B1.3 probe — re-saving the SAME analysis id is not a new read yet resets the re-arm budget and adds a duplicate outbox row per re-save (3 + 2n creates over n re-saves)', async () => {
@@ -204,20 +223,26 @@ describe('attack-fix8-a B1 — re-arm bounds and per-shot lifetime offers', () =
       for (let d = 0; d < 10; d += 1) await drainOutbox(db, t);
       perCycle.push(t.creates.length - c);
       await saveAnalysis(db, analysis, PERMIT_ID, { session: setInput(SET_A) });
-      expect(await rearmsOf(db, OWNER, SET_A)).toBe(0);
+      // Re-pinned (fix9, R5): a re-save of a known id is not a new read — the
+      // set's automatic re-arm budget stays spent.
+      expect(await rearmsOf(db, OWNER, SET_A)).toBe(
+        SESSION_CREATE_REARM_BOUND + 1,
+      );
     }
     // Reachability: runCaptureAnalysis mints `analysisId = makeUuid()` per
-    // scored run, so the product has no re-save path; recorded as a probe
-    // (the invariant "reset only by a NEW read" is enforced by the caller,
-    // not by saveAnalysis).
-    expect(perCycle).toEqual([3, 2, 2, 2, 2]);
-    expect(await outboxCount(db, OWNER)).toBe(6);
+    // scored run, so the product has no re-save path; recorded as a probe.
+    // Re-pinned (fix9, R5): saveAnalysis itself is idempotent per id — the
+    // first cycle costs the 3 creates of one read, every re-save costs 0
+    // creates, queues no second `shot.sync` row and re-offers nothing.
+    expect(perCycle).toEqual([3, 0, 0, 0, 0]);
+    expect(await outboxCount(db, OWNER)).toBe(1);
     const { rows } = await db.execute(
       `SELECT count(*) AS n FROM outbox WHERE owner_key = ? AND kind = 'shot.sync'
          AND json_extract(payload, '$.id') = ?`,
       [OWNER, id],
     );
-    expect(Number(rows[0]?.['n'])).toBe(6);
+    expect(Number(rows[0]?.['n'])).toBe(1);
+    expect(offersTo(t, id)).toBe(1 + SESSION_CREATE_REARM_BOUND);
   });
 
   it('B1.4 probe — saveSession for an existing set (no new read) resets rearms and queues a live create: +3 creates without a read', async () => {
@@ -303,19 +328,25 @@ describe('attack-fix8-a B1 — re-arm bounds and per-shot lifetime offers', () =
       [OWNER, SET_A],
     );
     for (let d = 0; d < 12; d += 1) await drainOutbox(db, t);
-    expect(offersTo(t, s1)).toBe(OUTBOX_MAX_ATTEMPTS);
+    // Re-pinned (fix9): the pause is a durable marker on the shot row, not a
+    // reading of local_session — deleting the local set row un-pauses
+    // nothing (0 further offers, no `session.create` to re-queue from).
+    expect(offersTo(t, s1)).toBe(1 + SESSION_CREATE_REARM_BOUND);
     expect(await getShotOutboxStatus(db, s1)).toMatchObject({
-      state: 'orphaned',
-      attempts: OUTBOX_MAX_ATTEMPTS,
+      state: 'paused',
+      attempts: 1 + SESSION_CREATE_REARM_BOUND,
     });
     await saveSession(db, setInput(SET_A));
     for (let d = 0; d < 12; d += 1) await drainOutbox(db, t);
     // No product path deletes one local_session row (only purgeOwnerData
-    // deletes everything), so this stays a probe of the bound's shape.
+    // deletes everything), so this stays a probe of the bound's shape:
+    // saving the set again is an explicit re-arm worth one more bounded
+    // round (3 creates, 3 offers), and the lifetime stays ≤ OUTBOX_MAX_ATTEMPTS.
     expect({ offers: offersTo(t, s1), creates: t.creates.length }).toEqual({
-      offers: OUTBOX_MAX_ATTEMPTS + 3,
-      creates: 6,
+      offers: 2 * (1 + SESSION_CREATE_REARM_BOUND),
+      creates: 2 * (1 + SESSION_CREATE_REARM_BOUND),
     });
+    expect(offersTo(t, s1)).toBeLessThanOrEqual(OUTBOX_MAX_ATTEMPTS);
   });
 
   it('B1.8 probe — purging the owner between a re-arm and its create: nothing is created or offered afterwards, the queue is empty', async () => {

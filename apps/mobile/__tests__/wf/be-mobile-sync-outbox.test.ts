@@ -119,6 +119,20 @@ function fakeDb(options: { failDeleteOnce?: boolean } = {}) {
         });
         return { rows: [] };
       }
+      if (sql.startsWith('SELECT 1 AS known FROM outbox')) {
+        // saveAnalysis idempotency: a shot.sync row or a receipt for the id.
+        const known =
+          outbox.some(
+            r =>
+              r.owner_key === String(params[0]) &&
+              r.kind === 'shot.sync' &&
+              (JSON.parse(r.payload) as { id?: string }).id === params[1],
+          ) ||
+          receipts.some(
+            r => r.owner === String(params[2]) && r.entityId === params[3],
+          );
+        return { rows: known ? [{ known: 1 }] : [] };
+      }
       if (sql.startsWith('SELECT 1 FROM sync_receipt')) {
         return {
           rows: receipts

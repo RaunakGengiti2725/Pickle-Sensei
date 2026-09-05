@@ -1,5 +1,6 @@
 import { open, type DB } from '@op-engineering/op-sqlite';
 import { GUEST_DATA_OWNER } from './accountScope';
+import { statementSettled, statementStarted } from './transaction';
 
 /**
  * Durable local store (directive §32): SQLite for structured state, with a
@@ -67,7 +68,8 @@ const LOCAL_MIGRATIONS: string[] = [
      attempts INTEGER NOT NULL DEFAULT 0,
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
      last_error TEXT,
-     refusals INTEGER NOT NULL DEFAULT 0
+     refusals INTEGER NOT NULL DEFAULT 0,
+     quarantined INTEGER NOT NULL DEFAULT 0
    )`,
   `CREATE TABLE IF NOT EXISTS sync_receipt (
      owner_key TEXT NOT NULL,
@@ -248,6 +250,51 @@ function ensureAccountScopedSchema(db: DB): void {
         'ALTER TABLE local_session ADD COLUMN rearms INTEGER NOT NULL DEFAULT 0',
       );
     }
+    // A row the drain could not turn into a request (corrupt payload, unknown
+    // kind, oversized body) is QUARANTINED (sync.ts quarantineRow): the
+    // server never saw it, so it is neither refused nor exhausted. Earlier
+    // builds recorded a quarantine as attempts = refusals = 8 with the
+    // parser's message in `last_error`; those rows are re-labelled once, and
+    // their `refusals` — server refusals that never happened — reset to 0.
+    // Shots of a practice set whose automatic re-arm budget an earlier build
+    // spent (`rearms` past SESSION_CREATE_REARM_BOUND, no live create row)
+    // were paused by that state alone; they get the durable
+    // SESSION_PAUSED_VERDICT the drain and the status surfaces read now.
+    if (!hasColumn(db, 'outbox', 'quarantined')) {
+      db.executeSync(
+        'ALTER TABLE outbox ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0',
+      );
+      db.executeSync(
+        `UPDATE outbox SET quarantined = 1, refusals = 0
+         WHERE attempts >= 8
+           AND (NOT json_valid(payload)
+                OR last_error LIKE 'Error: outbox.%'
+                OR last_error LIKE 'Error: shot.sync\\_missing\\_%' ESCAPE '\\'
+                OR last_error LIKE 'Error: shot.sync\\_malformed\\_%' ESCAPE '\\'
+                OR last_error LIKE 'Error: session.%\\_missing\\_id%' ESCAPE '\\'
+                OR last_error LIKE 'Error: evaluation.trial\\_missing\\_id%' ESCAPE '\\'
+                OR last_error LIKE 'SyntaxError:%')`,
+      );
+      db.executeSync(
+        `UPDATE outbox
+         SET last_error = 'shot.session_paused: ' || coalesce(last_error || ' ', '')
+           || 'Its practice set was asked for again 2 times from this device without this read being applied; this read is paused until a new read joins the set.'
+         WHERE kind = 'shot.sync' AND attempts < 8 AND quarantined = 0
+           AND (last_error IS NULL OR (last_error NOT LIKE 'shot.session_paused:%'
+                                      AND last_error NOT LIKE 'shot.session_orphaned:%'))
+           AND json_valid(payload)
+           AND json_extract(payload, '$.sessionId') IN (
+             SELECT ls.id FROM local_session ls
+             WHERE ls.owner_key = outbox.owner_key AND ls.rearms > 2)
+           AND json_extract(payload, '$.sessionId') NOT IN (
+             SELECT CASE WHEN json_valid(s.payload)
+                         THEN json_extract(s.payload, '$.id') END
+             FROM outbox s
+             WHERE s.owner_key = outbox.owner_key AND s.kind = 'session.create'
+               AND s.attempts < 8 AND json_valid(s.payload)
+               AND json_extract(s.payload, '$.id') IS NOT NULL)`,
+      );
+    }
     db.executeSync(
       'CREATE INDEX IF NOT EXISTS idx_local_shot_owner_time ON local_shot (owner_key, captured_at DESC)',
     );
@@ -299,8 +346,13 @@ export function getDb(): LocalDb {
   const db = instance;
   return {
     async execute(sql, params = []) {
-      const result = await db.execute(sql, params as never[]);
-      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+      statementStarted();
+      try {
+        const result = await db.execute(sql, params as never[]);
+        return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+      } finally {
+        statementSettled();
+      }
     },
     close() {
       db.close();

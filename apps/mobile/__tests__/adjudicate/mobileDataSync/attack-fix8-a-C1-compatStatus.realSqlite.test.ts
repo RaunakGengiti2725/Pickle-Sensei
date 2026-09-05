@@ -296,7 +296,15 @@ describe('attack-fix8-a C1 — upgrade from the pre-fix schema, status truth', (
     };
     const results = [];
     for (let d = 0; d < 6; d += 1) results.push(await drainOutbox(db, t));
-    expect(results[0]).toEqual({ synced: 1, failed: 3, remaining: 7 });
+    // Re-pinned (fix9, Q1.4): the 3 malformed legacy rows are QUARANTINED
+    // (the server never saw them), reported apart from `failed` so the sync
+    // runtime's back-off is not moved by rows no retry can deliver.
+    expect(results[0]).toEqual({
+      synced: 1,
+      failed: 0,
+      remaining: 7,
+      quarantined: 3,
+    });
     expect(results.slice(1)).toEqual(
       Array(5).fill({ synced: 0, failed: 0, remaining: 7 }),
     );

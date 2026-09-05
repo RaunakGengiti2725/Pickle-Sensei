@@ -301,7 +301,14 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
     // is a string; the five unbuildable rows (no permit, numeric permit,
     // null, array, string) fail alone, permanently, and none of them poisons
     // the page or throws out of the drain.
-    expect(first).toEqual({ synced: 3, failed: 5, remaining: 5 });
+    // Re-pinned (fix9, Q1.4): the five quarantined rows are reported apart
+    // from `failed` — the server never saw them.
+    expect(first).toEqual({
+      synced: 3,
+      failed: 0,
+      remaining: 5,
+      quarantined: 5,
+    });
     // Re-pinned (S1): a row that can never become a request is quarantined
     // ONCE — its whole budget spent in the drain that finds it, with a
     // truthful last_error — and is never re-read, so later drains of this
@@ -344,7 +351,14 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
       attempts: 0,
     });
     const result = await drainOutbox(db, server);
-    expect(result).toEqual({ synced: 1, failed: 2, remaining: 2 });
+    // Re-pinned (fix9, Q1.4): quarantined rows are reported apart from
+    // `failed` — the server never saw them.
+    expect(result).toEqual({
+      synced: 1,
+      failed: 0,
+      remaining: 2,
+      quarantined: 2,
+    });
     expect(await hasShotSyncReceipt(db, shotId(0xa00))).toBe(true);
     // Re-pinned (S1): both corrupt rows are quarantined once (budget spent,
     // truthful last_error) rather than charged one attempt per drain.

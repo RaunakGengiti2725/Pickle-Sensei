@@ -116,6 +116,7 @@ function fakeDb() {
     payload: string;
     attempts: number;
     refusals?: number;
+    quarantined?: number;
     last_error: string | null;
   }
   const outbox: OutboxRow[] = [];
@@ -142,6 +143,26 @@ function fakeDb() {
         );
         return { rows: hit ? [{ 1: 1 }] : [] };
       }
+      if (sql.startsWith('SELECT 1 AS known FROM outbox')) {
+        // saveAnalysis idempotency: a shot.sync row or a receipt for the id.
+        const known =
+          outbox.some(r => {
+            if (r.owner_key !== String(params[0]) || r.kind !== 'shot.sync') {
+              return false;
+            }
+            try {
+              return (
+                (JSON.parse(r.payload) as { id?: string }).id === params[1]
+              );
+            } catch {
+              return false;
+            }
+          }) ||
+          receipts.some(
+            r => r.owner === String(params[2]) && r.entityId === params[3],
+          );
+        return { rows: known ? [{ known: 1 }] : [] };
+      }
       if (sql.startsWith('SELECT id, kind, payload')) {
         return {
           rows: outbox
@@ -153,7 +174,11 @@ function fakeDb() {
             .map(r => ({ ...r })),
         };
       }
-      if (sql.startsWith('SELECT attempts, refusals, last_error FROM outbox')) {
+      if (
+        sql.startsWith(
+          'SELECT attempts, refusals, quarantined, last_error FROM outbox',
+        )
+      ) {
         // getShotOutboxStatus: the newest shot.sync row for this shot id.
         const row = [...outbox]
           .reverse()
@@ -169,6 +194,7 @@ function fakeDb() {
                 {
                   attempts: row.attempts,
                   refusals: row.refusals ?? 0,
+                  quarantined: row.quarantined ?? 0,
                   last_error: row.last_error,
                 },
               ]
@@ -191,12 +217,12 @@ function fakeDb() {
           if (sql.includes('refusals = refusals + 1')) {
             row.refusals = (row.refusals ?? 0) + 1;
           }
-          const quarantine = /SET attempts = (\d+), refusals = (\d+),/.exec(
+          const quarantine = /SET attempts = (\d+), quarantined = 1,/.exec(
             sql,
           );
           if (quarantine) {
             row.attempts = Number(quarantine[1]);
-            row.refusals = Number(quarantine[2]);
+            row.quarantined = 1;
           }
           row.last_error = String(params[0]);
         }

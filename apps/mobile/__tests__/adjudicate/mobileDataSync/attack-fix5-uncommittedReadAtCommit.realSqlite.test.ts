@@ -121,7 +121,11 @@ describe('attack fix5 / C2: the drain reads rows of an open saveAnalysis transac
     expect(drainResult.status).toBe('fulfilled');
     const log = statementLog(logStart);
     const firstShotPage = log.findIndex(
-      sql => sql.includes('FROM outbox') && sql.includes(`kind = 'shot.sync'`),
+      // The drain's page read (saveAnalysis's own idempotency SELECT on the
+      // outbox is not a drain read).
+      sql =>
+        sql.startsWith('SELECT id, kind, payload') &&
+        sql.includes(`kind = 'shot.sync'`),
     );
     const rollback = log.findIndex(
       sql => sql.trim().toUpperCase() === 'ROLLBACK',

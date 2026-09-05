@@ -346,7 +346,15 @@ describe('drainOutbox', () => {
       createSession: async () => {},
       finalizeSession: async () => {},
     });
-    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    // Fix round 9 (Q1.4): a row that can never become a request is
+    // quarantined — reported apart from `failed`, which only counts rows
+    // the server answered (and drives the runtime's back-off).
+    expect(result).toEqual({
+      synced: 0,
+      failed: 0,
+      remaining: 1,
+      quarantined: 1,
+    });
     expect(outbox[0]?.last_error).toContain(
       'shot.sync_missing_analysis_permit',
     );

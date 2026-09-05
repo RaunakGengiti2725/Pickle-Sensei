@@ -108,10 +108,12 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     const payload = JSON.stringify({ ...realAnalysis({ id }) });
     await plantShotRow(db, payload);
     const t = acceptAllTransport();
+    // Re-pinned (fix9): the quarantine is reported beside `failed`, not in it.
     expect(await drainOutbox(db, t)).toEqual({
       synced: 0,
-      failed: 1,
+      failed: 0,
       remaining: 1,
+      quarantined: 1,
     });
     await drainOutbox(db, t);
     const [row] = await outboxRows(db, OWNER);
@@ -129,10 +131,21 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     // although the server never saw it. Expected: a lifetime `refusals`
     // that counts server refusals only (0 here) and copy that does not
     // attribute the quarantine to the server.
+    // Re-pinned (fix9): the row is `quarantined` (its own state, never
+    // `exhausted`), attempts = refusals = 0, and the Result surface has a
+    // dedicated sentence saying the server never saw it.
     expect({
       refusals: Number(rows[0]?.['refusals']),
       reported: status.state === 'exhausted' ? status.attempts : status.state,
-    }).toEqual({ refusals: 0, reported: 0 });
+    }).toEqual({ refusals: 0, reported: 'quarantined' });
+    expect(status).toEqual({
+      state: 'quarantined',
+      attempts: 0,
+      lastError: expect.stringContaining('shot.sync_missing_analysis_permit'),
+    });
+    expect(RESULT_SCREEN).toContain(
+      'so it was never sent and the server never saw it.',
+    );
   });
 
   it('Q1.2 BREAK — one oversized shot in a page makes the whole request 413: the 5 healthy rows of the page are charged 8× and exhausted, never offered alone', async () => {
@@ -202,13 +215,18 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     };
     for (let d = 0; d < 6; d += 1) await drainOutbox(db, t);
     const status = await getShotOutboxStatus(db, id);
-    expect(status).toMatchObject({ state: 'rejected', attempts: 3 });
+    // Re-pinned (fix9): the paused set's shot reports `paused` (its own
+    // state) with the 3 refusals the server actually issued.
+    expect(status).toMatchObject({ state: 'paused', attempts: 3 });
     const before = offersOf(t, id);
     for (let d = 0; d < 50; d += 1) await drainOutbox(db, t);
     const offersWhilePaused = offersOf(t, id) - before;
     expect(offersWhilePaused).toBe(0);
+    // (fix9: the retry promise is still the `rejected` copy — a row within
+    // its budget in a live set — now composed after the last-response
+    // sentence, so the leading period moved into that sentence.)
     expect(RESULT_SCREEN).toContain(
-      '. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.',
+      ' It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.',
     );
     // Observed: state 'rejected' (→ "The server refused this read 3 of 8
     // times … It stays in the secure outbox and will be retried") while the
@@ -216,6 +234,9 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     // Expected: a state whose copy does not promise a retry the code does
     // not perform (APP_STORE_SUBMISSION.md: no automatic-resend promise).
     expect(status.state).not.toBe('rejected');
+    expect(RESULT_SCREEN).toContain(
+      'Sync is paused: this read is not sent again until a new read joins its practice set.',
+    );
   });
 
   it('Q1.4 BREAK — 10,000 quarantined rows ahead of one healthy row: the healthy row is delivered in drain 1 and nothing is re-read, but the drain reports failed = 10,000 (the runtime counts that as a failed drain and backs off)', async () => {
@@ -244,7 +265,13 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     // syncRuntime's `consecutiveFailures = result.failed > 0 ? +1 : 0` turns
     // the quarantine into one failed drain and a longer retry delay.
     // Expected under "never affect the owner's backoff": failed 0.
-    expect(first).toEqual({ synced: 1, failed: 0, remaining: 10_000 });
+    // Re-pinned (fix9): the quarantine is reported in its own count.
+    expect(first).toEqual({
+      synced: 1,
+      failed: 0,
+      remaining: 10_000,
+      quarantined: 10_000,
+    });
   }, 60_000);
 
   it('Q1.5 probe — corrupt session.create (payload null) with healthy shots of the set: quarantined once, the set is re-queued from local_session and the shots deliver', async () => {
@@ -278,8 +305,10 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     };
     const results = [];
     for (let d = 0; d < 4; d += 1) results.push(await drainOutbox(db, t));
+    // Re-pinned (fix9): the corrupt create is `quarantined: 1`, the two
+    // shots the server disowned are the 2 `failed`.
     expect(results.slice(0, 2)).toEqual([
-      { synced: 0, failed: 3, remaining: 4 },
+      { synced: 0, failed: 2, remaining: 4, quarantined: 1 },
       { synced: 3, failed: 0, remaining: 1 },
     ]);
     expect(t.sessions).toEqual([SET]);
@@ -364,8 +393,9 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
     // Valid-but-odd rows (NUL id, __proto__ key, deep guidance, 1 MB string)
     // are offered once and accepted; the rest are quarantined in drain 1.
+    // Re-pinned (fix9): the 3 unreadable rows are `quarantined`, not `failed`.
     expect(results).toEqual([
-      { synced: 4, failed: 3, remaining: 3 },
+      { synced: 4, failed: 0, remaining: 3, quarantined: 3 },
       { synced: 0, failed: 0, remaining: 3 },
       { synced: 0, failed: 0, remaining: 3 },
     ]);
@@ -388,9 +418,11 @@ describe('attack-fix8-a Q1 — quarantine, page fairness and status/copy truth',
     for (let d = 0; d < 3; d += 1) await drainOutbox(db, t);
     expect(t.sessions).toEqual([SET]);
     expect(offersOf(t, id)).toBe(0);
+    // Re-pinned (fix9): never offered, so `quarantined` with 0 refusals —
+    // not `exhausted` with 8.
     expect(await getShotOutboxStatus(db, id)).toMatchObject({
-      state: 'exhausted',
-      attempts: OUTBOX_MAX_ATTEMPTS,
+      state: 'quarantined',
+      attempts: 0,
     });
   });
 });

@@ -300,7 +300,12 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
     await ticks(200);
     t2.shotCalls[0]!.d.resolve(acceptAll(t2.shotCalls[0]!.shots));
     const r2 = await drain2.promise;
-    expect(r2.failed).toBe(1);
+    // Re-pinned (fix9, Q1.4): the unparseable row is quarantined — reported
+    // apart from `failed`, which only counts rows the server answered.
+    expect({ failed: r2.failed, quarantined: r2.quarantined }).toEqual({
+      failed: 0,
+      quarantined: 1,
+    });
     const after = track(saveSession(db, setInput(SET(2))));
     await ticks(200);
     expect(after.settled()).toBe(true);

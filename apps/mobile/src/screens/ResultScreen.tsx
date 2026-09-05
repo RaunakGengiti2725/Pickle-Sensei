@@ -40,7 +40,11 @@ import {
   listRealAnalysisFacts,
   type ShotOutboxStatus,
 } from '../data/repository';
-import { OUTBOX_MAX_ATTEMPTS } from '../data/sync';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  SESSION_ORPHANED_VERDICT,
+  SESSION_PAUSED_VERDICT,
+} from '../data/sync';
 import type { RootStackParams } from '../navigation/params';
 import {
   FixList,
@@ -136,29 +140,52 @@ export type SyncEvidenceState =
   | { kind: 'pending' }
   | { kind: 'unknown' }
   | {
-      kind: 'rejected' | 'exhausted';
+      kind: 'rejected' | 'exhausted' | 'paused';
       attempts: number;
       lastError: string | null;
     }
-  | { kind: 'orphaned'; lastError: string | null };
+  | { kind: 'orphaned' | 'quarantined'; lastError: string | null };
 
 function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
   switch (status.state) {
     case 'rejected':
     case 'exhausted':
+    case 'paused':
       return {
         kind: status.state,
         attempts: status.attempts,
         lastError: status.lastError,
       };
     case 'orphaned':
-      return { kind: 'orphaned', lastError: status.lastError };
+    case 'quarantined':
+      return { kind: status.state, lastError: status.lastError };
     case 'queued':
       return { kind: 'pending' };
     case 'absent':
       return { kind: 'unknown' };
   }
 }
+
+/**
+ * The outbox row's last verdict as one sentence of user copy: the client's
+ * own state markers (`shot.session_orphaned: `, `shot.session_paused: `) and
+ * an `Error: ` prefix are dropped — the surrounding copy already names the
+ * state — and the sentence is closed. Empty when there is no verdict.
+ */
+export function lastResponseSentence(lastError: string | null): string {
+  if (lastError === null) return '';
+  let text = lastError.trim();
+  for (const marker of [SESSION_PAUSED_VERDICT, SESSION_ORPHANED_VERDICT]) {
+    if (text.startsWith(`${marker}:`)) {
+      text = text.slice(marker.length + 1).trim();
+    }
+  }
+  if (text.startsWith('Error:')) text = text.slice('Error:'.length).trim();
+  if (text.length === 0) return '';
+  if (!/[.!?]$/.test(text)) text += '.';
+  return ` Last response: ${text}`;
+}
+
 
 type GuideStep = 'score' | 'problem' | 'drills' | 'next';
 
@@ -1585,11 +1612,9 @@ function TrainingPlanSection(props: {
             The server did not accept this read.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {`Sync was refused ${syncEvidence.attempts} times and this read will not be sent again${
-              syncEvidence.lastError
-                ? ` (last response: ${syncEvidence.lastError})`
-                : ''
-            }. It stays on this device; capture a new read to build training.`}
+            {`Sync was refused ${syncEvidence.attempts} times and this read will not be sent again.${lastResponseSentence(
+              syncEvidence.lastError,
+            )} It stays on this device; capture a new read to build training.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -1608,11 +1633,55 @@ function TrainingPlanSection(props: {
             The server did not accept this read.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {`The practice set this read belongs to was refused or has not reached the server${
-              syncEvidence.lastError
-                ? ` (last response: ${syncEvidence.lastError})`
-                : ''
-            }. Sync is paused until the set is accepted, then this read is sent again automatically. It stays on this device; capture a new read to build training now.`}
+            {`The practice set this read belongs to was refused or has not reached the server.${lastResponseSentence(
+              syncEvidence.lastError,
+            )} Sync is paused until the set is accepted, then this read is sent again automatically. It stays on this device; capture a new read to build training now.`}
+          </Text>
+          <View style={styles.trainingAction}>
+            <Button
+              label="Capture a new read"
+              variant="secondary"
+              onPress={props.onCaptureNewRead}
+            />
+          </View>
+        </Card>
+      ) : syncEvidence.kind === 'paused' ? (
+        <Card tone="soft" style={styles.trainingStateCard}>
+          <View style={styles.trainingStateIcon}>
+            <Icon name="upload" size={22} color={color.court} />
+          </View>
+          <Text style={[type.h2, styles.trainingStateTitle]}>
+            This read needs a new read to sync.
+          </Text>
+          <Text style={[type.body, styles.trainingStateBody]}>
+            {`${
+              syncEvidence.attempts > 0
+                ? `The server refused this read ${syncEvidence.attempts} times so far.`
+                : 'The server has not accepted this read.'
+            }${lastResponseSentence(
+              syncEvidence.lastError,
+            )} Sync is paused: this read is not sent again until a new read joins its practice set. It stays on this device; capture a new read in this set to send both.`}
+          </Text>
+          <View style={styles.trainingAction}>
+            <Button
+              label="Capture a new read"
+              variant="secondary"
+              onPress={props.onCaptureNewRead}
+            />
+          </View>
+        </Card>
+      ) : syncEvidence.kind === 'quarantined' ? (
+        <Card tone="soft" style={styles.trainingStateCard}>
+          <View style={styles.trainingStateIcon}>
+            <Icon name="close" size={22} color={color.bad} />
+          </View>
+          <Text style={[type.h2, styles.trainingStateTitle]}>
+            This read could not be prepared for sync.
+          </Text>
+          <Text style={[type.body, styles.trainingStateBody]}>
+            {`The saved copy of this read cannot be turned into a sync request, so it was never sent and the server never saw it.${lastResponseSentence(
+              syncEvidence.lastError,
+            )} It stays on this device and will not be sent; capture a new read to build training.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -1638,11 +1707,9 @@ function TrainingPlanSection(props: {
                     syncEvidence.attempts > OUTBOX_MAX_ATTEMPTS
                       ? `${syncEvidence.attempts} times so far`
                       : `${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times`
-                  }${
-                    syncEvidence.lastError
-                      ? ` (last response: ${syncEvidence.lastError})`
-                      : ''
-                  }. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
+                  }.${lastResponseSentence(
+                    syncEvidence.lastError,
+                  )} It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
                 : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
           </Text>
         </Card>

@@ -21,7 +21,9 @@ import {
   OUTBOX_MAX_ATTEMPTS,
   enqueueLiveSessionCreate,
   isSessionOrphanedVerdict,
+  isSessionPausedVerdict,
   rearmExhaustedSessionCreate,
+  resumePausedShots,
 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
@@ -183,6 +185,23 @@ export async function saveAnalysis(
   }
   const owner = requireWritableDataOwner();
   await runInTransaction(db, async () => {
+    // A NEW read is one the queue does not know yet: no `shot.sync` row names
+    // the id (whatever its state) and the server has not accepted it. Saving
+    // the same id again refreshes the local shot only — it queues nothing,
+    // re-arms nothing and resets no durable counter, so a re-save can never
+    // buy a refused set more offers.
+    const { rows: known } = await db.execute(
+      `SELECT 1 AS known FROM outbox
+       WHERE owner_key = ? AND kind = 'shot.sync'
+         AND CASE WHEN json_valid(payload)
+                  THEN json_extract(payload, '$.id') END = ?
+       UNION ALL
+       SELECT 1 AS known FROM sync_receipt
+       WHERE owner_key = ? AND kind = 'shot.sync' AND entity_id = ?
+       LIMIT 1`,
+      [owner, analysis.id, owner, analysis.id],
+    );
+    const newRead = known.length === 0;
     if (session !== null) {
       const { rows } = await db.execute(
         `SELECT 1 FROM local_session WHERE owner_key = ? AND id = ? LIMIT 1`,
@@ -203,7 +222,7 @@ export async function saveAnalysis(
           ],
         );
         await enqueueLiveSessionCreate(db, owner, session);
-      } else {
+      } else if (newRead) {
         await rearmExhaustedSessionCreate(db, owner, session.id);
       }
     }
@@ -224,11 +243,13 @@ export async function saveAnalysis(
         JSON.stringify(analysis),
       ],
     );
-    await db.execute(
-      `INSERT INTO outbox (owner_key, kind, payload)
-       VALUES (?, 'shot.sync', ?)`,
-      [owner, JSON.stringify({ ...analysis, analysisPermitId })],
-    );
+    if (newRead) {
+      await db.execute(
+        `INSERT INTO outbox (owner_key, kind, payload)
+         VALUES (?, 'shot.sync', ?)`,
+        [owner, JSON.stringify({ ...analysis, analysisPermitId })],
+      );
+    }
   });
 }
 
@@ -801,6 +822,13 @@ function parseCaptureRow(row: Record<string, unknown>): PendingCapture {
   };
 }
 
+/**
+ * Saves (or saves again) a practice set. Saving a set the device already
+ * knows is an explicit re-arm: the automatic re-arm budget starts over (the
+ * replaced row's `rearms` defaults to 0), a live `session.create` is queued
+ * unless one exists, and the set's paused shots are offered again — each
+ * still within its own lifetime refusal bound.
+ */
 export async function saveSession(
   db: LocalDb,
   session: SessionInput,
@@ -821,6 +849,7 @@ export async function saveSession(
       ],
     );
     await enqueueLiveSessionCreate(db, owner, session);
+    await resumePausedShots(db, owner, session.id);
   });
 }
 
@@ -897,7 +926,13 @@ export async function hasShotSyncReceipt(
 export type ShotOutboxStatus =
   | { state: 'absent' }
   | {
-      state: 'queued' | 'rejected' | 'exhausted' | 'orphaned';
+      state:
+        | 'queued'
+        | 'rejected'
+        | 'exhausted'
+        | 'orphaned'
+        | 'paused'
+        | 'quarantined';
       attempts: number;
       lastError: string | null;
     };
@@ -909,11 +944,17 @@ export type ShotOutboxStatus =
  * `orphaned` rows are PARKED, not finished: shots whose practice set the
  * server does not know yet (its session.create row was refused, or none
  * exists on this device); a drain offers them again as soon as a
- * session.create for that set is accepted.
+ * session.create for that set is accepted. `paused` rows belong to a set
+ * the server accepts but keeps disowning (SESSION_PAUSED_VERDICT): no drain
+ * offers them until a new read is saved into the set. `quarantined` rows
+ * could not be turned into a request (corrupt or oversized payload) and were
+ * never offered: the server never saw them.
  *
  * `attempts` is the number of times the server refused the read over the
  * row's LIFETIME (`outbox.refusals`, monotone): the retry budget a released
- * parked row gets back never lowers what the Result surface reports.
+ * parked row gets back never lowers what the Result surface reports, and a
+ * quarantined row reports the refusals it actually received (none, unless
+ * it was offered before its payload became unreadable).
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -925,7 +966,7 @@ export async function getShotOutboxStatus(
   // payload, and one such row must not make every healthy shot's lookup
   // throw. CASE evaluates in order, unlike a bare AND.
   const { rows } = await db.execute(
-    `SELECT attempts, refusals, last_error FROM outbox
+    `SELECT attempts, refusals, quarantined, last_error FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
        AND CASE WHEN json_valid(payload)
                 THEN json_extract(payload, '$.id') END = ?
@@ -935,13 +976,20 @@ export async function getShotOutboxStatus(
   const row = rows[0];
   if (!row) return { state: 'absent' };
   const budget = Number(row['attempts'] ?? 0);
-  const attempts = Math.max(budget, Number(row['refusals'] ?? 0));
+  const refusals = Number(row['refusals'] ?? 0);
+  const attempts = Math.max(budget, refusals);
   const lastError =
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
       : null;
+  if (Number(row['quarantined'] ?? 0) === 1) {
+    return { state: 'quarantined', attempts: refusals, lastError };
+  }
   if (isSessionOrphanedVerdict(lastError)) {
     return { state: 'orphaned', attempts, lastError };
+  }
+  if (budget < OUTBOX_MAX_ATTEMPTS && isSessionPausedVerdict(lastError)) {
+    return { state: 'paused', attempts, lastError };
   }
   if (budget >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };

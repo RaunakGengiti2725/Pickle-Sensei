@@ -141,7 +141,7 @@ describe('B7-1 / B7-2: the session pass has no budget for unparseable session.cr
     for (let i = 0; i < 3; i += 1) {
       outcomes.push(
         await drainOutbox(db, transport).then(
-          r => `resolved failed=${r.failed}`,
+          r => `resolved failed=${r.failed} quarantined=${r.quarantined ?? 0}`,
           e => `rejected ${String(e).slice(0, 60)}`,
         ),
       );
@@ -153,8 +153,14 @@ describe('B7-1 / B7-2: the session pass has no budget for unparseable session.cr
       poisonedRowAttempts: rows.find(r => r.kind === 'session.create')!
         .attempts,
     }).toEqual({
-      // A row that cannot become a request fails alone and permanently.
-      outcomes: ['resolved failed=1', 'resolved failed=0', 'resolved failed=0'],
+      // A row that cannot become a request is quarantined alone, once, and
+      // permanently. Re-pinned (fix9, Q1.4): the server never saw it, so it
+      // is reported as `quarantined`, not `failed` (which drives back-off).
+      outcomes: [
+        'resolved failed=0 quarantined=1',
+        'resolved failed=0 quarantined=0',
+        'resolved failed=0 quarantined=0',
+      ],
       receipt: true,
       poisonedRowAttempts: expect.any(Number),
     });

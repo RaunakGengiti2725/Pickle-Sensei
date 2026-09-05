@@ -180,11 +180,14 @@ describe('B7-3 / B7-4: session.create re-arm cadence is not bounded (real SQLite
     for (let d = 0; d < 40; d += 1) {
       await drainOutbox(db, transport);
       const status = await getShotOutboxStatus(db, shotId(0x40));
+      // Re-pinned (fix9, Q1.3): a shot of a paused set reports `paused`
+      // with its lifetime refusal count — it is part of the same trace.
       attemptsTrace.push(
         status.state === 'queued' ||
           status.state === 'rejected' ||
           status.state === 'exhausted' ||
-          status.state === 'orphaned'
+          status.state === 'orphaned' ||
+          status.state === 'paused'
           ? status.attempts
           : -1,
       );
@@ -237,9 +240,13 @@ describe('B7-3 / B7-4: session.create re-arm cadence is not bounded (real SQLite
     const status = await getShotOutboxStatus(db, shotId(0x41));
     // `rejected` copy: "The server refused this read {attempts} of 8 times".
     // The server has refused it `offers` times; the two must agree (or the
-    // row must have settled) for the copy to be truthful.
-    expect(status.state === 'rejected' ? status.attempts : status.state).toBe(
-      offers,
-    );
+    // row must have settled) for the copy to be truthful. Re-pinned (fix9,
+    // Q1.3): the set is paused after its re-arm budget, and the `paused`
+    // status carries the same lifetime refusal count.
+    expect(
+      status.state === 'rejected' || status.state === 'paused'
+        ? status.attempts
+        : status.state,
+    ).toBe(offers);
   });
 });

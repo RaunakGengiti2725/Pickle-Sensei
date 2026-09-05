@@ -1,4 +1,8 @@
-import { OUTBOX_MAX_ATTEMPTS, isSessionOrphanedVerdict } from './sync';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  isSessionOrphanedVerdict,
+  isSessionPausedVerdict,
+} from './sync';
 
 /**
  * OFFLINE / WEAK-NETWORK CAPABILITY MAP (workstream i28).
@@ -207,6 +211,10 @@ export interface OutboxRowStatus {
   readonly kind: string;
   readonly attempts: number;
   readonly lastError: string | null;
+  /** `outbox.quarantined`: the row could not be turned into a request and
+   * was never offered to the server. Omitted by callers that predate the
+   * column; such rows report as exhausted (their attempts are pinned). */
+  readonly quarantined?: boolean;
 }
 
 /**
@@ -218,6 +226,16 @@ export interface OutboxRowStatus {
  * (`shot.session_orphaned:` verdict) is neither: it waits for its practice
  * set to be accepted and is offered again then, whatever its attempt count,
  * so it counts as pending.
+ *
+ * Two further buckets need attention without being server refusals, and are
+ * reported apart from `exhausted` so the surface never claims a refusal the
+ * server did not make:
+ *  - `quarantined`: rows the drain could not turn into a request (corrupt
+ *    or oversized payload); the server never saw them.
+ *  - `paused`: shots of a practice set the drain stopped asking for
+ *    (SESSION_PAUSED_VERDICT); no drain offers them until a new read is saved
+ *    into the set, so they are not pending.
+ * Both keys are present only when non-zero.
  */
 export type UploadQueueStatus =
   | { readonly state: 'idle' }
@@ -226,20 +244,38 @@ export type UploadQueueStatus =
       readonly state: 'needs_attention';
       readonly pending: number;
       readonly exhausted: number;
+      readonly quarantined?: number;
+      readonly paused?: number;
     };
 
 export function deriveUploadQueueStatus(
   rows: readonly OutboxRowStatus[],
 ): UploadQueueStatus {
   if (rows.length === 0) return { state: 'idle' };
-  const exhausted = rows.filter(
-    row =>
-      row.attempts >= OUTBOX_MAX_ATTEMPTS &&
-      !isSessionOrphanedVerdict(row.lastError),
-  ).length;
-  const pending = rows.length - exhausted;
-  if (exhausted > 0) return { state: 'needs_attention', pending, exhausted };
-  return { state: 'queued', pending };
+  let exhausted = 0;
+  let quarantined = 0;
+  let paused = 0;
+  for (const row of rows) {
+    if (row.quarantined === true) quarantined += 1;
+    else if (isSessionOrphanedVerdict(row.lastError)) continue;
+    else if (
+      row.attempts < OUTBOX_MAX_ATTEMPTS &&
+      isSessionPausedVerdict(row.lastError)
+    ) {
+      paused += 1;
+    } else if (row.attempts >= OUTBOX_MAX_ATTEMPTS) exhausted += 1;
+  }
+  const pending = rows.length - exhausted - quarantined - paused;
+  if (exhausted + quarantined + paused === 0) {
+    return { state: 'queued', pending };
+  }
+  return {
+    state: 'needs_attention',
+    pending,
+    exhausted,
+    ...(quarantined > 0 ? { quarantined } : {}),
+    ...(paused > 0 ? { paused } : {}),
+  };
 }
 
 // ─── Honest external blocker ───────────────────────────────────────────────

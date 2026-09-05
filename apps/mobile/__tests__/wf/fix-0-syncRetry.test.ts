@@ -228,7 +228,14 @@ describe('transient per-item rejections keep the attempt budget', () => {
     } as unknown as SyncTransport;
 
     const result = await drainOutbox(db, transport);
-    expect(result).toEqual({ synced: 1, failed: 1, remaining: 1 });
+    // Fix round 9 (Q1.4): the corrupt row is quarantined — reported apart
+    // from `failed`, which only counts rows the server answered.
+    expect(result).toEqual({
+      synced: 1,
+      failed: 0,
+      remaining: 1,
+      quarantined: 1,
+    });
     expect(transport.uploadEvaluationTrials).toHaveBeenCalledTimes(1);
     expect(transport.uploadEvaluationTrials).toHaveBeenCalledWith([
       { trialId: TRIAL_ID, schemaVersion: 1 },

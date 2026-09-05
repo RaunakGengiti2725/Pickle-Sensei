@@ -188,9 +188,11 @@ describe('fix round 8 — stated bounds and malformed-shape fuzz (real SQLite)',
 
     // The Result copy reads the lifetime refusal count — what the server
     // actually issued — and the row says why nothing more is sent.
+    // Re-pinned (fix9, Q1.3): the shot of a paused set reports its own
+    // `paused` state — `rejected` would promise a retry no drain performs.
     const paused = await getShotOutboxStatus(db, shotId(0x800));
     expect(paused).toEqual({
-      state: 'rejected',
+      state: 'paused',
       attempts: bound,
       lastError: expect.stringContaining(
         'paused until a new read joins the set',
@@ -224,12 +226,14 @@ describe('fix round 8 — stated bounds and malformed-shape fuzz (real SQLite)',
       creates: bound + SESSION_CREATE_REARM_BOUND,
       offers: 2 * bound,
     });
+    // Re-pinned (fix9, Q1.3): both shots of the re-paused set report
+    // `paused` with their lifetime refusal counts.
     expect(await getShotOutboxStatus(db, shotId(0x800))).toMatchObject({
-      state: 'rejected',
+      state: 'paused',
       attempts: 2 * bound,
     });
     expect(await getShotOutboxStatus(db, shotId(0x801))).toMatchObject({
-      state: 'rejected',
+      state: 'paused',
       attempts: bound,
     });
     expect(
@@ -470,7 +474,13 @@ describe('fix round 8 — stated bounds and malformed-shape fuzz (real SQLite)',
       quarantined: true,
       leftUnderBudget: 0,
     });
-    expect(first.failed).toBe(rows.length);
+    // Re-pinned (fix9, Q1.4): quarantined rows are reported apart from
+    // `failed` — the server never saw them, so the runtime's back-off does
+    // not move for them.
+    expect({ failed: first.failed, quarantined: first.quarantined }).toEqual({
+      failed: 0,
+      quarantined: rows.length,
+    });
     expect(rows.length).toBeGreaterThanOrEqual(200);
 
     // Quarantined once: later drains re-read nothing and report nothing.

@@ -86,6 +86,11 @@ function fakeDb() {
         );
         return { rows: hit ? [{ '1': 1 }] : [] };
       }
+      if (statement.startsWith('SELECT 1 AS paused FROM outbox')) {
+        // resumePausedShots: a saved set resumes its paused shots; the fake
+        // holds no shot.sync rows, so there is nothing to resume.
+        return { rows: [] };
+      }
       if (statement.includes('INSERT INTO outbox')) {
         const kind = /'([a-z.]+)'/.exec(statement)?.[1] ?? 'unknown';
         outbox.push({

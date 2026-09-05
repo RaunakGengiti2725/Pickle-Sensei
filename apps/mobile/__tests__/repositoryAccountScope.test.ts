@@ -64,13 +64,16 @@ describe('account-scoped local repository', () => {
 
     expect(calls.map(call => call.sql)).toEqual([
       'BEGIN IMMEDIATE',
+      // Idempotency read: is this analysis id already queued or receipted?
+      expect.stringContaining('SELECT 1 AS known FROM outbox'),
       expect.stringContaining('INSERT OR REPLACE INTO local_shot'),
       expect.stringContaining('INSERT INTO outbox'),
       'COMMIT',
     ]);
-    expect(calls[1]?.params[0]).toBe(ownerA);
+    expect(calls[1]?.params).toEqual([ownerA, analysis.id, ownerA, analysis.id]);
     expect(calls[2]?.params[0]).toBe(ownerA);
-    expect(JSON.parse(String(calls[2]?.params[1]))).toMatchObject({
+    expect(calls[3]?.params[0]).toBe(ownerA);
+    expect(JSON.parse(String(calls[3]?.params[1]))).toMatchObject({
       id: analysis.id,
       analysisPermitId: permitId,
       source: 'real',

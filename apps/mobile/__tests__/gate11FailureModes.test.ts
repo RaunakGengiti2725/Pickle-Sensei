@@ -253,7 +253,14 @@ describe('Gate 11 — drop during upload / expired auth keep rows durable', () =
       }),
       ...noopSessionTransport,
     });
-    expect(result).toMatchObject({ synced: 1, failed: 1, remaining: 1 });
+    // Fix round 9 (Q1.4): the quarantined row is reported apart from `failed`
+    // — the server never saw it, so it must not move the owner's back-off.
+    expect(result).toEqual({
+      synced: 1,
+      failed: 0,
+      remaining: 1,
+      quarantined: 1,
+    });
     const corrupt = outbox.find(row => row.id === 999);
     // Fix round 8 (S1): a row that can never become a request is quarantined
     // ONCE — its whole budget is spent in that one drain with a truthful
