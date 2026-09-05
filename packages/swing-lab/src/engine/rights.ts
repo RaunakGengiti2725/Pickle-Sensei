@@ -74,12 +74,13 @@ export type ParsedLicense =
 
 /**
  * Words that signal the string hedges, negates, or disputes the license it
- * mentions. Any of them anywhere in the string means a human must read it.
- * Long-form CC element names are canonicalised BEFORE this check so that
- * "NonCommercial" / "NoDerivatives" are not mistaken for negations.
+ * mentions — including a question mark or a TBD/TODO placeholder, which is a
+ * reviewer who has not decided. Any of them anywhere in the string means a
+ * human must read it. Long-form CC element names are canonicalised BEFORE this
+ * check so that "NonCommercial" / "NoDerivatives" are not mistaken for negations.
  */
 const HEDGE_MARKERS =
-  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined)|disputed|pending|possibly|maybe|probably|likely|plausibl[ey]|except|unless|proprietary|claimed|alleged|assessed|false|incorrect|invalid|mixed|partial(?:ly)?|prohibited|forbidden|restrict(?:ed|ions?)|only|exclusive(?:ly)?|may|revoked|reverted|withdrawn|expired|editorial|research|educational|personal|dual)\b|all rights reserved|©|\(c\)/;
+  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined)|disputed|pending|possibly|maybe|probably|likely|plausibl[ey]|except|unless|proprietary|claimed|alleged|assessed|false|incorrect|invalid|mixed|partial(?:ly)?|prohibited|forbidden|restrict(?:ed|ions?)|only|exclusive(?:ly)?|may|revoked|reverted|withdrawn|expired|editorial|research|educational|personal|dual|tb[cd]|todo)\b|all rights reserved|©|\(c\)|\?/;
 
 /**
  * A Creative Commons element token that appears AFTER the parsed designation
