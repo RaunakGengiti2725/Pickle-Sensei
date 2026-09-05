@@ -302,7 +302,7 @@ describe("ADJ-AP-001 SessionEventEngine per-push cost must not grow with session
     for (const chunkMs of [40_000, Number.POSITIVE_INFINITY]) {
       const chunked = new SessionEventEngine({ sessionId: `adj-session-floor-${chunkMs}` });
       const viaChunks: SessionStrokeEvent[] = [];
-      for (let from = 0; from < wrist.length; ) {
+      for (let from = 0; from < wrist.length;) {
         let to = from;
         while (to < wrist.length && wrist[to]!.timestampMs - wrist[from]!.timestampMs < chunkMs) {
           to += 1;
@@ -326,6 +326,19 @@ describe("ADJ-AP-001 SessionEventEngine per-push cost must not grow with session
       expect(chunkedQuality.paddleSamples).toBe(paddle.length);
       expect(chunkedQuality.droppedLateSamples).toBe(0);
     }
+
+    // Paddle evidence that runs AHEAD of the wrist feed (the whole paddle
+    // series first, then wrist in 40 s chunks) must not evict the paddle
+    // history the still-pending wrist candidates confirm against.
+    const paddleFirst = new SessionEventEngine({ sessionId: "adj-session-floor-paddle-first" });
+    const viaPaddleFirst: SessionStrokeEvent[] = [];
+    viaPaddleFirst.push(...paddleFirst.push({ paddle }));
+    for (let from = 0; from < wrist.length; from += 1200) {
+      viaPaddleFirst.push(...paddleFirst.push({ wrist: wrist.slice(from, from + 1200) }));
+    }
+    viaPaddleFirst.push(...paddleFirst.flush());
+    expect(viaPaddleFirst.map((event) => view(event.proposal))).toEqual(batch.map(view));
+    expect(paddleFirst.snapshot().qualityState.paddleSamples).toBe(paddle.length);
   });
 
   it("a 305 s session imported in one push or in 45 s chunks emits the per-frame feed's events", () => {
@@ -345,9 +358,12 @@ describe("ADJ-AP-001 SessionEventEngine per-push cost must not grow with session
     for (const chunkMs of [45_000, Number.POSITIVE_INFINITY]) {
       const engine = new SessionEventEngine({ sessionId: `adj-import-${chunkMs}` });
       const emitted: SessionStrokeEvent[] = [];
-      for (let from = 0; from < stream.length; ) {
+      for (let from = 0; from < stream.length;) {
         let to = from;
-        while (to < stream.length && stream[to]!.timestampMs - stream[from]!.timestampMs < chunkMs) {
+        while (
+          to < stream.length &&
+          stream[to]!.timestampMs - stream[from]!.timestampMs < chunkMs
+        ) {
           to += 1;
         }
         emitted.push(...engine.push({ wrist: stream.slice(from, to) }));

@@ -663,10 +663,16 @@ export const BOUND_STABILITY_MS = 1200;
  * BOUNDED RETENTION — why minute 30 of a live session costs the same per
  * push as minute 1. Every push re-runs the canonical proposer over the
  * retained series, so the RETAINED series (not the session) must bound the
- * work. A sample is retired once it trails the newest sample by more than
- * `horizonMs`; everything that can still shape a candidate past the frontier
- * is far younger (D-029 closes any candidate by trigger+2500ms; boundaries
- * reach ±1200ms, baseline context ±1500ms, fragment glue 350ms — < 6s).
+ * work. A sample is retired once it trails the newest wrist sample (the
+ * reconcile clock) by more than `horizonMs`; everything that can still shape
+ * a candidate past the frontier is far younger (D-029 closes any candidate
+ * by trigger+2500ms; boundaries reach ±1200ms, baseline context ±1500ms,
+ * fragment glue 350ms — < 6s). Retirement runs AFTER the push's reconcile
+ * pass: a sample leaves the window only once the proposer has seen it
+ * together with everything that arrived with it, so a replay/import that
+ * pushes minutes (or the whole session) per call emits exactly what the
+ * per-frame feed emits — the per-push cost is then bounded by the PUSH
+ * size plus the window, never by the session.
  *
  * The proposer reads exactly one session-wide statistic from the whole
  * series: the peak smoothed speed, which sets the relative proposal floor
@@ -923,8 +929,9 @@ export class SessionEventEngine {
       }
       insertSorted(this.wrist, sample);
     }
+    const closed = this.reconcile(false);
     this.retire();
-    return this.reconcile(false);
+    return closed;
   }
 
   /** Convenience for one-sample-per-frame live feeding. */
@@ -1156,12 +1163,13 @@ export class SessionEventEngine {
 
   // ── bounded retention (SESSION_RETENTION) ────────────────────────────────
 
+  /** Wrist time is the reconcile clock (candidates close on wrist samples),
+   * so retention is measured from the newest WRIST sample: paddle samples
+   * that run ahead of the wrist feed can never evict a still-open
+   * candidate's history. */
   private retire(): void {
-    const newestMs = Math.max(
-      this.wrist[this.wrist.length - 1]?.timestampMs ?? Number.NEGATIVE_INFINITY,
-      this.paddle[this.paddle.length - 1]?.timestampMs ?? Number.NEGATIVE_INFINITY,
-    );
-    if (newestMs === Number.NEGATIVE_INFINITY) return;
+    const newestMs = this.lastSampleMs();
+    if (newestMs === null) return;
     const cutMs = newestMs - SESSION_RETENTION.horizonMs;
     const lineMs = newestMs - SESSION_RETENTION.anchorScanLagMs;
     this.scanWristAnchor(lineMs);
