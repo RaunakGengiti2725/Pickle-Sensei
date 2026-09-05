@@ -53,7 +53,9 @@ type AccountRow = { id: string; status: string };
  * settings and audit entry) when none exists. Concurrent first bootstraps for
  * one subject all race the UNIQUE(auth_subject) index: the insert is
  * ON CONFLICT DO NOTHING, so every loser adopts the winner's committed row
- * instead of failing the transaction.
+ * instead of failing the transaction. Adopting the winner needs per-statement
+ * snapshots — the caller's transaction must run READ COMMITTED (under
+ * REPEATABLE READ or stricter the conflict is a serialization failure).
  */
 async function resolveAccount(
   tx: pg.PoolClient,
@@ -158,6 +160,9 @@ export function registerIdentityRoutes(app: FastifyInstance, context: AppContext
     }
     const body = parsed.data;
     const account = await withTransaction(context.pool, async (tx) => {
+      // Pinned regardless of the connection's default_transaction_isolation;
+      // must precede every other statement in this transaction.
+      await tx.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
       const account = await resolveAccount(tx, identity.authSubject, body, request.id);
       if (account.status === "deleted") {
         throw Object.assign(new Error("account deleted"), { statusCode: 410 });
