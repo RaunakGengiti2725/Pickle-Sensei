@@ -72,13 +72,13 @@ importers:
       '@pickle/vision-contracts':
         specifier: workspace:*
         version: link:../vision-contracts
+      '@pickle/vision-geometry':
+        specifier: workspace:*
+        version: link:../vision-geometry
     devDependencies:
       '@pickle/evaluation':
         specifier: workspace:*
         version: link:../evaluation
-      '@pickle/vision-geometry':
-        specifier: workspace:*
-        version: link:../vision-geometry
       typescript:
         specifier: ^5.9.2
         version: 5.9.3

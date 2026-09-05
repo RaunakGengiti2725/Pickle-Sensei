@@ -16,12 +16,12 @@
     "@pickle/scoring": "workspace:*",
     "@pickle/shared-types": "workspace:*",
     "@pickle/vision-contracts": "workspace:*",
-    "@pickle/swing-domain": "workspace:*"
+    "@pickle/swing-domain": "workspace:*",
+    "@pickle/vision-geometry": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
-    "@pickle/vision-geometry": "workspace:*",
     "@pickle/evaluation": "workspace:*"
   }
 }

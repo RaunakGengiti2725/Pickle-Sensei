@@ -37,6 +37,7 @@ import type {
   IUncertaintyEstimator,
   ProviderDescriptor,
 } from "@pickle/vision-contracts";
+import { evaluateCaptureQuality, type CaptureQualityReport } from "@pickle/vision-geometry";
 import {
   detectFlatDisagreement,
   detectHierarchicalDisagreement,
@@ -124,6 +125,48 @@ export interface CaptureAnalysisOptions {
   captureEnvelopeThresholdsVersion?: string | null;
 }
 
+/**
+ * User guidance for each whole-clip pose-quality reason the library gate can
+ * report (vision-geometry captureQuality). Plain language only — the reason
+ * slugs themselves travel in the failure code and `cause`, never in copy.
+ */
+const CAPTURE_QUALITY_GUIDANCE: Record<string, string> = {
+  too_few_pose_frames: "too few tracked frames",
+  insufficient_fps: "the tracking frame rate was too low",
+  low_pose_confidence: "the player could not be tracked with confidence",
+  body_not_fully_visible: "the full body was not in view",
+  torso_not_measured: "the torso could not be measured",
+  player_too_small_in_frame: "the player was too far from the camera",
+  player_too_close_or_cropped: "the player was too close to the camera or cropped",
+  tracking_dropout_gap: "tracking dropped out during the clip",
+};
+
+/**
+ * The library's own capture-quality gate, enforced at the engine boundary:
+ * a pose sequence whose whole-clip report is not analyzable is refused with
+ * a typed `low_confidence` abstention that carries user guidance and the
+ * measured report, before any phase, biomechanics or scoring provider runs.
+ * Callers may (and the shipping path does) gate earlier with richer context;
+ * this is the floor no caller can fall through.
+ */
+function captureQualityGate(pose: PoseSequence): Result<CaptureQualityReport> {
+  const report = evaluateCaptureQuality(pose);
+  if (report.analyzable) return ok(report);
+  const measured = report.reasons
+    .map((reason) => CAPTURE_QUALITY_GUIDANCE[reason] ?? reason.replace(/_/g, " "))
+    .join(", ");
+  return fail(
+    failure(
+      "low_confidence",
+      `capture.not_analyzable.${report.reasons[0]!}`,
+      "This capture cannot be analyzed honestly — the recorded motion could " +
+        `not be measured well enough to rate (${measured}). Nothing was rated. ` +
+        "Keep your whole body in frame through the stroke and try again.",
+      report,
+    ),
+  );
+}
+
 const CHECKPOINT_PHASE: Record<string, PhaseKey> = {
   ready_position: "ready",
   athletic_base: "ready",
@@ -182,6 +225,8 @@ export async function analyzeCapture(
       failure("low_confidence", "fusion.empty_pose_sequence", "The capture has no pose frames."),
     );
   }
+  const quality = captureQualityGate(input.pose);
+  if (!quality.ok) return fail(quality.failure);
 
   // ── Stroke identity ────────────────────────────────────────────────────
   let identity = input.stroke;
