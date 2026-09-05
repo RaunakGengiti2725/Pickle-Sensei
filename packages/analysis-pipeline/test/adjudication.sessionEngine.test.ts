@@ -293,5 +293,74 @@ describe("ADJ-AP-001 SessionEventEngine per-push cost must not grow with session
     expect(quality.notes).toEqual([]);
     expect(quality.wristSamples).toBe(wrist.length);
     expect(quality.paddleSamples).toBe(paddle.length);
+
+    // Feed-shape independence: `push()` accepts any batch size ≥ 1, so a
+    // replay/import that hands the engine minutes of samples per call (or
+    // the whole session at once) must emit exactly the same events as the
+    // per-frame feed — retention may never evict a sample the proposer has
+    // not yet seen together with the samples that arrived with it.
+    for (const chunkMs of [40_000, Number.POSITIVE_INFINITY]) {
+      const chunked = new SessionEventEngine({ sessionId: `adj-session-floor-${chunkMs}` });
+      const viaChunks: SessionStrokeEvent[] = [];
+      for (let from = 0; from < wrist.length; ) {
+        let to = from;
+        while (to < wrist.length && wrist[to]!.timestampMs - wrist[from]!.timestampMs < chunkMs) {
+          to += 1;
+        }
+        viaChunks.push(
+          ...chunked.push({ wrist: wrist.slice(from, to), paddle: paddle.slice(from, to) }),
+        );
+        from = to;
+      }
+      viaChunks.push(...chunked.flush());
+      expect(
+        viaChunks.map((event) => view(event.proposal)),
+        `push chunk ${chunkMs}ms emitted ${viaChunks.length} events vs ${batch.length} in the batch`,
+      ).toEqual(batch.map(view));
+      expect(viaChunks.map((event) => event.eventId)).toEqual(
+        emitted.map((event) => event.eventId),
+      );
+      const chunkedQuality = chunked.snapshot().qualityState;
+      expect(chunkedQuality.notes).toEqual([]);
+      expect(chunkedQuality.wristSamples).toBe(wrist.length);
+      expect(chunkedQuality.paddleSamples).toBe(paddle.length);
+      expect(chunkedQuality.droppedLateSamples).toBe(0);
+    }
   });
+
+  it("a 305 s session imported in one push or in 45 s chunks emits the per-frame feed's events", () => {
+    const stream = liveStream(305);
+    const perFrame = new SessionEventEngine({ sessionId: "adj-import-frame" });
+    const expected: SessionStrokeEvent[] = [];
+    for (const sample of stream) expected.push(...perFrame.pushWristSample(sample));
+    expected.push(...perFrame.flush());
+    expect(expected.length).toBe(strokePeaksIn(0, stream[stream.length - 1]!.timestampMs).length);
+
+    const bounds = (event: SessionStrokeEvent) => [
+      event.eventId,
+      event.proposal.startMs,
+      event.proposal.peakMs,
+      event.proposal.endMs,
+    ];
+    for (const chunkMs of [45_000, Number.POSITIVE_INFINITY]) {
+      const engine = new SessionEventEngine({ sessionId: `adj-import-${chunkMs}` });
+      const emitted: SessionStrokeEvent[] = [];
+      for (let from = 0; from < stream.length; ) {
+        let to = from;
+        while (to < stream.length && stream[to]!.timestampMs - stream[from]!.timestampMs < chunkMs) {
+          to += 1;
+        }
+        emitted.push(...engine.push({ wrist: stream.slice(from, to) }));
+        from = to;
+      }
+      emitted.push(...engine.flush());
+      expect(
+        emitted.map(bounds),
+        `push chunk ${chunkMs}ms emitted ${emitted.length} events vs ${expected.length} per frame`,
+      ).toEqual(expected.map(bounds));
+      const quality = engine.snapshot().qualityState;
+      expect(quality.wristSamples).toBe(stream.length);
+      expect(quality.droppedLateSamples).toBe(0);
+    }
+  }, 120_000);
 });
