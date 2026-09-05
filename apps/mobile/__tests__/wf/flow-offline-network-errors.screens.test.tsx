@@ -14,6 +14,7 @@ jest.mock('../../src/account/apiSession', () => {
   return {
     getApiSession: () => session,
     subscribeToApiSession: () => () => {},
+    reportApiUnauthorized: jest.fn(),
     __setSession: (next: unknown) => {
       session = next;
     },

@@ -276,7 +276,7 @@ describe('account deletion 401 → auth layer', () => {
     );
   });
 
-  it('step 2: reports the rejected bearer BEFORE throwing; the outcome is open and the challenge may be retried once the session settles', async () => {
+  it('step 2: reports the rejected bearer BEFORE throwing; the bearer is spent (not retryable as-is) but the outcome is open', async () => {
     const fetchFn = unauthorized();
     const order: string[] = [];
     listener.mockImplementation(() => order.push('reported'));
@@ -291,7 +291,7 @@ describe('account deletion 401 → auth layer', () => {
     expect(order).toEqual(['reported', 'thrown']);
     expect(error).toMatchObject({
       code: 'deletion.session_expired',
-      retryable: true,
+      retryable: false,
       mayHaveDeleted: true,
     });
     expect(error.message).not.toContain('Nothing was deleted');

@@ -98,14 +98,39 @@ export const LOCAL_DATA_UNAVAILABLE_MESSAGE =
   'Your saved shots on this phone could not be opened. You are still signed in; restart the app to try again.';
 
 /** Outcome of the on-device cleanup that follows a server-confirmed
- * deletion. `failed` means the account is gone server-side but some of its
- * rows are still on this phone — the surface that started the deletion must
- * tell the user. */
+ * deletion. `in_progress` is set the moment the session is torn down and
+ * replaced when the purge has run; `failed` means the account is gone
+ * server-side but some of its rows are still on this phone — the surface
+ * that started the deletion must tell the user. */
 export interface AccountDeletionCleanup {
-  localPurge: 'complete' | 'failed' | 'not_needed';
+  localPurge: 'in_progress' | 'complete' | 'failed' | 'not_needed';
 }
 
 const LOCAL_PURGE_ATTEMPTS = 3;
+
+/**
+ * A delete-confirm that left the device and has not been answered
+ * definitively. The server deletes the account and fences its bearer before
+ * it answers, so a lost answer followed by a retry looks like an ordinary
+ * expired session (401) — the keeper then refreshes, and the server refusing
+ * the refresh token means the ACCOUNT is gone, not just this device's
+ * session. While a confirm is pending, that refusal runs the full
+ * end-of-account cleanup (`completeAccountDeletion`) instead of the plain
+ * revoked-session sign-out. A refresh the server ACCEPTS after the confirm
+ * was sent proves the account existed at that moment (`sessionRenewed`), so
+ * the surface waiting on the verdict may let the user go on — the record
+ * itself stays, because the server may still be finishing that very
+ * confirm. Held in memory only: released when the server answers the
+ * confirm without acting, when the deletion completes locally, or when the
+ * user signs out or a different sign-in begins.
+ */
+export interface PendingAccountDeletion {
+  canonicalAppUserId: string;
+  challenge: string;
+  /** The server issued a fresh bearer for this account after the confirm
+   * was sent: the account was still there then. */
+  sessionRenewed: boolean;
+}
 
 export const SESSION_EXPIRED_MESSAGE =
   'Your sign-in expired. Sign in again to keep syncing — everything on this phone is still here.';
@@ -130,6 +155,8 @@ interface AuthState {
   localDataError: LocalDataError | null;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
+  /** The delete-confirm whose outcome the server has not yet made definite. */
+  pendingDeletion: PendingAccountDeletion | null;
   hydrate: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -279,10 +306,36 @@ async function persistSession(
 async function dropRevokedSession(): Promise<void> {
   clearSyncedRuntime();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-  useAuthStore.setState({ session: null, error: null, busy: false });
+  useAuthStore.setState({
+    session: null,
+    error: null,
+    busy: false,
+    pendingDeletion: null,
+  });
   await clearPersistedSession();
   await persistLocalGuest(false);
   await persistLastProvider(null);
+}
+
+/**
+ * The keeper's ONE session-ending verdict, read in the light of what this
+ * device has done: with a delete-confirm pending for the account whose
+ * refresh token was just refused, the refusal is the deletion's lost answer
+ * and the account is ended locally in full (owner rows purged, Keychain
+ * cleared, provider disconnected). Otherwise it is the ordinary revoked-
+ * session sign-out.
+ */
+async function endRefusedSession(session: AuthSession): Promise<void> {
+  const pending = useAuthStore.getState().pendingDeletion;
+  if (
+    pending &&
+    session.canonicalAppUserId !== null &&
+    pending.canonicalAppUserId === session.canonicalAppUserId
+  ) {
+    await useAuthStore.getState().completeAccountDeletion();
+    return;
+  }
+  await dropRevokedSession();
 }
 
 /**
@@ -317,6 +370,16 @@ function adoptRotatedTokens(
   } else {
     installApiSession(next);
   }
+  const pending = useAuthStore.getState().pendingDeletion;
+  if (
+    pending &&
+    pending.canonicalAppUserId === canonicalAppUserId &&
+    !pending.sessionRenewed
+  ) {
+    useAuthStore.setState({
+      pendingDeletion: { ...pending, sessionRenewed: true },
+    });
+  }
   void persistSession(session, next);
 }
 
@@ -350,7 +413,7 @@ function keepSessionAlive(
       onOutcome?.('online');
     },
     onRevoked: async () => {
-      await dropRevokedSession();
+      await endRefusedSession(session);
       onOutcome?.('revoked');
     },
     onDeferred: () => onOutcome?.('offline'),
@@ -382,6 +445,7 @@ async function establishSyncedAccount(input: {
     displayName: input.displayName,
     email: result.account.email ?? input.providerEmail,
   };
+  useAuthStore.setState({ pendingDeletion: null });
   await persistSession(session, result.apiSession);
   keepSessionAlive(session, result.apiSession);
   return session;
@@ -555,6 +619,7 @@ function handleApiUnauthorized(expired: ApiSession): void {
       session: null,
       busy: false,
       error: { code: 'auth.session_expired', message: SESSION_EXPIRED_MESSAGE },
+      pendingDeletion: null,
     });
     await clearPersistedSession();
     await persistLocalGuest(false);
@@ -568,10 +633,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   localDataError: null,
   deletionCleanup: null,
+  pendingDeletion: null,
 
   hydrate: async () => {
     clearSyncedRuntime();
-    set({ localDataError: null });
+    set({ localDataError: null, pendingDeletion: null });
     // The durable session is read from the Keychain FIRST, before SQLite is
     // touched: whoever signed in on this device last stays signed in across
     // relaunches, backgrounding, reboots AND a broken local database, for
@@ -749,7 +815,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = localGuestSession();
     await persistLocalGuest(true);
     setActiveDataOwner(GUEST_DATA_OWNER);
-    set({ session, error: null });
+    set({ session, error: null, pendingDeletion: null });
   },
 
   signOut: async () => {
@@ -757,7 +823,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const apiSession = getApiSession();
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-    set({ session: null, error: null, busy: false });
+    set({ session: null, error: null, busy: false, pendingDeletion: null });
     // The persisted session goes first: whatever else fails below, the next
     // launch must not restore an account the user just signed out of.
     await clearPersistedSession();
@@ -786,7 +852,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       : null;
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-    set({ session: null, error: null, busy: false, deletionCleanup: null });
+    set({
+      session: null,
+      error: null,
+      busy: false,
+      deletionCleanup: { localPurge: 'in_progress' },
+      pendingDeletion: null,
+    });
     // The account (and every server-side session) is already gone; the
     // Keychain record must go with it or the next launch would try — and
     // fail — to refresh a deleted account.
@@ -822,3 +894,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+/** Call right BEFORE a delete-confirm is sent for the signed-in account.
+ * From then on a refused refresh token ends the account, not just the
+ * session. No-op for local-only sessions. */
+export function markDeletionConfirmSent(challenge: string): void {
+  const { session } = useAuthStore.getState();
+  if (!session?.canonicalAppUserId || session.localOnly) return;
+  useAuthStore.setState({
+    pendingDeletion: {
+      canonicalAppUserId: session.canonicalAppUserId,
+      challenge,
+      sessionRenewed: false,
+    },
+    deletionCleanup: null,
+  });
+}
+
+/** The server answered the confirm without acting (challenge rejected,
+ * rate limited): the account is still there, a later revocation is once
+ * again an ordinary sign-out. */
+export function markDeletionConfirmRefused(challenge: string): void {
+  if (useAuthStore.getState().pendingDeletion?.challenge !== challenge) return;
+  useAuthStore.setState({ pendingDeletion: null });
+}

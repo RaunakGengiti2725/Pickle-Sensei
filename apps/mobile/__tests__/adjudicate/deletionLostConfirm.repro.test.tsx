@@ -80,7 +80,12 @@ import {
   ManageAccountScreen,
 } from '../../src/screens/ManageAccountScreen';
 import { Button } from '../../src/design/components';
-import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import {
+  markDeletionConfirmRefused,
+  markDeletionConfirmSent,
+  useAuthStore,
+  type AuthSession,
+} from '../../src/auth/authStore';
 import {
   clearApiSession,
   establishApiSession,
@@ -489,6 +494,7 @@ describe('D1 settlement — the session layer decides an ambiguous confirm', () 
     expect(sentDuringConfirm).toContainEqual({
       canonicalAppUserId,
       challenge: 'challenge-1',
+      sessionRenewed: false,
     });
     expect(useAuthStore.getState().pendingDeletion).toBeNull();
     expect(allText(renderer)).toContain('Delete your account?');
@@ -506,6 +512,7 @@ describe('D1 settlement — the session layer decides an ambiguous confirm', () 
     expect(useAuthStore.getState().pendingDeletion).toEqual({
       canonicalAppUserId,
       challenge: 'challenge-1',
+      sessionRenewed: false,
     });
     expect(copy).not.toContain('Delete your account?');
     expect(copy).not.toContain('Nothing was deleted');
@@ -546,12 +553,18 @@ describe('D1 settlement — the session layer decides an ambiguous confirm', () 
 
   it('screen: verdict STILL SIGNED IN (bearer rotated) → the dialog re-arms on the same challenge and nothing is purged', async () => {
     const renderer = await driveLostConfirm();
+    // What the real store does when the keeper's refresh is ACCEPTED after
+    // the confirm was sent (pinned on the real store below): the bearer is
+    // renewed and the pending record is flagged, not released.
     await act(async () => {
       establishApiSession({
         ...apiSession,
         bearerToken: 'access-token-2',
         refreshToken: 'refresh-2',
       });
+      useAuthStore.setState(s => ({
+        pendingDeletion: { ...s.pendingDeletion!, sessionRenewed: true },
+      }));
     });
     await flush();
     const copy = allText(renderer);
@@ -605,14 +618,52 @@ describe('D1 settlement — the session layer decides an ambiguous confirm', () 
 
   it('screen: a plain sign-out while waiting (legacy session, no refresh token) closes the dialog without a deletion notice', async () => {
     const renderer = await driveLostConfirm();
+    // What signOut / the legacy expiry path leave behind: no session, no
+    // pending record, no cleanup report.
     await act(async () => {
-      useAuthStore.setState({ session: null });
+      useAuthStore.setState({ session: null, pendingDeletion: null });
     });
     await flush();
+    expect(allText(renderer)).not.toContain('Delete your account?');
     expect(mockShowBrandNotice).not.toHaveBeenCalled();
     expect(
       useAuthStore.getState().completeAccountDeletion,
     ).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('screen: a late verdict after the dialog gave up (deadline passed, then the store ended the account) is still announced', async () => {
+    const renderer = await driveLostConfirm();
+    await act(async () => {
+      jest.advanceTimersByTime(DELETION_SETTLEMENT_DEADLINE_MS);
+    });
+    await flush();
+    // The user closes the dialog and moves on; the keeper's refresh is only
+    // refused later (it was offline).
+    await act(async () => {
+      sheetButton(renderer, 'Keep my account').props.onPress();
+    });
+    await flush();
+    await act(async () => {
+      useAuthStore.setState({
+        session: null,
+        pendingDeletion: null,
+        deletionCleanup: { localPurge: 'in_progress' },
+      });
+    });
+    await flush();
+    expect(mockShowBrandNotice).not.toHaveBeenCalled();
+    await act(async () => {
+      useAuthStore.setState({ deletionCleanup: { localPurge: 'complete' } });
+    });
+    await flush();
+    const notices = mockShowBrandNotice.mock.calls.map(
+      c => c[0] as { title: string; detail: string },
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.title).toBe('Account deleted');
+    expect(notices[0]!.detail).not.toMatch(/could not be removed/);
+    expect(notices[0]!.detail).toMatch(/Sign in with Apple/);
     act(() => renderer.unmount());
   });
 });
@@ -634,8 +685,9 @@ describe('D1 settlement — real auth store + session keeper', () => {
     } as unknown as Response;
   }
 
-  /** /v1/auth/refresh answers 200 once (launch), then refuses forever. */
-  function installRefreshRoute() {
+  /** /v1/auth/refresh answers 200 `accepted` times (the launch refresh is
+   * the first), then refuses forever. */
+  function installRefreshRoute(accepted = 1) {
     let refreshes = 0;
     globalThis.fetch = ((input: unknown) => {
       const url = String(input);
@@ -644,10 +696,13 @@ describe('D1 settlement — real auth store + session keeper', () => {
       }
       refreshes += 1;
       return Promise.resolve(
-        refreshes === 1
+        refreshes <= accepted
           ? jsonResponse(
               200,
-              refreshBody({ access: 'access-2', refresh: 'refresh-2' }),
+              refreshBody({
+                access: `access-${refreshes + 1}`,
+                refresh: `refresh-${refreshes + 1}`,
+              }),
             )
           : jsonResponse(401, { error: { message: 'Sign in again.' } }),
       );
@@ -705,10 +760,11 @@ describe('D1 settlement — real auth store + session keeper', () => {
     await hydrateFromVault();
     const bearer = getApiSession()!.bearerToken;
 
-    useAuthStore.getState().markDeletionConfirmSent('challenge-1');
+    markDeletionConfirmSent('challenge-1');
     expect(useAuthStore.getState().pendingDeletion).toEqual({
       canonicalAppUserId,
       challenge: 'challenge-1',
+      sessionRenewed: false,
     });
 
     // What deletion.ts does on the confirm's 401.
@@ -740,8 +796,8 @@ describe('D1 settlement — real auth store + session keeper', () => {
 
   it('a sent confirm the server then REFUSED is released, so a later revocation is again a plain sign-out', async () => {
     await hydrateFromVault();
-    useAuthStore.getState().markDeletionConfirmSent('challenge-1');
-    useAuthStore.getState().markDeletionConfirmRefused('challenge-1');
+    markDeletionConfirmSent('challenge-1');
+    markDeletionConfirmRefused('challenge-1');
     expect(useAuthStore.getState().pendingDeletion).toBeNull();
 
     reportApiUnauthorized(getApiSession()!.bearerToken);
@@ -750,17 +806,54 @@ describe('D1 settlement — real auth store + session keeper', () => {
     expect(useAuthStore.getState().deletionCleanup).toBeNull();
   });
 
-  it('a rotated bearer does NOT release the sent confirm (the server may still be finishing it)', async () => {
+  it('an ACCEPTED refresh after a sent confirm flags the account as still there but does NOT release the record; a later refusal still ends the account', async () => {
+    installRefreshRoute(2);
     await hydrateFromVault();
-    useAuthStore.getState().markDeletionConfirmSent('challenge-1');
-    establishApiSession({
-      ...getApiSession()!,
-      bearerToken: 'access-3',
-    });
+    markDeletionConfirmSent('challenge-1');
+
+    // The confirm's 401 → refresh → the server renews the bearer: the
+    // account existed at that moment.
+    reportApiUnauthorized(getApiSession()!.bearerToken);
+    await flush(20);
+    expect(getApiSession()?.bearerToken).toBe('access-3');
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalAppUserId,
+    );
     expect(useAuthStore.getState().pendingDeletion).toEqual({
       canonicalAppUserId,
       challenge: 'challenge-1',
+      sessionRenewed: true,
     });
+    expect(useAuthStore.getState().deletionCleanup).toBeNull();
+
+    // The server finished the deletion after all: the next 401's refresh is
+    // refused, and the account (not just the session) is ended locally.
+    reportApiUnauthorized(getApiSession()!.bearerToken);
+    await flush(20);
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().pendingDeletion).toBeNull();
+    expect(useAuthStore.getState().deletionCleanup).toEqual({
+      localPurge: 'failed',
+    });
+    expect(__keychainStore.get(SESSION_VAULT_SERVICE)).toBeUndefined();
+  });
+
+  it('the cleanup report goes through in_progress while the session is already gone, then lands on the purge outcome', async () => {
+    await hydrateFromVault();
+    markDeletionConfirmSent('challenge-1');
+    const reports: Array<[boolean, string | null]> = [];
+    const unsubscribe = useAuthStore.subscribe(state => {
+      reports.push([
+        state.session === null,
+        state.deletionCleanup?.localPurge ?? null,
+      ]);
+    });
+    reportApiUnauthorized(getApiSession()!.bearerToken);
+    await flush(20);
+    unsubscribe();
+    expect(reports).toContainEqual([true, 'in_progress']);
+    expect(reports[reports.length - 1]).toEqual([true, 'failed']);
+    expect(reports).not.toContainEqual([true, null]);
   });
 });
 
