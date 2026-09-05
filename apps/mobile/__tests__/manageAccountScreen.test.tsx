@@ -44,11 +44,19 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack }),
 }));
 
+const mockShowBrandNotice = jest.fn();
+jest.mock('../src/design/BrandNotice', () => ({
+  showBrandNotice: (...args: unknown[]) => mockShowBrandNotice(...args),
+}));
+
 const mockRequestAccountDeletion = jest.fn<
   Promise<{ challenge: string; expiresAt: string }>,
   unknown[]
 >();
-const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
+const mockConfirmAccountDeletion = jest.fn<
+  Promise<{ appleAuthorizationRevocation: string } | void>,
+  unknown[]
+>();
 jest.mock('../src/account/deletion', () => {
   // Only the network calls are stubbed; the survey vocabulary/caps the
   // screen renders from are the real ones.
@@ -120,6 +128,7 @@ function radios(renderer: TestRenderer.ReactTestRenderer) {
 describe('ManageAccountScreen', () => {
   beforeEach(() => {
     mockGoBack.mockClear();
+    mockShowBrandNotice.mockReset();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
     useAuthStore.setState({
@@ -127,6 +136,8 @@ describe('ManageAccountScreen', () => {
       session: syncedSession,
       busy: false,
       error: null,
+      deletionCleanup: null,
+      pendingDeletion: null,
       completeAccountDeletion: jest.fn(() => Promise.resolve()),
     });
   });
@@ -459,5 +470,85 @@ describe('ManageAccountScreen', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  describe('post-deletion notices', () => {
+    async function deleteWith(
+      revocation: string,
+      localPurge: 'complete' | 'failed',
+    ) {
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-1',
+        expiresAt: '2026-08-31T00:00:00.000Z',
+      });
+      mockConfirmAccountDeletion.mockResolvedValue({
+        appleAuthorizationRevocation: revocation,
+      });
+      useAuthStore.setState({
+        session: { ...syncedSession, provider: 'apple' },
+        completeAccountDeletion: jest.fn(async () => {
+          useAuthStore.setState({
+            session: null,
+            deletionCleanup: { localPurge },
+          });
+        }),
+      });
+      const renderer = renderScreen();
+      await act(async () => {
+        pressable(renderer, 'Delete account')[0]!.props.onPress();
+      });
+      await act(async () => {
+        pressable(renderer, 'Skip the survey')[0]!.props.onPress();
+      });
+      await act(async () => {
+        sheetButton(renderer, 'Continue to delete').props.onPress();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+      });
+      await act(async () => {
+        sheetButton(renderer, 'Permanently delete').props.onPress();
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => renderer.unmount());
+      return mockShowBrandNotice.mock.calls.map(
+        c => c[0] as { title: string; detail: string; eyebrow: string },
+      );
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('revoked + purge complete → no notice needed', async () => {
+      expect(await deleteWith('revoked', 'complete')).toEqual([]);
+    });
+
+    it('manual Apple step alone → the Apple instruction', async () => {
+      const notices = await deleteWith('manual_action_required', 'complete');
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.detail).toMatch(/Stop Using Apple ID/);
+      expect(notices[0]!.detail).not.toMatch(/could not be removed/);
+    });
+
+    it('purge failed alone → the local cleanup instruction', async () => {
+      const notices = await deleteWith('revoked', 'failed');
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.detail).toMatch(/could not be removed/);
+      expect(notices[0]!.detail).not.toMatch(/Apple ID/);
+    });
+
+    it('purge failed AND manual Apple step → BOTH instructions reach the user', async () => {
+      const notices = await deleteWith('manual_action_required', 'failed');
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.title).toBe('Account deleted');
+      expect(notices[0]!.detail).toMatch(/could not be removed/);
+      expect(notices[0]!.detail).toMatch(/Stop Using Apple ID/);
+    });
   });
 });

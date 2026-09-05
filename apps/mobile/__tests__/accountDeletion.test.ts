@@ -1,10 +1,22 @@
 /**
  * Two-step account deletion: the client for /v1/me/delete-request +
- * /v1/me/delete-confirm (step-2 must present step-1's challenge; failures
- * always say NOTHING was deleted unless the server confirmed), and the
+ * /v1/me/delete-confirm (step-2 must present step-1's challenge), and the
  * post-confirmation local purge that removes every owner-scoped row.
+ *
+ * Failure honesty: a step-1 failure always says NOTHING was deleted (the
+ * request only mints a challenge). A step-2 failure says so ONLY when the
+ * server answered that it did not act (4xx other than 401); a timeout, a
+ * network drop, a 5xx or a 401 leave the outcome open (`mayHaveDeleted`) —
+ * the server may have deleted the account and fenced the bearer before the
+ * answer was lost. A 401 on either step is reported to the auth layer like
+ * every other API client's, so the session layer can settle it.
  */
-import type { ApiSession } from '../src/account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+  type ApiSession,
+} from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
@@ -163,7 +175,7 @@ describe('account deletion client', () => {
     );
     await expect(
       requestAccountDeletion(session, null, limited),
-    ).rejects.toMatchObject({ retryable: true });
+    ).rejects.toMatchObject({ retryable: true, mayHaveDeleted: false });
 
     const down = jest.fn(async () => {
       throw new Error('network down');
@@ -171,6 +183,126 @@ describe('account deletion client', () => {
     await expect(
       confirmAccountDeletion(session, 'challenge', down),
     ).rejects.toBeInstanceOf(AccountDeletionError);
+  });
+
+  it('step 1 network drop: nothing was deleted; step 2 network drop: the outcome is open and the copy says so', async () => {
+    const down = jest.fn(async () => {
+      throw new TypeError('Network request failed');
+    });
+    const requestError = (await requestAccountDeletion(
+      session,
+      null,
+      down,
+    ).catch((e: unknown) => e)) as AccountDeletionError;
+    expect(requestError).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+      mayHaveDeleted: false,
+    });
+    expect(requestError.message).toContain('Nothing was deleted');
+
+    const confirmError = (await confirmAccountDeletion(
+      session,
+      'challenge',
+      down,
+    ).catch((e: unknown) => e)) as AccountDeletionError;
+    expect(confirmError).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+      mayHaveDeleted: true,
+    });
+    expect(confirmError.message).not.toContain('Nothing was deleted');
+    expect(confirmError.message).toMatch(/not yet known|whether your account/);
+  });
+
+  it('step 2 refused by the server (403) is known not to have deleted; a 5xx is not', async () => {
+    const refused = jest.fn(async () =>
+      jsonResponse(403, { error: { message: 'Challenge expired.' } }),
+    );
+    await expect(
+      confirmAccountDeletion(session, 'challenge', refused),
+    ).rejects.toMatchObject({ retryable: false, mayHaveDeleted: false });
+
+    const crashed = jest.fn(async () =>
+      jsonResponse(500, { error: { message: 'Internal error.' } }),
+    );
+    await expect(
+      confirmAccountDeletion(session, 'challenge', crashed),
+    ).rejects.toMatchObject({ retryable: true, mayHaveDeleted: true });
+  });
+});
+
+describe('account deletion 401 → auth layer', () => {
+  const listener = jest.fn();
+  const liveSession: ApiSession = {
+    ...session,
+    bearerToken: 'access-token-1',
+    refreshToken: 'refresh-token-1',
+  };
+
+  beforeEach(() => {
+    listener.mockReset();
+    establishApiSession(liveSession);
+    setApiUnauthorizedListener(listener);
+  });
+
+  afterEach(() => {
+    setApiUnauthorizedListener(null);
+    clearApiSession();
+  });
+
+  const unauthorized = () =>
+    jest.fn(async () =>
+      jsonResponse(401, { error: { message: 'Sign in again.' } }),
+    );
+
+  it('step 1: reports the rejected bearer BEFORE throwing; nothing was deleted', async () => {
+    const fetchFn = unauthorized();
+    const order: string[] = [];
+    listener.mockImplementation(() => order.push('reported'));
+    await requestAccountDeletion(liveSession, null, fetchFn).catch(
+      (e: unknown) => {
+        order.push('thrown');
+        expect(e).toMatchObject({
+          code: 'deletion.session_expired',
+          retryable: false,
+          mayHaveDeleted: false,
+        });
+      },
+    );
+    expect(order).toEqual(['reported', 'thrown']);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ bearerToken: 'access-token-1' }),
+    );
+  });
+
+  it('step 2: reports the rejected bearer BEFORE throwing; the outcome is open and the challenge may be retried once the session settles', async () => {
+    const fetchFn = unauthorized();
+    const order: string[] = [];
+    listener.mockImplementation(() => order.push('reported'));
+    const error = (await confirmAccountDeletion(
+      liveSession,
+      'challenge',
+      fetchFn,
+    ).catch((e: unknown) => {
+      order.push('thrown');
+      return e;
+    })) as AccountDeletionError;
+    expect(order).toEqual(['reported', 'thrown']);
+    expect(error).toMatchObject({
+      code: 'deletion.session_expired',
+      retryable: true,
+      mayHaveDeleted: true,
+    });
+    expect(error.message).not.toContain('Nothing was deleted');
+  });
+
+  it('a 401 for a bearer that is no longer current is not reported (late answer for a rotated token)', async () => {
+    establishApiSession({ ...liveSession, bearerToken: 'access-token-2' });
+    await expect(
+      confirmAccountDeletion(liveSession, 'challenge', unauthorized()),
+    ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 
