@@ -24,8 +24,10 @@
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
-#   security   scripts/tests/security-scan-scope.sh (scanner scope regression)
-#              then scripts/security-scan.sh (secret scan) when present
+#   security   scripts/tests/security-scan-scope.sh (scanner scope regression),
+#              scripts/tests/gitleaks-allowlist-policy.sh (no whole-file allowlists),
+#              scripts/tests/security-scan-binary-trust.sh (only the digest-verified
+#              pinned gitleaks may run), then scripts/security-scan.sh (secret scan)
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
@@ -68,7 +70,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,56p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -257,6 +259,8 @@ stage_security() {
     exit 75
   fi
   scripts/tests/security-scan-scope.sh
+  scripts/tests/gitleaks-allowlist-policy.sh
+  scripts/tests/security-scan-binary-trust.sh
   scripts/security-scan.sh
 }
 
