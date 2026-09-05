@@ -77,10 +77,30 @@ export type ParsedLicense =
  * mentions — including a question mark or a TBD/TODO placeholder, which is a
  * reviewer who has not decided. Any of them anywhere in the string means a
  * human must read it. Long-form CC element names are canonicalised BEFORE this
- * check so that "NonCommercial" / "NoDerivatives" are not mistaken for negations.
+ * check so that "NonCommercial" / "NoDerivatives" are not mistaken for negations;
+ * question marks in other scripts are folded to `?` and a URL query separator
+ * is neutralised before it, so the `?` here is exactly a reviewer's doubt.
  */
 const HEDGE_MARKERS =
-  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined)|disputed|pending|possibly|maybe|probably|likely|plausibl[ey]|except|unless|proprietary|claimed|alleged|assessed|false|incorrect|invalid|mixed|partial(?:ly)?|prohibited|forbidden|restrict(?:ed|ions?)|only|exclusive(?:ly)?|may|revoked|reverted|withdrawn|expired|editorial|research|educational|personal|dual|tb[cd]|todo)\b|all rights reserved|©|\(c\)|\?/;
+  /\b(?:not|no|non|never|isn'?t|aren'?t|wasn'?t|un(?:confirmed|verified|clear|known|licensed|determined|certain|sure)|disputed|pending|possibly|maybe|probably|likely|plausibl[ey]|except|unless|proprietary|claimed|alleged|assessed|false|incorrect|invalid|mixed|partial(?:ly)?|prohibited|forbidden|restrict(?:ed|ions?)|only|exclusive(?:ly)?|may|revoked|reverted|withdrawn|expired|editorial|research|educational|personal|dual|copyrighted|third[ -]party|n\/a|tb[cd]|todo)\b|all rights reserved|©|\(c\)|\?/;
+
+/**
+ * Question marks outside ASCII — fullwidth (CJK keyboards), Arabic, Greek,
+ * Armenian, Ethiopic, Limbu, Coptic, Vai, Bamum, the interrobang and the
+ * doubled/ornamental forms rich-text editors emit. A reviewer's doubt reads the
+ * same in every script, so they fold to `?` before the hedge check.
+ */
+const QUESTION_MARK_VARIANTS =
+  /[\u00bf\u037e\u055e\u061f\u1367\u1945\u203d\u2047\u2048\u2049\u2753\u2754\u2cfa\u2cfb\u2e2e\ua60f\ua6f7\ufe16\ufe56\uff1f]/g;
+
+/**
+ * The `?` that opens a URL query string (`…/licenses/by/4.0/?ref=chooser-v1`,
+ * as the Creative Commons chooser emits) is a delimiter, not a hedge. It is
+ * replaced by a space so the query text itself stays visible to the hedge and
+ * stray-element checks; a `?` that ends a URL (`…/4.0/?`) or follows a space is
+ * still a reviewer's doubt.
+ */
+const URL_QUERY_SEPARATOR = /(https?:\/\/[^\s?()<>"']+)\?(?=[^\s?]+)/g;
 
 /**
  * A Creative Commons element token that appears AFTER the parsed designation
@@ -91,6 +111,9 @@ const HEDGE_MARKERS =
  * not stray.
  */
 const CC_ELEMENT_TOKENS = /(?:^|[^a-z0-9])(sa|nc|nd)(?![a-z0-9])/g;
+
+/** A public-domain designation grants no CC element, so every element token after it is stray. */
+const NO_CC_ELEMENTS: ReadonlySet<CcElement> = new Set();
 
 function strayCcElement(rest: string, elements: ReadonlySet<CcElement>): CcElement | null {
   for (const match of rest.matchAll(CC_ELEMENT_TOKENS)) {
@@ -119,6 +142,8 @@ function canonicalize(license: string): string {
   let text = license
     .toLowerCase()
     .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(URL_QUERY_SEPARATOR, "$1 ")
+    .replace(QUESTION_MARK_VARIANTS, "?")
     .replace(/\s+/g, " ")
     .trim();
   for (const [pattern, replacement] of LONG_FORM_ELEMENTS) {
@@ -141,6 +166,13 @@ export function parseLicense(license: string): ParsedLicense {
   }
   const pd = PUBLIC_DOMAIN_DESIGNATION.exec(text);
   if (pd) {
+    const stray = strayCcElement(text.slice(pd[0].length), NO_CC_ELEMENTS);
+    if (stray) {
+      return {
+        kind: "unrecognized",
+        reason: `Creative Commons element "${stray}" appears after a public-domain designation`,
+      };
+    }
     return { kind: "public_domain", designation: pd[0] };
   }
   const cc = CREATIVE_COMMONS_DESIGNATION.exec(text);
