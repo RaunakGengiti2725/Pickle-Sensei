@@ -1072,6 +1072,8 @@ interface Row {
   unreachableLabels: ReturnType<typeof inspectUnreachableLabels>;
   consoleErrors: string[];
   durationMs: number;
+  /** Host tree of the inspected page — captured only in STRESS_ONLY replays. */
+  renderedTree: ReturnType<TestRenderer.ReactTestRenderer['toJSON']> | null;
 }
 
 const rows: Row[] = [];
@@ -1100,6 +1102,7 @@ async function runVariant(v: Variant): Promise<Row> {
   let overlapRisks: ReturnType<typeof overlapModel> = [];
   let unreachableLabels: ReturnType<typeof inspectUnreachableLabels> = [];
   let mounted: Mounted | null = null;
+  let renderedTree: Row['renderedTree'] = null;
   try {
     mounted = await mount(v);
     const { renderer } = mounted;
@@ -1113,6 +1116,7 @@ async function runVariant(v: Variant): Promise<Row> {
     }
 
     // Snapshot inspection on the requested page.
+    if (STRESS_ONLY.length > 0) renderedTree = renderer.toJSON();
     interactive = inspectInteractive(screen);
     strings = visibleStrings(screen);
     clipRisks = layoutModel(v, screen);
@@ -1273,6 +1277,7 @@ async function runVariant(v: Variant): Promise<Row> {
     unreachableLabels,
     consoleErrors: relevantConsoleErrors,
     durationMs: Date.now() - started,
+    renderedTree,
   };
 }
 
