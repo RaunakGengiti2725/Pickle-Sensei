@@ -396,8 +396,23 @@ async function partialDir(model: Model, root: string, upTo: string): Promise<str
   return dir;
 }
 
+/**
+ * Dropping a fully migrated schema takes hundreds of locks; several workers
+ * doing it at once can exhaust the server-wide lock table (SQLSTATE 53200
+ * "out of shared memory"). That is contention between workers, not a property
+ * of the unit under test, so retry with backoff.
+ */
 async function resetSchema(pool: pg.Pool): Promise<void> {
-  await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      return;
+    } catch (error) {
+      const code = error instanceof pg.DatabaseError ? error.code : undefined;
+      if (code !== "53200" || attempt >= 20) throw error;
+      await new Promise((r) => setTimeout(r, 250 + attempt * 250));
+    }
+  }
 }
 
 export async function runDbSequence(
@@ -1160,6 +1175,19 @@ export async function runDbSequence(
                 `victim exited code=${exit.code} signal=${exit.signal} (${rows.length} backends terminated): ${firstLine}`,
               );
             }
+            // The process may die with a COMMIT already on the wire; the
+            // server settles that (commit or abort) asynchronously. Do not
+            // read schema_migrations until every victim backend is gone.
+            const gone = Date.now() + 10_000;
+            while (Date.now() < gone) {
+              const live = await count(
+                pool,
+                "SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name = $1",
+                [appName],
+              );
+              if (live === 0) break;
+              await new Promise((r) => setTimeout(r, 5));
+            }
           } else {
             const victim = new pg.Pool({
               connectionString: ctx.connectionString,
@@ -1223,8 +1251,16 @@ export async function runDbSequence(
             model.schemaMigrationsTableExists = true;
             const union = new Set([...recorded.map((r) => r.name), ...resume.v.applied]);
             const expectedUnion = new Set([...model.applied.keys(), ...predicted.applied]);
-            if (JSON.stringify([...union].sort()) !== JSON.stringify([...expectedUnion].sort()))
-              fail(i, action.kind, "M6", `resume union mismatch`);
+            if (JSON.stringify([...union].sort()) !== JSON.stringify([...expectedUnion].sort())) {
+              const missing = [...expectedUnion].filter((n) => !union.has(n));
+              const extra = [...union].filter((n) => !expectedUnion.has(n));
+              fail(
+                i,
+                action.kind,
+                "M6",
+                `resume union mismatch: missing=[${missing.join(",")}] extra=[${extra.join(",")}] recorded=${recorded.length} resumed=${resume.v.applied.length}`,
+              );
+            }
             for (const name of predicted.applied) {
               const sql = model.dir.get(name);
               if (sql !== undefined) model.recordApplied(name, checksumOf(sql));
