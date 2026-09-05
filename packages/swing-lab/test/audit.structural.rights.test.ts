@@ -18,6 +18,8 @@ import {
   redistributionEligible,
   rightsForLicense,
   trainingEligible,
+  type RightAnswer,
+  type RightsProfile,
 } from "../src/engine/rights.js";
 
 const REVIEWER = "audit-probe";
@@ -103,10 +105,10 @@ describe("SL-01: NonCommercial denies commercial use and quarantines training", 
     });
   }
 
-  it("CC BY-NC-SA keeps the ShareAlike derivative term", () => {
-    expect(rightsForLicense("CC BY-NC-SA 4.0", REVIEWER).redistributeDerivatives).toBe(
-      "sharealike",
-    );
+  it("CC BY-NC-SA: NonCommercial outranks ShareAlike for derivatives (human review, not affirmative)", () => {
+    const rights = rightsForLicense("CC BY-NC-SA 4.0", REVIEWER);
+    expect(rights.redistributeDerivatives).toBe("unclear");
+    expect(redistributionEligible(rights)).toBe(false);
   });
 });
 
@@ -182,7 +184,8 @@ describe("SL-01: restating the designation's own elements is not a stray restric
     );
     expect(rights.commercial).toBe("no");
     expect(rights.train).toBe("unclear");
-    expect(rights.redistributeDerivatives).toBe("sharealike");
+    expect(rights.redistributeDerivatives).toBe("unclear");
+    expect(redistributionEligible(rights)).toBe(false);
   });
   it("PD-USGov is a public-domain designation; bare PD is not", () => {
     expect(parseLicense("PD-USGov").kind).toBe("public_domain");
@@ -235,6 +238,142 @@ describe("SL-01: permissive controls keep their full profiles (corpus strings)",
     expect(rights.basis).toContain("CC BY-NC 4.0");
     expect(rights.reviewedBy).toBe(REVIEWER);
     expect(Number.isNaN(Date.parse(rights.reviewedAtIso))).toBe(false);
+  });
+});
+
+// ── ADJ-01 mechanism: element restrictions compose by most-restrictive-wins ──
+
+const RESTRICTIVENESS: Readonly<Record<RightAnswer, number>> = {
+  yes: 0,
+  yes_with_attribution: 1,
+  sharealike: 2,
+  unclear: 3,
+  no: 4,
+};
+
+function answersOf(license: string): Record<(typeof MODALITIES)[number], RightAnswer> {
+  const rights = rightsForLicense(license, REVIEWER);
+  return Object.fromEntries(MODALITIES.map((m) => [m, rights[m]])) as Record<
+    (typeof MODALITIES)[number],
+    RightAnswer
+  >;
+}
+
+describe("ADJ-01 mechanism: a Creative Commons element can only restrict, never widen", () => {
+  const BASE = answersOf("CC BY 4.0");
+
+  for (const license of [
+    "CC BY-SA 4.0",
+    "CC BY-NC 4.0",
+    "CC BY-ND 4.0",
+    "CC BY-NC-SA 4.0",
+    "CC BY-NC-ND 4.0",
+  ]) {
+    it(`${license}: every modality is at least as restrictive as CC BY`, () => {
+      const answers = answersOf(license);
+      for (const modality of MODALITIES) {
+        expect(
+          RESTRICTIVENESS[answers[modality]],
+          `${license} → ${modality}`,
+        ).toBeGreaterThanOrEqual(RESTRICTIVENESS[BASE[modality]]);
+      }
+    });
+  }
+
+  it("adding an element to a designation never relaxes any modality", () => {
+    for (const [narrower, wider] of [
+      ["CC BY-NC-SA 4.0", "CC BY-SA 4.0"],
+      ["CC BY-NC-SA 4.0", "CC BY-NC 4.0"],
+      ["CC BY-NC-ND 4.0", "CC BY-NC 4.0"],
+      ["CC BY-NC-ND 4.0", "CC BY-ND 4.0"],
+    ] as const) {
+      const a = answersOf(narrower);
+      const b = answersOf(wider);
+      for (const modality of MODALITIES) {
+        expect(
+          RESTRICTIVENESS[a[modality]],
+          `${narrower} vs ${wider} → ${modality}`,
+        ).toBeGreaterThanOrEqual(RESTRICTIVENESS[b[modality]]);
+      }
+    }
+  });
+
+  it("the composed profile does not depend on the order elements are written in", () => {
+    for (const [a, b] of [
+      ["CC BY-NC-SA 4.0", "CC BY-SA-NC 4.0"],
+      ["CC BY-NC-ND 4.0", "CC BY-ND-NC 4.0"],
+      ["cc-by-nc-sa 3.0", "Creative Commons Attribution-ShareAlike-NonCommercial 3.0"],
+    ] as const) {
+      expect(parseLicense(b).kind, b).toBe("creative_commons");
+      expect(answersOf(a), `${a} vs ${b}`).toEqual(answersOf(b));
+    }
+  });
+
+  it("NonCommercial alone already withholds an affirmative derivative answer", () => {
+    const nc = rightsForLicense("CC BY-NC 4.0", REVIEWER);
+    expect(nc.redistributeDerivatives).toBe("unclear");
+    expect(redistributionEligible(nc)).toBe(false);
+    expect(nc.basis).toMatch(/NonCommercial/);
+  });
+
+  it("the basis names every applied element term", () => {
+    const basis = rightsForLicense("CC BY-NC-SA 4.0", REVIEWER).basis;
+    expect(basis).toContain("CC BY-NC-SA 4.0");
+    expect(basis).toContain("CC BY permits use with attribution");
+    expect(basis).toMatch(/ShareAlike/);
+    expect(basis).toMatch(/NonCommercial/);
+  });
+});
+
+function uniformProfile(answer: RightAnswer): Pick<RightsProfile, (typeof MODALITIES)[number]> {
+  return {
+    store: answer,
+    analyze: answer,
+    annotate: answer,
+    train: answer,
+    redistributeDerivatives: answer,
+    commercial: answer,
+  };
+}
+
+describe("ADJ-01 gate: redistribution of derivatives is a commercial act", () => {
+  const reviewed = {
+    basis: "hand-reviewed fixture",
+    reviewedBy: REVIEWER,
+    reviewedAtIso: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("an affirmative derivative answer alone is not enough when commercial use is denied", () => {
+    const profile: RightsProfile = {
+      store: "yes_with_attribution",
+      analyze: "yes_with_attribution",
+      annotate: "yes_with_attribution",
+      train: "unclear",
+      redistributeDerivatives: "sharealike",
+      commercial: "no",
+      ...reviewed,
+    };
+    expect(redistributionEligible(profile)).toBe(false);
+  });
+
+  it("an unclear commercial answer also withholds redistribution", () => {
+    const profile: RightsProfile = {
+      ...uniformProfile("yes"),
+      commercial: "unclear",
+      ...reviewed,
+    };
+    expect(redistributionEligible(profile)).toBe(false);
+  });
+
+  it("affirmative derivatives AND affirmative commercial use are redistribution-eligible", () => {
+    for (const answer of ["yes", "yes_with_attribution", "sharealike"] as const) {
+      const profile: RightsProfile = {
+        ...uniformProfile("yes_with_attribution"),
+        redistributeDerivatives: answer,
+        ...reviewed,
+      };
+      expect(redistributionEligible(profile), answer).toBe(true);
+    }
   });
 });
 
