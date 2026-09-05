@@ -121,17 +121,20 @@ describe('vision/providers — seeded randomized long-run', () => {
       expect(summary.sequences).toBe(ITERATIONS);
       expect(summary.minLength).toBeGreaterThanOrEqual(MIN_SEQUENCE_LENGTH);
       expect(summary.maxLength).toBeLessThanOrEqual(MAX_SEQUENCE_LENGTH);
-      // Every public entry point must have been exercised at least once.
-      for (const op of [
-        'select',
-        'fusion',
-        'classify',
-        'registry',
-        'status',
-        'platform',
-        'withEntry',
-      ]) {
-        expect(summary.opCounts[op] ?? 0).toBeGreaterThan(0);
+      // Every public entry point must have been exercised at least once
+      // (a single-seed replay is too short to guarantee that).
+      if (ITERATIONS >= 10) {
+        for (const op of [
+          'select',
+          'fusion',
+          'classify',
+          'registry',
+          'status',
+          'platform',
+          'withEntry',
+        ]) {
+          expect(summary.opCounts[op] ?? 0).toBeGreaterThan(0);
+        }
       }
       expect(summary.nonDeterministic).toBe(0);
       if (summary.broken > 0) {
