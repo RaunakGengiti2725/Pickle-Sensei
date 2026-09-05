@@ -285,6 +285,10 @@ Deno.test({
         await tx.unsafe(
           `insert into auth.users (id, email) values ('${userId}', '${userId}@example.com')`,
         );
+        await tx.unsafe(
+          `insert into public.billing_entitlements (user_id, premium) values ($1, true)`,
+          [userId],
+        );
         // GET /v1/progress reads progress_daily with .eq(user_id).order(day)
         // and NO .limit()/.range() (index.ts:1403-1408). Hosted Supabase's
         // Data API caps unpaged responses at max_rows = 1000, so the newest
@@ -380,12 +384,16 @@ Deno.test({
         const userId = crypto.randomUUID();
         const n = 1 + Math.floor(rand() * 60);
         const shots = randomShots(rand, n);
-        // Insert as superuser (bypasses permits/free-limit) — the trigger
+        // Insert a premium history as superuser — the trigger
         // still refreshes player_rank_state for every row.
         await withRollback(sql, async (tx) => {
           {
             await tx.unsafe(
               `insert into auth.users (id, email) values ('${userId}', '${userId}@example.com')`,
+            );
+            await tx.unsafe(
+              `insert into public.billing_entitlements (user_id, premium) values ($1, true)`,
+              [userId],
             );
             for (const s of shots) {
               await tx.unsafe(

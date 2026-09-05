@@ -3,7 +3,10 @@
 // asserted end-to-end without a project. The fake records every PostgREST
 // request so tests can inspect exactly what the function would write.
 //
-//   deno test --allow-all --no-check --node-modules-dir=none supabase/functions/api/__wf__/
+//   deno test --check --no-prompt --allow-env --allow-read=. --allow-net=127.0.0.1 \
+//     --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/
+
+import { fakeSupabaseAccessToken } from "./routesHarness.ts";
 
 export const USER_ID = "11111111-1111-4111-8111-111111111111";
 export const API_BASE = "http://127.0.0.1:8000";
@@ -62,6 +65,22 @@ export function fakeGoogleIdToken(subject = "probe"): string {
 
 async function fakeSupabase(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  if (request.method === "GET" && url.pathname === "/auth/v1/user") {
+    const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+    let userId: unknown;
+    try {
+      const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      userId = JSON.parse(atob(segment)).sub;
+    } catch {
+      return restJson(401, { code: "bad_jwt" });
+    }
+    if (typeof userId !== "string" || !userId) return restJson(401, { code: "bad_jwt" });
+    return restJson(200, {
+      id: userId,
+      email: "probe@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    });
+  }
   if (url.pathname === "/auth/v1/token") {
     const nowSeconds = Math.floor(Date.now() / 1000);
     return restJson(200, {
@@ -99,9 +118,24 @@ export function bootEdgeFunction(): Promise<void> {
     const fake = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, fakeSupabase);
     Deno.env.set("SUPABASE_URL", `http://127.0.0.1:${fake.addr.port}`);
     Deno.env.set("SUPABASE_ANON_KEY", "fake-anon-key");
+    Deno.env.delete("SB_PUBLISHABLE_KEY");
+    Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    Deno.env.delete("REVENUECAT_SECRET_API_KEY");
+    Deno.env.delete("REVENUECAT_PUBLIC_SDK_KEY");
+    Deno.env.delete("REVENUECAT_WEBHOOK_AUTH");
     Deno.env.delete("UPSTASH_REDIS_REST_URL");
     Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
-    await import("../index.ts");
+    const realServe = Deno.serve;
+    Deno.serve = ((...args: unknown[]) => {
+      const handler = args.find((arg) => typeof arg === "function") as Deno.ServeHandler;
+      if (!handler) throw new Error("index.ts did not provide a serve handler");
+      return realServe({ hostname: "127.0.0.1", port: 8000, onListen() {} }, handler);
+    }) as typeof Deno.serve;
+    try {
+      await import("../index.ts");
+    } finally {
+      Deno.serve = realServe;
+    }
     for (let attempt = 0; attempt < 50; attempt += 1) {
       try {
         const res = await fetch(`${API_BASE}/healthz`);
@@ -117,7 +151,7 @@ export function bootEdgeFunction(): Promise<void> {
   return booted;
 }
 
-export function authedInit(init: RequestInit = {}, token = fakeGoogleIdToken()): RequestInit {
+export function authedInit(init: RequestInit = {}, token = fakeSupabaseAccessToken()): RequestInit {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   return { ...init, headers };

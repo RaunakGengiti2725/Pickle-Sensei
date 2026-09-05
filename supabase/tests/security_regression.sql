@@ -1322,6 +1322,48 @@ begin
   end if;
 end $$;
 
+create table public.rls_auto_enable_check (id integer);
+do $$
+declare
+  signature text;
+  index_name text;
+begin
+  foreach signature in array array[
+    'public.set_updated_at()',
+    'public.player_rank_tier(numeric)',
+    'public.complete_onboarding()'
+  ] loop
+    if not exists (
+      select 1 from pg_catalog.pg_proc
+      where oid = pg_catalog.to_regprocedure(signature)
+        and proconfig @> array['search_path=""']
+    ) then
+      raise exception 'K1: function % must pin its search_path', signature;
+    end if;
+  end loop;
+  if has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE') then
+    raise exception 'K2: client roles must not directly execute the platform event trigger';
+  end if;
+  if not (select relrowsecurity from pg_catalog.pg_class
+          where oid = 'public.rls_auto_enable_check'::regclass) then
+    raise exception 'K3: automatic RLS must still work after client EXECUTE is revoked';
+  end if;
+  if not has_function_privilege('authenticated', 'public.identity_scored_count()', 'EXECUTE') then
+    raise exception 'K4: legitimate identity-scoped quota reads must remain available';
+  end if;
+  foreach index_name in array array[
+    'public.account_deletion_feedback_user_idx',
+    'public.captures_session_id_idx',
+    'public.captures_shot_id_idx'
+  ] loop
+    if pg_catalog.to_regclass(index_name) is null then
+      raise exception 'K5: missing foreign-key index %', index_name;
+    end if;
+  end loop;
+end;
+$$;
+
 rollback;
 
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED

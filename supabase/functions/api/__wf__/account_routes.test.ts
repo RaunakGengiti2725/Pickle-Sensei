@@ -5,13 +5,13 @@
 // CHARACTERIZE current behavior — each `REPRO:` case pins a confirmed defect
 // (the assertion is what the function does today, not what it should do).
 //
-// Run from the repo root (`--no-check` because index.ts has the pre-existing
-// untyped-supabase-client errors documented in AGENTS.md; the sibling
-// deno.json keeps Deno from touching the root package.json / deno.lock):
-//   deno test -A --no-check --config supabase/functions/api/__wf__/deno.json \
-//     supabase/functions/api/__wf__/
+// Run from the repo root (the sibling deno.json keeps Deno from touching the
+// root package.json / deno.lock; both source and fixtures now typecheck):
+//   deno test --check --no-prompt --allow-env --allow-read=. --allow-net=127.0.0.1 \
+//     --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/
 
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1";
+import { fakeSupabaseAccessToken } from "./routesHarness.ts";
 
 // ─── Fake Supabase ──────────────────────────────────────────────────────────
 
@@ -19,6 +19,13 @@ interface FakeState {
   /** Status for POST /auth/v1/token?grant_type=id_token (200 = succeed). */
   tokenStatus: number;
   tokenCalls: number;
+  userCalls: number;
+  requests: Array<{
+    url: string;
+    method: string;
+    authorization: string | null;
+    apikey: string | null;
+  }>;
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
   /** Last upsert payload PostgREST received for account_deletion_requests. */
@@ -33,6 +40,8 @@ interface FakeState {
 const state: FakeState = {
   tokenStatus: 200,
   tokenCalls: 0,
+  userCalls: 0,
+  requests: [],
   deletionRows: [],
   lastUpsert: null,
   adminDeleteStatuses: [],
@@ -44,6 +53,8 @@ const state: FakeState = {
 function resetState(): void {
   state.tokenStatus = 200;
   state.tokenCalls = 0;
+  state.userCalls = 0;
+  state.requests = [];
   state.deletionRows = [];
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
@@ -78,6 +89,30 @@ function providerToken(sub: string): string {
 async function fakeSupabase(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
+  state.requests.push({
+    url: request.url,
+    method: request.method,
+    authorization: request.headers.get("authorization"),
+    apikey: request.headers.get("apikey"),
+  });
+
+  if (request.method === "GET" && path === "/auth/v1/user") {
+    state.userCalls += 1;
+    const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+    let userId: unknown;
+    try {
+      const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      userId = JSON.parse(atob(segment)).sub;
+    } catch {
+      return jsonResponse(401, { code: "bad_jwt" });
+    }
+    if (typeof userId !== "string" || !userId) return jsonResponse(401, { code: "bad_jwt" });
+    return jsonResponse(200, {
+      id: userId,
+      email: "u@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    });
+  }
 
   if (request.method === "POST" && path === "/auth/v1/token") {
     state.tokenCalls += 1;
@@ -139,13 +174,20 @@ async function fakeSupabase(request: Request): Promise<Response> {
 
 // ─── Boot the Edge Function in-process ───────────────────────────────────────
 
-const fake = Deno.serve({ port: 0, onListen: () => undefined }, fakeSupabase);
+const fake = Deno.serve(
+  { hostname: "127.0.0.1", port: 0, onListen: () => undefined },
+  fakeSupabase,
+);
 const fakeUrl = `http://127.0.0.1:${fake.addr.port}`;
 
 Deno.env.set("SUPABASE_URL", fakeUrl);
 Deno.env.set("SUPABASE_ANON_KEY", "anon-key");
+Deno.env.delete("SB_PUBLISHABLE_KEY");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
 Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
+Deno.env.delete("REVENUECAT_PUBLIC_SDK_KEY");
+Deno.env.delete("UPSTASH_REDIS_REST_URL");
+Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -195,18 +237,29 @@ const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).to
 
 Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const userId = crypto.randomUUID();
+  const token = fakeSupabaseAccessToken(userId);
   const res = await call("POST", "/v1/me/delete-request", token);
   assertEquals(res.status, 200);
   const body = (await res.json()) as { challenge: string; expiresAt: string };
   assertEquals(body.challenge, state.lastUpsert?.challenge);
   const ttlMs = Date.parse(body.expiresAt) - Date.now();
   assertEquals(ttlMs > 14 * 60_000 && ttlMs <= 15 * 60_000, true);
+  assertEquals(state.tokenCalls, 0, "normal account fixtures must not exchange a provider token");
+  assertEquals(state.userCalls, 1);
+  assertEquals(state.lastUpsert?.user_id, userId);
+  const writes = state.requests.filter(
+    (req) =>
+      new URL(req.url).pathname === "/rest/v1/account_deletion_requests" && req.method === "POST",
+  );
+  assertEquals(writes.length, 1);
+  assertEquals(writes[0].authorization, `Bearer ${token}`);
+  assertEquals(writes[0].apikey, "anon-key");
 });
 
 Deno.test("delete-confirm rejects a non-UUID challenge with 400 and no admin call", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = fakeSupabaseAccessToken(crypto.randomUUID());
   const res = await call("POST", "/v1/me/delete-confirm", token, { challenge: "nope" });
   assertEquals(res.status, 400);
   assertEquals(
@@ -218,7 +271,7 @@ Deno.test("delete-confirm rejects a non-UUID challenge with 400 and no admin cal
 
 Deno.test("delete-confirm enforces the 3-second minimum challenge age (429)", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = fakeSupabaseAccessToken(crypto.randomUUID());
   const challenge = crypto.randomUUID();
   state.deletionRows = [{ challenge, created_at: pastIso(500), expires_at: futureIso(60_000) }];
   const res = await call("POST", "/v1/me/delete-confirm", token, { challenge });
@@ -232,7 +285,7 @@ Deno.test("delete-confirm enforces the 3-second minimum challenge age (429)", as
 
 Deno.test("onboarding rejects malformed JSON with 400, not 5xx", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const token = fakeSupabaseAccessToken(crypto.randomUUID());
   const res = await api(
     new Request("http://edge.local/functions/v1/api/v1/me/onboarding", {
       method: "PUT",
@@ -243,22 +296,22 @@ Deno.test("onboarding rejects malformed JSON with 400, not 5xx", async () => {
   assertEquals(res.status, 400);
 });
 
-// ─── REPRO: Supabase Auth outage is reported as a credential rejection ───────
+// ─── Regression: Supabase Auth outages must not become credential rejections ─
 
 Deno.test(
-  "REPRO: GoTrue 503 during signInWithIdToken is returned as 401 'token could not be verified'",
+  "GoTrue 503 during signInWithIdToken stays retryable, not a credential rejection",
   async () => {
     resetState();
     state.tokenStatus = 503;
     const token = providerToken(crypto.randomUUID());
     const res = await call("POST", "/v1/account/bootstrap", token);
     // Expected for a retryable upstream failure: 5xx (the mobile bootstrap maps
-    // 401/403 to the non-retryable `account.rejected`). Actual today: 401.
-    assertEquals(res.status, 401);
-    assertStringIncludes(
-      ((await res.json()) as { error: { message: string } }).error.message,
-      "could not be verified",
-    );
+    // 401/403 to the non-retryable `account.rejected`). The old handler returned
+    // 401 here; pin the corrected contract, not that historical defect.
+    assertEquals(res.status, 503);
+    assertEquals(await res.json(), {
+      error: { message: "Authentication is temporarily unavailable. Please try again." },
+    });
     assertEquals(state.tokenCalls, 1);
   },
 );
@@ -269,7 +322,7 @@ Deno.test(
   "two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone",
   async () => {
     resetState();
-    const token = providerToken(crypto.randomUUID());
+    const token = fakeSupabaseAccessToken(crypto.randomUUID());
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -293,7 +346,7 @@ Deno.test(
   "replaying delete-confirm after deleteUser succeeded remains a successful deletion",
   async () => {
     resetState();
-    const token = providerToken(crypto.randomUUID());
+    const token = fakeSupabaseAccessToken(crypto.randomUUID());
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -315,7 +368,7 @@ Deno.test(
   async () => {
     resetState();
     const userId = crypto.randomUUID();
-    const token = providerToken(userId);
+    const token = fakeSupabaseAccessToken(userId);
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -324,7 +377,20 @@ Deno.test(
 
     const deleted = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(deleted.status, 200);
-    assertEquals(state.tokenCalls, 1);
+    assertEquals(state.userCalls, 1);
+    assertEquals(state.tokenCalls, 0);
+    for (const req of state.requests.filter((req) => req.url.includes("/rest/v1/"))) {
+      const url = new URL(req.url);
+      if (url.pathname.endsWith("/account_deletion_requests")) {
+        assertEquals(req.authorization, `Bearer ${token}`);
+        assertEquals(req.apikey, "anon-key");
+        assertEquals(url.searchParams.get("user_id"), `eq.${userId}`);
+      } else {
+        assertEquals(url.pathname, "/rest/v1/account_external_credentials");
+        assertEquals(req.authorization, "Bearer service-role-key");
+        assertEquals(req.apikey, "service-role-key");
+      }
+    }
 
     // Post-deletion: the profile and deletion rows are gone (cascade).
     state.deletionRows = [];
@@ -333,11 +399,12 @@ Deno.test(
     // The cached session for the deleted user id must not be reused: the next
     // request with the same bearer goes back to Supabase Auth.
     const access = await call("GET", "/v1/me/access", token);
-    assertEquals(state.tokenCalls, 2);
+    assertEquals(state.userCalls, 2);
+    assertEquals(state.tokenCalls, 0);
     assertEquals(access.status, 200);
 
-    // Every further request keeps being verified from a fresh cache entry, so
-    // a stale identity can never outlive the account.
+    // The fake Auth service still verifies this session for the race above;
+    // its fresh cache entry cannot restore a deletion challenge already gone.
     const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(again.status, 403);
     assertEquals(

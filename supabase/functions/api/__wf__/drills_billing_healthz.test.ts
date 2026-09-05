@@ -8,7 +8,7 @@ import { drillCatalog } from "../drills.ts";
 import { drillInstructionalMedia } from "../drillMedia.ts";
 import {
   activeSubscriber,
-  fakeGoogleIdToken,
+  fakeSupabaseAccessToken,
   loadHarness,
   OTHER_USER_ID,
   RC_URL,
@@ -26,7 +26,8 @@ Deno.test(
     const h = await loadHarness();
     const catalog = await drillCatalog();
     h.tables["user_saved_drills"] = [{ slug: catalog[0].slug }];
-    const res = await h.handler(userRequest("GET", "/v1/catalog/drills", { ip: "198.51.100.1" }));
+    const request = userRequest("GET", "/v1/catalog/drills", { ip: "198.51.100.1" });
+    const res = await h.handler(request);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("cache-control"), "no-store");
     const body = await res.json();
@@ -40,6 +41,12 @@ Deno.test(
     const dbCalls = h.callsTo("/rest/v1/user_saved_drills");
     assertEquals(dbCalls.length, 1);
     assert(dbCalls[0].url.includes(`user_id=eq.${TEST_USER_ID}`));
+    assertEquals(dbCalls[0].headers.authorization, request.headers.get("Authorization"));
+    assertEquals(dbCalls[0].headers.apikey, "anon-test-key");
+    assertEquals(h.callsTo("grant_type=id_token").length, 0);
+    const verified = h.callsTo("/auth/v1/user");
+    assertEquals(verified.length, 1, "normal fixtures verify the actual Supabase bearer");
+    assertEquals(verified[0].headers.authorization, request.headers.get("Authorization"));
   },
 );
 
@@ -219,7 +226,7 @@ Deno.test(
         `http://127.0.0.1:${server.addr.port}/functions/v1/api/v1/catalog/drills/%E0%A4%A`,
         {
           headers: {
-            Authorization: `Bearer ${fakeGoogleIdToken()}`,
+            Authorization: `Bearer ${fakeSupabaseAccessToken()}`,
             "x-forwarded-for": "198.51.100.7",
           },
         },
@@ -232,7 +239,7 @@ Deno.test(
         {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${fakeGoogleIdToken()}`,
+            Authorization: `Bearer ${fakeSupabaseAccessToken()}`,
             "x-forwarded-for": "198.51.100.7",
           },
         },
@@ -261,7 +268,11 @@ Deno.test(
         reserved_count: 0,
       },
     ];
-    const res = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.8" }));
+    const request = userRequest("POST", "/v1/billing/sync", {
+      ip: "198.51.100.8",
+      body: { userId: OTHER_USER_ID, appUserId: OTHER_USER_ID },
+    });
+    const res = await h.handler(request);
     assertEquals(res.status, 200);
     const body = await res.json();
     assertEquals(body.billing.premium, true);
@@ -280,7 +291,13 @@ Deno.test(
     );
     const row = h.callsTo("/rest/v1/billing_entitlements")[0];
     assertEquals(row.headers["apikey"], "service-role-test-key");
+    assertEquals(row.headers.authorization, "Bearer service-role-test-key");
     assertEquals((row.body as Record<string, unknown>).user_id, TEST_USER_ID);
+    const access = h.callsTo("/rest/v1/rpc/access_state");
+    assertEquals(access.length, 1);
+    assertEquals(access[0].headers.apikey, "anon-test-key");
+    assertEquals(access[0].headers.authorization, request.headers.get("Authorization"));
+    assertEquals(h.callsTo("grant_type=id_token").length, 0);
   },
 );
 
@@ -309,7 +326,7 @@ Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-
   const h = await loadHarness();
   h.subscriber = activeSubscriber();
   h.rpcs["access_state"] = ACCESS_ROW;
-  const token = fakeGoogleIdToken(OTHER_USER_ID);
+  const token = fakeSupabaseAccessToken(OTHER_USER_ID);
   let last: Response | null = null;
   for (let i = 0; i < 11; i += 1) {
     last = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.10", token }));
@@ -319,6 +336,16 @@ Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-
   assertEquals(last!.status, 429);
   assert(Number(last!.headers.get("retry-after")) > 0);
   assertEquals(h.callsTo(RC_URL).length, 10);
+  assert(h.callsTo(RC_URL).every((call) => call.url.endsWith(OTHER_USER_ID)));
+  for (const row of h.callsTo("/rest/v1/billing_entitlements")) {
+    assertEquals((row.body as Record<string, unknown>).user_id, OTHER_USER_ID);
+    assertEquals(row.headers.authorization, "Bearer service-role-test-key");
+  }
+  for (const call of h.callsTo("/rest/v1/rpc/access_state")) {
+    assertEquals(call.headers.authorization, `Bearer ${token}`);
+    assertEquals(call.headers.apikey, "anon-test-key");
+  }
+  assertEquals(h.callsTo("grant_type=id_token").length, 0);
 });
 
 // ── healthz ──────────────────────────────────────────────────────────────────

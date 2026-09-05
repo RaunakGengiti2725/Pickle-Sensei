@@ -86,6 +86,34 @@ jobs:
         working-directory: apps/mobile
         run: npm test
 
+  supabase-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Verify pinned Deno runtime
+        run: npm exec --yes --package=deno@2.9.5 -- deno --version
+      - name: Typecheck current Edge source
+        run: >-
+          npm exec --yes --package=deno@2.9.5 -- deno check
+          --config supabase/functions/api/__wf__/deno.json
+          supabase/functions/api/*.ts
+      - name: Typed Edge fixtures (fake services, loopback only)
+        run: |
+          if [ -n "${PICKLE_AUDIT_PG_URL:-}" ]; then
+            echo "Fixture-only verification must not use a configured database. Run the DB matrix separately."
+            exit 1
+          fi
+          npm exec --yes --package=deno@2.9.5 -- deno test \
+            --check --no-prompt --allow-env --allow-read=. --allow-net=127.0.0.1 \
+            --config supabase/functions/api/__wf__/deno.json \
+            supabase/functions/api/__wf__/
+
   supabase-security:
     runs-on: ubuntu-latest
     steps:

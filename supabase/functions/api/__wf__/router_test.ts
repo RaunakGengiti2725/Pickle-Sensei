@@ -19,6 +19,7 @@ import {
   USER_ID,
   wantsSingleObject,
 } from "./edgeHarness.ts";
+import { fakeSupabaseAccessToken, OTHER_USER_ID } from "./routesHarness.ts";
 
 const PROFILE = {
   skill_level: "beginner",
@@ -303,7 +304,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "authenticated user identity flows through to PostgREST as the user's session",
+  name: "legacy provider bearer: authenticated identity flows to PostgREST as the exchanged session",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -319,5 +320,181 @@ Deno.test({
     assert(consent);
     assertEquals(consent.headers.get("authorization"), "Bearer fake-session-access-token");
     assertEquals(consent.query.get("user_id"), `eq.${USER_ID}`);
+  },
+});
+
+Deno.test({
+  name: "normal route fixtures pass the Supabase access bearer and each verified owner to RLS reads",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    for (const owner of [USER_ID, OTHER_USER_ID]) {
+      resetRest();
+      const init =
+        owner === USER_ID
+          ? authedInit({ method: "GET" })
+          : authedInit({ method: "GET" }, fakeSupabaseAccessToken(owner));
+      const res = await fetch(`${API_BASE}/v1/me/consent/status`, init);
+      assertEquals(res.status, 200);
+      await res.body?.cancel();
+      const consent = recorded.find((r) => r.path === "consent_records");
+      assert(consent);
+      assertEquals(
+        consent.headers.get("authorization"),
+        new Headers(init.headers).get("Authorization"),
+      );
+      assertEquals(consent.headers.get("apikey"), "fake-anon-key");
+      assertEquals(consent.query.get("user_id"), `eq.${owner}`);
+    }
+  },
+});
+
+Deno.test({
+  name: "normal shot-sync fixtures use the access bearer for atomic writes, replay reads and ownership conflicts",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    const shot = {
+      id: crypto.randomUUID(),
+      analysisPermitId: crypto.randomUUID(),
+      sessionId: null,
+      shotType: "dink",
+      cameraView: "side",
+      capturedAt: "2026-09-01T10:00:00.000Z",
+      overallScore: 7,
+      confidence: 0.9,
+      resultKind: "scored",
+      phases: [],
+      checkpoints: [],
+      versionVector: {
+        appVersion: "1.0.0",
+        modelBundleVersion: "bundle-1",
+        poseModelVersion: "pose-1",
+        paddleModelVersion: "paddle-1",
+        strokeDetectorVersion: "stroke-1",
+        phaseModelVersion: "phase-1",
+        scoringModelVersion: "scoring-1",
+        shotConfigVersion: "config-1",
+      },
+    };
+    const timestamps = { startMs: 0, contactMs: 100, endMs: 200 };
+    const body = JSON.stringify({
+      userId: OTHER_USER_ID,
+      shots: [
+        { ...shot, source: "real", timestamps, user_id: OTHER_USER_ID, userId: OTHER_USER_ID },
+      ],
+    });
+    let replay = false;
+    const verdict = "accepted";
+    setRestResponder((req) => {
+      if (req.path === "shots" && req.method === "GET") {
+        return restJson(200, replay ? [{ id: shot.id }] : []);
+      }
+      if (req.path === "rpc/apply_synced_shot") return restJson(200, verdict);
+      return null;
+    });
+    const init = authedInit({ method: "POST", body });
+    const written = await fetch(`${API_BASE}/v1/shots:sync`, init);
+    assertEquals(written.status, 200);
+    assertEquals(await written.json(), { acceptedIds: [shot.id], rejected: [] });
+    const rpc = recorded.filter((req) => req.path === "rpc/apply_synced_shot");
+    assertEquals(rpc.length, 1);
+    assertEquals(rpc[0].method, "POST");
+    assertEquals(
+      rpc[0].headers.get("authorization"),
+      new Headers(init.headers).get("Authorization"),
+    );
+    assertEquals(rpc[0].headers.get("apikey"), "fake-anon-key");
+    assertEquals(JSON.parse(rpc[0].body), { shot: { ...shot, ...timestamps } });
+    assertEquals(
+      recorded.find((req) => req.path === "shots")?.query.get("user_id"),
+      `eq.${USER_ID}`,
+    );
+
+    replay = true;
+    const retried = await fetch(`${API_BASE}/v1/shots:sync`, init);
+    assertEquals(retried.status, 200);
+    assertEquals(await retried.json(), { acceptedIds: [shot.id], rejected: [] });
+    assertEquals(recorded.filter((req) => req.path === "rpc/apply_synced_shot").length, 1);
+
+    resetRest();
+    setRestResponder((req) =>
+      req.path === "rpc/apply_synced_shot" ? restJson(200, "shot.id_conflict") : null,
+    );
+    const other = authedInit({ method: "POST", body }, fakeSupabaseAccessToken(OTHER_USER_ID));
+    const conflict = await fetch(`${API_BASE}/v1/shots:sync`, other);
+    assertEquals(conflict.status, 200);
+    assertEquals(await conflict.json(), {
+      acceptedIds: [],
+      rejected: [
+        {
+          id: shot.id,
+          code: "shot.id_conflict",
+          message: "Shot id is already bound to a different user.",
+        },
+      ],
+    });
+    assertEquals(
+      recorded.find((req) => req.path === "shots")?.query.get("user_id"),
+      `eq.${OTHER_USER_ID}`,
+    );
+    for (const req of recorded) {
+      assertEquals(
+        req.headers.get("authorization"),
+        new Headers(other.headers).get("Authorization"),
+      );
+      assertEquals(req.headers.get("apikey"), "fake-anon-key");
+    }
+  },
+});
+
+Deno.test({
+  name: "normal session-sync fixtures stamp the verified owner and scope finalization reads and writes",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    const id = crypto.randomUUID();
+    const startedAt = "2026-09-01T10:00:00.000Z";
+    setRestResponder((req) => {
+      if (req.path === "sessions" && req.method === "GET") {
+        const row = { id, ended_at: null };
+        return restJson(200, wantsSingleObject(req) ? row : [row]);
+      }
+      return null;
+    });
+    const init = authedInit({
+      method: "POST",
+      body: JSON.stringify({ id, startedAt, user_id: OTHER_USER_ID, userId: OTHER_USER_ID }),
+    });
+    const created = await fetch(`${API_BASE}/v1/sessions`, init);
+    assertEquals(created.status, 200);
+    assertEquals(await created.json(), {});
+    const inserted = recorded.find((req) => req.path === "sessions" && req.method === "POST");
+    assert(inserted);
+    assertEquals(JSON.parse(inserted.body), { id, user_id: USER_ID, started_at: startedAt });
+    assertStringIncludes(inserted.headers.get("prefer") ?? "", "resolution=ignore-duplicates");
+
+    const finalized = await fetch(`${API_BASE}/v1/sessions/${id}/finalize`, init);
+    assertEquals(finalized.status, 200);
+    assertEquals(await finalized.json(), {});
+    const patch = recorded.find((req) => req.path === "sessions" && req.method === "PATCH");
+    assert(patch);
+    assertEquals(Object.keys(JSON.parse(patch.body)), ["ended_at"]);
+    for (const req of recorded) {
+      assertEquals(
+        req.headers.get("authorization"),
+        new Headers(init.headers).get("Authorization"),
+      );
+      assertEquals(req.headers.get("apikey"), "fake-anon-key");
+      if (req.method !== "POST") {
+        assertEquals(req.query.get("id"), `eq.${id}`);
+        assertEquals(req.query.get("user_id"), `eq.${USER_ID}`);
+      }
+    }
   },
 });

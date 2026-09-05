@@ -111,11 +111,13 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
+type ApiDatabaseClient = ReturnType<typeof userScopedClient>;
+
 /** Service-role client for verified billing/webhook writes, encrypted Apple
  * revocation-token storage, retry-safe external-deletion checkpoints, and
  * Auth admin deleteUser. Lazy so unrelated routes do not depend on the key. */
-let billingAdminClient: ReturnType<typeof createClient> | null = null;
-function billingAdminDb(): ReturnType<typeof createClient> | null {
+let billingAdminClient: ApiDatabaseClient | null = null;
+function billingAdminDb(): ApiDatabaseClient | null {
   if (billingAdminClient) return billingAdminClient;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceRoleKey) return null;
@@ -290,7 +292,7 @@ interface AuthedUser {
   email: string | null;
   provider: "google" | "apple";
   // Supabase client acting AS this user (RLS enforced on every query).
-  db: ReturnType<typeof createClient>;
+  db: ApiDatabaseClient;
 }
 
 /** Cached, verified session material keyed by SHA-256 of the bearer. For a
@@ -312,16 +314,10 @@ interface CachedAuthSession {
 
 const AUTH_CACHE_MAX_TTL_SECONDS = 600;
 
-function userScopedClient(accessToken: string): ReturnType<typeof createClient> {
+function userScopedClient(accessToken: string) {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-}
-
-function anonAuthClient(): ReturnType<typeof createClient> {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
@@ -398,11 +394,202 @@ interface SupabaseSessionLike {
  * on, the rotating refresh token that keeps it alive across relaunches, and
  * the access token's expiry (unix seconds) so the app can rotate ahead of it. */
 function sessionView(session: SupabaseSessionLike) {
+  const expiresAt =
+    session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600);
   return {
     accessToken: session.access_token,
     refreshToken: session.refresh_token,
-    expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
+    expiresAt,
+    expiresIn: Math.max(
+      0,
+      Math.min(session.expires_in ?? Infinity, (expiresAt * 1000 - Date.now()) / 1000),
+    ),
   };
+}
+
+interface VerifiedAuthUser {
+  id: string;
+  email?: string | null;
+  app_metadata?: Record<string, unknown>;
+}
+
+interface VerifiedAuthSession extends SupabaseSessionLike {
+  user: VerifiedAuthUser;
+  expires_at: number;
+}
+
+function isVerifiedAuthUser(value: unknown): value is VerifiedAuthUser {
+  if (!isRecord(value)) return false;
+  const meta = value.app_metadata;
+  const providerName = (name: unknown): boolean => typeof name === "string" && Boolean(name.trim());
+  return (
+    isUuid(value.id) &&
+    (value.email === undefined || value.email === null || typeof value.email === "string") &&
+    (meta === undefined ||
+      (isRecord(meta) &&
+        (meta.provider === undefined || providerName(meta.provider)) &&
+        (meta.providers === undefined ||
+          (Array.isArray(meta.providers) && meta.providers.every(providerName)))))
+  );
+}
+
+function parseAuthSession(value: unknown): VerifiedAuthSession | null {
+  if (
+    !isRecord(value) ||
+    typeof value.access_token !== "string" ||
+    !/^\S+$/.test(value.access_token) ||
+    typeof value.refresh_token !== "string" ||
+    !/^\S+$/.test(value.refresh_token) ||
+    !isVerifiedAuthUser(value.user)
+  ) {
+    return null;
+  }
+  const now = Math.floor(Date.now() / 1_000);
+  const expiresIn = value.expires_in;
+  if (
+    expiresIn !== undefined &&
+    (typeof expiresIn !== "number" || !Number.isSafeInteger(expiresIn) || expiresIn <= 0)
+  ) {
+    return null;
+  }
+  const expiresAt =
+    value.expires_at === undefined
+      ? typeof expiresIn === "number"
+        ? now + expiresIn
+        : null
+      : value.expires_at;
+  if (typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= now) {
+    return null;
+  }
+  return {
+    access_token: value.access_token,
+    refresh_token: value.refresh_token,
+    expires_at: expiresAt,
+    expires_in: expiresIn,
+    user: value.user,
+  };
+}
+
+type SupabaseAuthCredentials =
+  | { kind: "user"; token: string }
+  | { kind: "id_token"; provider: "google" | "apple"; token: string }
+  | { kind: "refresh_token"; token: string };
+
+const AUTH_REJECTION_CODES = new Set([
+  "bad_jwt",
+  "invalid_credentials",
+  "invalid_grant",
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "session_not_found",
+  "session_expired",
+  "user_not_found",
+  "user_banned",
+]);
+const AUTH_THROTTLE_CODES = new Set([
+  "over_request_rate_limit",
+  "over_email_send_rate_limit",
+  "over_sms_send_rate_limit",
+]);
+const ID_TOKEN_OAUTH_REJECTION_CODES = new Set(["invalid request", "invalid nonce"]);
+
+function authRetryAfter(value: string | null): string | null {
+  const raw = value?.trim() ?? "";
+  let delay: number;
+  if (/^\d+$/.test(raw)) {
+    delay = Number(raw);
+  } else if (/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(raw)) {
+    delay = Math.max(0, Math.ceil((Date.parse(raw) - Date.now()) / 1_000));
+  } else {
+    return null;
+  }
+  return Number.isSafeInteger(delay) && delay >= 0 ? String(delay) : null;
+}
+
+function authThrottleResponse(response: Response): Response {
+  const limited = codedError(
+    429,
+    "rate_limited",
+    "Too many requests. Please slow down and try again shortly.",
+  );
+  const retryAfter = authRetryAfter(response.headers.get("Retry-After"));
+  if (retryAfter !== null) limited.headers.set("Retry-After", retryAfter);
+  return limited;
+}
+
+async function requestSupabaseAuth(
+  credentials: SupabaseAuthCredentials,
+): Promise<Record<string, unknown> | Response> {
+  const context = credentials.kind === "refresh_token" ? "Session refresh" : "Authentication";
+  try {
+    const isUser = credentials.kind === "user";
+    const path = isUser ? "/user" : `/token?grant_type=${credentials.kind}`;
+    const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+      method: isUser ? "GET" : "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${isUser ? credentials.token : SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        "X-Supabase-Api-Version": "2024-01-01",
+      },
+      body: isUser
+        ? undefined
+        : JSON.stringify(
+            credentials.kind === "id_token"
+              ? { provider: credentials.provider, id_token: credentials.token }
+              : { refresh_token: credentials.token },
+          ),
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+    });
+    const data: unknown = await response.json().catch(() => null);
+    if (response.status === 200) {
+      return isRecord(data) ? data : serviceUnavailable(context);
+    }
+    const code = isRecord(data)
+      ? [data.code, data.error_code, data.error].find(
+          (value): value is string => typeof value === "string",
+        )
+      : undefined;
+    const credentialStatus = [400, 401, 403, 404, 422].includes(response.status);
+    if (
+      response.status === 429 ||
+      (credentialStatus && typeof code === "string" && AUTH_THROTTLE_CODES.has(code))
+    ) {
+      return authThrottleResponse(response);
+    }
+    if (
+      credentialStatus &&
+      typeof code === "string" &&
+      (AUTH_REJECTION_CODES.has(code) ||
+        (credentials.kind === "id_token" &&
+          response.status === 400 &&
+          ID_TOKEN_OAUTH_REJECTION_CODES.has(code)))
+    ) {
+      return errorJson(
+        401,
+        credentials.kind === "refresh_token"
+          ? "The session could not be refreshed. Sign in again."
+          : credentials.kind === "user"
+            ? "The session is no longer valid. Sign in again."
+            : "The identity token could not be verified.",
+      );
+    }
+    return serviceUnavailable(context, { upstreamStatus: response.status });
+  } catch {
+    return serviceUnavailable(context);
+  }
+}
+
+async function requestAuthSession(
+  credentials: Exclude<SupabaseAuthCredentials, { kind: "user" }>,
+): Promise<VerifiedAuthSession | Response> {
+  const result = await requestSupabaseAuth(credentials);
+  if (result instanceof Response) return result;
+  return (
+    parseAuthSession(result) ??
+    serviceUnavailable(credentials.kind === "refresh_token" ? "Session refresh" : "Authentication")
+  );
 }
 
 /** A Supabase user's sign-in provider, from app_metadata. `provider` is the
@@ -443,18 +630,16 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(401, "The identity token could not be verified.");
-  }
+  const session = await requestAuthSession({ kind: "id_token", provider, token });
+  if (session instanceof Response) return session;
   return {
     authed: {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: session.user.id,
+      email: session.user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     },
-    session: signIn.data.session,
+    session,
     providerSubject,
   };
 }
@@ -490,42 +675,50 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (cached) return cached;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
-      return errorJson(401, "The identity token could not be verified.");
-    }
+    const session = await requestAuthSession({ kind: "id_token", provider, token });
+    if (session instanceof Response) return session;
     await writeAuthCache(
       cacheKey,
       {
-        userId: signIn.data.user.id,
-        email: signIn.data.user.email ?? null,
+        userId: session.user.id,
+        email: session.user.email ?? null,
         provider,
-        accessToken: signIn.data.session.access_token,
+        accessToken: session.access_token,
       },
       payload?.exp,
-      signIn.data.session.expires_at,
+      session.expires_at,
     );
     return {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: session.user.id,
+      email: session.user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     };
   }
 
-  const verified = await anonAuthClient().auth.getUser(token);
-  if (verified.error || !verified.data.user) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+  const verified = await requestSupabaseAuth({ kind: "user", token });
+  if (verified instanceof Response) return verified;
+  const user = "user" in verified ? verified.user : verified;
+  if (!isVerifiedAuthUser(user)) return serviceUnavailable("Authentication");
+  const meta = user.app_metadata;
+  if (
+    !meta ||
+    !(
+      (typeof meta.provider === "string" && meta.provider.length > 0) ||
+      (Array.isArray(meta.providers) && meta.providers.some((p) => typeof p === "string" && p))
+    )
+  ) {
+    return serviceUnavailable("Authentication");
   }
-  const sessionProvider = providerOfUser(verified.data.user);
+  const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
     return errorJson(401, "The session does not belong to a Google or Apple account.");
   }
   await writeAuthCache(
     cacheKey,
     {
-      userId: verified.data.user.id,
-      email: verified.data.user.email ?? null,
+      userId: user.id,
+      email: user.email ?? null,
       provider: sessionProvider,
       accessToken: token,
     },
@@ -533,8 +726,8 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     payload?.exp,
   );
   return {
-    id: verified.data.user.id,
-    email: verified.data.user.email ?? null,
+    id: user.id,
+    email: user.email ?? null,
     provider: sessionProvider,
     db: userScopedClient(token),
   };
@@ -549,17 +742,12 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   if (typeof refreshToken !== "string" || !refreshToken.trim()) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const refreshed = await anonAuthClient().auth.refreshSession({
-    refresh_token: refreshToken.trim(),
+  const refreshed = await requestAuthSession({
+    kind: "refresh_token",
+    token: refreshToken.trim(),
   });
-  if (refreshed.error || !refreshed.data.session) {
-    const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
-    }
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
-  }
-  return json(200, { session: sessionView(refreshed.data.session) });
+  if (refreshed instanceof Response) return refreshed;
+  return json(200, { session: sessionView(refreshed) });
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
@@ -568,16 +756,40 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
   await cacheDel(await authCacheKey(token));
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
-    method: "POST",
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-  });
-  // 401/403/404 here mean the session is already gone — the outcome the
-  // caller wanted. Only a server-side failure is worth reporting.
-  if (!response.ok && response.status >= 500) {
-    return serviceUnavailable("Sign-out", `status ${response.status}`);
+  const signal = AbortSignal.timeout(10_000);
+  let onAbort: (() => void) | undefined;
+  try {
+    const response = await Promise.race([
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      }),
+      (async () => {
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+          signal,
+          redirect: "error",
+        });
+        await response.body?.cancel();
+        return response;
+      })(),
+    ]);
+    // 401/403/404 here mean the session is already gone — the outcome the
+    // caller wanted. Only a server-side failure is worth reporting.
+    // A throttle or unrecognized upstream reply also does not establish
+    // revocation: keep it retryable instead of claiming success.
+    if (response.status === 429) return authThrottleResponse(response);
+    if (!response.ok && ![401, 403, 404].includes(response.status)) {
+      return serviceUnavailable("Sign-out", { upstreamStatus: response.status });
+    }
+    return noContent();
+  } catch {
+    return serviceUnavailable("Sign-out");
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
   }
-  return noContent();
 }
 
 interface ProfileRow {
@@ -2478,7 +2690,7 @@ type AppleDeletionOutcome = "revoked" | "not_applicable" | "manual_action_requir
  * later provider/database failure can be retried safely. */
 async function deleteExternalAccounts(
   authed: AuthedUser,
-  adminDb: ReturnType<typeof createClient>,
+  adminDb: ApiDatabaseClient,
 ): Promise<AppleDeletionOutcome | Response> {
   const externalQ = await adminDb
     .from("account_external_credentials")
@@ -2491,7 +2703,11 @@ async function deleteExternalAccounts(
   const external = externalQ.data as ExternalCredentialRow | null;
   let appleOutcome: AppleDeletionOutcome = "not_applicable";
 
-  if (authed.provider === "apple") {
+  if (
+    external?.apple_revoked_at ||
+    external?.apple_refresh_token_encrypted ||
+    authed.provider === "apple"
+  ) {
     if (external?.apple_revoked_at) {
       appleOutcome = "revoked";
     } else if (external?.apple_refresh_token_encrypted) {
@@ -2507,7 +2723,10 @@ async function deleteExternalAccounts(
         );
         await revokeAppleRefreshToken(refreshToken, config);
       } catch (error) {
-        const detail = error instanceof ExternalAccountError ? error.message : error;
+        const detail =
+          error instanceof ExternalAccountError
+            ? { provider: error.provider, kind: error.kind }
+            : undefined;
         return serviceUnavailable("Account deletion", detail);
       }
       const marked = await adminDb
@@ -2536,7 +2755,10 @@ async function deleteExternalAccounts(
     try {
       await deleteRevenueCatCustomer(authed.id, revenueCatSecret);
     } catch (error) {
-      const detail = error instanceof ExternalAccountError ? error.message : error;
+      const detail =
+        error instanceof ExternalAccountError
+          ? { provider: error.provider, kind: error.kind }
+          : undefined;
       return serviceUnavailable("Account deletion", detail);
     }
     const now = new Date().toISOString();
@@ -2614,7 +2836,7 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     authError?.code === "user_not_found" ||
     authError?.error_code === "user_not_found";
   if (authError && !alreadyDeleted) {
-    return serviceUnavailable("Account deletion", deleted.error.message);
+    return serviceUnavailable("Account deletion", { upstreamStatus: authError.status });
   }
 
   // Drop this user's cached derived state AND this bearer's verified-auth
@@ -2697,6 +2919,7 @@ const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
  * healthy device needs it about once per access-token lifetime, so a tight
  * per-IP budget costs real users nothing and starves refresh-token guessing. */
 const AUTH_REFRESH_LIMIT = { limit: 30, windowSeconds: 60 };
+const AUTH_BOOTSTRAP_LIMIT = { limit: 30, windowSeconds: 60 };
 const PUBLIC_PAGE_LIMIT = { limit: 60, windowSeconds: 60 };
 const WEBHOOK_LIMIT = { limit: 240, windowSeconds: 60 };
 
@@ -2780,7 +3003,10 @@ async function bootstrapAccount(
             "Apple could not validate this sign-in authorization. Try again.",
           );
         }
-        const detail = error instanceof ExternalAccountError ? error.message : error;
+        const detail =
+          error instanceof ExternalAccountError
+            ? { provider: error.provider, kind: error.kind }
+            : undefined;
         return serviceUnavailable("Apple sign-in", detail);
       }
     }
@@ -2903,6 +3129,13 @@ async function handleRequest(request: Request): Promise<Response> {
   // token in its body. Both count toward the per-IP auth-failure budget so
   // token stuffing is throttled exactly like a bad bearer.
   if (route === "POST /v1/account/bootstrap") {
+    const rl = await enforceRateLimit(
+      "auth_bootstrap",
+      ip,
+      AUTH_BOOTSTRAP_LIMIT.limit,
+      AUTH_BOOTSTRAP_LIMIT.windowSeconds,
+    );
+    if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
       if (exchanged.status === 401) await recordAuthFailure();

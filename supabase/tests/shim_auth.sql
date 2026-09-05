@@ -62,3 +62,26 @@ alter default privileges in schema public
   grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public
   grant all on sequences to anon, authenticated, service_role;
+
+create function public.rls_auto_enable()
+returns event_trigger
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $$
+declare
+  command record;
+begin
+  for command in
+    select * from pg_catalog.pg_event_trigger_ddl_commands()
+    where schema_name = 'public' and object_type in ('table', 'partitioned table')
+  loop
+    execute pg_catalog.format('alter table %s enable row level security', command.object_identity);
+  end loop;
+end;
+$$;
+
+create event trigger test_hosted_rls_auto_enable
+  on ddl_command_end
+  when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+  execute function public.rls_auto_enable();

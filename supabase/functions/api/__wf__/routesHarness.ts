@@ -8,6 +8,8 @@ export interface RecordedCall {
   method: string;
   headers: Record<string, string>;
   body: unknown;
+  signal: AbortSignal;
+  redirect: RequestRedirect;
 }
 
 export interface Harness {
@@ -15,6 +17,7 @@ export interface Harness {
   realFetch: typeof fetch;
   realServe: typeof Deno.serve;
   calls: RecordedCall[];
+  authResponse: ((call: RecordedCall) => Response | Promise<Response>) | null;
   /** Subscriber JSON RevenueCat returns (null → HTTP 500 from RevenueCat). */
   subscriber: Record<string, unknown> | null;
   /** Rows returned for PostgREST GET by table name. */
@@ -65,6 +68,15 @@ export function fakeAppleIdToken(sub = TEST_USER_ID): string {
   return `${header}.${payload}.sig`;
 }
 
+export function fakeSupabaseAccessToken(
+  sub = TEST_USER_ID,
+  expiresAt = Math.floor(Date.now() / 1000) + 3600,
+): string {
+  const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = b64url(JSON.stringify({ iss: `${SUPABASE_URL}/auth/v1`, sub, exp: expiresAt }));
+  return `${header}.${payload}.sig`;
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -94,9 +106,11 @@ export async function loadHarness(): Promise<Harness> {
 
   Deno.env.set("SUPABASE_URL", SUPABASE_URL);
   Deno.env.set("SUPABASE_ANON_KEY", "anon-test-key");
+  Deno.env.delete("SB_PUBLISHABLE_KEY");
   Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-test-key");
   Deno.env.set("REVENUECAT_WEBHOOK_AUTH", WEBHOOK_SECRET);
   Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
+  Deno.env.delete("REVENUECAT_PUBLIC_SDK_KEY");
   const appleTokenEncryptionKey = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
   Deno.env.set("APPLE_SIGN_IN_CLIENT_ID", "com.picklesensei");
   Deno.env.set("APPLE_SIGN_IN_TEAM_ID", "TEAMID1234");
@@ -113,12 +127,14 @@ export async function loadHarness(): Promise<Harness> {
     realFetch,
     realServe,
     calls: [],
+    authResponse: null,
     subscriber: {},
     tables: {},
     rpcs: {},
     appleTokenEncryptionKey,
     reset() {
       state.calls = [];
+      state.authResponse = null;
       state.subscriber = {};
       state.tables = {};
       state.rpcs = {};
@@ -148,8 +164,19 @@ export async function loadHarness(): Promise<Harness> {
         body = text;
       }
     }
-    state.calls.push({ url, method: request.method, headers, body });
+    const call: RecordedCall = {
+      url,
+      method: request.method,
+      headers,
+      body,
+      signal: request.signal,
+      redirect: request.redirect,
+    };
+    state.calls.push(call);
 
+    if (url.startsWith(`${SUPABASE_URL}/auth/v1/`) && state.authResponse) {
+      return state.authResponse(call);
+    }
     if (url.startsWith(RC_URL)) {
       if (!state.subscriber) {
         return new Response("upstream error", { status: 500 });
@@ -167,6 +194,24 @@ export async function loadHarness(): Promise<Harness> {
     }
     if (url === "https://appleid.apple.com/auth/revoke") {
       return new Response(null, { status: 200 });
+    }
+    if (request.method === "GET" && url === `${SUPABASE_URL}/auth/v1/user`) {
+      const token = headers.authorization?.replace(/^Bearer /, "") ?? "";
+      let userId: unknown;
+      try {
+        const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        userId = JSON.parse(atob(segment)).sub;
+      } catch {
+        return jsonResponse(401, { code: "bad_jwt" });
+      }
+      if (typeof userId !== "string" || !userId) {
+        return jsonResponse(401, { code: "bad_jwt" });
+      }
+      return jsonResponse(200, {
+        id: userId,
+        email: "user@example.com",
+        app_metadata: { provider: "google", providers: ["google"] },
+      });
     }
     if (url.startsWith(`${SUPABASE_URL}/auth/v1/token`)) {
       const payload = isRecord(body) ? body : {};
@@ -236,6 +281,16 @@ export async function loadHarness(): Promise<Harness> {
         return jsonResponse(200, rows);
       }
       if (request.method === "POST" || request.method === "PATCH") {
+        if (table === "account_external_credentials" && isRecord(body)) {
+          const userId =
+            request.method === "POST"
+              ? body.user_id
+              : new URL(url).searchParams.get("user_id")?.replace(/^eq\./, "");
+          const rows = state.tables[table] ?? (state.tables[table] = []);
+          const row = rows.find((row) => isRecord(row) && row.user_id === userId);
+          if (isRecord(row)) Object.assign(row, body);
+          else if (request.method === "POST") rows.push({ ...body });
+        }
         return new Response(null, { status: 201 });
       }
       if (request.method === "DELETE") {
@@ -292,7 +347,7 @@ export function userRequest(
   } = {},
 ): Request {
   const headers = new Headers({
-    Authorization: `Bearer ${options.token ?? fakeGoogleIdToken()}`,
+    Authorization: `Bearer ${options.token ?? fakeSupabaseAccessToken()}`,
     "x-forwarded-for": options.ip ?? "203.0.113.20",
     ...options.headers,
   });

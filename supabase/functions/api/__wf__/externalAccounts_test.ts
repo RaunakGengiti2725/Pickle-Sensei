@@ -132,15 +132,16 @@ Deno.test(
 
 Deno.test("Apple revocation uses the refresh-token hint and accepts idempotent 200", async () => {
   const config = await appleConfig();
-  let form: URLSearchParams | null = null;
+  const forms: URLSearchParams[] = [];
   await revokeAppleRefreshToken("refresh-to-revoke", config, async (input, init) => {
     const request = new Request(input, init);
     assertEquals(request.url, "https://appleid.apple.com/auth/revoke");
-    form = new URLSearchParams(await request.text());
+    forms.push(new URLSearchParams(await request.text()));
     return new Response(null, { status: 200 });
   });
-  assertEquals(form?.get("token"), "refresh-to-revoke");
-  assertEquals(form?.get("token_type_hint"), "refresh_token");
+  assertEquals(forms.length, 1);
+  assertEquals(forms[0].get("token"), "refresh-to-revoke");
+  assertEquals(forms[0].get("token_type_hint"), "refresh_token");
 });
 
 Deno.test(
