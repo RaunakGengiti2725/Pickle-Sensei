@@ -442,6 +442,28 @@ describe("certification readiness fails closed (ADJ-02)", () => {
     expect(() => loadHoldoutLedger(root)).toThrowError(/holdout ledger.*holdout-rotation-v99/i);
   });
 
+  it("loadHoldoutLedger rejects a holdout entry whose inspections are not a list", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-noinspections-"));
+    tmpRoots.push(root);
+    mkdirSync(join(root, "datasets", "holdouts"), { recursive: true });
+    const { inspections: _dropped, ...withoutInspections } = entry({ caseId: "bare" });
+    writeFileSync(
+      join(root, HOLDOUT_LEDGER_PATH),
+      JSON.stringify(ledger({ holdouts: [withoutInspections as HoldoutEntry] })),
+    );
+    expect(() => loadHoldoutLedger(root)).toThrowError(HoldoutLedgerError);
+    expect(() => loadHoldoutLedger(root)).toThrowError(/holdout ledger.*bare.*inspections/i);
+  });
+
+  it("inspection budgets cannot be mutated at runtime", () => {
+    expect(Object.isFrozen(INSPECTION_BUDGETS)).toBe(true);
+    const budgets = INSPECTION_BUDGETS as Record<HoldoutTier, number>;
+    expect(() => {
+      budgets.SHADOW_HOLDOUT = 99;
+    }).toThrowError(TypeError);
+    expect(INSPECTION_BUDGETS.SHADOW_HOLDOUT).toBe(0);
+  });
+
   it("loadHoldoutLedger accepts a well-formed ledger and evaluation of it is ELIGIBLE", () => {
     const root = mkdtempSync(join(tmpdir(), "holdout-ok-"));
     tmpRoots.push(root);

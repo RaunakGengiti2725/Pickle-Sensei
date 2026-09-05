@@ -65,12 +65,12 @@ export class HoldoutLedgerError extends Error {
  * unbounded; LOCKED_TEST tolerates a small number of audited evaluations;
  * SHADOW_HOLDOUT must never be inspected at all before its freeze.
  */
-export const INSPECTION_BUDGETS: Readonly<Record<HoldoutTier, number>> = {
+export const INSPECTION_BUDGETS: Readonly<Record<HoldoutTier, number>> = Object.freeze({
   DEV: Number.POSITIVE_INFINITY,
   VALIDATION: Number.POSITIVE_INFINITY,
   LOCKED_TEST: 3,
   SHADOW_HOLDOUT: 0,
-};
+});
 
 export const INSPECTION_KINDS = [
   "human_frame_review",
@@ -256,6 +256,8 @@ export function holdoutLedgerShapeProblems(value: unknown): string[] {
     value.holdouts.forEach((entry, index) => {
       if (!isRecord(entry) || typeof entry.caseId !== "string" || entry.caseId.length === 0) {
         problems.push(`holdouts[${index}] must be an object with a non-empty caseId`);
+      } else if (!Array.isArray(entry.inspections)) {
+        problems.push(`holdouts[${index}] (${entry.caseId}) must list its inspections as an array`);
       }
     });
   }
