@@ -259,6 +259,18 @@ class Model {
     for (const f of canonical) this.dir.set(f.name, f.sql);
   }
 
+  /**
+   * Model transition for one migration the runner reports as applied.
+   * 0009_real_data_boundary.sql retires every dev fixture drill
+   * (`UPDATE drill SET active = false WHERE is_dev_fixture = true`), so a
+   * fixture inserted on a pre-0009 schema is expected inactive once 0009 lands.
+   */
+  recordApplied(name: string, checksum: string): void {
+    this.applied.set(name, checksum);
+    if (name === "0009_real_data_boundary.sql")
+      for (const slug of this.drills.keys()) this.drills.set(slug, false);
+  }
+
   canonicalNames(): string[] {
     return this.canonical.map((f) => f.name);
   }
@@ -442,7 +454,7 @@ export async function runDbSequence(
     // Whatever the runner reports applied is what the model records.
     for (const name of predicted.applied) {
       const sql = model.dir.get(name);
-      if (sql !== undefined) model.applied.set(name, checksumOf(sql));
+      if (sql !== undefined) model.recordApplied(name, checksumOf(sql));
     }
     outcome["applied"] = result?.applied ?? null;
     outcome["skipped"] = result?.skipped.length ?? null;
@@ -813,7 +825,7 @@ export async function runDbSequence(
             .sort();
           for (const name of predicted.applied) {
             const sql = model.dir.get(name);
-            if (sql !== undefined) model.applied.set(name, checksumOf(sql));
+            if (sql !== undefined) model.recordApplied(name, checksumOf(sql));
           }
           outcome["errors"] = errors;
           outcome["appliedUnion"] = appliedAll;
@@ -1201,7 +1213,7 @@ export async function runDbSequence(
               `recorded ${recorded.length} rows, expected within [${before}, ${before + predicted.applied.length}]`,
             );
           for (const row of recorded)
-            if (!model.applied.has(row.name)) model.applied.set(row.name, row.checksum);
+            if (!model.applied.has(row.name)) model.recordApplied(row.name, row.checksum);
           const resume = await runMigrations(pool, workDir).then(
             (v) => ({ ok: true as const, v }),
             (e: unknown) => ({ ok: false as const, e }),
@@ -1215,7 +1227,7 @@ export async function runDbSequence(
               fail(i, action.kind, "M6", `resume union mismatch`);
             for (const name of predicted.applied) {
               const sql = model.dir.get(name);
-              if (sql !== undefined) model.applied.set(name, checksumOf(sql));
+              if (sql !== undefined) model.recordApplied(name, checksumOf(sql));
             }
           }
           break;
