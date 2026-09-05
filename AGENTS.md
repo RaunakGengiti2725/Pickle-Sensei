@@ -26,7 +26,7 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   applied migration, add a new one)
 - API: `supabase functions deploy api --no-verify-jwt`
 - Secrets: `supabase secrets set REVENUECAT_SECRET_API_KEY=…` (billing sync falls
-  back to `REVENUECAT_PUBLIC_SDK_KEY`, currently set to the Test Store key),
+  back to `REVENUECAT_PUBLIC_SDK_KEY`; verify the deployed store configuration),
   `REVENUECAT_WEBHOOK_AUTH=…` (shared secret the RevenueCat webhook must send
   as its Authorization header), `APPLE_SIGN_IN_CLIENT_ID=com.picklesensei`,
   `APPLE_SIGN_IN_TEAM_ID=…`, `APPLE_SIGN_IN_KEY_ID=…`,
@@ -41,11 +41,11 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 
 ## Auth sessions (durable sign-in — closing the app must NEVER sign out)
 
-- Contract (2026-09-01): `POST /v1/account/bootstrap` spends the Apple/Google
-  ID token once (`signInWithIdToken`) and returns `session {accessToken,
+- Contract (2026-09-01): `POST /v1/account/bootstrap` exchanges the Apple/Google
+  ID token through Supabase Auth's `id_token` grant and returns `session {accessToken,
 refreshToken, expiresAt}` beside the account. Every other route takes the
-  Supabase ACCESS token as bearer (`authenticate()` verifies it with
-  `auth.getUser`, cached like before); `POST /v1/auth/refresh {refreshToken}`
+  Supabase ACCESS token as bearer (`authenticate()` verifies it through
+  Supabase Auth's `/auth/v1/user`, cached like before); `POST /v1/auth/refresh {refreshToken}`
   rotates it (per-IP budget, 401 counts as an auth failure);
   `POST /v1/auth/logout` revokes THIS device's session (`scope=local` — other
   devices stay signed in) and drops the bearer from the auth cache.
@@ -109,6 +109,12 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   a different subject (e.g. Apple then Google) is a different identity.
   `access_state().scored_count` is therefore identity-lifetime (the exit
   survey's `scored_count` stamp inherits that meaning).
+- `20260905000000_shots_quota_boundary.sql` also protects raw shot writes:
+  a BEFORE trigger takes the same account lock as permit/RPC operations;
+  the ledger's AFTER trigger checks the identity count and post-insert rows.
+  Multi-row overflow rolls back the whole statement. Do not relax the
+  immutable-history UPDATE grant to support merge-upserts. The concurrency
+  matrix covers raw writes, RPC/raw overlap, and recreated identities.
 - 5xx bodies are generic (detail only in function logs). Free-text inputs are
   sanitized (`http.ts sanitizeUserText`). pg_cron sweeps stale permits,
   expired deletion requests, old webhook events.
@@ -118,10 +124,12 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `POST /webhooks/revenuecat`
   (secret-gated; entitlements re-verified against RevenueCat, never trusted
   from the event body; audit-logged in `public.webhook_events`).
-- `deno check` on `index.ts` reports pre-existing untyped-supabase-client
-  errors (insert/update infer `never`) — deploy bundling type-strips, and the
-  standalone modules (`cache.ts`, `rateLimit.ts`, `http.ts`, `legal.ts`)
-  check clean.
+- Edge source, including `index.ts`, typechecks. The concrete client-factory
+  return type avoids the old generic `ReturnType<typeof createClient>`
+  inference to `never`. CI's `supabase-edge` job pins Deno 2.9.5, checks the
+  source and fixtures, and limits test networking to loopback. DB-dependent
+  cases are reported as ignored without an explicit disposable test DB;
+  the separate `supabase-security` job runs the real database matrix.
 - Defense in depth (`20260831160000_defense_in_depth.sql`): column-level
   UPDATE grants sized to EXACTLY the writes the edge fn performs (shots have
   NO client update — favorites are device-local, sync is INSERT-only via the
@@ -875,3 +883,114 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   RootNavigator's PaywallRoute and Settings → About.
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
+
+## Local verification tooling and evidence (2026-09-05)
+
+- A reloaded CLI may omit Node/package managers from PATH. Root checks use
+  `/Users/raunakgengiti/.nvm/versions/node/v20.20.0/bin` before
+  `/opt/homebrew/bin`; mobile checks can use `/opt/homebrew/bin/node`
+  (24.5.0, satisfies the app's >=22.11 requirement). Supply PATH to the
+  command process rather than changing shell or agent configuration.
+- Deno 2.9.5 can run through `npm exec --package=deno@2.9.5 -- deno` without
+  adding an application dependency. Edge suites live in
+  `supabase/functions/api/__wf__`; their fake-server harnesses must not use
+  hosted endpoints or inherited production credentials.
+- The six `be-edge-routes-shots-rank.test.ts` DB cases need a separately
+  verified disposable database with the shim and all Supabase migrations.
+  For socket-only postgres.js, use `PGHOST=<owned socket directory>` plus
+  `PGUSER`/`PGPORT` and `PICKLE_AUDIT_PG_URL=postgresql:///database_name`;
+  its URL host query parameter does not behave like node-postgres. Deno's
+  socket adapter needs read/write access to that socket and
+  `--allow-net=unix:<absolute socket path>`. Do not grant general network
+  access or point these fixtures at a hosted database. Long-history fixtures
+  seed premium entitlements as test admin rather than bypass quota triggers.
+- FFmpeg 9 removed `-vsync`. Adversarial timestamp fixtures use
+  `-fps_mode passthrough` (also supported by FFmpeg 5.1+), not `vfr`:
+  passthrough preserves duplicate timestamps. The VFR and duplicate-PTS
+  fixtures were checked with ffprobe, not only their verdict assertions.
+- Mobile's `importedRealFootageAnalysis.test.ts` can read an existing
+  `wm-volley-02` run via `PICKLE_REAL_FOOTAGE_RUN_DIR` without copying
+  gitignored artifacts into a worktree. The directory must contain
+  `pose.json` and `extract-meta.json`; an explicitly configured missing
+  run fails rather than silently skipping. This checks the import/persistence
+  contract against recorded Apple Vision poses, not coaching accuracy.
+- Supabase MCP inspection on 2026-09-05 found project
+  `ucqnaiwqwjtgvlduiuib` healthy on Postgres 17.6, API version 31 active with
+  gateway JWT verification disabled (the handler authenticates provider and
+  session tokens), and migration history through `20260902150000`. This is
+  dated deployment evidence, not confirmation that later local migrations
+  or function changes have shipped. Local RLS tests use PostgreSQL 16.
+- RLS-without-policy notices for `account_external_credentials`,
+  `free_rating_ledger`, and `webhook_events` are intentional service-only
+  isolation. `identity_scored_count()` deliberately permits authenticated
+  callers but scopes itself to auth.uid(); do not revoke its required
+  permission or add policies to service-only tables to silence advisors.
+
+## Paired 3D review direction (2026-09-05)
+
+The player/reference comparison is a visual priority: simple paired views,
+shared playback, one cue at a time, and controls away from the body. Current
+shipping pose sidecars are 2D; never manufacture depth or call them measured
+3D. A 3D viewer must require compatible, timestamped XYZ evidence and clear
+source/units. Label an illustrative reference as an illustration, not the
+player's measured or verified corrected motion. Missing 3D evidence or an
+unsupported reference must remain unavailable. Keep experimental viewers
+and comparisons out of shipping routes, scoring, and membership claims
+until their evidence and validation requirements are met.
+
+## Durable operations and accessible review (2026-09-05)
+
+- The native SQLite connection shares an execution queue across `getDb()`
+  facades. Multi-statement operations use `LocalDb.withExclusive` and only
+  its callback-supplied executor; the executor expires when the callback
+  ends. Do not put network waits inside it or issue independent raw
+  BEGIN/COMMIT sequences. Repository transactions and sync receipt/outbox
+  writes use this boundary (`__tests__/dbConcurrency.test.ts`).
+- Analysis captures an owner generation before asynchronous work. Its
+  actual `practiceSetPlan` commits in the same owner transaction as the
+  analysis, scored shot, outbox entries and capture status. Failure rolls
+  everything back; closing the screen without changing owner can finish
+  persistence, but cannot navigate or show a late prompt. A changed owner
+  invalidates the run and its late sync outcomes. Analyze supplies an
+  owner-bound `resolveApiToken` callback: permits resolve the current bearer
+  after extraction and again on release, rather than freezing it at capture.
+- A restored canonical account without a local profile must wait for a
+  server profile read, not enter a new questionnaire on a missing bearer.
+  The matching API owner's first arrival retries profile hydration; token
+  rotation does not. Gate uses `preserveCurrentProfile` so a loaded same-owner
+  profile and navigator remain mounted while this background work finishes.
+  Pending onboarding answers still get their canonical save attempt.
+  Secure-store read failures have an explicit Gate retry.
+- Logout persists a credential-free `auth.logout-intent` marker and blocks
+  restoration in-run; the serialized vault supports a tombstone fallback.
+  Retry completes failed cleanup, never signs the player back into the stale
+  vault record. Explicit sign-in clears the block only after safe persistence.
+  If both channels fail, the in-run block and warning remain; restart safety
+  cannot be guaranteed without durable storage.
+- Bootstrap/refresh include backward-compatible `expiresIn` alongside
+  `expiresAt`. The keeper uses receipt-based monotonic renewal deadlines,
+  bounded short-lifetime scheduling, and conservative legacy-skew cooldowns.
+  Foreground events must not bypass network backoff. Current-token 401s can
+  still request recovery (`__tests__/sessionKeeperClockSkew.test.ts`).
+- Capture `captureAccountDeletionScope()` before the deletion challenge and
+  pass it through confirmation to `completeAccountDeletion`. A late A
+  completion must not erase B's credentials, SDK state, rows or files.
+  Media cleanup reads the deleted owner's references before row purge,
+  preserves shared references and refuses paths outside today's Captures
+  directory. Genuine failures keep the references and report incomplete
+  cleanup; no silent success. Native capture storage is excluded from
+  future cloud backups; historical backups and exported copies are not
+  retroactively erased. A lost server confirmation is an unknown outcome,
+  not proof that nothing was deleted; do not purge locally on that ambiguity.
+- Supabase auth failures use protocol codes, not vendor message text. Known
+  ID-token OAuth errors are 401; throttles remain 429 with bounded header
+  handling; transport/unrecognized upstream failures remain retryable.
+  Bootstrap is limited to 30 attempts per IP per aligned minute. Stored
+  Apple credentials are revoked during deletion even for Google-primary
+  linked identities. Logout remains device-local and deadline-bounded.
+- Default-size review keeps its existing fixed layout. Compact/large-text states
+  let content scroll while transport/actions remain reachable, without
+  capping essential text. Shared Buttons use contained, wrapping labels
+  and token-based corners at large text sizes. Contact is labeled an
+  estimate; result copy distinguishes body-pose estimates from validated
+  coaching claims and local video/pose from synced analysis results.

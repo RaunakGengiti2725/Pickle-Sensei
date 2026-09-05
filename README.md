@@ -1,15 +1,19 @@
 # Pickle Sensei
 
-Pickleball coaching platform with automatic, native camera capture and on-device body-pose visualization.
+Pickleball technique coaching with player-initiated iOS recording, on-device pose analysis, and guided Form Review.
 
 ```
-PHONE ON FENCE → LIVE BODY POSE + MEASURED JOINT MOTION → WRIST-MOTION TRIGGER
-→ PRIVATE CLIP CAPTURE → AWAITING VALIDATED STROKE + SCORING MODELS
+PLACE PHONE → TAP RECORD → SWING → RECORDED POSE EVIDENCE
+→ TECHNIQUE SCORE OR ABSTENTION → FORM REVIEW → PRACTICE AGAIN
 ```
 
-The shipping camera path does not ask the player to select a stroke. iOS and Android show a live skeleton and a motion-intensity glow derived from observed joint movement, then automatically retain a short clip around the motion trigger. A validated pickleball stroke classifier, phase model, paddle/ball tracking, and coach-calibrated scoring model are not available yet, so captures remain `unknown`/`awaiting_model`; the app does not fabricate a stroke name, score, drill, or speed. Live Court remains unavailable until those models pass release gates.
+The shipping app is `apps/mobile`, an npm-managed React Native app. It calls the production Supabase Edge Function in `supabase/functions/api`; `services/api`, its database package, and the AWS infrastructure are a separate, older implementation. Start with `AGENTS.md` for the current product contracts. Historical architecture and release documents do not establish what is deployed.
 
-The account service implements a hard entitlement boundary after exactly two successful server-accepted ratings. Because unvalidated captures do not create ratings, they do not consume either free rating. The training catalog intentionally ships empty until reviewed, rights-cleared drills and human instruction media are published.
+On iOS, recording starts only after the player taps record. The camera follows measured body motion and retains a stroke window; imported videos use an explicit pose-extraction pass. The app composes the geometry providers and `Sm1TechniqueScorer` in `src/vision/providers.ts`. It can return a versioned technique score, or withhold it when evidence is insufficient. Form Review uses the recorded clip and hash-verified pose sidecar, with playback controls and coaching text below the video. Android camera parity is not established by iOS tests. Live Court remains dormant.
+
+These scores use engineering target ranges that still need independent coach and repeatability validation. A wrist-speed peak is not verified ball contact; wrist geometry is not a measured paddle track. The app does not measure ball speed, forces, or injury risk. See `docs/SCORING.md` for the limits of the method.
+
+Free access allows two lifetime scored ratings per sign-in identity, including after account deletion and recreation. Reservations protect that allowance while analysis is pending; abstentions do not spend it. The backend verifies RevenueCat entitlements and owns billing writes. The current drill UI reads the server catalog and labels stroke-family matches; the production API does not currently create training plans.
 
 ## Documentation
 
@@ -24,6 +28,10 @@ The account service implements a hard entitlement boundary after exactly two suc
 | [docs/DATABASE.md](docs/DATABASE.md) · [docs/API.md](docs/API.md) · [docs/SCORING.md](docs/SCORING.md) · [docs/TESTING.md](docs/TESTING.md) | Subsystem references                                                         |
 
 ## Quick start
+
+The root workspace uses Node 20 and pnpm 10.15.1. The mobile app requires Node 22.11 or newer and npm; do not run pnpm inside `apps/mobile`.
+
+The following commands start the **legacy service sandbox**, not the backend used by the shipping app. Database migration commands here apply `packages/database/migrations`, not `supabase/migrations`.
 
 ```bash
 pnpm install
@@ -66,8 +74,8 @@ infra/terraform            network / compute / data / media modules + staging en
 ## Non-negotiables
 
 - No faked functionality: production runtime contains no demo inference or seeded training content. Deterministic test doubles, where needed, live under test code only.
-- The app stays `unknown`/`awaiting_model` instead of inventing a stroke or score. Once validated scoring is released, the confidence gate must continue to abstain below 0.65.
-- Seeded scoring configs are validation hypotheses, never active models. A fresh database has zero active scoring models; canonical score sync accepts only an explicitly released model backed by a 100%-active SHA-256 bundle, dataset snapshot, locked evaluation-report hash, coach-validation reference, releasing admin, and the exact shot-config version.
+- Missing evidence stays unknown or unscored; the score engine abstains below its 0.65 confidence threshold. That heuristic confidence is not a calibrated probability of correctness.
+- Scoring configs remain validation hypotheses until the required independent evidence exists. The legacy database seeds activate no scoring models, and its release-gated sync contract is distinct from the shipping Supabase sync path. A passing software test does not validate coaching accuracy.
 - ML schemas are v2 and cover 61 pickleball techniques plus explicit `unknown_technique`, `no_stroke`, `partial`, and `aborted` outcomes. Release-eligible data cannot be synthetic and must satisfy consent, rights, two-annotator, and coach-adjudication gates.
 - Joint-motion glow is a visualization of measured pose displacement, not a diagnosis. Ball speed/MPH is withheld until calibrated ball tracking can support a real measurement.
 - Every score carries its full model/config version vector; history is never silently rescored.

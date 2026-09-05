@@ -1,41 +1,46 @@
 # SECURITY
 
-Spec pp. 41–42 controls and their current state.
+This overview covers the shipping React Native app in `apps/mobile` and the Supabase Edge Function in `supabase/functions/api`. The Fastify API, its database package, and the AWS infrastructure describe a separate legacy implementation. Their configuration is not evidence of production deployment.
 
-## Identity & access
+## Identity and sessions
 
-- OIDC/OAuth only; API stores stable `auth_subject`, never passwords. Access tokens verified against provider JWKS (`OidcTokenVerifier`).
-- Dev HS256 issuer exists strictly for development/test: constructor throws elsewhere; staging/production refuse to boot without real OIDC config (`buildVerifier` guard). Production camera inference has no deterministic/demo provider.
-- Admin: separate `pickle_role=admin` claim; all admin reads/writes audited (`audit_log`); MFA enforcement belongs to the IdP configuration.
-- Ownership checks on every private resource (`WHERE user_id = $me`); UUID possession grants nothing — integration-tested.
-- No AWS credentials in mobile binaries; media access via short-lived signed URLs (300s downloads, 900s uploads).
+- Apple/Google bootstrap exchanges a provider ID token through Supabase Auth and returns an access/refresh session. Subsequent app requests use the Supabase access token; a transitional provider-token path remains for older builds.
+- The app stores the refresh token and account descriptor in the device Keychain/Keystore, with device-only accessibility. Access and provider tokens stay in memory, not SQLite. Long-lived clients resolve the current bearer per request.
+- The session keeper renews against receipt-based monotonic deadlines, uses relative lifetimes when available, and backs off on transient failures and unusable legacy expiry estimates. Foreground events cannot bypass network backoff. Only a definitive refresh-token refusal should implicitly sign the player out.
+- A credential-free logout-intent marker and serialized vault tombstone fallback prevent failed credential cleanup from restoring the account just signed out of. If both storage channels fail, the app keeps the run blocked and warns before closing; durable restart safety is not then established.
+- Logout requests `scope=local`, preserving other devices' sessions. Supabase access JWTs can remain valid until their `exp`; removing a refresh session or an Edge cache entry does not establish immediate access-token revocation. Other isolates can retain their own L1 cache entries. See [Supabase's sign-out semantics](https://supabase.com/docs/guides/auth/signout).
+- Verification caches have finite lifetimes bounded by token expiry. Production JWT settings, cross-instance revocation timing, and deployment parity need separate evidence; a mocked Auth server cannot prove them.
 
-## Application
+## Authorization and input boundaries
 
-- Input validation: Zod on every mutating route; unknown scoring-model versions rejected at sync.
-- Idempotency: client-generated UUID PKs + transactional `ON CONFLICT DO NOTHING` writes. Accepted shot payloads are SHA-256-bound, so only the exact schema-normalized payload can replay; a changed score under the same UUID is rejected. `idempotency_record` remains available for header-keyed replays as other mutations grow.
-- Rate limiting: Redis infrastructure provisioned; limiter middleware pending (tracked NOT_STARTED — not silently assumed).
-- Typed error envelopes everywhere; unhandled errors log server-side, return opaque 500.
-- No secrets/tokens/signed URLs in logs (worker/api log lines carry ids only).
+- Authenticated Edge routes use a user-scoped Supabase client, so database RLS applies. Service-role access is limited to server-owned billing, audit, external-credential, and account-administration operations.
+- Supabase migrations define owner policies, column-level write grants, append-only ledgers, and restricted function execution. Applied migration history must remain unchanged; fixes use new migrations.
+- Rate limits cover pre-auth IP traffic, authentication failures, and per-user routes. Optional Upstash Redis shares state across instances; the fallback is per-isolate, not a distributed limit.
+- The Edge function validates request shape and size and sanitizes free text. Server failures return generic public bodies. Logs must not contain credentials or private media.
+- The RLS matrix checks both permitted owner operations and denied operations. Coverage is bounded by its cases; a passing matrix is not an exhaustive security claim.
 
-## Media
+## Billing and free ratings
 
-- Private S3, all public access blocked, SSE-KMS, TLS, random 48-hex object keys, MIME allowlist, 500MB cap, sha256 recorded at upload. Malware scanning: pending (tracked).
+- The backend verifies RevenueCat subscriber state rather than accepting premium claims from the client or webhook body. Only server credentials write `billing_entitlements`.
+- Webhooks require the configured authorization secret. Duplicate delivery, upstream failures, and entitlement expiry belong in regression coverage.
+- Two lifetime free ratings follow the sign-in identity, including after deletion and recreation. The service-only identity ledger has no account foreign key and retains no email or name. Its retention is disclosed in the privacy policy and deletion flow.
+- Reservations and scored-shot sync use database accounting. Abstentions release their reservation; they do not spend a successful rating. Concurrency checks must use independent database connections, not only sequential SQL.
+- StoreKit purchases and restores begin only after an explicit button press. iOS uses the App Store configuration; Android's Test Store configuration is not evidence of production Play billing.
 
-## Data
+## Local data and media
 
-- RDS in private subnets, storage encrypted (KMS), 14-day backups + PITR, deletion protection (terraform). Separate app/migration roles: staging bootstrap task.
-- Checksum-locked migrations — applied history cannot be silently edited.
-- Local pose-evidence summaries are owner-scoped motion-derived personal data. They share the private clip's export/deletion lifecycle; legacy or malformed payloads are never reconstructed, and guest evidence is never claimed by a later signed-in account.
+- Structured local data is owner-partitioned. Account switching must not adopt another owner's pending analysis, clip, outbox item, or response.
+- Clips and pose sidecars live in the app container. Readers account for iOS container relocation and verify sidecar hashes before drawing recorded pose evidence.
+- A checksum detects a byte mismatch; it is not an authenticated signature or proof of athlete identity, camera view, or coaching validity.
+- Account deletion must remove the deleted owner's local media as well as database rows, preserve other owners' references, and report cleanup failures. Missing files should make retries idempotent; paths outside the capture store must not be deleted. A lost confirmation response leaves the server outcome unknown and must not produce a false “nothing was deleted” claim.
+- Native filesystem protections, backup behavior, capture lifecycle, and physical-device resource limits need native verification. Simulator or JavaScript tests alone do not establish them.
 
-## Model security
+## Release and operational evidence
 
-- `model_bundle.manifest_sha256` + status lifecycle + rollout percent + audited admin mutation = signed manifests, staged rollout, rollback, kill switch (set rollout 0 / status retired).
+`./supabase/tests/run_rls_tests.sh` runs against a disposable local PostgreSQL instance. Mobile verification uses `npx tsc --noEmit`, `npx jest --silent`, and `npm run check:distribution` from `apps/mobile`. Root CI also checks formatting, lint, workspace types, tests, migrations/seed, and Python validators.
 
-## Supply chain / CI
+The Edge test suites live in `supabase/functions/api/__wf__`. Test harnesses must use synthetic local services and must not inherit production endpoints or secrets. Historical tests that mirror old implementations are not evidence of current behavior; prefer regressions exercising the actual handler.
 
-- ECR scan-on-push; CI: format/lint/typecheck/tests/migration checks. Dependency + secret scanning jobs: pending additions to CI (tracked).
+Dependency advisory results need installed-version and runtime-reachability analysis. Do not downgrade React Native, disable validation, or bypass release/security controls merely to make a scanner green.
 
-## Billing honesty
-
-- Store receipt validation returns typed 501 until Apple/Google server credentials exist. Entitlements only via verified store events or audited admin grants — never client-asserted.
+Hosted settings, backups and restore tests, secrets, webhook configuration, App Store products, receipt behavior, and live deployment parity remain separate verification tasks. Static distribution checks are not App Review approval, legal certification, or a guarantee against compromise.
