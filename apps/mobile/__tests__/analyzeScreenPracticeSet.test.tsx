@@ -152,19 +152,29 @@ import type {
 import {
   commitPracticeSet,
   practiceSetKeyForOwner,
+  resumeOrStartPracticeSet,
+  type PracticeSetPlan,
 } from '../src/analysis/practiceSet';
-import { saveAnalysis } from '../src/data/repository';
+import { saveAnalysis, saveLocalOnlyAnalysis } from '../src/data/repository';
+import { triggerOutboxSync } from '../src/data/syncRuntime';
 import {
   drainOutbox,
   SESSION_NOT_FOUND_REJECTION,
   type SyncTransport,
 } from '../src/data/sync';
 
+const actualPracticeSet = jest.requireActual(
+  '../src/analysis/practiceSet',
+) as typeof import('../src/analysis/practiceSet');
+
 const owner = '55555555-5555-4555-8555-555555555555';
 const permitId = '66666666-6666-4666-8666-666666666666';
 const analysisId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
-function scoredAnalysis(sessionId: string | null): ShotAnalysis {
+function scoredAnalysis(
+  sessionId: string | null,
+  resultKind: ShotAnalysis['resultKind'] = 'scored',
+): ShotAnalysis {
   return {
     id: analysisId,
     sessionId,
@@ -176,9 +186,9 @@ function scoredAnalysis(sessionId: string | null): ShotAnalysis {
     phases: [],
     measurements: [],
     checkpoints: [],
-    overallScore: 7.8,
-    analysisConfidence: 0.91,
-    resultKind: 'scored',
+    overallScore: resultKind === 'scored' ? 7.8 : null,
+    analysisConfidence: resultKind === 'scored' ? 0.91 : 0.31,
+    resultKind,
     guidance: null,
     priorityFix: null,
     versionVector: {
@@ -322,13 +332,24 @@ async function flush() {
   await act(async () => {});
 }
 
-/** The analysis seam behaves like production: the scored shot is saved
- * (with the request's sessionId) inside the run, then the outcome resolves
- * only when the test releases it. */
-function inFlightAnalysis(): {
+interface InFlightAnalysisOptions {
+  /** `scored` persists via saveAnalysis (permit + shot.sync outbox row, like
+   * production); `low_confidence` persists local-only (no outbox row) and
+   * resolves as an abstention. */
+  outcome?: 'scored' | 'low_confidence';
+  /** Runs inside the analysis seam right after the shot was persisted and
+   * BEFORE the outcome resolves — i.e. before the screen can commit. */
+  afterSave?: (db: LocalDb) => Promise<void>;
+}
+
+/** The analysis seam behaves like production: the shot is saved (with the
+ * request's sessionId) inside the run, then the outcome resolves only when
+ * the test releases it. */
+function inFlightAnalysis(options: InFlightAnalysisOptions = {}): {
   request: () => RunCaptureAnalysisRequest;
   settle: () => Promise<void>;
 } {
+  const outcomeKind = options.outcome ?? 'scored';
   let request: RunCaptureAnalysisRequest | null = null;
   let release!: () => void;
   const gate = new Promise<void>(resolve => {
@@ -338,11 +359,28 @@ function inFlightAnalysis(): {
     async (req: RunCaptureAnalysisRequest): Promise<CaptureAnalysisOutcome> => {
       request = req;
       await gate;
+      if (outcomeKind === 'low_confidence') {
+        await saveLocalOnlyAnalysis(
+          req.db,
+          scoredAnalysis(req.sessionId ?? null, 'low_confidence'),
+        );
+        await options.afterSave?.(req.db);
+        return {
+          kind: 'low_confidence',
+          analysisId,
+          record: {} as Extract<
+            CaptureAnalysisOutcome,
+            { kind: 'low_confidence' }
+          >['record'],
+          guidance: null,
+        };
+      }
       await saveAnalysis(
         req.db,
         scoredAnalysis(req.sessionId ?? null),
         permitId,
       );
+      await options.afterSave?.(req.db);
       return {
         kind: 'scored',
         analysisId,
@@ -586,5 +624,218 @@ describe('AnalyzeScreen practice set — scored run whose screen was left mid-an
     expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
       analysisId,
     });
+  });
+});
+
+async function kvStamp(db: LocalDb): Promise<Record<string, unknown> | null> {
+  const stored = (
+    await db.execute(`SELECT value FROM kv WHERE key = ?`, [
+      practiceSetKeyForOwner(owner),
+    ])
+  ).rows[0]?.['value'];
+  return stored === undefined
+    ? null
+    : (JSON.parse(String(stored)) as Record<string, unknown>);
+}
+
+async function outboxAttempts(db: LocalDb) {
+  const { rows } = await db.execute(
+    `SELECT kind, attempts, last_error FROM outbox WHERE owner_key = ? ORDER BY id ASC`,
+    [owner],
+  );
+  return rows.map(row => ({
+    kind: String(row['kind']),
+    attempts: Number(row['attempts']),
+    lastError: row['last_error'] === null ? null : String(row['last_error']),
+  }));
+}
+
+describe('AnalyzeScreen practice set — adversarial boundaries around the unmount-time commit', () => {
+  it('B1: an abandoned run that ABSTAINS (low_confidence) commits nothing — no local_session row, no outbox row, no kv stamp, no drain kick', async () => {
+    const analysis = inFlightAnalysis({ outcome: 'low_confidence' });
+    const renderer = await startCameraRun();
+    const { sessionId } = analysis.request();
+    expect(typeof sessionId).toBe('string');
+    await act(async () => renderer.unmount());
+    await flush();
+    await analysis.settle();
+
+    const db = getDb();
+    expect(commitPracticeSet).not.toHaveBeenCalled();
+    expect(triggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    const { rows: sessions } = await db.execute(
+      `SELECT id FROM local_session WHERE owner_key = ?`,
+      [owner],
+    );
+    expect(sessions).toEqual([]);
+    expect(await outboxRows(db)).toEqual([]);
+    expect(await kvStamp(db)).toBeNull();
+    // The abstention is kept for local display only and is never a scored
+    // orphan.
+    const { rows: shots } = await db.execute(
+      `SELECT result_kind FROM local_shot WHERE owner_key = ?`,
+      [owner],
+    );
+    expect(shots).toEqual([{ result_kind: 'low_confidence' }]);
+    expect(await orphanedScoredShots(db)).toEqual([]);
+  });
+
+  it('B2: an abandoned scored run that RESUMES a live set is idempotent — one session row, one session.create row, kv activity refreshed, drain converges', async () => {
+    const db = getDb();
+    const seededAtIso = new Date(Date.now() - 5 * 60_000).toISOString();
+    const seeded = await resumeOrStartPracticeSet(db, {
+      shotType: 'forehand_drive',
+      nowIso: seededAtIso,
+    });
+    if (seeded.sessionId === null) throw new Error('seed did not start a set');
+    expect(await kvStamp(db)).toMatchObject({
+      sessionId: seeded.sessionId,
+      lastActivityAtIso: seededAtIso,
+    });
+    (commitPracticeSet as jest.Mock).mockClear();
+
+    const { sessionId } = await abandonedScoredRun();
+    expect(sessionId).toBe(seeded.sessionId);
+
+    expect(commitPracticeSet).toHaveBeenCalledTimes(1);
+    expect((commitPracticeSet as jest.Mock).mock.calls[0]?.[1]).toMatchObject({
+      sessionId,
+      resumed: true,
+    });
+    const { rows: sessions } = await db.execute(
+      `SELECT id FROM local_session WHERE owner_key = ?`,
+      [owner],
+    );
+    expect(sessions).toEqual([{ id: sessionId }]);
+    const rows = await outboxRows(db);
+    expect(rows.map(row => row.kind)).toEqual(['session.create', 'shot.sync']);
+    expect(rows[0]?.payload['id']).toBe(sessionId);
+    expect(rows[1]?.payload['sessionId']).toBe(sessionId);
+    const stamp = await kvStamp(db);
+    expect(stamp).toMatchObject({ sessionId });
+    expect(String(stamp?.['lastActivityAtIso']) > seededAtIso).toBe(true);
+    expect(await orphanedScoredShots(db)).toEqual([]);
+    const { transport, calls } = serverLikeTransport();
+    await expect(drainOutbox(db, transport)).resolves.toEqual({
+      synced: 2,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(calls).toEqual([
+      `session.create:${sessionId}`,
+      `shot.sync:${analysisId}`,
+    ]);
+  });
+
+  it('B3: unmounting while the set commit itself is pending still lands the commit, kicks the drain once and never routes', async () => {
+    let releaseCommit!: () => void;
+    const commitGate = new Promise<void>(resolve => {
+      releaseCommit = resolve;
+    });
+    (commitPracticeSet as jest.Mock).mockImplementationOnce(
+      async (db: LocalDb, plan: PracticeSetPlan) => {
+        await commitGate;
+        return actualPracticeSet.commitPracticeSet(db, plan);
+      },
+    );
+    const analysis = inFlightAnalysis();
+    const renderer = await startCameraRun();
+    const { sessionId } = analysis.request();
+    await analysis.settle();
+    // The outcome resolved; the run is parked inside commitPracticeSet.
+    expect(commitPracticeSet).toHaveBeenCalledTimes(1);
+    expect(triggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    const db = getDb();
+    expect(await orphanedScoredShots(db)).toHaveLength(1);
+
+    await act(async () => renderer.unmount());
+    await flush();
+    await act(async () => {
+      releaseCommit();
+    });
+    await flush();
+    await flush();
+
+    expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    expect(await orphanedScoredShots(db)).toEqual([]);
+    expect(await kvStamp(db)).toMatchObject({ sessionId });
+    const { transport, calls } = serverLikeTransport();
+    await expect(drainOutbox(db, transport)).resolves.toEqual({
+      synced: 2,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(calls).toEqual([
+      `session.create:${sessionId}`,
+      `shot.sync:${analysisId}`,
+    ]);
+  });
+
+  it('B4: a drain racing the save (shot.sync queued, session.create not yet) is transient with its attempt budget intact, and the drain after the commit syncs both', async () => {
+    const { transport, calls } = serverLikeTransport();
+    let earlyDrain: Awaited<ReturnType<typeof drainOutbox>> | null = null;
+    const analysis = inFlightAnalysis({
+      afterSave: async db => {
+        earlyDrain = await drainOutbox(db, transport);
+      },
+    });
+    const renderer = await startCameraRun();
+    const { sessionId } = analysis.request();
+    await act(async () => renderer.unmount());
+    await flush();
+    await analysis.settle();
+
+    // Before the commit the shot alone reached the server and was refused
+    // as shot.session_not_found: transient, so no attempt was consumed.
+    expect(earlyDrain).toEqual({ synced: 0, failed: 1, remaining: 1 });
+    expect(calls).toEqual([`shot.sync:${analysisId}`]);
+    const db = getDb();
+    expect(await outboxAttempts(db)).toEqual([
+      {
+        kind: 'shot.sync',
+        attempts: 0,
+        lastError: expect.stringContaining(SESSION_NOT_FOUND_REJECTION),
+      },
+      { kind: 'session.create', attempts: 0, lastError: null },
+    ]);
+    // The commit happened despite the unmount, so the next drain converges:
+    // session first (sync.ts ordering), then the retried shot.
+    await expect(drainOutbox(db, transport)).resolves.toEqual({
+      synced: 2,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(calls).toEqual([
+      `shot.sync:${analysisId}`,
+      `session.create:${sessionId}`,
+      `shot.sync:${analysisId}`,
+    ]);
+    expect(await outboxAttempts(db)).toEqual([]);
+    expect(await orphanedScoredShots(db)).toEqual([]);
+  });
+
+  it('B5: a commitPracticeSet failure never turns a scored run into an error — the mounted screen still kicks the drain and routes to Result', async () => {
+    (commitPracticeSet as jest.Mock).mockImplementationOnce(async () => {
+      throw new Error('kv write failed');
+    });
+    const analysis = inFlightAnalysis();
+    await startCameraRun();
+    await analysis.settle();
+
+    expect(commitPracticeSet).toHaveBeenCalledTimes(1);
+    expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId,
+    });
+    const db = getDb();
+    // The scored shot itself is durable regardless of the set bookkeeping.
+    const { rows: scored } = await db.execute(
+      `SELECT id FROM local_shot WHERE owner_key = ? AND result_kind = 'scored'`,
+      [owner],
+    );
+    expect(scored).toEqual([{ id: analysisId }]);
   });
 });

@@ -726,6 +726,27 @@ describe('S10 (extra) — practice set commit for a run whose screen was left', 
       analysisId: 'analysis-attack-1',
     });
   });
+
+  it('[HELD] an abandoned run that settles LOW-CONFIDENCE commits nothing (no local_session row, no outbox row, no kv stamp, no drain kick)', async () => {
+    const analysis = deferred<CaptureAnalysisOutcome>(
+      runCaptureAnalysis as jest.Mock,
+    );
+    const renderer = await renderScreen('camera');
+    await startCameraRun(renderer);
+    const request = analysisRequest();
+    expect(typeof request.sessionId).toBe('string');
+
+    await act(async () => renderer.unmount());
+    await flush();
+    await analysis.resolve(lowConfidenceOutcome());
+    await flush();
+
+    expect(sqlMatching(/local_session/i)).toHaveLength(0);
+    expect(sqlMatching(/INSERT INTO outbox/i)).toHaveLength(0);
+    expect(kv.get(practiceSetKeyForOwner(owner))).toBeUndefined();
+    expect(triggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+  });
 });
 
 // ─── S9: unmount while extractImportedPoseSequence is pending ───────────────
