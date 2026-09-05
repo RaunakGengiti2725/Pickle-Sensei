@@ -147,13 +147,14 @@ const PER_SEQUENCE_BUDGET_MS = 4_000;
  */
 const KNOWN_FINDINGS: ReadonlyArray<{
   id: string;
-  invariant: string;
+  /** Matches the violation text this finding explains. */
+  matches: RegExp;
   seed: number;
   title: string;
 }> = [
   {
     id: 'F1',
-    invariant: 'I15',
+    matches: /→ I15 /,
     seed: 1001,
     title:
       "'Open Library' calls navigation.navigate('Tabs', …) from the stack; " +
@@ -162,20 +163,29 @@ const KNOWN_FINDINGS: ReadonlyArray<{
   },
   {
     id: 'F2',
-    invariant: 'I4',
+    matches: /→ I4 /,
     seed: 1012,
     title:
       'a camera readiness event with no capture in flight (buried instance ' +
       'of F1, or an event trailing a settled native op) flips AnalyzeScreen ' +
       'to `working` with nothing that can move it out of that phase',
   },
+  {
+    id: 'F3',
+    matches:
+      /→ I11 access refreshed \(GET \/v1\/me\/access\) while the focused AnalyzeScreen is mounted/,
+    seed: 1766,
+    title:
+      "an abandoned run's unmount-deferred access refresh lands while a NEW " +
+      'AnalyzeScreen is mounted; when it flips canStartRating the route ' +
+      'gate replaces that screen with Paywall mid-flow',
+  },
 ];
 
 function knownFindingsFor(violations: string[]): string[] | null {
   const ids = new Set<string>();
   for (const violation of violations) {
-    const invariant = /→ (I\d+)\b/.exec(violation)?.[1];
-    const known = KNOWN_FINDINGS.find(f => f.invariant === invariant);
+    const known = KNOWN_FINDINGS.find(f => f.matches.test(violation));
     if (!known) return null;
     ids.add(known.id);
   }
@@ -527,5 +537,71 @@ describe('AnalyzeScreen — seeded randomized long-run (real RootNavigator)', ()
     expect(text.violations).toEqual([]);
     expect(text.trace[text.trace.length - 1]!.phase).toBe('error');
     expect(text.trace[text.trace.length - 1]!.enabled).toContain('Try again');
+  });
+
+  // Minimized reproductions of the campaign's findings (see KNOWN_FINDINGS).
+  // They pin the OBSERVED defect so the fix flips them red; when that
+  // happens, invert the expectation and delete the KNOWN_FINDINGS entry.
+
+  it('finding F1 (seed 1027 minimized): "Open Library" pushes a second Tabs route and leaves the saved AnalyzeScreen mounted', async () => {
+    const result = await driver.replayActions(
+      1027,
+      [
+        'home.startLibrary',
+        'native.resolve:imported_with_poster',
+        'tap:Open Library',
+        'tap:Tab Home',
+        'home.startCamera',
+      ].map(parseAction),
+      { premium: false, preUsed: 0 },
+    );
+    const afterOpenLibrary = result.trace[2]!;
+    expect(afterOpenLibrary.route).toBe('Library');
+    expect(afterOpenLibrary.instances).toEqual(['saved']);
+    const last = result.trace[result.trace.length - 1]!;
+    expect(last.instances).toEqual(['saved', 'ready']);
+    expect(result.violations.some(v => / I15 /.test(v))).toBe(true);
+  });
+
+  it('finding F2 (seed 1012 minimized): a readiness event with no capture in flight strands the screen in `working`', async () => {
+    const result = await driver.replayActions(
+      1012,
+      ['home.startCamera', 'native.lateEvent:lost', 'settle:1000'].map(
+        parseAction,
+      ),
+      { premium: false, preUsed: 1 },
+    );
+    const last = result.trace[result.trace.length - 1]!;
+    expect(last.phase).toBe('working');
+    expect(last.bridge.pending).toBe(0);
+    expect(last.server.held).toBe(0);
+    expect(last.enabled).not.toContain('Open automatic camera');
+    expect(result.violations.some(v => / I4 /.test(v))).toBe(true);
+  });
+
+  it("finding F3 (seed 1766 minimized, scoring variant): an abandoned run's deferred access refresh replaces the NEXT AnalyzeScreen with Paywall", async () => {
+    const result = await driver.replayActions(
+      1766,
+      [
+        'home.startCamera',
+        'tap:Open automatic camera',
+        'native.resolve:guided_scoring',
+        'tap:Third-shot drop',
+        'server.hold:reserve',
+        'tapTwice:Get my Technique Score',
+        'nav.back',
+        'home.startCamera',
+        'server.release',
+        'settle:1000',
+      ].map(parseAction),
+      { premium: false, preUsed: 1 },
+    );
+    const beforeRelease = result.trace[7]!;
+    expect(beforeRelease.route).toBe('Analyze');
+    expect(beforeRelease.phase).toBe('ready');
+    const afterRelease = result.trace[result.trace.length - 1]!;
+    expect(afterRelease.route).toBe('Paywall');
+    expect(afterRelease.instances).toEqual([]);
+    expect(result.violations.some(v => / I11 /.test(v))).toBe(true);
   });
 });

@@ -1159,6 +1159,10 @@ export class AnalyzeScreenStressDriver {
     }
     for (const permit of this.server.permits.values()) {
       if (permit.status !== 'reserved') continue;
+      // A release the network dropped is accepted by production ("the permit
+      // expires server-side; a lost release is not a lost rating"): the run
+      // has settled and there is nothing left for the read to wait on.
+      if (this.server.lostReleases.has(permit.id)) continue;
       const persisted = countRows(
         `SELECT COUNT(*) AS n FROM outbox WHERE kind = 'shot.sync' AND payload LIKE ?`,
         [`%"analysisPermitId":"${permit.id}"%`],
@@ -1256,8 +1260,10 @@ export class AnalyzeScreenStressDriver {
           `I3 routed to Result from ${before.route}/${before.phase} via ${describeAction(action)}`,
         );
       }
-      const marker = after.text.match(/Result:([^\u241f]+)/);
-      const analysisId = marker?.[1] ?? 'unknown';
+      // Earlier Result routes stay rendered (hidden) under the stack, so the
+      // topmost marker — the LAST one in tree order — is the route we landed on.
+      const markers = [...after.text.matchAll(/Result:([^\u241f]+)/g)];
+      const analysisId = markers.at(-1)?.[1] ?? 'unknown';
       m.resultRoutes.set(analysisId, (m.resultRoutes.get(analysisId) ?? 0) + 1);
       if (!userInitiated && (m.resultRoutes.get(analysisId) ?? 0) > 1) {
         v.push(

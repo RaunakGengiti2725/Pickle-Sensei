@@ -75,6 +75,8 @@ export class FakeRatingServer {
   premium = false;
   offline = false;
   readonly permits = new Map<string, PermitRecord>();
+  /** Permit ids whose finalize (release) request the network dropped. */
+  readonly lostReleases = new Set<string>();
   readonly requests: ServerRequestRecord[] = [];
   readonly counters: ServerCounters = emptyCounters();
   /** Observer invoked synchronously when a request ARRIVES (before any hold). */
@@ -90,6 +92,7 @@ export class FakeRatingServer {
     this.premium = options.premium;
     this.offline = false;
     this.permits.clear();
+    this.lostReleases.clear();
     this.requests.length = 0;
     Object.assign(this.counters, emptyCounters());
     this.holdMatcher = null;
@@ -162,15 +165,24 @@ export class FakeRatingServer {
     this.requests.push(record);
     this.onRequest?.(record);
     const signal = init?.signal ?? null;
+    const finalizeOf = /^\/v1\/analysis-permits\/([^/]+)\/finalize$/.exec(path);
+    const noteLostRelease = () => {
+      if (finalizeOf) this.lostReleases.add(decodeURIComponent(finalizeOf[1]!));
+    };
     if (this.holdMatcher?.(path)) {
-      await this.park(path, signal);
+      await this.park(path, signal).catch((error: unknown) => {
+        noteLostRelease();
+        throw error;
+      });
     }
     if (signal?.aborted) {
       this.counters.aborted += 1;
+      noteLostRelease();
       throw abortError();
     }
     if (this.offline) {
       this.counters.offlineFailures += 1;
+      noteLostRelease();
       throw new TypeError('Network request failed');
     }
     const body = parseBody(init?.body);
