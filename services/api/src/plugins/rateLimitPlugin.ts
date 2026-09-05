@@ -12,9 +12,12 @@ import { sendFailure } from "../lib/replies.js";
  * Per-process request throttling with a two-phase ledger.
  *
  * Phase 1 (`onRequest`, before any route code): every request is charged to
- * its CLIENT ADDRESS. A bearer header is never consulted here — an
- * unauthenticated caller must not be able to choose its own budget key by
- * rotating garbage tokens.
+ * its CLIENT ADDRESS. A bearer header never CREATES or CHARGES a budget here —
+ * an unauthenticated caller must not be able to choose its own budget key by
+ * rotating garbage tokens. The only pre-auth use of the header is a read: if
+ * the bearer already owns a credential window (which only phase 2 can open,
+ * i.e. it verified earlier in this window) and that window is spent, the
+ * request is refused right away instead of paying for verification again.
  *
  * Phase 2 (a preHandler appended to every route's own chain by an `onRoute`
  * hook, so it runs AFTER the route's `verifyToken` / `authenticate` /
@@ -94,6 +97,12 @@ class WindowStore {
     return fresh;
   }
 
+  /** The live window for `key`, if any; never creates or charges one. */
+  peek(key: string, now: number): Window | undefined {
+    const existing = this.windows.get(key);
+    return existing && existing.resetAt > now ? existing : undefined;
+  }
+
   /** Undo one `hit` inside the same window; a rolled-over window owes nothing. */
   refund(key: string, now: number): void {
     const existing = this.windows.get(key);
@@ -162,6 +171,19 @@ export function registerRateLimit(app: FastifyInstance, config: RateLimitConfig)
     const route = `${request.method} ${routeUrl}`;
     const limit = EXPENSIVE_ROUTES.has(route) ? config.expensiveLimit : config.defaultLimit;
     const now = Date.now();
+    const credential = credentialKey(request);
+    if (credential !== null) {
+      const credentialWindowKey = `${credential}|${scope(route, limit)}`;
+      const spent = store.peek(credentialWindowKey, now);
+      if (spent && spent.count >= limit) {
+        return throttle(
+          reply,
+          request,
+          store.hit(credentialWindowKey, limit, config.windowMs, now),
+          now,
+        );
+      }
+    }
     const key = `${addressKey(request)}|${scope(route, limit)}`;
     const window = store.hit(key, limit, config.windowMs, now);
     if (window.count > limit) return throttle(reply, request, window, now);
