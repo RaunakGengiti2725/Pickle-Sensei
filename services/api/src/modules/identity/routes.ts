@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import type pg from "pg";
 import { z } from "zod";
 import { AccountBootstrapRequest } from "@pickle/api-contracts";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, many, one, withTransaction } from "../../lib/db.js";
+import { accountRejection } from "../../plugins/authPlugin.js";
 
 /** Identity module: bootstrap, me, profile, settings, onboarding, devices. */
 
@@ -43,6 +45,49 @@ const DeviceRegister = z.object({
   model: z.string().max(60),
   deviceTier: z.enum(["A", "B", "C"]).nullable(),
 });
+
+type AccountRow = { id: string; status: string };
+
+/**
+ * Returns the app_user row for `authSubject`, creating it (with its profile,
+ * settings and audit entry) when none exists. Concurrent first bootstraps for
+ * one subject all race the UNIQUE(auth_subject) index: the insert is
+ * ON CONFLICT DO NOTHING, so every loser adopts the winner's committed row
+ * instead of failing the transaction.
+ */
+async function resolveAccount(
+  tx: pg.PoolClient,
+  authSubject: string,
+  body: { locale: string; timezone: string },
+  requestId: string,
+): Promise<AccountRow> {
+  const existing = await one<AccountRow>(
+    tx,
+    "SELECT id, status FROM app_user WHERE auth_subject = $1",
+    [authSubject],
+  );
+  if (existing) return existing;
+  const created = await one<AccountRow>(
+    tx,
+    `INSERT INTO app_user (auth_subject, locale, timezone) VALUES ($1, $2, $3)
+     ON CONFLICT (auth_subject) DO NOTHING
+     RETURNING id, status`,
+    [authSubject, body.locale, body.timezone],
+  );
+  if (created) {
+    await tx.query("INSERT INTO user_profile (user_id) VALUES ($1)", [created.id]);
+    await tx.query("INSERT INTO user_setting (user_id) VALUES ($1)", [created.id]);
+    await audit(tx, { actorUserId: created.id, action: "account.created", requestId });
+    return created;
+  }
+  const winner = await one<AccountRow>(
+    tx,
+    "SELECT id, status FROM app_user WHERE auth_subject = $1",
+    [authSubject],
+  );
+  if (!winner) throw new Error("app_user insert conflicted but no row is visible");
+  return winner;
+}
 
 async function fetchMe(context: AppContext, userId: string) {
   const pool = context.pool!;
@@ -112,41 +157,39 @@ export function registerIdentityRoutes(app: FastifyInstance, context: AppContext
       );
     }
     const body = parsed.data;
-    const userId = await withTransaction(context.pool, async (tx) => {
-      const existing = await one<{ id: string; status: string }>(
-        tx,
-        "SELECT id, status FROM app_user WHERE auth_subject = $1",
-        [identity.authSubject],
-      );
-      if (existing && existing.status === "deleted") {
+    const account = await withTransaction(context.pool, async (tx) => {
+      const account = await resolveAccount(tx, identity.authSubject, body, request.id);
+      if (account.status === "deleted") {
         throw Object.assign(new Error("account deleted"), { statusCode: 410 });
       }
-      let id = existing?.id;
-      if (!id) {
-        const created = await one<{ id: string }>(
-          tx,
-          "INSERT INTO app_user (auth_subject, locale, timezone) VALUES ($1, $2, $3) RETURNING id",
-          [identity.authSubject, body.locale, body.timezone],
-        );
-        id = created!.id;
-        await tx.query("INSERT INTO user_profile (user_id) VALUES ($1)", [id]);
-        await tx.query("INSERT INTO user_setting (user_id) VALUES ($1)", [id]);
-        await audit(tx, { actorUserId: id, action: "account.created", requestId: request.id });
-      }
+      // Only an account that may act registers a device; the status reply is
+      // sent after the (write-free) transaction ends.
+      if (accountRejection(account)) return account;
       await tx.query(
         `INSERT INTO user_device (user_id, platform, app_version, os_version, model, last_seen_at)
          VALUES ($1, $2, $3, $4, $5, now())`,
         [
-          id,
+          account.id,
           body.device.platform,
           body.device.appVersion,
           body.device.osVersion,
           body.device.model,
         ],
       );
-      return id;
+      return account;
     });
-    return fetchMe(context, userId);
+    const rejection = accountRejection(account);
+    if (rejection) {
+      return sendFailure(
+        reply,
+        request,
+        rejection.status,
+        rejection.kind,
+        rejection.code,
+        rejection.message,
+      );
+    }
+    return fetchMe(context, account.id);
   });
 
   app.get("/v1/me", { preHandler: app.authenticate }, async (request) =>

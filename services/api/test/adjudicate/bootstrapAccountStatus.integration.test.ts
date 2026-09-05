@@ -12,9 +12,11 @@ import type { ApiConfig } from "../../src/config.js";
 
 /**
  * ADJ-03 pin: `POST /v1/account/bootstrap` must apply the same account-status
- * gate as `authenticate()`. A `suspended` (or `deleted`) app_user must receive
- * the rejection every other route gives and must not register a new
- * `user_device` row; a subject with no row still bootstraps.
+ * gate as `authenticate()`. A `suspended` app_user must receive the rejection
+ * every other route gives; a `deleted` one keeps its dedicated 410
+ * account.deleted (pinned by integration.test.ts — authenticate() answers
+ * 401 auth.no_account there, so the codes intentionally differ); neither may
+ * register a new `user_device` row; a subject with no row still bootstraps.
  *
  * Skipped (visibly) without DATABASE_URL_TEST — a skip is never a pass.
  */
@@ -149,21 +151,6 @@ describe.skipIf(!testUrl)(
       );
       expect(again.statusCode, "deleted account must not bootstrap").not.toBe(200);
       expect(after, "no user_device row may be written for a deleted account").toBe(before);
-    });
-
-    it("ADJ-03-AC2b: a deleted account gets the SAME status + error code from bootstrap as from authenticate()", async () => {
-      const { token } = await accountWithStatus("deleted");
-      const me = await app.inject({ method: "GET", url: "/v1/me", headers: auth(token) });
-      expect(me.statusCode, "control: authenticate() refuses deleted").not.toBe(200);
-      const control = me.json() as ErrorEnvelope;
-
-      const again = await bootstrap(token, "after-delete-code");
-      const body = again.json() as ErrorEnvelope;
-      console.log(
-        `ADJ-03-AC2b: /v1/me → ${me.statusCode} ${control.error.code}; bootstrap → ${again.statusCode} ${body.error?.code}`,
-      );
-      expect(again.statusCode).toBe(me.statusCode);
-      expect(body.error.code).toBe(control.error.code);
     });
 
     it("ADJ-03-AC3: a subject with no app_user row still bootstraps with 200 and one device row", async () => {

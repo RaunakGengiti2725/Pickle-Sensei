@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FailureKind } from "@pickle/shared-types";
 import type { ITokenVerifier } from "../auth/tokens.js";
 import { sendFailure } from "../lib/replies.js";
 import { one } from "../lib/db.js";
@@ -21,6 +22,39 @@ declare module "fastify" {
     user: AuthedUser | null;
     identity: { authSubject: string; role: "user" | "admin" } | null;
   }
+}
+
+export interface AccountRejection {
+  status: number;
+  kind: FailureKind;
+  code: string;
+  message: string;
+}
+
+/**
+ * The one account-status gate every authenticated route applies: a missing or
+ * deleted app_user row and a suspended one are refused with these exact
+ * replies. Routes that resolve the account themselves (bootstrap) must reuse
+ * it so a suspended account cannot act through them either.
+ */
+export function accountRejection(user: { status: string } | null): AccountRejection | null {
+  if (!user || user.status === "deleted") {
+    return {
+      status: 401,
+      kind: "auth_failed",
+      code: "auth.no_account",
+      message: "No active account. Call /v1/account/bootstrap first.",
+    };
+  }
+  if (user.status === "suspended") {
+    return {
+      status: 401,
+      kind: "auth_failed",
+      code: "auth.suspended",
+      message: "Account suspended.",
+    };
+  }
+  return null;
 }
 
 export function registerAuth(
@@ -83,27 +117,18 @@ export function registerAuth(
       "SELECT id, status FROM app_user WHERE auth_subject = $1",
       [identity.authSubject],
     );
-    if (!user || user.status === "deleted") {
+    const rejection = accountRejection(user);
+    if (rejection) {
       return sendFailure(
         reply,
         request,
-        401,
-        "auth_failed",
-        "auth.no_account",
-        "No active account. Call /v1/account/bootstrap first.",
+        rejection.status,
+        rejection.kind,
+        rejection.code,
+        rejection.message,
       );
     }
-    if (user.status === "suspended") {
-      return sendFailure(
-        reply,
-        request,
-        401,
-        "auth_failed",
-        "auth.suspended",
-        "Account suspended.",
-      );
-    }
-    request.user = { id: user.id, authSubject: identity.authSubject, role: identity.role };
+    request.user = { id: user!.id, authSubject: identity.authSubject, role: identity.role };
   });
 
   /** Admin-only routes: separate privileged role, always audited by callers. */
