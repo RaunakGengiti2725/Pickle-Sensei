@@ -44,7 +44,11 @@ import {
   type AccountDeletionCleanup,
   type AuthProvider,
 } from '../auth/authStore';
-import { getApiSession } from '../account/apiSession';
+import {
+  getApiSession,
+  subscribeToApiSession,
+  type ApiSession,
+} from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   AccountDeletionError,
@@ -82,6 +86,12 @@ const DELETION_STILL_SIGNED_IN_COPY =
   'Your account is still here — the deletion did not go through. Tap Permanently delete to try again.';
 const DELETION_UNSETTLED_COPY =
   'It is not yet known whether your account was deleted — the server could not be reached to check. Try again to find out.';
+const DELETION_BEARER_ROTATED_COPY =
+  'Your sign-in was renewed while that request was on its way, so the server did not accept it. It is not yet known whether your account was deleted — tap Permanently delete to try again.';
+const REQUEST_SIGN_IN_RENEWED_COPY =
+  'Your sign-in was renewed. Nothing was deleted — tap Continue to delete to try again.';
+const REQUEST_SIGN_IN_UNCHECKED_COPY =
+  'The server did not accept your sign-in and could not be reached to renew it. Nothing was deleted — try again in a moment.';
 const DELETED_BASE_COPY = 'Your account and synced data were deleted.';
 const DELETED_LOCAL_CLEANUP_COPY =
   'Some data saved on this phone could not be removed — delete the app to clear it.';
@@ -209,6 +219,25 @@ function announceAccountDeleted(input: {
 
 let stopSettlementWatch: (() => void) | null = null;
 
+interface SettlementWatch {
+  /** The auth store has ended the account for this confirm (its refresh
+   * token was refused while the confirm was pending). */
+  endedBySession: () => boolean;
+  /** The server's own answer to the confirm arrived. Nothing was ended by
+   * the session layer: the watch stops and the caller announces. Already
+   * ended by the session layer: the watch keeps the one notice and only
+   * learns the Apple outcome the answer carried. */
+  settledByServer: (result?: AccountDeletionResult) => void;
+}
+
+function appleOutcomeOf(
+  result: AccountDeletionResult,
+): 'settled' | 'manual_action_required' {
+  return result.appleAuthorizationRevocation === 'manual_action_required'
+    ? 'manual_action_required'
+    : 'settled';
+}
+
 /**
  * From the moment a delete-confirm leaves the device, the auth store may end
  * the account on its own (the server refused the refresh token after the
@@ -216,20 +245,31 @@ let stopSettlementWatch: (() => void) | null = null;
  * not this screen is still mounted: the app switches to the sign-in screen
  * as soon as the session is gone. So the notice for that outcome is owned by
  * a store subscription, not by a component. It lives exactly as long as the
- * pending record does and announces the completed cleanup with the Apple
- * side marked unknown, since the server's answer was never seen. A confirm
- * the server answers itself calls `settledByServer()` first, so the parent's
- * own notice is the only one.
+ * pending record does and announces the completed cleanup once, with the
+ * Apple side marked unknown unless the server's answer arrives in time to
+ * say. A confirm the server answers before the store acted calls
+ * `settledByServer()`, so the parent's own notice is the only one.
  */
 function watchSessionSettledDeletion(
   challenge: string,
   provider: AuthProvider,
-): { settledByServer: () => void } {
+): SettlementWatch {
   stopSettlementWatch?.();
   let accountEnded = false;
+  let announced = false;
+  let serverApple: 'settled' | 'manual_action_required' | null = null;
   const stop = () => {
     unsubscribe();
     if (stopSettlementWatch === stop) stopSettlementWatch = null;
+  };
+  const announce = (cleanup: AccountDeletionCleanup) => {
+    if (announced || cleanup.localPurge === 'in_progress') return;
+    announced = true;
+    stop();
+    announceAccountDeleted({
+      localPurge: cleanup.localPurge,
+      apple: serverApple ?? (provider === 'apple' ? 'unknown' : 'settled'),
+    });
   };
   const unsubscribe = useAuthStore.subscribe((state, previous) => {
     if (!accountEnded) {
@@ -245,16 +285,63 @@ function watchSessionSettledDeletion(
       }
       accountEnded = true;
     }
-    const cleanup = state.deletionCleanup;
-    if (!cleanup || cleanup.localPurge === 'in_progress') return;
-    stop();
-    announceAccountDeleted({
-      localPurge: cleanup.localPurge,
-      apple: provider === 'apple' ? 'unknown' : 'settled',
-    });
+    if (state.deletionCleanup) announce(state.deletionCleanup);
   });
   stopSettlementWatch = stop;
-  return { settledByServer: stop };
+  return {
+    endedBySession: () => accountEnded,
+    settledByServer: result => {
+      if (!accountEnded) {
+        stop();
+        return;
+      }
+      if (result) serverApple = appleOutcomeOf(result);
+      const cleanup = useAuthStore.getState().deletionCleanup;
+      if (cleanup) announce(cleanup);
+    },
+  };
+}
+
+/**
+ * After a delete-request came back 401 for a durable (refresh-token) session,
+ * the auth store is already renewing the sign-in. Resolves `renewed` once
+ * the same account carries a different bearer (or already does — the bearer
+ * rotated while the request travelled), `ended` when the session is gone
+ * (the store's plain sign-out; the app leaves this screen), and `unknown`
+ * when neither happened by the deadline (the refresh is offline).
+ */
+function awaitSignInRenewal(
+  rejected: ApiSession,
+): Promise<'renewed' | 'ended' | 'unknown'> {
+  return new Promise(resolve => {
+    const verdictFor = (session: ApiSession | null) => {
+      if (
+        !session ||
+        session.canonicalAppUserId !== rejected.canonicalAppUserId
+      )
+        return 'ended';
+      return session.bearerToken !== rejected.bearerToken ? 'renewed' : null;
+    };
+    const immediate = verdictFor(getApiSession());
+    if (immediate) {
+      resolve(immediate);
+      return;
+    }
+    let unsubscribe = () => {};
+    const finish = (verdict: 'renewed' | 'ended' | 'unknown') => {
+      clearTimeout(deadline);
+      unsubscribe();
+      resolve(verdict);
+    };
+    const deadline = setTimeout(
+      () => finish('unknown'),
+      DELETION_SETTLEMENT_DEADLINE_MS,
+    );
+    unsubscribe = subscribeToApiSession(session => {
+      const verdict = verdictFor(session);
+      if (verdict) finish(verdict);
+    });
+  });
 }
 
 type PageDirection = 'forward' | 'back' | 'none';
@@ -519,11 +606,9 @@ function DeleteAccountDialog(props: {
     const presentation = presentationRef.current;
     setError(null);
     setStep({ phase: 'requesting' });
+    const apiSession = getApiSession();
     try {
-      const { challenge } = await requestAccountDeletion(
-        getApiSession(),
-        survey,
-      );
+      const { challenge } = await requestAccountDeletion(apiSession, survey);
       if (presentation !== presentationRef.current) return;
       const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
       setStep({ phase: 'armed', challenge, secondsLeft });
@@ -539,10 +624,33 @@ function DeleteAccountDialog(props: {
       }, 1_000);
     } catch (e) {
       if (presentation !== presentationRef.current) return;
+      const failure = e instanceof AccountDeletionError ? e : null;
+      if (
+        failure?.code === 'deletion.session_expired' &&
+        apiSession?.refreshToken
+      ) {
+        // A durable session is renewed by the auth store, not by the user:
+        // the dialog holds until the sign-in is renewed, gone, or unchecked.
+        // Nothing was deleted either way (the request never mints a
+        // challenge on a 401).
+        const verdict = await awaitSignInRenewal(apiSession);
+        if (presentation !== presentationRef.current) return;
+        if (verdict === 'ended') {
+          props.onCancel();
+          return;
+        }
+        setStep({ phase: 'review' });
+        setError(
+          verdict === 'renewed'
+            ? REQUEST_SIGN_IN_RENEWED_COPY
+            : REQUEST_SIGN_IN_UNCHECKED_COPY,
+        );
+        return;
+      }
       setStep({ phase: 'review' });
       setError(
-        e instanceof AccountDeletionError
-          ? e.message
+        failure
+          ? failure.message
           : 'The deletion request could not be completed. Nothing was deleted.',
       );
     }
@@ -559,18 +667,48 @@ function DeleteAccountDialog(props: {
       challenge,
       useAuthStore.getState().session?.provider ?? 'guest',
     );
+    const apiSession = getApiSession();
     try {
-      const result = await confirmAccountDeletion(getApiSession(), challenge);
+      const result = await confirmAccountDeletion(apiSession, challenge);
+      if (watch.endedBySession()) {
+        // The store already ended the account while this answer travelled
+        // (its refresh token was refused) and announced it once; the answer
+        // only adds what the server said about the Apple side.
+        watch.settledByServer(result);
+        if (presentation === presentationRef.current) props.onCancel();
+        return;
+      }
       watch.settledByServer();
       props.onDeleted(result);
     } catch (e) {
       const failure = e instanceof AccountDeletionError ? e : null;
       if (!failure?.mayHaveDeleted) markDeletionConfirmRefused(challenge);
       if (presentation !== presentationRef.current) return;
+      if (watch.endedBySession()) {
+        props.onCancel();
+        return;
+      }
       if (
         failure?.code === 'deletion.session_expired' &&
         failure.mayHaveDeleted
       ) {
+        const current = getApiSession();
+        if (
+          apiSession &&
+          current &&
+          current.canonicalAppUserId === apiSession.canonicalAppUserId &&
+          current.bearerToken !== apiSession.bearerToken
+        ) {
+          // The 401 names a bearer this device has since rotated away, so
+          // it says nothing about the account as it stands now (apiSession
+          // drops it for the same reason) — and the rotation that preceded
+          // it is no verdict either. The confirm is simply re-armed: the
+          // retry carries the live bearer and the server's answer to THAT
+          // is definitive.
+          setStep({ phase: 'armed', challenge, secondsLeft: 0 });
+          setError(DELETION_BEARER_ROTATED_COPY);
+          return;
+        }
         setStep({ phase: 'settling', challenge });
         setError(null);
         return;

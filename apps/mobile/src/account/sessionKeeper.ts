@@ -27,7 +27,13 @@ export interface SessionKeeperInput {
   refreshToken: string;
   /** null ⇒ no valid bearer yet: refresh right away. */
   bearerExpiresAtMs: number | null;
-  onRotated: (tokens: RefreshedTokens) => void | Promise<void>;
+  /** `refreshSeq` numbers the refresh that produced these tokens; compare it
+   * with what `refreshSessionNow()` returned to tell a rotation that began
+   * after that call from one that was already under way. */
+  onRotated: (
+    tokens: RefreshedTokens,
+    refreshSeq: number,
+  ) => void | Promise<void>;
   onRevoked: () => void | Promise<void>;
   /** A refresh failed for a transient reason and a retry is scheduled. */
   onDeferred?: (error: unknown) => void;
@@ -54,7 +60,9 @@ const RETRY_MAX_MS = 5 * 60_000;
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
-let refreshNow: (() => void) | null = null;
+let refreshNow: ((mode: RefreshNowMode) => number) | null = null;
+/** Numbers every refresh ever started, across keepers. */
+let refreshSeq = 0;
 
 /** Stops all future work synchronously; an in-flight refresh's result is
  * dropped when it lands. */
@@ -68,14 +76,26 @@ export function stopSessionKeeper(): void {
 }
 
 /**
+ * What a refresh already in flight means to `refreshSessionNow()`:
+ * - `coalesce`: it will mint the bearer the callers need — a storm of 401s on
+ *   one expired bearer costs exactly one refresh.
+ * - `after_inflight`: it cannot answer, because it was on its way before the
+ *   route said 401; one more refresh runs as soon as it lands.
+ */
+export type RefreshNowMode = 'coalesce' | 'after_inflight';
+
+/**
  * Rotates the bearer right away — for an API route that rejected the current
  * access token ahead of its recorded expiry (clock skew, or a revoked
- * bearer). A refresh already in flight is left alone; the outcome flows
- * through the keeper's own `onRotated` / `onRevoked` exactly as a scheduled
- * rotation would. No-op when no keeper is running.
+ * bearer). The outcome flows through the keeper's own `onRotated` /
+ * `onRevoked` exactly as a scheduled rotation would. Returns the sequence
+ * number of the refresh that answers this call (see `RefreshNowMode` for
+ * which one that is while a refresh is in flight). With no keeper running
+ * nothing is started; the returned number is the one the next keeper's
+ * first refresh would carry.
  */
-export function refreshSessionNow(): void {
-  refreshNow?.();
+export function refreshSessionNow(mode: RefreshNowMode = 'coalesce'): number {
+  return refreshNow ? refreshNow(mode) : refreshSeq + 1;
 }
 
 export function retryDelayMs(attempt: number): number {
@@ -90,6 +110,9 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   let bearerExpiresAtMs = input.bearerExpiresAtMs;
   let failedAttempts = 0;
   let inflight = false;
+  // `refreshSessionNow()` arrived while a refresh was in flight: rotate once
+  // more as soon as it lands instead of waiting for the next scheduled one.
+  let followUp = false;
 
   const live = () => myGeneration === generation;
 
@@ -113,6 +136,9 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   const refresh = async () => {
     if (!live() || inflight) return;
     inflight = true;
+    refreshSeq += 1;
+    const seq = refreshSeq;
+    let again = false;
     try {
       const tokens = await refreshApiSession(
         { apiBaseUrl: input.apiBaseUrl, refreshToken },
@@ -122,8 +148,13 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       refreshToken = tokens.refreshToken;
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
       failedAttempts = 0;
-      await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry(MIN_ROTATION_GAP_MS);
+      await input.onRotated(tokens, seq);
+      if (!live()) return;
+      if (followUp) {
+        again = true;
+      } else {
+        scheduleAheadOfExpiry(MIN_ROTATION_GAP_MS);
+      }
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
@@ -133,9 +164,16 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       }
       failedAttempts += 1;
       input.onDeferred?.(error);
+      // The backoff retry is the next refresh to start, so it also answers a
+      // follow-up that was queued behind this one.
+      followUp = false;
       schedule(retryDelayMs(failedAttempts));
     } finally {
       inflight = false;
+    }
+    if (again) {
+      followUp = false;
+      void refresh();
     }
   };
 
@@ -152,7 +190,15 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   // A completed refresh reschedules itself (success → ahead of the new
   // expiry, transient failure → backoff), so the pending timer is left to
   // `schedule` to replace.
-  refreshNow = () => void refresh();
+  refreshNow = mode => {
+    if (inflight) {
+      if (mode === 'coalesce') return followUp ? refreshSeq + 1 : refreshSeq;
+      followUp = true;
+      return refreshSeq + 1;
+    }
+    void refresh();
+    return refreshSeq;
+  };
 
   if (bearerExpiresAtMs === null) {
     void refresh();

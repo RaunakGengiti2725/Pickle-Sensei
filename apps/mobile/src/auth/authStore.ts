@@ -120,17 +120,27 @@ const LOCAL_PURGE_ATTEMPTS = 3;
  * was sent proves the account existed at that moment (`sessionRenewed`), so
  * the surface waiting on the verdict may let the user go on — the record
  * itself stays, because the server may still be finishing that very
- * confirm. Held in memory only: released when the server answers the
- * confirm without acting, when the deletion completes locally, or when the
- * user signs out or a different sign-in begins.
+ * confirm. Every 401 the current bearer meets while the record is pending
+ * re-opens the question: the flag is cleared and only a refresh that STARTS
+ * after that 401 can set it again, so a rotation that merely preceded the
+ * refusal is never mistaken for the answer to it. Held in memory only:
+ * released when the server answers the confirm without acting, when the
+ * deletion completes locally, or when the user signs out or a different
+ * sign-in begins.
  */
 export interface PendingAccountDeletion {
   canonicalAppUserId: string;
   challenge: string;
   /** The server issued a fresh bearer for this account after the confirm
-   * was sent: the account was still there then. */
+   * was sent — and after the latest 401 the current bearer met since: the
+   * account was still there then. */
   sessionRenewed: boolean;
 }
+
+/** Sequence number (sessionKeeper) of the refresh that must land before a
+ * rotation may set `pendingDeletion.sessionRenewed`: the one requested by
+ * the latest 401 while the confirm was pending. null ⇒ any rotation. */
+let deletionVerdictRefreshSeq: number | null = null;
 
 export const SESSION_EXPIRED_MESSAGE =
   'Your sign-in expired. Sign in again to keep syncing — everything on this phone is still here.';
@@ -348,6 +358,7 @@ function adoptRotatedTokens(
   session: AuthSession,
   apiBaseUrl: string,
   tokens: RefreshedTokens,
+  refreshSeq: number,
 ): void {
   const canonicalAppUserId = session.canonicalAppUserId;
   if (
@@ -374,7 +385,9 @@ function adoptRotatedTokens(
   if (
     pending &&
     pending.canonicalAppUserId === canonicalAppUserId &&
-    !pending.sessionRenewed
+    !pending.sessionRenewed &&
+    (deletionVerdictRefreshSeq === null ||
+      refreshSeq >= deletionVerdictRefreshSeq)
   ) {
     useAuthStore.setState({
       pendingDeletion: { ...pending, sessionRenewed: true },
@@ -408,8 +421,8 @@ function keepSessionAlive(
     apiBaseUrl: apiSession.apiBaseUrl,
     refreshToken: apiSession.refreshToken,
     bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
-    onRotated: tokens => {
-      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+    onRotated: (tokens, refreshSeq) => {
+      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens, refreshSeq);
       onOutcome?.('online');
     },
     onRevoked: async () => {
@@ -596,7 +609,24 @@ function handleApiUnauthorized(expired: ApiSession): void {
     return;
   }
   if (expired.refreshToken) {
-    refreshSessionNow();
+    const pending = state.pendingDeletion;
+    const verdictWanted =
+      pending !== null &&
+      pending.canonicalAppUserId === current.canonicalAppUserId;
+    const refreshSeq = refreshSessionNow(
+      verdictWanted ? 'after_inflight' : 'coalesce',
+    );
+    if (verdictWanted) {
+      // The refused bearer may be the fence of a finished deletion: whatever
+      // an earlier rotation proved — or a refresh already on its way — no
+      // longer answers for the account now.
+      deletionVerdictRefreshSeq = refreshSeq;
+      if (pending.sessionRenewed) {
+        useAuthStore.setState({
+          pendingDeletion: { ...pending, sessionRenewed: false },
+        });
+      }
+    }
     return;
   }
   clearSyncedRuntime();
@@ -901,6 +931,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 export function markDeletionConfirmSent(challenge: string): void {
   const { session } = useAuthStore.getState();
   if (!session?.canonicalAppUserId || session.localOnly) return;
+  deletionVerdictRefreshSeq = null;
   useAuthStore.setState({
     pendingDeletion: {
       canonicalAppUserId: session.canonicalAppUserId,
