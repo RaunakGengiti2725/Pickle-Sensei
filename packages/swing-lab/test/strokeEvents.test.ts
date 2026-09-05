@@ -70,8 +70,17 @@ describe("proposeStrokeEvents", () => {
 });
 
 describe("low-amplitude tier (wrist-only compact strokes)", () => {
+  // Amplitude floors are defined at the reference cadence (60 fps); these
+  // fixtures sample there so "sub-floor" means what the gates say it means.
+  const REFERENCE_STEP_MS = 1000 / 60;
+
   it("admits a sub-floor compact stroke only from wrist, flagged and confidence-penalized", () => {
-    const compact = speedBumps([{ peakMs: 2000, height: 0.28, halfWidthMs: 130 }], 0, 4000);
+    const compact = speedBumps(
+      [{ peakMs: 2000, height: 0.28, halfWidthMs: 130 }],
+      0,
+      4000,
+      REFERENCE_STEP_MS,
+    );
     const fromWrist = proposeStrokeEvents({
       paddleSpeeds: null,
       wristSpeeds: compact,
@@ -98,9 +107,12 @@ describe("low-amplitude tier (wrist-only compact strokes)", () => {
   });
 
   it("rejects the same amplitude over a busy baseline (prominence gate)", () => {
-    const busy = speedBumps([{ peakMs: 2000, height: 0.2, halfWidthMs: 130 }], 0, 4000).map(
-      (sample) => ({ ...sample, value: sample.value + 0.1 }), // baseline 0.18, peak ≈0.38
-    );
+    const busy = speedBumps(
+      [{ peakMs: 2000, height: 0.2, halfWidthMs: 130 }],
+      0,
+      4000,
+      REFERENCE_STEP_MS,
+    ).map((sample) => ({ ...sample, value: sample.value + 0.1 })); // baseline 0.18, peak ≈0.38
     const { events } = proposeStrokeEvents({
       paddleSpeeds: null,
       wristSpeeds: busy,
@@ -108,6 +120,32 @@ describe("low-amplitude tier (wrist-only compact strokes)", () => {
       clipEndMs: 4000,
     });
     expect(events.length).toBe(0);
+  });
+
+  it("scales the floors with the sample interval: the same compact stroke sampled at 30 fps is still proposed", () => {
+    const at30 = proposeStrokeEvents({
+      paddleSpeeds: null,
+      wristSpeeds: speedBumps(
+        [{ peakMs: 2000, height: 0.28, halfWidthMs: 130 }],
+        0,
+        4000,
+        1000 / 30,
+      ),
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(at30.events.length).toBe(1);
+    expect(Math.abs(at30.events[0]!.peakMs - 2000)).toBeLessThanOrEqual(60);
+    // Idle motion stays idle at every cadence.
+    for (const stepMs of [1000 / 60, 1000 / 30, 1000 / 24]) {
+      const idle = proposeStrokeEvents({
+        paddleSpeeds: null,
+        wristSpeeds: speedBumps([], 0, 4000, stepMs),
+        clipStartMs: 0,
+        clipEndMs: 4000,
+      });
+      expect(idle.events.length).toBe(0);
+    }
   });
 
   it("never alters tier-1 output: full swings keep identical bounds and no flag", () => {

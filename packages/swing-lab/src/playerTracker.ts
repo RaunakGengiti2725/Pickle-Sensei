@@ -36,6 +36,19 @@ export const PLAYER_TRACKER_VERSION = "player-track-1.1";
  * window of each other (single frame, or every gap a dropout). */
 const FALLBACK_FRAME_INTERVAL_MS = 40;
 
+/** Loss-period rule (see `lossGapThresholdMs`). */
+const LOSS_GATES = {
+  /** A stamp gap longer than this many observed frame intervals is a hole. */
+  cadenceGapFactor: 1.9,
+  /** Fraction of the file's own frame gaps that may be "long" and still be
+   * cadence: an interval that recurs in at least one gap in ten is how the
+   * file was sampled (30→24 fps decimation stamps 33,33,33,33,67 ms), not a
+   * detection dropout. */
+  regularGapPercentile: 0.9,
+  /** Slack over the regular-gap ceiling before a gap counts as a hole. */
+  regularGapSlack: 1.25,
+} as const;
+
 /**
  * Frame interval the loss-period rule measures gaps against: the OBSERVED
  * cadence of the file's frame timestamps, never `video.fps`. The declared
@@ -47,6 +60,32 @@ export function observedFrameIntervalMs(file: Pick<PeopleFile, "frames">): numbe
   return (
     observedSampleIntervalMs(file.frames.map((frame) => ({ timestampMs: frame.t }))) ??
     FALLBACK_FRAME_INTERVAL_MS
+  );
+}
+
+/**
+ * Stamp gap above which two consecutive detections of one track are a loss
+ * period. Two conditions must both hold, and both come from the file's own
+ * timestamps: the gap exceeds `cadenceGapFactor` observed frame intervals,
+ * AND it exceeds the file's regular-gap ceiling (the `regularGapPercentile`
+ * of consecutive file-frame gaps, with slack). The second condition keeps
+ * irregular-but-systematic cadences (decimated or throttled captures whose
+ * long interval recurs) from reading as dropouts; a genuine hole is longer
+ * than anything the file's cadence repeats.
+ */
+export function lossGapThresholdMs(file: Pick<PeopleFile, "frames">): number {
+  const gaps: number[] = [];
+  for (let index = 1; index < file.frames.length; index += 1) {
+    gaps.push(file.frames[index]!.t - file.frames[index - 1]!.t);
+  }
+  gaps.sort((a, b) => a - b);
+  const regularCeiling =
+    gaps.length === 0
+      ? 0
+      : gaps[Math.min(gaps.length - 1, Math.floor(gaps.length * LOSS_GATES.regularGapPercentile))]!;
+  return Math.max(
+    observedFrameIntervalMs(file) * LOSS_GATES.cadenceGapFactor,
+    regularCeiling * LOSS_GATES.regularGapSlack,
   );
 }
 
@@ -74,7 +113,8 @@ export interface PlayerTrack {
   /** Fraction of clip frames where this player was observed. */
   coverage: number;
   meanTorsoSpan: number;
-  /** Gaps longer than one frame interval, as explicit loss periods. */
+  /** Stretches the track was not observed (skipped file frames, or stamp
+   * holes longer than the file's cadence repeats), as explicit loss periods. */
   lossPeriods: Array<{ fromMs: number; toMs: number }>;
   /**
    * Frames where this track's association was CONTESTED: a rival track
@@ -192,7 +232,8 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
   finished.push(...active);
 
   const clipFrameCount = Math.max(1, file.frames.length);
-  const frameIntervalMs = observedFrameIntervalMs(file);
+  const lossGapMs = lossGapThresholdMs(file);
+  const fileFrameIndex = new Map(file.frames.map((frame, index) => [frame.t, index] as const));
   return finished
     .filter((track) => track.frames.length >= GATES.minFrames)
     .map((track) => {
@@ -202,7 +243,14 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
         const previous = track.frames[index - 1]!;
         const current = track.frames[index]!;
         const gap = current.timestampMs - previous.timestampMs;
-        if (gap > frameIntervalMs * 1.9) {
+        // A loss is a stretch the track was NOT observed: either it skipped a
+        // file frame in which detection ran (someone else was seen), or the
+        // file itself has a hole longer than its cadence repeats.
+        const skippedFileFrames =
+          (fileFrameIndex.get(current.timestampMs) ?? 0) -
+            (fileFrameIndex.get(previous.timestampMs) ?? 0) >
+          1;
+        if (skippedFileFrames || gap > lossGapMs) {
           lossPeriods.push({ fromMs: previous.timestampMs, toMs: current.timestampMs });
           // Extrapolate pre-gap motion; a resume far from where the person was
           // heading is geometrically unverifiable identity.
