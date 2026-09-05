@@ -381,9 +381,10 @@ export function installFaultLayer(urls: { redis: string; supabase: string }): Fa
   };
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url =
-      typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
     const upstream = classifyUpstream(urls, url, method);
     const fault = active;
     if (upstream && fault && fault.upstream === upstream && fault.remaining > 0) {

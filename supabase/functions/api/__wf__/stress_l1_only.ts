@@ -49,7 +49,7 @@ for (let i = 0; i < users; i++) {
   }
 }
 
-console.log(JSON.stringify({
+const report = JSON.stringify({
   users,
   gcForced: typeof gc === "function",
   setMs: Math.round(setMs),
@@ -58,4 +58,5 @@ console.log(JSON.stringify({
   newestEvicted,
   heapDeltaMB: Math.round(((heapAfter - heapStart) / 1_048_576) * 100) / 100,
   bytesPerResidentEntry: resident > 0 ? Math.round((heapAfter - heapStart) / resident) : null,
-}));
+});
+await Deno.stdout.write(new TextEncoder().encode(`${report}\n`));
