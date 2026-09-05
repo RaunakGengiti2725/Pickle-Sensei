@@ -35,6 +35,24 @@ const AFFIRMATIVE: ReadonlySet<RightAnswer> = new Set([
   "sharealike",
 ]);
 
+/**
+ * Answers ordered from most permissive to most restrictive. A license term
+ * can only move an answer DOWN this ladder (see `meet`); `unclear` sits above
+ * `no` because an unknown answer still routes to a human, while `no` is final.
+ */
+const RESTRICTIVENESS: Readonly<Record<RightAnswer, number>> = {
+  yes: 0,
+  yes_with_attribution: 1,
+  sharealike: 2,
+  unclear: 3,
+  no: 4,
+};
+
+/** The more restrictive of two answers (commutative, associative, idempotent). */
+function meet(a: RightAnswer, b: RightAnswer): RightAnswer {
+  return RESTRICTIVENESS[a] >= RESTRICTIVENESS[b] ? a : b;
+}
+
 export function trainingEligible(rights: RightsProfile): boolean {
   return (
     AFFIRMATIVE.has(rights.train) &&
@@ -43,8 +61,13 @@ export function trainingEligible(rights: RightsProfile): boolean {
   );
 }
 
+/**
+ * Derivatives (clips, frames, overlays, datasets) are redistributed by a
+ * commercial product, so the profile must affirm commercial use as well as
+ * the redistribution itself.
+ */
 export function redistributionEligible(rights: RightsProfile): boolean {
-  return AFFIRMATIVE.has(rights.redistributeDerivatives);
+  return AFFIRMATIVE.has(rights.redistributeDerivatives) && AFFIRMATIVE.has(rights.commercial);
 }
 
 // ── License parsing ───────────────────────────────────────────────────────
@@ -66,6 +89,17 @@ function isCcElement(token: string): token is CcElement {
 
 /** The six per-modality answers, without the review metadata. */
 type ModalityAnswers = Omit<RightsProfile, "basis" | "reviewedBy" | "reviewedAtIso">;
+
+type Modality = Exclude<keyof ModalityAnswers, "notes">;
+
+const MODALITIES: ReadonlyArray<Modality> = [
+  "store",
+  "analyze",
+  "annotate",
+  "train",
+  "redistributeDerivatives",
+  "commercial",
+];
 
 export type ParsedLicense =
   | { kind: "public_domain"; designation: string }
@@ -179,33 +213,62 @@ function uniform(answer: RightAnswer): ModalityAnswers {
   };
 }
 
+interface CcElementTerm {
+  /** The answers this element caps; modalities it does not name are untouched. */
+  caps: Readonly<Partial<Record<Modality, RightAnswer>>>;
+  term: string;
+}
+
+/**
+ * What each Creative Commons element says about our use, as a cap on the
+ * CC BY baseline. NonCommercial caps derivatives at `unclear` (they may only
+ * be shared non-commercially, which our redistribution is not) and
+ * NoDerivatives at `no`; both leave training for a commercial product to a
+ * human. The caps are DATA — composition happens in `creativeCommonsRights`.
+ */
+const CC_ELEMENT_TERMS: Readonly<Record<CcElement, CcElementTerm>> = {
+  by: {
+    caps: {},
+    term: "CC BY permits use with attribution",
+  },
+  sa: {
+    caps: { redistributeDerivatives: "sharealike" },
+    term: "ShareAlike: redistributed derivatives must carry the same license",
+  },
+  nc: {
+    caps: { commercial: "no", train: "unclear", redistributeDerivatives: "unclear" },
+    term: "NonCommercial: no commercial use; training a model for a commercial product, and sharing derivatives from one, need human review",
+  },
+  nd: {
+    caps: { redistributeDerivatives: "no", train: "unclear" },
+    term: "NoDerivatives: adapted material may not be shared; whether a trained model is adapted material needs human review",
+  },
+};
+
+/** Canonical element order for the basis text; the composed answers do not depend on it. */
+const CC_ELEMENT_ORDER: ReadonlyArray<CcElement> = ["by", "sa", "nc", "nd"];
+
 /**
  * Compose the profile for a parsed Creative Commons license from its elements.
- * Every element only ever RESTRICTS the CC BY baseline; none can widen it.
+ * Each modality takes the `meet` (most restrictive) of the CC BY baseline and
+ * every element's cap, so an element can only ever restrict the baseline —
+ * never widen it, and never leave a sibling element's more permissive answer
+ * standing — whatever order the elements appear in.
  */
 function creativeCommonsRights(elements: ReadonlySet<CcElement>): {
   rights: ModalityAnswers;
   terms: string[];
 } {
   const rights = uniform("yes_with_attribution");
-  const terms = ["CC BY permits use with attribution"];
-  if (elements.has("sa")) {
-    rights.redistributeDerivatives = "sharealike";
-    terms.push("ShareAlike: redistributed derivatives must carry the same license");
-  }
-  if (elements.has("nc")) {
-    rights.commercial = "no";
-    rights.train = "unclear";
-    terms.push(
-      "NonCommercial: no commercial use; training a model for a commercial product needs human review",
-    );
-  }
-  if (elements.has("nd")) {
-    rights.redistributeDerivatives = "no";
-    rights.train = "unclear";
-    terms.push(
-      "NoDerivatives: adapted material may not be shared; whether a trained model is adapted material needs human review",
-    );
+  const terms: string[] = [];
+  for (const element of CC_ELEMENT_ORDER) {
+    if (!elements.has(element)) continue;
+    const { caps, term } = CC_ELEMENT_TERMS[element];
+    for (const modality of MODALITIES) {
+      const cap = caps[modality];
+      if (cap !== undefined) rights[modality] = meet(rights[modality], cap);
+    }
+    terms.push(term);
   }
   return { rights, terms };
 }
