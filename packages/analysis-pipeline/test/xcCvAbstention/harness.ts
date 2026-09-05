@@ -12,11 +12,13 @@
  *      EngineUncertaintyEstimator, PriorityCoachingRanker, and the
  *      heuristic hierarchical classifier exactly as mobile adapts it).
  *
- * Also recorded, but NOT on the shipping path (see findings): the library
- * pose-quality gate `evaluateCaptureQuality` from @pickle/vision-geometry,
- * which apps/mobile never calls. Its verdict is logged per row so the gap
- * between "what the library would have refused" and "what the app scored"
- * is measurable.
+ * Also recorded per row: the verdict of the library pose-quality gate
+ * `evaluateCaptureQuality` from @pickle/vision-geometry, computed here
+ * independently of the pipeline. runCaptureAnalysis.ts runs it (via
+ * evaluatePreAnalysisGate) before analyzeCapture, and analyzeCapture enforces
+ * it again at the engine boundary; logging it beside the fusion outcome keeps
+ * the gap between "what the library refuses" and "what was scored" measurable
+ * (it must be zero for analyzable=false rows).
  *
  * Nothing here touches native code, Apple Vision, or the device: the pose
  * inputs are synthetic or committed sidecars, and every row records that.
@@ -122,7 +124,7 @@ export interface RowResult {
   /** Frame-to-frame torso-centre displacement (normalized units); a body
    * jumping between people shows up as a large max jump. */
   torsoJump: { maxNorm: number; p95Norm: number; framesOverTenPercent: number };
-  /** Library gate (NOT wired into the app) — recorded for the gap analysis. */
+  /** Library gate verdict, computed independently of the pipeline for the gap analysis. */
   libraryQuality: {
     analyzable: boolean;
     reasons: string[];
