@@ -47,6 +47,16 @@ const FOREGROUND_LEAD_MS = 5 * 60_000;
  * and a route that does reject it calls `refreshSessionNow()`.
  */
 export const MIN_ROTATION_GAP_MS = 30_000;
+/**
+ * Ceiling on any delay the keeper arms. The server's expiry is not trusted
+ * further out than this: a bearer reported to live longer (a skewed clock, a
+ * millisecond-scaled `expiresAt` that `refreshApiSession` scaled again) is
+ * re-checked after a day at most instead of parking the timer. Also keeps
+ * every delay inside setTimeout's signed 32-bit range (2**31-1 ms, ~24.8
+ * days) — past it Node collapses the delay to 1 ms, which would turn one bad
+ * expiry into a refresh exchange + Keychain write every millisecond.
+ */
+export const MAX_DELAY_MS = 24 * 60 * 60_000;
 const MIN_DELAY_MS = 1_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
@@ -82,6 +92,11 @@ export function retryDelayMs(attempt: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));
 }
 
+/** Every timer the keeper arms lands in [MIN_DELAY_MS, MAX_DELAY_MS]. */
+export function clampDelayMs(delayMs: number): number {
+  return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, delayMs));
+}
+
 export function startSessionKeeper(input: SessionKeeperInput): void {
   stopSessionKeeper();
   const myGeneration = generation;
@@ -96,13 +111,10 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   const schedule = (delayMs: number) => {
     if (!live()) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(
-      () => {
-        timer = null;
-        void refresh();
-      },
-      Math.max(MIN_DELAY_MS, delayMs),
-    );
+    timer = setTimeout(() => {
+      timer = null;
+      void refresh();
+    }, clampDelayMs(delayMs));
   };
 
   const scheduleAheadOfExpiry = (floorMs: number) => {
