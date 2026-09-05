@@ -103,10 +103,10 @@ describe("SL-01: NonCommercial denies commercial use and quarantines training", 
     });
   }
 
-  it("CC BY-NC-SA keeps the ShareAlike derivative term", () => {
-    expect(rightsForLicense("CC BY-NC-SA 4.0", REVIEWER).redistributeDerivatives).toBe(
-      "sharealike",
-    );
+  it("CC BY-NC-SA: NonCommercial restricts ShareAlike derivatives to human review", () => {
+    const rights = rightsForLicense("CC BY-NC-SA 4.0", REVIEWER);
+    expect(rights.redistributeDerivatives).toBe("unclear");
+    expect(redistributionEligible(rights)).toBe(false);
   });
 });
 
@@ -182,7 +182,8 @@ describe("SL-01: restating the designation's own elements is not a stray restric
     );
     expect(rights.commercial).toBe("no");
     expect(rights.train).toBe("unclear");
-    expect(rights.redistributeDerivatives).toBe("sharealike");
+    expect(rights.redistributeDerivatives).toBe("unclear");
+    expect(redistributionEligible(rights)).toBe(false);
   });
   it("PD-USGov is a public-domain designation; bare PD is not", () => {
     expect(parseLicense("PD-USGov").kind).toBe("public_domain");

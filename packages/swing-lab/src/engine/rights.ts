@@ -181,7 +181,9 @@ function uniform(answer: RightAnswer): ModalityAnswers {
 
 /**
  * Compose the profile for a parsed Creative Commons license from its elements.
- * Every element only ever RESTRICTS the CC BY baseline; none can widen it.
+ * Every element only ever RESTRICTS the CC BY baseline; none can widen it, and
+ * a later element may tighten an answer an earlier one left affirmative (SA's
+ * `sharealike` derivatives are still NonCommercial-restricted under BY-NC-SA).
  */
 function creativeCommonsRights(elements: ReadonlySet<CcElement>): {
   rights: ModalityAnswers;
@@ -196,8 +198,9 @@ function creativeCommonsRights(elements: ReadonlySet<CcElement>): {
   if (elements.has("nc")) {
     rights.commercial = "no";
     rights.train = "unclear";
+    rights.redistributeDerivatives = "unclear";
     terms.push(
-      "NonCommercial: no commercial use; training a model for a commercial product needs human review",
+      "NonCommercial: no commercial use; training a model for a commercial product and redistributing derivatives (permitted only for non-commercial purposes) need human review",
     );
   }
   if (elements.has("nd")) {
