@@ -97,10 +97,10 @@ const QUESTION_MARK_VARIANTS =
  * The `?` that opens a URL query string (`…/licenses/by/4.0/?ref=chooser-v1`,
  * as the Creative Commons chooser emits) is a delimiter, not a hedge. It is
  * replaced by a space so the query text itself stays visible to the hedge and
- * stray-element checks; a `?` that ends a URL (`…/4.0/?`) or follows a space is
- * still a reviewer's doubt.
+ * stray-element checks; a `?` that ends a URL (`…/4.0/?`, `…/4.0/?)`) or
+ * follows a space is still a reviewer's doubt.
  */
-const URL_QUERY_SEPARATOR = /(https?:\/\/[^\s?()<>"']+)\?(?=[^\s?]+)/g;
+const URL_QUERY_SEPARATOR = /(https?:\/\/[^\s?()<>"']+)\?(?=[a-z0-9_%~&=.-])/g;
 
 /**
  * A Creative Commons element token that appears AFTER the parsed designation
