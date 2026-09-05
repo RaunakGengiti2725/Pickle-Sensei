@@ -227,3 +227,89 @@ describe("gate: degenerate shoulder separation abstains the side decision (E10-F
     expect(prediction.label).toBe("FOREHAND");
   });
 });
+
+describe("classifyStroke reference-frame torso is read through the measured-landmark view", () => {
+  // kinematics.landmark's MIN_LANDMARK_VISIBILITY: below it a landmark is
+  // unmeasured (Apple Vision forwards 0 for an unrecognised joint).
+  const MIN_LANDMARK_VISIBILITY = 0.3;
+  const TORSO = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"] as const;
+  const { sequence, window } = generateSwingSequence();
+  const windowArg = { startMs: window.startMs, endMs: window.endMs };
+
+  type Frame = (typeof sequence)["frames"][number];
+  type Landmark = Frame["landmarks"][number];
+
+  function atReference(mutate: (mark: Landmark) => Landmark | null) {
+    return {
+      ...sequence,
+      frames: sequence.frames.map((frame) =>
+        Math.abs(frame.timestampMs - window.peakMs) > 40
+          ? frame
+          : {
+              ...frame,
+              landmarks: frame.landmarks.flatMap((mark) => {
+                const next = mutate(mark);
+                return next ? [next] : [];
+              }),
+            },
+      ),
+    };
+  }
+
+  function classify(seq: typeof sequence) {
+    return classifyStroke({
+      sequence: seq,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+  }
+
+  it("precondition: the fully measured control commits a side", () => {
+    expect(classify(sequence).label).toBe("FOREHAND");
+  });
+
+  for (const name of TORSO) {
+    it(`a single ${name} just below the visibility floor abstains exactly like a missing one`, () => {
+      const unmeasured = classify(
+        atReference((mark) =>
+          mark.name === name ? { ...mark, visibility: MIN_LANDMARK_VISIBILITY - 0.01 } : mark,
+        ),
+      );
+      const removed = classify(atReference((mark) => (mark.name === name ? null : mark)));
+      expect(removed.label).toBe("UNKNOWN");
+      expect(removed.limitingFactors).toContain("torso_not_measured_at_contact");
+      expect(unmeasured).toStrictEqual(removed);
+    });
+  }
+
+  it("a torso at exactly the visibility floor is measured (same inclusive floor as kinematics.landmark)", () => {
+    const atFloor = classify(
+      atReference((mark) =>
+        TORSO.includes(mark.name as (typeof TORSO)[number])
+          ? { ...mark, visibility: MIN_LANDMARK_VISIBILITY }
+          : mark,
+      ),
+    );
+    expect(atFloor.limitingFactors).not.toContain("torso_not_measured_at_contact");
+    expect(atFloor.label).toBe("FOREHAND");
+  });
+
+  it("invisible torso coordinates carry no weight: dragging them across the wrist changes nothing", () => {
+    const unmeasured = classify(atReference((mark) => ({ ...mark, visibility: 0 })));
+    const dragged = classify(
+      atReference((mark) => ({
+        ...mark,
+        x: Math.min(0.99, mark.x + 0.45),
+        y: Math.min(0.99, mark.y + 0.3),
+        visibility: 0,
+      })),
+    );
+    expect(unmeasured.label).toBe("UNKNOWN");
+    expect(unmeasured.limitingFactors).toContain("torso_not_measured_at_contact");
+    expect(dragged).toStrictEqual(unmeasured);
+  });
+});
