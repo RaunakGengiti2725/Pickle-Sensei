@@ -138,6 +138,14 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * but keep both hands on ONE grip (same side of the midline) and keep
  * committing.
  *
+ * stroke-heuristic-8 closes ADJ-VG-01: the reference-frame torso (shoulders +
+ * hips) is gated on landmark VISIBILITY, not mere presence. Apple Vision
+ * forwards an unrecognised joint as a landmark with visibility 0, so a torso
+ * that was never measured used to define the midline, shoulder width and
+ * torso extent — and its arbitrary coordinates could commit or flip the side.
+ * A torso landmark below TORSO_MIN_VISIBILITY (the kinematics.landmark floor)
+ * is treated exactly like an absent one: UNKNOWN / torso_not_measured_at_contact.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -161,7 +169,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -275,6 +283,8 @@ const NON_SWING_SPEED_FLOOR = 0.25;
 const MIN_WINDOW_SPEED_SAMPLES = 3;
 const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
+/** Same floor as kinematics.landmark's MIN_LANDMARK_VISIBILITY. */
+const TORSO_MIN_VISIBILITY = 0.3;
 const TORSO_MIN_EXTENT = 0.04;
 const TORSO_COLLAPSE_MEDIAN_RATIO = 0.6;
 const TORSO_MEDIAN_MIN_FRAMES = 5;
@@ -394,7 +404,11 @@ export function classifyStroke(input: {
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
-  const joints = new Map(frame.landmarks.map((mark) => [mark.name, mark]));
+  const joints = new Map(
+    frame.landmarks
+      .filter((mark) => mark.visibility >= TORSO_MIN_VISIBILITY)
+      .map((mark) => [mark.name, mark]),
+  );
   const leftShoulder = joints.get("left_shoulder");
   const rightShoulder = joints.get("right_shoulder");
   const leftHip = joints.get("left_hip");
