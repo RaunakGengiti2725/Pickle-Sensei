@@ -60,7 +60,17 @@ describeIf("pg.Pool idle-client termination", () => {
     // 1. The process is alive 2s after the termination and health still answers.
     expect(run.exitCode, failureContext).toBe(0);
     expect(verdictLine, failureContext).toBeDefined();
-    const verdict = JSON.parse(verdictLine!) as { survived: boolean; healthStatus: number };
+    const verdict = JSON.parse(verdictLine!) as {
+      survived: boolean;
+      healthStatus: number;
+      dbRecovered: boolean;
+      sloPoolAfterTerminate: {
+        totalCount: number;
+        idleCount: number;
+        waitingCount: number;
+        maxSize: number | null;
+      } | null;
+    };
     expect(verdict.survived).toBe(true);
     expect([200, 503]).toContain(verdict.healthStatus);
 
@@ -74,5 +84,42 @@ describeIf("pg.Pool idle-client termination", () => {
     );
     expect(pgErrorLogLine, failureContext).toBeDefined();
     expect(run.stderr).not.toMatch(/Unhandled 'error' event/);
+
+    // 3. admin_shutdown (57P01) is a recognised datastore-unavailable class:
+    //    logged as a warning carrying the pg code and the post-purge pool
+    //    sample — without the purged pg.Client (socket + connection
+    //    parameters) pg-pool tags onto the error.
+    const logged = JSON.parse(pgErrorLogLine!) as {
+      level: number;
+      pgCode: string | null;
+      pool: { totalCount: number; idleCount: number };
+      err: { code?: string; client?: unknown };
+    };
+    expect(logged.level).toBe(40);
+    expect(logged.pgCode).toBe("57P01");
+    expect(logged.pool).toMatchObject({ totalCount: 0, idleCount: 0 });
+    expect(logged.err.client).toBeUndefined();
+    expect(pgErrorLogLine).not.toContain("connectionParameters");
+
+    // 4. The purge is visible on the SLO surface before any request probes the
+    //    pool again, and the next checkout reconnects instead of reusing the
+    //    dead client.
+    expect(verdict.sloPoolAfterTerminate).toMatchObject({
+      totalCount: 0,
+      idleCount: 0,
+      waitingCount: 0,
+    });
+    expect(verdict.dbRecovered).toBe(true);
+    expect(run.stderr, failureContext).toMatch(/reconnect pool=1\/1/);
+
+    // 5. A pool failure outside the recognised outage classes is survived too,
+    //    reported at error level.
+    const syntheticLogLine = lines.find(
+      (l) => l.startsWith("{") && l.includes("synthetic idle client fault"),
+    );
+    expect(syntheticLogLine, failureContext).toBeDefined();
+    const synthetic = JSON.parse(syntheticLogLine!) as { level: number; pgCode: string | null };
+    expect(synthetic.level).toBe(50);
+    expect(synthetic.pgCode).toBe("XX000");
   }, 30_000);
 });

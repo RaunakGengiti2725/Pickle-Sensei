@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
 import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
 import { BufferedAnalytics, type IAnalyticsSink } from "@pickle/analytics";
-import { ApiSloRecorder, evaluateApiSlos, DEFAULT_API_SLO_TARGETS } from "@pickle/slo";
+import {
+  ApiSloRecorder,
+  evaluateApiSlos,
+  DEFAULT_API_SLO_TARGETS,
+  type PoolSaturationSample,
+} from "@pickle/slo";
 import type { FailureKind } from "@pickle/shared-types";
 import type { ApiConfig } from "./config.js";
 import type { AppContext } from "./context.js";
@@ -62,7 +67,8 @@ const PG_INVALID_INPUT_CODES = new Set(["22P02", "22003", "22021"]);
 
 /**
  * Datastore outages: connection refused/reset plus the Postgres classes for
- * connection failure (08…), admin shutdown, and exhausted resources.
+ * connection failure (08…), admin/crash shutdown, server-side idle session
+ * timeout, and exhausted resources.
  */
 const UNAVAILABLE_SYSTEM_CODES = new Set([
   "ECONNREFUSED",
@@ -74,6 +80,7 @@ const UNAVAILABLE_SYSTEM_CODES = new Set([
   "57P01",
   "57P02",
   "57P03",
+  "57P05",
   "53300",
   "53400",
 ]);
@@ -84,6 +91,47 @@ function isDatastoreUnavailable(error: unknown): boolean {
     return true;
   const message = error instanceof Error ? error.message : "";
   return message === "Connection terminated unexpectedly" || message.startsWith("timeout exceeded");
+}
+
+function samplePool(pool: pg.Pool): PoolSaturationSample {
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    maxSize: pool.options.max ?? null,
+  };
+}
+
+/**
+ * Connection pool whose idle-client failures are operational telemetry, not
+ * process faults. When PostgreSQL closes an idle pooled connection (restart,
+ * failover, idle_session_timeout, pg_terminate_backend) pg-pool purges the
+ * client and re-emits its 'error' on the pool; the next checkout opens a
+ * fresh connection. The failure is logged through the app logger — a warning
+ * for a recognised datastore-unavailable class, an error otherwise — and the
+ * shrunken pool is sampled into the SLO snapshot so it is visible on
+ * /v1/health/slo before any request notices.
+ */
+function buildPool(
+  connectionString: string,
+  log: FastifyBaseLogger,
+  sloRecorder: ApiSloRecorder,
+): pg.Pool {
+  const pool = new pg.Pool({ connectionString });
+  pool.on("error", (err) => {
+    // pg-pool tags the purged client onto the error; the log line must carry
+    // the Postgres error, not a serialised socket and connection parameters.
+    if ("client" in err) Object.defineProperty(err, "client", { enumerable: false });
+    const pgCode = (err as { code?: string }).code ?? null;
+    const sample = samplePool(pool);
+    sloRecorder.recordPoolSample(sample);
+    if (isDatastoreUnavailable(err)) {
+      log.warn({ err, pgCode, pool: sample }, "postgres pool: idle client closed by server");
+      return;
+    }
+    log.error({ err, pgCode, pool: sample }, "postgres pool: idle client error");
+  });
+  return pool;
 }
 
 interface ClientFailure {
@@ -161,7 +209,8 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
     genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
   });
 
-  const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
+  const sloRecorder = options.sloRecorder ?? new ApiSloRecorder();
+  const pool = config.databaseUrl ? buildPool(config.databaseUrl, app.log, sloRecorder) : null;
   const queue =
     options.queue ??
     (config.sqsQueueUrl
@@ -205,7 +254,6 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
     new BufferedAnalytics(async (batch) => {
       for (const event of batch) app.log.info({ analyticsEvent: event }, "analytics");
     });
-  const sloRecorder = options.sloRecorder ?? new ApiSloRecorder();
   // Typed security-monitoring events (auth anomalies, authorization denials,
   // admin anomalies, upload abuse, rate-limit trips, media-access failures,
   // consent mutations, training-eligibility changes). Same privacy contract
@@ -370,12 +418,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
         // Probe failure surfaces through the datastore-unavailable 5xx path of
         // real requests; the probe itself must not throw the health route.
       }
-      sloRecorder.recordPoolSample({
-        totalCount: pool.totalCount,
-        idleCount: pool.idleCount,
-        waitingCount: pool.waitingCount,
-        maxSize: pool.options.max ?? null,
-      });
+      sloRecorder.recordPoolSample(samplePool(pool));
     }
     const snapshot = sloRecorder.snapshot();
     return {

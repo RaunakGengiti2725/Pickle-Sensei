@@ -13,6 +13,7 @@
  */
 import pg from "pg";
 import { InMemoryJobQueue } from "@pickle/queue";
+import { ApiSloRecorder } from "@pickle/slo";
 import { buildApp } from "../../src/app.js";
 import type { ApiConfig } from "../../src/config.js";
 import type { AppContext } from "../../src/context.js";
@@ -49,7 +50,8 @@ process.on("exit", (code) => {
   process.stderr.write(`child exit code=${code} events=${JSON.stringify(events)}\n`);
 });
 
-const app = buildApp(config, { queue: new InMemoryJobQueue() });
+const sloRecorder = new ApiSloRecorder();
+const app = buildApp(config, { queue: new InMemoryJobQueue(), sloRecorder });
 await app.listen({ port: 0, host: "127.0.0.1" });
 const pool = (app as typeof app & { appContext: AppContext }).appContext.pool!;
 
@@ -70,12 +72,29 @@ await admin.query(
 );
 await new Promise((r) => setTimeout(r, 2000));
 events.push(`after-terminate pool=${pool.totalCount}/${pool.idleCount}`);
+// Sampled by the pool error handler itself: read before any route re-probes
+// the pool and overwrites it.
+const sloPoolAfterTerminate = sloRecorder.snapshot().pool;
 
 const health = await app.inject({ method: "GET", url: "/v1/health" });
 events.push(`health:${health.statusCode}`);
+// The purged client must not poison the pool: the next checkout reconnects.
+const probe = await pool.query<{ ok: number }>("SELECT 1 AS ok");
+events.push(`reconnect pool=${pool.totalCount}/${pool.idleCount}`);
+// A pool failure outside the recognised outage classes must also be survived,
+// but reported at error level.
+pool.emit("error", Object.assign(new Error("synthetic idle client fault"), { code: "XX000" }));
+events.push("synthetic-error-emitted");
 await admin.end();
 await app.close();
 console.log(
-  JSON.stringify({ survived: true, healthStatus: health.statusCode, backends: rows, events }),
+  JSON.stringify({
+    survived: true,
+    healthStatus: health.statusCode,
+    dbRecovered: probe.rows[0]?.ok === 1,
+    sloPoolAfterTerminate,
+    backends: rows,
+    events,
+  }),
 );
 process.exit(0);
