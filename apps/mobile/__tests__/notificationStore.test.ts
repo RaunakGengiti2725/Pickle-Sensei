@@ -21,11 +21,16 @@ import {
  */
 
 const mockKvTable = new Map<string, string>();
+/** Holds the SELECT of one kv key until released, so an owner's hydrate
+ * can be frozen mid-read while the rest of the store keeps moving. */
+const mockSelectGates = new Map<string, Promise<void>>();
 
 jest.mock('../src/data/db', () => ({
   getDb: () => ({
     async execute(sql: string, params: unknown[] = []) {
       if (sql.startsWith('SELECT value FROM kv')) {
+        const gate = mockSelectGates.get(String(params[0]));
+        if (gate) await gate;
         const value = mockKvTable.get(String(params[0]));
         return { rows: value === undefined ? [] : [{ value }] };
       }
@@ -90,9 +95,32 @@ function resetStore() {
 
 const owner = '33333333-3333-4333-8333-333333333333';
 const otherOwner = '44444444-4444-4444-8444-444444444444';
+const thirdOwner = '55555555-5555-4555-8555-555555555555';
+
+function durablePrefs(forOwner: string): Record<string, unknown> | null {
+  const raw = mockKvTable.get(notificationPrefsKeyForOwner(forOwner));
+  return raw === undefined
+    ? null
+    : (JSON.parse(raw) as Record<string, unknown>);
+}
+
+function holdSelect(forOwner: string): () => void {
+  let release!: () => void;
+  mockSelectGates.set(
+    notificationPrefsKeyForOwner(forOwner),
+    new Promise<void>(resolve => {
+      release = resolve;
+    }),
+  );
+  return () => {
+    mockSelectGates.delete(notificationPrefsKeyForOwner(forOwner));
+    release();
+  };
+}
 
 beforeEach(() => {
   mockKvTable.clear();
+  mockSelectGates.clear();
   resetStore();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
@@ -301,5 +329,148 @@ describe('notification store', () => {
     expect(useNotificationStore.getState().prefs.promptDismissed).toBe(true);
     const stored = mockKvTable.get(notificationPrefsKeyForOwner(owner));
     expect(JSON.parse(stored!).promptDismissed).toBe(true);
+  });
+});
+
+describe('notification store — owner switch', () => {
+  const prefsA = {
+    ...DEFAULT_NOTIFICATION_PREFS,
+    enabled: true,
+    practiceReminderMinutes: 19 * 60,
+    promptDismissed: true,
+  };
+
+  async function hydrateA(scheduler: FakeScheduler) {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify(prefsA),
+    );
+    setActiveDataOwner(owner);
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: owner,
+      prefs: prefsA,
+    });
+  }
+
+  it('starting the next owner’s hydrate drops the previous owner’s state at once', async () => {
+    const scheduler = new FakeScheduler();
+    await hydrateA(scheduler);
+
+    setActiveDataOwner(otherOwner);
+    const release = holdSelect(otherOwner);
+    const hydrateB = useNotificationStore
+      .getState()
+      .hydrate({ ...deps(scheduler), expectedOwnerKey: otherOwner });
+
+    // Synchronously after the call: nothing of A is visible any more.
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: false,
+      ownerKey: null,
+      prefs: DEFAULT_NOTIFICATION_PREFS,
+    });
+
+    release();
+    await hydrateB;
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+      prefs: DEFAULT_NOTIFICATION_PREFS,
+    });
+    expect(durablePrefs(owner)).toEqual(prefsA);
+  });
+
+  it('a write made before the new owner’s row is read lands on that row, not on the previous owner’s prefs', async () => {
+    const scheduler = new FakeScheduler();
+    await hydrateA(scheduler);
+
+    const prefsB = {
+      ...DEFAULT_NOTIFICATION_PREFS,
+      enabled: true,
+      practiceReminderMinutes: 7 * 60,
+      promptDismissed: true,
+    };
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(otherOwner),
+      JSON.stringify(prefsB),
+    );
+
+    setActiveDataOwner(otherOwner);
+    const release = holdSelect(otherOwner);
+    const hydrateB = useNotificationStore
+      .getState()
+      .hydrate({ ...deps(scheduler), expectedOwnerKey: otherOwner });
+
+    const write = useNotificationStore
+      .getState()
+      .setPrefs({ weeklyRecap: false }, deps(scheduler));
+    // The write must not have reached B's row with A's (or default) values.
+    expect(durablePrefs(otherOwner)).toEqual(prefsB);
+
+    release();
+    await Promise.all([hydrateB, write]);
+
+    const expected = { ...prefsB, weeklyRecap: false };
+    expect(durablePrefs(otherOwner)).toEqual(expected);
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+      prefs: expected,
+    });
+    expect(durablePrefs(owner)).toEqual(prefsA);
+  });
+
+  it('a write for an owner whose row has not been read hydrates that owner first', async () => {
+    const scheduler = new FakeScheduler();
+    await hydrateA(scheduler);
+
+    // Owner changes but nothing has asked the store to hydrate B yet.
+    setActiveDataOwner(otherOwner);
+    await useNotificationStore
+      .getState()
+      .setPrefs({ weeklyRecap: false }, deps(scheduler));
+
+    expect(durablePrefs(otherOwner)).toEqual({
+      ...DEFAULT_NOTIFICATION_PREFS,
+      weeklyRecap: false,
+    });
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: otherOwner,
+      prefs: { ...DEFAULT_NOTIFICATION_PREFS, weeklyRecap: false },
+    });
+    expect(durablePrefs(owner)).toEqual(prefsA);
+  });
+
+  it('a write held for an owner is dropped when the owner changes again before its row is read', async () => {
+    const scheduler = new FakeScheduler();
+    await hydrateA(scheduler);
+
+    setActiveDataOwner(otherOwner);
+    const releaseB = holdSelect(otherOwner);
+    const hydrateB = useNotificationStore
+      .getState()
+      .hydrate({ ...deps(scheduler), expectedOwnerKey: otherOwner });
+    const write = useNotificationStore
+      .getState()
+      .setPrefs({ enabled: true }, deps(scheduler));
+
+    setActiveDataOwner(thirdOwner);
+    await useNotificationStore
+      .getState()
+      .hydrate({ ...deps(scheduler), expectedOwnerKey: thirdOwner });
+
+    releaseB();
+    await Promise.all([hydrateB, write]);
+
+    expect(durablePrefs(otherOwner)).toBeNull();
+    expect(durablePrefs(thirdOwner)).toBeNull();
+    expect(useNotificationStore.getState()).toMatchObject({
+      hydrated: true,
+      ownerKey: thirdOwner,
+      prefs: DEFAULT_NOTIFICATION_PREFS,
+    });
+    expect(durablePrefs(owner)).toEqual(prefsA);
   });
 });
