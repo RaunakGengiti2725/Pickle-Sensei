@@ -24,10 +24,20 @@ canary_payload() { # matches supabase-secret-api-key, aws-access-token, generic-
     "$(rand 40)" "$(head -c 64 /dev/urandom | tr -dc 'A-Z0-9' | head -c 16)" "$(rand 40)"
 }
 
+# The gate under test is the checked-out tree's, not HEAD's: a clone only carries
+# committed files, so the policy and the wrapper are overlaid from the working
+# tree (this is what makes `git checkout <sha> -- .gitleaks.toml` revert checks
+# and uncommitted fixes observable).
+GATE_FILES=(.gitleaks.toml scripts/security-scan.sh)
+
 throwaway_clone() { # throwaway_clone <dest> [extra git clone args...]
-  local dest="$1"; shift
+  local dest="$1" f; shift
   rm -rf "$dest"
   git clone -q "$@" "$REPO_ROOT" "$dest" || die "clone failed"
+  for f in "${GATE_FILES[@]}"; do
+    [ -f "$REPO_ROOT/$f" ] || die "$f missing from the working tree"
+    cp -p "$REPO_ROOT/$f" "$dest/$f" || die "cannot overlay $f"
+  done
   git -C "$dest" config user.email adjudicator@example.invalid
   git -C "$dest" config user.name adjudicator
 }

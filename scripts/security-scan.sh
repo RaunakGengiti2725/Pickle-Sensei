@@ -17,7 +17,8 @@
 # executables BEFORE it is executed, and must then report exactly that version.
 # Anything else is a setup failure (exit 2) — never a warning.
 #
-# Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
+# Exit codes: 0 = no findings, 1 = findings, 2 = setup failure (untrusted binary,
+# or gitleaks itself failed — e.g. a malformed .gitleaks.toml — so no verdict exists).
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary instead of the pinned download
@@ -246,7 +247,7 @@ run_scan() {
   case "$rc" in
     0) log "${label}: clean ($((end - start))s)" ;;
     1) log "${label}: FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
-    *) log "${label}: gitleaks failed with exit $rc" ;;
+    *) die "${label}: gitleaks exited $rc without a verdict (scanner or .gitleaks.toml error) — nothing was proven clean" ;;
   esac
   return "$rc"
 }
@@ -283,16 +284,27 @@ scan_tree() {
 }
 
 overall=0
+record() { # $1 = a scan's exit: 1 = findings; anything above 1 is a die (already logged)
+  case "$1" in
+    0) ;;
+    1) overall=1 ;;
+    *) exit 2 ;;
+  esac
+}
 if [ "$SCAN_TREE" = 1 ]; then
-  scan_tree || overall=1
+  rc=0
+  scan_tree || rc=$?
+  record "$rc"
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  run_scan history git --log-opts "$LOG_OPTS" || overall=1
+  rc=0
+  run_scan history git --log-opts "$LOG_OPTS" || rc=$?
+  record "$rc"
 fi
 
 if [ "$overall" = 0 ]; then
   log "PASS: no secrets detected"
 else
-  log "FAIL: secrets detected (or scanner error). Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
+  log "FAIL: secrets detected. Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
 fi
 exit "$overall"
