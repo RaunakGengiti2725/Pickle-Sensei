@@ -785,6 +785,22 @@ async function runQuery(
             `start ${w.startMs} ≤ peak ${w.peakMotionMs} ≤ end ${w.endMs} violated`,
           );
         }
+        // motionStart/motionEnd is the unpadded core inside the padded window.
+        if (!(
+          w.startMs <= w.motionStartMs &&
+          w.motionStartMs <= w.motionEndMs &&
+          w.motionEndMs <= w.endMs
+        )) {
+          add(
+            "offline_window",
+            `motion core ${w.motionStartMs}..${w.motionEndMs} not inside ${w.startMs}..${w.endMs}`,
+          );
+        }
+        for (const [key, value] of Object.entries(w)) {
+          if (typeof value === "number" && !Number.isFinite(value)) {
+            add("offline_window", `${key}=${value}`);
+          }
+        }
         if (!inUnit(w.confidence)) add("offline_window", `confidence ${w.confidence}`);
       }
       return result;
