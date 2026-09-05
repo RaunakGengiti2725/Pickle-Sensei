@@ -305,9 +305,13 @@ describe("security-monitoring detectors (no database)", () => {
 
   it("never records the bearer token, URL query, or body of the offending request", async () => {
     const secretToken = `eyJhbGciOiJIUzI1NiJ9.${"a".repeat(24)}.${"b".repeat(24)}`;
+    // An unverified bearer is budgeted by ADDRESS, and the previous test spent
+    // this process's default address budget — call from a fresh one so the
+    // response under test is the auth rejection, not a 429.
     const res = await app.inject({
       method: "GET",
       url: "/v1/me?email=victim@example.com",
+      remoteAddress: "203.0.113.77",
       headers: { authorization: `Bearer ${secretToken}` },
     });
     expect(res.statusCode).toBe(401);
