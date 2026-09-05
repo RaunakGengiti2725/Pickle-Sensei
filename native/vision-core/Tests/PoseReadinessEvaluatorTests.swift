@@ -152,6 +152,105 @@ final class PoseReadinessEvaluatorTests: XCTestCase {
     XCTAssertEqual(snapshot.missingJoints, [])
   }
 
+  /// Two agreeing frames separated by more than the window are not an
+  /// observation of the window: the app was suspended or inference stalled,
+  /// and the athlete may have walked away and back in between.
+  func testSilenceLongerThanTheWindowRestartsObservation() {
+    let boundary = PoseReadinessEvaluator()
+    _ = boundary.ingest(pose: pose(timestampMs: 0))
+    XCTAssertEqual(boundary.ingest(pose: pose(timestampMs: 450)).state, .ready)
+
+    let beyond = PoseReadinessEvaluator()
+    _ = beyond.ingest(pose: pose(timestampMs: 0))
+    let restarted = beyond.ingest(pose: pose(timestampMs: 451))
+    XCTAssertEqual(restarted.state, .holdStill)
+    XCTAssertEqual(restarted.stableForMs, 0)
+    XCTAssertEqual(beyond.ingest(pose: pose(timestampMs: 900)).state, .holdStill)
+    XCTAssertEqual(beyond.ingest(pose: pose(timestampMs: 901)).state, .ready)
+
+    let suspended = PoseReadinessEvaluator()
+    _ = suspended.ingest(pose: pose(timestampMs: 0))
+    XCTAssertNotEqual(suspended.ingest(pose: pose(timestampMs: 100_000)).state, .ready)
+  }
+
+  /// A stalled clock re-observes one instant; the window must neither grow
+  /// nor do more work per frame.
+  func testStalledTimestampReplacesTheNewestSampleInsteadOfGrowing() {
+    let evaluator = PoseReadinessEvaluator()
+    let start = Date()
+    for _ in 0 ..< 600 {
+      let snapshot = evaluator.ingest(pose: pose(timestampMs: 1_000))
+      XCTAssertEqual(snapshot.state, .holdStill)
+      XCTAssertEqual(snapshot.stableForMs, 0)
+    }
+    XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+    _ = evaluator.ingest(pose: pose(timestampMs: 1_225))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 1_450)).state, .ready)
+  }
+
+  func testClockRunningBackwardsRestartsObservationWithoutTrapping() {
+    let evaluator = PoseReadinessEvaluator()
+    _ = evaluator.ingest(pose: pose(timestampMs: 5_000))
+    _ = evaluator.ingest(pose: pose(timestampMs: 5_225))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 5_450)).state, .ready)
+    let rewound = evaluator.ingest(pose: pose(timestampMs: 23))
+    XCTAssertEqual(rewound.state, .holdStill)
+    XCTAssertEqual(rewound.stableForMs, 0)
+    _ = evaluator.ingest(pose: pose(timestampMs: 248))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 473)).state, .ready)
+  }
+
+  func testExtremeTimestampsNeverTrap() {
+    for extreme in [Int.min, Int.min + 100, Int.max - 100, Int.max] {
+      let evaluator = PoseReadinessEvaluator()
+      _ = evaluator.ingest(pose: pose(timestampMs: extreme))
+      _ = evaluator.ingest(pose: pose(timestampMs: extreme))
+      _ = evaluator.ingestMissing(timestampMs: extreme)
+      _ = evaluator.ingest(pose: pose(timestampMs: 0))
+      _ = evaluator.ingest(pose: pose(timestampMs: extreme))
+      _ = evaluator.ingest(pose: pose(timestampMs: 0))
+    }
+    let nearMin = PoseReadinessEvaluator()
+    _ = nearMin.ingest(pose: pose(timestampMs: Int.min + 100))
+    _ = nearMin.ingest(pose: pose(timestampMs: Int.min + 325))
+    let ready = nearMin.ingest(pose: pose(timestampMs: Int.min + 550))
+    XCTAssertEqual(ready.state, .ready)
+    XCTAssertEqual(ready.stableForMs, 450)
+  }
+
+  /// Stillness is measured on the torso-and-legs box: a wrist that flickers
+  /// below the visibility threshold (or a paddle tap) must not move the centre
+  /// and restart the window for a body that has not moved.
+  func testWristVisibilityFlickerDoesNotRestartTheWindow() {
+    let evaluator = PoseReadinessEvaluator()
+    var t = 0
+    var readyFrames = 0
+    var index = 0
+    while t <= 3_000 {
+      let wristVisibility = index % 3 == 0 ? 0.20 : 0.95
+      let frame = PoseFrame(
+        timestampMs: t,
+        landmarks: pose(timestampMs: t).landmarks.map {
+          PoseLandmark(
+            name: $0.name,
+            x: $0.name == "left_wrist" ? 0.10 : $0.x,
+            y: $0.y,
+            visibility: $0.name == "left_wrist" ? wristVisibility : $0.visibility
+          )
+        },
+        confidence: 0.95
+      )
+      let snapshot = evaluator.ingest(pose: frame)
+      if t >= 450 {
+        XCTAssertEqual(snapshot.state, .ready, "not ready at \(t) ms with a flickering wrist")
+        readyFrames += 1
+      }
+      t += 33
+      index += 1
+    }
+    XCTAssertGreaterThan(readyFrames, 70)
+  }
+
   private struct SplitMix64 {
     private var state: UInt64
     init(seed: UInt64) { state = seed }

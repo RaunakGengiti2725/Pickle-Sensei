@@ -26,13 +26,40 @@ public struct PoseFrame: Sendable {
   public let landmarks: [PoseLandmark]
   public let confidence: Double
 
-  /// Landmarks with a non-finite coordinate or visibility are dropped and a
-  /// non-finite confidence reads as 0: every consumer differentiates,
-  /// divides and smooths these values, and one NaN/∞ would otherwise poison
-  /// its state for the rest of the session.
+  /// Coordinates a provider may legitimately report: normalized-image space
+  /// with one full frame of slack on every side. Anything beyond is not a
+  /// joint position but corrupt data, and finite-but-huge magnitudes overflow
+  /// the consumers' differences and squares exactly like ∞ would.
+  public static let coordinateRange: ClosedRange<Double> = -1 ... 2
+  /// Visibility is a confidence and lives on the unit interval.
+  public static let visibilityRange: ClosedRange<Double> = 0 ... 1
+
+  /// Landmarks with a non-finite or out-of-range coordinate/visibility are
+  /// dropped and a non-finite confidence reads as 0: every consumer
+  /// differentiates, divides and smooths these values, and one NaN/∞ would
+  /// otherwise poison its state for the rest of the session. A joint reported
+  /// twice keeps its most visible sample (first occurrence on a tie) so every
+  /// consumer sees the same single point per joint, in provider order.
   public init(timestampMs: Int, landmarks: [PoseLandmark], confidence: Double) {
     self.timestampMs = timestampMs
-    self.landmarks = landmarks.filter { $0.x.isFinite && $0.y.isFinite && $0.visibility.isFinite }
+    var indexByName: [String: Int] = [:]
+    var kept: [PoseLandmark] = []
+    kept.reserveCapacity(landmarks.count)
+    for landmark in landmarks
+    where Self.coordinateRange.contains(landmark.x)
+      && Self.coordinateRange.contains(landmark.y)
+      && Self.visibilityRange.contains(landmark.visibility)
+    {
+      if let index = indexByName[landmark.name] {
+        if landmark.visibility > kept[index].visibility {
+          kept[index] = landmark
+        }
+      } else {
+        indexByName[landmark.name] = kept.count
+        kept.append(landmark)
+      }
+    }
+    self.landmarks = kept
     self.confidence = confidence.isFinite ? confidence : 0
   }
 }

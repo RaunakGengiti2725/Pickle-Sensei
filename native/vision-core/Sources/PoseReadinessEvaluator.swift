@@ -37,6 +37,13 @@ public final class PoseReadinessEvaluator {
     /// natural sway and paddle-tapping fit; a step does not.
     public var maximumCenterTravel: Double
     public var maximumScaleChange: Double
+    /// Longest silence between two framed poses that still counts as one
+    /// continuous observation. A wider gap (the app was suspended, inference
+    /// stalled, the clock jumped) restarts the window: stillness is proven by
+    /// watching the athlete, not by two frames that happen to agree. Defaults
+    /// to the window itself, so a pair of frames can never span more than one
+    /// window's worth of unobserved time.
+    public var maximumSampleGapMs: Int
 
     public init(
       minimumJointVisibility: Double = 0.35,
@@ -47,7 +54,8 @@ public final class PoseReadinessEvaluator {
       frameMargin: Double = 0.025,
       stableDurationMs: Int = 450,
       maximumCenterTravel: Double = 0.055,
-      maximumScaleChange: Double = 0.08
+      maximumScaleChange: Double = 0.08,
+      maximumSampleGapMs: Int = 450
     ) {
       self.minimumJointVisibility = minimumJointVisibility
       self.minimumPoseConfidence = minimumPoseConfidence
@@ -58,6 +66,7 @@ public final class PoseReadinessEvaluator {
       self.stableDurationMs = stableDurationMs
       self.maximumCenterTravel = maximumCenterTravel
       self.maximumScaleChange = maximumScaleChange
+      self.maximumSampleGapMs = max(1, maximumSampleGapMs)
     }
   }
 
@@ -89,6 +98,19 @@ public final class PoseReadinessEvaluator {
     "left_ankle", "right_ankle",
   ]
 
+  /// Torso and legs: the joints framing requires on every frame. Stillness is
+  /// measured on their box, so an extended arm whose wrist flickers in and out
+  /// of visibility (or taps a paddle) cannot restart the window.
+  private static let coreJoints = [
+    "left_shoulder", "right_shoulder", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle",
+  ]
+
+  /// Hard ceiling on retained samples so a pathological cadence (hundreds of
+  /// frames per window) keeps the pairwise scan bounded; the anchor and the
+  /// newest sample are always kept.
+  private static let maximumRetainedSamples = 256
+
   private let config: Config
   private var stableSamples: [StableSample] = []
 
@@ -114,8 +136,8 @@ public final class PoseReadinessEvaluator {
       return ingestMissing(timestampMs: pose.timestampMs)
     }
 
-    // A provider may report a joint twice; keep the more visible sample rather
-    // than trapping on the duplicate key.
+    // `PoseFrame` already keeps one sample per joint; never trap on a duplicate
+    // key regardless.
     let visible = Dictionary(
       pose.landmarks
         .filter { $0.visibility >= config.minimumJointVisibility }
@@ -127,11 +149,8 @@ public final class PoseReadinessEvaluator {
 
     // One missing arm point can occur briefly during a valid swing, but a
     // complete lower body and both shoulders are mandatory for framing.
-    let mandatory = [
-      "left_shoulder", "right_shoulder", "left_hip", "right_hip",
-      "left_knee", "right_knee", "left_ankle", "right_ankle",
-    ]
-    guard coverage >= 0.83, mandatory.allSatisfy({ visible[$0] != nil }) else {
+    let core = Self.coreJoints.compactMap { visible[$0] }
+    guard coverage >= 0.83, core.count == Self.coreJoints.count else {
       stableSamples.removeAll(keepingCapacity: true)
       return snapshot(
         state: .fullBodyRequired,
@@ -166,25 +185,42 @@ public final class PoseReadinessEvaluator {
       return snapshot(state: .moveFarther, pose: pose, coverage: coverage, stableForMs: 0, missing: missing)
     }
 
+    let coreXs = core.map(\.x)
+    let coreYs = core.map(\.y)
     let sample = StableSample(
       timestampMs: pose.timestampMs,
-      centerX: (minX + maxX) / 2,
-      centerY: (minY + maxY) / 2,
-      height: height
+      centerX: (coreXs.min()! + coreXs.max()!) / 2,
+      centerY: (coreYs.min()! + coreYs.max()!) / 2,
+      height: coreYs.max()! - coreYs.min()!
     )
+    if let last = stableSamples.last {
+      if last.timestampMs == pose.timestampMs {
+        // A stalled clock re-observes the same instant: replace, never grow.
+        stableSamples.removeLast()
+      } else if let gap = Self.elapsedMs(from: last.timestampMs, to: pose.timestampMs),
+                gap <= config.maximumSampleGapMs {
+        // Continuous observation: keep the window.
+      } else {
+        // Clock went backwards, or nothing was observed for too long.
+        stableSamples.removeAll(keepingCapacity: true)
+      }
+    }
     stableSamples.append(sample)
     // The newest sample at or before the cutoff anchors the window, so its
     // measured span is at least `stableDurationMs` regardless of frame cadence
     // or dropped frames.
-    let cutoff = pose.timestampMs - config.stableDurationMs
-    if let anchor = stableSamples.lastIndex(where: { $0.timestampMs <= cutoff }) {
+    let (cutoff, cutoffOverflowed) = pose.timestampMs.subtractingReportingOverflow(config.stableDurationMs)
+    if !cutoffOverflowed, let anchor = stableSamples.lastIndex(where: { $0.timestampMs <= cutoff }) {
       stableSamples.removeFirst(anchor)
     }
+    while stableSamples.count > Self.maximumRetainedSamples {
+      stableSamples.remove(at: 1)
+    }
 
-    let stableForMs = max(0, pose.timestampMs - (stableSamples.first?.timestampMs ?? pose.timestampMs))
+    let stableForMs = stableSamples.first.flatMap { Self.elapsedMs(from: $0.timestampMs, to: pose.timestampMs) } ?? 0
     let centerTravel = maximumPairwiseTravel(in: stableSamples)
     let heights = stableSamples.map(\.height)
-    let scaleChange = (heights.max() ?? height) - (heights.min() ?? height)
+    let scaleChange = (heights.max() ?? sample.height) - (heights.min() ?? sample.height)
     let isStable = stableForMs >= config.stableDurationMs
       && centerTravel <= config.maximumCenterTravel
       && scaleChange <= config.maximumScaleChange
@@ -224,6 +260,12 @@ public final class PoseReadinessEvaluator {
       missingJoints: missing,
       landmarks: pose.landmarks
     )
+  }
+
+  /// `to - from` when it is representable and non-negative; nil otherwise.
+  private static func elapsedMs(from: Int, to: Int) -> Int? {
+    let (elapsed, overflow) = to.subtractingReportingOverflow(from)
+    return overflow || elapsed < 0 ? nil : elapsed
   }
 
   private func maximumPairwiseTravel(in samples: [StableSample]) -> Double {
