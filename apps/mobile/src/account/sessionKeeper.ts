@@ -78,10 +78,11 @@ const RETRY_MAX_MS = 5 * 60_000;
  */
 export const MAX_TRUSTED_LIFETIME_MS = 7 * 24 * 3600_000;
 /**
- * Largest delay a JS timer accepts as-is: Node and Hermes take a 32-bit
- * signed integer, and Node (like @sinonjs/fake-timers) collapses anything
- * over it to 1 ms with a TimeoutOverflowWarning. Timers are armed by
- * deadline in chunks no longer than this.
+ * Largest delay a JS timer is guaranteed to hold: a 32-bit signed integer.
+ * Node (like @sinonjs/fake-timers) collapses anything over it to 1 ms with a
+ * TimeoutOverflowWarning; what Hermes does with one is not something the
+ * keeper relies on. Timers are armed by deadline in chunks no longer than
+ * this.
  */
 export const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 

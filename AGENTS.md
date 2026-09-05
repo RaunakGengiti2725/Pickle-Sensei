@@ -84,7 +84,23 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   rotation — a short-lived or clock-skewed `expiresAt` must not become a
   once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts`),
   retries transient failures with backoff, and
-  re-checks on every foreground (timers don't fire while suspended). The ONE
+  re-checks on every foreground (timers don't fire while suspended). The
+  expiry is an INPUT to the keeper's timer, never its master (2026-09-05,
+  MAS-1): `trustedLifetimeMs()` admits only a lifetime past the 60s lead
+  and ≤ `MAX_TRUSTED_LIFETIME_MS` (7 d, Supabase's JWT cap); anything else
+  (past, inside the lead, NaN, far-future, or a millisecond-scaled value
+  from the server or the vault) is "no usable expiry" — the keeper
+  self-paces (30s → 60s → 120s → 240s → every 5 min) until a trusted answer
+  snaps it back to the exact 60s-before schedule, timers are armed by
+  deadline in ≤ 2**31-1 ms chunks (Node collapses an over-range delay to
+  1 ms with a TimeoutOverflowWarning; Hermes' handling is unverified, so the
+  keeper never hands it one), and self-decided rotations (timer, foreground
+  with an untrusted expiry) share one 30s rate gate keyed on the last
+  success.
+  `refreshSessionNow()` (a route saw the bearer refused) bypasses the gate.
+  `RefreshedTokens` reach `onRotated` exactly as the server issued them;
+  an untrusted expiry is a scheduling problem, never a sign-out
+  (`__tests__/adjudication/sessionKeeperExpirySanity.test.ts`). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
   legacy Google silent-restore flag is only a fallback for devices that
   signed in before the vault existed. Long-lived API clients (sync transport,
