@@ -158,6 +158,11 @@ describe("SL-01: negated, hedged, or unknown-element strings are all-unclear", (
     "Public domain in the United States; may be copyrighted elsewhere",
     "Mixed: VOA policy makes exclusively-VOA material public domain, but this video contains AFP-watermarked footage",
     "Unverified; plausible PD-USGov for VA-shot footage",
+    // A question mark or a placeholder is a reviewer who has not decided.
+    "CC BY 4.0?",
+    "Public domain (?)",
+    "CC0 — TBD",
+    "CC BY-SA 4.0 (TODO: confirm with the uploader)",
     // Two letters are not a public-domain designation.
     "PD",
     "pdf",
