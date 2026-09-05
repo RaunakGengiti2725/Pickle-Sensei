@@ -56,9 +56,12 @@ existing candidate branches from the closure workflow:
 `[0,1]` visibility, one most-visible landmark per joint), gap/clock-safe
 readiness window, core-joint stillness geometry, bounded history. Linux shadow
 suite 91/91; reviewer ACCEPT_WITH_NITS; adversary found only P2/P3 at ≥568 fps
-(unreachable for Apple Vision) plus a pre-existing teleport-stroke P3. Apple
-verification run 33943338843 was still executing at session end — the branch
-stays UNVERIFIED on Apple until it completes.
+(unreachable for Apple Vision) plus a pre-existing teleport-stroke P3. Exact-tree
+Apple verification passed (GH run 33943338843, `mac-full-verify-12/summary.json`
+`ok: true`, git_sha e0369e84…, environment/swift-native/ios-app all passed,
+Xcode 26.4.1, alive_after_25s=1, crash_reports=0). The branch is Apple-verified
+but still NOT integrated: merging it requires rerunning full-tier cloud, bench
+compare and exact-SHA Mac on the merged tree.
 
 ## Orchestration
 

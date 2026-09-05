@@ -44,7 +44,7 @@
     },
     "MACOS": {
       "status": "PASS",
-      "evidence": "exact-SHA 590e90c1 mac-full-verify ok: environment/swift-native/ios-app (GH run 33940249594, evidence/mac-590e90c1). Native r11 hardening e0369e84 (branch devin/fix11-native) is UNVERIFIED on Apple: run 33943338843 in progress"
+      "evidence": "exact-SHA 590e90c1 mac-full-verify ok: environment/swift-native/ios-app (GH run 33940249594, evidence/mac-590e90c1). Native r11 hardening e0369e84 (branch devin/fix11-native) also Apple-verified on its exact tree (GH run 33943338843, ok:true) but not integrated."
     },
     "SECURITY": {
       "status": "DEGRADED",
@@ -139,21 +139,21 @@
     }
   ],
   "p2_p3_followups": [
-    "native: A11-CAP-HIDDEN-STEP (P2) and A11-CAP-ANCHOR (P3) — PoseReadinessEvaluator 256-sample cap can evict samples inside the window at >568 fps (unreachable at Apple Vision 24–120 fps); A11-TELEPORT-STROKE (P3, pre-existing) single-frame wrist teleport emits a stroke event",
+    "native: A11-CAP-HIDDEN-STEP (P2) and A11-CAP-ANCHOR (P3) \u2014 PoseReadinessEvaluator 256-sample cap can evict samples inside the window at >568 fps (unreachable at Apple Vision 24\u2013120 fps); A11-TELEPORT-STROKE (P3, pre-existing) single-frame wrist teleport emits a stroke event",
     "native: raw timestamp subtraction in PoseMotionTrail / TemporalStrokeDetector / CaptureEvidenceAccumulator / SessionMotionStream traps only for Int.min-scale timestamps (capture emits non-negative CMTime ms)",
     "permits: owner-role PK rename / DELETE-INSERT race / TRUNCATE bypass tombstones (evidence/adjudicate-permit-r9.json)"
   ],
   "external": [
     "xc-ux-a11y-i18n::XC-UAI-05 remainder (device VoiceOver)",
-    "App Store review, Apple approval, human ground-truth labels for missing stroke families (docs/EVALUATION.md §4)"
+    "App Store review, Apple approval, human ground-truth labels for missing stroke families (docs/EVALUATION.md \u00a74)"
   ],
   "unintegrated_branches": {
-    "devin/fix11-native@e0369e84": "native vision-core hardening; Linux shadow 91/91; reviewer ACCEPT_WITH_NITS (session 09e1dc15); adversary P2/P3 only (session 4f795da1); Apple run 33943338843 pending",
-    "devin/fix9-mds-sqlite": "mobile-data-sync round-9 fixer (session 91ba825d) — not completed"
+    "devin/fix11-native@e0369e84": "native vision-core hardening; Linux shadow 91/91; reviewer ACCEPT_WITH_NITS (session 09e1dc15); adversary P2/P3 only (session 4f795da1); Apple run 33943338843 PASSED on exact tree (mac-full-verify-12 summary ok:true, 3/3 stages, crash_reports=0); NOT integrated \u2014 merged tree needs full cloud + bench + exact-SHA Mac rerun",
+    "devin/fix9-mds-sqlite": "mobile-data-sync round-9 fixer (session 91ba825d) \u2014 not completed"
   },
   "workflows": {
     "audit": "pickle-sensei-production-readiness (map -> 3-pass -> adjudicate -> fix)",
-    "stress": "wfr-2af59c55c8b74c689cb74bcad89ef9e9 — 131 units, 445 stress agents, 52 adjudicators (artifacts/.../stress)",
-    "closure": "wfr-6e12da73f92c46d483fe2515b0f02d38 — 38 P0/P1 triaged on f702f0f8: 16 RESOLVED, 20 OPEN, 2 EXTERNAL; fix loop killed before acceptance"
+    "stress": "wfr-2af59c55c8b74c689cb74bcad89ef9e9 \u2014 131 units, 445 stress agents, 52 adjudicators (artifacts/.../stress)",
+    "closure": "wfr-6e12da73f92c46d483fe2515b0f02d38 \u2014 38 P0/P1 triaged on f702f0f8: 16 RESOLVED, 20 OPEN, 2 EXTERNAL; fix loop killed before acceptance"
   }
 }
