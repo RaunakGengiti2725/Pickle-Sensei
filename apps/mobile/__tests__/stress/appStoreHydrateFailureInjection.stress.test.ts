@@ -958,7 +958,7 @@ const KNOWN_ISSUES: readonly Pin[] = [
   {
     id: 'OBS-1',
     finding:
-      'observation (converges, not a finding): adoption assigns `raw` before `await setKv` (appStore.ts:174-175), so when the local profile write fails state shows the adopted profile while kv still has the previous one (or none); the stash is kept (clear is skipped) so the next hydrate re-adopts and kv catches up',
+      'observation (converges, not a finding): adoption assigns `raw` before `await setKv` (appStore.ts:172-173), so when the local profile write fails state shows the adopted profile while kv still has the previous one (or none); the stash is kept (clear is skipped) so the next hydrate re-adopts and kv catches up',
     matches: (row, violation) =>
       (violation === 'state_profile_differs_from_kv' ||
         violation === 'state_profile_not_persisted') &&
