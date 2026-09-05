@@ -8,6 +8,23 @@ from the repository). Nothing in this file contains a secret value; only names a
 Companion artifacts: `scripts/security-scan.sh` (the gitleaks gate) and `.gitleaks.toml` (its
 policy; every allowlist entry carries a justification comment).
 
+Gate invariants (each pinned by a regression test that `scripts/verify-cloud.sh` `security`
+stage runs before the scan):
+
+- **Only the pinned scanner runs.** Whichever `gitleaks` the wrapper is about to execute —
+  `GITLEAKS_BIN`, the `SECURITY_SCAN_CACHE` copy, one found on `PATH`, or a fresh download — must
+  hash to one of the per-platform pinned sha256 digests of the official v8.30.1 executables
+  (`GITLEAKS_BIN_SHA256` in `scripts/security-scan.sh`, in addition to the release-tarball
+  digests) and report exactly that version; the digest is checked before the file is ever run.
+  Anything else is a setup failure (exit 2), never a warning, so a substituted or no-op binary
+  cannot pass the gate (`scripts/tests/security-scan-binary-trust.sh`).
+- **No whole-file allowlists.** `.gitleaks.toml` has no paths-only entries (a global path
+  allowlist hides a committed secret in both scan modes, whatever the directory, extension or
+  `.gitignore` says — `git add -f` still commits it), and every paths+regexes entry sets
+  `condition = "AND"` and `targetRules` (gitleaks ORs the two by default, and `dir` mode skips a
+  file matched by a global path allowlist before any rule runs). Fixture exemptions are one exact
+  string or line shape per rule per file (`scripts/tests/gitleaks-allowlist-policy.sh`).
+
 ---
 
 ## 1. Secret scan results
@@ -239,7 +256,9 @@ npx jest`, `./supabase/tests/run_rls_tests.sh` (throwaway Docker/initdb cluster)
   add client grants to the service-only tables, or write `count(*) from public.shots` into a
   free-rating decision point (AGENTS.md).
 - Weaken or skip `supabase/tests/security_regression.sql`, the `__wf__` pins, or
-  `scripts/security-scan.sh` (no `|| true`, no blanket path allowlists in `.gitleaks.toml`).
+  `scripts/security-scan.sh` (no `|| true`; no paths-only or OR-evaluated path allowlists in
+  `.gitleaks.toml`; no unpinned `GITLEAKS_BIN`, cache or `PATH` binary — the wrapper refuses
+  anything whose sha256 is not one of the pinned executables).
 - Commit `.env`, `supabase/.temp/`, `build/signing`, or anything the scanner flags. If a real
   secret is ever found: report the path@commit only, never the value; rotation is a human action.
 
@@ -247,8 +266,9 @@ npx jest`, `./supabase/tests/run_rls_tests.sh` (throwaway Docker/initdb cluster)
 
 1. Create a **staging Supabase project** (or use Supabase Branching) so migrations and function
    deploys can be rehearsed; today every deploy is production.
-2. Wire `scripts/security-scan.sh` into `verify-cloud.sh`/CI (coordinator-owned) — it is
-   deterministic, pinned, ~5 s.
+2. ~~Wire `scripts/security-scan.sh` into `verify-cloud.sh`/CI~~ — done: the `security` stage runs
+   the scope, allowlist-policy and binary-trust regressions and then the scan (~15 s: the tree
+   scan now reads the committed corpus media too, since extension allowlists were removed).
 3. Close B-1/B-3 from `docs/SECURITY_CERTIFICATION_2026-08-30.md` (Dashboard config verification,
    one rotation drill) and record the evidence.
 4. Consider the `TRUNCATE/REFERENCES/TRIGGER` revoke migration and pinning `search_path` on

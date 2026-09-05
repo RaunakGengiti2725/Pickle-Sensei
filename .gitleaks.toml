@@ -5,54 +5,35 @@
 # so a real credential landing next to a fixture still fails the gate.
 # Baseline: gitleaks v8.30.1 default rules (`useDefault = true`) + the custom
 # rules at the bottom for credential formats this system actually depends on.
+#
+# No entry may exempt a whole file (enforced by scripts/tests/gitleaks-allowlist-policy.sh):
+#   - no paths-only entries — a global path allowlist hides a committed secret in
+#     BOTH scan modes, whatever the directory, extension or .gitignore says
+#     (`git add -f` still commits it). Gitignored trees never reach the scanner
+#     anyway: scripts/security-scan.sh scans committable files and history only.
+#   - every paths+regexes entry sets condition = "AND" (gitleaks ORs them by
+#     default, so the path half alone would silence the file) AND targetRules
+#     (gitleaks `dir` mode skips a file matched by a GLOBAL path allowlist before
+#     any rule runs; rule-scoped entries are evaluated per finding in both modes).
 
 title = "Pickle Sensei secret-scanning policy"
 
 [extend]
 useDefault = true
 
-# ─── Path allowlists (files never read) ──────────────────────────────────────
+# ─── Rule-scoped allowlists (evaluated per finding, never per file) ──────────
 
 [[allowlists]]
-# Local-only env files are gitignored (.env, .env.local, .env.*.local) and may
-# legitimately hold a developer's own dev credentials; .env.example stays scanned.
-description = "gitignored local env files"
-paths = ['''(?:^|/)\.env$''', '''(?:^|/)\.env\.local$''', '''(?:^|/)\.env\.[^/]+\.local$''']
-
-[[allowlists]]
-# Committed binary media and ML model artifacts (~820 MB, mostly 44 corpus .mp4):
-# text-pattern rules cannot read them, and skipping them keeps the gate at a few
-# seconds. Mirrors the default config's image/font/pdf exclusions.
-description = "binary video, audio, and ML model artifacts"
-paths = ['''(?i)\.(?:mp4|mov|m4v|webm|mp3|wav|npz|npy|task|tflite|mlmodelc?|mlpackage|onnx|pt|pth|pkl)$''']
-
-[[allowlists]]
-# CocoaPods lockfile: the `SPEC CHECKSUMS` section is SHA-1 podspec digests
-# (`RNKeychain: 551d…`), which the generic-api-key rule mistakes for keys.
-description = "CocoaPods Podfile.lock spec checksums"
+# CocoaPods lockfile: the `SPEC CHECKSUMS` section is one `<Pod>: <sha1>` per
+# line (podspec digests, e.g. `RNKeychain: 551d…`), which generic-api-key
+# mistakes for keys. Only those exact lines are exempt; anything else committed
+# to the lockfile is still scanned.
+description = "CocoaPods Podfile.lock SPEC CHECKSUMS lines"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
 paths = ['''(?:^|/)Podfile\.lock$''']
-
-[[allowlists]]
-# Re-derivable, gitignored build/dependency/media trees (see .gitignore); they are
-# large (Pods, .venv, corpus video) and can never reach the repository.
-description = "gitignored build, dependency, and media artifact directories"
-paths = [
-  '''(?:^|/)Pods/''',
-  '''(?:^|/)\.venv[^/]*/''',
-  '''(?:^|/)\.build/''',
-  '''(?:^|/)build/''',
-  '''(?:^|/)dist/''',
-  '''(?:^|/)coverage/''',
-  '''(?:^|/)\.turbo/''',
-  '''(?:^|/)vendor/bundle/''',
-  '''(?:^|/)datasets/corpus/media/''',
-  '''(?:^|/)datasets/corpus/runs/''',
-  '''(?:^|/)datasets/paddle-bench/videos/''',
-  '''(?:^|/)datasets/paddle-bench/runs/''',
-  '''(?:^|/)supabase/\.temp/''',
-]
-
-# ─── Regex allowlists (matched against the finding's line) ───────────────────
+regexes = ['''^\s*[A-Za-z0-9_+.-]+: [0-9a-f]{40}\s*$''']
 
 [[allowlists]]
 # Research-corpus record identifiers: `sessionKey`/`subjectKey` are recording
@@ -69,22 +50,28 @@ regexes = ['''(?i)\b(?:sessionKey|subjectKey|productKey|product_key)"?\s*[:=]'''
 # The issuer constructor throws outside development/test (docs/SECURITY.md).
 description = "labeled dev-issuer HS256 fixtures in services/api tests"
 targetRules = ["generic-api-key"]
+condition = "AND"
 paths = ['''(?:^|/)services/api/test/.*\.test\.ts$''']
 regexes = ['''[a-z0-9-]*secret-0123456789''']
 
 [[allowlists]]
 # Deno edge-function tests stub REVENUECAT_SECRET_API_KEY with the literal
 # "sk_test_revenuecat" and assert it is forwarded; it is not a Stripe or
-# RevenueCat key.
+# RevenueCat key. docs/devin/SECURITY_BOUNDARIES.md names the same literal when
+# documenting this exemption. Only that exact secret string is exempt.
 description = "edge-function test fixture for the RevenueCat secret key env var"
 targetRules = ["stripe-access-token", "revenuecat-secret-api-key"]
-paths = ['''(?:^|/)supabase/functions/api/__wf__/''']
-regexes = ['''sk_test_revenuecat''']
+condition = "AND"
+paths = ['''(?:^|/)supabase/functions/api/__wf__/''', '''(?:^|/)docs/devin/SECURITY_BOUNDARIES\.md$''']
+regexes = ['''^sk_test_revenuecat$''']
 
 [[allowlists]]
 # Mobile security test builds a synthetic "header.<base64 payload>.sig" Google
 # ID token to prove the app never persists provider tokens; not a real JWT.
 description = "synthetic three-part token fixture in the mobile secrets test"
+targetRules = ["jwt", "generic-api-key"]
+condition = "AND"
+regexTarget = "line"
 paths = ['''(?:^|/)apps/mobile/__tests__/wf/be-mobile-security-secrets\.test\.ts$''']
 regexes = ['''header\.eyJ[A-Za-z0-9_-]+\.sig''']
 
@@ -93,6 +80,9 @@ regexes = ['''header\.eyJ[A-Za-z0-9_-]+\.sig''']
 # credentials: nothing can be signed or uploaded without the .p8 private key,
 # which is never committed (docs/DISTRIBUTION.md documents the identifiers).
 description = "App Store Connect API key identifiers (issuer/key id) in docs"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
 paths = ['''(?:^|/)docs/DISTRIBUTION\.md$''']
 regexes = ['''APP_STORE_CONNECT_API_KEY_(?:ISSUER_ID|KEY_ID)=[A-Za-z0-9-]+''']
 
@@ -101,8 +91,10 @@ regexes = ['''APP_STORE_CONNECT_API_KEY_(?:ISSUER_ID|KEY_ID)=[A-Za-z0-9-]+''']
 # inside the app binary; they cannot read or mutate subscriber data server-side
 # (that needs a `sk_…` secret key). Scoped to the one config file that holds them.
 description = "RevenueCat public SDK keys in the mobile runtime config"
+targetRules = ["generic-api-key"]
+condition = "AND"
 paths = ['''(?:^|/)apps/mobile/src/config/runtimeConfig\.ts$''']
-regexes = ['''\b(?:appl|goog|test)_[A-Za-z0-9]{20,40}\b''']
+regexes = ['''^(?:appl|goog|test)_[A-Za-z0-9]{20,40}$''']
 
 # ─── Custom rules for credential formats this system depends on ──────────────
 # (Legacy Supabase service_role/anon JWTs, Apple .p8 keys, AWS keys, GitHub

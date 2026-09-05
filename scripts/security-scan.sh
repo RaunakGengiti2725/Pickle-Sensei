@@ -11,10 +11,17 @@
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
 # with a justification). Findings are ALWAYS redacted in output and reports.
 #
+# Only the pinned gitleaks release may run: whichever binary is selected
+# (GITLEAKS_BIN, the cache, PATH, or a fresh download) must match one of the
+# pinned per-platform sha256 digests of the official v${GITLEAKS_VERSION}
+# executables BEFORE it is executed, and must then report exactly that version.
+# Anything else is a setup failure (exit 2) — never a warning.
+#
 # Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary instead of the pinned download
+#                           (still digest- and version-verified)
 #   SECURITY_SCAN_CACHE     where the pinned binary is cached
 #                           (default: ${XDG_CACHE_HOME:-~/.cache}/pickle-sensei)
 #   SECURITY_SCAN_OFFLINE=1 never download; fail with exit 2 if no usable binary
@@ -28,6 +35,16 @@ declare -A GITLEAKS_SHA256=(
   [linux_arm64]="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
   [darwin_x64]="dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"
   [darwin_arm64]="b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
+)
+# sha256 of the `gitleaks` executable extracted from each of those tarballs.
+# Every binary this script is about to run — GITLEAKS_BIN, the cache, PATH or a
+# fresh download — must hash to one of these; the tarball digest alone only
+# covers what this script downloaded itself.
+declare -A GITLEAKS_BIN_SHA256=(
+  [linux_x64]="88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509"
+  [linux_arm64]="00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b"
+  [darwin_x64]="cee01fea7173f1b779dff188e1c26ecbcb4027d394acc573b23aaf0be260e291"
+  [darwin_arm64]="ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f"
 )
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -93,7 +110,7 @@ sha256_file() {
   elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" | awk '{print $1}'
   else
-    die "need sha256sum or shasum to verify the gitleaks download"
+    die "need sha256sum or shasum to verify the gitleaks binary"
   fi
 }
 
@@ -118,6 +135,33 @@ reports_version() {
   [ -x "$1" ] && [ "$("$1" version 2>/dev/null | tr -d '[:space:]')" = "$GITLEAKS_VERSION" ]
 }
 
+# Digest of $1 matches the pinned executable for the current platform, or —
+# when the platform is not one we pin (or the file is a foreign-arch binary run
+# under emulation) — any of the pinned executables. Never executes $1.
+binary_is_pinned() {
+  local file="$1" actual expected
+  [ -f "$file" ] && [ -x "$file" ] || return 1
+  actual="$(sha256_file "$file")"
+  for expected in "${GITLEAKS_BIN_SHA256[@]}"; do
+    [ "$actual" = "$expected" ] && return 0
+  done
+  return 1
+}
+
+# Refuse to run anything but the pinned release: the digest check runs first so
+# an untrusted file is never executed, then the version string must match too.
+verify_gitleaks() {
+  local file="$1" source="$2" key expected
+  [ -e "$file" ] || die "$source: $file does not exist"
+  [ -f "$file" ] && [ -x "$file" ] || die "$source: $file is not an executable file"
+  if ! binary_is_pinned "$file"; then
+    key="$(platform_key || true)"
+    expected="${GITLEAKS_BIN_SHA256[${key:-none}]:-<no pin for $(uname -s)/$(uname -m)>}"
+    die "$source: $file is not the pinned gitleaks v${GITLEAKS_VERSION} executable (sha256 $(sha256_file "$file"); expected $expected). Remove or replace it — the gate only runs the pinned scanner."
+  fi
+  reports_version "$file" || die "$source: $file does not report v${GITLEAKS_VERSION}"
+}
+
 download_gitleaks() {
   local key="$1" dest="$2" tmp tarball url expected actual
   expected="${GITLEAKS_SHA256[$key]:-}"
@@ -132,40 +176,48 @@ download_gitleaks() {
   actual="$(sha256_file "$tmp/$tarball")"
   [ "$actual" = "$expected" ] || die "checksum mismatch for $tarball (expected $expected, got $actual)"
   tar -xzf "$tmp/$tarball" -C "$tmp" gitleaks
+  chmod 0755 "$tmp/gitleaks"
+  expected="${GITLEAKS_BIN_SHA256[$key]}"
+  actual="$(sha256_file "$tmp/gitleaks")"
+  [ "$actual" = "$expected" ] || die "checksum mismatch for the gitleaks executable in $tarball (expected $expected, got $actual)"
   mkdir -p "$(dirname "$dest")"
   mv "$tmp/gitleaks" "$dest"
-  chmod 0755 "$dest"
   rm -rf "$tmp"
   DOWNLOAD_TMP=""
 }
 
+# Pick the scanner to run. Every candidate is digest+version verified by
+# verify_gitleaks before it is returned; a candidate that exists but fails
+# verification is a setup failure, not something to silently skip past.
 resolve_gitleaks() {
-  local key cached
+  local key cached on_path
   if [ -n "${GITLEAKS_BIN:-}" ]; then
-    [ -x "$GITLEAKS_BIN" ] || die "GITLEAKS_BIN=$GITLEAKS_BIN is not executable"
-    reports_version "$GITLEAKS_BIN" || log "warning: GITLEAKS_BIN is not v${GITLEAKS_VERSION}; results may differ from the pinned gate"
+    verify_gitleaks "$GITLEAKS_BIN" "GITLEAKS_BIN"
     printf '%s' "$GITLEAKS_BIN"
     return
   fi
   key="$(platform_key || true)"
   cached="$CACHE_DIR/gitleaks-${GITLEAKS_VERSION}/gitleaks"
-  if reports_version "$cached"; then
+  if [ -e "$cached" ]; then
+    verify_gitleaks "$cached" "SECURITY_SCAN_CACHE"
     printf '%s' "$cached"
     return
   fi
-  if command -v gitleaks >/dev/null 2>&1 && reports_version "$(command -v gitleaks)"; then
-    command -v gitleaks
+  on_path="$(command -v gitleaks 2>/dev/null || true)"
+  if [ -n "$on_path" ]; then
+    verify_gitleaks "$on_path" "PATH"
+    printf '%s' "$on_path"
     return
   fi
   [ -n "$key" ] || die "unsupported platform $(uname -s)/$(uname -m); set GITLEAKS_BIN to a gitleaks v${GITLEAKS_VERSION} binary"
   [ "${SECURITY_SCAN_OFFLINE:-0}" = 1 ] && die "gitleaks v${GITLEAKS_VERSION} not found and SECURITY_SCAN_OFFLINE=1"
   download_gitleaks "$key" "$cached"
-  reports_version "$cached" || die "downloaded binary did not report v${GITLEAKS_VERSION}"
+  verify_gitleaks "$cached" "download"
   printf '%s' "$cached"
 }
 
 GITLEAKS="$(resolve_gitleaks)"
-log "gitleaks $("$GITLEAKS" version) at $GITLEAKS"
+log "gitleaks $("$GITLEAKS" version) (sha256 verified) at $GITLEAKS"
 
 if [ -n "$REPORT_DIR" ]; then
   mkdir -p "$REPORT_DIR"
