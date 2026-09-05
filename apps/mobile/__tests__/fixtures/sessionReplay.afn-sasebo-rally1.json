@@ -395,19 +395,19 @@
       "startMs": 367,
       "peakMs": 467,
       "endMs": 901,
-      "peakSpeed": 1.5754600205290272
+      "peakSpeed": 1.5682773956654097
     },
     {
       "startMs": 967.5,
       "peakMs": 1468,
-      "endMs": 2636,
-      "peakSpeed": 0.5327583224901291
+      "endMs": 2669,
+      "peakSpeed": 0.5419697138002043
     },
     {
       "startMs": 2703,
       "peakMs": 3403,
       "endMs": 3770,
-      "peakSpeed": 1.0588562521783815
+      "peakSpeed": 1.0596411824025205
     }
   ],
   "expectedEmissions": [
@@ -423,7 +423,7 @@
       "eventId": "E2",
       "startMs": 967.5,
       "peakMs": 1468,
-      "endMs": 2636,
+      "endMs": 2669,
       "closeReason": "next_stroke_valley",
       "closedAtMs": 2669
     },
