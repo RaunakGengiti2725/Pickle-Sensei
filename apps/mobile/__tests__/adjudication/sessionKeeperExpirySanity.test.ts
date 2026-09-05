@@ -124,7 +124,7 @@ describe('sessionKeeper sanity-checks the bearer expiry before arming a timer', 
     expect(onRevoked).not.toHaveBeenCalled();
   });
 
-  it('an epoch-MILLISECOND expiresAt never schedules a delay past 2**31-1 ms (no TimeoutOverflowWarning collapse to 1 ms)', async () => {
+  it('an epoch-MILLISECOND expiresAt never schedules a delay past 2**31-1 ms (no timer-overflow collapse to 1 ms)', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
     const { fetchFn, onRevoked } = keeperAnsweringExpiry(() => Date.now());
