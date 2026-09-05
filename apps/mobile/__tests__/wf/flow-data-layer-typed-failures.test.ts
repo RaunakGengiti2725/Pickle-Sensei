@@ -217,9 +217,7 @@ function fakeDb() {
           if (sql.includes('refusals = refusals + 1')) {
             row.refusals = (row.refusals ?? 0) + 1;
           }
-          const quarantine = /SET attempts = (\d+), quarantined = 1,/.exec(
-            sql,
-          );
+          const quarantine = /SET attempts = (\d+), quarantined = 1,/.exec(sql);
           if (quarantine) {
             row.attempts = Number(quarantine[1]);
             row.quarantined = 1;

@@ -186,7 +186,6 @@ export function lastResponseSentence(lastError: string | null): string {
   return ` Last response: ${text}`;
 }
 
-
 type GuideStep = 'score' | 'problem' | 'drills' | 'next';
 
 const STEP_LABEL: Record<GuideStep, string> = {
