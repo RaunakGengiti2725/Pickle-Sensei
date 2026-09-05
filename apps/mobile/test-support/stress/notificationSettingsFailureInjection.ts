@@ -647,6 +647,9 @@ export interface FaultController {
   osStatusAfterRequest: number;
   /** Fake notification tray: id → trigger the module was given. */
   tray: Map<string, { timestamp: unknown; repeatFrequency: unknown }>;
+  /** Dependencies this screen must never reach (fetch, Keychain, RevenueCat):
+   * every access is recorded here and throws. */
+  outOfScope: string[];
   /** Injected exception messages (never user copy). */
   arm(faults: readonly Fault[]): void;
   clear(): void;
@@ -664,6 +667,7 @@ export function createFaultController(): FaultController {
     osStatus: -1,
     osStatusAfterRequest: 1,
     tray: new Map(),
+    outOfScope: [],
     arm(faults) {
       ctl.faults = [...faults];
     },
@@ -688,6 +692,33 @@ export function createFaultController(): FaultController {
 /** One controller per Jest module registry: the hoisted `jest.mock`
  * factories and the test body must see the same instance. */
 export const sharedController: FaultController = createFaultController();
+
+/** A module stand-in whose every property access is recorded and whose
+ * every call throws — proves the unit never reaches the dependency. */
+export function createOutOfScopePoison(
+  ctl: FaultController,
+  name: string,
+): unknown {
+  const poison = (path: string): unknown =>
+    new Proxy(function poisoned() {} as unknown as object, {
+      get(_target, prop) {
+        if (prop === '__esModule') return true;
+        if (prop === 'then') return undefined;
+        const at = `${path}.${String(prop)}`;
+        ctl.outOfScope.push(at);
+        return poison(at);
+      },
+      apply() {
+        ctl.outOfScope.push(`${path}()`);
+        throw new Error(`out-of-scope dependency reached: ${path}()`);
+      },
+      construct() {
+        ctl.outOfScope.push(`new ${path}`);
+        throw new Error(`out-of-scope dependency reached: new ${path}`);
+      },
+    });
+  return poison(name);
+}
 
 export function injectedError(fault: Fault): Error {
   return new Error(`injected ${faultId(fault)}`);

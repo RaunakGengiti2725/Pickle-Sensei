@@ -109,6 +109,24 @@ jest.mock('react-native-notify-kit', () => {
     require('../../test-support/stress/notificationSettingsFailureInjection') as typeof import('../../test-support/stress/notificationSettingsFailureInjection');
   return support.createNotifyKitFake(support.sharedController);
 });
+// Dependencies the lens lists that this screen must never reach: poisoned so
+// any access is recorded (and throws) instead of silently succeeding.
+jest.mock('react-native-keychain', () => {
+  const support =
+    require('../../test-support/stress/notificationSettingsFailureInjection') as typeof import('../../test-support/stress/notificationSettingsFailureInjection');
+  return support.createOutOfScopePoison(
+    support.sharedController,
+    'react-native-keychain',
+  );
+});
+jest.mock('react-native-purchases', () => {
+  const support =
+    require('../../test-support/stress/notificationSettingsFailureInjection') as typeof import('../../test-support/stress/notificationSettingsFailureInjection');
+  return support.createOutOfScopePoison(
+    support.sharedController,
+    'react-native-purchases',
+  );
+});
 
 import React from 'react';
 import { Linking, Text, View } from 'react-native';
@@ -671,6 +689,12 @@ async function runScenario(
   mockCtl.calls.length = 0;
   mockCtl.hits.clear();
   mockCtl.tray.clear();
+  mockCtl.outOfScope = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((input: unknown) => {
+    mockCtl.outOfScope.push(`fetch(${String(input)})`);
+    return Promise.reject(new Error('out-of-scope dependency reached: fetch'));
+  }) as typeof fetch;
   mockCtl.tray.set(FOREIGN_TRAY_ID, { timestamp: 4e12, repeatFrequency: -1 });
   const real = new DatabaseSync(':memory:');
   mockCtl.real = real;
@@ -1206,6 +1230,13 @@ async function runScenario(
       }
     }
     detail['kvKeys'] = readKv(real).map(r => r.key);
+    globalThis.fetch = realFetch;
+    if (mockCtl.outOfScope.length) {
+      detail['outOfScope'] = mockCtl.outOfScope.slice(0, 10);
+      violations.push(
+        `out-of-scope: screen reached ${mockCtl.outOfScope[0]} (fetch/Keychain/RevenueCat are not notification dependencies)`,
+      );
+    }
     if (actError) detail['error'] = actError;
     if (consoleErrors.length)
       detail['consoleErrors'] = consoleErrors.slice(0, 3);
