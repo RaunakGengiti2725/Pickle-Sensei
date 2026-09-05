@@ -23,6 +23,7 @@ const LATE_LINK_LEDGER = "20260905000100_late_linked_identity_ledger.sql";
 const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
 const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
 const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
+const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -925,6 +926,194 @@ Deno.test(
         !dropsTriggerWithoutRecreating(later, "analysis_permits_guard_resurrection"),
         `${later.file} drops analysis_permits_guard_resurrection without recreating it`,
       );
+    }
+  },
+);
+
+// ─── ADV-11-PREFIX-RESURRECTION + ADV-17-SETTLED-UNRESTORABLE (round 9):
+// settled permits are terminal for the OWNER role across DELETE ──────────────
+
+function grantsOnTombstones(statement: string): boolean {
+  return (
+    statement.startsWith("grant ") &&
+    /\bpublic\.analysis_permit_tombstones\b/.test(statement.split(" on ", 2)[1] ?? "")
+  );
+}
+
+Deno.test(
+  "permits: an owner-role DELETE of a settled or shot-linked permit leaves a tombstone the id can only be restored into (BEFORE DELETE definer guard, revoked from clients, never dropped later); the account cascade is exempt; the lifecycle guard stays",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_SETTLED_NO_DELETE);
+    ok(migration, `${PERMIT_SETTLED_NO_DELETE} must exist in the migration chain`);
+    ok(
+      PERMIT_SETTLED_NO_DELETE > PERMIT_TERMINAL,
+      "the owner-role terminality migration must follow the client-role one",
+    );
+    const { statements } = migration;
+    const raw = stripSqlComments(migration.raw);
+
+    // 1. The tombstone table is service-only: RLS on, every client grant
+    //    revoked, no policy, cascades away with the profile.
+    ok(
+      statements.some((s) =>
+        /^create table if not exists public\.analysis_permit_tombstones \( permit_id uuid primary key, user_id uuid not null references public\.profiles \(id\) on delete cascade,/.test(
+          s,
+        ),
+      ) &&
+        statements.includes(
+          "alter table public.analysis_permit_tombstones enable row level security",
+        ) &&
+        statements.includes(
+          "revoke all on public.analysis_permit_tombstones from public, anon, authenticated",
+        ) &&
+        !statements.some((s) =>
+          /^create policy .* on public\.analysis_permit_tombstones\b/.test(s),
+        ),
+      "analysis_permit_tombstones must be keyed by permit id, cascade from profiles, have RLS on, no client grants and no policies",
+    );
+
+    // 2. BEFORE DELETE guard: definer, pinned search_path, exempts the account
+    //    cascade (profile already gone) and reserved+unlinked rows, remembers
+    //    everything else, revoked from clients.
+    const [del] = functionBodies(raw, "guard_analysis_permit_delete");
+    ok(del, `${PERMIT_SETTLED_NO_DELETE} must define public.guard_analysis_permit_delete`);
+    ok(
+      /security definer/.test(del) &&
+        /set search_path = pg_catalog, public/.test(del) &&
+        del.includes(
+          "if not exists (select 1 from public.profiles p where p.id = old.user_id) then\n    return old;",
+        ) &&
+        del.includes("if old.status = 'reserved'") &&
+        del.includes(
+          "not exists (select 1 from public.shots s where s.analysis_permit_id = old.id) then\n    return old;",
+        ) &&
+        del.includes("insert into public.analysis_permit_tombstones") &&
+        del.includes(
+          "(old.id, old.user_id, old.idempotency_key, old.status, old.outcome, old.created_at, now())",
+        ) &&
+        !/raise exception/.test(del),
+      "the delete guard must be SECURITY DEFINER with search_path = pg_catalog, public; let the account cascade and reserved/unlinked rows through; and tombstone every settled or linked permit",
+    );
+    ok(
+      statements.includes(
+        "create trigger analysis_permits_guard_delete before delete on public.analysis_permits for each row execute function public.guard_analysis_permit_delete()",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_analysis_permit_delete() from public, anon, authenticated",
+        ),
+      "the delete guard must be a BEFORE DELETE row trigger on public.analysis_permits, revoked from clients",
+    );
+
+    // 3. Resurrection guard, same trigger: a tombstoned id is re-creatable only
+    //    as the identical settled row (consuming the tombstone); every other
+    //    shape, and an id on a shot without a tombstone, is 23514.
+    const [res] = functionBodies(raw, "guard_analysis_permit_resurrection");
+    ok(res, `${PERMIT_SETTLED_NO_DELETE} must redefine public.guard_analysis_permit_resurrection`);
+    ok(
+      /security definer/.test(res) &&
+        res.includes(
+          "from public.analysis_permit_tombstones x\n  where x.permit_id = new.id\n  for update",
+        ) &&
+        res.includes(
+          "if new.user_id = t.user_id\n       and new.idempotency_key = t.idempotency_key\n       and new.status = t.status\n       and new.outcome is not distinct from t.outcome then",
+        ) &&
+        res.includes(
+          "delete from public.analysis_permit_tombstones x where x.permit_id = new.id;\n      return new;",
+        ) &&
+        res.includes("where s.analysis_permit_id = new.id") &&
+        (res.match(/errcode = 'check_violation'/g) ?? []).length === 2 &&
+        (res.match(/hint = 'access\.permit_transition_rejected'/g) ?? []).length === 2,
+      "the resurrection guard must allow exactly the identical restore of a tombstoned id and answer 23514 + access.permit_transition_rejected to every other re-creation",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.guard_analysis_permit_resurrection() from public, anon, authenticated",
+      ) && !dropsTriggerWithoutRecreating(migration, "analysis_permits_guard_resurrection"),
+      "the redefined resurrection guard stays non-executable by clients and keeps its trigger",
+    );
+
+    // 4. The RPC answers permit_not_reserved for the caller's tombstoned id
+    //    through the auth.uid()-scoped definer reader.
+    const [reader] = functionBodies(raw, "permit_tombstoned");
+    ok(reader, `${PERMIT_SETTLED_NO_DELETE} must define public.permit_tombstoned`);
+    ok(
+      /security definer/.test(reader) &&
+        reader.includes("and t.user_id = (select auth.uid())") &&
+        statements.includes(
+          "revoke all on function public.permit_tombstoned(uuid) from public, anon",
+        ) &&
+        statements.includes(
+          "grant execute on function public.permit_tombstoned(uuid) to authenticated",
+        ),
+      "permit_tombstoned() must be a definer reader scoped to auth.uid(), executable by authenticated only",
+    );
+    const [rpc] = functionBodies(raw, "apply_synced_shot");
+    ok(rpc, `${PERMIT_SETTLED_NO_DELETE} must recreate public.apply_synced_shot`);
+    ok(
+      /if not found then\s+if public\.permit_tombstoned\(v_permit_id\) then\s+return 'access\.permit_not_reserved';\s+end if;\s+return 'access\.permit_not_found';/.test(
+        rpc,
+      ) &&
+        rpc.includes("where s.analysis_permit_id = v_permit_id") &&
+        rpc.includes("public.permit_backs_sync(") &&
+        rpc.includes("public.lifetime_scored_count() >= 2"),
+      "apply_synced_shot must answer access.permit_not_reserved for a tombstoned own permit and keep the round-8 link / backing / lifetime-count rules",
+    );
+
+    // 5. No FK with SET NULL on the link (it recreates the ADV-11 blind spot).
+    for (const m of chain) {
+      for (const s of m.statements) {
+        ok(
+          !(/\banalysis_permit_id\b/.test(s) && /\bon delete set null\b/.test(s)),
+          `${m.file}: shots.analysis_permit_id must never be ON DELETE SET NULL: ${s}`,
+        );
+      }
+    }
+
+    // 6. Later migrations keep every guard and never open the tombstones.
+    for (const later of after(chain, PERMIT_SETTLED_NO_DELETE)) {
+      for (const statement of later.statements) {
+        ok(
+          !grantsOnTombstones(statement),
+          `${later.file} grants on public.analysis_permit_tombstones: ${statement}`,
+        );
+        ok(
+          !/^create policy .* on public\.analysis_permit_tombstones\b/.test(statement) &&
+            !/^drop table .*analysis_permit_tombstones/.test(statement) &&
+            !/^alter table public\.analysis_permit_tombstones disable row level security/.test(
+              statement,
+            ),
+          `${later.file} opens public.analysis_permit_tombstones: ${statement}`,
+        );
+        ok(
+          !/^alter table public\.analysis_permits disable trigger/.test(statement),
+          `${later.file} disables a trigger on public.analysis_permits: ${statement}`,
+        );
+      }
+      for (const trigger of [
+        "analysis_permits_guard_delete",
+        "analysis_permits_guard_resurrection",
+        "analysis_permits_guard_lifecycle",
+      ]) {
+        ok(
+          !dropsTriggerWithoutRecreating(later, trigger),
+          `${later.file} drops ${trigger} without recreating it`,
+        );
+      }
+    }
+    // The lifecycle guard is what makes UPDATE terminal for the owner role too;
+    // it must still be the BEFORE INSERT OR UPDATE trigger 20260906140000
+    // installed, in every migration that (re)creates it.
+    for (const m of chain) {
+      for (const s of m.statements) {
+        if (s.startsWith("create trigger analysis_permits_guard_lifecycle ")) {
+          ok(
+            s ===
+              "create trigger analysis_permits_guard_lifecycle before insert or update on public.analysis_permits for each row execute function public.guard_analysis_permit_lifecycle()",
+            `${m.file}: analysis_permits_guard_lifecycle must stay a BEFORE INSERT OR UPDATE row trigger: ${s}`,
+          );
+        }
+      }
     }
   },
 );

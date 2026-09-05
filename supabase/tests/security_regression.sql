@@ -49,6 +49,16 @@
 --      written, settled permits are terminal for every role, every legal
 --      product transition still works), backing is NULL-safe/default-deny,
 --      and the shots gate never falls back to a permit the sync did not name
+--   R. (round 9, 20260907100000) a settled permit is terminal for the OWNER
+--      role across DELETE: removing a finalized permit that backs a shot, or
+--      a settled legacy-style unlinked one, leaves a tombstone — the id can
+--      only be restored as the identical settled row (never reopened as
+--      reserved, by anyone), the RPC answers permit_not_reserved for it and
+--      writes nothing; the owner cannot reopen a settled row by UPDATE
+--      either; a reserved unlinked permit is deleted with no memory; account
+--      deletion through auth.users AND through public.profiles still removes
+--      every permit, shot and tombstone and frees the ids; the tombstone
+--      table is invisible to clients
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -2995,7 +3005,8 @@ end $$;
 -- Q4  no resurrection by any role: after the owner removes the consumed
 --     permit row, re-creating its id is 23514 + access.permit_transition_
 --     rejected (definer BEFORE INSERT guard); a second shot on the consumed
---     permit id is 23505 for the owner; the RPC answers permit_not_found
+--     permit id is 23505 for the owner; the RPC answers permit_not_reserved
+--     (the id is consumed, not unknown — 20260907100000 tombstone)
 -- Q5  shots.analysis_permit_id is the RPC's column: a client INSERT naming it
 --     (live permit, scored or abstention, with or without a mismatched
 --     vouch) is 42501 + access.permit_not_reserved and writes nothing
@@ -3218,8 +3229,9 @@ end $$;
 
 -- Q4: no resurrection for ANY role. The owner (cascade/maintenance path, no
 -- JWT claim) removes the consumed permit row; its id can never be created
--- again while the shot exists, a second shot on the id is refused by the
--- index, and the RPC reports the row gone.
+-- again as a reservation, a second shot on the id is refused by the index,
+-- and the RPC reports the id consumed (the settled row left a tombstone —
+-- 20260907100000; section R covers the exact restore).
 reset role;
 set local request.jwt.claim.sub = '';
 do $$
@@ -3258,8 +3270,8 @@ begin
    where id = '00000000-0000-4000-8000-000000000231';
   v := public.apply_synced_shot(pg_temp.n_shot(
     '00000000-0000-4000-8000-000000000234', p_id, 'scored'));
-  if v <> 'access.permit_not_found' then
-    raise exception 'Q4: the RPC must report the removed permit as not found (got %)', v;
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'Q4: the RPC must report the removed settled permit as consumed (got %)', v;
   end if;
   -- replay of the shot that consumed it is still an idempotent accept
   v := public.apply_synced_shot(pg_temp.n_shot(
@@ -3492,6 +3504,362 @@ begin
   -- with the shot gone, nothing tombstones the id: the owner may re-issue it
   insert into public.analysis_permits (id, user_id, idempotency_key)
   values (p_id, '00000000-0000-4000-8000-000000000021', 'sam-reissued');
+end $$;
+
+-- ============================================================================
+-- R. Round 9 (ADV-11-PREFIX-RESURRECTION + ADV-17-SETTLED-UNRESTORABLE):
+--    settled permits are terminal for the OWNER / service role across DELETE
+--    (20260907100000_permit_settled_no_delete). Two fresh users: Rae (free,
+--    Google identity) and Vic (member).
+-- R1  owner DELETE of Rae's finalized/scored permit that backs a shot is
+--     allowed and tombstoned; the shot keeps its link; reopening the id as
+--     reserved (Rae or Vic), or as any other settled shape, is 23514 +
+--     access.permit_transition_rejected; the byte-identical restore is
+--     allowed, the tombstone is consumed, and a second sync on the id is
+--     access.permit_not_reserved with exactly one shot
+-- R2  a settled legacy-style permit (no shot names it) deleted by the owner
+--     is tombstoned: reopening is 23514; Rae's RPC naming it is
+--     access.permit_not_reserved and writes nothing; Vic's RPC naming it is
+--     access.permit_not_found
+-- R3  a reserved, unlinked permit is deleted with no memory and the id is
+--     re-issuable
+-- R4  the lifecycle guard holds for the owner: settled → reserved UPDATE is
+--     23514 (no DELETE-free reopening path exists)
+-- R5  the tombstone table is service-only: SELECT / DELETE as a client are
+--     42501; permit_tombstoned() is caller-scoped (false for another user's
+--     tombstoned id, true for the owner's)
+-- R6  account deletion: `delete from auth.users` (Rae) and `delete from
+--     public.profiles` (Vic) each remove every permit, shot and tombstone of
+--     the user (settled, linked, reserved, pre-existing tombstone) and the
+--     freed ids are re-issuable as reservations
+-- ============================================================================
+
+reset role;
+set local request.jwt.claim.sub = '';
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000031', 'rae@example.com',
+   '{"full_name":"Rae"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000032', 'vic@example.com',
+   '{"full_name":"Vic"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-rae', '00000000-0000-4000-8000-000000000031',
+   '{"sub":"google-sub-rae","email":"rae@example.com"}');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000032', true, null);
+
+create function pg_temp.r_permit(p_id uuid) returns text
+language sql as $$
+  select coalesce((select status || '/' || coalesce(outcome, 'NULL')
+                   from public.analysis_permits where id = p_id), 'MISSING');
+$$;
+create function pg_temp.r_tomb(p_id uuid) returns text
+language sql as $$
+  select coalesce((select user_id::text || ':' || status || '/' || coalesce(outcome, 'NULL')
+                   from public.analysis_permit_tombstones where permit_id = p_id), 'NONE');
+$$;
+
+-- R1 setup, as Rae: reserve + sync one scored shot (the permit is now
+-- finalized/scored and linked).
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000031';
+do $$
+declare r record; v text;
+begin
+  select * into r from public.reserve_analysis_permit('rae-p1');
+  if r.result <> 'accepted' then
+    raise exception 'R1 precondition: reserve must succeed (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000331', r.permit_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'R1 precondition: the first sync must be accepted (got %)', v;
+  end if;
+  if pg_temp.r_permit(r.permit_id) <> 'finalized/scored' then
+    raise exception 'R1 precondition: the permit must be finalized/scored (got %)', pg_temp.r_permit(r.permit_id);
+  end if;
+end $$;
+
+-- R1: as the owner role.
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+declare p_id uuid; saved record; r text;
+begin
+  select analysis_permit_id into p_id from public.shots
+   where id = '00000000-0000-4000-8000-000000000331';
+  select * into saved from public.analysis_permits where id = p_id;
+  if pg_temp.r_tomb(p_id) <> 'NONE' then
+    raise exception 'R1 precondition: a live permit has no tombstone';
+  end if;
+
+  r := pg_temp.q_try(format('delete from public.analysis_permits where id = %L', p_id));
+  if r <> 'allowed 1' then
+    raise exception 'R1: the owner may remove the row (ops path), got %', r;
+  end if;
+  if pg_temp.r_permit(p_id) <> 'MISSING' then
+    raise exception 'R1: the row must be gone';
+  end if;
+  if pg_temp.r_tomb(p_id) <> '00000000-0000-4000-8000-000000000031:finalized/scored' then
+    raise exception 'R1: the settled row must leave a tombstone (got %)', pg_temp.r_tomb(p_id);
+  end if;
+  if (select analysis_permit_id from public.shots
+      where id = '00000000-0000-4000-8000-000000000331') is distinct from p_id then
+    raise exception 'R1: the shot keeps its link (the row is restorable)';
+  end if;
+
+  -- Reopening the id: as Rae reserved, as Vic reserved, as Rae in another
+  -- settled shape, as Vic in the right shape — every one is 23514.
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values (%L, '00000000-0000-4000-8000-000000000031', 'rae-reopen')$q$, p_id));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R1: reopening a tombstoned id as reserved must be 23514 + access.permit_transition_rejected (got %)', r;
+  end if;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values (%L, '00000000-0000-4000-8000-000000000032', 'vic-steal')$q$, p_id));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R1: another user cannot take a tombstoned id (got %)', r;
+  end if;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+       values (%L, '00000000-0000-4000-8000-000000000031', %L, 'released', 'expired')$q$,
+    p_id, saved.idempotency_key));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R1: a different settled shape is not the restore (got %)', r;
+  end if;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+       values (%L, '00000000-0000-4000-8000-000000000032', %L, 'finalized', 'scored')$q$,
+    p_id, saved.idempotency_key));
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R1: the right shape under another user is not the restore (got %)', r;
+  end if;
+  if pg_temp.r_permit(p_id) <> 'MISSING' or pg_temp.r_tomb(p_id) = 'NONE' then
+    raise exception 'R1: refused inserts must leave the id gone and remembered';
+  end if;
+
+  -- The byte-identical restore (pg_dump --data-only / support repair).
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at, updated_at)
+       values (%L, %L, %L, %L, %L, %L, %L)$q$,
+    saved.id, saved.user_id, saved.idempotency_key, saved.status, saved.outcome,
+    saved.created_at, saved.updated_at));
+  if r <> 'allowed 1' then
+    raise exception 'R1: the identical settled row must be restorable (got %)', r;
+  end if;
+  if pg_temp.r_permit(p_id) <> 'finalized/scored' then
+    raise exception 'R1: the restored row is finalized/scored (got %)', pg_temp.r_permit(p_id);
+  end if;
+  if pg_temp.r_tomb(p_id) <> 'NONE' then
+    raise exception 'R1: the restore consumes the tombstone (got %)', pg_temp.r_tomb(p_id);
+  end if;
+end $$;
+
+-- R1: the restored permit is still consumed for Rae.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000031';
+do $$
+declare p_id uuid; v text;
+begin
+  select analysis_permit_id into p_id from public.shots
+   where id = '00000000-0000-4000-8000-000000000331';
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000332', p_id, 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'R1: a second sync on the restored permit must be access.permit_not_reserved (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where user_id = '00000000-0000-4000-8000-000000000031') <> 1 then
+    raise exception 'R1: exactly one shot for Rae';
+  end if;
+  -- replay of the shot that consumed it is still an idempotent accept
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000331', p_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'R1: replaying the held shot must stay accepted (got %)', v;
+  end if;
+end $$;
+
+-- R2 + R3 + R4, as the owner: a settled legacy-style permit (no shot), a
+-- reserved one, and the UPDATE path.
+reset role;
+set local request.jwt.claim.sub = '';
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+values
+  ('00000000-0000-4000-8000-000000000341', '00000000-0000-4000-8000-000000000031', 'rae-legacy', 'finalized', 'scored'),
+  ('00000000-0000-4000-8000-000000000342', '00000000-0000-4000-8000-000000000031', 'rae-hygiene', 'reserved', null),
+  ('00000000-0000-4000-8000-000000000343', '00000000-0000-4000-8000-000000000031', 'rae-settled', 'released', 'cancelled');
+do $$
+declare r text;
+begin
+  -- R2
+  r := pg_temp.q_try('delete from public.analysis_permits where id = ''00000000-0000-4000-8000-000000000341''');
+  if r <> 'allowed 1' then
+    raise exception 'R2: the owner may remove a settled legacy-style row (got %)', r;
+  end if;
+  if pg_temp.r_tomb('00000000-0000-4000-8000-000000000341') <> '00000000-0000-4000-8000-000000000031:finalized/scored' then
+    raise exception 'R2: a settled unlinked permit leaves a tombstone (got %)', pg_temp.r_tomb('00000000-0000-4000-8000-000000000341');
+  end if;
+  r := pg_temp.q_try(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values ('00000000-0000-4000-8000-000000000341', '00000000-0000-4000-8000-000000000031', 'rae-legacy-again')$q$);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R2: reopening a settled legacy-style id must be 23514 (got %)', r;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000341') <> 'MISSING' then
+    raise exception 'R2: the refused reopen writes nothing';
+  end if;
+
+  -- R3
+  r := pg_temp.q_try('delete from public.analysis_permits where id = ''00000000-0000-4000-8000-000000000342''');
+  if r <> 'allowed 1' then
+    raise exception 'R3: a reserved unlinked permit is deletable by the owner (got %)', r;
+  end if;
+  if pg_temp.r_tomb('00000000-0000-4000-8000-000000000342') <> 'NONE' then
+    raise exception 'R3: a reserved unlinked permit leaves no tombstone (got %)', pg_temp.r_tomb('00000000-0000-4000-8000-000000000342');
+  end if;
+  r := pg_temp.q_try(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+       values ('00000000-0000-4000-8000-000000000342', '00000000-0000-4000-8000-000000000031', 'rae-hygiene-again')$q$);
+  if r <> 'allowed 1' then
+    raise exception 'R3: the freed id is re-issuable (got %)', r;
+  end if;
+
+  -- R4
+  r := pg_temp.q_try(
+    $q$update public.analysis_permits set status = 'reserved', outcome = null
+       where id = '00000000-0000-4000-8000-000000000343'$q$);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R4: the owner cannot reopen a settled row by UPDATE (got %)', r;
+  end if;
+  r := pg_temp.q_try(
+    $q$update public.analysis_permits set status = 'finalized', outcome = 'scored'
+       where id = '00000000-0000-4000-8000-000000000343'$q$);
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'R4: the owner cannot move a settled row to another outcome (got %)', r;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000343') <> 'released/cancelled' then
+    raise exception 'R4: the settled row is unchanged';
+  end if;
+end $$;
+
+-- R2 (client view) + R5, as Rae then Vic.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000031';
+do $$
+declare v text; r text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000344', '00000000-0000-4000-8000-000000000341', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'R2: the RPC must report a tombstoned own permit as consumed (got %)', v;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000344') then
+    raise exception 'R2: nothing is written for a tombstoned permit';
+  end if;
+  -- R5
+  r := pg_temp.q_try('select * from public.analysis_permit_tombstones');
+  if r <> '42501:' then
+    raise exception 'R5: the tombstone table must be unreadable by clients (got %)', r;
+  end if;
+  r := pg_temp.q_try('delete from public.analysis_permit_tombstones');
+  if r <> '42501:' then
+    raise exception 'R5: the tombstone table must be unwritable by clients (got %)', r;
+  end if;
+  if not public.permit_tombstoned('00000000-0000-4000-8000-000000000341') then
+    raise exception 'R5: permit_tombstoned() is true for the owner of the id';
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000032';
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000345', '00000000-0000-4000-8000-000000000341', 'scored'));
+  if v <> 'access.permit_not_found' then
+    raise exception 'R2: another user''s tombstoned id is simply unknown (got %)', v;
+  end if;
+  if public.permit_tombstoned('00000000-0000-4000-8000-000000000341') then
+    raise exception 'R5: permit_tombstoned() must not leak another user''s id';
+  end if;
+end $$;
+
+-- R6 setup: Vic gets a linked finalized permit, a settled unlinked one, a
+-- live one and a pre-existing tombstone (Rae already has all four shapes).
+do $$
+declare r record; v text;
+begin
+  select * into r from public.reserve_analysis_permit('vic-p1');
+  if r.result <> 'accepted' then
+    raise exception 'R6 precondition: member reserve must succeed (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000351', r.permit_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'R6 precondition: member sync must be accepted (got %)', v;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+values
+  ('00000000-0000-4000-8000-000000000352', '00000000-0000-4000-8000-000000000032', 'vic-settled', 'finalized', 'cancelled'),
+  ('00000000-0000-4000-8000-000000000353', '00000000-0000-4000-8000-000000000032', 'vic-live', 'reserved', null),
+  ('00000000-0000-4000-8000-000000000354', '00000000-0000-4000-8000-000000000032', 'vic-gone', 'finalized', 'scored');
+delete from public.analysis_permits where id = '00000000-0000-4000-8000-000000000354';
+
+-- R6: both deletion paths.
+do $$
+declare rae_ids uuid[]; vic_ids uuid[]; u uuid; p uuid; r text; n int := 0;
+begin
+  select array_agg(id) into rae_ids from public.analysis_permits
+   where user_id = '00000000-0000-4000-8000-000000000031';
+  select array_agg(id) into vic_ids from public.analysis_permits
+   where user_id = '00000000-0000-4000-8000-000000000032';
+  if coalesce(array_length(rae_ids, 1), 0) < 3 or coalesce(array_length(vic_ids, 1), 0) < 3 then
+    raise exception 'R6 precondition: each user holds linked + settled + reserved permits (% / %)',
+      array_length(rae_ids, 1), array_length(vic_ids, 1);
+  end if;
+  if (select count(*) from public.analysis_permit_tombstones
+      where user_id in ('00000000-0000-4000-8000-000000000031', '00000000-0000-4000-8000-000000000032')) <> 2 then
+    raise exception 'R6 precondition: each user has one pre-existing tombstone';
+  end if;
+  if (select count(*) from public.shots
+      where user_id in ('00000000-0000-4000-8000-000000000031', '00000000-0000-4000-8000-000000000032')) <> 2 then
+    raise exception 'R6 precondition: each user has one linked shot';
+  end if;
+
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000031';
+  delete from public.profiles where id = '00000000-0000-4000-8000-000000000032';
+
+  foreach u in array array['00000000-0000-4000-8000-000000000031'::uuid,
+                          '00000000-0000-4000-8000-000000000032'::uuid] loop
+    if exists (select 1 from public.profiles where id = u)
+       or exists (select 1 from public.analysis_permits where user_id = u)
+       or exists (select 1 from public.shots where user_id = u)
+       or exists (select 1 from public.analysis_permit_tombstones where user_id = u) then
+      raise exception 'R6: account deletion must leave no profile, permit, shot or tombstone for %', u;
+    end if;
+  end loop;
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('google', 'google-sub-rae')) then
+    raise exception 'R6: the identity ledger row must survive account deletion';
+  end if;
+
+  -- The freed ids (linked and settled alike) are plain ids again.
+  foreach p in array rae_ids || vic_ids
+                     || array['00000000-0000-4000-8000-000000000354'::uuid] loop
+    n := n + 1;
+    r := pg_temp.q_try(format(
+      $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+         values (%L, '00000000-0000-4000-8000-000000000021', %L)$q$, p, 'sam-r6-' || n));
+    if r <> 'allowed 1' then
+      raise exception 'R6: freed id % must be re-issuable (got %)', p, r;
+    end if;
+  end loop;
 end $$;
 
 rollback;
