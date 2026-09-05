@@ -1,15 +1,18 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { HELD_OUT_CASE_IDS } from "../src/coachGates.js";
 import { REPO_ROOT } from "../src/engine/corpus.js";
 import {
   evaluateCertificationReadiness,
   evaluateHoldout,
+  HOLDOUT_LEDGER_PATH,
   INSPECTION_BUDGETS,
   loadHoldoutLedger,
   type HoldoutEntry,
   type HoldoutLedger,
+  type HoldoutTier,
   type InspectionEvent,
   type SuccessorDesignation,
 } from "../src/holdoutRotation.js";
@@ -27,6 +30,11 @@ import {
  * freeze — certification therefore stays BLOCKED. This suite must never
  * be edited to flip that verdict without new external evidence.
  */
+
+const tmpRoots: string[] = [];
+afterAll(() => {
+  for (const root of tmpRoots) rmSync(root, { recursive: true, force: true });
+});
 
 function event(overrides: Partial<InspectionEvent> = {}): InspectionEvent {
   return {
@@ -218,6 +226,164 @@ describe("certification readiness enforcement", () => {
     );
     expect(readiness.status).toBe("ELIGIBLE");
     expect(readiness.reasons).toEqual([]);
+  });
+});
+
+describe("certification readiness fails closed (ADJ-02)", () => {
+  const retiredTo = (caseId: string, successorId: string) =>
+    entry({
+      caseId,
+      status: "RETIRED_TO_REGRESSION",
+      inspections: [event(), event(), event(), event()],
+      retirement: {
+        dateIso: "2026-08-29",
+        workstream: "test",
+        reason: "over budget",
+        regressionRole: "regression fixture",
+        successorId,
+      },
+    });
+
+  it("an empty ledger (no holdouts, no successors) is NOT_EVALUABLE with a reason", () => {
+    const readiness = evaluateCertificationReadiness(ledger());
+    expect(readiness.status).toBe("NOT_EVALUABLE");
+    expect(readiness.reasons.length).toBeGreaterThan(0);
+  });
+
+  it("a ledger without a successors array is NOT_EVALUABLE and does not throw", () => {
+    const malformed = { ...ledger({ holdouts: [entry()] }) } as Partial<HoldoutLedger>;
+    delete malformed.successors;
+    let readiness: ReturnType<typeof evaluateCertificationReadiness> | null = null;
+    expect(() => {
+      readiness = evaluateCertificationReadiness(malformed as HoldoutLedger);
+    }).not.toThrow();
+    expect(readiness!.status).toBe("NOT_EVALUABLE");
+    expect(readiness!.reasons.length).toBeGreaterThan(0);
+  });
+
+  it("a ledger whose holdouts is not an array is NOT_EVALUABLE and does not throw", () => {
+    const malformed = ledger();
+    (malformed as unknown as { holdouts: unknown }).holdouts = "nope";
+    let readiness: ReturnType<typeof evaluateCertificationReadiness> | null = null;
+    expect(() => {
+      readiness = evaluateCertificationReadiness(malformed);
+    }).not.toThrow();
+    expect(readiness!.status).toBe("NOT_EVALUABLE");
+  });
+
+  it("loadHoldoutLedger on a missing file raises a typed governance error, not raw ENOENT", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-missing-"));
+    tmpRoots.push(root);
+    let caught: unknown = null;
+    try {
+      loadHoldoutLedger(root);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).not.toBeNull();
+    expect((caught as { code?: string }).code).not.toBe("ENOENT");
+    expect(String(caught)).toMatch(/holdout ledger/i);
+  });
+
+  it("loadHoldoutLedger on a non-JSON file raises a typed governance error, not SyntaxError", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-nonjson-"));
+    tmpRoots.push(root);
+    mkdirSync(join(root, "datasets", "holdouts"), { recursive: true });
+    writeFileSync(join(root, HOLDOUT_LEDGER_PATH), "{ this is not json");
+    let caught: unknown = null;
+    try {
+      loadHoldoutLedger(root);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).not.toBeNull();
+    expect(caught).not.toBeInstanceOf(SyntaxError);
+    expect(String(caught)).toMatch(/holdout ledger/i);
+  });
+
+  it("loadHoldoutLedger rejects holdouts:'nope' (shape validated beyond policyVersion)", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-shape-"));
+    tmpRoots.push(root);
+    mkdirSync(join(root, "datasets", "holdouts"), { recursive: true });
+    writeFileSync(
+      join(root, HOLDOUT_LEDGER_PATH),
+      JSON.stringify({ policyVersion: "holdout-rotation-v1", holdouts: "nope" }),
+    );
+    let loaded: HoldoutLedger | null = null;
+    let caught: unknown = null;
+    try {
+      loaded = loadHoldoutLedger(root);
+    } catch (error) {
+      caught = error;
+    }
+    if (caught === null) {
+      expect(Array.isArray(loaded?.holdouts)).toBe(true);
+    } else {
+      expect(caught).not.toBeInstanceOf(TypeError);
+      expect(String(caught)).toMatch(/holdout ledger/i);
+    }
+  });
+
+  it("an unknown tier with 500 inspections is never WITHIN_BUDGET", () => {
+    const bogus = entry({
+      tier: "BOGUS" as HoldoutTier,
+      inspections: Array.from({ length: 500 }, () => event()),
+    });
+    let outcome: string;
+    try {
+      outcome = evaluateHoldout(bogus).verdict;
+    } catch (error) {
+      expect(String(error)).toMatch(/tier/i);
+      return;
+    }
+    expect(outcome).not.toBe("WITHIN_BUDGET");
+    const readiness = evaluateCertificationReadiness(ledger({ holdouts: [bogus] }));
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toMatch(/tier/i);
+  });
+
+  it("self-succession is BLOCKED with a reason", () => {
+    const readiness = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [retiredTo("old-1", "old-1")],
+        successors: [successor({ caseId: "old-1" })],
+      }),
+    );
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toContain("old-1");
+  });
+
+  it("a successor whose tier is DEV (not SHADOW_HOLDOUT) is BLOCKED with a reason", () => {
+    const readiness = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [retiredTo("old-1", "fresh-y")],
+        successors: [successor({ tier: "DEV" })],
+      }),
+    );
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toContain("fresh-y");
+  });
+
+  it("one successor shared by two retired holdouts is BLOCKED with a reason", () => {
+    const readiness = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [retiredTo("old-1", "fresh-y"), retiredTo("old-2", "fresh-y")],
+        successors: [successor()],
+      }),
+    );
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toContain("fresh-y");
+  });
+
+  it("a successor that is itself a RETIRED holdout is BLOCKED with a reason", () => {
+    const readiness = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [retiredTo("old-1", "fresh-y"), retiredTo("fresh-y", "fresh-z")],
+        successors: [successor(), successor({ caseId: "fresh-z" })],
+      }),
+    );
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toContain("fresh-y");
   });
 });
 
