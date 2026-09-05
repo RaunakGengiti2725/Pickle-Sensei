@@ -18,7 +18,9 @@
 # never asked for its version to decide whether to trust it — and a candidate
 # that does not match is a setup failure, not a warning and not a fallback.
 #
-# Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
+# Exit codes: 0 = no findings, 1 = findings, 2 = setup failure (unverified or
+# missing scanner, bad arguments, or gitleaks itself aborting — e.g. a malformed
+# .gitleaks.toml — which is never reported as a verdict about the code).
 #
 # Environment:
 #   GITLEAKS_BIN            use this binary (must hash to the pinned digest)
@@ -241,9 +243,21 @@ run_scan() {
   case "$rc" in
     0) log "${label}: clean ($((end - start))s)" ;;
     1) log "${label}: FINDINGS — see output above$([ -n "$REPORT_DIR" ] && printf ' and %s' "$REPORT_DIR/gitleaks-${label}.json") ($((end - start))s)" ;;
-    *) log "${label}: gitleaks failed with exit $rc" ;;
+    *) log "${label}: gitleaks failed with exit $rc (scanner or config error, not a verdict)" ;;
   esac
   return "$rc"
+}
+
+# A gitleaks exit other than 0/1 (malformed config, unreadable repo, crash) is
+# not a verdict about the code; surface it as a setup failure instead of
+# letting it masquerade as "findings".
+record_scan() {
+  local rc="$1"
+  case "$rc" in
+    0) ;;
+    1) overall=1 ;;
+    *) die "scan aborted: gitleaks exited $rc" ;;
+  esac
 }
 
 # `gitleaks dir` walks every file under the path, including gitignored ones, so
@@ -278,16 +292,20 @@ scan_tree() {
 }
 
 overall=0
+rc=0
 if [ "$SCAN_TREE" = 1 ]; then
-  scan_tree || overall=1
+  scan_tree || rc=$?
+  record_scan "$rc"
 fi
 if [ "$SCAN_HISTORY" = 1 ]; then
-  run_scan history git --log-opts "$LOG_OPTS" || overall=1
+  rc=0
+  run_scan history git --log-opts "$LOG_OPTS" || rc=$?
+  record_scan "$rc"
 fi
 
 if [ "$overall" = 0 ]; then
   log "PASS: no secrets detected"
 else
-  log "FAIL: secrets detected (or scanner error). Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
+  log "FAIL: secrets detected. Never commit the value — remove it, rotate it, and only allowlist in .gitleaks.toml with a justification if it is provably non-secret."
 fi
 exit "$overall"
