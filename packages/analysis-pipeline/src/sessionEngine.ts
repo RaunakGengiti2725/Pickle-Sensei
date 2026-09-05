@@ -579,9 +579,10 @@ export function selectTargetEvent(
  *
  *  1. EVENT IDENTITY = stroke-event-2 (D-030, strokeEvents.ts). The engine
  *     never invents its own proposer: on every reconciliation it runs
- *     `proposeStrokeEventsV2` over the ACCUMULATED series (target BODY
- *     motion proposes; paddle only confirms/ranks/refines). Emitted events
- *     carry the canonical `StrokeEventProposalV2` — no second event type.
+ *     `proposeStrokeEventsV2` over the PROPOSAL WINDOW — the trailing
+ *     `PROPOSAL_WINDOW_MS` of the accumulated series (target BODY motion
+ *     proposes; paddle only confirms/ranks/refines). Emitted events carry
+ *     the canonical `StrokeEventProposalV2` — no second event type.
  *
  *  2. EVENT COMPLETION = D-029 adaptive settle-or-valley-or-safety
  *     (eventCompletionBench.ts, ADAPTIVE variant). Constants are mirrored
@@ -602,9 +603,34 @@ export function selectTargetEvent(
  *     and may close per D-029;
  *   - wrist samples at/before the frontier arriving late are DROPPED and
  *     counted (`droppedLateSamples`) — they may not rewrite history. Paddle
- *     samples are kept regardless: per D-030 paddle evidence can never
- *     create/delete/re-bound a proposal, so late paddle history only feeds
- *     the confirm-normalization of FUTURE candidates.
+ *     samples inside the window are kept regardless: per D-030 paddle
+ *     evidence can never create/delete/re-bound a proposal, so late paddle
+ *     history only feeds the confirm-normalization of FUTURE candidates.
+ *
+ * PROPOSAL WINDOW (why per-push cost does not grow with the session): a
+ * live session pushes one wrist sample per frame for as long as the athlete
+ * plays, so re-proposing from sample 0 on every push makes each frame cost
+ * O(session) and the session O(N²) — measured 18–22× growth in per-push
+ * cost between minute 1 and minute 5 of a 30 fps stream. Every question the
+ * reconciliation asks is LOCAL in time: a candidate whose peak is older
+ * than `OPEN_CANDIDATE_MAX_AGE_MS` has necessarily closed (safety max fires
+ * ≤ safetyMaxMs after the raw trigger, which lies inside bounds capped at
+ * peak+1200), and the proposer needs at most `PROPOSAL_CONTEXT_MS` of
+ * history before that peak (its own boundary walk, one glued preceding
+ * fragment, the ±1.5 s local-baseline context). Samples older than
+ * `lastMs − PROPOSAL_WINDOW_MS` are therefore RETIRED from the working
+ * series after each reconciliation (totals stay in `qualityState`); a
+ * sample arriving behind the retired horizon is dropped and counted like
+ * any other late sample. Bounded work per push, unbounded session length.
+ *
+ * The ONE semantic consequence, recorded — never silent: the proposer's
+ * relative floor (30% of the strongest smoothed peak) is now taken over the
+ * window, not the whole session. A stroke far stronger than everything
+ * after it stops suppressing weaker movements once it leaves the window.
+ * Such a movement is by then far older than any live candidate can be, so
+ * it is never emitted (it would close thousands of ms after its own end);
+ * it is skipped as STALE and noted once (`SESSION_STALE_PROPOSAL_IGNORED`).
+ * Retro-suppression notes are likewise judged against the window.
  *
  * BOUND-STABILITY WAIT (why emission is not instant on settle): proposal
  * boundaries walk outward while smoothed wrist speed stays above the
@@ -622,7 +648,7 @@ export function selectTargetEvent(
  */
 
 export const SESSION_ENGINE_VERSION =
-  "session-engine-1 (streaming reconcile over stroke-event-2 · D-029 completion · append-only)";
+  "session-engine-2 (windowed streaming reconcile over stroke-event-2 · D-029 completion · append-only)";
 
 /** D-029 ADAPTIVE completion constants, mirrored VERBATIM from
  * eventCompletionBench.ts (the promoted-candidate semantics). Every field
@@ -650,6 +676,29 @@ export const SESSION_COMPLETION = {
  * there): once the stream passes peak+this, no sample can extend the
  * proposal's boundaries any further — bounds are stable and freezable. */
 export const BOUND_STABILITY_MS = 1200;
+
+/** Mirror of the local-baseline context in strokeEvents.ts buildEvent
+ * (±1500ms around the event, literal there). */
+const LOCAL_BASELINE_CONTEXT_MS = 1500;
+
+/** Oldest peak a still-OPEN candidate can have relative to the stream time
+ * of the previous reconciliation. Safety max closes a candidate no later
+ * than trigger+safetyMaxMs; the raw trigger lies inside the proposal's
+ * bounds, which reach at most peak+BOUND_STABILITY_MS (one more reach is
+ * allowed for a glued follow-through fragment). Anything older that turns
+ * up as a proposal was not proposable while it was live. */
+const OPEN_CANDIDATE_MAX_AGE_MS = 2 * BOUND_STABILITY_MS + SESSION_COMPLETION.safetyMaxMs;
+
+/** History the proposer needs BEFORE an open candidate's peak for its
+ * proposal to be identical to the full-series one: the start walk, one
+ * glued preceding fragment (gap + that fragment's full span) and the
+ * local-baseline context of the result. */
+const PROPOSAL_CONTEXT_MS =
+  BOUND_STABILITY_MS + GLUE_GATES.maxGapMs + 2 * BOUND_STABILITY_MS + LOCAL_BASELINE_CONTEXT_MS;
+
+/** Trailing span of the accumulated series the proposer runs over on each
+ * reconciliation; older samples are retired (see PROPOSAL WINDOW above). */
+export const PROPOSAL_WINDOW_MS = OPEN_CANDIDATE_MAX_AGE_MS + PROPOSAL_CONTEXT_MS;
 
 export interface SpeedSample {
   timestampMs: number;
@@ -714,7 +763,8 @@ export interface SessionCaptureMeta {
 export interface SessionQualityState {
   wristSamples: number;
   paddleSamples: number;
-  /** Late wrist samples at/before the frontier — dropped, never rewritten. */
+  /** Late samples dropped, never rewritten: wrist samples at/before the
+   * frontier, and any sample behind the retired proposal window. */
   droppedLateSamples: number;
   lastSampleMs: number | null;
   /** Recorded oddities (e.g. suppressed merged proposals) — never silent. */
@@ -804,13 +854,22 @@ function adaptiveCompletion(
 }
 
 export class SessionEventEngine {
+  /** Working series = the proposal window (samples ≥ `retiredBeforeMs`). */
   private readonly wrist: SpeedSample[] = [];
   private readonly paddle: SpeedSample[] = [];
   private readonly events: SessionStrokeEvent[] = [];
   private frontierMs = Number.NEGATIVE_INFINITY;
-  private droppedLateSamples = 0;
+  /** Samples older than this were retired from the working series. */
+  private retiredBeforeMs = Number.NEGATIVE_INFINITY;
+  /** Stream time at the end of the previous reconciliation. */
+  private reconciledThroughMs = Number.NEGATIVE_INFINITY;
+  private acceptedWristSamples = 0;
+  private acceptedPaddleSamples = 0;
+  private droppedLateWristSamples = 0;
+  private droppedLatePaddleSamples = 0;
   private readonly notes: string[] = [];
   private readonly suppressionNoted = new Set<number>();
+  private readonly staleNoted = new Set<number>();
   private readonly retroNoted = new Set<string>();
 
   constructor(
@@ -832,18 +891,28 @@ export class SessionEventEngine {
   }): SessionStrokeEvent[] {
     for (const sample of input.paddle ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
+      if (sample.timestampMs < this.retiredBeforeMs) {
+        this.droppedLatePaddleSamples += 1;
+        continue;
+      }
       insertSorted(this.paddle, sample);
+      this.acceptedPaddleSamples += 1;
     }
     for (const sample of input.wrist ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
-      if (sample.timestampMs <= this.frontierMs) {
-        // Late data behind the frontier could only rewrite closed events.
-        this.droppedLateSamples += 1;
+      if (sample.timestampMs <= this.frontierMs || sample.timestampMs < this.retiredBeforeMs) {
+        // Late data behind the frontier could only rewrite closed events;
+        // behind the retired window there is nothing left to reconcile it
+        // against.
+        this.droppedLateWristSamples += 1;
         continue;
       }
       insertSorted(this.wrist, sample);
+      this.acceptedWristSamples += 1;
     }
-    return this.reconcile(false);
+    const emitted = this.reconcile(false);
+    this.retire();
+    return emitted;
   }
 
   /** Convenience for one-sample-per-frame live feeding. */
@@ -864,8 +933,7 @@ export class SessionEventEngine {
   /** The still-open trailing candidate, for live UI ("stroke in progress").
    * Never emitted from here; bounds may still move until closure. */
   activeProposal(): StrokeEventProposalV2 | null {
-    const batch = this.propose();
-    const open = batch.filter((event) => event.peakMs > this.frontierMs);
+    const open = this.liveCandidates(this.propose());
     return open.length > 0 ? { ...open[open.length - 1]! } : null;
   }
 
@@ -892,9 +960,9 @@ export class SessionEventEngine {
           "adaptive-completion (D-029 settle-or-valley-or-safety; constants mirrored from eventCompletionBench.ts)",
       },
       qualityState: {
-        wristSamples: this.wrist.length + this.droppedLateSamples,
-        paddleSamples: this.paddle.length,
-        droppedLateSamples: this.droppedLateSamples,
+        wristSamples: this.acceptedWristSamples + this.droppedLateWristSamples,
+        paddleSamples: this.acceptedPaddleSamples,
+        droppedLateSamples: this.droppedLateWristSamples + this.droppedLatePaddleSamples,
         lastSampleMs: this.lastSampleMs(),
         notes: [...this.notes],
       },
@@ -949,10 +1017,10 @@ export class SessionEventEngine {
     return last ?? null;
   }
 
-  /** Canonical proposals over the accumulated series (stroke-event-2). Clip
-   * bounds are the observed sample span — in proposeStrokeEventsV2 they only
+  /** Canonical proposals over the proposal window (stroke-event-2). Clip
+   * bounds are the window's sample span — in proposeStrokeEventsV2 they only
    * gate coverage, so a live session (full coverage by construction) sees
-   * identical events to the offline batch run. */
+   * the same events as an offline batch run over the same window. */
   private propose(): StrokeEventProposalV2[] {
     if (this.wrist.length < 4) return [];
     return proposeStrokeEventsV2({
@@ -961,6 +1029,28 @@ export class SessionEventEngine {
       clipStartMs: this.wrist[0]!.timestampMs,
       clipEndMs: this.wrist[this.wrist.length - 1]!.timestampMs,
     }).events;
+  }
+
+  /** Batch proposals that are NEW candidates: past the frontier and not
+   * stale. Staleness is judged against the PREVIOUS reconciliation's stream
+   * time, so a bulk push (replay, chunked feeding) that first reveals a
+   * whole clip reconciles every stroke in it exactly like the full-series
+   * engine did. */
+  private liveCandidates(batch: readonly StrokeEventProposalV2[]): StrokeEventProposalV2[] {
+    const staleBeforeMs = this.reconciledThroughMs - OPEN_CANDIDATE_MAX_AGE_MS;
+    return batch.filter((event) => event.peakMs > this.frontierMs && event.peakMs >= staleBeforeMs);
+  }
+
+  /** Drop the working series' prefix that no future reconciliation can
+   * read: older than the proposal window behind the latest sample. */
+  private retire(): void {
+    const lastMs = this.lastSampleMs();
+    if (lastMs === null) return;
+    const cutoffMs = lastMs - PROPOSAL_WINDOW_MS;
+    if (cutoffMs <= this.retiredBeforeMs) return;
+    this.retiredBeforeMs = cutoffMs;
+    trimBefore(this.wrist, cutoffMs);
+    trimBefore(this.paddle, cutoffMs);
   }
 
   private reconcile(flush: boolean): SessionStrokeEvent[] {
@@ -972,8 +1062,9 @@ export class SessionEventEngine {
     for (;;) {
       const batch = this.propose();
       this.noteSuppressedMergers(batch);
+      this.noteStaleProposals(batch, lastMs);
       this.noteRetroSubthreshold(batch);
-      const candidates = batch.filter((event) => event.peakMs > this.frontierMs);
+      const candidates = this.liveCandidates(batch);
       const candidate = candidates[0];
       if (!candidate) break;
       const hasNewerCandidate = candidates.length > 1;
@@ -1011,22 +1102,49 @@ export class SessionEventEngine {
       emitted.push(event);
       this.frontierMs = Math.max(this.frontierMs, proposal.endMs);
     }
+    this.reconciledThroughMs = lastMs;
     return emitted;
+  }
+
+  /** A proposal past the frontier whose peak is older than any open
+   * candidate can be was not proposable while it was live (the window's
+   * relative floor dropped once a stronger stroke retired). Emitting it now
+   * would close it far after its own end — it is skipped, and recorded. */
+  private noteStaleProposals(batch: readonly StrokeEventProposalV2[], lastMs: number): void {
+    const staleBeforeMs = this.reconciledThroughMs - OPEN_CANDIDATE_MAX_AGE_MS;
+    for (const proposal of batch) {
+      if (proposal.peakMs <= this.frontierMs || proposal.peakMs >= staleBeforeMs) continue;
+      const key = Math.round(proposal.peakMs);
+      if (this.staleNoted.has(key)) continue;
+      this.staleNoted.add(key);
+      this.notes.push(
+        `SESSION_STALE_PROPOSAL_IGNORED: batch proposal at peak ${key}ms (${proposal.peakSpeed.toFixed(2)} u/s) ` +
+          `first surfaced ${Math.round(lastMs - proposal.peakMs)}ms after its peak, past the ` +
+          `${OPEN_CANDIDATE_MAX_AGE_MS}ms completion horizon; never emitted`,
+      );
+    }
   }
 
   /**
    * CAUSAL vs ACAUSAL divergence, recorded — never silent. strokeEvents.ts
-   * only proposes peaks ≥ max(0.5, 30% of the GLOBAL smoothed peak); in a
-   * live stream the global peak only grows, so a weak early stroke that was
+   * only proposes peaks ≥ max(0.5, 30% of the window's smoothed peak); as
+   * the stream advances that peak can grow, so a weak early stroke that was
    * a valid proposal when it closed can be retro-suppressed from later
-   * full-series batch runs by a much stronger stroke (measured on
-   * afn-sasebo-rally2: a 0.60 u/s movement at 67–1401ms vanishes once the
-   * 6.87 u/s stroke arrives). The emitted event stays (append-only; it was
-   * proposed over all evidence available at close time) and is flagged for
-   * downstream confidence handling.
+   * batch runs by a much stronger stroke inside the same window (measured
+   * on afn-sasebo-rally2: a 0.60 u/s movement at 67–1401ms vanishes once
+   * the 6.87 u/s stroke arrives). The emitted event stays (append-only; it
+   * was proposed over all evidence available at close time) and is flagged
+   * for downstream confidence handling. Only events whose span still lies
+   * inside the window are judged — the batch cannot see anything older.
    */
   private noteRetroSubthreshold(batch: readonly StrokeEventProposalV2[]): void {
-    for (const event of this.events) {
+    const windowStartMs = this.wrist[0]?.timestampMs;
+    if (windowStartMs === undefined) return;
+    // Emitted peaks are strictly increasing (each lies past the frontier).
+    for (let index = this.events.length - 1; index >= 0; index -= 1) {
+      const event = this.events[index]!;
+      if (event.proposal.peakMs < windowStartMs) break;
+      if (event.proposal.startMs < windowStartMs) continue;
       if (this.retroNoted.has(event.eventId)) continue;
       const stillProposed = batch.some(
         (proposal) =>
@@ -1037,8 +1155,8 @@ export class SessionEventEngine {
       this.retroNoted.add(event.eventId);
       this.notes.push(
         `SESSION_EVENT_RETRO_SUPPRESSED: ${event.eventId} (peak ${event.proposal.peakSpeed.toFixed(2)} u/s ` +
-          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the full-series batch ` +
-          `(a later stroke raised the relative proposal floor); kept append-only, flagged`,
+          `at ${Math.round(event.proposal.peakMs)}ms) is no longer proposed by the batch over the ` +
+          `proposal window (a later stroke raised the relative proposal floor); kept append-only, flagged`,
       );
     }
   }
@@ -1060,6 +1178,12 @@ export class SessionEventEngine {
       );
     }
   }
+}
+
+function trimBefore(series: SpeedSample[], cutoffMs: number): void {
+  let count = 0;
+  while (count < series.length && series[count]!.timestampMs < cutoffMs) count += 1;
+  if (count > 0) series.splice(0, count);
 }
 
 function insertSorted(series: SpeedSample[], sample: SpeedSample): void {
