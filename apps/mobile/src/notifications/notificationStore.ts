@@ -27,6 +27,12 @@ import {
  *
  * A signed-out process gets everything cancelled — reminders never outlive
  * the account context that asked for them.
+ *
+ * In-memory state is only ever the ACTIVE owner's: the moment a different
+ * owner is hydrated the previous owner's prefs are dropped (hydrated=false,
+ * ownerKey=null, defaults), and a write that lands before the new owner's
+ * durable row has been read is re-based onto that row once it arrives — no
+ * account ever inherits another account's opt-in or reminder time.
  */
 
 export interface NotificationStoreDeps {
@@ -34,6 +40,10 @@ export interface NotificationStoreDeps {
   loadContext?: () => Promise<NotificationPlanContext>;
   expectedOwnerKey?: string;
 }
+
+export type NotificationPrefsPatch = Partial<
+  Omit<NotificationPrefs, 'version'>
+>;
 
 export type NotificationOnboardingChoice = 'enable' | 'not_now';
 export const PENDING_NOTIFICATION_ONBOARDING_KV_KEY =
@@ -50,6 +60,9 @@ interface NotificationState {
   /** The last reconcile against the OS scheduler failed; what is queued may
    *  not match the preferences until the next successful sync. */
   scheduleFailed: boolean;
+  /** A preference write that arrived before its owner's durable row was
+   *  read; merged onto that row (newest intent wins) when hydrate commits. */
+  pendingWrite: { owner: string; patch: NotificationPrefsPatch } | null;
   hydrate: (deps?: NotificationStoreDeps) => Promise<void>;
   refreshPermission: (deps?: NotificationStoreDeps) => Promise<void>;
   /** System prompt → on grant, flips the master switch on and schedules. */
@@ -61,7 +74,7 @@ interface NotificationState {
     deps?: NotificationStoreDeps,
   ) => Promise<boolean>;
   setPrefs: (
-    patch: Partial<Omit<NotificationPrefs, 'version'>>,
+    patch: NotificationPrefsPatch,
     deps?: NotificationStoreDeps,
   ) => Promise<void>;
   dismissPrompt: (deps?: NotificationStoreDeps) => Promise<void>;
@@ -131,6 +144,110 @@ async function persistPrefs(
   );
 }
 
+/** The in-memory state with every trace of a previous owner dropped; the
+ *  device-level permission survives and a write already queued for `owner`
+ *  is kept. `null` when the state already belongs to `owner`. */
+function invalidatedForOwner(
+  state: Pick<NotificationState, 'ownerKey' | 'pendingWrite'>,
+  owner: string,
+): Partial<NotificationState> | null {
+  if (state.ownerKey === owner) return null;
+  return {
+    hydrated: false,
+    ownerKey: null,
+    prefs: { ...DEFAULT_NOTIFICATION_PREFS },
+    persistFailed: false,
+    scheduleFailed: false,
+    pendingWrite:
+      state.pendingWrite?.owner === owner ? state.pendingWrite : null,
+  };
+}
+
+/** The hydrate currently reading an owner's durable row; a second hydrate
+ *  for the same owner joins it instead of racing it to the commit. */
+let hydrateInFlight: { owner: string; promise: Promise<void> } | null = null;
+
+async function hydrateOwner(
+  set: (patch: Partial<NotificationState>) => void,
+  get: () => NotificationState,
+  owner: string,
+  deps: NotificationStoreDeps | undefined,
+): Promise<void> {
+  const invalidated = invalidatedForOwner(get(), owner);
+  if (invalidated) set(invalidated);
+  const scheduler = deps?.scheduler ?? getScheduler();
+  if (owner === SIGNED_OUT_DATA_OWNER) {
+    // No readable owner: nothing may stay scheduled.
+    await scheduler.cancelAllPlanned().catch(() => {});
+    if (getActiveDataOwner() !== owner) return;
+    set({
+      hydrated: true,
+      ownerKey: owner,
+      prefs: { ...DEFAULT_NOTIFICATION_PREFS },
+      permission: get().permission,
+      persistFailed: false,
+      scheduleFailed: false,
+      pendingWrite: null,
+    });
+    return;
+  }
+  let prefs: NotificationPrefs;
+  let persistFailed = false;
+  let rowReadable = true;
+  try {
+    const db = getDb();
+    const raw = await getKv(db, notificationPrefsKeyForOwner(owner));
+    prefs = parseNotificationPrefs(raw);
+    const pendingRaw = await getKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY);
+    const pending = parsePendingOnboardingChoice(pendingRaw);
+    if (getActiveDataOwner() !== owner) return;
+    if (pending) {
+      if (!raw) {
+        prefs = {
+          ...prefs,
+          enabled: pending.enabled,
+          promptDismissed: true,
+        };
+        await persistPrefs(owner, prefs);
+        if (getActiveDataOwner() !== owner) return;
+      }
+      await setKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
+    }
+  } catch {
+    prefs = { ...DEFAULT_NOTIFICATION_PREFS };
+    rowReadable = false;
+  }
+  // Writes that arrived while the row was being read are re-based onto it,
+  // newest intent last. Each persist may let another write queue up, so keep
+  // draining until the queue is empty before committing.
+  for (;;) {
+    const queued = get().pendingWrite;
+    if (!queued || queued.owner !== owner) break;
+    set({ pendingWrite: null });
+    prefs = { ...prefs, ...queued.patch, version: 1 };
+    if (!rowReadable) {
+      // Never overwrite a row we could not read with defaults + a patch.
+      persistFailed = true;
+      continue;
+    }
+    try {
+      await persistPrefs(owner, prefs);
+    } catch {
+      persistFailed = true;
+    }
+  }
+  if (getActiveDataOwner() !== owner) return;
+  set({
+    hydrated: true,
+    ownerKey: owner,
+    prefs,
+    persistFailed,
+  });
+  await get().refreshPermission(deps);
+  if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
+  await get().syncNow(deps);
+}
+
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
@@ -138,56 +255,17 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   permission: 'unknown',
   persistFailed: false,
   scheduleFailed: false,
+  pendingWrite: null,
 
-  hydrate: async deps => {
+  hydrate: deps => {
     const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
-    if (getActiveDataOwner() !== owner) return;
-    const scheduler = deps?.scheduler ?? getScheduler();
-    if (owner === SIGNED_OUT_DATA_OWNER) {
-      // No readable owner: nothing may stay scheduled.
-      await scheduler.cancelAllPlanned().catch(() => {});
-      if (getActiveDataOwner() !== owner) return;
-      set({
-        hydrated: true,
-        ownerKey: owner,
-        prefs: { ...DEFAULT_NOTIFICATION_PREFS },
-        permission: get().permission,
-        persistFailed: false,
-        scheduleFailed: false,
-      });
-      return;
-    }
-    let prefs: NotificationPrefs;
-    try {
-      const db = getDb();
-      const raw = await getKv(db, notificationPrefsKeyForOwner(owner));
-      prefs = parseNotificationPrefs(raw);
-      const pendingRaw = await getKv(
-        db,
-        PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
-      );
-      const pending = parsePendingOnboardingChoice(pendingRaw);
-      if (getActiveDataOwner() !== owner) return;
-      if (pending) {
-        if (!raw) {
-          prefs = {
-            ...prefs,
-            enabled: pending.enabled,
-            promptDismissed: true,
-          };
-          await persistPrefs(owner, prefs);
-          if (getActiveDataOwner() !== owner) return;
-        }
-        await setKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
-      }
-    } catch {
-      prefs = { ...DEFAULT_NOTIFICATION_PREFS };
-    }
-    if (getActiveDataOwner() !== owner) return;
-    set({ hydrated: true, ownerKey: owner, prefs });
-    await get().refreshPermission(deps);
-    if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-    await get().syncNow(deps);
+    if (getActiveDataOwner() !== owner) return Promise.resolve();
+    if (hydrateInFlight?.owner === owner) return hydrateInFlight.promise;
+    const run = hydrateOwner(set, get, owner, deps).finally(() => {
+      if (hydrateInFlight?.promise === run) hydrateInFlight = null;
+    });
+    hydrateInFlight = { owner, promise: run };
+    return run;
   },
 
   refreshPermission: async deps => {
@@ -246,6 +324,25 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   setPrefs: async (patch, deps) => {
     const owner = getActiveDataOwner();
     if (owner === SIGNED_OUT_DATA_OWNER) return;
+    if (!get().hydrated || get().ownerKey !== owner) {
+      // This owner's durable row has not been read yet: whatever is in
+      // memory is not theirs to write over. Show the choice on defaults and
+      // hand it to hydrate, which re-bases it onto the real row.
+      const invalidated = invalidatedForOwner(get(), owner);
+      if (invalidated) set(invalidated);
+      const queued = get().pendingWrite;
+      const merged: NotificationPrefsPatch = {
+        ...(queued?.owner === owner ? queued.patch : {}),
+        ...patch,
+      };
+      set({
+        prefs: { ...DEFAULT_NOTIFICATION_PREFS, ...merged, version: 1 },
+        pendingWrite: { owner, patch: merged },
+      });
+      if (hydrateInFlight?.owner === owner) return;
+      await get().hydrate({ ...deps, expectedOwnerKey: owner });
+      return;
+    }
     const prefs: NotificationPrefs = { ...get().prefs, ...patch, version: 1 };
     set({ prefs, ownerKey: owner });
     try {
