@@ -2,9 +2,11 @@
  * STRESS `scr-progressscreen` / lens `randomized-seeded`.
  *
  * Seeded randomized long-run over the real ProgressScreen mounted in a real
- * navigator (see progressScreenStress/runner.tsx for the invariants I1–I9 and
- * progressScreenStress/model.ts for the data oracle). Every sequence is
- * replayable from its seed; the campaign writes a seed → outcome JSON table.
+ * navigator. Helpers live in apps/mobile/__harness__/progressScreenStress/
+ * (runner.tsx: invariants I1–I9; model.ts: the data oracle) — outside
+ * __tests__ so jest's default testMatch does not treat them as suites.
+ * Every sequence is replayable from its seed; the campaign writes a
+ * seed → outcome JSON table.
  *
  *   default (suite):  STRESS_ITER=40 sequences, seeds 1..40
  *   full campaign:    STRESS_ITER=2000 npx jest --ci --silent progressScreen.randomized
@@ -19,8 +21,8 @@
 jest.mock('@op-engineering/op-sqlite', () =>
   (
     jest.requireActual(
-      './progressScreenStress/dbMock',
-    ) as typeof import('./progressScreenStress/dbMock')
+      '../../__harness__/progressScreenStress/dbMock',
+    ) as typeof import('../../__harness__/progressScreenStress/dbMock')
   ).createOpSqliteMock(),
 );
 
@@ -51,12 +53,12 @@ jest.mock('react-native-linear-gradient', () => {
 import {
   generateScenario,
   type Scenario,
-} from './progressScreenStress/generator';
+} from '../../__harness__/progressScreenStress/generator';
 import {
   KNOWN_DEFECTS,
   runScenario,
   type ScenarioOutcome,
-} from './progressScreenStress/runner';
+} from '../../__harness__/progressScreenStress/runner';
 
 // apps/mobile types only `jest` (no @types/node); declare the exact Node
 // surface the artifact writer drives.

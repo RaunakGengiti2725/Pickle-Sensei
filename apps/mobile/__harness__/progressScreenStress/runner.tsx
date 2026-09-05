@@ -10,30 +10,30 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { ProgressScreen } from '../../../src/screens/ProgressScreen';
-import { StreakCalendarScreen } from '../../../src/screens/StreakCalendarScreen';
-import { PremiumTabBar } from '../../../src/navigation/PremiumTabBar';
+import { ProgressScreen } from '../../src/screens/ProgressScreen';
+import { StreakCalendarScreen } from '../../src/screens/StreakCalendarScreen';
+import { PremiumTabBar } from '../../src/navigation/PremiumTabBar';
 import type {
   MainTabParams,
   RootStackParams,
-} from '../../../src/navigation/params';
-import { getDb } from '../../../src/data/db';
+} from '../../src/navigation/params';
+import { getDb } from '../../src/data/db';
 import {
   markCaptureAnalyzed,
   saveAnalysis,
   saveLocalOnlyAnalysis,
   savePendingCapture,
-} from '../../../src/data/repository';
+} from '../../src/data/repository';
 import {
   GUEST_DATA_OWNER,
   setActiveDataOwner,
-} from '../../../src/data/accountScope';
+} from '../../src/data/accountScope';
 import {
   useApiSessionStore,
   type ApiSession,
-} from '../../../src/account/apiSession';
-import { useConsistencyStore } from '../../../src/consistency/store';
-import { assertCapturedClip } from '../../../src/camera/capture';
+} from '../../src/account/apiSession';
+import { useConsistencyStore } from '../../src/consistency/store';
+import { assertCapturedClip } from '../../src/camera/capture';
 
 import { dbMockState, openFreshDatabase, requireRawDb } from './dbMock';
 import {

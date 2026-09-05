@@ -1,4 +1,4 @@
-import type { CapturedClip } from '../../../src/camera/capture';
+import type { CapturedClip } from '../../src/camera/capture';
 import type { ShotAnalysis, ShotTypeSlug } from '@pickle/shared-types';
 
 /**
