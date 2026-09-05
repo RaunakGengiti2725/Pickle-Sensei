@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
+import { DevTokenVerifier } from "../../src/auth/tokens.js";
 import type { ApiConfig } from "../../src/config.js";
-import { DEFAULT_RATE_LIMIT } from "../../src/plugins/rateLimitPlugin.js";
+import { DEFAULT_RATE_LIMIT, WindowStore } from "../../src/plugins/rateLimitPlugin.js";
 
 /**
  * ADJUDICATION reproduction (area: services-api-legacy-admin-web): the
@@ -106,4 +107,91 @@ describe("ADJUDICATE rate limiter (no datastore)", () => {
       "exhausted budget must survive a key flood inside the same window",
     ).toBe(429);
   }, 300_000);
+
+  // Without a datastore a VERIFIED bootstrap ends in 503 (db.unavailable) — any
+  // status other than 429 proves the request was admitted by the limiter.
+  const minter = new DevTokenVerifier("test", config.devAuthSecret);
+
+  it("ADJ-RL-VERIFIED-SHARED-ADDRESS: verified callers behind one address each keep their own budget", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < LIMIT * 5; i++) {
+      const token = await minter.mint(`adjudicate|shared|${i}`);
+      statuses.push((await bootstrap(token, "203.0.113.40")).statusCode);
+    }
+    expect(
+      statuses.filter((s) => s === 429),
+      "verified traffic is not address-budgeted",
+    ).toEqual([]);
+    expect(new Set(statuses)).toEqual(new Set([503]));
+  });
+
+  it("ADJ-RL-VERIFIED-CREDENTIAL: a verified credential is budgeted by fingerprint across addresses", async () => {
+    const token = await minter.mint("adjudicate|credential");
+    const statuses: number[] = [];
+    for (let i = 0; i < LIMIT + 5; i++)
+      statuses.push((await bootstrap(token, "203.0.113.50")).statusCode);
+    expect(statuses.slice(0, LIMIT)).toEqual(Array(LIMIT).fill(503));
+    expect(statuses.slice(LIMIT)).toEqual(Array(5).fill(429));
+
+    expect(
+      (await bootstrap(token, "203.0.113.51")).statusCode,
+      "the credential budget follows the credential, not the address",
+    ).toBe(429);
+    expect(
+      (await bootstrap("someone-else-garbage", "203.0.113.50")).statusCode,
+      "verified traffic handed its address charge back",
+    ).toBe(401);
+  });
+});
+
+describe("ADJUDICATE WindowStore eviction", () => {
+  const WINDOW_MS = 60_000;
+
+  it("ADJ-RL-EVICT: a store full of live keys drops only the oldest window, never every window", () => {
+    const store = new WindowStore(3);
+    const t0 = 1_000_000;
+    store.hit("a", WINDOW_MS, t0);
+    for (let i = 0; i < 5; i++) store.hit("b", WINDOW_MS, t0 + 1);
+    store.hit("c", WINDOW_MS, t0 + 2);
+    expect(store.size).toBe(3);
+
+    store.hit("d", WINDOW_MS, t0 + 3);
+
+    expect(store.size).toBe(3);
+    expect(store.peek("a"), "oldest live window is the one evicted").toBeUndefined();
+    expect(store.peek("b")?.count, "a younger exhausted counter survives").toBe(5);
+    expect(store.peek("c")?.count).toBe(1);
+    expect(store.peek("d")?.count).toBe(1);
+  });
+
+  it("ADJ-RL-EVICT-EXPIRED: expired windows are reclaimed before any live window is dropped", () => {
+    const store = new WindowStore(3);
+    const t0 = 1_000_000;
+    store.hit("stale", WINDOW_MS, t0);
+    for (let i = 0; i < 4; i++) store.hit("busy", WINDOW_MS, t0 + WINDOW_MS - 1);
+    store.hit("recent", WINDOW_MS, t0 + WINDOW_MS - 1);
+
+    store.hit("new", WINDOW_MS, t0 + WINDOW_MS);
+
+    expect(store.peek("stale")).toBeUndefined();
+    expect(store.peek("busy")?.count).toBe(4);
+    expect(store.peek("recent")?.count).toBe(1);
+    expect(store.peek("new")?.count).toBe(1);
+  });
+
+  it("ADJ-RL-REKEY: a key that expires and is hit again ages as a new window", () => {
+    const store = new WindowStore(2);
+    const t0 = 1_000_000;
+    store.hit("first", WINDOW_MS, t0);
+    store.hit("second", WINDOW_MS, t0 + 1);
+    // "first" expires and is hit again: it is now the YOUNGEST window.
+    store.hit("first", WINDOW_MS, t0 + WINDOW_MS);
+    expect(store.peek("first")?.count).toBe(1);
+
+    store.hit("third", WINDOW_MS, t0 + WINDOW_MS + 1);
+
+    expect(store.peek("second"), "the older window is evicted").toBeUndefined();
+    expect(store.peek("first")?.count).toBe(1);
+    expect(store.peek("third")?.count).toBe(1);
+  });
 });

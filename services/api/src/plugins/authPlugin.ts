@@ -56,6 +56,9 @@ export function registerAuth(
       );
     }
     request.identity = verified.value;
+    // Only a VERIFIED bearer earns its own budget; until here the request was
+    // charged to its address (see rateLimitPlugin).
+    return app.applyCredentialRateLimit(request, reply);
   });
 
   /** Requires token AND an existing (non-deleted) app_user. */
