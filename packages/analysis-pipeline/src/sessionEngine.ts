@@ -630,7 +630,7 @@ export function selectTargetEvent(
  */
 
 export const SESSION_ENGINE_VERSION =
-  "session-engine-1 (streaming reconcile over stroke-event-2 · D-029 completion · append-only)";
+  "session-engine-2 (streaming reconcile over stroke-event-2 · D-029 completion · append-only · bounded retention)";
 
 /** D-029 ADAPTIVE completion constants, mirrored VERBATIM from
  * eventCompletionBench.ts (the promoted-candidate semantics). Every field
