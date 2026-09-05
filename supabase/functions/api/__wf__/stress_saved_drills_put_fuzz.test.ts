@@ -2029,7 +2029,7 @@ Deno.test({
           ),
         },
         {
-          name: "I7 429 has Retry-After and no upstream call",
+          name: "I7 429 has Retry-After and never reached PostgREST",
           holds: !rows.some((r) =>
             r.violations.some((v) => v.startsWith("I7"))
           ),
