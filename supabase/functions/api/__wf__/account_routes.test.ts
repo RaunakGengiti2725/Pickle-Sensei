@@ -11,7 +11,8 @@
 //   deno test -A --no-check --config supabase/functions/api/__wf__/deno.json \
 //     supabase/functions/api/__wf__/
 
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { peekRateLimit } from "../rateLimit.ts";
 
 // ─── Fake Supabase ──────────────────────────────────────────────────────────
 
@@ -19,6 +20,10 @@ interface FakeState {
   /** Status for POST /auth/v1/token?grant_type=id_token (200 = succeed). */
   tokenStatus: number;
   tokenCalls: number;
+  /** POST /auth/v1/token?grant_type=refresh_token: `transport` rejects the
+   * fetch before GoTrue answers; `invalid_grant` is GoTrue's 400 refusal. */
+  refreshGrant: "ok" | "transport" | "invalid_grant";
+  refreshGrantCalls: number;
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
   /** Last upsert payload PostgREST received for account_deletion_requests. */
@@ -33,6 +38,8 @@ interface FakeState {
 const state: FakeState = {
   tokenStatus: 200,
   tokenCalls: 0,
+  refreshGrant: "ok",
+  refreshGrantCalls: 0,
   deletionRows: [],
   lastUpsert: null,
   adminDeleteStatuses: [],
@@ -44,6 +51,8 @@ const state: FakeState = {
 function resetState(): void {
   state.tokenStatus = 200;
   state.tokenCalls = 0;
+  state.refreshGrant = "ok";
+  state.refreshGrantCalls = 0;
   state.deletionRows = [];
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
@@ -78,6 +87,30 @@ function providerToken(sub: string): string {
 async function fakeSupabase(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
+
+  if (
+    request.method === "POST" &&
+    path === "/auth/v1/token" &&
+    url.searchParams.get("grant_type") === "refresh_token"
+  ) {
+    state.refreshGrantCalls += 1;
+    if (state.refreshGrant === "invalid_grant") {
+      return jsonResponse(400, {
+        error: "invalid_grant",
+        error_description: "Invalid Refresh Token: Refresh Token Not Found",
+      });
+    }
+    const body = (await request.json()) as { refresh_token: string };
+    const userId = body.refresh_token.replace(/^sb-refresh-/, "");
+    return jsonResponse(200, {
+      access_token: `sb-access-${userId}-rotated`,
+      token_type: "bearer",
+      expires_in: 3_600,
+      expires_at: Math.floor(Date.now() / 1_000) + 3_600,
+      refresh_token: `sb-refresh-${userId}-rotated`,
+      user: { id: userId, aud: "authenticated", role: "authenticated", email: "u@example.com" },
+    });
+  }
 
   if (request.method === "POST" && path === "/auth/v1/token") {
     state.tokenCalls += 1;
@@ -156,6 +189,14 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     assertEquals(request.headers.get("authorization"), "Bearer sk_test_revenuecat");
     return Promise.resolve(new Response(null, { status: 200 }));
   }
+  if (
+    state.refreshGrant === "transport" &&
+    request.method === "POST" &&
+    request.url.startsWith(`${fakeUrl}/auth/v1/token?grant_type=refresh_token`)
+  ) {
+    state.refreshGrantCalls += 1;
+    return Promise.reject(new TypeError("error sending request: connection reset"));
+  }
   return realFetch(input, init);
 }) as typeof fetch;
 
@@ -187,6 +228,39 @@ const call = (method: string, path: string, token: string, body?: unknown): Prom
       }),
     ),
   );
+
+const callFrom = (
+  ip: string,
+  method: string,
+  path: string,
+  token: string | null,
+  body?: unknown,
+): Promise<Response> =>
+  Promise.resolve(
+    api(
+      new Request(`http://edge.local/functions/v1/api${path}`, {
+        method,
+        headers: {
+          ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
+          "Content-Type": "application/json",
+          "x-forwarded-for": ip,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    ),
+  );
+
+/** Mirrors AUTH_FAILURE_LIMIT in index.ts. */
+const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
+const chargedAuthFailures = async (ip: string): Promise<number> => {
+  const window = await peekRateLimit(
+    "authfail",
+    ip,
+    AUTH_FAILURE_LIMIT.limit,
+    AUTH_FAILURE_LIMIT.windowSeconds,
+  );
+  return window.limit - window.remaining;
+};
 
 const pastIso = (msAgo: number): string => new Date(Date.now() - msAgo).toISOString();
 const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).toISOString();
@@ -260,6 +334,55 @@ Deno.test(
       "could not be verified",
     );
     assertEquals(state.tokenCalls, 1);
+  },
+);
+
+// ─── Refresh: only a GoTrue refusal is a 401; a transport fault is retryable ──
+
+Deno.test(
+  "refresh: GoTrue fetch rejects → 502/503, and the auth-failure budget is not charged",
+  async () => {
+    resetState();
+    const ip = "198.51.100.41";
+    state.refreshGrant = "transport";
+    const before = await chargedAuthFailures(ip);
+    const res = await callFrom(ip, "POST", "/v1/auth/refresh", null, {
+      refreshToken: "sb-refresh-still-valid",
+    });
+    const body = (await res.json()) as { error: { message: string } };
+    assert(
+      res.status === 502 || res.status === 503,
+      `a refresh that never reached GoTrue must be retryable, got ${res.status} ${JSON.stringify(body)}`,
+    );
+    assert(state.refreshGrantCalls >= 1, "the refresh grant was attempted");
+    assertEquals(body.error.message.includes("Sign in again"), false);
+    assertEquals(await chargedAuthFailures(ip), before, "a transport fault is not an auth failure");
+
+    // A following request from the same IP is served, not 429'd.
+    state.refreshGrant = "ok";
+    const next = await callFrom(ip, "GET", "/v1/me/access", providerToken(crypto.randomUUID()));
+    await next.body?.cancel();
+    assertEquals(next.status, 200);
+  },
+);
+
+Deno.test(
+  "refresh: GoTrue 400 invalid_grant → 401 'Sign in again' (the one implicit sign-out)",
+  async () => {
+    resetState();
+    const ip = "198.51.100.42";
+    state.refreshGrant = "invalid_grant";
+    const before = await chargedAuthFailures(ip);
+    const res = await callFrom(ip, "POST", "/v1/auth/refresh", null, {
+      refreshToken: "sb-refresh-rotated-away",
+    });
+    assertEquals(res.status, 401);
+    assertStringIncludes(
+      ((await res.json()) as { error: { message: string } }).error.message,
+      "Sign in again",
+    );
+    assertEquals(state.refreshGrantCalls, 1);
+    assertEquals(await chargedAuthFailures(ip), before + 1, "a refused refresh is an auth failure");
   },
 );
 
