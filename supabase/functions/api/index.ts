@@ -419,23 +419,17 @@ function userScopedClient(accessToken: string): ReturnType<typeof createClient> 
   });
 }
 
-function anonAuthClient(): ReturnType<typeof createClient> {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
 // ── Supabase Auth (GoTrue) gateway ──────────────────────────────────────────
 //
-// Session verification and refresh talk to GoTrue's REST API directly rather
-// than through the supabase-js auth client. The client folds every failure
-// into one `error` (an HTTP verdict, a network fault, a body it could not
-// parse, its own internal retry loop of ~25 s on a dead socket) and the
-// routes then had nothing but "failed" to hand the app — which reads a 401
-// as "the server refused your session" and signs the user out. The gateway
-// keeps the verdict typed: `refused` is the ONE outcome that may become a
-// 401 (and the one that charges the auth-failure budget); `unavailable` is
-// retryable for the app and says nothing about the credential.
+// Session verification, refresh and the provider ID-token exchange talk to
+// GoTrue's REST API directly rather than through the supabase-js auth client.
+// The client folds every failure into one `error` (an HTTP verdict, a network
+// fault, a body it could not parse, its own internal retry loop of ~25 s on a
+// dead socket) and the routes then had nothing but "failed" to hand the app —
+// which reads a 401 as "the server refused your session" and signs the user
+// out. The gateway keeps the verdict typed: `refused` is the ONE outcome that
+// may become a 401 (and the one that charges the auth-failure budget);
+// `unavailable` is retryable for the app and says nothing about the credential.
 
 /** Deadline for one Auth round trip. The app gives a refresh 15 s
  * (sessionLifecycle REQUEST_TIMEOUT_MS) and launch waits 8 s for it, so the
@@ -462,10 +456,17 @@ function authUpstreamTimeoutMs(): number {
     : AUTH_UPSTREAM_TIMEOUT_MS_DEFAULT;
 }
 
+/** `unavailable.upstreamStatus` is GoTrue's HTTP status when it answered
+ * (429, 5xx, an unreadable 2xx) and null when no answer arrived at all. */
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
   | { kind: "refused"; status: number; detail: string }
-  | { kind: "unavailable"; detail: string; retryAfterSeconds: number };
+  | {
+      kind: "unavailable";
+      detail: string;
+      retryAfterSeconds: number;
+      upstreamStatus: number | null;
+    };
 
 interface AuthUserLike {
   id: string;
@@ -597,6 +598,7 @@ async function authRequest<T>(
     kind: "unavailable",
     detail: `Supabase Auth unreachable: ${detail}`,
     retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+    upstreamStatus: null,
   });
   const attemptOnce = async () => {
     const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
@@ -655,12 +657,14 @@ async function authRequest<T>(
       kind: "unavailable",
       detail: `Supabase Auth answered HTTP ${answer.status} without a usable body`,
       retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+      upstreamStatus: answer.status,
     };
   }
   return {
     kind: "unavailable",
     detail: `Supabase Auth answered ${authErrorDetail(answer.status, body)}`,
     retryAfterSeconds: retryAfterOf(answer.retryAfter),
+    upstreamStatus: answer.status,
   };
 }
 
@@ -678,6 +682,43 @@ const rotateRefreshToken = (
     { method: "POST", body: { refresh_token: refreshToken } },
     authSessionOf,
   );
+
+/** POST /auth/v1/token?grant_type=id_token — exchange a Google/Apple ID
+ * token for a Supabase session (the signInWithIdToken grant). GoTrue verifies
+ * the token against the provider; a 400/401/403 is its refusal of THAT
+ * token, anything else is the service. */
+const exchangeProviderIdToken = (
+  provider: "google" | "apple",
+  idToken: string,
+): Promise<AuthVerdict<SupabaseSessionLike & { user: AuthUserLike }>> =>
+  authRequest(
+    "/token?grant_type=id_token",
+    { method: "POST", body: { provider, id_token: idToken } },
+    authSessionOf,
+  );
+
+/** Copy for a failed ID-token exchange: `refused` is the one 401 (charged to
+ * the auth-failure budget by the caller's route); `unavailable` is retryable
+ * and says nothing about the token — GoTrue's per-IP /token limit is shared
+ * by every edge isolate, so its 429 is relayed as a 429 with its Retry-After
+ * (the app treats 429 and 5xx alike as retryable), and every other outage
+ * is the generic 503. */
+function providerSignInFailure(verdict: Exclude<AuthVerdict<unknown>, { kind: "ok" }>): Response {
+  if (verdict.kind === "refused") {
+    return errorJson(401, "The identity token could not be verified.");
+  }
+  if (verdict.upstreamStatus === 429) {
+    console.error("[api] Sign-in rate limited upstream:", verdict.detail);
+    const response = codedError(
+      429,
+      "rate_limited",
+      "Sign-in is temporarily unavailable. Please try again.",
+    );
+    response.headers.set("Retry-After", String(verdict.retryAfterSeconds));
+    return response;
+  }
+  return serviceUnavailable("Sign-in", verdict.detail, verdict.retryAfterSeconds);
+}
 
 /** A bearer whose own `exp` has passed is dead whatever else is true of it:
  * refuse it before the auth cache or Supabase Auth is consulted (a cached
@@ -813,21 +854,17 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({
-    provider,
-    token,
-  });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(401, "The identity token could not be verified.");
-  }
+  const signIn = await exchangeProviderIdToken(provider, token);
+  if (signIn.kind !== "ok") return providerSignInFailure(signIn);
+  const session = signIn.value;
   return {
     authed: {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: session.user.id,
+      email: session.user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     },
-    session: signIn.data.session,
+    session,
     providerSubject,
   };
 }
@@ -869,29 +906,25 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (cached.authed) return cached.authed;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({
-      provider,
-      token,
-    });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
-      return errorJson(401, "The identity token could not be verified.");
-    }
+    const signIn = await exchangeProviderIdToken(provider, token);
+    if (signIn.kind !== "ok") return providerSignInFailure(signIn);
+    const session = signIn.value;
     await writeAuthCache(
       cacheKey,
       {
-        userId: signIn.data.user.id,
-        email: signIn.data.user.email ?? null,
+        userId: session.user.id,
+        email: session.user.email ?? null,
         provider,
-        accessToken: signIn.data.session.access_token,
+        accessToken: session.access_token,
       },
       payload?.exp,
-      signIn.data.session.expires_at,
+      session.expires_at,
     );
     return {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: session.user.id,
+      email: session.user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     };
   }
 
