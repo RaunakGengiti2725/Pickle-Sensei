@@ -133,8 +133,8 @@ describe('sessionKeeper sanity-checks the bearer expiry before arming a timer', 
   it('an implausibly far-future SECONDS expiresAt (now+400 days) is clamped below 2**31-1 ms and does not storm', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
-    const { fetchFn, onRotated, onRevoked } = keeperAnsweringExpiry(
-      () => Math.floor((Date.now() + 400 * DAY_MS) / 1000),
+    const { fetchFn, onRotated, onRevoked } = keeperAnsweringExpiry(() =>
+      Math.floor((Date.now() + 400 * DAY_MS) / 1000),
     );
 
     await jest.advanceTimersByTimeAsync(1_000);
