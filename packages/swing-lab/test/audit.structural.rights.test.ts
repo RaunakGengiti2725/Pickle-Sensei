@@ -163,6 +163,29 @@ describe("SL-01: negated, hedged, or unknown-element strings are all-unclear", (
     "Public domain (?)",
     "CC0 — TBD",
     "CC BY-SA 4.0 (TODO: confirm with the uploader)",
+    // … in any script: fullwidth, Arabic, Greek, inverted, interrobang, ornament.
+    "CC BY 4.0\uFF1F",
+    "Public domain \u061F",
+    "CC0 1.0\u037E",
+    "\u00BFCC BY-SA 4.0",
+    "CC BY 4.0 \u203D",
+    "Public domain \u2753",
+    // A `?` that ends a URL or follows a space is still a reviewer's doubt.
+    "CC BY 4.0 (licenseurl: https://creativecommons.org/licenses/by/4.0/?)",
+    "CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ ?",
+    // Query text is still read: a stray element or hedge inside it counts.
+    "CC BY 4.0 (licenseurl: https://creativecommons.org/licenses/by/4.0/?ref=nc)",
+    "CC BY 4.0 (licenseurl: https://creativecommons.org/licenses/by/4.0/?note=unverified)",
+    // Reviewer doubt in other words.
+    "Public domain — uncertain",
+    "CC BY 4.0 (unsure which version)",
+    "CC BY 4.0 (license N/A on the item)",
+    "CC BY 4.0, contains third-party footage",
+    "Public domain claim; copyrighted music throughout",
+    // A public-domain designation grants no CC element; one after it is a contradiction.
+    "CC0 1.0 (licenseurl: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
+    "Public domain (NC)",
+    "PD-USGov nd",
     // Two letters are not a public-domain designation.
     "PD",
     "pdf",
@@ -194,6 +217,32 @@ describe("SL-01: restating the designation's own elements is not a stray restric
     expect(parseLicense("PD-USGov").kind).toBe("public_domain");
     expect(parseLicense("PD").kind).toBe("unrecognized");
   });
+});
+
+describe("SL-01: a URL query string is a delimiter, not a hedge", () => {
+  for (const [plain, withQuery] of [
+    [
+      "CC BY 4.0 (licenseurl: https://creativecommons.org/licenses/by/4.0/)",
+      "CC BY 4.0 (licenseurl: https://creativecommons.org/licenses/by/4.0/?ref=chooser-v1)",
+    ],
+    [
+      "CC BY-NC-SA 4.0 (licenseurl: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
+      "CC BY-NC-SA 4.0 (licenseurl: https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1)",
+    ],
+    [
+      "CC0 1.0 (licenseurl: https://creativecommons.org/publicdomain/zero/1.0/)",
+      "CC0 1.0 (licenseurl: http://creativecommons.org/publicdomain/zero/1.0/?ref=chooser-v1&lang=en)",
+    ],
+  ] as const) {
+    it(`${JSON.stringify(withQuery)} derives the same rights as its query-less twin`, () => {
+      const expected = rightsForLicense(plain, REVIEWER);
+      const actual = rightsForLicense(withQuery, REVIEWER);
+      for (const modality of MODALITIES) {
+        expect(actual[modality], `${withQuery} → ${modality}`).toBe(expected[modality]);
+      }
+      expect(parseLicense(withQuery).kind).not.toBe("unrecognized");
+    });
+  }
 });
 
 describe("SL-01: permissive controls keep their full profiles (corpus strings)", () => {
@@ -285,6 +334,11 @@ describe("SL-01 mechanism: parseLicense yields a structured designation", () => 
       ["CC BY 4.0 International — no derivatives", 'element "nd" appears outside'],
       ["CC BY 3.0 NonCommercial", 'element "nc" appears outside'],
       ["Public Domain Mark 1.0 — assessed FALSE", "hedge marker"],
+      ["CC BY 4.0\uFF1F", 'hedge marker ("?")'],
+      [
+        "CC0 1.0 (licenseurl: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
+        'element "nc" appears after a public-domain designation',
+      ],
       ["", "empty"],
     ] as const) {
       const parsed = parseLicense(license);
