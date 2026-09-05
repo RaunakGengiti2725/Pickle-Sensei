@@ -65,7 +65,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
     const entry = registry.resolve({ task: "stroke_classification", platform: "ios" });
     expect(entry?.id).toBe("stroke.heuristic-hierarchical");
-    expect(entry?.version).toBe("stroke-heuristic-7");
+    expect(entry?.version).toBe("stroke-heuristic-7.1");
     expect(entry?.runtime).toBe("deterministic");
     // The notes must keep the honesty ceiling explicit: no L3 without bounce.
     expect(entry?.notes).toContain("L3 needs bounce observation");
@@ -136,7 +136,7 @@ describe("ModelRegistry", () => {
       ["ball_tracking", "server", "ball-track-2"],
       ["contact_estimation", "server", "contact-evidence-4.4"],
       ["phase_segmentation", "ios", "phase-geometry-1"],
-      ["stroke_classification", "ios", "stroke-heuristic-7"],
+      ["stroke_classification", "ios", "stroke-heuristic-7.1"],
       ["stroke_auto_resolution", "ios", "fusion-1"],
       ["capture_completion", "ios", "capture-completion-params-v1"],
     ];
@@ -226,7 +226,7 @@ describe("ModelRegistry", () => {
     ).toThrow(/own rollback predecessor/);
     // The default manifest's only rollback edge points at a registered entry.
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
-    const v7 = registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-7");
+    const v7 = registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-7.1");
     expect(v7?.rollbackPredecessor).toBe("stroke.heuristic-hierarchical@stroke-heuristic-5");
     expect(
       registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-5")?.deploymentStatus,

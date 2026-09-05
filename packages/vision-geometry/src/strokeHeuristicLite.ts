@@ -161,7 +161,20 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7.1 (uncalibrated)";
+
+/**
+ * Reference-frame landmarks are read through a MEASURED view of the frame
+ * (`measuredJoints`): a landmark whose visibility is below
+ * MIN_LANDMARK_VISIBILITY is not in the view at all, so the torso gate sees
+ * it exactly as an absent landmark and its coordinates can never reach the
+ * midline, shoulder-width, torso-extent, reach or height computations.
+ * The floor is the one every other geometry consumer applies
+ * (kinematics.landmark); Apple Vision forwards visibility 0 for a joint it
+ * did not recognise, and parsePoseSequence accepts that frame.
+ * (stroke-heuristic-7.1)
+ */
+const MIN_LANDMARK_VISIBILITY = 0.3;
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -394,7 +407,7 @@ export function classifyStroke(input: {
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
-  const joints = new Map(frame.landmarks.map((mark) => [mark.name, mark]));
+  const joints = measuredJoints(frame);
   const leftShoulder = joints.get("left_shoulder");
   const rightShoulder = joints.get("right_shoulder");
   const leftHip = joints.get("left_hip");
@@ -1029,6 +1042,16 @@ function scanFacingWindow(
     else if (front / total >= FACING_CONSENSUS_MIN_RATIO) consensus = -1;
   }
   return { consensus, rear, front, skippedSmallSeparation };
+}
+
+/** Name → landmark for the MEASURED landmarks of a frame only; anything
+ * below MIN_LANDMARK_VISIBILITY is absent from the view. */
+function measuredJoints(frame: ReturnType<typeof toLegacyPoseFrames>[number]) {
+  const joints = new Map<string, (typeof frame.landmarks)[number]>();
+  for (const mark of frame.landmarks) {
+    if (mark.visibility >= MIN_LANDMARK_VISIBILITY) joints.set(mark.name, mark);
+  }
+  return joints;
 }
 
 function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs: number) {
