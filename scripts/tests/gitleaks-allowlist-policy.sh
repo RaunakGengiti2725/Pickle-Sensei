@@ -3,9 +3,14 @@
 #   1. An [[allowlists]] entry that names both `paths` and `regexes` must set
 #      condition = "AND"; gitleaks evaluates the two with OR by default, so the
 #      `paths` half alone silences every finding in those files.
-#   2. A `paths` pattern that covers an entire directory (ends in `/`) is only
-#      acceptable when git ignores that directory repo-wide — otherwise a
-#      committed secret under it is never scanned.
+#   2. Such an entry must also name `targetRules`: gitleaks `dir` mode (the
+#      --tree scan) skips a file matched by a GLOBAL path allowlist before any
+#      rule runs, whatever `condition` says, so only rule-scoped entries are
+#      evaluated per finding in both scan modes.
+#   3. An entry with `paths` but no `regexes` exempts whole files. That is only
+#      acceptable for a directory pattern (ends in `/`) that git ignores
+#      repo-wide — anything else (a file name, an extension, a directory that
+#      can be committed) hides a committed secret from both scan modes.
 #   scripts/tests/gitleaks-allowlist-policy.sh
 # Exit 0 = policy holds; 1 = violation; 2 = setup failure.
 set -euo pipefail
@@ -34,25 +39,41 @@ config_path = sys.argv[1]
 with open(config_path, "rb") as fh:
     config = tomllib.load(fh)
 
+
+def gitignored_dir(pattern):
+    """True when the directory pattern maps to a path git ignores repo-wide."""
+    sample = re.sub(r"^\(\?:\^\|/\)", "", pattern)
+    sample = re.sub(r"\[\^/\][*+?]?", "", sample)
+    sample = re.sub(r"\\(.)", r"\1", sample)
+    if re.search(r"[\[\](){}|*+?^$]", sample):
+        return False, f"pattern {pattern!r} is too complex to map to a gitignore check"
+    probe = f"{sample}x"
+    ignored = subprocess.run(["git", "check-ignore", "-q", probe], check=False).returncode == 0
+    if not ignored:
+        return False, f"{probe!r} is not gitignored repo-wide"
+    return True, ""
+
+
 violations = []
 for index, entry in enumerate(config.get("allowlists", [])):
     label = f'allowlists[{index}] "{entry.get("description", "?")}"'
     paths = entry.get("paths", [])
-    if paths and entry.get("regexes") and entry.get("condition") != "AND":
-        violations.append(f'{label}: combines paths+regexes without condition = "AND" (OR silences the whole file)')
+    regexes = entry.get("regexes", [])
+    if not paths:
+        continue
+    if regexes:
+        if entry.get("condition") != "AND":
+            violations.append(f'{label}: combines paths+regexes without condition = "AND" (OR silences the whole file)')
+        if not entry.get("targetRules"):
+            violations.append(f"{label}: path-scoped allowlist without targetRules (global path allowlists skip the whole file in dir mode)")
+        continue
     for pattern in paths:
         if not pattern.endswith("/"):
+            violations.append(f"{label}: paths-only pattern {pattern!r} exempts whole files from the scan")
             continue
-        sample = re.sub(r"^\(\?:\^\|/\)", "", pattern)
-        sample = re.sub(r"\[\^/\][*+?]?", "", sample)
-        sample = re.sub(r"\\(.)", r"\1", sample)
-        if re.search(r"[\[\](){}|*+?]", sample):
-            violations.append(f"{label}: directory pattern {pattern!r} is too complex to map to a gitignore check")
-            continue
-        probe = f"{sample}x"
-        ignored = subprocess.run(["git", "check-ignore", "-q", probe], check=False).returncode == 0
-        if not ignored:
-            violations.append(f"{label}: directory pattern {pattern!r} is allowlisted but {probe!r} is not gitignored repo-wide")
+        ok, why = gitignored_dir(pattern)
+        if not ok:
+            violations.append(f"{label}: paths-only directory pattern {pattern!r} is allowlisted but {why}")
 
 for violation in violations:
     print(f"[gitleaks-allowlist-policy] VIOLATION: {violation}", file=sys.stderr)
