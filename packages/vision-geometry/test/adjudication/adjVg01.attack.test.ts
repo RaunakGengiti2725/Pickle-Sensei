@@ -192,8 +192,42 @@ describe("ADJ-VG-01 attack: unmeasured torso landmarks OUTSIDE the reference fra
       expect(classify(invisibleCollapsed)).toEqual(classify(invisibleInPlace));
     });
 
+    it("visibility-0 hips in every other frame are absent hips: no median exists beyond the reference", () => {
+      // The five reference frames (60fps, ±40ms) are exactly
+      // TORSO_MEDIAN_MIN_FRAMES, so when no other frame has measured hips the
+      // honest sequence median IS the collapsed reference extent and the gate
+      // has nothing to fire against. Demanding UNKNOWN here would require the
+      // classifier to read the coordinates of hips that were never measured —
+      // the very defect under test — so the invariant is byte-identity with
+      // the same hips removed.
+      const absentElsewhere = removeFromFrames(collapsedReference, others, HIPS);
+      expect(classify(invisibleCollapsed)).toEqual(classify(absentElsewhere));
+      expect(classify(invisibleInPlace)).toEqual(classify(absentElsewhere));
+    });
+
     it("visibility-0 hips must not be able to defeat the torso-collapse abstention", () => {
-      expect(classify(invisibleCollapsed).label).toBe("UNKNOWN");
+      // Keep an honest median measurable (TORSO_MEDIAN_MIN_FRAMES visible
+      // torsos outside the reference) and poison every remaining frame's hips
+      // at visibility 0, collapsed onto the reference extent: the median must
+      // ignore them and the collapse abstention must survive.
+      const honestTail = new Set(
+        sequence.frames
+          .filter(others)
+          .slice(-5)
+          .map((frame) => frame.timestampMs),
+      );
+      const honestFrame = (frame: Frame) => honestTail.has(frame.timestampMs);
+      const poisonable = (frame: Frame) => others(frame) && !honestFrame(frame);
+      const poisoned = mutateFrames(collapsedReference, poisonable, HIPS, (mark) => ({
+        ...mark,
+        y: mark.y - 0.1,
+        visibility: 0,
+      }));
+      expect(sequence.frames.filter(honestFrame)).toHaveLength(5);
+      const verdict = classify(poisoned);
+      expect(verdict.label).toBe("UNKNOWN");
+      expect(verdict.limitingFactors).toContain("torso_extent_collapsed_vs_sequence_median");
+      expect(verdict).toEqual(classify(removeFromFrames(collapsedReference, poisonable, HIPS)));
     });
   });
 });
