@@ -90,6 +90,7 @@ function resetStore() {
     ownerKey: null,
     prefs: { ...DEFAULT_NOTIFICATION_PREFS },
     permission: 'unknown',
+    heldPatch: null,
   });
 }
 
