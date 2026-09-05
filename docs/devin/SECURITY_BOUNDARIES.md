@@ -8,6 +8,32 @@ from the repository). Nothing in this file contains a secret value; only names a
 Companion artifacts: `scripts/security-scan.sh` (the gitleaks gate) and `.gitleaks.toml` (its
 policy; every allowlist entry carries a justification comment).
 
+### Gate contract (2026-09-05) — VERIFIED by `scripts/verify-cloud.sh --only security`
+
+- **Policy is finding-shaped, never file-shaped.** Every `[[allowlists]]` entry in `.gitleaks.toml`
+  is pinned to the rule(s) it silences (`targetRules`), the file(s) the fixture lives in (`paths`)
+  and the exact fixture value or line (`regexes`, `regexTarget = "line"` for line-shaped fixtures),
+  joined with `condition = "AND"`. There are no path-only entries and no global path allowlists:
+  gitleaks `dir` mode skips a whole file that a global path allowlist matches before any rule runs,
+  and `paths`+`regexes` without `condition = "AND"` is evaluated with OR. Scope is the wrapper's
+  job — `scripts/security-scan.sh --tree` stages exactly the tracked and untracked-unignored files
+  (`git ls-files --cached --others --exclude-standard`) — so a committed `.env`, build output or
+  media/model blob is scanned like any other file. Pinned by `scripts/tests/gitleaks-allowlist-policy.sh` (static) and
+  `tools/adjudication/security-secrets-deps/r1_gitleaks_allowlists.sh` (17 planted canaries,
+  tree + history).
+- **Only the pinned scanner can run the gate.** `scripts/security-scan.sh` carries the sha256 of
+  the extracted gitleaks v8.30.1 _binary_ for linux_x64/linux_arm64/darwin_x64/darwin_arm64 next
+  to the tarball digests. Whichever candidate it selects — `GITLEAKS_BIN`, `SECURITY_SCAN_CACHE`,
+  `gitleaks` on `PATH`, or a fresh download — is copied into a private mode-0700 run directory,
+  hashed **before** it is ever executed, and only that verified copy runs; a digest or version
+  mismatch is a setup failure (exit 2), never a warning or a fallback to the next source. Pinned by
+  `scripts/tests/security-scan-binary-trust.sh` (`/bin/true`, a same-version impostor in the
+  cache, a same-version impostor first on `PATH` → exit 2; the verified binary via `GITLEAKS_BIN`
+  and via `PATH` still reports the canary).
+- **Wired into the Linux gate.** `stage_security` in `scripts/verify-cloud.sh` (PR tier) runs
+  `scripts/tests/security-scan-scope.sh`, `scripts/tests/gitleaks-allowlist-policy.sh`,
+  `scripts/tests/security-scan-binary-trust.sh`, then `scripts/security-scan.sh`.
+
 ---
 
 ## 1. Secret scan results
@@ -247,8 +273,8 @@ npx jest`, `./supabase/tests/run_rls_tests.sh` (throwaway Docker/initdb cluster)
 
 1. Create a **staging Supabase project** (or use Supabase Branching) so migrations and function
    deploys can be rehearsed; today every deploy is production.
-2. Wire `scripts/security-scan.sh` into `verify-cloud.sh`/CI (coordinator-owned) — it is
-   deterministic, pinned, ~5 s.
+2. ~~Wire `scripts/security-scan.sh` into `verify-cloud.sh`/CI~~ — done: `stage_security` (PR
+   tier) runs the scope, allowlist-policy and binary-trust regressions, then the scan.
 3. Close B-1/B-3 from `docs/SECURITY_CERTIFICATION_2026-08-30.md` (Dashboard config verification,
    one rotation drill) and record the evidence.
 4. Consider the `TRUNCATE/REFERENCES/TRIGGER` revoke migration and pinning `search_path` on

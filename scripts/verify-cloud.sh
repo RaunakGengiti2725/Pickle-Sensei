@@ -26,7 +26,9 @@
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
 #   security   scripts/tests/security-scan-scope.sh (scanner scope regression),
 #              scripts/tests/gitleaks-allowlist-policy.sh (no whole-file allowlists),
-#              then scripts/security-scan.sh (secret scan) when present
+#              scripts/tests/security-scan-binary-trust.sh (only the digest-
+#              verified gitleaks may run), then scripts/security-scan.sh
+#              (secret scan) when present
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
@@ -259,6 +261,7 @@ stage_security() {
   fi
   scripts/tests/security-scan-scope.sh
   scripts/tests/gitleaks-allowlist-policy.sh
+  scripts/tests/security-scan-binary-trust.sh
   scripts/security-scan.sh
 }
 

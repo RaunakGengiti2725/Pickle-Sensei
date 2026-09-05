@@ -11,10 +11,17 @@
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
 # with a justification). Findings are ALWAYS redacted in output and reports.
 #
+# Scanner identity: the ONLY thing this wrapper ever executes is a private copy
+# of a file whose sha256 equals the pinned digest of the official gitleaks
+# v${GITLEAKS_VERSION} binary for this platform. Candidates (GITLEAKS_BIN, the
+# cache, PATH, a fresh download) are hashed BEFORE they are run — a file is
+# never asked for its version to decide whether to trust it — and a candidate
+# that does not match is a setup failure, not a warning and not a fallback.
+#
 # Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
 #
 # Environment:
-#   GITLEAKS_BIN            use this binary instead of the pinned download
+#   GITLEAKS_BIN            use this binary (must hash to the pinned digest)
 #   SECURITY_SCAN_CACHE     where the pinned binary is cached
 #                           (default: ${XDG_CACHE_HOME:-~/.cache}/pickle-sensei)
 #   SECURITY_SCAN_OFFLINE=1 never download; fail with exit 2 if no usable binary
@@ -29,6 +36,16 @@ declare -A GITLEAKS_SHA256=(
   [darwin_x64]="dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"
   [darwin_arm64]="b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
 )
+# sha256 of the `gitleaks` BINARY extracted from each of those tarballs. This
+# is the identity every candidate must prove before it is executed; the tarball
+# digests above only guard the download. Re-derive on a version bump with:
+#   tar -xzf gitleaks_<ver>_<key>.tar.gz gitleaks && sha256sum gitleaks
+declare -A GITLEAKS_BIN_SHA256=(
+  [linux_x64]="88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509"
+  [linux_arm64]="00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b"
+  [darwin_x64]="cee01fea7173f1b779dff188e1c26ecbcb4027d394acc573b23aaf0be260e291"
+  [darwin_arm64]="ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f"
+)
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$REPO_ROOT/.gitleaks.toml"
@@ -36,9 +53,11 @@ CACHE_DIR="${SECURITY_SCAN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/pickle-sensei}
 
 DOWNLOAD_TMP=""
 STAGE_DIR=""
+RUN_DIR=""
 cleanup() {
   [ -z "$DOWNLOAD_TMP" ] || rm -rf "$DOWNLOAD_TMP"
   [ -z "$STAGE_DIR" ] || rm -rf "$STAGE_DIR"
+  [ -z "$RUN_DIR" ] || rm -rf "$RUN_DIR"
 }
 trap cleanup EXIT
 
@@ -93,7 +112,7 @@ sha256_file() {
   elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" | awk '{print $1}'
   else
-    die "need sha256sum or shasum to verify the gitleaks download"
+    die "need sha256sum or shasum to verify the gitleaks binary"
   fi
 }
 
@@ -113,9 +132,32 @@ platform_key() {
   printf '%s_%s' "$os" "$arch"
 }
 
-reports_version() {
-  # gitleaks prints just the semver on stdout.
-  [ -x "$1" ] && [ "$("$1" version 2>/dev/null | tr -d '[:space:]')" = "$GITLEAKS_VERSION" ]
+PLATFORM_KEY="$(platform_key || true)"
+EXPECTED_BIN_SHA256="${GITLEAKS_BIN_SHA256[${PLATFORM_KEY:-none}]:-}"
+
+# admit_binary <candidate> <source>
+# Copies the candidate into this run's private directory, proves the COPY
+# hashes to the pinned digest, and only then runs it once to confirm the
+# version string. Nothing outside RUN_DIR is ever executed, so a file swapped
+# under a cache or PATH entry after the check cannot reach the scan, and an
+# executable that merely claims the version (or claims nothing) never runs at
+# all. Prints the admitted path.
+admit_binary() {
+  local candidate="$1" source="$2" admitted actual reported
+  [ -n "$EXPECTED_BIN_SHA256" ] || die "no pinned gitleaks v${GITLEAKS_VERSION} binary digest for platform $(uname -s)/$(uname -m); cannot verify the scanner"
+  [ -f "$candidate" ] || die "$source: $candidate is not a regular file"
+  admitted="$RUN_DIR/gitleaks"
+  cp "$candidate" "$admitted"
+  chmod 0500 "$admitted"
+  actual="$(sha256_file "$admitted")"
+  if [ "$actual" != "$EXPECTED_BIN_SHA256" ]; then
+    rm -f "$admitted"
+    die "$source: $candidate is not the pinned gitleaks v${GITLEAKS_VERSION} binary for ${PLATFORM_KEY} (sha256 $actual, expected $EXPECTED_BIN_SHA256); refusing to run an unverified scanner"
+  fi
+  reported="$("$admitted" version 2>/dev/null | tr -d '[:space:]')" || reported=""
+  [ "$reported" = "$GITLEAKS_VERSION" ] || die "$source: verified binary reported version '${reported}', expected ${GITLEAKS_VERSION}"
+  log "gitleaks v${GITLEAKS_VERSION} verified (sha256 ${actual:0:12}…) from ${source}: $candidate"
+  printf '%s' "$admitted"
 }
 
 download_gitleaks() {
@@ -132,6 +174,8 @@ download_gitleaks() {
   actual="$(sha256_file "$tmp/$tarball")"
   [ "$actual" = "$expected" ] || die "checksum mismatch for $tarball (expected $expected, got $actual)"
   tar -xzf "$tmp/$tarball" -C "$tmp" gitleaks
+  actual="$(sha256_file "$tmp/gitleaks")"
+  [ "$actual" = "$EXPECTED_BIN_SHA256" ] || die "extracted gitleaks binary from $tarball does not match the pinned binary digest (expected $EXPECTED_BIN_SHA256, got $actual)"
   mkdir -p "$(dirname "$dest")"
   mv "$tmp/gitleaks" "$dest"
   chmod 0755 "$dest"
@@ -139,33 +183,36 @@ download_gitleaks() {
   DOWNLOAD_TMP=""
 }
 
+# Pick the candidate binary, in priority order, and admit exactly that one.
+# Every source is judged by digest alone; a candidate that fails is fatal
+# rather than skipped, so a poisoned cache or a `gitleaks` on PATH that is not
+# the pinned build can never be papered over by a later source.
 resolve_gitleaks() {
-  local key cached
+  local cached on_path
   if [ -n "${GITLEAKS_BIN:-}" ]; then
-    [ -x "$GITLEAKS_BIN" ] || die "GITLEAKS_BIN=$GITLEAKS_BIN is not executable"
-    reports_version "$GITLEAKS_BIN" || log "warning: GITLEAKS_BIN is not v${GITLEAKS_VERSION}; results may differ from the pinned gate"
-    printf '%s' "$GITLEAKS_BIN"
+    admit_binary "$GITLEAKS_BIN" "GITLEAKS_BIN"
     return
   fi
-  key="$(platform_key || true)"
   cached="$CACHE_DIR/gitleaks-${GITLEAKS_VERSION}/gitleaks"
-  if reports_version "$cached"; then
-    printf '%s' "$cached"
+  if [ -e "$cached" ]; then
+    admit_binary "$cached" "SECURITY_SCAN_CACHE (remove the file to re-download)"
     return
   fi
-  if command -v gitleaks >/dev/null 2>&1 && reports_version "$(command -v gitleaks)"; then
-    command -v gitleaks
+  if on_path="$(command -v gitleaks 2>/dev/null)"; then
+    admit_binary "$on_path" "PATH (set GITLEAKS_BIN to the pinned v${GITLEAKS_VERSION} build, or take this one off PATH)"
     return
   fi
-  [ -n "$key" ] || die "unsupported platform $(uname -s)/$(uname -m); set GITLEAKS_BIN to a gitleaks v${GITLEAKS_VERSION} binary"
+  [ -n "$PLATFORM_KEY" ] || die "unsupported platform $(uname -s)/$(uname -m); no pinned gitleaks v${GITLEAKS_VERSION} build to download"
   [ "${SECURITY_SCAN_OFFLINE:-0}" = 1 ] && die "gitleaks v${GITLEAKS_VERSION} not found and SECURITY_SCAN_OFFLINE=1"
-  download_gitleaks "$key" "$cached"
-  reports_version "$cached" || die "downloaded binary did not report v${GITLEAKS_VERSION}"
-  printf '%s' "$cached"
+  download_gitleaks "$PLATFORM_KEY" "$cached"
+  admit_binary "$cached" "fresh download"
 }
 
+# Private, mode-0700 home for the one binary this run may execute (inside the
+# git dir like the staging tree, so a noexec $TMPDIR cannot break the gate).
+RUN_DIR="$(mktemp -d "$(git rev-parse --absolute-git-dir)/security-scan-bin.XXXXXX")"
+chmod 0700 "$RUN_DIR"
 GITLEAKS="$(resolve_gitleaks)"
-log "gitleaks $("$GITLEAKS" version) at $GITLEAKS"
 
 if [ -n "$REPORT_DIR" ]; then
   mkdir -p "$REPORT_DIR"
