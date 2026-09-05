@@ -6,7 +6,8 @@
  * AGENTS.md contract are labelled `[BROKEN]` in their title and their
  * expectation comment; everything else is `[HELD]`. Pins inverted by the
  * MAC-03/MAC-04 fixes (S1 cancellation classification, S8 deferred ledger
- * refresh) are labelled `[FIXED]` and now assert the contract.
+ * refresh) and by the A2 fix (S10 practice-set commit for an abandoned
+ * scored run) are labelled `[FIXED]` and now assert the contract.
  *
  * Camera + native are simulated exactly like the existing flow harnesses
  * (analyzeScreenExtractionProgress / analyzeScreenAccessRefresh): the typed
@@ -652,10 +653,10 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
   });
 });
 
-// ─── S10 (extra): unmount mid-run orphans the practice set ──────────────────
+// ─── S10 (extra): unmount mid-run must still commit the practice set ────────
 
-describe('S10 (extra) — practice set commit skipped for a run whose screen was left', () => {
-  it('[BROKEN] a scored analysis saved with a NEW sessionId never gets its local_session row / session.create outbox entry / kv stamp when the screen unmounts mid-run', async () => {
+describe('S10 (extra) — practice set commit for a run whose screen was left', () => {
+  it('[FIXED] a scored analysis saved with a NEW sessionId gets its local_session row / session.create outbox entry / kv stamp even though the screen unmounted mid-run', async () => {
     const analysis = deferred<CaptureAnalysisOutcome>(
       runCaptureAnalysis as jest.Mock,
     );
@@ -675,22 +676,31 @@ describe('S10 (extra) — practice set commit skipped for a run whose screen was
     await analysis.resolve(scoredOutcome(false));
     await flush();
 
-    // OBSERVED on 4d812e1a: `if (abandoned.current) return;` (AnalyzeScreen
-    // ~L891) runs BEFORE `commitPracticeSet` (~L925): no session row, no
-    // session.create outbox entry, no practice.set kv record — yet the
-    // scored shot already persisted inside runCaptureAnalysis references
-    // request.sessionId. Its shot.sync will hit `shot.session_not_found`
-    // (transient → retried) until the permit ages out (24h) and then be
-    // rejected for good; a TRY AGAIN from that Result rearms with the same
-    // orphan id (`preferredSessionId` → resumed:true → no row ever written).
-    // EXPECTED: the set is committed whenever the scored shot was saved,
-    // regardless of whether the screen is still mounted.
-    expect(sqlMatching(/local_session/i)).toHaveLength(0);
-    expect(sqlMatching(/INSERT INTO outbox/i)).toHaveLength(0);
-    expect(kv.get(practiceSetKeyForOwner(owner))).toBeUndefined();
-    // …and the outbox drain for the orphaned shot.sync row WAS kicked off
-    // (triggerOutboxSync runs before the abandoned check).
+    // The scored shot persisted inside runCaptureAnalysis references
+    // request.sessionId, so the set is committed whenever a score exists —
+    // whether or not the screen is still mounted. Without the session row
+    // and its session.create outbox entry the shot.sync row would hit
+    // `shot.session_not_found` (transient in sync.ts) on every drain.
+    const sessionInserts = sqlMatching(/INSERT OR REPLACE INTO local_session/i);
+    expect(sessionInserts).toHaveLength(1);
+    expect(sessionInserts[0]!.params).toContain(request.sessionId);
+    const outboxInserts = sqlMatching(/INSERT INTO outbox/i);
+    expect(outboxInserts).toHaveLength(1);
+    expect(outboxInserts[0]!.sql).toMatch(/'session\.create'/);
+    expect(
+      outboxInserts[0]!.params.some(
+        param =>
+          typeof param === 'string' &&
+          param.includes(`"id":"${request.sessionId}"`),
+      ),
+    ).toBe(true);
+    const stored = kv.get(practiceSetKeyForOwner(owner));
+    expect(stored).toBeDefined();
+    expect(JSON.parse(stored!).sessionId).toBe(request.sessionId);
+    // The outbox drain for the scored shot is still kicked off exactly once
+    // and the unmounted screen never routes.
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
   });
 
   it('[HELD] control: the same run with the screen still mounted commits the set (session row + kv stamp)', async () => {
