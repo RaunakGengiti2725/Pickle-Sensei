@@ -10,9 +10,15 @@
 // Run:  cd supabase/functions/api/__wf__ && deno test -A --no-check \
 //         --config deno.json rate_limit_test.ts
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { peekRateLimit } from "../rateLimit.ts";
-import { loadHarness, SUPABASE_URL, TEST_USER_ID } from "./routesHarness.ts";
+import {
+  fakeGoogleIdToken,
+  loadHarness,
+  SUPABASE_URL,
+  TEST_USER_ID,
+  userRequest,
+} from "./routesHarness.ts";
 
 /** Mirrors AUTH_FAILURE_LIMIT in index.ts. */
 const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
@@ -73,6 +79,27 @@ const onRefreshEndpoint =
       ? respond()
       : null;
 
+const onIdTokenEndpoint =
+  (respond: () => Promise<Response> | Response): Upstream =>
+  (request) =>
+    request.url.startsWith(`${SUPABASE_URL}/auth/v1/token`) &&
+    request.url.includes("grant_type=id_token")
+      ? respond()
+      : null;
+
+/** Keep the connection-fault retry loop short so a thrown fetch is answered
+ * in milliseconds instead of riding out the full backoff schedule. */
+async function withShortUpstreamDeadline<T>(run: () => Promise<T>): Promise<T> {
+  const previous = Deno.env.get("AUTH_UPSTREAM_TIMEOUT_MS");
+  Deno.env.set("AUTH_UPSTREAM_TIMEOUT_MS", "150");
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) Deno.env.delete("AUTH_UPSTREAM_TIMEOUT_MS");
+    else Deno.env.set("AUTH_UPSTREAM_TIMEOUT_MS", previous);
+  }
+}
+
 async function getMe(
   handler: (request: Request) => Promise<Response>,
   ip: string,
@@ -100,6 +127,24 @@ async function postRefresh(
   );
   await response.body?.cancel();
   return response;
+}
+
+async function postBootstrap(
+  handler: (request: Request) => Promise<Response>,
+  ip: string,
+): Promise<{ status: number; retryAfter: string | null; body: string }> {
+  const response = await handler(
+    userRequest("POST", "/v1/account/bootstrap", {
+      ip,
+      token: fakeGoogleIdToken(crypto.randomUUID()),
+      body: {},
+    }),
+  );
+  return {
+    status: response.status,
+    retryAfter: response.headers.get("Retry-After"),
+    body: await response.text(),
+  };
 }
 
 const chargedFailures = async (ip: string): Promise<number> => {
@@ -204,5 +249,72 @@ Deno.test(
     );
     assertEquals(refused.status, 401);
     assertEquals(await chargedFailures(ip), 1, "a refused refresh token is a real auth failure");
+  },
+);
+
+Deno.test(
+  "authfail: bootstrap under a GoTrue 429 / 5xx / network fault / malformed answer is 429-or-503 and charges nothing; a refused ID token (400/401/403) is 401 and charges one each",
+  async () => {
+    const h = await loadHarness();
+    const ip = "10.7.0.34";
+    const upstreamDetail = "gotrue-detail-must-not-leak";
+
+    const limited = await withAuthUpstream(
+      onIdTokenEndpoint(
+        () =>
+          new Response(
+            JSON.stringify({
+              code: 429,
+              error_code: "over_request_rate_limit",
+              msg: upstreamDetail,
+            }),
+            { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "7" } },
+          ),
+      ),
+      () => postBootstrap(h.handler, ip),
+    );
+    assertEquals(limited.status, 429, "an upstream 429 is relayed as a retryable 429");
+    assertEquals(limited.retryAfter, "7", "the upstream Retry-After is relayed");
+    const limitedBody = JSON.parse(limited.body) as { error: { code?: string; message?: string } };
+    assertEquals(limitedBody.error.code, "rate_limited");
+    assertEquals(typeof limitedBody.error.message, "string");
+    assertEquals(limited.body.includes(upstreamDetail), false, `leaked: ${limited.body}`);
+
+    const outages: Array<() => Promise<Response> | Response> = [
+      () => jsonResponse(503, { code: 503, msg: upstreamDetail }),
+      () => new Response("<html>bad gateway</html>", { status: 502 }),
+      () => Promise.reject(new TypeError(upstreamDetail)),
+      () => jsonResponse(200, { ok: true }),
+    ];
+    for (const [index, respond] of outages.entries()) {
+      const outage = await withShortUpstreamDeadline(() =>
+        withAuthUpstream(onIdTokenEndpoint(respond), () => postBootstrap(h.handler, ip)),
+      );
+      assertEquals(outage.status, 503, `outage ${index} must be retryable: ${outage.body}`);
+      assertStringIncludes(outage.body, "is temporarily unavailable. Please try again.");
+      assertEquals(outage.body.includes(upstreamDetail), false, `leaked: ${outage.body}`);
+    }
+    assertEquals(await chargedFailures(ip), 0, "transient bootstrap failures must not be charged");
+
+    const refusals: Array<() => Response> = [
+      () => jsonResponse(400, { code: 400, error_code: "bad_id_token", msg: "Bad ID token" }),
+      () => jsonResponse(401, { code: 401, msg: "invalid JWT" }),
+      () => jsonResponse(403, { code: 403, error_code: "user_banned", msg: "User is banned" }),
+    ];
+    for (const [index, respond] of refusals.entries()) {
+      const refused = await withAuthUpstream(onIdTokenEndpoint(respond), () =>
+        postBootstrap(h.handler, ip),
+      );
+      assertEquals(
+        refused.status,
+        401,
+        `refusal ${index} is a credential verdict: ${refused.body}`,
+      );
+      assertEquals(
+        await chargedFailures(ip),
+        index + 1,
+        "a refused ID token is a real auth failure",
+      );
+    }
   },
 );
