@@ -34,6 +34,15 @@ export interface AccessStoreState {
 
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
+/**
+ * Ordering ticket for canonicalAccess writes. Every refreshAccess() takes the
+ * next ticket when it STARTS; purchase/restore/sync take one when they COMMIT a
+ * backend-verified snapshot (or its fail-closed absence). A refresh may only
+ * apply its result — or its failure — while it still holds the newest ticket,
+ * so a GET /v1/me/access that was requested before a newer operation landed
+ * can never replace that operation's snapshot.
+ */
+let accessWriteSequence = 0;
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -74,6 +83,24 @@ function isCurrentConfiguration(
   version: number,
 ): boolean {
   return dependencies === clients && configurationVersion === version;
+}
+
+function nextAccessWriteTicket(): number {
+  accessWriteSequence += 1;
+  return accessWriteSequence;
+}
+
+function isNewestAccessWrite(ticket: number): boolean {
+  return accessWriteSequence === ticket;
+}
+
+/** Commit a snapshot that outranks every refresh already in flight. */
+function commitAccess(
+  set: (patch: Partial<AccessStoreState>) => void,
+  patch: Partial<AccessStoreState>,
+): void {
+  nextAccessWriteTicket();
+  set(patch);
 }
 
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
@@ -192,14 +219,20 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const ticket = nextAccessWriteTicket();
     set({ status: 'loading', error: null });
+    // A refresh overtaken by a newer write (a purchase/restore/sync commit or a
+    // later refresh) neither applies its result nor its failure; it reports
+    // whether the store holds a verified snapshot once it settles.
     try {
       const canonicalAccess = await clients.backend.getAccess();
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!isNewestAccessWrite(ticket)) return get().canonicalAccess !== null;
       set({ status: 'ready', canonicalAccess, error: null });
       return true;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      if (!isNewestAccessWrite(ticket)) return get().canonicalAccess !== null;
       const error = billingError(
         cause,
         'billing.backend_unavailable',
@@ -231,7 +264,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
-      set({
+      commitAccess(set, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -251,7 +284,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         true,
         source.unconfiguredReason,
       );
-      set({
+      commitAccess(set, {
         status: statusFor(source),
         operation: 'idle',
         canonicalAccess: null,
@@ -318,7 +351,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
           'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
           true,
         );
-        set({
+        commitAccess(set, {
           status: 'error',
           operation: 'idle',
           canonicalAccess: synced.access,
@@ -326,7 +359,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         });
         return false;
       }
-      set({
+      commitAccess(set, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -340,7 +373,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
         true,
       );
-      set({
+      commitAccess(set, {
         status: 'error',
         operation: 'idle',
         canonicalAccess: null,
@@ -383,7 +416,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
           'No active Pickle Sensei membership was found for this store account.',
           false,
         );
-        set({
+        commitAccess(set, {
           status: 'ready',
           operation: 'idle',
           canonicalAccess: synced.access,
@@ -391,7 +424,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         });
         return false;
       }
-      set({
+      commitAccess(set, {
         status: 'ready',
         operation: 'idle',
         canonicalAccess: synced.access,
@@ -405,7 +438,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
         'Restored purchases could not be verified yet. Please try again.',
         true,
       );
-      set({
+      commitAccess(set, {
         status: 'error',
         operation: 'idle',
         canonicalAccess: null,
