@@ -1,7 +1,7 @@
 /**
  * ADJUDICATION — stress area `mobile-auth-account-1` (base 1fb0efd7).
  *
- * Minimal, seed-free reproductions of the three CONFIRMED findings, written
+ * Minimal, seed-free reproductions of the four CONFIRMED findings, written
  * as the EXPECTED behaviour. Every case here fails at 1fb0efd7 by
  * construction and is the executable acceptance criterion for its fix:
  *
@@ -16,6 +16,10 @@
  *           /v1/account/bootstrap is overridden when the response lands:
  *           the store, ApiSession and Keychain are re-populated.
  *           Seed: authStoreRandomized STRESS_REPLAY=20260916 (I9).
+ *   MAA1-D  a Keychain READ that throws at launch is collapsed to "no record"
+ *           (loadPersistedSession catch → null): the launch lands on SignIn
+ *           while the vault still holds a valid session; no retry.
+ *           Seed: authStoreRandomized STRESS_REPLAY=20261479 (I7).
  *   MAA1-C  a Keychain write that fails after the server rotated the
  *           refresh token is ignored (`void persistSession` in
  *           adoptRotatedTokens): the vault keeps the dead token and the
@@ -431,6 +435,35 @@ describe('MAA1-B an explicit sign-out / deletion issued while a sign-in awaits b
     expect(useAuthStore.getState().session).toBeNull();
     expect(getApiSession()).toBeNull();
     expect(vaultRecord()).toBeNull();
+  });
+});
+
+// ─── MAA1-D: a Keychain READ error is not "no record" ────────────────────────
+
+describe('MAA1-D a Keychain read that throws at launch must not present the app signed out while the vault holds a valid record', () => {
+  it('getGenericPassword rejects once (e.g. errSecInteractionNotAllowed) then recovers: the user is signed in from the record within 60s (fake time) and the vault is intact', async () => {
+    seedVault('refresh-1');
+    installRoutes({
+      '/v1/auth/refresh': () => response(refreshBody('access-2', 'refresh-2')),
+    });
+    keychainMock.getGenericPassword = jest
+      .fn()
+      .mockImplementationOnce(() =>
+        Promise.reject(new Error('errSecInteractionNotAllowed')),
+      )
+      .mockImplementation(realGet);
+
+    await useAuthStore.getState().hydrate();
+    await flush();
+    await jest.advanceTimersByTimeAsync(60_000);
+    for (const listener of appStateListeners) listener('active');
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(useAuthStore.getState().hydrated).toBe(true);
+    expect(vaultRecord()).not.toBeNull();
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalId,
+    );
   });
 });
 
