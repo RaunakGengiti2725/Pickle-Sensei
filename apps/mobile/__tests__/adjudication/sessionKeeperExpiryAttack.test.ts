@@ -309,7 +309,7 @@ describe('hardening: the MAS-1 storm stays unreachable under doubled-scale varia
 
   it('stop → start (account switch) while the launch exchange is in flight: the stale answer is dropped and only the live keeper rotates, ≤ 2 exchanges in the first second even with a past expiry', async () => {
     useClock();
-    let release: (() => void) | null = null;
+    let release = null as (() => void) | null;
     const slowFetch = jest.fn(
       () =>
         new Promise<Response>(resolve => {
@@ -338,7 +338,7 @@ describe('hardening: the MAS-1 storm stays unreachable under doubled-scale varia
 
   it('cancellation mid-flight: stopSessionKeeper() during a refresh whose answer is a past expiry leaves no timer behind (nothing fires in the next hour)', async () => {
     useClock();
-    let release: (() => void) | null = null;
+    let release = null as (() => void) | null;
     const fetchFn = jest.fn(
       () =>
         new Promise<Response>(resolve => {

@@ -16,6 +16,21 @@ import {
  * overnight is refreshed the moment the app is opened). Started without a
  * bearer (a persisted session at launch) it refreshes immediately.
  *
+ * The server's expiry is a hint, not an order. Before it drives a timer it
+ * is classified by `rotationLeadMs`: a finite expiry no further out than
+ * MAX_TRUSTED_LIFE_MS with room for the refresh lead is TRUSTED and the
+ * bearer is rotated exactly REFRESH_LEAD_MS before it. Anything else — a
+ * value that is not a number, an epoch-millisecond `expiresAt` that
+ * `refreshApiSession` scaled again, a far-future clock, an expiry already in
+ * the past or inside the lead — gives the keeper nothing to schedule from:
+ * at launch it exchanges the refresh token right away (as it does for null),
+ * and after a successful rotation it re-checks on the PACED schedule
+ * (`pacedRotationDelayMs`: 30 s, doubling to 5 min for as long as the
+ * server keeps answering that way) instead of once a second or once a
+ * millisecond. Every delay still passes through `clampDelayMs`, so no
+ * timer is ever armed outside [MIN_DELAY_MS, MAX_DELAY_MS]. An expiry the
+ * keeper cannot trust is never a reason to sign the user out.
+ *
  * The ONE outcome that ends the session is the server refusing the refresh
  * token (`onRevoked`): it was logged out, rotated away, or the account is
  * gone. Being offline, a 5xx, a timeout — none of those ever sign the user
@@ -40,19 +55,27 @@ const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
 /**
- * Floor between two successful rotations. A bearer whose reported expiry is
- * already inside the refresh lead (or in the past, when the phone clock lags
- * the server's) would otherwise re-arm at MIN_DELAY_MS and hammer the refresh
- * route once a second; the server still honours the bearer by its own clock,
- * and a route that does reject it calls `refreshSessionNow()`.
+ * Floor between two successful rotations, and the first paced re-check after
+ * a rotation whose expiry gave nothing to schedule from. A bearer whose
+ * reported expiry is already inside the refresh lead (or in the past, when
+ * the phone clock lags the server's) would otherwise re-arm at MIN_DELAY_MS
+ * and hammer the refresh route once a second; the server still honours the
+ * bearer by its own clock, and a route that does reject it calls
+ * `refreshSessionNow()`.
  */
 export const MIN_ROTATION_GAP_MS = 30_000;
 /**
- * Ceiling on any delay the keeper arms. The server's expiry is not trusted
- * further out than this: a bearer reported to live longer (a skewed clock, a
- * millisecond-scaled `expiresAt` that `refreshApiSession` scaled again) is
- * re-checked after a day at most instead of parking the timer. Also keeps
- * every delay inside setTimeout's signed 32-bit range (2**31-1 ms, ~24.8
+ * Longest life the server can have meant for a bearer: Supabase caps a JWT
+ * at 7 days (auth.jwt_expiry ≤ 604 800 s); the extra day absorbs a phone
+ * clock behind the server's. An expiry further out than this is not one the
+ * server issued — an epoch-millisecond `expiresAt` scaled to milliseconds
+ * again lands ~50 000 years out — so it is not trusted to drive a timer.
+ */
+export const MAX_TRUSTED_LIFE_MS = 8 * 24 * 60 * 60_000;
+/**
+ * Ceiling on any delay the keeper arms. A trusted bearer that lives longer
+ * than a day is re-checked daily rather than parking the timer, and every
+ * delay stays inside setTimeout's signed 32-bit range (2**31-1 ms, ~24.8
  * days) — past it Node collapses the delay to 1 ms, which would turn one bad
  * expiry into a refresh exchange + Keychain write every millisecond.
  */
@@ -92,9 +115,53 @@ export function retryDelayMs(attempt: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));
 }
 
+/**
+ * Pace of re-checks while the server keeps answering with an expiry the
+ * keeper cannot schedule from (`streak` = consecutive such rotations, ≥ 1):
+ * 30 s, 1 min, 2 min, 4 min, then 5 min. Bounds a stale, skewed or
+ * millisecond-scaled expiry to a handful of exchanges per hour without ever
+ * parking a bearer whose real life is unknown for a day.
+ */
+export function pacedRotationDelayMs(streak: number): number {
+  return Math.min(
+    RETRY_MAX_MS,
+    MIN_ROTATION_GAP_MS * 2 ** Math.max(0, streak - 1),
+  );
+}
+
 /** Every timer the keeper arms lands in [MIN_DELAY_MS, MAX_DELAY_MS]. */
 export function clampDelayMs(delayMs: number): number {
   return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, delayMs));
+}
+
+/**
+ * Life left in a bearer whose expiry the keeper can trust, or null when the
+ * expiry is unknown, not a finite number, or further out than
+ * MAX_TRUSTED_LIFE_MS. A trusted expiry may lie in the past (the phone clock
+ * is ahead of the server's): the bearer is then due, not implausible.
+ */
+export function trustedLifeMs(
+  expiresAtMs: number | null,
+  nowMs: number,
+): number | null {
+  if (expiresAtMs === null || !Number.isFinite(expiresAtMs)) return null;
+  const life = expiresAtMs - nowMs;
+  return life > MAX_TRUSTED_LIFE_MS ? null : life;
+}
+
+/**
+ * Delay until the bearer should be rotated (REFRESH_LEAD_MS before a trusted
+ * expiry), or null when the expiry gives nothing to schedule from: untrusted,
+ * or already inside the lead / in the past.
+ */
+export function rotationLeadMs(
+  expiresAtMs: number | null,
+  nowMs: number,
+): number | null {
+  const life = trustedLifeMs(expiresAtMs, nowMs);
+  if (life === null) return null;
+  const lead = life - REFRESH_LEAD_MS;
+  return lead > 0 ? lead : null;
 }
 
 export function startSessionKeeper(input: SessionKeeperInput): void {
@@ -104,6 +171,8 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   let refreshToken = input.refreshToken;
   let bearerExpiresAtMs = input.bearerExpiresAtMs;
   let failedAttempts = 0;
+  /** Consecutive rotations whose expiry could not be scheduled from. */
+  let unscheduledRotations = 0;
   let inflight = false;
 
   const live = () => myGeneration === generation;
@@ -117,9 +186,15 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     }, clampDelayMs(delayMs));
   };
 
-  const scheduleAheadOfExpiry = (floorMs: number) => {
-    const untilExpiry = (bearerExpiresAtMs ?? now()) - now();
-    schedule(Math.max(untilExpiry - REFRESH_LEAD_MS, floorMs));
+  const scheduleAfterRotation = () => {
+    const lead = rotationLeadMs(bearerExpiresAtMs, now());
+    if (lead === null) {
+      unscheduledRotations += 1;
+      schedule(pacedRotationDelayMs(unscheduledRotations));
+      return;
+    }
+    unscheduledRotations = 0;
+    schedule(Math.max(lead, MIN_ROTATION_GAP_MS));
   };
 
   const refresh = async () => {
@@ -135,7 +210,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
       failedAttempts = 0;
       await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry(MIN_ROTATION_GAP_MS);
+      if (live()) scheduleAfterRotation();
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
@@ -153,10 +228,10 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
 
   const subscription = AppState.addEventListener('change', nextState => {
     if (nextState !== 'active' || !live()) return;
-    if (
-      bearerExpiresAtMs === null ||
-      bearerExpiresAtMs - now() < FOREGROUND_LEAD_MS
-    ) {
+    // Only a bearer KNOWN to have life left is left alone; an unknown or
+    // untrusted expiry is re-checked now that the user is back.
+    const life = trustedLifeMs(bearerExpiresAtMs, now());
+    if (life === null || life < FOREGROUND_LEAD_MS) {
       void refresh();
     }
   });
@@ -166,9 +241,10 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   // `schedule` to replace.
   refreshNow = () => void refresh();
 
-  if (bearerExpiresAtMs === null) {
+  const launchLead = rotationLeadMs(bearerExpiresAtMs, now());
+  if (launchLead === null) {
     void refresh();
   } else {
-    scheduleAheadOfExpiry(MIN_DELAY_MS);
+    schedule(launchLead);
   }
 }

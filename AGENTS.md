@@ -82,13 +82,22 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   local data while the refresh continues), and `sessionKeeper.ts` rotates
   the bearer 60s before expiry (never sooner than 30s after the previous
   rotation — a short-lived or clock-skewed `expiresAt` must not become a
-  once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts` —
-  and never later than `MAX_DELAY_MS` = 24h: the server expiry is not
-  trusted further out than that, and every timer the keeper arms stays
-  inside setTimeout's 32-bit range, since an epoch-millisecond or far-future
-  `expiresAt` would otherwise overflow to a 1 ms delay and rotate + write the
-  Keychain every millisecond;
-  `__tests__/adjudication/sessionKeeperExpirySanity.test.ts`),
+  once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts`).
+  The server expiry is a HINT the keeper classifies (`rotationLeadMs`)
+  before it drives a timer: finite, no further out than
+  `MAX_TRUSTED_LIFE_MS` = 8 d (Supabase caps a JWT at 7 d + 1 d of clock
+  tolerance) and with room for the 60 s lead → trusted, rotated exactly
+  then. Anything else (NaN/±Infinity/negative at start, an epoch-millisecond
+  `expiresAt` that `refreshApiSession` scaled again, a past or inside-lead
+  value) gives nothing to schedule from: at launch the refresh token is
+  exchanged at once, after a rotation the bearer is re-checked on the paced
+  `pacedRotationDelayMs` schedule (30 s doubling to 5 min), and on
+  foreground it is refreshed. Every timer still passes `clampDelayMs` into
+  [1 s, `MAX_DELAY_MS` = 24 h] ⊂ setTimeout's 32-bit range (an over-range
+  delay collapses to 1 ms on Node and would rotate + write the Keychain
+  every millisecond). An untrusted expiry is never a sign-out reason;
+  `__tests__/adjudication/sessionKeeperExpirySanity.test.ts` +
+  `sessionKeeperExpiryAttack.test.ts`. The keeper
   retries transient failures with backoff, and
   re-checks on every foreground (timers don't fire while suspended). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
