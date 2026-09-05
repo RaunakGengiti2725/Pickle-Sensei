@@ -31,11 +31,15 @@ jest.mock('../src/data/repository', () => ({
   listPendingCaptures: jest.fn(async () => []),
 }));
 
-jest.mock('../src/auth/authStore', () => ({
-  useAuthStore: (
-    selector: (state: { session: { localOnly: boolean } }) => unknown,
-  ) => selector({ session: { localOnly: false } }),
-}));
+jest.mock('../src/auth/authStore', () => {
+  const state = { session: { localOnly: false } };
+  return {
+    useAuthStore: Object.assign(
+      (selector: (value: typeof state) => unknown) => selector(state),
+      { getState: () => state },
+    ),
+  };
+});
 
 import { LibraryScreen } from '../src/screens/LibraryScreen';
 

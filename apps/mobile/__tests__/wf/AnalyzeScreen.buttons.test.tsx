@@ -224,7 +224,17 @@ function scoredOutcome(analysisId: string, freeLimitReached = false) {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function rendered(renderer: ReactTestRenderer): string {
-  return JSON.stringify(renderer.toJSON());
+  const collect = (node: unknown): string => {
+    if (node == null) return '';
+    if (typeof node === 'string' || typeof node === 'number')
+      return String(node);
+    if (Array.isArray(node)) return node.map(collect).join('');
+    const json = node as { type?: string; children?: unknown[] };
+    return (json.children ?? [])
+      .map(collect)
+      .join(json.type === 'Text' ? '' : '\n');
+  };
+  return collect(renderer.toJSON());
 }
 
 function findByLabel(renderer: ReactTestRenderer, label: string) {
@@ -918,10 +928,12 @@ describe('AnalyzeScreen button ledger', () => {
         resolveAnalysis(scoredOutcome('analysis-late'));
       });
       await act(async () => {});
-      // The late resolution settles without throwing and never re-fires the
-      // exit; the stale REPLACE is dropped by the stack router once the
-      // route is gone (its source key no longer exists).
+      // Closing abandons this intent: a late result must never navigate or
+      // prompt over whichever screen the user returned to.
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
       await unmount(renderer);
     });
   });

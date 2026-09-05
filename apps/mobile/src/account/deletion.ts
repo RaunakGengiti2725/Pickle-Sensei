@@ -120,7 +120,7 @@ async function post(
   } catch {
     throw new AccountDeletionError(
       'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      'Account deletion could not be confirmed. Check your connection and try again.',
       true,
     );
   } finally {
@@ -145,7 +145,7 @@ async function post(
     const message =
       error && typeof error['message'] === 'string'
         ? error['message']
-        : 'The deletion request could not be completed. Nothing was deleted.';
+        : 'Account deletion could not be confirmed. Check your connection and try again.';
     throw new AccountDeletionError(
       'deletion.rejected',
       message,

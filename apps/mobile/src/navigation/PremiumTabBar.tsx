@@ -217,11 +217,9 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       }
       const { canonicalAccess, status } = useAccessStore.getState();
       if (
-        !canonicalAccess?.canStartRating &&
-        (canonicalAccess !== null ||
-          status === 'ready' ||
-          status === 'unconfigured' ||
-          status === 'error')
+        canonicalAccess?.canStartRating === false &&
+        canonicalAccess.paywallRequired &&
+        status !== 'loading'
       ) {
         rootNavigation?.navigate('Paywall', { source: 'rating' });
         return;

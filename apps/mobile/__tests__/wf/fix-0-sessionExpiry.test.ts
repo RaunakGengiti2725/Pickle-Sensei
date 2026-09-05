@@ -149,7 +149,10 @@ describe('completeAccountDeletion local purge reporting', () => {
       error: null,
       deletionCleanup: null,
     });
-    (getDb as jest.Mock).mockReturnValue({});
+    (getDb as jest.Mock).mockReturnValue({
+      execute: jest.fn(async () => ({ rows: [] })),
+      close: jest.fn(),
+    });
   });
 
   it('reports complete when the purge succeeds', async () => {

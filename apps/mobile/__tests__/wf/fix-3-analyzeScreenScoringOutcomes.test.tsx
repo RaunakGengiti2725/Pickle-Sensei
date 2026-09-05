@@ -13,6 +13,7 @@
  */
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 jest.mock('../../src/data/repository', () => ({
+  ...jest.requireActual('../../src/data/repository'),
   savePendingCapture: jest.fn(async () => {}),
   setDeclaredStroke: jest.fn(async () => {}),
 }));
@@ -100,7 +101,6 @@ jest.mock('react-native-svg', () => {
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
-import { ScreenHeader } from '../../src/design/components';
 import { TargetSelector } from '../../src/camera/TargetSelector';
 import {
   assertCapturedClip,
@@ -110,6 +110,11 @@ import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
 import { triggerOutboxSync } from '../../src/data/syncRuntime';
 import { reportScoredAnalysisForReview } from '../../src/review/appStoreReview';
 import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
+import { getDb, type LocalDb } from '../../src/data/db';
+import {
+  SIGNED_OUT_DATA_OWNER,
+  setActiveDataOwner,
+} from '../../src/data/accountScope';
 
 const importedClip = assertCapturedClip({
   uri: 'file:///private/var/mobile/import.mov',
@@ -123,8 +128,20 @@ const importedClip = assertCapturedClip({
   ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
 });
 
+const mounted: ReactTestRenderer[] = [];
+
 function textContents(renderer: ReactTestRenderer): string {
   return JSON.stringify(renderer.toJSON());
+}
+
+function closeAnalysis(renderer: ReactTestRenderer) {
+  const button = renderer.root.findAll(
+    node =>
+      node.props.accessibilityLabel === 'Close' &&
+      typeof node.props.onPress === 'function',
+  )[0];
+  expect(button).toBeDefined();
+  button!.props.onPress();
 }
 
 async function renderLibraryScreen(): Promise<ReactTestRenderer> {
@@ -132,6 +149,7 @@ async function renderLibraryScreen(): Promise<ReactTestRenderer> {
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<AnalyzeScreen />);
+    mounted.push(renderer);
   });
   await act(async () => {
     jest.advanceTimersByTime(200);
@@ -172,14 +190,38 @@ function buttonLabelled(renderer: ReactTestRenderer, label: string) {
   );
 }
 
+const ownerA = '22222222-2222-4222-8222-222222222222';
+const ownerB = '33333333-3333-4333-8333-333333333333';
+
+function useRecordingDb() {
+  const calls: { sql: string; params: unknown[] }[] = [];
+  const db: LocalDb = {
+    async execute(sql, params = []) {
+      calls.push({ sql, params });
+      return { rows: [] };
+    },
+    close() {},
+  };
+  (getDb as jest.Mock).mockReturnValue(db);
+  setActiveDataOwner(ownerA);
+  return { db, calls };
+}
+
 describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    (getDb as jest.Mock).mockReturnValue(undefined);
     (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      for (const renderer of mounted.splice(0)) renderer.unmount();
+    });
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
@@ -363,9 +405,8 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
     expect(textContents(renderer)).toContain('Measuring your swing');
 
-    const header = renderer.root.findByType(ScreenHeader);
     await act(async () => {
-      header.props.onClose();
+      closeAnalysis(renderer);
     });
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
@@ -391,6 +432,171 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     });
     expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
+
+  it.each([ownerB, SIGNED_OUT_DATA_OWNER])(
+    'an owner change to %s while scoring never commits the old set or presents its result',
+    async nextOwner => {
+      const { calls } = useRecordingDb();
+      const resolveAnalysis = pendingAnalysis();
+      const renderer = await renderLibraryScreen();
+      await declareAndScore(renderer);
+      const request = (runCaptureAnalysis as jest.Mock).mock.calls[0]![0];
+      expect(typeof request.sessionId).toBe('string');
+      setActiveDataOwner(nextOwner);
+      await act(async () => {
+        resolveAnalysis({
+          kind: 'scored',
+          analysisId: 'old-owner-analysis',
+          record: {},
+          freeLimitReached: true,
+        });
+      });
+      expect(
+        calls.some(call =>
+          /local_session|INSERT INTO outbox|INSERT OR REPLACE INTO kv/.test(
+            call.sql,
+          ),
+        ),
+      ).toBe(false);
+      expect(triggerOutboxSync).not.toHaveBeenCalled();
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+      expect(textContents(renderer)).not.toContain(
+        'That was your last free analysis.',
+      );
+      await act(async () => renderer.unmount());
+      expect(mockRefreshAccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it('an owner change while the set is being planned stops the old capture before inference', async () => {
+    const { db } = useRecordingDb();
+    let resolvePlan!: () => void;
+    db.execute = () =>
+      new Promise(resolve => {
+        resolvePlan = () => resolve({ rows: [] });
+      });
+    const renderer = await renderLibraryScreen();
+    await declareAndScore(renderer);
+    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    setActiveDataOwner(ownerB);
+    await act(async () => resolvePlan());
+    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    expect(triggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
+  });
+
+  it.each(['close', 'owner_change'] as const)(
+    '%s while session commit is pending waits to sync and suppresses all result UI',
+    async interrupt => {
+      const { db, calls } = useRecordingDb();
+      const execute = db.execute.bind(db);
+      let resolveCommit: (() => void) | undefined;
+      db.execute = async (sql, params = []) => {
+        const result = await execute(sql, params);
+        if (sql === 'COMMIT') {
+          await new Promise<void>(resolve => {
+            resolveCommit = resolve;
+          });
+        }
+        return result;
+      };
+      (runCaptureAnalysis as jest.Mock).mockResolvedValue({
+        kind: 'scored',
+        analysisId: 'saved-analysis',
+        record: {},
+        freeLimitReached: true,
+      });
+      const renderer = await renderLibraryScreen();
+      try {
+        await declareAndScore(renderer);
+        expect(typeof resolveCommit).toBe('function');
+        expect(triggerOutboxSync).not.toHaveBeenCalled();
+        if (interrupt === 'close') {
+          await act(async () => closeAnalysis(renderer));
+        } else {
+          setActiveDataOwner(ownerB);
+        }
+        await act(async () => resolveCommit!());
+        const sessionOutbox = calls.filter(call =>
+          call.sql.includes("VALUES (?, 'session.create', ?)"),
+        );
+        expect(sessionOutbox).toHaveLength(1);
+        expect(sessionOutbox[0]?.params[0]).toBe(ownerA);
+        expect(calls.some(call => call.params.includes(ownerB))).toBe(false);
+        expect(triggerOutboxSync).toHaveBeenCalledTimes(
+          interrupt === 'close' ? 1 : 0,
+        );
+        expect(mockNavigation.replace).not.toHaveBeenCalled();
+        expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+        expect(textContents(renderer)).not.toContain(
+          'That was your last free analysis.',
+        );
+      } finally {
+        await act(async () => {
+          resolveCommit?.();
+          renderer.unmount();
+        });
+      }
+    },
+  );
+
+  it.each(['abstained', 'unavailable', 'exception'] as const)(
+    'closing a pending analysis that ends %s creates no set or sync and shows no late recovery',
+    async result => {
+      const { calls } = useRecordingDb();
+      let resolveAnalysis!: (value: unknown) => void;
+      let rejectAnalysis!: (error: Error) => void;
+      (runCaptureAnalysis as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveAnalysis = resolve;
+            rejectAnalysis = reject;
+          }),
+      );
+      const renderer = await renderLibraryScreen();
+      await declareAndScore(renderer);
+      await act(async () => closeAnalysis(renderer));
+      await act(async () => {
+        if (result === 'exception') {
+          rejectAnalysis(new Error('Connection lost after leaving'));
+        } else {
+          resolveAnalysis(
+            result === 'unavailable'
+              ? {
+                  kind: 'unavailable',
+                  reason: 'Connection unavailable after leaving',
+                }
+              : {
+                  kind: 'low_confidence',
+                  analysisId: 'unscored-analysis',
+                  record: {
+                    result: null,
+                    strokeIntent: { resolutionBasis: 'abstained' },
+                  },
+                  guidance: null,
+                },
+          );
+        }
+      });
+      expect(
+        calls.some(call =>
+          /local_session|INSERT INTO outbox|INSERT OR REPLACE INTO kv/.test(
+            call.sql,
+          ),
+        ),
+      ).toBe(false);
+      expect(triggerOutboxSync).not.toHaveBeenCalled();
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+      expect(textContents(renderer)).not.toContain('after leaving');
+      expect(textContents(renderer)).not.toContain('RATING NOT CONSUMED');
+      await act(async () => renderer.unmount());
+    },
+  );
 
   it('unmounting mid-scoring abandons the run the same way', async () => {
     const resolveAnalysis = pendingAnalysis();

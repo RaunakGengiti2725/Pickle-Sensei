@@ -1,14 +1,30 @@
 import React from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { BrandMark, Button, Pill, PressableScale } from '../design/components';
+import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 
-function CourtStory() {
+function CourtStory(props: { adaptive: boolean }) {
   return (
-    <View style={styles.courtStory}>
-      <Svg width="100%" height="100%" viewBox="0 0 340 300">
+    <View
+      style={[styles.courtStory, props.adaptive && styles.courtStoryAdaptive]}
+      testID="welcome-court-story"
+    >
+      <Svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 340 300"
+        style={props.adaptive ? StyleSheet.absoluteFill : undefined}
+      >
         <Path
           d="M35 42h270v216H35z"
           stroke={color.lineDark}
@@ -50,7 +66,7 @@ function CourtStory() {
         <Circle cx="84" cy="221" r="8" fill={color.volt} />
         <Circle cx="231" cy="112" r="5" fill={color.onDark} />
       </Svg>
-      <View style={styles.readout}>
+      <View style={[styles.readout, props.adaptive && styles.readoutAdaptive]}>
         <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
         <Text style={[type.h1, styles.readoutTitle]}>
           Automatic{`\n`}capture.
@@ -61,9 +77,19 @@ function CourtStory() {
           No shot picker. No timer.
         </Text>
       </View>
-      <View style={styles.livePill}>
+      <View
+        style={[styles.livePill, props.adaptive && styles.livePillAdaptive]}
+      >
         <View style={styles.privateIcon} />
-        <Text style={[type.micro, { color: color.onDark }]}>ON-DEVICE</Text>
+        <Text
+          style={[
+            type.micro,
+            { color: color.onDark },
+            props.adaptive && styles.flexibleText,
+          ]}
+        >
+          ON-DEVICE
+        </Text>
       </View>
     </View>
   );
@@ -76,12 +102,35 @@ export function WelcomeScreen(props: {
    * questionnaire after signing in. */
   onSignIn?: () => void;
 }) {
-  return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.topBar}>
-        <BrandMark light />
-        <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+  const { height, fontScale } = useWindowDimensions();
+  const adaptive = height < 760 || fontScale > 1.2;
+  const freeCopy = (
+    <Text style={styles.privacy} testID="welcome-free-copy">
+      Two scored technique reads free · Unscored attempts don’t count
+    </Text>
+  );
+  const content = (
+    <>
+      <View style={[styles.topBar, adaptive && styles.topBarAdaptive]}>
+        {adaptive ? (
+          <View style={styles.adaptiveBrand}>
+            <BrandMark light compact />
+            <Text accessible={false} style={[type.h3, styles.brandName]}>
+              Pickle Sensei
+            </Text>
+          </View>
+        ) : (
+          <BrandMark light />
+        )}
+        {adaptive ? (
+          <View style={styles.privacyBadge}>
+            <Text style={[type.micro, { color: color.onDark }]}>
+              PRIVATE BY DEFAULT
+            </Text>
+          </View>
+        ) : (
+          <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+        )}
       </View>
 
       <View style={styles.heroCopy}>
@@ -89,19 +138,52 @@ export function WelcomeScreen(props: {
           See the stroke.{`\n`}Know the fix.
         </Text>
         <Text style={styles.tagline}>
-          A private technique coach that guides each capture and turns validated
-          reads into one clear next step.
+          A private technique coach that guides each capture and turns scored
+          technique reads into one clear next step.
         </Text>
       </View>
 
-      <CourtStory />
-
-      <View style={styles.footer}>
-        <Button
-          label="Start your first read"
-          variant="volt"
-          onPress={props.onGetStarted}
-        />
+      <CourtStory adaptive={adaptive} />
+      {adaptive ? <View style={styles.freeCopyContent}>{freeCopy}</View> : null}
+    </>
+  );
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+      <StatusBar barStyle="light-content" />
+      {adaptive ? (
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.scrollContent}
+          indicatorStyle="white"
+          testID="welcome-content-scroll"
+        >
+          {content}
+        </ScrollView>
+      ) : (
+        content
+      )}
+      <View
+        style={[styles.footer, adaptive && styles.footerAdaptive]}
+        testID="welcome-actions"
+      >
+        {adaptive ? (
+          <PressableScale
+            accessibilityLabel="Start your first read"
+            onPress={props.onGetStarted}
+            style={styles.primaryAdaptive}
+          >
+            <Text style={[type.bodyBold, styles.primaryLabel]}>
+              Start your first read
+            </Text>
+            <Icon name="arrow" size={18} color={color.onVolt} />
+          </PressableScale>
+        ) : (
+          <Button
+            label="Start your first read"
+            variant="volt"
+            onPress={props.onGetStarted}
+          />
+        )}
         {props.onSignIn ? (
           <PressableScale
             accessibilityRole="button"
@@ -110,14 +192,18 @@ export function WelcomeScreen(props: {
             onPress={props.onSignIn}
             style={styles.signInLink}
           >
-            <Text style={[type.bodyBold, { color: color.onDarkMuted }]}>
+            <Text
+              style={[
+                type.bodyBold,
+                { color: color.onDarkMuted },
+                adaptive && styles.centeredText,
+              ]}
+            >
               I already have an account
             </Text>
           </PressableScale>
         ) : null}
-        <Text style={styles.privacy}>
-          Two successful validated ratings free · Unscored attempts don’t count
-        </Text>
+        {!adaptive ? freeCopy : null}
       </View>
     </SafeAreaView>
   );
@@ -125,6 +211,49 @@ export function WelcomeScreen(props: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
+  contentScroll: { flex: 1, minHeight: 0 },
+  scrollContent: { paddingBottom: space.lg },
+  topBarAdaptive: { flexWrap: 'wrap', gap: space.sm },
+  adaptiveBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    maxWidth: '100%',
+  },
+  brandName: { color: color.onDark, flexShrink: 1 },
+  privacyBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
+    backgroundColor: color.inkElevated,
+  },
+  courtStoryAdaptive: { flex: 0, padding: space.lg },
+  readoutAdaptive: { position: 'relative', top: 0, left: 0 },
+  livePillAdaptive: {
+    position: 'relative',
+    right: 0,
+    bottom: 0,
+    marginTop: space.lg,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  flexibleText: { flexShrink: 1 },
+  centeredText: { textAlign: 'center' },
+  footerAdaptive: { flexShrink: 0 },
+  primaryAdaptive: {
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: color.volt,
+  },
+  primaryLabel: { color: color.onVolt, flex: 1, textAlign: 'center' },
+  freeCopyContent: { paddingHorizontal: space.lg },
   topBar: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,

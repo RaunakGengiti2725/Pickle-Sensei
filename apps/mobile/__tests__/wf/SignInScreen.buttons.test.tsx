@@ -12,8 +12,15 @@
  * double-tap guard are the store's real behavior, not a stubbed action.
  */
 import React from 'react';
-import { NativeModules, Platform, Text } from 'react-native';
+import {
+  Dimensions,
+  NativeModules,
+  Platform,
+  ScrollView,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import type { LocalDb } from '../../src/data/db';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -21,11 +28,23 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 // SQLite is absent under jest; the store's kv writes are best-effort.
-jest.mock('../../src/data/db', () => ({
-  getDb: () => {
-    throw new Error('no native sqlite in jest');
-  },
-}));
+const mockKv = new Map<string, string>();
+function mockCurrentDb(): LocalDb {
+  return {
+    async execute(sql: string, params: unknown[] = []) {
+      if (sql.startsWith('SELECT value FROM kv WHERE key = ?')) {
+        const value = mockKv.get(String(params[0]));
+        return { rows: value === undefined ? [] : [{ value }] };
+      }
+      if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+        mockKv.set(String(params[0]), String(params[1]));
+      }
+      return { rows: [] };
+    },
+    close() {},
+  };
+}
+jest.mock('../../src/data/db', () => ({ getDb: () => mockCurrentDb() }));
 
 jest.mock('../../src/config/authConfig', () => ({
   GOOGLE_WEB_CLIENT_ID: 'test-web-client.apps.googleusercontent.com',
@@ -85,6 +104,7 @@ jest.mock('../../src/account/bootstrap', () => {
 });
 
 import { SignInScreen } from '../../src/screens/SignInScreen';
+import { radius } from '../../src/design/tokens';
 import { useAuthStore } from '../../src/auth/authStore';
 import { AccountBootstrapError } from '../../src/account/bootstrap';
 import { clearApiSession, getApiSession } from '../../src/account/apiSession';
@@ -224,6 +244,10 @@ const DISMISS = 'Dismiss sign-in error';
 
 describe('SignInScreen button ledger', () => {
   beforeEach(() => {
+    mockKv.clear();
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
     mockAppleSignIn.mockReset();
     mockBootstrapCanonicalAccount.mockReset();
     Object.values(mockGoogleSignin).forEach(fn => fn.mockReset());
@@ -245,6 +269,109 @@ describe('SignInScreen button ledger', () => {
     delete nativeModules.PickleAuth;
     jest.restoreAllMocks();
   });
+
+  it('responsive layout preserves the default non-scrolling identity without invoking providers', () => {
+    const renderer = renderScreen();
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    const title = renderer.root
+      .findAllByType(Text)
+      .find(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children.includes('Your ratings,'),
+      )!;
+    expect(flattenStyle(title.props.style)).toMatchObject({
+      fontSize: 48,
+      lineHeight: 50,
+    });
+    expect(pressableStyle(pressable(renderer, APPLE)).minHeight).toBe(58);
+    expect(pressableStyle(pressable(renderer, GOOGLE)).minHeight).toBe(58);
+    expect(mockAppleSignIn).not.toHaveBeenCalled();
+    expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it.each([
+    [375, 667, 1],
+    [375, 667, 2.64],
+    [375, 667, 3.14],
+    [393, 852, 3.12],
+  ])(
+    'responsive layout at %sx%s/%sx scrolls full provider/error/trust content beneath Back',
+    async (width, height, fontScale) => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width, height, scale: 2, fontScale });
+      const original = useAuthStore.getState();
+      const apple = jest.fn(async () => {}),
+        google = jest.fn(async () => {}),
+        clear = jest.fn();
+      useAuthStore.setState({
+        signInWithApple: apple,
+        signInWithGoogle: google,
+        clearError: clear,
+        error: {
+          code: 'auth.not_configured',
+          message: 'A local layout-only error fixture.',
+        },
+      });
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack);
+      try {
+        const [scroll] = renderer.root.findAllByType(ScrollView);
+        expect(scroll!.props.testID).toBe('signin-content-scroll');
+        expect(flattenStyle(scroll!.props.style)).toMatchObject({
+          flex: 1,
+          minHeight: 0,
+        });
+        expect(
+          scroll!.findAll(node => node.props.accessibilityLabel === BACK),
+        ).toHaveLength(0);
+        expect(
+          scroll!.findAll(node => node.props.testID === 'signin-trust-copy')
+            .length,
+        ).toBeGreaterThan(0);
+        for (const label of [APPLE, GOOGLE, DISMISS]) {
+          expect(
+            scroll!.findAll(node => node.props.accessibilityLabel === label)
+              .length,
+          ).toBeGreaterThan(0);
+          expect(
+            pressableStyle(pressable(renderer, label)).minHeight,
+          ).toBeGreaterThanOrEqual(44);
+        }
+        for (const label of [APPLE, GOOGLE]) {
+          expect(pressableStyle(pressable(renderer, label)).borderRadius).toBe(
+            radius.lg,
+          );
+        }
+        for (const text of renderer.root.findAllByType(Text)) {
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+          expect(text.props.numberOfLines).toBeUndefined();
+        }
+        expect(apple).not.toHaveBeenCalled();
+        expect(google).not.toHaveBeenCalled();
+        await press(renderer, APPLE);
+        await press(renderer, GOOGLE);
+        await press(renderer, DISMISS);
+        await press(renderer, BACK);
+        expect(apple).toHaveBeenCalledTimes(1);
+        expect(google).toHaveBeenCalledTimes(1);
+        expect(clear).toHaveBeenCalledTimes(1);
+        expect(onBack).toHaveBeenCalledTimes(1);
+        expect(mockAppleSignIn).not.toHaveBeenCalled();
+        expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+      } finally {
+        act(() => renderer.unmount());
+        useAuthStore.setState({
+          signInWithApple: original.signInWithApple,
+          signInWithGoogle: original.signInWithGoogle,
+          clearError: original.clearError,
+        });
+      }
+    },
+  );
 
   it('renders exactly the ledger pressables on iOS, each a labelled button with a >=44pt target', () => {
     const renderer = renderScreen();

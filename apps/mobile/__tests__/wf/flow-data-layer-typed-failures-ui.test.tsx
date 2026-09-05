@@ -358,7 +358,7 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
         sheetButton(renderer, 'Permanently delete').props.onPress();
       });
       expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
+        'Account deletion could not be confirmed. Check your connection and try again.',
       );
       const again = sheetButton(renderer, 'Permanently delete');
       expect(again.props.label).toBe('Permanently delete');

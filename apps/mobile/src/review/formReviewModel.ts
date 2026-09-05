@@ -330,7 +330,7 @@ export const PHASE_TITLES: Record<PhaseKey, string> = {
   ready: 'Ready stance',
   prepare: 'Preparation',
   accelerate: 'Acceleration',
-  contact: 'Contact',
+  contact: 'Contact estimate',
   follow_through: 'Follow-through',
   recover: 'Recovery',
 };

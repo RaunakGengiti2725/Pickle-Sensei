@@ -2,15 +2,25 @@ package com.picklesensei.camera
 
 import android.app.Activity
 import android.content.Intent
+import android.os.ParcelFileDescriptor
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.util.concurrent.Executors
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -20,6 +30,7 @@ internal class PickleVideoCaptureModule(
   private var pendingPromise: Promise? = null
   private var pendingRequestCode: Int? = null
   @Volatile private var listenerCount = 0
+  private val captureCleanupExecutor = Executors.newSingleThreadExecutor()
 
   init {
     reactContext.addActivityEventListener(this)
@@ -44,6 +55,51 @@ internal class PickleVideoCaptureModule(
     // Ignore cleanup calls when no operation exists; otherwise a stale cancel
     // could be consumed by the next camera screen.
     if (pendingPromise != null) CameraOperationRegistry.requestCancellation()
+  }
+
+  @ReactMethod
+  fun deleteCaptureFiles(uris: ReadableArray, promise: Promise) {
+    val values = try {
+      require(uris.size() <= MAX_CAPTURE_CLEANUP_BATCH)
+      (0 until uris.size()).map { index ->
+        require(uris.getType(index) == ReadableType.String)
+        requireNotNull(uris.getString(index))
+      }
+    } catch (_: Exception) {
+      promise.reject("file.invalid_batch", "A capture cleanup batch must contain at most 128 URIs.")
+      return
+    }
+    try {
+      captureCleanupExecutor.execute {
+        try {
+          val files = reactContext.filesDir.absoluteFile
+          val canonicalFiles = files.canonicalFile
+          val roots = mutableSetOf(
+            File(files, "captures").path,
+            File(canonicalFiles, "captures").path,
+          )
+          if (canonicalFiles.path == "/data/user/0/${reactContext.packageName}/files") {
+            roots.add("/data/data/${reactContext.packageName}/files/captures")
+          }
+          val results = Arguments.createArray()
+          openCleanupDirectory(files.path).use { filesDescriptor ->
+            val rootDescriptor = filesDescriptor?.let {
+              openCleanupDirectory("/proc/self/fd/${it.fd}/captures")
+            }
+            rootDescriptor.use { directory ->
+              values.forEachIndexed { index, uri ->
+                results.pushMap(deleteCaptureFile(index, uri, roots, directory))
+              }
+            }
+          }
+          promise.resolve(Arguments.createMap().apply { putArray("results", results) })
+        } catch (_: Exception) {
+          promise.reject("file.unavailable", "Private capture cleanup is unavailable. Please retry.")
+        }
+      }
+    } catch (_: Exception) {
+      promise.reject("file.unavailable", "Private capture cleanup is unavailable. Please retry.")
+    }
   }
 
   /**
@@ -158,6 +214,7 @@ internal class PickleVideoCaptureModule(
   }
 
   override fun invalidate() {
+    captureCleanupExecutor.shutdown()
     CameraOperationRegistry.setEventSink(null)
     reactContext.removeActivityEventListener(this)
     val pending = clearPending()
@@ -176,6 +233,96 @@ internal class PickleVideoCaptureModule(
     private const val REQUEST_CAPTURE = 7_301
     private const val REQUEST_IMPORT = 7_302
     private const val EVENT_NAME = "PickleCameraEvent"
+    private const val MAX_CAPTURE_CLEANUP_BATCH = 128
+
+    private fun openCleanupDirectory(path: String): ParcelFileDescriptor? {
+      val descriptor = try {
+        Os.open(
+          path,
+          OsConstants.O_RDONLY or OsConstants.O_DIRECTORY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC,
+          0,
+        )
+      } catch (error: ErrnoException) {
+        if (error.errno == OsConstants.ENOENT) return null
+        throw error
+      }
+      try {
+        return ParcelFileDescriptor.dup(descriptor)
+      } finally {
+        Os.close(descriptor)
+      }
+    }
+
+    private fun deleteCaptureFile(
+      index: Int,
+      uri: String,
+      roots: Set<String>,
+      directory: ParcelFileDescriptor?,
+    ): WritableMap {
+      fun result(status: String, code: String? = null) = Arguments.createMap().apply {
+        putInt("index", index)
+        putString("status", status)
+        if (code != null) putString("code", code)
+      }
+      val name = captureBasename(uri, roots)
+        ?: return result("failed", "file.invalid_uri")
+      if (directory == null) return result("missing")
+      val path = "/proc/self/fd/${directory.fd}/$name"
+      return try {
+        if (!OsConstants.S_ISREG(Os.lstat(path).st_mode)) {
+          result("failed", "file.not_regular")
+        } else {
+          Os.unlink(path)
+          result("deleted")
+        }
+      } catch (error: ErrnoException) {
+        if (error.errno == OsConstants.ENOENT) result("missing")
+        else result("failed", "file.delete_failed")
+      } catch (_: Exception) {
+        result("failed", "file.delete_failed")
+      }
+    }
+
+    private fun captureBasename(uri: String, roots: Set<String>): String? {
+      if (uri.toByteArray(Charsets.UTF_8).size > 8192 || !uri.startsWith("file://") ||
+        uri.contains('?') || uri.contains('#')) return null
+      var path = uri.substring(7)
+      if (path.startsWith("localhost/")) path = path.substring(9)
+      if (!path.startsWith('/')) return null
+      val components = path.substring(1).split('/').map { encoded ->
+        val component = decodeCaptureComponent(encoded) ?: return null
+        if (component.isEmpty() || component == "." || component == ".." ||
+          component.contains('/') || component.contains('\\') ||
+          component.any { it.code < 32 || it.code == 127 }) return null
+        component
+      }
+      val name = components.lastOrNull() ?: return null
+      if (name.toByteArray(Charsets.UTF_8).size > 255) return null
+      if ("/" + components.dropLast(1).joinToString("/") !in roots) return null
+      return name
+    }
+
+    private fun decodeCaptureComponent(encoded: String): String? {
+      return try {
+        val bytes = Charsets.UTF_8.newEncoder().encode(CharBuffer.wrap(encoded))
+        val decoded = ByteBuffer.allocate(bytes.remaining())
+        while (bytes.hasRemaining()) {
+          val byte = bytes.get()
+          if (byte.toInt() == 37) {
+            if (bytes.remaining() < 2) return null
+            val high = bytes.get().toInt().toChar().digitToIntOrNull(16) ?: return null
+            val low = bytes.get().toInt().toChar().digitToIntOrNull(16) ?: return null
+            decoded.put((high * 16 + low).toByte())
+          } else {
+            decoded.put(byte)
+          }
+        }
+        decoded.flip()
+        Charsets.UTF_8.newDecoder().decode(decoded).toString()
+      } catch (_: Exception) {
+        null
+      }
+    }
 
     private fun jsonObjectToWritable(value: JSONObject): WritableMap {
       val output = Arguments.createMap()

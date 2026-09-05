@@ -431,7 +431,7 @@ describe('COACH portal — actions', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failed access check fails closed to the Paywall (never a silent no-op, never Analyze)', async () => {
+  it('a failed access check hands the intended source to the fail-closed Analyze recovery gate, not the Paywall', async () => {
     configureAccessStore(
       billing(async () => {
         throw new Error('offline');
@@ -450,13 +450,23 @@ describe('COACH portal — actions', () => {
     await flushCloseAnimation();
     await flushMicrotasks();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-    expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-      source: 'rating',
+    expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
     });
+    await pressByLabel(renderer, 'Open coach actions');
+    await pressByLabel(renderer, 'Import Video');
+    await flushCloseAnimation();
+    expect(mockRootNavigate).toHaveBeenLastCalledWith('Analyze', {
+      source: 'library',
+    });
+    expect(mockRootNavigate).not.toHaveBeenCalledWith(
+      'Paywall',
+      expect.anything(),
+    );
     act(() => renderer.unmount());
   });
 
-  it('unconfigured billing (no clients) still resolves to the Paywall instead of hanging', async () => {
+  it('unconfigured billing (no clients) hands off to access recovery instead of a sales offer', async () => {
     clearAccessStoreConfiguration();
     await act(async () => {
       await useAccessStore.getState().initialize();
@@ -468,8 +478,8 @@ describe('COACH portal — actions', () => {
     await flushCloseAnimation();
     await flushMicrotasks();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-    expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-      source: 'rating',
+    expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
     });
     act(() => renderer.unmount());
   });

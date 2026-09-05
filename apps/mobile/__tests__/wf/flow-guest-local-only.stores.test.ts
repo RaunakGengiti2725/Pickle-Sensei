@@ -535,16 +535,21 @@ describe('guest → Connect account (Google)', () => {
   it('double-tap guard: a second signInWithGoogle while busy is ignored', async () => {
     await becomeGuest();
     let resolveSignIn!: (value: unknown) => void;
-    mockGoogleSignin.signIn.mockReturnValue(
-      new Promise(resolve => {
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      signalStarted = resolve;
+    });
+    mockGoogleSignin.signIn.mockImplementation(() => {
+      signalStarted();
+      return new Promise(resolve => {
         resolveSignIn = resolve;
-      }),
-    );
+      });
+    });
 
     const first = useAuthStore.getState().signInWithGoogle();
-    await Promise.resolve();
     expect(useAuthStore.getState().busy).toBe(true);
     await useAuthStore.getState().signInWithGoogle();
+    await started;
     expect(mockGoogleSignin.signIn).toHaveBeenCalledTimes(1);
 
     resolveSignIn({ type: 'cancelled', data: null });

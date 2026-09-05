@@ -138,6 +138,56 @@ describe('account deletion client', () => {
     ).resolves.toEqual({ appleAuthorizationRevocation: 'revoked' });
   });
 
+  it('step 2 reports an unconfirmed, retryable outcome after server deletion loses its response', async () => {
+    const serverAccounts = new Set([session.canonicalAppUserId]);
+    const onDeleted = jest.fn();
+    const fetchFn = jest.fn(async () => {
+      serverAccounts.delete(session.canonicalAppUserId);
+      throw new TypeError('Network request failed after deletion');
+    });
+
+    const error = await confirmAccountDeletion(
+      session,
+      'challenge',
+      fetchFn,
+    ).then(onDeleted, (reason: unknown) => reason);
+
+    expect(serverAccounts.has(session.canonicalAppUserId)).toBe(false);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(error).toBeInstanceOf(AccountDeletionError);
+    expect(error).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+      message:
+        'Account deletion could not be confirmed. Check your connection and try again.',
+    });
+    expect(error).toHaveProperty(
+      'message',
+      expect.not.stringContaining('Nothing was deleted'),
+    );
+  });
+
+  it.each([
+    { status: 400, retryable: false },
+    { status: 429, retryable: true },
+    { status: 503, retryable: true },
+  ])(
+    'step 2 reports an unconfirmed outcome for HTTP $status without a server message',
+    async ({ status, retryable }) => {
+      const fetchFn = jest.fn(async () => jsonResponse(status, {}));
+
+      await expect(
+        confirmAccountDeletion(session, 'challenge', fetchFn),
+      ).rejects.toMatchObject({
+        code: 'deletion.rejected',
+        retryable,
+        message:
+          'Account deletion could not be confirmed. Check your connection and try again.',
+      });
+    },
+  );
+
   it('step 2 surfaces a stale/foreign challenge as non-retryable', async () => {
     const fetchFn = jest.fn(async () =>
       jsonResponse(403, {

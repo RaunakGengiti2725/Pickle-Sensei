@@ -16,7 +16,15 @@ import {
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
+  withOwnerTransaction,
 } from '../data/repository';
+import {
+  captureDataOwnerScope,
+  DataOwnerChangedError,
+  GUEST_DATA_OWNER,
+  isDataOwnerScopeActive,
+  type DataOwnerScope,
+} from '../data/accountScope';
 import { createFusionProviders } from '../vision/providers';
 import {
   ApiError,
@@ -29,6 +37,7 @@ import {
   type EvaluationTelemetryContext,
 } from '../evaluation/trialCapture';
 import { stabilitySlo } from './stabilityTelemetry';
+import { commitPracticeSet, type PracticeSetPlan } from './practiceSet';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -55,6 +64,7 @@ export type CaptureAnalysisOutcome =
        * prompt exactly once, right when the last free analysis completes.
        */
       freeLimitReached: boolean;
+      practiceSetCommitted?: true;
     }
   | {
       kind: 'low_confidence';
@@ -66,7 +76,7 @@ export type CaptureAnalysisOutcome =
       kind: 'unavailable';
       reason: string;
       /** HTTP 402 `access.paywall_required`: not retryable without an upgrade. */
-      cause?: 'paywall_required';
+      cause?: 'paywall_required' | 'owner_changed' | 'storage_failed';
     }
   | {
       /**
@@ -99,8 +109,10 @@ export interface RunCaptureAnalysisRequest {
   handedness: 'right' | 'left' | 'ambidextrous';
   cameraView: 'side' | 'rear_oblique';
   apiConfig: ApiConfigState;
+  resolveApiToken?: () => string | null;
   appVersion: string;
   sessionId?: string | null;
+  practiceSetPlan?: PracticeSetPlan | null;
   focusCheckpoint?: string;
   /**
    * Product-assisted target selection ("tap yourself"). Normalized image
@@ -131,15 +143,49 @@ export interface RunCaptureAnalysisRequest {
 export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
+  const scope = captureDataOwnerScope();
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
+  const practiceSetPlan = request.practiceSetPlan
+    ? { ...request.practiceSetPlan }
+    : null;
+  if (
+    practiceSetPlan &&
+    (practiceSetPlan.owner !== scope.owner ||
+      practiceSetPlan.ownerGeneration !== scope.generation)
+  ) {
+    return ownerChangedOutcome();
+  }
+  const entryToken = request.apiConfig.token;
+  const resolveApiToken = request.resolveApiToken;
+  const entryRequest: RunCaptureAnalysisRequest = {
+    ...request,
+    practiceSetPlan,
+    sessionId: practiceSetPlan?.sessionId ?? request.sessionId,
+    apiConfig: {
+      baseUrl: request.apiConfig.baseUrl,
+      get token() {
+        if (!isDataOwnerScopeActive(scope)) return null;
+        return resolveApiToken ? resolveApiToken() : entryToken;
+      },
+    },
+    evaluationTelemetry: request.evaluationTelemetry
+      ? {
+          ...request.evaluationTelemetry,
+          dims: { ...request.evaluationTelemetry.dims },
+        }
+      : null,
+  };
   const startedAt = Date.now();
   stabilitySlo.record({ kind: 'analysis_started' });
   let outcome: CaptureAnalysisOutcome;
   try {
-    outcome = await runCaptureAnalysisCore(request);
+    outcome = await runCaptureAnalysisCore(entryRequest, scope);
   } catch (error) {
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
     stabilitySlo.record({ kind: 'analysis_failed', failureKind: 'exception' });
     throw error;
   }
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
   // 'scored', 'low_confidence' and 'quality_blocked' all answered the user
   // honestly; only 'unavailable' means the run produced no outcome at all.
   if (outcome.kind === 'unavailable') {
@@ -150,24 +196,35 @@ export async function runCaptureAnalysis(
   } else {
     stabilitySlo.record({ kind: 'analysis_completed' });
   }
-  const telemetry = request.evaluationTelemetry ?? null;
-  if (telemetry && telemetry.consentActive) {
+  const telemetry = entryRequest.evaluationTelemetry ?? null;
+  if (telemetry && telemetry.consentActive && isDataOwnerScopeActive(scope)) {
     try {
-      await recordEvaluationTrial(request.db, {
-        outcome,
-        captureId: request.captureId,
-        capturedAtIso: request.clip.capturedAtIso,
-        declaredStroke: request.declaredStroke,
-        latencyMs: Date.now() - startedAt,
-        appVersion: request.appVersion,
-        context: telemetry,
+      await withOwnerTransaction(entryRequest.db, scope, async ownedDb => {
+        await recordEvaluationTrial(ownedDb, {
+          outcome,
+          captureId: entryRequest.captureId,
+          capturedAtIso: entryRequest.clip.capturedAtIso,
+          declaredStroke: entryRequest.declaredStroke,
+          latencyMs: Date.now() - startedAt,
+          appVersion: entryRequest.appVersion,
+          context: telemetry,
+        });
       });
     } catch {
       // Telemetry is best-effort evidence collection: a failed queue write
       // must never surface as an analysis failure to the user.
     }
   }
-  return outcome;
+  return isDataOwnerScopeActive(scope) ? outcome : ownerChangedOutcome();
+}
+
+function ownerChangedOutcome(): CaptureAnalysisOutcome {
+  return {
+    kind: 'unavailable',
+    cause: 'owner_changed',
+    reason:
+      'The active account changed. Reopen this capture from its original account to try again.',
+  };
 }
 
 export const PAYWALL_REQUIRED_CODE = 'access.paywall_required';
@@ -178,7 +235,9 @@ function isPaywallRequired(error: ApiError): boolean {
 
 async function runCaptureAnalysisCore(
   request: RunCaptureAnalysisRequest,
+  scope: DataOwnerScope,
 ): Promise<CaptureAnalysisOutcome> {
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
   const { clip } = request;
   // ── Capture-envelope gate: UNSUPPORTED input never enters inference ────
   const envelope = request.captureEnvelope ?? null;
@@ -220,11 +279,13 @@ async function runCaptureAnalysisCore(
   try {
     sidecarJson = await readCaptureArtifact(poseSequence.uri);
   } catch {
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
     return {
       kind: 'unavailable',
       reason: 'The recorded pose sequence for this capture could not be read.',
     };
   }
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
   // Integrity: the sidecar must be byte-identical to what capture recorded.
   if (sha256Hex(sidecarJson) !== poseSequence.sha256) {
     return {
@@ -253,11 +314,13 @@ async function runCaptureAnalysisCore(
   }
 
   // ── Entitlement: reserve before inference (spec: permits) ─────────────
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
   const permits = createAnalysisPermitClient(request.apiConfig);
   let permitId: string;
   let freeLimitReached = false;
   try {
     const reserved = await permits.reserve(makeUuid());
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
     permitId = reserved.permit.id;
     freeLimitReached =
       reserved.permit.accessSource === 'free' &&
@@ -265,6 +328,7 @@ async function runCaptureAnalysisCore(
       !reserved.access.premium &&
       reserved.access.freeRatings.availableToReserve === 0;
   } catch (error) {
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
     if (error instanceof ApiError && isPaywallRequired(error)) {
       return {
         kind: 'unavailable',
@@ -273,11 +337,22 @@ async function runCaptureAnalysisCore(
       };
     }
     const message =
-      error instanceof ApiError
-        ? error.message
-        : 'The rating service could not be reached. Your capture is saved and can be scored later.';
+      error instanceof ApiError &&
+      error.status === 401 &&
+      scope.owner !== GUEST_DATA_OWNER
+        ? 'Your account is reconnecting. Your capture is saved; try again when the connection is ready.'
+        : error instanceof ApiError
+          ? error.message
+          : 'The rating service could not be reached. Your capture is saved and can be scored later.';
     return { kind: 'unavailable', reason: message };
   }
+
+  const releasePermit = async (outcome: 'failed' | 'low_confidence') => {
+    if (!isDataOwnerScopeActive(scope)) return;
+    await permits.release(permitId, outcome).catch(() => {
+      // The permit expires server-side; a lost release is not a lost rating.
+    });
+  };
 
   // Imported clips carry no measured trigger: the analysis window is
   // honestly the whole clip, and the provenance says exactly that instead
@@ -313,40 +388,47 @@ async function runCaptureAnalysisCore(
         };
 
   const analysisId = makeUuid();
-  const result = await analyzeCapture(
-    fusion.providers,
-    {
-      captureId: request.captureId,
-      pose: parsed.value,
-      paddle: unavailable('paddle_detector_not_installed'),
-      ball: unavailable('ball_tracker_not_installed'),
-      trigger,
-      // declared may be null (AUTO DETECT); predicted is filled downstream
-      // by the classifier providers, never here.
-      stroke: { declared: request.declaredStroke, predicted: null },
-      declaredCanonical: request.declaredCanonical ?? null,
-      handedness: request.handedness,
-      cameraView: request.cameraView,
-      capturedAtIso: clip.capturedAtIso,
-    },
-    {
-      analysisId,
-      sessionId: request.sessionId ?? null,
-      appVersion: request.appVersion,
-      modelBundleVersion: 'on-device-fusion-1',
-      nowIso: () => new Date().toISOString(),
-      makeId: makeUuid,
-      captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
-      ...(request.focusCheckpoint
-        ? { focusCheckpoint: request.focusCheckpoint }
-        : {}),
-    },
-  );
+  let result: Awaited<ReturnType<typeof analyzeCapture>>;
+  try {
+    result = await analyzeCapture(
+      fusion.providers,
+      {
+        captureId: request.captureId,
+        pose: parsed.value,
+        paddle: unavailable('paddle_detector_not_installed'),
+        ball: unavailable('ball_tracker_not_installed'),
+        trigger,
+        // declared may be null (AUTO DETECT); predicted is filled downstream
+        // by the classifier providers, never here.
+        stroke: { declared: request.declaredStroke, predicted: null },
+        declaredCanonical: request.declaredCanonical ?? null,
+        handedness: request.handedness,
+        cameraView: request.cameraView,
+        capturedAtIso: clip.capturedAtIso,
+      },
+      {
+        analysisId,
+        sessionId: request.sessionId ?? null,
+        appVersion: request.appVersion,
+        modelBundleVersion: 'on-device-fusion-1',
+        nowIso: () => new Date().toISOString(),
+        makeId: makeUuid,
+        captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
+        ...(request.focusCheckpoint
+          ? { focusCheckpoint: request.focusCheckpoint }
+          : {}),
+      },
+    );
+  } catch (error) {
+    await releasePermit('failed');
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
+    throw error;
+  }
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
 
   if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
-    });
+    await releasePermit('failed');
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
     return { kind: 'unavailable', reason: result.failure.message };
   }
   // Attach the measured envelope so downstream Result can explain
@@ -356,27 +438,57 @@ async function runCaptureAnalysisCore(
     captureEnvelope: envelope,
   };
 
-  // Every run is durably recorded, scored or not — reprocessing history.
-  await saveAnalysisRecord(request.db, record);
-  await markCaptureAnalyzed(request.db, request.captureId);
+  try {
+    await withOwnerTransaction(request.db, scope, async ownedDb => {
+      // Every run is durably recorded, scored or not — reprocessing history.
+      await saveAnalysisRecord(ownedDb, record);
+      if (record.result?.resultKind === 'scored') {
+        // Promote to the product rating; the sync transaction consumes the permit.
+        await saveAnalysis(ownedDb, record.result, permitId);
+        if (request.practiceSetPlan) {
+          await commitPracticeSet(ownedDb, request.practiceSetPlan);
+        }
+      } else if (record.result) {
+        // Local display only — abstentions are never synced as ratings.
+        await saveLocalOnlyAnalysis(ownedDb, record.result);
+      }
+      await markCaptureAnalyzed(ownedDb, request.captureId);
+    });
+  } catch (error) {
+    if (
+      error instanceof DataOwnerChangedError ||
+      !isDataOwnerScopeActive(scope)
+    ) {
+      return ownerChangedOutcome();
+    }
+    await releasePermit('failed');
+    if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
+    return {
+      kind: 'unavailable',
+      cause: 'storage_failed',
+      reason:
+        'The analysis could not be saved. Your capture is still available to try again.',
+    };
+  }
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
 
-  if (record.result && record.result.resultKind === 'scored') {
-    // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record, freeLimitReached };
+  if (record.result?.resultKind === 'scored') {
+    return {
+      kind: 'scored',
+      analysisId,
+      record,
+      freeLimitReached,
+      ...(request.practiceSetPlan ? { practiceSetCommitted: true } : {}),
+    };
   }
 
   // Permit accounting: EVERY non-scored outcome releases the reservation.
   // This branch also carries the AUTO DETECT abstained partial records — an
   // abstained run has result:null and must never burn the user's rating
   // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
-  });
-  if (record.result) {
-    // Local display only — abstentions are never synced as ratings.
-    await saveLocalOnlyAnalysis(request.db, record.result);
-  }
+  // Server-side expiry covers a lost release.
+  await releasePermit('low_confidence');
+  if (!isDataOwnerScopeActive(scope)) return ownerChangedOutcome();
   return {
     kind: 'low_confidence',
     analysisId,

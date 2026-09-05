@@ -51,11 +51,11 @@ jest.mock('react-native-safe-area-context', () => ({
 // getState() inside the capture actions, so each test shapes them directly.
 const mockAccessState: {
   status: string;
-  canonicalAccess: { canStartRating: boolean } | null;
+  canonicalAccess: { canStartRating: boolean; paywallRequired: boolean } | null;
   initialize: jest.Mock<Promise<void>, []>;
 } = {
-  status: 'idle',
-  canonicalAccess: { canStartRating: true },
+  status: 'ready',
+  canonicalAccess: { canStartRating: true, paywallRequired: false },
   initialize: jest.fn(async () => {}),
 };
 const mockAuthState: { session: { localOnly: boolean } | null } = {
@@ -166,8 +166,11 @@ describe('PremiumTabBar button ledger', () => {
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
     mockEmit.mockImplementation(() => ({ defaultPrevented: false }));
-    mockAccessState.status = 'idle';
-    mockAccessState.canonicalAccess = { canStartRating: true };
+    mockAccessState.status = 'ready';
+    mockAccessState.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAccessState.initialize = jest.fn(async () => {});
     mockAuthState.session = { localOnly: false };
   });
@@ -502,7 +505,10 @@ describe('PremiumTabBar button ledger', () => {
     });
 
     it('Auto Analyze -> Paywall { source: rating } when the allowance is exhausted', async () => {
-      mockAccessState.canonicalAccess = { canStartRating: false };
+      mockAccessState.canonicalAccess = {
+        canStartRating: false,
+        paywallRequired: true,
+      };
       const renderer = renderBar();
       await openMenu(renderer);
       await press(renderer, 'Auto Analyze');
@@ -514,10 +520,9 @@ describe('PremiumTabBar button ledger', () => {
       act(() => renderer.unmount());
     });
 
-    it('Import Video -> Paywall (its own retry surface) when access could not be verified', async () => {
-      // accessStore.initialize never rejects: a failed backend read leaves
-      // canonicalAccess null with status 'error' and the Paywall carries the
-      // retry copy.
+    it('Import Video -> Analyze retry/cancel gate when access could not be verified, preserving the import intent', async () => {
+      // A failed backend read leaves canonicalAccess null with status 'error'.
+      // That is not a verified paywall verdict; the route owns recovery.
       mockAccessState.canonicalAccess = null;
       mockAccessState.status = 'error';
       const renderer = renderBar();
@@ -526,9 +531,14 @@ describe('PremiumTabBar button ledger', () => {
       await flushCloseAnimation();
       expect(mockAccessState.initialize).not.toHaveBeenCalled();
       expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-      expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-        source: 'rating',
+      expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+        source: 'library',
       });
+      expect(mockRootNavigate).not.toHaveBeenCalledWith(
+        'Paywall',
+        expect.anything(),
+      );
+      expect(modal(renderer).props.visible).toBe(false);
       act(() => renderer.unmount());
     });
 

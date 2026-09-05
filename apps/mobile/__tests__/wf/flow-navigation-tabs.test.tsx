@@ -2,8 +2,9 @@
  * navigation-tabs workflow: drives PremiumTabBar as a user would — the four
  * regular tabs, the center COACH action portal (open, cancel via backdrop /
  * overlay button / Android back, each action), and the rating-flow gate the
- * actions run through (local-only → ConnectAccount, no access → Paywall,
- * access → Analyze), including the double-tap and failure branches.
+ * actions run through (local-only → ConnectAccount, verified exhaustion →
+ * Paywall, access → Analyze, unknown/error → Analyze's Retry/Cancel gate),
+ * including the double-tap and failure branches.
  */
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
@@ -41,11 +42,11 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockAccess: {
-  canonicalAccess: { canStartRating: boolean } | null;
+  canonicalAccess: { canStartRating: boolean; paywallRequired: boolean } | null;
   status: 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
   initialize: jest.Mock<Promise<void>, []>;
 } = {
-  canonicalAccess: { canStartRating: true },
+  canonicalAccess: { canStartRating: true, paywallRequired: false },
   status: 'ready',
   initialize: jest.fn(async () => {}),
 };
@@ -160,7 +161,10 @@ describe('navigation-tabs: PremiumTabBar regular tabs', () => {
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
-    mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
@@ -255,7 +259,10 @@ describe('navigation-tabs: COACH action portal open / cancel', () => {
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
-    mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
@@ -383,7 +390,10 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
-    mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
@@ -459,7 +469,10 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
   });
 
   it('no rating entitlement: routes to Paywall { source: rating }', async () => {
-    mockAccess.canonicalAccess = { canStartRating: false };
+    mockAccess.canonicalAccess = {
+      canStartRating: false,
+      paywallRequired: true,
+    };
     const renderer = renderBar();
     await press(renderer, 'Open coach actions');
     await press(renderer, 'Auto Analyze');
@@ -471,7 +484,7 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     act(() => renderer.unmount());
   });
 
-  it('access check failed (status error, access null): still lands on Paywall, no dead end', async () => {
+  it('access check failed (status error, access null): lands on the Analyze retry/cancel gate, never an upsell', async () => {
     mockAccess.canonicalAccess = null;
     mockAccess.status = 'error';
     const renderer = renderBar();
@@ -480,9 +493,14 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     await flushCloseAnimation();
     expect(mockAccess.initialize).not.toHaveBeenCalled();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-    expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-      source: 'rating',
+    expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
     });
+    expect(mockRootNavigate).not.toHaveBeenCalledWith(
+      'Paywall',
+      expect.anything(),
+    );
+    expect(menu(renderer).props.visible).toBe(false);
     act(() => renderer.unmount());
   });
 

@@ -38,10 +38,17 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import {
+  Dimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { WelcomeScreen } from '../../src/screens/WelcomeScreen';
+import { radius, space } from '../../src/design/tokens';
 import {
   stageAfterGetStarted,
   stageAfterOnboarding,
@@ -50,12 +57,26 @@ import {
 
 const START_LABEL = 'Start your first read';
 const SIGN_IN_LABEL = 'I already have an account';
+const mounted: TestRenderer.ReactTestRenderer[] = [];
+
+beforeEach(() => {
+  jest
+    .spyOn(Dimensions, 'get')
+    .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
+});
+afterEach(() => {
+  act(() => {
+    for (const renderer of mounted.splice(0)) renderer.unmount();
+  });
+  jest.restoreAllMocks();
+});
 
 function render(props: { onGetStarted: () => void; onSignIn?: () => void }) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
     renderer = TestRenderer.create(<WelcomeScreen {...props} />);
   });
+  mounted.push(renderer);
   return renderer;
 }
 
@@ -258,6 +279,103 @@ describe('WelcomeScreen button ledger', () => {
       expect(setPreAuthStage).toHaveBeenCalledWith('signin');
     });
   });
+
+  test.each([1, 1.118])(
+    'responsive layout preserves the fitting non-scrolling identity and free-read contract at %sx',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      const renderer = render({ onGetStarted: jest.fn(), onSignIn: jest.fn() });
+      expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+      const court = renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.testID === 'welcome-court-story',
+      )[0]!;
+      expect(resolvedStyle(court)).toMatchObject({ flex: 1, minHeight: 270 });
+      const hero = renderer.root
+        .findAllByType(Text)
+        .find(
+          node =>
+            Array.isArray(node.props.children) &&
+            node.props.children.includes('See the stroke.'),
+        )!;
+      expect(resolvedStyle(hero)).toMatchObject({
+        fontSize: 48,
+        lineHeight: 50,
+      });
+      const text = allText(renderer);
+      expect(text).toContain('Two scored technique reads free');
+      expect(text).toContain('Unscored attempts don’t count');
+      expect(text).toContain('Start your first read');
+      expect(text).not.toMatch(/validated/i);
+    },
+  );
+
+  test.each([
+    [375, 667, 1],
+    [375, 667, 2.64],
+    [375, 667, 3.14],
+    [393, 852, 3.12],
+    [393, 852, 1.235],
+  ])(
+    'responsive layout at %sx%s/%sx keeps actions outside scrolling content and never caps copy',
+    (width, height, fontScale) => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width, height, scale: 2, fontScale });
+      const onGetStarted = jest.fn(),
+        onSignIn = jest.fn();
+      const renderer = render({ onGetStarted, onSignIn });
+      const [scroll] = renderer.root.findAllByType(ScrollView);
+      expect(scroll!.props.testID).toBe('welcome-content-scroll');
+      expect(StyleSheet.flatten(scroll!.props.style)).toMatchObject({
+        flex: 1,
+        minHeight: 0,
+      });
+      for (const label of [START_LABEL, SIGN_IN_LABEL]) {
+        expect(
+          scroll!.findAll(node => node.props.accessibilityLabel === label),
+        ).toHaveLength(0);
+        expect(
+          resolvedStyle(pressableByLabel(renderer, label)).minHeight,
+        ).toBeGreaterThanOrEqual(44);
+      }
+      expect(
+        scroll!.findAll(
+          node =>
+            typeof node.type === 'string' &&
+            node.props.testID === 'welcome-free-copy',
+        ),
+      ).toHaveLength(1);
+      const court = scroll!.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.testID === 'welcome-court-story',
+      )[0]!;
+      expect(resolvedStyle(court).flex).toBe(0);
+      expect(
+        resolvedStyle(pressableByLabel(renderer, START_LABEL)),
+      ).toMatchObject({
+        borderRadius: radius.lg,
+        paddingVertical: space.sm,
+      });
+      for (const text of renderer.root.findAllByType(Text)) {
+        expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(text.props.allowFontScaling).not.toBe(false);
+        expect(text.props.numberOfLines).toBeUndefined();
+      }
+      act(() => {
+        pressableByLabel(renderer, START_LABEL).props.onPress();
+        pressableByLabel(renderer, SIGN_IN_LABEL).props.onPress();
+      });
+      expect(onGetStarted).toHaveBeenCalledTimes(1);
+      expect(onSignIn).toHaveBeenCalledTimes(1);
+      expect(allText(renderer)).toContain('Two scored technique reads free');
+      expect(allText(renderer)).toContain('Unscored attempts don’t count');
+    },
+  );
 
   test('static copy carries no placeholder text', () => {
     const renderer = render({ onGetStarted: jest.fn(), onSignIn: jest.fn() });

@@ -38,7 +38,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
   BillingAccessDependencies,
@@ -168,7 +168,13 @@ function pressable(renderer: TestRenderer.ReactTestRenderer, testID: string) {
 }
 
 beforeEach(() => {
+  jest
+    .spyOn(Dimensions, 'get')
+    .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
   clearAccessStoreConfiguration();
+});
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe('PaywallScreen podium', () => {
@@ -179,7 +185,7 @@ describe('PaywallScreen podium', () => {
     // Page 1 is the value pitch: benefits present, prices absent.
     const copy = allText(renderer);
     expect(copy).toContain('A coach for every stroke.');
-    expect(copy).toContain('Unlimited validated ratings');
+    expect(copy).toContain('Unlimited technique ratings');
     expect(copy).toContain('Rank and progress from real scores');
     expect(copy).not.toContain('$');
     expect(pressable(renderer, 'paywall-see-plans')).toBeTruthy();
@@ -231,6 +237,96 @@ describe('PaywallScreen podium', () => {
     expect(copy).toContain('$3.33/mo · billed yearly');
     expect(copy).toContain('one-time · yours forever');
 
+    act(() => renderer.unmount());
+  });
+
+  it.each([2.64, 3.14])(
+    'shows complete store prices, qualifiers and trial text in full-width cards at %sx',
+    async fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      const longPlans: StorePlans = {
+        ...plans,
+        monthly: { ...plans.monthly!, priceString: 'CA$ 12.99' },
+        annual: {
+          ...plans.annual!,
+          priceString: 'CA$ 129.99',
+          pricePerMonthString: 'CA$ 10.83',
+          freeTrial: {
+            label: '14-day introductory free trial',
+            periodIso8601: 'P14D',
+          },
+        },
+        lifetime: { ...plans.lifetime!, priceString: 'CA$ 1,299.99' },
+      };
+      const deps = dependencies({ loadPlans: async () => longPlans });
+      configureAccessStore(deps);
+      const renderer = await renderPaywall();
+      await openPricing(renderer);
+      for (const period of ['monthly', 'annual', 'lifetime'] as const) {
+        const card = pressable(renderer, `paywall-plan-${period}`);
+        const column = card.parent!;
+        let row = column.parent;
+        while (
+          row &&
+          StyleSheet.flatten(row.props.style)?.flexDirection !== 'column'
+        )
+          row = row.parent;
+        expect(row).not.toBeNull();
+        expect(StyleSheet.flatten(column.props.style).flex).toBe(0);
+        expect(StyleSheet.flatten(row!.props.style)).toMatchObject({
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        });
+        const price = card
+          .findAllByType(Text)
+          .find(node => node.props.testID === `paywall-plan-${period}-price`)!;
+        const qualifier = card
+          .findAllByType(Text)
+          .find(
+            node => node.props.testID === `paywall-plan-${period}-qualifier`,
+          )!;
+        expect(price.props.children).toBe(longPlans[period]!.priceString);
+        expect(price.props.numberOfLines).toBeUndefined();
+        expect(price.props.adjustsFontSizeToFit).toBe(false);
+        expect(price.props.minimumFontScale).toBeUndefined();
+        expect(qualifier.props.numberOfLines).toBeUndefined();
+        for (const text of card.findAllByType(Text)) {
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+      }
+      const trial = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === 'paywall-plan-annual-trial')!;
+      expect(trial.props.children).toBe('14-day introductory free trial');
+      expect(trial.props.numberOfLines).toBeUndefined();
+      expect(deps.store.purchase).not.toHaveBeenCalled();
+      expect(deps.store.restore).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('does not truncate a longer store trial label at default text size', async () => {
+    const longPlans: StorePlans = {
+      ...plans,
+      annual: {
+        ...plans.annual!,
+        freeTrial: {
+          label: '14-day introductory free trial',
+          periodIso8601: 'P14D',
+        },
+      },
+    };
+    configureAccessStore(dependencies({ loadPlans: async () => longPlans }));
+    const renderer = await renderPaywall();
+    await openPricing(renderer);
+    const trial = renderer.root
+      .findAllByType(Text)
+      .find(node => node.props.testID === 'paywall-plan-annual-trial')!;
+    expect(trial.props.numberOfLines).toBeUndefined();
+    expect(trial.props.children).toBe('14-day introductory free trial');
     act(() => renderer.unmount());
   });
 

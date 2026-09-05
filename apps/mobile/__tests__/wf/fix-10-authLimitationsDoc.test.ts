@@ -12,29 +12,34 @@ const doc = readFileSync(
   'utf8',
 );
 
-describe('AUTH_LIMITATIONS.md documents the provider-token bearer lifetime', () => {
-  it('states that the provider identity token is the bearer and has no refresh path', () => {
-    expect(doc).toMatch(/provider identity token IS the API bearer/);
-    expect(doc).toMatch(
-      /no\s+backend token-exchange or refresh-session endpoint/,
+describe('AUTH_LIMITATIONS.md documents the shipping durable-session contract', () => {
+  it('names the production exchange, access bearer and secure refresh-token storage', () => {
+    expect(doc).toContain('POST /v1/account/bootstrap');
+    expect(doc).toContain('Supabase access token');
+    expect(doc).toContain('POST /v1/auth/refresh');
+    expect(doc).toContain('Keychain/Keystore');
+    expect(doc).toContain('AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY');
+    expect(doc).not.toContain('provider identity token IS the API bearer');
+    expect(doc).not.toContain(
+      'no backend token-exchange or refresh-session endpoint',
     );
   });
 
-  it('states both provider token lifetimes and the resulting 401', () => {
-    expect(doc).toMatch(/Apple ID tokens expire after roughly\s+10 minutes/);
-    expect(doc).toMatch(/Google ID tokens after roughly 1 hour/);
-    expect(doc).toMatch(/401 `The identity token could not be verified\.`/);
+  it('separates transient failures and compatibility from definitive revocation', () => {
+    expect(doc).toContain('Only a definitive refresh-token refusal');
+    expect(doc).toContain('429 responses and 5xx responses remain retryable');
+    expect(doc).toContain('AUTH_FAILURE_LIMIT');
+    expect(doc).toContain('transitional path');
+    expect(doc).toContain('legacy Google silent-restore flag');
   });
 
-  it('pins the expired-bearer contract every client caller must follow', () => {
-    expect(doc).toMatch(/exactly one recovery, never a blind retry/);
-    expect(doc).toMatch(/GoogleSignin\.signInSilently\(\)/);
-    expect(doc).toMatch(/Apple has no\s+silent path/);
-    expect(doc).toMatch(
-      /read the bearer from `getApiSession\(\)` at request time/,
-    );
-    expect(doc).toMatch(/401 pauses\s+the retry loop/);
-    expect(doc).toMatch(/AUTH_FAILURE_LIMIT/);
-    expect(doc).toMatch(/App Review 2\.1 \/ 4\.2/);
+  it('states per-request resolution and the limits of logout and deletion', () => {
+    expect(doc).toContain('bearerTokenFor(canonicalAppUserId)');
+    expect(doc).toContain('POST /v1/auth/logout');
+    expect(doc).toContain('scope=local');
+    expect(doc).toContain('Access JWTs can remain valid until their `exp`');
+    expect(doc).toContain('captureAccountDeletionScope()');
+    expect(doc).toContain('media cleanup precedes owner-row purge');
+    expect(doc).toContain('App Review approval');
   });
 });

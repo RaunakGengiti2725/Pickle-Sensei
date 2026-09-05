@@ -9,6 +9,10 @@ RCT_EXTERN_METHOD(capture:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(importVideo:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(deleteCaptureFiles:(NSArray *)uris
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(readTextFile:(NSString *)uri
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)

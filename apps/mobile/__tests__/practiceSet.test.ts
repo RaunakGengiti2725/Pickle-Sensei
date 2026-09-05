@@ -42,19 +42,65 @@ interface OutboxRow {
   payload: Record<string, unknown>;
 }
 
+interface DbCall {
+  statement: string;
+  params: unknown[];
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(accept => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
 function fakeDb() {
   const kv = new Map<string, string>();
   const sessions: SessionRow[] = [];
   const outbox: OutboxRow[] = [];
   const sql: string[] = [];
+  const calls: DbCall[] = [];
+  let snapshot: {
+    kv: Map<string, string>;
+    sessions: SessionRow[];
+    outbox: OutboxRow[];
+  } | null = null;
+  const controls: {
+    beforeExecute: (call: DbCall) => Promise<void>;
+    failNext: ((call: DbCall) => boolean) | null;
+  } = { beforeExecute: async () => {}, failNext: null };
   const db: LocalDb = {
     async execute(statement: string, params: unknown[] = []) {
       sql.push(statement);
-      if (
-        statement === 'BEGIN IMMEDIATE' ||
-        statement === 'COMMIT' ||
-        statement === 'ROLLBACK'
-      ) {
+      const call = { statement, params: [...params] };
+      calls.push(call);
+      await controls.beforeExecute(call);
+      if (controls.failNext?.(call)) {
+        controls.failNext = null;
+        throw new Error('injected storage failure');
+      }
+      if (statement === 'BEGIN IMMEDIATE') {
+        if (snapshot) throw new Error('nested transaction');
+        snapshot = {
+          kv: new Map(kv),
+          sessions: [...sessions],
+          outbox: [...outbox],
+        };
+        return { rows: [] };
+      }
+      if (statement === 'COMMIT') {
+        snapshot = null;
+        return { rows: [] };
+      }
+      if (statement === 'ROLLBACK') {
+        if (snapshot) {
+          kv.clear();
+          for (const [key, value] of snapshot.kv) kv.set(key, value);
+          sessions.splice(0, sessions.length, ...snapshot.sessions);
+          outbox.splice(0, outbox.length, ...snapshot.outbox);
+          snapshot = null;
+        }
         return { rows: [] };
       }
       if (statement.startsWith('SELECT value FROM kv')) {
@@ -89,7 +135,7 @@ function fakeDb() {
     },
     close() {},
   };
-  return { db, kv, sessions, outbox, sql };
+  return { db, kv, sessions, outbox, sql, calls, controls };
 }
 
 const T0 = '2026-09-02T17:00:00.000Z';
@@ -444,5 +490,144 @@ describe('planPracticeSet / commitPracticeSet (deferred commit)', () => {
       planPracticeSet(db, { shotType: 'dink', nowIso: T0 }),
     ).resolves.toBeNull();
     expect(sql).toHaveLength(0);
+  });
+
+  it.each(['switch', 'return-to-a', 'sign-out'] as const)(
+    'rejects an old plan on %s without writing a session for a different owner',
+    async change => {
+      const { db, sessions, outbox, kv, calls } = fakeDb();
+      const plan = (await planPracticeSet(db, {
+        shotType: 'dink',
+        nowIso: T0,
+      }))!;
+      const count = calls.length;
+      setActiveDataOwner(
+        change === 'sign-out' ? SIGNED_OUT_DATA_OWNER : ownerB,
+      );
+      if (change === 'return-to-a') setActiveDataOwner(ownerA);
+      const result = await commitPracticeSet(db, plan).then(
+        () => null,
+        error => error,
+      );
+      expect(calls.slice(count)).toEqual([]);
+      expect(result).toMatchObject({ name: 'DataOwnerChangedError' });
+      expect(sessions).toEqual([]);
+      expect(outbox).toEqual([]);
+      expect(kv.size).toBe(0);
+    },
+  );
+
+  it('drops a plan when the owner changes during its kv read', async () => {
+    const { db, controls, sessions, outbox, kv } = fakeDb();
+    const entered = deferred();
+    const release = deferred();
+    controls.beforeExecute = async call => {
+      if (call.statement.startsWith('SELECT value')) {
+        entered.resolve();
+        await release.promise;
+      }
+    };
+    const planning = planPracticeSet(db, { shotType: 'dink', nowIso: T0 });
+    await entered.promise;
+    setActiveDataOwner(ownerB);
+    setActiveDataOwner(ownerA);
+    release.resolve();
+    expect(await planning).toBeNull();
+    expect(sessions).toEqual([]);
+    expect(outbox).toEqual([]);
+    expect(kv.size).toBe(0);
+  });
+
+  it.each([
+    'BEGIN IMMEDIATE',
+    'INSERT OR REPLACE INTO local_session',
+    'INSERT INTO outbox',
+    'INSERT OR REPLACE INTO kv',
+  ])(
+    'rolls back the whole practice-set commit if the owner changes during %s',
+    async statement => {
+      const { db, controls, sessions, outbox, kv, calls } = fakeDb();
+      const plan = (await planPracticeSet(db, {
+        shotType: 'dink',
+        nowIso: T0,
+      }))!;
+      const entered = deferred();
+      const release = deferred();
+      let paused = false;
+      controls.beforeExecute = async call => {
+        if (!paused && call.statement.startsWith(statement)) {
+          paused = true;
+          entered.resolve();
+          await release.promise;
+        }
+      };
+      const committing = commitPracticeSet(db, plan).then(
+        () => null,
+        error => error,
+      );
+      await entered.promise;
+      setActiveDataOwner(ownerB);
+      release.resolve();
+      expect(await committing).toMatchObject({ name: 'DataOwnerChangedError' });
+      expect(sessions).toEqual([]);
+      expect(outbox).toEqual([]);
+      expect(kv.size).toBe(0);
+      expect(
+        calls
+          .filter(
+            call =>
+              call.statement.includes('local_session') ||
+              call.statement.includes('outbox'),
+          )
+          .every(call => call.params[0] === ownerA),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    'INSERT OR REPLACE INTO local_session',
+    'INSERT INTO outbox',
+    'INSERT OR REPLACE INTO kv',
+    'COMMIT',
+  ])(
+    'rolls back a storage failure at %s and allows the same plan to retry',
+    async statement => {
+      const { db, controls, sessions, outbox, kv } = fakeDb();
+      const plan = (await planPracticeSet(db, {
+        shotType: 'dink',
+        nowIso: T0,
+      }))!;
+      controls.failNext = call => call.statement.startsWith(statement);
+      await expect(commitPracticeSet(db, plan)).rejects.toThrow(
+        'injected storage failure',
+      );
+      expect(sessions).toEqual([]);
+      expect(outbox).toEqual([]);
+      expect(kv.size).toBe(0);
+      await commitPracticeSet(db, plan);
+      expect(sessions).toHaveLength(1);
+      expect(outbox).toHaveLength(1);
+      expect(kv.has(practiceSetKeyForOwner(ownerA))).toBe(true);
+    },
+  );
+
+  it('does not restore an old activity stamp after the owner changed during notePracticeSetAnalysis', async () => {
+    const { db, controls, kv } = fakeDb();
+    const entered = deferred();
+    const release = deferred();
+    controls.beforeExecute = async call => {
+      if (call.statement.startsWith('SELECT value')) {
+        entered.resolve();
+        await release.promise;
+      }
+    };
+    const noting = notePracticeSetAnalysis(db, 'old-session', T0).catch(
+      () => {},
+    );
+    await entered.promise;
+    setActiveDataOwner(ownerB);
+    release.resolve();
+    await noting;
+    expect(kv.size).toBe(0);
   });
 });

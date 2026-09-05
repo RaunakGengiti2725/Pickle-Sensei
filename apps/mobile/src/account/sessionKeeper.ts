@@ -27,7 +27,10 @@ export interface SessionKeeperInput {
   refreshToken: string;
   /** null ⇒ no valid bearer yet: refresh right away. */
   bearerExpiresAtMs: number | null;
-  onRotated: (tokens: RefreshedTokens) => void | Promise<void>;
+  onRotated: (
+    tokens: RefreshedTokens,
+  ) => boolean | void | Promise<boolean | void>;
+  pendingTokens?: RefreshedTokens;
   onRevoked: () => void | Promise<void>;
   /** A refresh failed for a transient reason and a retry is scheduled. */
   onDeferred?: (error: unknown) => void;
@@ -40,6 +43,9 @@ const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
 const MIN_DELAY_MS = 1_000;
+const MIN_RENEWAL_INTERVAL_MS = 5_000;
+const LEGACY_RENEWAL_COOLDOWN_MS = 5 * 60_000;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
 
@@ -47,16 +53,20 @@ let generation = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
 let refreshNow: (() => void) | null = null;
+let currentRefresh: Promise<RefreshedTokens | null> | null = null;
 
 /** Stops all future work synchronously; an in-flight refresh's result is
  * dropped when it lands. */
-export function stopSessionKeeper(): void {
+export function stopSessionKeeper(): Promise<RefreshedTokens | null> | null {
+  const stoppedRefresh = currentRefresh;
+  currentRefresh = null;
   generation += 1;
   if (timer) clearTimeout(timer);
   timer = null;
   removeAppStateListener?.();
   removeAppStateListener = null;
   refreshNow = null;
+  return stoppedRefresh;
 }
 
 /**
@@ -78,12 +88,50 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   stopSessionKeeper();
   const myGeneration = generation;
   const now = input.now ?? Date.now;
+  const clock = (
+    globalThis as typeof globalThis & {
+      performance?: { now(): number };
+    }
+  ).performance;
+  const elapsedNow = clock ? () => clock.now() : now;
   let refreshToken = input.refreshToken;
-  let bearerExpiresAtMs = input.bearerExpiresAtMs;
+  let pendingTokens = input.pendingTokens ?? null;
   let failedAttempts = 0;
   let inflight = false;
+  let persistenceInFlight = false;
+  let forceAfterPersistence = false;
+  let renewalAt: number | null = null;
+  let foregroundAt: number | null = null;
+  let networkRetryAt = 0;
 
   const live = () => myGeneration === generation;
+
+  const setBearerTiming = (expiresAtMs: number | null, fresh: boolean) => {
+    if (expiresAtMs === null) {
+      renewalAt = null;
+      foregroundAt = null;
+      return;
+    }
+    const remaining = expiresAtMs - now();
+    const receivedAt = elapsedNow();
+    if (remaining > 0 && Number.isFinite(remaining)) {
+      const minimum = fresh ? MIN_RENEWAL_INTERVAL_MS : 0;
+      renewalAt =
+        receivedAt +
+        Math.max(minimum, remaining - Math.min(REFRESH_LEAD_MS, remaining / 5));
+      foregroundAt =
+        receivedAt +
+        Math.max(
+          minimum,
+          remaining - Math.min(FOREGROUND_LEAD_MS, remaining / 5),
+        );
+    } else {
+      renewalAt = receivedAt + (fresh ? LEGACY_RENEWAL_COOLDOWN_MS : 0);
+      foregroundAt = renewalAt;
+    }
+  };
+
+  setBearerTiming(input.bearerExpiresAtMs, pendingTokens !== null);
 
   const schedule = (delayMs: number) => {
     if (!live()) return;
@@ -93,28 +141,60 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
         timer = null;
         void refresh();
       },
-      Math.max(MIN_DELAY_MS, delayMs),
+      Math.max(MIN_DELAY_MS, Math.min(MAX_TIMER_DELAY_MS, delayMs)),
     );
   };
 
   const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+    schedule(
+      Math.max(renewalAt ?? elapsedNow(), networkRetryAt) - elapsedNow(),
+    );
   };
 
-  const refresh = async () => {
-    if (!live() || inflight) return;
+  const refresh = async (forceNetwork = false) => {
+    if (!live()) return;
+    if (inflight) {
+      if (forceNetwork && persistenceInFlight) forceAfterPersistence = true;
+      return;
+    }
+    const needsNetwork =
+      !pendingTokens ||
+      forceNetwork ||
+      (renewalAt !== null && elapsedNow() >= renewalAt);
+    const canUseNetwork = forceNetwork || elapsedNow() >= networkRetryAt;
+    if (needsNetwork && !canUseNetwork && !pendingTokens) {
+      schedule(networkRetryAt - elapsedNow());
+      return;
+    }
     inflight = true;
+    let requested = false;
     try {
-      const tokens = await refreshApiSession(
-        { apiBaseUrl: input.apiBaseUrl, refreshToken },
-        { fetchFn: input.fetchFn },
-      );
+      if (needsNetwork && canUseNetwork) {
+        requested = true;
+        const request = refreshApiSession(
+          { apiBaseUrl: input.apiBaseUrl, refreshToken },
+          { fetchFn: input.fetchFn },
+        );
+        currentRefresh = request.catch(() => null);
+        const tokens = await request;
+        if (!live()) return;
+        currentRefresh = null;
+        pendingTokens = tokens;
+        setBearerTiming(tokens.bearerExpiresAtMs, true);
+        networkRetryAt = 0;
+      }
+      if (!live() || !pendingTokens) return;
+      refreshToken = pendingTokens.refreshToken;
+      persistenceInFlight = true;
+      if ((await input.onRotated(pendingTokens)) === false) {
+        throw new Error(
+          'The refreshed session could not be saved securely yet.',
+        );
+      }
       if (!live()) return;
-      refreshToken = tokens.refreshToken;
-      bearerExpiresAtMs = tokens.bearerExpiresAtMs;
+      pendingTokens = null;
       failedAttempts = 0;
-      await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry();
+      scheduleAheadOfExpiry();
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
@@ -123,18 +203,27 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
         return;
       }
       failedAttempts += 1;
+      const delay = retryDelayMs(failedAttempts);
+      if (requested) networkRetryAt = elapsedNow() + delay;
       input.onDeferred?.(error);
-      schedule(retryDelayMs(failedAttempts));
+      schedule(delay);
     } finally {
+      if (live()) currentRefresh = null;
+      persistenceInFlight = false;
       inflight = false;
+      if (live() && forceAfterPersistence) {
+        forceAfterPersistence = false;
+        void refresh(true);
+      }
     }
   };
 
   const subscription = AppState.addEventListener('change', nextState => {
     if (nextState !== 'active' || !live()) return;
     if (
-      bearerExpiresAtMs === null ||
-      bearerExpiresAtMs - now() < FOREGROUND_LEAD_MS
+      pendingTokens !== null ||
+      foregroundAt === null ||
+      elapsedNow() >= foregroundAt
     ) {
       void refresh();
     }
@@ -143,9 +232,11 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   // A completed refresh reschedules itself (success → ahead of the new
   // expiry, transient failure → backoff), so the pending timer is left to
   // `schedule` to replace.
-  refreshNow = () => void refresh();
+  refreshNow = () => void refresh(true);
 
-  if (bearerExpiresAtMs === null) {
+  if (pendingTokens) {
+    schedule(RETRY_BASE_MS);
+  } else if (input.bearerExpiresAtMs === null) {
     void refresh();
   } else {
     scheduleAheadOfExpiry();

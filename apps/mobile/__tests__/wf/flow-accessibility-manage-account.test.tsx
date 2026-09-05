@@ -492,7 +492,7 @@ describe('Manage account → delete account — accessibility workflow', () => {
       });
       expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(null, 'c-2');
       expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
+        'Account deletion could not be confirmed. Check your connection and try again.',
       );
       expect(
         useAuthStore.getState().completeAccountDeletion,

@@ -43,7 +43,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const mockAccessState: {
   status: string;
-  canonicalAccess: { canStartRating: boolean } | null;
+  canonicalAccess: { canStartRating: boolean; paywallRequired: boolean } | null;
   initialize: jest.Mock;
 } = {
   status: 'idle',
@@ -189,7 +189,10 @@ describe('PremiumTabBar capture routing (wf fix-5)', () => {
 
   it('sends a resolved free-eligible user straight to Analyze', async () => {
     mockAccessState.status = 'ready';
-    mockAccessState.canonicalAccess = { canStartRating: true };
+    mockAccessState.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     const renderer = await chooseCaptureAction('Auto Analyze');
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
@@ -199,7 +202,10 @@ describe('PremiumTabBar capture routing (wf fix-5)', () => {
 
   it('sends a resolved exhausted allowance to the rating Paywall', async () => {
     mockAccessState.status = 'ready';
-    mockAccessState.canonicalAccess = { canStartRating: false };
+    mockAccessState.canonicalAccess = {
+      canStartRating: false,
+      paywallRequired: true,
+    };
     const renderer = await chooseCaptureAction('Import Video');
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
@@ -208,17 +214,58 @@ describe('PremiumTabBar capture routing (wf fix-5)', () => {
     act(() => renderer.unmount());
   });
 
-  it.each(['error', 'unconfigured'] as const)(
-    'sends a failed access check (%s) to the rating Paywall',
-    async status => {
-      mockAccessState.status = status;
-      const renderer = await chooseCaptureAction('Auto Analyze');
-      expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-        source: 'rating',
-      });
+  describe.each([
+    ['Auto Analyze', 'camera'],
+    ['Import Video', 'library'],
+  ] as const)('%s preserves its %s intent', (action, source) => {
+    it.each(['error', 'unconfigured'] as const)(
+      'hands a failed access check (%s) to the Analyze retry/cancel gate, not the Paywall',
+      async status => {
+        mockAccessState.status = status;
+        const renderer = await chooseCaptureAction(action);
+        expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+        expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', { source });
+        expect(mockRootNavigate).not.toHaveBeenCalledWith(
+          'Paywall',
+          expect.anything(),
+        );
+        expect(mockAccessState.initialize).not.toHaveBeenCalled();
+        act(() => renderer.unmount());
+      },
+    );
+
+    it('does not upsell when the server denies a rating without requiring a paywall', async () => {
+      mockAccessState.status = 'ready';
+      mockAccessState.canonicalAccess = {
+        canStartRating: false,
+        paywallRequired: false,
+      };
+      const renderer = await chooseCaptureAction(action);
+      expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+      expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', { source });
+      expect(mockRootNavigate).not.toHaveBeenCalledWith(
+        'Paywall',
+        expect.anything(),
+      );
       act(() => renderer.unmount());
-    },
-  );
+    });
+
+    it('waits for an in-flight refresh even if the old snapshot required a paywall', async () => {
+      mockAccessState.status = 'loading';
+      mockAccessState.canonicalAccess = {
+        canStartRating: false,
+        paywallRequired: true,
+      };
+      const renderer = await chooseCaptureAction(action);
+      expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+      expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', { source });
+      expect(mockRootNavigate).not.toHaveBeenCalledWith(
+        'Paywall',
+        expect.anything(),
+      );
+      act(() => renderer.unmount());
+    });
+  });
 
   it('sends a local-only session to ConnectAccount', async () => {
     mockAuthState.session = { localOnly: true };
@@ -234,7 +281,10 @@ describe('PremiumTabBar coach menu dismissal (wf fix-5)', () => {
     jest.useFakeTimers();
     mockRootNavigate.mockClear();
     mockAccessState.status = 'ready';
-    mockAccessState.canonicalAccess = { canStartRating: true };
+    mockAccessState.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAuthState.session = { localOnly: false };
   });
 

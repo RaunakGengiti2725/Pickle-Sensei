@@ -360,7 +360,7 @@ describe('StrokeResult — scored on-device read (measured phases, structural to
     const insightText = JSON.stringify(
       insightCard!.findAllByType(Text).map(node => node.props.children),
     );
-    expect(insightText).toContain('WHAT THE CAMERA MEASURED');
+    expect(insightText).toContain('BODY-POSE ESTIMATE');
     expect(insightText).toContain(
       'Contact position scored 48 — contact came late.',
     );
@@ -400,7 +400,7 @@ describe('StrokeResult — scored on-device read (measured phases, structural to
       />,
     );
     const rendered = textOf(renderer);
-    expect(rendered).toContain('WHAT THE CAMERA MEASURED');
+    expect(rendered).toContain('BODY-POSE ESTIMATE');
     expect(rendered).toContain(
       'Every measured checkpoint held its target — strongest was Contact position at 91.',
     );

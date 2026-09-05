@@ -16,7 +16,6 @@ jest.mock('../src/data/repository', () => ({
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
-jest.mock('../src/account/apiSession', () => ({ getApiSession: () => null }));
 
 type CameraListener = (event: CameraEvent) => void;
 const mockCameraListeners = new Set<CameraListener>();
@@ -95,6 +94,15 @@ import {
   type CapturedClip,
 } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
+import type { RunCaptureAnalysisRequest } from '../src/analysis/runCaptureAnalysis';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -191,8 +199,10 @@ function renderedText(renderer: ReactTestRenderer): string {
     if (node == null) return '';
     if (typeof node === 'string') return node;
     if (Array.isArray(node)) return node.map(collect).join('');
-    const json = node as { children?: unknown[] };
-    return (json.children ?? []).map(collect).join('\n');
+    const json = node as { type?: string; children?: unknown[] };
+    return (json.children ?? [])
+      .map(collect)
+      .join(json.type === 'Text' ? '' : '\n');
   };
   return collect(renderer.toJSON());
 }
@@ -314,6 +324,55 @@ afterEach(() => {
 // ─── Import flow: real native events drive percentage + ETA ─────────────────
 
 describe('imported-video extraction progress', () => {
+  it('follows bearer rotation across extraction and remains bound to the original owner', async () => {
+    const owner = '11111111-1111-4111-8111-111111111111';
+    const session = {
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'before-extraction',
+      canonicalAppUserId: owner,
+      provider: 'apple' as const,
+    };
+    setActiveDataOwner(owner);
+    establishApiSession(session);
+    (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
+    const extraction = deferred<unknown>(
+      extractImportedPoseSequence as jest.Mock,
+    );
+    const analysis = deferred<unknown>(runCaptureAnalysis as jest.Mock);
+    const renderer = await renderScreen('library');
+    try {
+      pressByLabel(renderer, 'Forehand drive');
+      await act(async () =>
+        renderer.root.findByType(TargetSelector).props.onSkip(),
+      );
+      establishApiSession({ ...session, bearerToken: 'after-extraction' });
+      await extraction.resolve({ poseSequence: extractedPoseSequence });
+      expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+      const request = (runCaptureAnalysis as jest.Mock).mock
+        .calls[0]![0] as RunCaptureAnalysisRequest;
+      expect(request.apiConfig.baseUrl).toBe(session.apiBaseUrl);
+      expect(request.resolveApiToken?.()).toBe('after-extraction');
+      establishApiSession({ ...session, bearerToken: 'during-analysis' });
+      expect(request.resolveApiToken?.()).toBe('during-analysis');
+      establishApiSession({
+        ...session,
+        canonicalAppUserId: '22222222-2222-4222-8222-222222222222',
+        bearerToken: 'other-owner',
+      });
+      expect(request.resolveApiToken?.()).toBeNull();
+    } finally {
+      if ((runCaptureAnalysis as jest.Mock).mock.calls.length) {
+        await analysis.resolve({
+          kind: 'unavailable',
+          reason: 'Test complete.',
+        });
+      }
+      act(() => renderer.unmount());
+      clearApiSession();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    }
+  });
+
   it('native import_pose_extraction events update the displayed percentage and ETA for the active pass', async () => {
     (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
     const extraction = deferred<unknown>(
@@ -391,7 +450,7 @@ describe('imported-video extraction progress', () => {
     });
     expect(renderedText(renderer)).toContain('Measuring your swing…');
     expect(renderedText(renderer)).toContain('Measuring your swing');
-    expect(renderedText(renderer)).toContain('usually under ~10 seconds');
+    expect(renderedText(renderer)).toContain('Time varies by clip and device.');
     expect(
       progressBarNode(renderer).props.accessibilityValue.now,
     ).toBeUndefined();
@@ -464,7 +523,7 @@ describe('guided-capture analysis progress', () => {
     // The analyzing surface keeps its exact caption, now with the honest
     // indeterminate stage bar: label + static hint, no percentage.
     expect(renderedText(renderer)).toContain('Measuring your swing…');
-    expect(renderedText(renderer)).toContain('usually under ~10 seconds');
+    expect(renderedText(renderer)).toContain('Time varies by clip and device.');
     const bar = progressBarNode(renderer);
     expect(bar.props.accessibilityValue).toEqual({ min: 0, max: 100 });
     expect(renderedText(renderer)).not.toContain('%');

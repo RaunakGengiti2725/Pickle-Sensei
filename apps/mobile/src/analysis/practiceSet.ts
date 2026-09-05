@@ -1,10 +1,16 @@
 import type { ShotTypeSlug } from '@pickle/shared-types';
 import {
-  getActiveDataOwner,
-  SIGNED_OUT_DATA_OWNER,
+  assertDataOwnerScope,
+  captureDataOwnerScope,
+  isDataOwnerScopeActive,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
-import { getKv, saveSession, setKv } from '../data/repository';
+import {
+  getKv,
+  saveSession,
+  setKv,
+  withOwnerTransaction,
+} from '../data/repository';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -96,13 +102,6 @@ function resolveNow(nowIso: string | undefined): { iso: string; ms: number } {
   return { iso, ms };
 }
 
-/** Owner whose product data may be written; null while signed out (the
- * signed-out bucket is neither readable nor writable — see accountScope). */
-function writableOwner(): string | null {
-  const owner = getActiveDataOwner();
-  return owner === SIGNED_OUT_DATA_OWNER ? null : owner;
-}
-
 async function readStoredSet(
   db: LocalDb,
   owner: string,
@@ -152,6 +151,7 @@ export interface PracticeSetPlan {
   startedAtIso: string;
   nowIso: string;
   owner: string;
+  ownerGeneration: number;
 }
 
 /**
@@ -167,10 +167,14 @@ export async function planPracticeSet(
   db: LocalDb,
   input: ResumeOrStartPracticeSetInput,
 ): Promise<PracticeSetPlan | null> {
-  const owner = writableOwner();
-  if (owner === null) return null;
+  /** Owner whose product data may be written; null while signed out (the
+   * signed-out bucket is neither readable nor writable — see accountScope). */
+  const scope = captureDataOwnerScope();
+  if (!isDataOwnerScopeActive(scope)) return null;
+  const owner = scope.owner;
   const now = resolveNow(input.nowIso);
   const stored = await readStoredSet(db, owner);
+  if (!isDataOwnerScopeActive(scope)) return null;
 
   const preferred = input.preferredSessionId ?? null;
   if (preferred !== null && preferred.length > 0) {
@@ -182,6 +186,7 @@ export async function planPracticeSet(
       startedAtIso: continuing?.startedAtIso ?? now.iso,
       nowIso: now.iso,
       owner,
+      ownerGeneration: scope.generation,
     };
   }
   if (stored && isLive(stored, now.ms)) {
@@ -192,6 +197,7 @@ export async function planPracticeSet(
       startedAtIso: stored.startedAtIso,
       nowIso: now.iso,
       owner,
+      ownerGeneration: scope.generation,
     };
   }
   return {
@@ -201,6 +207,7 @@ export async function planPracticeSet(
     startedAtIso: now.iso,
     nowIso: now.iso,
     owner,
+    ownerGeneration: scope.generation,
   };
 }
 
@@ -216,22 +223,27 @@ export async function commitPracticeSet(
   plan: PracticeSetPlan,
   nowIso?: string,
 ): Promise<void> {
+  const scope = { owner: plan.owner, generation: plan.ownerGeneration };
+  assertDataOwnerScope(scope);
   const now = resolveNow(nowIso ?? plan.nowIso);
-  if (!plan.resumed) {
-    await saveSession(db, {
-      id: plan.sessionId,
-      mode: PRACTICE_SET_MODE,
+  await withOwnerTransaction(db, scope, async ownedDb => {
+    if (!plan.resumed) {
+      await saveSession(ownedDb, {
+        id: plan.sessionId,
+        mode: PRACTICE_SET_MODE,
+        shotType: plan.shotType,
+        focusCheckpoint: null,
+        startedAt: plan.startedAtIso,
+      });
+    }
+    await writeStoredSet(ownedDb, scope.owner, {
+      sessionId: plan.sessionId,
       shotType: plan.shotType,
-      focusCheckpoint: null,
-      startedAt: plan.startedAtIso,
+      startedAtIso: plan.startedAtIso,
+      lastActivityAtIso: now.iso,
     });
-  }
-  await writeStoredSet(db, plan.owner, {
-    sessionId: plan.sessionId,
-    shotType: plan.shotType,
-    startedAtIso: plan.startedAtIso,
-    lastActivityAtIso: now.iso,
   });
+  assertDataOwnerScope(scope);
 }
 
 /**
@@ -259,16 +271,19 @@ export async function notePracticeSetAnalysis(
   sessionId: string,
   nowIso?: string,
 ): Promise<void> {
-  const owner = writableOwner();
-  if (owner === null || sessionId.length === 0) return;
+  const scope = captureDataOwnerScope();
+  if (!isDataOwnerScopeActive(scope) || sessionId.length === 0) return;
   const now = resolveNow(nowIso);
-  const stored = await readStoredSet(db, owner);
+  const stored = await readStoredSet(db, scope.owner);
+  if (!isDataOwnerScopeActive(scope)) return;
   const continuing = stored?.sessionId === sessionId ? stored : null;
-  await writeStoredSet(db, owner, {
-    sessionId,
-    shotType: continuing?.shotType ?? null,
-    startedAtIso: continuing?.startedAtIso ?? now.iso,
-    lastActivityAtIso: now.iso,
+  await withOwnerTransaction(db, scope, async ownedDb => {
+    await writeStoredSet(ownedDb, scope.owner, {
+      sessionId,
+      shotType: continuing?.shotType ?? null,
+      startedAtIso: continuing?.startedAtIso ?? now.iso,
+      lastActivityAtIso: now.iso,
+    });
   });
 }
 
@@ -280,9 +295,10 @@ export async function currentPracticeSetId(
   db: LocalDb,
   nowIso?: string,
 ): Promise<string | null> {
-  const owner = writableOwner();
-  if (owner === null) return null;
+  const scope = captureDataOwnerScope();
+  if (!isDataOwnerScopeActive(scope)) return null;
   const now = resolveNow(nowIso);
-  const stored = await readStoredSet(db, owner);
+  const stored = await readStoredSet(db, scope.owner);
+  if (!isDataOwnerScopeActive(scope)) return null;
   return stored && isLive(stored, now.ms) ? stored.sessionId : null;
 }

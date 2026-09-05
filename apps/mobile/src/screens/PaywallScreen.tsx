@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { BrandSpinner, PressableScale } from '../design/components';
@@ -16,6 +17,7 @@ import { Icon, type IconName } from '../design/icons';
 import { color, font, radius, shadow, space, type } from '../design/tokens';
 import type { BillingPeriod, StorePlan } from '../billing/types';
 import { selectHasPremium, useAccessStore } from '../state/accessStore';
+import { getActiveDataOwner } from '../data/accountScope';
 import {
   freeRatingAllowanceCopy,
   RATING_CONSUMPTION_RULE,
@@ -35,23 +37,23 @@ export interface PaywallScreenProps {
 const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
   {
     icon: 'spark',
-    title: 'Unlimited validated ratings',
-    body: 'Automatic capture, evidence-backed checkpoints, and no invented score.',
+    title: 'Unlimited technique ratings',
+    body: 'Review recorded movement, measured checkpoints, and a clear next step.',
   },
   {
     icon: 'court',
     title: 'Coaching that follows evidence',
-    body: 'When reviewed work exists, a server-accepted score sets its priority and reassessment baseline.',
+    body: 'Measured form checkpoints highlight what to work on next, with cues tied to the stroke you recorded.',
   },
   {
     icon: 'progress',
     title: 'Rank and progress from real scores',
-    body: 'Bronze-to-Diamond player rank and trend lines built only from server-accepted analyses.',
+    body: 'Bronze-to-Diamond player rank and trend lines built from your scored reads.',
   },
   {
     icon: 'bookmark',
-    title: 'Reviewed practice, kept together',
-    body: 'Published drills and rights-cleared coaching videos can be saved with the plan that prescribed them.',
+    title: 'Saved drills, ready for practice',
+    body: 'Save drills from the library or a scored read, then return to their published instructions and videos.',
   },
 ];
 
@@ -116,6 +118,7 @@ function PodiumColumn(props: {
   heroBadge?: string | null;
   chip?: string | null;
   chipTone?: 'volt' | 'dark';
+  accessibleLayout: boolean;
   onPress: () => void;
 }) {
   const { plan, selected, hero } = props;
@@ -124,7 +127,13 @@ function PodiumColumn(props: {
       ? `${plan.priceString} one-time`
       : `${plan.priceString} per ${periodLabel(plan.period)}`;
   return (
-    <View style={[styles.podiumColumn, hero && styles.podiumColumnHero]}>
+    <View
+      style={[
+        styles.podiumColumn,
+        hero && styles.podiumColumnHero,
+        props.accessibleLayout && styles.podiumColumnAccessible,
+      ]}
+    >
       <PressableScale
         testID={`paywall-plan-${plan.period}`}
         onPress={props.onPress}
@@ -137,11 +146,23 @@ function PodiumColumn(props: {
           { minHeight: PODIUM_HEIGHTS[plan.period] },
           hero && styles.podiumCardHero,
           selected && styles.podiumCardSelected,
+          props.accessibleLayout && styles.podiumCardAccessible,
         ]}
       >
         {hero && props.heroBadge ? (
-          <View pointerEvents="none" style={styles.heroBadge}>
-            <View style={styles.heroBadgePill}>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.heroBadge,
+              props.accessibleLayout && styles.heroBadgeAccessible,
+            ]}
+          >
+            <View
+              style={[
+                styles.heroBadgePill,
+                props.accessibleLayout && styles.badgePillAccessible,
+              ]}
+            >
               <Text style={styles.heroBadgeText}>{props.heroBadge}</Text>
             </View>
           </View>
@@ -156,13 +177,18 @@ function PodiumColumn(props: {
         <Text style={styles.podiumTitle}>{PODIUM_TITLES[plan.period]}</Text>
         <Text
           style={[styles.podiumPrice, hero && styles.podiumPriceHero]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.7}
+          numberOfLines={props.accessibleLayout ? undefined : 1}
+          adjustsFontSizeToFit={!props.accessibleLayout}
+          minimumFontScale={props.accessibleLayout ? undefined : 0.7}
+          testID={`paywall-plan-${plan.period}-price`}
         >
           {plan.priceString}
         </Text>
-        <Text style={styles.podiumQualifier} numberOfLines={2}>
+        <Text
+          style={styles.podiumQualifier}
+          numberOfLines={props.accessibleLayout ? undefined : 2}
+          testID={`paywall-plan-${plan.period}-qualifier`}
+        >
           {podiumQualifier(plan)}
         </Text>
         {props.chip ? (
@@ -187,7 +213,10 @@ function PodiumColumn(props: {
           </View>
         ) : null}
         {plan.freeTrial ? (
-          <Text style={styles.trialText} numberOfLines={1}>
+          <Text
+            style={styles.trialText}
+            testID={`paywall-plan-${plan.period}-trial`}
+          >
             {plan.freeTrial.label}
           </Text>
         ) : null}
@@ -212,6 +241,7 @@ function BenefitRow(props: (typeof BENEFITS)[number]) {
 
 export function PaywallScreen(props: PaywallScreenProps) {
   const insets = useReliableSafeAreaInsets();
+  const accessibleLayout = useWindowDimensions().fontScale > 1.3;
   const {
     status,
     operation,
@@ -219,13 +249,45 @@ export function PaywallScreen(props: PaywallScreenProps) {
     selectedPeriod,
     canonicalAccess,
     error,
-    initialize,
     selectPeriod,
-    purchaseSelected,
-    restorePurchases,
     clearError,
   } = useAccessStore();
   const premium = useAccessStore(selectHasPremium);
+  const owner = useRef(getActiveDataOwner());
+  const mounted = useRef(true);
+  const dismissed = useRef(false);
+  const operationInFlight = useRef(false);
+  const [pendingOperation, setPendingOperation] = useState<
+    'purchasing' | 'restoring' | null
+  >(null);
+
+  const isCurrent = useCallback(
+    () =>
+      mounted.current &&
+      !dismissed.current &&
+      owner.current === getActiveDataOwner(),
+    [],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const close = () => {
+    if (!mounted.current || dismissed.current) return;
+    dismissed.current = true;
+    props.onClose();
+  };
+
+  const loadMembership = useCallback(() => {
+    if (!isCurrent() || operationInFlight.current) return;
+    const access = useAccessStore.getState();
+    if (access.status === 'loading' || access.operation !== 'idle') return;
+    void access.initialize();
+  }, [isCurrent]);
 
   // Two-step flow: page 1 sells the value, page 2 (one deliberate tap later)
   // shows store-verified pricing. Entering content slides/fades in 220ms
@@ -237,7 +299,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
   const transitionTo = useCallback(
     (next: PaywallPage) => {
-      if (pageRef.current === next) return;
+      if (!isCurrent() || pageRef.current === next) return;
       pageRef.current = next;
       pageOpacity.setValue(0);
       pageShift.setValue(next === 'pricing' ? 28 : -28);
@@ -257,12 +319,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
       ]).start();
       setPage(next);
     },
-    [pageOpacity, pageShift],
+    [isCurrent, pageOpacity, pageShift],
   );
 
   useEffect(() => {
-    if (status === 'idle') void initialize();
-  }, [initialize, status]);
+    if (status === 'idle') loadMembership();
+  }, [loadMembership, status]);
 
   // Hardware back on the pricing page returns to the value page instead of
   // dismissing the paywall (predictable step-back navigation).
@@ -284,7 +346,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
       : selectedPeriod === 'lifetime'
         ? plans?.lifetime
         : plans?.monthly;
-  const busy = operation !== 'idle';
+  const busy =
+    status === 'loading' || operation !== 'idle' || pendingOperation !== null;
   const annualSavings = savingsLabel(
     plans?.annual ?? null,
     plans?.monthly ?? null,
@@ -303,15 +366,97 @@ export function PaywallScreen(props: PaywallScreenProps) {
   const showRetry =
     status !== 'loading' && (!plans || canonicalAccess === null);
 
-  const purchase = async () => {
-    const verified = await purchaseSelected();
-    if (verified) props.onPurchased?.();
+  const runStoreOperation = async (kind: 'purchasing' | 'restoring') => {
+    if (
+      !isCurrent() ||
+      pageRef.current !== 'pricing' ||
+      operationInFlight.current
+    )
+      return;
+    const access = useAccessStore.getState();
+    if (
+      access.status === 'loading' ||
+      access.operation !== 'idle' ||
+      access.canonicalAccess?.premium
+    )
+      return;
+    if (kind === 'purchasing' && !access.canonicalAccess) return;
+    operationInFlight.current = true;
+    setPendingOperation(kind);
+    try {
+      const verified = await (kind === 'purchasing'
+        ? access.purchaseSelected()
+        : access.restorePurchases());
+      if (
+        verified &&
+        isCurrent() &&
+        pageRef.current === 'pricing' &&
+        props.onPurchased
+      ) {
+        props.onPurchased();
+      }
+    } finally {
+      operationInFlight.current = false;
+      if (mounted.current) setPendingOperation(null);
+    }
   };
 
-  const restore = async () => {
-    const verified = await restorePurchases();
-    if (verified) props.onPurchased?.();
-  };
+  const purchase = () => runStoreOperation('purchasing');
+  const restore = () => runStoreOperation('restoring');
+  const membershipRecovery = (
+    <>
+      {error ? (
+        <PressableScale
+          onPress={clearError}
+          accessibilityLabel="Dismiss membership message"
+          accessibilityHint={error.message}
+          accessibilityLiveRegion="assertive"
+          style={styles.errorCard}
+        >
+          <Icon name="shield" color={color.volt} size={18} />
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {error.message}
+          </Text>
+        </PressableScale>
+      ) : null}
+      {showRetry ? (
+        <PressableScale
+          testID="paywall-retry"
+          onPress={loadMembership}
+          accessibilityLabel="Retry loading membership"
+          disabled={busy}
+          style={styles.secondaryButton}
+        >
+          <Text style={styles.secondaryButtonText}>Try again</Text>
+        </PressableScale>
+      ) : null}
+    </>
+  );
+  const legalLinks =
+    props.onOpenTerms || props.onOpenPrivacy ? (
+      <View style={styles.legalLinks}>
+        {props.onOpenTerms ? (
+          <PressableScale
+            onPress={props.onOpenTerms}
+            accessibilityLabel="Terms of use"
+            accessibilityRole="link"
+            style={styles.legalLink}
+          >
+            <Text style={styles.legalLinkText}>Terms</Text>
+          </PressableScale>
+        ) : null}
+        {props.onOpenPrivacy ? (
+          <PressableScale
+            onPress={props.onOpenPrivacy}
+            accessibilityLabel="Privacy policy"
+            accessibilityRole="link"
+            style={styles.legalLink}
+          >
+            <Text style={styles.legalLinkText}>Privacy</Text>
+          </PressableScale>
+        ) : null}
+      </View>
+    ) : null;
 
   if (premium) {
     return (
@@ -328,7 +473,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             ]}
           >
             <PressableScale
-              onPress={props.onClose}
+              onPress={close}
               accessibilityLabel="Close membership"
               style={styles.closeButton}
             >
@@ -349,7 +494,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
               reviewed coaching stays tied to it.
             </Text>
             <PressableScale
-              onPress={props.onClose}
+              onPress={close}
               accessibilityLabel="Continue coaching"
               style={styles.primaryButton}
             >
@@ -395,7 +540,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             </View>
           )}
           <PressableScale
-            onPress={props.onClose}
+            onPress={close}
             accessibilityLabel="Close membership offer"
             style={styles.closeButton}
           >
@@ -438,9 +583,15 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
               <View style={styles.plans}>
                 {plans ? (
-                  <View style={styles.podiumRow}>
+                  <View
+                    style={[
+                      styles.podiumRow,
+                      accessibleLayout && styles.podiumRowAccessible,
+                    ]}
+                  >
                     {plans.monthly ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
                         plan={plans.monthly}
                         selected={selectedPeriod === 'monthly'}
                         onPress={() => selectPeriod('monthly')}
@@ -448,6 +599,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                     ) : null}
                     {plans.annual ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
                         plan={plans.annual}
                         selected={selectedPeriod === 'annual'}
                         hero
@@ -458,6 +610,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                     ) : null}
                     {plans.lifetime ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
                         plan={plans.lifetime}
                         selected={selectedPeriod === 'lifetime'}
                         chip="PAY ONCE"
@@ -506,30 +659,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 ) : null}
               </View>
 
-              {error ? (
-                <PressableScale
-                  onPress={clearError}
-                  accessibilityLabel="Dismiss membership message"
-                  accessibilityHint={error.message}
-                  accessibilityLiveRegion="assertive"
-                  style={styles.errorCard}
-                >
-                  <Icon name="shield" color={color.volt} size={18} />
-                  <Text style={styles.errorText}>{error.message}</Text>
-                </PressableScale>
-              ) : null}
-
-              {showRetry ? (
-                <PressableScale
-                  testID="paywall-retry"
-                  onPress={() => void initialize()}
-                  accessibilityLabel="Retry loading membership"
-                  disabled={busy}
-                  style={styles.secondaryButton}
-                >
-                  <Text style={styles.secondaryButtonText}>Try again</Text>
-                </PressableScale>
-              ) : null}
+              {membershipRecovery}
 
               <PressableScale
                 testID="paywall-continue"
@@ -589,30 +719,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 </Text>
               ) : null}
 
-              {props.onOpenTerms || props.onOpenPrivacy ? (
-                <View style={styles.legalLinks}>
-                  {props.onOpenTerms ? (
-                    <PressableScale
-                      onPress={props.onOpenTerms}
-                      accessibilityLabel="Terms of use"
-                      accessibilityRole="link"
-                      style={styles.legalLink}
-                    >
-                      <Text style={styles.legalLinkText}>Terms</Text>
-                    </PressableScale>
-                  ) : null}
-                  {props.onOpenPrivacy ? (
-                    <PressableScale
-                      onPress={props.onOpenPrivacy}
-                      accessibilityLabel="Privacy policy"
-                      accessibilityRole="link"
-                      style={styles.legalLink}
-                    >
-                      <Text style={styles.legalLinkText}>Privacy</Text>
-                    </PressableScale>
-                  ) : null}
-                </View>
-              ) : null}
+              {legalLinks}
             </ScrollView>
           ) : (
             <ScrollView
@@ -636,6 +743,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 <Text style={styles.ratingRule}>{RATING_CONSUMPTION_RULE}</Text>
               </View>
 
+              {membershipRecovery}
               <View style={styles.benefits}>
                 {BENEFITS.map(benefit => (
                   <BenefitRow key={benefit.title} {...benefit} />
@@ -661,6 +769,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   by your app store — cancel anytime.
                 </Text>
               </View>
+              {legalLinks}
             </ScrollView>
           )}
         </Animated.View>
@@ -797,6 +906,21 @@ const styles = StyleSheet.create({
   },
   podiumColumn: { flex: 1 },
   podiumColumnHero: { flex: 1.18, zIndex: 1 },
+  podiumRowAccessible: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.lg,
+  },
+  podiumColumnAccessible: { flex: 0 },
+  podiumCardAccessible: { paddingHorizontal: space.md },
+  heroBadgeAccessible: {
+    position: 'relative',
+    top: 0,
+    marginBottom: space.sm,
+    alignSelf: 'center',
+    maxWidth: '100%',
+  },
+  badgePillAccessible: { borderRadius: radius.sm, maxWidth: '100%' },
   podiumCard: {
     borderRadius: radius.md,
     borderWidth: 1.5,

@@ -250,28 +250,35 @@ beforeEach(() => {
 });
 
 describe('Paywall — exits and legal links (3.1.2)', () => {
-  it('close is wired on both pages and back returns to the value page', async () => {
-    configureAccessStore(dependencies());
-    const { renderer, handlers } = await renderPaywall();
-
-    const close = byLabel(renderer, 'Close membership offer');
-    expect(close.props.accessibilityRole).toBe('button');
-    await act(async () => close.props.onPress());
-    expect(handlers.onClose).toHaveBeenCalledTimes(1);
-
-    await openPricing(renderer);
-    await act(async () =>
-      byLabel(renderer, 'Close membership offer').props.onPress(),
-    );
-    expect(handlers.onClose).toHaveBeenCalledTimes(2);
-
-    const back = byTestId(renderer, 'paywall-back');
-    expect(back.props.accessibilityLabel).toBe('Back to membership benefits');
-    await act(async () => back.props.onPress());
-    expect(byTestId(renderer, 'paywall-see-plans')).toBeTruthy();
-    expect(handlers.onPurchased).not.toHaveBeenCalled();
-    act(() => renderer.unmount());
-  });
+  it.each(['value', 'pricing'])(
+    'close remains wired once on the %s page, and pricing back restores benefits',
+    async page => {
+      configureAccessStore(dependencies());
+      const { renderer, handlers } = await renderPaywall();
+      try {
+        if (page === 'pricing') {
+          await openPricing(renderer);
+          const back = byTestId(renderer, 'paywall-back');
+          expect(back.props.accessibilityLabel).toBe(
+            'Back to membership benefits',
+          );
+          await act(async () => back.props.onPress());
+          expect(byTestId(renderer, 'paywall-see-plans')).toBeTruthy();
+          await openPricing(renderer);
+        }
+        const close = byLabel(renderer, 'Close membership offer');
+        expect(close.props.accessibilityRole).toBe('button');
+        await act(async () => {
+          close.props.onPress();
+          close.props.onPress();
+        });
+        expect(handlers.onClose).toHaveBeenCalledTimes(1);
+        expect(handlers.onPurchased).not.toHaveBeenCalled();
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
 
   it('Terms and Privacy are functional link-role controls on the pricing page', async () => {
     configureAccessStore(dependencies());
@@ -557,22 +564,27 @@ describe('Paywall — pricing unavailable and premium states', () => {
     act(() => renderer.unmount());
   });
 
-  it('verified members see an honest state with two wired exits and no purchase controls', async () => {
-    configureAccessStore(
-      dependencies({ getAccess: async () => premiumAccess }),
-    );
-    const { renderer, handlers } = await renderPaywall();
-    expect(allText(renderer)).toContain('MEMBERSHIP VERIFIED');
-    expect(
-      renderer.root.findAll(n => n.props.testID === 'paywall-continue'),
-    ).toHaveLength(0);
-    await act(async () =>
-      byLabel(renderer, 'Close membership').props.onPress(),
-    );
-    await act(async () =>
-      byLabel(renderer, 'Continue coaching').props.onPress(),
-    );
-    expect(handlers.onClose).toHaveBeenCalledTimes(2);
-    act(() => renderer.unmount());
-  });
+  it.each(['Close membership', 'Continue coaching'])(
+    'verified members can use %s without purchase controls or duplicate dismissal',
+    async label => {
+      configureAccessStore(
+        dependencies({ getAccess: async () => premiumAccess }),
+      );
+      const { renderer, handlers } = await renderPaywall();
+      try {
+        expect(allText(renderer)).toContain('MEMBERSHIP VERIFIED');
+        expect(
+          renderer.root.findAll(n => n.props.testID === 'paywall-continue'),
+        ).toHaveLength(0);
+        const dismiss = byLabel(renderer, label).props.onPress;
+        await act(async () => {
+          dismiss();
+          dismiss();
+        });
+        expect(handlers.onClose).toHaveBeenCalledTimes(1);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
 });

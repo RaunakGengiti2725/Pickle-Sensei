@@ -12,6 +12,7 @@ export interface LocalDb {
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: Record<string, unknown>[] }>;
+  withExclusive?<T>(operation: (db: LocalDb) => Promise<T>): Promise<T>;
   close(): void;
 }
 
@@ -246,7 +247,13 @@ function ensureAccountScopedSchema(db: DB): void {
   }
 }
 
-let instance: DB | null = null;
+interface DbConnection {
+  db: DB;
+  tail: Promise<void>;
+  closed: boolean;
+}
+
+let instance: DbConnection | null = null;
 
 function openMigrated(): DB {
   const db = open({ name: 'pickle-sensei.db' });
@@ -268,17 +275,56 @@ function openMigrated(): DB {
 
 export function getDb(): LocalDb {
   if (!instance) {
-    instance = openMigrated();
+    instance = { db: openMigrated(), tail: Promise.resolve(), closed: false };
   }
-  const db = instance;
+  const connection = instance;
+  function assertOpen(): void {
+    if (connection.closed) throw new Error('The local database is closed.');
+  }
+  function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = connection.tail.then(() => {
+      assertOpen();
+      return operation();
+    });
+    connection.tail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
+  const execute: LocalDb['execute'] = async (sql, params = []) => {
+    assertOpen();
+    const result = await connection.db.execute(sql, params as never[]);
+    assertOpen();
+    return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+  };
+  const close = () => {
+    if (connection.closed) return;
+    connection.closed = true;
+    if (instance === connection) instance = null;
+    connection.db.close();
+  };
   return {
-    async execute(sql, params = []) {
-      const result = await db.execute(sql, params as never[]);
-      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+    execute: (sql, params) => enqueue(() => execute(sql, params)),
+    withExclusive(operation) {
+      return enqueue(async () => {
+        let active = true;
+        const exclusiveDb: LocalDb = {
+          async execute(sql, params) {
+            if (!active) {
+              throw new Error('The exclusive database executor has expired.');
+            }
+            return execute(sql, params);
+          },
+          close,
+        };
+        try {
+          return await operation(exclusiveDb);
+        } finally {
+          active = false;
+        }
+      });
     },
-    close() {
-      db.close();
-      instance = null;
-    },
+    close,
   };
 }

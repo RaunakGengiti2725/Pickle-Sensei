@@ -664,36 +664,40 @@ describe('PremiumTabBar capture actions — guest', () => {
     },
   );
 
-  it('the same actions send a canonical session without access through the paywall (source=rating), once', async () => {
-    asSynced();
-    // Unconfigured billing (no bootstrap in this test): the access store
-    // resolves to 'unconfigured' and the bar routes on that answer. (An
-    // unchecked 'idle' store is handed to the Analyze gate instead — the bar
-    // never awaits initialize() itself.)
-    await act(async () => {
-      await useAccessStore.getState().initialize();
-    });
-    expect(useAccessStore.getState().status).toBe('unconfigured');
-    const renderer = render(<PremiumTabBar {...tabBarProps()} />);
+  it.each([
+    ['Auto Analyze', 'camera'],
+    ['Import Video', 'library'],
+  ])(
+    '"%s" sends unverified canonical access to the Analyze retry gate with the original source, never an upsell',
+    async (action, source) => {
+      asSynced();
+      // Unconfigured billing (no bootstrap in this test) is not proof that
+      // the two lifetime free ratings are spent. The route owns Retry/Cancel;
+      // the bar neither guesses Paywall nor awaits initialize() itself.
+      await act(async () => {
+        await useAccessStore.getState().initialize();
+      });
+      expect(useAccessStore.getState().status).toBe('unconfigured');
+      const renderer = render(<PremiumTabBar {...tabBarProps()} />);
 
-    await press(renderer, 'Open coach actions');
-    await press(renderer, 'Auto Analyze');
-    await act(async () => {
-      jest.advanceTimersByTime(400);
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
+      await press(renderer, 'Open coach actions');
+      await press(renderer, action);
+      await act(async () => {
+        jest.advanceTimersByTime(400);
+      });
 
-    // Honest paywall, no loop.
-    expect(useAccessStore.getState().status).toBe('unconfigured');
-    expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-    expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-      source: 'rating',
-    });
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    act(() => renderer.unmount());
-  });
+      expect(useAccessStore.getState().status).toBe('unconfigured');
+      expect(useAccessStore.getState().canonicalAccess).toBeNull();
+      expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+      expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', { source });
+      expect(mockRootNavigate).not.toHaveBeenCalledWith(
+        'Paywall',
+        expect.anything(),
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    },
+  );
 });
 
 // ─── Manage account: guests never see deletion; synced failure branches ──────
@@ -901,7 +905,7 @@ describe('ManageAccountScreen', () => {
       'challenge-1',
     );
     expect(allText(renderer)).toContain(
-      'The deletion could not be completed. Nothing was deleted.',
+      'Account deletion could not be confirmed. Check your connection and try again.',
     );
     expect(pressable(renderer, 'Permanently delete').props.disabled).toBe(
       false,

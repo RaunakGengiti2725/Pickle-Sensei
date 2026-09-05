@@ -6,7 +6,9 @@ import React, {
   useState,
 } from 'react';
 import {
+  AppState,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -19,7 +21,10 @@ import { PressableScale, useReducedMotion } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { ClipPlayer, clipPlaybackAvailable } from '../components/ClipPlayer';
-import type { StrokeResultClip } from '../components/StrokeResult';
+import {
+  ACCESSIBLE_ANALYSIS_FONT_SCALE,
+  type StrokeResultClip,
+} from '../components/StrokeResult';
 import type { StrokeReviewEvidence } from '../components/strokeResultData';
 import {
   jointHeatAt,
@@ -61,6 +66,9 @@ import {
  * play/pause · next · AUTO-pause). A tap on the stage toggles play/pause. In
  * `fill` mode the stage takes all the height its parent leaves after those
  * rows, so a host can pin header + player + CTAs with no scroll.
+ * At large Dynamic Type the same full copy and picture scroll within a
+ * bounded content viewport, while the timeline/transport remain pinned below
+ * it. Expanded annotations move below the picture too, never over a joint.
  *
  * Two hosts render it: the full-screen `FormReview` route and the Result
  * guide's "The problem" page (inline). Both hand it the same evidence — the
@@ -93,6 +101,7 @@ export interface FormReviewPlayerProps {
    * header and a footer use this so nothing has to scroll.
    */
   fill?: boolean;
+  contentFooter?: React.ReactNode;
 }
 
 /** Verdict word + the ONE palette tint it carries (dot, label, marker). The
@@ -108,7 +117,8 @@ const DEFAULT_VIDEO = { width: 9, height: 16 };
 const TICK_MS = 1000 / 30;
 const END_TOLERANCE_MS = 30;
 const EXTENT_PAD_MS = 250;
-const TRACK_HEIGHT = 32;
+const TRACK_HEIGHT = 44;
+const ACCESSIBLE_SEEK_MS = 100;
 const TRACK_BAND_HEIGHT = 4;
 const STOP_MARKER = 10;
 const PLAYHEAD_KNOB = 14;
@@ -175,6 +185,9 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   const fill = props.fill === true;
   const reduced = useReducedMotion();
   const viewport = useWindowDimensions();
+  const largeText = viewport.fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
+  const scrollContent = fill && viewport.fontScale > 1.1;
+  const [contentViewportHeight, setContentViewportHeight] = useState(0);
 
   // The native player could not open the stored file: its layer would sit
   // black forever, so it is taken down and the stage says what happened.
@@ -225,6 +238,13 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
     setPlaying(value);
   }, []);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') setPlayingState(false);
+    });
+    return () => subscription.remove();
+  }, [setPlayingState]);
+
   const movePlayhead = useCallback((ms: number) => {
     playheadRef.current = ms;
     setPlayheadMs(ms);
@@ -236,6 +256,13 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
     lastSeekRef.current = next;
     setSeekMs(next);
   }, []);
+
+  const previousScrollContent = useRef(scrollContent);
+  useEffect(() => {
+    if (previousScrollContent.current === scrollContent) return;
+    previousScrollContent.current = scrollContent;
+    requestSeek(playheadRef.current);
+  }, [requestSeek, scrollContent]);
 
   /** Freeze on a checkpoint frame and show its caption. */
   const pauseAt = useCallback(
@@ -387,6 +414,15 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   const stageHeight =
     props.stageHeight ??
     Math.round(Math.min(560, Math.max(300, viewport.height * 0.52)));
+  const accessibleStageHeight = Math.min(
+    stageHeight,
+    contentViewportHeight > 0
+      ? Math.min(
+          contentViewportHeight,
+          Math.max(120, contentViewportHeight - space.xxl * 2),
+        )
+      : Math.min(320, viewport.height * 0.36),
+  );
 
   const onStageLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -399,13 +435,20 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
 
   const stageCaption = replayStageCaption(clip, sequence, clipUnreadable);
 
-  return (
-    <View style={fill ? styles.fill : undefined} testID="form-review-player">
+  const reviewContent = (
+    <>
       {/* ── Stage: real frames + exoskeleton + heat + arrow, and nothing
           else. One grouped accessibility element; a tap anywhere on it
           toggles playback, exactly like a video in Photos. ─────────────── */}
       <Pressable
-        style={[styles.stage, fill ? styles.fill : { height: stageHeight }]}
+        style={[
+          styles.stage,
+          scrollContent
+            ? { height: accessibleStageHeight }
+            : fill
+              ? styles.fill
+              : { height: stageHeight },
+        ]}
         onLayout={onStageLayout}
         onPress={togglePlay}
         testID="form-review-stage"
@@ -445,7 +488,7 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
           showArrow={showArrow}
           reducedMotion={reduced}
         />
-        {arrow && labelAnchor ? (
+        {arrow && labelAnchor && !largeText ? (
           <View
             pointerEvents="none"
             onLayout={event => {
@@ -472,7 +515,7 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
           </View>
         ) : null}
         {/* Partial-evidence caption: what is (not) on this device. */}
-        {stageCaption ? (
+        {stageCaption && !largeText ? (
           <View style={styles.evidenceCaption} pointerEvents="none">
             <Text style={[type.caption, styles.evidenceCaptionText]}>
               {stageCaption}
@@ -480,6 +523,21 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
           </View>
         ) : null}
       </Pressable>
+      {largeText && arrow ? (
+        <View
+          style={styles.accessibleArrowLabel}
+          testID="form-review-arrow-label"
+        >
+          <Text style={[type.micro, { color: color.onVolt }]}>
+            {arrow.label.toUpperCase()}
+          </Text>
+        </View>
+      ) : null}
+      {largeText && stageCaption ? (
+        <Text style={[type.caption, styles.accessibleEvidenceCaption]}>
+          {stageCaption}
+        </Text>
+      ) : null}
 
       {/* ── Stop card: verdict · phase, counter, measured headline, cue.
           Fixed height (the cue reserves three lines) so the stage above
@@ -497,15 +555,34 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
       >
         {shownStop && verdict ? (
           <>
-            <View style={styles.cardHeader}>
-              <View style={styles.verdictRow}>
+            <View
+              style={[
+                styles.cardHeader,
+                largeText && styles.accessibleCardHeader,
+              ]}
+            >
+              <View
+                style={[
+                  styles.verdictRow,
+                  largeText && styles.accessibleVerdictRow,
+                ]}
+              >
                 <View
                   style={[styles.verdictDot, { backgroundColor: verdict.tint }]}
                 />
-                <Text style={[type.micro, { color: verdict.tint }]}>
+                <Text
+                  style={[
+                    type.micro,
+                    { color: verdict.tint },
+                    largeText && styles.wrappingText,
+                  ]}
+                >
                   {verdictLabel}
                 </Text>
-                <Text style={[type.micro, styles.cardPhase]} numberOfLines={1}>
+                <Text
+                  style={[type.micro, styles.cardPhase]}
+                  numberOfLines={largeText ? undefined : 1}
+                >
                   {` · ${shownStop.title.toUpperCase()}`}
                 </Text>
               </View>
@@ -513,20 +590,71 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
                 {`STOP ${stopIndex + 1} OF ${stops.length}`}
               </Text>
             </View>
-            <Text style={[type.caption, styles.cardHeadline]} numberOfLines={1}>
+            <Text style={[type.caption, styles.cardHeadline]}>
               {shownStop.headline}
             </Text>
             <Text style={[type.body, styles.cardCue]}>{shownStop.cue}</Text>
           </>
         ) : null}
       </View>
+      {props.contentFooter}
+    </>
+  );
+
+  return (
+    <View style={fill ? styles.fill : undefined} testID="form-review-player">
+      {scrollContent ? (
+        <ScrollView
+          style={styles.fill}
+          contentContainerStyle={styles.scrollContent}
+          contentInsetAdjustmentBehavior="never"
+          onLayout={event =>
+            setContentViewportHeight(event.nativeEvent.layout.height)
+          }
+          testID="form-review-content-scroll"
+        >
+          {reviewContent}
+        </ScrollView>
+      ) : (
+        reviewContent
+      )}
 
       {/* ── Timeline: scrubber with checkpoint markers, then the clock ──── */}
       <View style={styles.timelineRow}>
         <View
           accessible
+          accessibilityRole="adjustable"
           accessibilityLabel="Review timeline"
-          accessibilityHint="Drag to move through the clip; dots mark measured checkpoints"
+          accessibilityHint="Drag to scrub, or swipe up and down to move a tenth of a second. Dots mark measured checkpoints."
+          accessibilityValue={{
+            min: 0,
+            max: durationMs,
+            now: Math.min(durationMs, Math.max(0, playheadMs)),
+            text: `${formatClock(playheadMs)} of ${formatClock(durationMs)}`,
+          }}
+          accessibilityActions={[
+            { name: 'increment', label: 'Forward a tenth of a second' },
+            { name: 'decrement', label: 'Back a tenth of a second' },
+          ]}
+          onAccessibilityAction={({ nativeEvent }) => {
+            const direction =
+              nativeEvent.actionName === 'increment'
+                ? 1
+                : nativeEvent.actionName === 'decrement'
+                  ? -1
+                  : 0;
+            if (direction === 0) return;
+            jumpTo(
+              Math.min(
+                durationMs,
+                Math.max(
+                  0,
+                  playheadRef.current + direction * ACCESSIBLE_SEEK_MS,
+                ),
+              ),
+              null,
+            );
+          }}
           onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
@@ -577,7 +705,13 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
 
       {/* ── Transport, symmetric around play: speed · prev · play · next ·
           AUTO. The two outer chips are the same size so the row balances. ── */}
-      <View style={styles.controls}>
+      <View
+        style={[
+          styles.controls,
+          viewport.width < 360 && styles.compactControls,
+        ]}
+        testID="form-review-controls"
+      >
         <PressableScale
           onPress={() =>
             setSpeedIndex(current => (current + 1) % REVIEW_SPEEDS.length)
@@ -589,6 +723,8 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
           testID="form-review-speed"
         >
           <Text
+            maxFontSizeMultiplier={1.3}
+            numberOfLines={1}
             style={[
               type.caption,
               styles.speedLabel,
@@ -645,6 +781,8 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
           testID="form-review-autopause"
         >
           <Text
+            maxFontSizeMultiplier={1.3}
+            numberOfLines={1}
             style={[
               type.micro,
               { color: autoPause ? color.onVolt : color.onDarkMuted },
@@ -659,7 +797,30 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
+  fill: { flex: 1, minHeight: 0 },
+  scrollContent: { paddingBottom: space.sm },
+  accessibleArrowLabel: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    marginTop: space.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: color.volt,
+  },
+  accessibleEvidenceCaption: { color: color.onDarkMuted, marginTop: space.sm },
+  accessibleCardHeader: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: space.xs,
+  },
+  accessibleVerdictRow: {
+    flex: 0,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    alignSelf: 'stretch',
+  },
+  wrappingText: { flexShrink: 1 },
   stage: {
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -713,6 +874,7 @@ const styles = StyleSheet.create({
   cardCue: { color: color.onDark, marginTop: 6, minHeight: CUE_MIN_HEIGHT },
   // ── Timeline ──
   timelineRow: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
@@ -756,12 +918,14 @@ const styles = StyleSheet.create({
   },
   // ── Transport ──
   controls: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.md,
     marginTop: space.sm,
   },
+  compactControls: { gap: space.sm },
   chipContainer: { width: 44 },
   chip: {
     width: 44,

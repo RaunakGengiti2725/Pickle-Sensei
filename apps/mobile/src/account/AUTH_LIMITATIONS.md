@@ -1,65 +1,37 @@
 # Account authentication boundary
 
-The mobile bootstrap deliberately does not mint an API token or treat an Apple
-user ID / Google subject as an app account ID. Apple and Google must return a
-signed identity token; `/v1/account/bootstrap` verifies that bearer and returns
-the canonical `app_user.id` UUID used by billing and training.
+The shipping app uses the Supabase Edge Function in `supabase/functions/api`, not the single-issuer OIDC server in `services/api`. Both Apple and Google are supported. Provider subjects are not app account IDs: bootstrap returns the verified canonical account UUID used by local ownership, billing, and synchronization.
 
-The current API has one `OIDC_ISSUER`, `OIDC_AUDIENCE`, and `OIDC_JWKS_URL`.
-That safely supports one configured issuer at a time. It cannot safely accept
-both Apple (`https://appleid.apple.com`) and Google
-(`https://accounts.google.com`) identity tokens in the same deployment. A
-production deployment must either:
+## Bootstrap and verification
 
-1. put both providers behind one trusted identity broker and configure the API
-   for that broker, or
-2. extend the API to choose from an explicit allowlist of per-issuer JWKS and
-   audiences before enabling both buttons.
+`POST /v1/account/bootstrap` exchanges the signed provider identity token through Supabase Auth's `id_token` grant. Decoding an issuer selects the verification path; it does not authenticate the caller. Supabase verifies the signature, issuer and configured audience. Google requires the configured web OAuth client ID; Apple's audience must match the app/service configuration.
 
-Do not remove issuer/audience verification or infer the provider from
-unverified JWT claims. Google also requires a web OAuth client ID so the native
-SDK returns an ID token with the backend's configured audience. Apple requires
-the backend audience to match the app/service identifier.
+Bootstrap returns the account and `session { accessToken, refreshToken, expiresAt, expiresIn }`. The relative lifetime is optional for compatibility with older servers. Normal application requests use the **Supabase access token**. The Edge handler verifies uncached access tokens through `/auth/v1/user` and creates a user-scoped database client, preserving RLS. Only valid verification is cached, with expiry bounds.
 
-## Bearer lifetime
+Bootstrap has a separate budget of 30 attempts per IP per aligned minute, including valid exchanges. Shared-NAT users can receive a retryable 429 at that boundary. Access-token requests and refresh have separate route budgets.
 
-The provider identity token IS the API bearer: `bootstrap.ts` returns it as
-`apiSession.bearerToken` and `apiSession.ts` holds it in memory. There is no
-backend token-exchange or refresh-session endpoint, so the bearer lives
-exactly as long as the provider allows — Apple ID tokens expire after roughly
-10 minutes, Google ID tokens after roughly 1 hour. Once expired, the edge
-function's `signInWithIdToken` verification fails and EVERY authenticated
-route answers 401 `The identity token could not be verified.` Sign-in is not
-"done" when the bootstrap succeeds; every later request can be the first one
-to hit an expired bearer.
+## Durable sign-in
 
-Contract for an expired bearer (a 401 on a request that carried one):
+`sessionVault.ts` stores the refresh token and account descriptor in Keychain/Keystore using `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`. Access tokens and provider tokens remain in memory; credentials do not go into SQLite. Secure-store operations are serialized, and ownership/generation checks prevent an old write or cleanup from replacing a newer account's record.
 
-- The 401 is an auth event, not a transient network error. The client must
-  attempt exactly one recovery, never a blind retry with the same bearer:
-  Google can mint a fresh ID token silently (`GoogleSignin.signInSilently()`,
-  the same path `restoreGoogleSessionSilently` uses on cold start), then
-  re-establish the API session and retry the request once. Apple has no
-  silent path: clear the API session, set an actionable auth error
-  ("Your sign-in expired — sign in again to keep syncing"), and route to the
-  sign-in gate.
-- Transports read the bearer from `getApiSession()` at request time rather
-  than capturing it once at configuration.
-- The sync outbox must not keep draining against a dead bearer: 401 pauses
-  the retry loop until a fresh session is established. Retrying every 30 s /
-  on foreground burns the backend per-IP auth-failure budget
-  (`AUTH_FAILURE_LIMIT`) and can lock the user out of the recovery call.
-- No screen may render a control whose only action re-runs the failed call
-  with the same expired bearer (a "Try again" that cannot succeed dead-ends
-  the user — App Review 2.1 / 4.2). The offered action is the recovery above.
-- The auth store must not present a signed-in account (`error: null`) while
-  the API session is known-expired.
+`POST /v1/auth/refresh` rotates the token pair. `sessionKeeper.ts` uses receipt-based monotonic deadlines, checks on foreground, and retries transient failures with backoff. Relative lifetimes protect renewal from a skewed device clock. Legacy responses that still appear expired use a conservative cooldown rather than a refresh loop; current-token 401 recovery remains available. A failed secure write retries persistence of the received pair rather than discarding the session. Cold-launch restoration can continue with cached owner-scoped data while the network request remains pending.
 
-The durable fix is a backend `/v1/auth/session` exchange that returns a
-Supabase refresh token stored in Keychain/Keystore (`react-native-keychain`),
-so cold starts and Apple users survive without re-authenticating.
+An access-route 401 requests refresh; it is not itself permission to sign the player out. Only a definitive refresh-token refusal, represented as 401/403, ends a durable session. Network errors, timeouts, 429 responses and 5xx responses remain retryable. The Edge function does not classify an unknown upstream response as revoked credentials, and transient failures do not charge `AUTH_FAILURE_LIMIT`.
 
-Provider tokens live in memory only. On process restart a synced user must
-authenticate again until that token-exchange/refresh-session endpoint and
-native Keychain/Keystore storage are implemented. Guest mode has no server
-token and remains explicitly local-only.
+Long-lived clients resolve the current bearer with `bearerTokenFor(canonicalAppUserId)` for each request. They must not capture a token at construction or reset their stores on rotation. Analysis supplies an owner-bound `resolveApiToken` callback, so reservation and release follow rotation during lengthy extraction or inference. Static legacy inputs retain their entry snapshot. A drain invalidated by an owner/generation change discards its late outcome without modifying the old queue's retry history; the next legitimate session can replay it idempotently.
+
+A canonical owner with no local profile must fetch its server profile before the app decides that onboarding is missing. An unavailable bearer produces a retryable profile state, not a fresh questionnaire. Arrival of the matching API session triggers profile recovery without rehydrating on every token rotation. A loaded same-owner profile stays available during this work, preserving navigation and active capture. Pending onboarding answers remain pending until a canonical save can succeed.
+
+## Sign-out and deletion
+
+Explicit sign-out clears local session state and requests `POST /v1/auth/logout` with `scope=local`. A credential-free `auth.logout-intent` marker and an in-run latch block stale-vault restoration when secure deletion fails. A vault tombstone provides a serialized fallback when the marker cannot be written. Retry completes cleanup instead of restoring the account; explicit sign-in removes the block only after safe persistence. If both storage channels fail, the app keeps the run blocked and warns the player to retry before closing; restart safety cannot then be guaranteed. An in-flight rotation is handed to the revocation path so logout can use the resulting pair without reinstalling it. Other devices' sessions are not intentionally revoked.
+
+Access JWTs can remain valid until their `exp`. Cache eviction is not global JWT revocation; other Edge isolates may retain L1 entries. See [Supabase sign-out semantics](https://supabase.com/docs/guides/auth/signout). GoTrue's active-child replay exception can recover a lost refresh response; a timeout alone does not establish that the refresh token is unusable. Persistent storage failure or credential loss can still require an explicit sign-in.
+
+Account deletion captures `captureAccountDeletionScope()` before the challenge request and passes that scope to `completeAccountDeletion`. An old account's response must not clear a new account's credentials, SDK state or files. Stored Apple credentials are revoked even when Google is the account's primary provider. On-device media cleanup precedes owner-row purge; genuine cleanup failures retain references and surface the documented recovery notice. A lost confirmation response leaves the server outcome unknown. The client must not claim that nothing was deleted or treat that failure as a confirmed local-purge instruction.
+
+## Compatibility and limits
+
+Older builds may still send a provider ID token on application routes. The Edge handler retains that transitional path; the legacy Google silent-restore flag is a fallback for installations predating the vault. It is not the normal durable-session strategy. Do not remove compatibility until supported app-version evidence permits it.
+
+Guest mode remains local-only. A secure-store read failure is distinguishable from an empty store and has an explicit in-app retry. Filesystem, Keychain, OS suspension and provider/store dialogs require native validation in addition to unit tests. Static checks and fake Auth services do not prove hosted configuration, live revocation timing, or App Review approval.

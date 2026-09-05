@@ -47,6 +47,10 @@ jest.mock('react-native-safe-area-context', () => {
   return { SafeAreaView: View };
 });
 jest.mock('../src/data/db', () => ({ getDb: () => mockCurrentDb() }));
+jest.mock('../src/data/syncRuntime', () => ({ triggerOutboxSync: jest.fn() }));
+jest.mock('../src/review/appStoreReview', () => ({
+  reportScoredAnalysisForReview: jest.fn(async () => {}),
+}));
 
 // ─── Native camera seam (typed contract, controllable per test) ─────────────
 
@@ -75,6 +79,8 @@ jest.mock('../src/camera/capture', () => {
 });
 
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
+import { triggerOutboxSync } from '../src/data/syncRuntime';
+import { reportScoredAnalysisForReview } from '../src/review/appStoreReview';
 import {
   armTryAgain,
   consumeTryAgainHandoff,
@@ -405,6 +411,8 @@ beforeEach(() => {
     provider: 'apple',
   });
   activeDb = recordingDb();
+  (triggerOutboxSync as jest.Mock).mockReset();
+  (reportScoredAnalysisForReview as jest.Mock).mockClear();
   mockCameraListeners.clear();
   mockCancelSpy.mockClear();
   mockNavigation.replace.mockClear();
@@ -828,6 +836,91 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     await act(async () => renderer.unmount());
   });
+});
+
+describe('scoring completion after leaving Analyze', () => {
+  it.each(['close', 'unmount'] as const)(
+    '%s while measuring still saves the real scored shot and its session before sync, without presenting a result',
+    async leave => {
+      const renderer = await renderScreen();
+      const syncSnapshots: RecordedCall[][] = [];
+      (triggerOutboxSync as jest.Mock).mockImplementation(() => {
+        syncSnapshots.push([...activeDb.calls]);
+      });
+      const { clip, sidecarJson } = guidedClip(`abandoned-${leave}`);
+      let resolveArtifact!: (json: string) => void;
+      const readArtifact = jest.fn(
+        () =>
+          new Promise<string>(resolve => {
+            resolveArtifact = resolve;
+          }),
+      );
+      mockReadArtifact = readArtifact;
+      pressByLabel(renderer, 'Forehand Drive');
+      const capture = deferredCapture();
+      pressButton(renderer, 'Open automatic camera');
+      await flush();
+      driveNativeCaptureSequence();
+      capture.resolve(clip);
+      await waitFor(
+        () => readArtifact.mock.calls.length === 1,
+        'pending analysis',
+      );
+      expect(textOf(renderer)).toContain('Measuring your swing');
+      expect(persistedRecordInserts()).toHaveLength(0);
+
+      if (leave === 'close') {
+        pressByLabel(renderer, 'Close');
+        expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+      } else {
+        await act(async () => renderer.unmount());
+      }
+
+      await act(async () => resolveArtifact(sidecarJson));
+      await flush();
+      const record = lastPersistedRecord();
+      expect(record.result?.resultKind).toBe('scored');
+      const sessionId = record.result?.sessionId;
+      expect(typeof sessionId).toBe('string');
+      const shot = activeDb.calls.find(call =>
+        call.sql.includes('INSERT OR REPLACE INTO local_shot'),
+      );
+      expect(shot?.params.slice(0, 3)).toEqual([owner, record.id, sessionId]);
+      const session = activeDb.calls.find(call =>
+        call.sql.includes('INSERT OR REPLACE INTO local_session'),
+      );
+      expect(session?.params.slice(0, 3)).toEqual([
+        owner,
+        sessionId,
+        'practice_set',
+      ]);
+      const sessionOutbox = activeDb.calls.filter(call =>
+        call.sql.includes("VALUES (?, 'session.create', ?)"),
+      );
+      expect(sessionOutbox).toHaveLength(1);
+      expect(sessionOutbox[0]?.params[0]).toBe(owner);
+      expect(JSON.parse(String(sessionOutbox[0]?.params[1])).id).toBe(
+        sessionId,
+      );
+      expect(syncSnapshots).toHaveLength(1);
+      expect(syncSnapshots[0]).toContain(sessionOutbox[0]);
+      const sessionWriteIndex = syncSnapshots[0]!.indexOf(sessionOutbox[0]!);
+      expect(
+        syncSnapshots[0]!
+          .slice(sessionWriteIndex + 1)
+          .some(call => call.sql === 'COMMIT'),
+      ).toBe(true);
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+      if (leave === 'close') {
+        expect(textOf(renderer)).not.toContain(
+          'That was your last free analysis.',
+        );
+        await act(async () => renderer.unmount());
+      }
+    },
+  );
 });
 
 // ─── REGRESSION: no cross-attempt readiness/quality carry-over ──────────────

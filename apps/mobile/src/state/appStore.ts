@@ -6,7 +6,8 @@ import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
   canonicalDataOwner,
-  getActiveDataOwner,
+  captureDataOwnerScope,
+  isDataOwnerScopeActive,
   profileKeyForOwner,
   requireWritableDataOwner,
 } from '../data/accountScope';
@@ -76,7 +77,7 @@ interface AppState {
   onboardingBusy: boolean;
   onboardingError: string | null;
   lastShotType: ShotTypeSlug;
-  hydrate: () => Promise<void>;
+  hydrate: (options?: { preserveCurrentProfile?: boolean }) => Promise<void>;
   /**
    * Accepts the full onboarding profile, including the optional firstName /
    * gender personalization fields; the whole object is persisted to the
@@ -97,7 +98,9 @@ interface AppState {
   setLastShotType: (shotType: ShotTypeSlug) => void;
 }
 
-export const useAppStore = create<AppState>(set => ({
+let hydrationGeneration = 0;
+
+export const useAppStore = create<AppState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
   profile: null,
@@ -105,48 +108,84 @@ export const useAppStore = create<AppState>(set => ({
   onboardingBusy: false,
   onboardingError: null,
   lastShotType: 'forehand_drive',
-  hydrate: async () => {
-    const owner = getActiveDataOwner();
-    set({
-      hydrated: false,
-      ownerKey: owner,
-      profile: null,
-      hydrateError: null,
-    });
+  hydrate: async options => {
+    const scope = captureDataOwnerScope();
+    const owner = scope.owner;
+    const previous = get();
+    const retainedProfile =
+      options?.preserveCurrentProfile &&
+      owner !== SIGNED_OUT_DATA_OWNER &&
+      previous.hydrated &&
+      previous.ownerKey === owner &&
+      !previous.hydrateError
+        ? previous.profile
+        : null;
+    const generation = ++hydrationGeneration;
+    const isCurrent = () => {
+      const current = captureDataOwnerScope();
+      return (
+        generation === hydrationGeneration &&
+        current.owner === owner &&
+        current.generation === scope.generation
+      );
+    };
+    if (!retainedProfile) {
+      set({
+        hydrated: false,
+        ownerKey: owner,
+        profile: null,
+        hydrateError: null,
+      });
+    }
     try {
       const db = getDb();
       let pending = parsePendingProfile(
         await getKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY),
       );
       let raw = await getKv(db, profileKeyForOwner(owner));
+      if (!isCurrent()) return;
       if (!raw && owner === GUEST_DATA_OWNER) {
         const legacy = await getKv(db, 'profile');
+        if (!isCurrent()) return;
         if (legacy) {
           await setKv(db, profileKeyForOwner(owner), legacy);
+          if (!isCurrent()) return;
           await setKv(db, 'profile', '');
           raw = legacy;
         }
       }
-      const apiSession = getApiSession();
+      if (!isCurrent()) return;
+      const candidateSession = getApiSession();
+      const apiSession =
+        candidateSession &&
+        canonicalDataOwner(candidateSession.canonicalAppUserId) === owner
+          ? candidateSession
+          : null;
       if (
         !raw &&
-        apiSession &&
-        canonicalDataOwner(apiSession.canonicalAppUserId) === owner
+        owner !== GUEST_DATA_OWNER &&
+        owner !== SIGNED_OUT_DATA_OWNER
       ) {
+        if (!apiSession) {
+          throw new Error(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
+        }
         let canonicalProfile: Profile | null;
         try {
           canonicalProfile = await fetchCanonicalOnboardingProfile(apiSession);
         } catch {
-          if (getActiveDataOwner() === owner) {
+          if (isCurrent()) {
             set({
               hydrated: true,
               ownerKey: owner,
-              profile: null,
-              hydrateError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+              profile: retainedProfile,
+              hydrateError: retainedProfile
+                ? null
+                : CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
             });
           }
           return;
         }
+        if (!isCurrent()) return;
         if (canonicalProfile) {
           raw = JSON.stringify(canonicalProfile);
           await setKv(db, profileKeyForOwner(owner), raw);
@@ -161,40 +200,52 @@ export const useAppStore = create<AppState>(set => ({
       if (
         pending &&
         owner !== SIGNED_OUT_DATA_OWNER &&
-        getActiveDataOwner() === owner
+        (owner === GUEST_DATA_OWNER || apiSession !== null) &&
+        isCurrent()
       ) {
         try {
-          const adopted =
-            apiSession &&
-            canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-              ? await saveCanonicalOnboardingProfile(apiSession, pending)
-              : pending;
-          raw = JSON.stringify(adopted);
-          await setKv(db, profileKeyForOwner(owner), raw);
+          const adopted = apiSession
+            ? await saveCanonicalOnboardingProfile(apiSession, pending)
+            : pending;
+          if (!isCurrent()) return;
+          const adoptedRaw = JSON.stringify(adopted);
+          await setKv(db, profileKeyForOwner(owner), adoptedRaw);
+          if (!isCurrent()) return;
           await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+          raw = adoptedRaw;
           pending = null;
         } catch {
           // Stash and existing profile both survive for the next attempt.
         }
       }
-      if (getActiveDataOwner() !== owner) return;
+      if (!isCurrent()) return;
+      const loadedProfile = raw ? (JSON.parse(raw) as Profile) : null;
       set({
-        profile: raw ? (JSON.parse(raw) as Profile) : null,
+        profile:
+          retainedProfile &&
+          JSON.stringify(retainedProfile) === JSON.stringify(loadedProfile)
+            ? retainedProfile
+            : loadedProfile,
         hydrated: true,
         ownerKey: owner,
         hydrateError: null,
-        lastShotType: 'forehand_drive',
-        onboardingBusy: false,
-        onboardingError: null,
+        ...(retainedProfile
+          ? {}
+          : {
+              lastShotType: 'forehand_drive',
+              onboardingBusy: false,
+              onboardingError: null,
+            }),
       });
     } catch (error) {
-      if (getActiveDataOwner() === owner) {
+      if (isCurrent()) {
         set({
           hydrated: true,
           ownerKey: owner,
-          profile: null,
-          hydrateError:
-            error instanceof Error
+          profile: retainedProfile,
+          hydrateError: retainedProfile
+            ? null
+            : error instanceof Error
               ? error.message
               : 'Your coaching profile could not be loaded.',
         });
@@ -203,20 +254,29 @@ export const useAppStore = create<AppState>(set => ({
   },
   completeOnboarding: async profile => {
     const owner = requireWritableDataOwner();
+    const scope = captureDataOwnerScope();
+    hydrationGeneration += 1;
     set({ onboardingBusy: true, onboardingError: null });
     try {
-      const apiSession = getApiSession();
-      const canonicalProfile =
-        apiSession &&
-        canonicalDataOwner(apiSession.canonicalAppUserId) === owner
-          ? await saveCanonicalOnboardingProfile(apiSession, profile)
-          : profile;
+      const candidateSession = getApiSession();
+      const apiSession =
+        candidateSession &&
+        canonicalDataOwner(candidateSession.canonicalAppUserId) === owner
+          ? candidateSession
+          : null;
+      if (owner !== GUEST_DATA_OWNER && !apiSession) {
+        throw new Error(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
+      }
+      const canonicalProfile = apiSession
+        ? await saveCanonicalOnboardingProfile(apiSession, profile)
+        : profile;
+      if (!isDataOwnerScopeActive(scope)) return;
       await setKv(
         getDb(),
         profileKeyForOwner(owner),
         JSON.stringify(canonicalProfile),
       );
-      if (getActiveDataOwner() === owner) {
+      if (isDataOwnerScopeActive(scope)) {
         set({
           profile: canonicalProfile,
           ownerKey: owner,
@@ -225,7 +285,7 @@ export const useAppStore = create<AppState>(set => ({
         });
       }
     } catch (error) {
-      if (getActiveDataOwner() === owner) {
+      if (isDataOwnerScopeActive(scope)) {
         set({
           onboardingBusy: false,
           onboardingError:

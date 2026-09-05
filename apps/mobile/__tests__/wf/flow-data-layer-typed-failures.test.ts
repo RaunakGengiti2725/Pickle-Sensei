@@ -125,6 +125,19 @@ function fakeDb() {
   const db: LocalDb = {
     async execute(sql: string, params: unknown[] = []) {
       log.push(sql);
+      if (sql.startsWith('SELECT value FROM kv WHERE key = ?')) {
+        const value = kv.get(String(params[0]));
+        return { rows: value === undefined ? [] : [{ value }] };
+      }
+      if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+        kv.set(String(params[0]), String(params[1]));
+        return { rows: [] };
+      }
+      if (
+        sql === 'SELECT uri, payload FROM local_capture WHERE owner_key = ?'
+      ) {
+        return { rows: [] };
+      }
       if (sql === 'BEGIN IMMEDIATE' || sql === 'COMMIT' || sql === 'ROLLBACK') {
         return { rows: [] };
       }
@@ -416,7 +429,7 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
     // Formerly a DEFECT pin (the failure was swallowed with nothing for the
     // UI to show); the store now records the outcome and ManageAccountScreen
     // alerts on `localPurge === 'failed'`.
-    const { db } = fakeDb();
+    const { db, kv } = fakeDb();
     let attempts = 0;
     const failing: LocalDb = {
       async execute(sql, params) {
@@ -432,11 +445,16 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
 
     await expect(
       useAuthStore.getState().completeAccountDeletion(),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ localPurge: 'failed' });
 
     // The account is signed out regardless — it no longer exists server-side…
     expect(useAuthStore.getState().session).toBeNull();
     expect(useAuthStore.getState().error).toBeNull();
+    expect(getApiSession()).toBeNull();
+    expect(getActiveDataOwner()).toBe(SIGNED_OUT_DATA_OWNER);
+    expect(kv.get('auth.logout-intent')).toBe(
+      JSON.stringify({ version: 1, guest: false }),
+    );
     // …the purge was given three chances…
     expect(attempts).toBe(3);
     // …and the fact that owner-scoped rows are still on disk is recorded.

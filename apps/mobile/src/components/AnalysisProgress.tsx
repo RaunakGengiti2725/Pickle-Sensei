@@ -134,11 +134,11 @@ export const ANALYSIS_STAGE_LABELS: Record<AnalysisStageKey, string> = {
   verifying: 'Verifying capture evidence',
   extracting: 'Reading player movement',
   measuring: 'Measuring your swing',
-  saving: 'Saving your result',
+  saving: 'Preparing your review',
 };
 
 /** Static, honest overall hint for the unmeasured stages. */
-export const ANALYSIS_DURATION_HINT = 'usually under ~10 seconds';
+export const ANALYSIS_DURATION_HINT = 'Time varies by clip and device.';
 
 /** One renderable snapshot of the progress surface. */
 export interface AnalysisProgressUi {
@@ -189,11 +189,13 @@ export function AnalysisProgressBar(props: {
   progress: number | null;
   label: string;
   sublabel?: string | null;
+  hideLabel?: boolean;
   dark?: boolean;
   testID?: string;
 }) {
   const reduced = useReducedMotion();
-  const determinate = props.progress !== null;
+  const determinate =
+    props.progress !== null && Number.isFinite(props.progress);
   const fraction = clamp01(props.progress ?? 0);
   const fill = useRef(new Animated.Value(fraction)).current;
   const pulse = useRef(new Animated.Value(1)).current;
@@ -256,7 +258,10 @@ export function AnalysisProgressBar(props: {
     <View
       style={styles.wrap}
       testID={props.testID ?? 'analysis-progress'}
+      accessible
       accessibilityRole="progressbar"
+      accessibilityState={{ busy: true }}
+      accessibilityLiveRegion="polite"
       accessibilityLabel={
         props.sublabel ? `${props.label}. ${props.sublabel}` : props.label
       }
@@ -266,30 +271,32 @@ export function AnalysisProgressBar(props: {
           : { min: 0, max: 100 }
       }
     >
-      <View style={styles.labelRow}>
-        <Text
-          style={[
-            type.caption,
-            styles.label,
-            { color: props.dark ? color.onDark : color.ink },
-          ]}
-          numberOfLines={1}
-        >
-          {props.label}
-        </Text>
-        {props.sublabel ? (
-          <Text
-            style={[
-              type.caption,
-              styles.sublabel,
-              { color: props.dark ? color.onDarkSubtle : color.inkSoft },
-            ]}
-            numberOfLines={1}
-          >
-            {props.sublabel}
-          </Text>
-        ) : null}
-      </View>
+      {!props.hideLabel || props.sublabel ? (
+        <View style={styles.labelRow}>
+          {!props.hideLabel ? (
+            <Text
+              style={[
+                type.caption,
+                styles.label,
+                { color: props.dark ? color.onDark : color.ink },
+              ]}
+            >
+              {props.label}
+            </Text>
+          ) : null}
+          {props.sublabel ? (
+            <Text
+              style={[
+                type.caption,
+                styles.sublabel,
+                { color: props.dark ? color.onDarkSubtle : color.inkSoft },
+              ]}
+            >
+              {props.sublabel}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <View style={[styles.track, { backgroundColor: trackColor }]}>
         <Animated.View
           testID="analysis-progress-fill"
@@ -312,13 +319,11 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   labelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: space.sm,
+    alignItems: 'center',
+    gap: space.xs,
   },
-  label: { flexShrink: 1 },
-  sublabel: { fontVariant: ['tabular-nums'] },
+  label: { textAlign: 'center' },
+  sublabel: { textAlign: 'center', fontVariant: ['tabular-nums'] },
   track: {
     height: 6,
     borderRadius: radius.pill,

@@ -45,11 +45,11 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockAccess: {
-  canonicalAccess: { canStartRating: boolean } | null;
+  canonicalAccess: { canStartRating: boolean; paywallRequired: boolean } | null;
   status: 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
   initialize: jest.Mock<Promise<void>, []>;
 } = {
-  canonicalAccess: { canStartRating: true },
+  canonicalAccess: { canStartRating: true, paywallRequired: false },
   status: 'ready',
   initialize: jest.fn(async () => undefined),
 };
@@ -57,18 +57,10 @@ const mockAuth: { session: { localOnly: boolean } | null } = {
   session: { localOnly: false },
 };
 jest.mock('../../src/state/accessStore', () => ({
-  useAccessStore: {
-    getState: () => ({
-      canonicalAccess: mockAccess.canonicalAccess,
-      status: mockAccess.status,
-      initialize: mockAccess.initialize,
-    }),
-  },
+  useAccessStore: { getState: () => mockAccess },
 }));
 jest.mock('../../src/auth/authStore', () => ({
-  useAuthStore: {
-    getState: () => ({ session: mockAuth.session }),
-  },
+  useAuthStore: { getState: () => mockAuth },
 }));
 
 import React from 'react';
@@ -148,7 +140,10 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
-    mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.canonicalAccess = {
+      canStartRating: true,
+      paywallRequired: false,
+    };
     mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => undefined);
     mockAuth.session = { localOnly: false };
@@ -256,7 +251,10 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
   });
 
   it('gated: no free ratings left → Paywall {source: rating} instead of the camera', async () => {
-    mockAccess.canonicalAccess = { canStartRating: false };
+    mockAccess.canonicalAccess = {
+      canStartRating: false,
+      paywallRequired: true,
+    };
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Import Video');
@@ -280,7 +278,7 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     act(() => renderer.unmount());
   });
 
-  it('unknown access → Analyze gate (which resolves it) without awaiting; a failed check still resolves to the Paywall', async () => {
+  it('unknown and failed access both reach the Analyze gate without awaiting or upselling, with the requested source intact', async () => {
     // The bar never awaits initialize(): an unchecked ('idle') account is
     // handed to the Analyze route whose gate shows "Checking access…".
     mockAccess.canonicalAccess = null;
@@ -291,13 +289,18 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     await flushCloseAnimation();
     await act(async () => {});
     expect(mockAccess.initialize).not.toHaveBeenCalled();
+    expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
     });
+    expect(mockRootNavigate).not.toHaveBeenCalledWith(
+      'Paywall',
+      expect.anything(),
+    );
     act(() => renderer.unmount());
 
     // Backend unreachable: access stays null with status 'error' → honest
-    // Paywall route, never a hang and never the blank Add screen.
+    // Retry/Cancel gate, never a purchase offer or the blank Add screen.
     mockRootNavigate.mockClear();
     mockAccess.canonicalAccess = null;
     mockAccess.status = 'error';
@@ -306,10 +309,16 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     await pressByLabel(second, 'Import Video');
     await flushCloseAnimation();
     await act(async () => {});
+    expect(mockAccess.initialize).not.toHaveBeenCalled();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
-    expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
-      source: 'rating',
+    expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      source: 'library',
     });
+    expect(mockRootNavigate).not.toHaveBeenCalledWith(
+      'Paywall',
+      expect.anything(),
+    );
+    expect(menuVisible(second)).toBe(false);
     act(() => second.unmount());
   });
 

@@ -7,7 +7,13 @@ import {
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
-import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
+import {
+  assertDataOwnerScope,
+  getActiveDataOwner,
+  invalidateDataOwnerScope,
+  requireWritableDataOwner,
+  type DataOwnerScope,
+} from './accountScope';
 import { OUTBOX_MAX_ATTEMPTS } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
@@ -73,22 +79,94 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
+const transactionOwners = new WeakMap<LocalDb, DataOwnerScope>();
+let transactionTail: Promise<void> = Promise.resolve();
+
+function writableDataOwner(db: LocalDb): string {
+  const scope = transactionOwners.get(db);
+  if (!scope) return requireWritableDataOwner();
+  assertDataOwnerScope(scope);
+  return scope.owner;
+}
+
 async function inTransaction(
   db: LocalDb,
-  operation: () => Promise<void>,
+  operation: (transactionDb: LocalDb) => Promise<void>,
+  scope?: DataOwnerScope,
 ): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
+  const inheritedScope = transactionOwners.get(db);
+  if (inheritedScope) {
+    assertDataOwnerScope(inheritedScope);
+    await operation(db);
+    assertDataOwnerScope(inheritedScope);
+    return;
   }
+  const run = async (transactionDb: LocalDb) => {
+    if (scope) assertDataOwnerScope(scope);
+    await transactionDb.execute('BEGIN IMMEDIATE');
+    try {
+      await operation(transactionDb);
+      if (scope) assertDataOwnerScope(scope);
+      await transactionDb.execute('COMMIT');
+    } catch (error) {
+      try {
+        await transactionDb.execute('ROLLBACK');
+      } catch {
+        try {
+          transactionDb.close();
+        } catch {
+          // Preserve the original persistence error.
+        }
+      }
+      throw error;
+    }
+  };
+  if (db.withExclusive) {
+    await db.withExclusive(run);
+    return;
+  }
+  const previous = transactionTail;
+  let release!: () => void;
+  transactionTail = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    await run(db);
+  } finally {
+    release();
+  }
+}
+
+export async function withOwnerTransaction(
+  db: LocalDb,
+  scope: DataOwnerScope,
+  operation: (ownedDb: LocalDb) => Promise<void>,
+): Promise<void> {
+  assertDataOwnerScope(scope);
+  await inTransaction(
+    db,
+    async transactionDb => {
+      const ownedDb: LocalDb = {
+        async execute(sql, params = []) {
+          assertDataOwnerScope(scope);
+          const result = await transactionDb.execute(sql, params);
+          assertDataOwnerScope(scope);
+          return result;
+        },
+        close: () => transactionDb.close(),
+      };
+      transactionOwners.set(ownedDb, scope);
+      try {
+        assertDataOwnerScope(scope);
+        await operation(ownedDb);
+        assertDataOwnerScope(scope);
+      } finally {
+        transactionOwners.delete(ownedDb);
+      }
+    },
+    scope,
+  );
 }
 
 /** Every owner-partitioned local table. Kept in one place so account
@@ -128,7 +206,8 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  invalidateDataOwnerScope(owner);
+  await inTransaction(db, async db => {
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -153,8 +232,8 @@ export async function saveAnalysis(
       'A server-reserved analysis permit is required before persisting a rating.',
     );
   }
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writableDataOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -197,7 +276,7 @@ export async function saveLocalOnlyAnalysis(
       'Scored analyses must be persisted with their analysis permit via saveAnalysis.',
     );
   }
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `INSERT OR REPLACE INTO local_shot
      (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -437,7 +516,7 @@ export async function savePendingCapture(
   clip: CapturedClip,
   declaredStroke: ShotTypeSlug | null = null,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `INSERT INTO local_capture
       (owner_key, id, uri, shot_type, declared_stroke, captured_at, duration_ms, fps, width, height, status, payload)
@@ -481,7 +560,7 @@ export async function saveAnalysisRecord(
   db: LocalDb,
   record: AnalysisRecord,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `INSERT INTO local_analysis_record
       (owner_key, id, capture_id, created_at, engine_version, scoring_model_version, record)
@@ -530,7 +609,7 @@ export async function setDeclaredStroke(
   captureId: string,
   declaredStroke: ShotTypeSlug,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `UPDATE local_capture SET declared_stroke = ?
      WHERE owner_key = ? AND id = ?`,
@@ -571,7 +650,7 @@ export async function setCaptureTargetSeed(
   captureId: string,
   seed: CaptureTargetSeed,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `UPDATE local_capture SET target_seed = ?
      WHERE owner_key = ? AND id = ?`,
@@ -593,7 +672,7 @@ export async function updateCaptureClipPayload(
   captureId: string,
   clip: CapturedClip,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `UPDATE local_capture SET payload = ?
      WHERE owner_key = ? AND id = ?`,
@@ -626,7 +705,7 @@ export async function markCaptureAnalyzed(
   db: LocalDb,
   captureId: string,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writableDataOwner(db);
   await db.execute(
     `UPDATE local_capture SET status = 'analyzed'
      WHERE owner_key = ? AND id = ?`,
@@ -745,8 +824,8 @@ export async function saveSession(
     startedAt: string;
   },
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writableDataOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
@@ -773,8 +852,8 @@ export async function finishSession(
   id: string,
   summary: Record<string, unknown>,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writableDataOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?

@@ -284,7 +284,7 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     return renderer;
   }
 
-  it('offline → "Nothing was deleted" copy, sheet returns to review, buttons re-enabled, exit still available', async () => {
+  it('offline → unconfirmed outcome copy, sheet returns to review, buttons re-enabled, exit still available', async () => {
     globalThis.fetch = offlineFetch as unknown as typeof fetch;
     const renderer = await openDeleteSheet();
     await act(async () => {
@@ -293,7 +293,7 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     await flush();
     const copy = allText(renderer);
     expect(copy).toContain(
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      'Account deletion could not be confirmed. Check your connection and try again.',
     );
     expect(buttonLabelled(renderer, 'Continue to delete').props.disabled).toBe(
       false,
@@ -483,17 +483,15 @@ describe('PaywallScreen — membership server unreachable', () => {
       renderer = TestRenderer.create(<PaywallScreen onClose={onClose} />);
     });
     await flush();
-    await act(async () => {
-      pressableByTestId(renderer, 'paywall-see-plans').props.onPress();
-    });
-    await flush();
-
     expect(allText(renderer)).toContain(
       'Membership verification is temporarily unavailable.',
     );
-    expect(pressableByTestId(renderer, 'paywall-continue').props.disabled).toBe(
-      true,
-    );
+    expect(
+      renderer.root.findAll(n => n.props.testID === 'paywall-continue'),
+    ).toHaveLength(0);
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(deps.backend.syncBilling).not.toHaveBeenCalled();
     const retry = pressableByTestId(renderer, 'paywall-retry');
     expect(retry.props.accessibilityLabel).toBe('Retry loading membership');
 
@@ -503,6 +501,15 @@ describe('PaywallScreen — membership server unreachable', () => {
     });
     await flush();
     expect(deps.backend.getAccess).toHaveBeenCalledTimes(2);
+    expect(allText(renderer)).not.toContain(
+      'Membership verification is temporarily unavailable.',
+    );
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+    await act(async () => {
+      pressableByTestId(renderer, 'paywall-see-plans').props.onPress();
+    });
     expect(pressableByTestId(renderer, 'paywall-continue').props.disabled).toBe(
       false,
     );

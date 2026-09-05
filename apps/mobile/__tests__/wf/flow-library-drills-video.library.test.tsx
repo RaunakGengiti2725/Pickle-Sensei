@@ -52,9 +52,10 @@ const authState: { session: { localOnly: boolean } | null } = {
   session: { localOnly: false },
 };
 jest.mock('../../src/auth/authStore', () => ({
-  useAuthStore: (
-    selector: (state: { session: { localOnly: boolean } | null }) => unknown,
-  ) => selector(authState),
+  useAuthStore: Object.assign(
+    (selector: (state: typeof authState) => unknown) => selector(authState),
+    { getState: () => authState },
+  ),
 }));
 
 import {
@@ -322,11 +323,18 @@ describe('Library flow · Reads tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failing local read never strands the spinner: it falls to the empty state', async () => {
-    mockListShots.mockRejectedValue(new Error('sqlite closed'));
+  it('a failing local read shows a retryable error instead of pretending the library is empty', async () => {
+    mockListShots.mockRejectedValueOnce(new Error('sqlite closed'));
     const renderer = await renderLibrary();
     expect(allText(renderer)).not.toContain('Opening your library…');
-    expect(allText(renderer)).toContain('Your measured reads, in one place.');
+    expect(allText(renderer)).toContain('Your library couldn’t load');
+    expect(allText(renderer)).not.toContain(
+      'Your measured reads, in one place.',
+    );
+    mockListShots.mockResolvedValueOnce([readRow]);
+    await pressByLabel(renderer, 'Try again');
+    expect(allText(renderer)).toContain('1 analyzed read · 0 pending clips');
+    expect(allText(renderer)).not.toContain('Your library couldn’t load');
     act(() => renderer.unmount());
   });
 
@@ -691,7 +699,7 @@ describe('Library flow · Saved drills tab', () => {
     expect(text).toContain('CURRENT PLAN');
     expect(text).toContain('0/1 DONE');
     expect(text).toContain('third shot drop');
-    await pressByLabel(renderer, 'Open your current personalized plan');
+    await pressByLabel(renderer, 'Review source analysis');
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: 'shot-0001',
     });

@@ -680,7 +680,7 @@ describe('Delete account sheet — step 1 request', () => {
     act(() => renderer.unmount());
   });
 
-  it('offline: shows the offline copy, returns to step 1, and lets the user retry', async () => {
+  it('offline: shows unconfirmed copy, returns to step 1, and lets the user retry', async () => {
     const { calls } = scriptFetch([
       async () => {
         throw new TypeError('Network request failed');
@@ -692,7 +692,7 @@ describe('Delete account sheet — step 1 request', () => {
     await pressContinue(renderer);
 
     expect(allText(renderer)).toContain(
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      'Account deletion could not be confirmed. Check your connection and try again.',
     );
     expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     const cont = sheetButton(renderer, 'Continue to delete');
@@ -701,7 +701,9 @@ describe('Delete account sheet — step 1 request', () => {
 
     await pressContinue(renderer);
     expect(calls).toHaveLength(2);
-    expect(allText(renderer)).not.toContain('temporarily offline');
+    expect(allText(renderer)).not.toContain(
+      'Account deletion could not be confirmed.',
+    );
     expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
     act(() => renderer.unmount());
   });
@@ -740,13 +742,13 @@ describe('Delete account sheet — step 1 request', () => {
     act(() => renderer.unmount());
   });
 
-  it('503 with a non-JSON body: generic "nothing was deleted" copy', async () => {
+  it('503 with a non-JSON body: generic unconfirmed copy', async () => {
     scriptFetch([async () => textResponse(503, 'Service Unavailable')]);
     const renderer = render(<ManageAccountScreen />);
     await openSheet(renderer);
     await pressContinue(renderer);
     expect(allText(renderer)).toContain(
-      'The deletion request could not be completed. Nothing was deleted.',
+      'Account deletion could not be confirmed. Check your connection and try again.',
     );
     expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
       false,
@@ -852,6 +854,75 @@ describe('Delete account sheet — step 2 confirm', () => {
     ).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
+
+  it.each(['lost response', 'non-JSON gateway error'])(
+    '%s after server deletion stays unconfirmed and retryable without local purge',
+    async failure => {
+      useCountdownTimers();
+      const serverAccounts = new Set([OWNER]);
+      const { calls } = scriptFetch([
+        ...armedResponders(),
+        async () => {
+          serverAccounts.delete(OWNER);
+          if (failure === 'lost response') {
+            throw new TypeError('Network request failed after deletion');
+          }
+          return textResponse(503, 'Service Unavailable');
+        },
+        async () => jsonResponse(401, { error: { message: 'unauthorized' } }),
+      ]);
+      const renderer = render(<ManageAccountScreen />);
+      try {
+        const confirm = await armAndWait(renderer);
+        await act(async () => {
+          confirm.props.onPress();
+        });
+
+        expect(serverAccounts.has(OWNER)).toBe(false);
+        expect(calls).toHaveLength(2);
+        expect(calls[1]!.url).toBe(`${API_BASE}/v1/me/delete-confirm`);
+        expect(JSON.parse(String(calls[1]!.init?.body))).toEqual({
+          challenge: '33333333-3333-4333-8333-333333333333',
+        });
+        expect(
+          useAuthStore.getState().completeAccountDeletion,
+        ).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().session).toEqual(syncedSession);
+        expect(sheetVisible(renderer)).toBe(true);
+        expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
+        const retry = sheetButton(renderer, 'Permanently delete');
+        expect(retry.props.label).toBe('Permanently delete');
+        expect(retry.props.disabled).toBe(false);
+        expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(
+          false,
+        );
+        expect(allText(renderer)).toContain(
+          'Account deletion could not be confirmed. Check your connection and try again.',
+        );
+        expect(allText(renderer)).not.toContain('Nothing was deleted');
+
+        await act(async () => {
+          retry.props.onPress();
+        });
+        expect(calls).toHaveLength(3);
+        expect(calls[2]!.url).toBe(calls[1]!.url);
+        expect(calls[2]!.init?.body).toBe(calls[1]!.init?.body);
+        expect(allText(renderer)).toContain(
+          'Your sign-in has expired. Sign in again, then delete your account.',
+        );
+        expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
+          false,
+        );
+        expect(
+          useAuthStore.getState().completeAccountDeletion,
+        ).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().session).toEqual(syncedSession);
+        expect(sheetVisible(renderer)).toBe(true);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
 
   it('server 403 (challenge expired): shows the server copy, nothing purged, user can still back out', async () => {
     useCountdownTimers();

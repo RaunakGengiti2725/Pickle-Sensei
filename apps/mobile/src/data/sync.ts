@@ -1,7 +1,12 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from './db';
 import { ApiError } from './api';
-import { getActiveDataOwner } from './accountScope';
+import {
+  assertDataOwnerScope,
+  captureDataOwnerScope,
+  SIGNED_OUT_DATA_OWNER,
+  type DataOwnerScope,
+} from './accountScope';
 
 /**
  * Outbox sync engine (directive §32): durable queue drained on reconnect.
@@ -109,38 +114,90 @@ export function isTransientSyncRejection(code: string): boolean {
   return TRANSIENT_SYNC_REJECTION_CODES.has(code);
 }
 
+async function inSyncTransaction(
+  db: LocalDb,
+  scope: DataOwnerScope,
+  operation: (transactionDb: LocalDb) => Promise<void>,
+): Promise<void> {
+  assertDataOwnerScope(scope);
+  const run = async (transactionDb: LocalDb) => {
+    assertDataOwnerScope(scope);
+    await transactionDb.execute('BEGIN IMMEDIATE');
+    try {
+      assertDataOwnerScope(scope);
+      await operation(transactionDb);
+      assertDataOwnerScope(scope);
+      await transactionDb.execute('COMMIT');
+    } catch (error) {
+      try {
+        await transactionDb.execute('ROLLBACK');
+      } catch {
+        try {
+          transactionDb.close();
+        } catch {
+          // Preserve the receipt/delete failure.
+        }
+      }
+      throw error;
+    }
+  };
+  if (db.withExclusive) await db.withExclusive(run);
+  else await run(db);
+}
+
 async function recordRowFailure(
   db: LocalDb,
-  owner: string,
+  scope: DataOwnerScope,
   rowId: unknown,
   error: unknown,
   permanent: boolean,
 ): Promise<void> {
-  if (permanent) {
-    await db.execute(
-      `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-       WHERE owner_key = ? AND id = ?`,
-      [String(error), owner, rowId],
-    );
-  } else {
-    await db.execute(
-      `UPDATE outbox SET last_error = ?
-       WHERE owner_key = ? AND id = ?`,
-      [String(error), owner, rowId],
-    );
-  }
+  await inSyncTransaction(db, scope, async db => {
+    if (permanent) {
+      await db.execute(
+        `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+         WHERE owner_key = ? AND id = ?`,
+        [String(error), scope.owner, rowId],
+      );
+    } else {
+      await db.execute(
+        `UPDATE outbox SET last_error = ?
+         WHERE owner_key = ? AND id = ?`,
+        [String(error), scope.owner, rowId],
+      );
+    }
+  });
+}
+
+async function deleteOutboxRow(
+  db: LocalDb,
+  scope: DataOwnerScope,
+  rowId: unknown,
+): Promise<void> {
+  await inSyncTransaction(db, scope, async db => {
+    await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
+      scope.owner,
+      rowId,
+    ]);
+  });
 }
 
 export async function drainOutbox(
   db: LocalDb,
   transport: SyncTransport,
 ): Promise<{ synced: number; failed: number; remaining: number }> {
-  const owner = getActiveDataOwner();
+  const scope = captureDataOwnerScope();
+  if (scope.owner === SIGNED_OUT_DATA_OWNER) {
+    return { synced: 0, failed: 0, remaining: 0 };
+  }
+  assertDataOwnerScope(scope);
+  const owner = scope.owner;
   const { rows } = await db.execute(
     `SELECT id, kind, payload, attempts FROM outbox
      WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
     [owner, OUTBOX_MAX_ATTEMPTS],
   );
+  assertDataOwnerScope(scope);
   let synced = 0;
   let failed = 0;
 
@@ -159,23 +216,23 @@ export async function drainOutbox(
         throw new Error(`unknown outbox kind ${String(r['kind'])}`);
       }
     } catch (error) {
-      await recordRowFailure(db, owner, r['id'], error, true);
+      await recordRowFailure(db, scope, r['id'], error, true);
       failed++;
       continue;
     }
     try {
+      assertDataOwnerScope(scope);
       if (r['kind'] === 'session.create')
         await transport.createSession(payload);
       else await transport.finalizeSession(String(payload['id']));
-      await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
-        owner,
-        r['id'],
-      ]);
+      assertDataOwnerScope(scope);
+      await deleteOutboxRow(db, scope, r['id']);
       synced++;
     } catch (error) {
+      assertDataOwnerScope(scope);
       await recordRowFailure(
         db,
-        owner,
+        scope,
         r['id'],
         error,
         isPermanentSyncFailure(error),
@@ -206,48 +263,42 @@ export async function drainOutbox(
         payload: toSyncPayload(analysis, analysis.analysisPermitId),
       });
     } catch (error) {
-      await recordRowFailure(db, owner, r['id'], error, true);
+      await recordRowFailure(db, scope, r['id'], error, true);
       failed++;
     }
   }
   if (entries.length > 0) {
     try {
+      assertDataOwnerScope(scope);
       const response = await transport.syncShots(
         entries.map(entry => entry.payload),
       );
+      assertDataOwnerScope(scope);
       const accepted = new Set(response.acceptedIds);
       const rejected = new Map(
         response.rejected.map(item => [item.id, item] as const),
       );
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
-          await db.execute('BEGIN IMMEDIATE');
-          try {
+          await inSyncTransaction(db, scope, async db => {
             await db.execute(
               `INSERT OR REPLACE INTO sync_receipt
                (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
               [owner, entry.shotId],
             );
+            assertDataOwnerScope(scope);
             await db.execute(
               `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
               [owner, entry.row['id']],
             );
-            await db.execute('COMMIT');
-          } catch (error) {
-            try {
-              await db.execute('ROLLBACK');
-            } catch {
-              // Preserve the receipt/delete failure.
-            }
-            throw error;
-          }
+          });
           synced++;
           continue;
         }
         const rejection = rejected.get(entry.shotId);
         await recordRowFailure(
           db,
-          owner,
+          scope,
           entry.row['id'],
           rejection
             ? `${rejection.code}: ${rejection.message}`
@@ -257,9 +308,10 @@ export async function drainOutbox(
         failed++;
       }
     } catch (error) {
+      assertDataOwnerScope(scope);
       const permanent = isPermanentSyncFailure(error);
       for (const entry of entries) {
-        await recordRowFailure(db, owner, entry.row['id'], error, permanent);
+        await recordRowFailure(db, scope, entry.row['id'], error, permanent);
         failed++;
       }
     }
@@ -279,34 +331,33 @@ export async function drainOutbox(
         }
         entries.push({ row: r, trial: { ...trial, trialId: trial.trialId } });
       } catch (error) {
-        await recordRowFailure(db, owner, r['id'], error, true);
+        await recordRowFailure(db, scope, r['id'], error, true);
         failed++;
       }
     }
     try {
+      assertDataOwnerScope(scope);
       const response =
         entries.length > 0
           ? await transport.uploadEvaluationTrials(
               entries.map(entry => entry.trial),
             )
           : { acceptedTrialIds: [], rejected: [] };
+      assertDataOwnerScope(scope);
       const accepted = new Set(response.acceptedTrialIds);
       const rejected = new Map(
         response.rejected.map(item => [item.trialId, item] as const),
       );
       for (const entry of entries) {
         if (accepted.has(entry.trial.trialId)) {
-          await db.execute(
-            `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
-            [owner, entry.row['id']],
-          );
+          await deleteOutboxRow(db, scope, entry.row['id']);
           synced++;
           continue;
         }
         const rejection = rejected.get(entry.trial.trialId);
         await recordRowFailure(
           db,
-          owner,
+          scope,
           entry.row['id'],
           rejection
             ? `${rejection.code}: ${rejection.message}`
@@ -316,17 +367,20 @@ export async function drainOutbox(
         failed++;
       }
     } catch (error) {
+      assertDataOwnerScope(scope);
       const permanent = isPermanentSyncFailure(error);
       for (const entry of entries) {
-        await recordRowFailure(db, owner, entry.row['id'], error, permanent);
+        await recordRowFailure(db, scope, entry.row['id'], error, permanent);
         failed++;
       }
     }
   }
 
+  assertDataOwnerScope(scope);
   const { rows: left } = await db.execute(
     `SELECT count(*) AS n FROM outbox WHERE owner_key = ?`,
     [owner],
   );
+  assertDataOwnerScope(scope);
   return { synced, failed, remaining: Number(left[0]?.['n'] ?? 0) };
 }

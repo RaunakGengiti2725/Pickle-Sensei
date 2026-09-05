@@ -216,9 +216,26 @@ describe('evaluation.trial outbox sync', () => {
       last_error: string | null;
     }
     const outbox: OutboxRow[] = [];
+    let snapshot: OutboxRow[] | null = null;
     let nextId = 1;
     const db: LocalDb = {
       async execute(sql: string, params: unknown[] = []) {
+        if (sql === 'BEGIN IMMEDIATE') {
+          if (snapshot) throw new Error('nested transaction');
+          snapshot = outbox.map(row => ({ ...row }));
+          return { rows: [] };
+        }
+        if (sql === 'COMMIT') {
+          if (!snapshot) throw new Error('commit without transaction');
+          snapshot = null;
+          return { rows: [] };
+        }
+        if (sql === 'ROLLBACK') {
+          if (!snapshot) throw new Error('rollback without transaction');
+          outbox.splice(0, outbox.length, ...snapshot);
+          snapshot = null;
+          return { rows: [] };
+        }
         if (sql.includes('INSERT INTO outbox')) {
           outbox.push({
             id: nextId++,

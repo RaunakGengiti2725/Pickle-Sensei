@@ -67,11 +67,21 @@ jest.mock('../../src/data/db', () => ({
   }),
 }));
 
-jest.mock('../../src/auth/authStore', () => ({
-  useAuthStore: (
-    selector: (state: { session: { localOnly: boolean } }) => unknown,
-  ) => selector({ session: { localOnly: true } }),
-}));
+jest.mock('../../src/auth/authStore', () => {
+  const { create } = require('zustand');
+  return {
+    useAuthStore: create(() => ({
+      session: {
+        provider: 'guest',
+        subject: 'local-only',
+        canonicalAppUserId: null,
+        localOnly: true,
+        displayName: null,
+        email: null,
+      },
+    })),
+  };
+});
 
 const mockShowBrandNotice = jest.fn();
 jest.mock('../../src/design/BrandNotice', () => ({

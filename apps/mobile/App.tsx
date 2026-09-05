@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StatusBar, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,6 +11,7 @@ import { ErrorState, LoadingState } from './src/design/components';
 import { color } from './src/design/tokens';
 import { useAppStore } from './src/state/appStore';
 import { useAuthStore } from './src/auth/authStore';
+import { useApiSessionStore } from './src/account/apiSession';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -123,6 +124,26 @@ function Gate() {
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
   const hydrateAuth = useAuthStore(s => s.hydrate);
+  const authErrorCode = useAuthStore(s => s.error?.code);
+  const clearAuthError = useAuthStore(s => s.clearError);
+  const authRetryInFlight = useRef(false);
+  const [authRetryState, setAuthRetryState] = useState<
+    'idle' | 'pending' | 'failed'
+  >('idle');
+  const retryAuth = useCallback(async () => {
+    if (authRetryInFlight.current) return;
+    authRetryInFlight.current = true;
+    setAuthRetryState('pending');
+    try {
+      clearAuthError();
+      await hydrateAuth();
+      setAuthRetryState('idle');
+    } catch {
+      setAuthRetryState('failed');
+    } finally {
+      authRetryInFlight.current = false;
+    }
+  }, [clearAuthError, hydrateAuth]);
   const [preAuthStage, setPreAuthStage] = useState<PreAuthStage>('welcome');
   const [splashDone, setSplashDone] = useState(false);
   const handleSplashFinished = useCallback(() => setSplashDone(true), []);
@@ -131,6 +152,10 @@ function Gate() {
     void hydrateAuth();
   }, [hydrateAuth]);
 
+  useEffect(() => {
+    if (session && authRetryState === 'failed') setAuthRetryState('idle');
+  }, [session, authRetryState]);
+
   const desiredOwner = !authHydrated
     ? null
     : session?.provider === 'guest'
@@ -138,11 +163,15 @@ function Gate() {
       : session?.canonicalAppUserId
         ? canonicalDataOwner(session.canonicalAppUserId)
         : SIGNED_OUT_DATA_OWNER;
+  const apiOwner = useApiSessionStore(s =>
+    s.session ? canonicalDataOwner(s.session.canonicalAppUserId) : null,
+  );
+  const matchingApiOwner = apiOwner === desiredOwner ? apiOwner : null;
 
   useEffect(() => {
     if (!desiredOwner) return;
-    void hydrateApp();
-  }, [desiredOwner, hydrateApp]);
+    void hydrateApp({ preserveCurrentProfile: true });
+  }, [desiredOwner, matchingApiOwner, hydrateApp]);
 
   // Stamp stability events with the pseudonymous data-owner key (never an
   // email or device id) once it is known; the session key stays the run's.
@@ -172,6 +201,7 @@ function Gate() {
   useConsistencyBootstrap(desiredOwner);
 
   const ready =
+    authRetryState !== 'pending' &&
     authHydrated &&
     Boolean(desiredOwner) &&
     appHydrated &&
@@ -197,7 +227,23 @@ function Gate() {
   const content = !ready ? (
     <LoadingState
       dark
-      label={session ? 'Loading your account' : 'Getting things ready'}
+      label={
+        authRetryState === 'pending'
+          ? 'Checking secure sign-in'
+          : session
+            ? 'Loading your account'
+            : 'Getting things ready'
+      }
+    />
+  ) : !session &&
+    (authErrorCode === 'auth.persistence_failed' ||
+      authRetryState === 'failed') ? (
+    <ErrorState
+      dark
+      title="Secure sign-in is unavailable"
+      detail="Pickle Sensei couldn’t access secure sign-in storage on this device. Try again to check your saved sign-in."
+      retryLabel="Retry"
+      onRetry={() => void retryAuth()}
     />
   ) : !session ? (
     preAuthStage === 'signin' ? (

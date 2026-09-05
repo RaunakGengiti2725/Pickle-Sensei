@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useNavigation,
@@ -8,11 +14,13 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ShotAnalysis } from '@pickle/shared-types';
-import { Button, ErrorState, ScreenHeader } from '../design/components';
+import { Button, ErrorState, PressableScale } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
 import type { RootStackParams } from '../navigation/params';
 import {
+  ACCESSIBLE_ANALYSIS_FONT_SCALE,
+  AnalysisScreenHeader,
   StrokeResultAnalyzing,
   type StrokeResultClip,
 } from '../components/StrokeResult';
@@ -39,8 +47,9 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * re-analyze / back CTAs; the Result guide renders the same player inline.
  *
  * Layout: header, then the player in FILL mode taking every point between
- * the header and the pinned CTAs — every control is on the video, so the
- * page never needs to scroll.
+ * the header and the pinned CTAs — every control stays below the video. The
+ * normal phone layout never needs to scroll; at large Dynamic Type only the
+ * picture, full cue and disclosure scroll, never the transport or CTAs.
  *
  * Honesty contract: everything shown traces to the analysis record and the
  * hash-verified pose sidecar. A missing clip shows the pose alone; a missing
@@ -107,7 +116,7 @@ export function FormReviewScreen() {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="light-content" />
-        <ScreenHeader
+        <AnalysisScreenHeader
           title="Form review"
           dark
           onClose={() => navigation.goBack()}
@@ -166,6 +175,18 @@ function FormReviewBody(props: {
   onClose: () => void;
   onReanalyze: () => void;
 }) {
+  const { height, fontScale } = useWindowDimensions();
+  const accessibleLayout = fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
+  const compactActions = accessibleLayout && height < 760;
+  const disclosure = (
+    <Text
+      style={[type.caption, styles.disclosure]}
+      testID="form-review-disclosure"
+    >
+      Video and pose stay on this device. Analysis results sync with your
+      account.
+    </Text>
+  );
   return (
     <SafeAreaView
       edges={['top', 'bottom']}
@@ -173,9 +194,9 @@ function FormReviewBody(props: {
       testID="form-review-screen"
     >
       <StatusBar barStyle="light-content" />
-      <ScreenHeader title="Form review" dark onClose={props.onClose} />
-      {/* The player fills everything between the header and the CTAs; its
-          controls live on the video, so nothing here scrolls. */}
+      <AnalysisScreenHeader title="Form review" dark onClose={props.onClose} />
+      {/* The player fills everything between the header and the CTAs. Its
+          controls stay below the video; only its accessible content can scroll. */}
       <View style={styles.body}>
         <FormReviewPlayer
           analysis={props.analysis}
@@ -185,6 +206,7 @@ function FormReviewBody(props: {
           script={props.script}
           initialStop={props.initialStop ?? null}
           fill
+          contentFooter={accessibleLayout ? disclosure : undefined}
         />
       </View>
 
@@ -197,16 +219,26 @@ function FormReviewBody(props: {
           onPress={props.onReanalyze}
           testID="form-review-reanalyze"
         />
-        <Button
-          label="Back to results"
-          variant="dark"
-          onPress={props.onClose}
-          testID="form-review-back"
-        />
-        <Text style={[type.caption, styles.disclosure]}>
-          Replay, pose and scoring stay on this device — the clip is never
-          uploaded.
-        </Text>
+        {compactActions ? (
+          <PressableScale
+            accessibilityLabel="Back to results"
+            onPress={props.onClose}
+            style={styles.backLink}
+            testID="form-review-back"
+          >
+            <Text style={[type.bodyBold, styles.backLinkText]}>
+              Back to results
+            </Text>
+          </PressableScale>
+        ) : (
+          <Button
+            label="Back to results"
+            variant="dark"
+            onPress={props.onClose}
+            testID="form-review-back"
+          />
+        )}
+        {!accessibleLayout ? disclosure : null}
       </View>
     </SafeAreaView>
   );
@@ -214,13 +246,16 @@ function FormReviewBody(props: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
-  body: { flex: 1, paddingHorizontal: space.lg },
+  body: { flex: 1, minHeight: 0, paddingHorizontal: space.lg },
   footer: {
+    flexShrink: 0,
     gap: 10,
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
+  backLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  backLinkText: { color: color.onDarkMuted, textAlign: 'center' },
   disclosure: {
     color: color.onDarkFaint,
     marginTop: space.xs,

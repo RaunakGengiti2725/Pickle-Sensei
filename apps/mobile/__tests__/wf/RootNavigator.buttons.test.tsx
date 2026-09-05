@@ -57,9 +57,16 @@ jest.mock('react-native-svg', () => {
 // Inert navigator doubles: Navigator renders its children, Screen renders
 // nothing but keeps name/component/options readable through the test tree.
 // Both factories return singletons so the test can look the elements up.
+const mockAnalyzeMounted = jest.fn();
+const mockScreenNavigation = {
+  navigate: jest.fn(),
+  goBack: jest.fn(),
+  replace: jest.fn(),
+};
 jest.mock('@react-navigation/native', () => {
   const React = require('react');
   const { View } = require('react-native');
+  const routeContext = React.createContext({ params: undefined });
   const navigationRef = {
     isReady: jest.fn(() => true),
     navigate: jest.fn(),
@@ -74,8 +81,11 @@ jest.mock('@react-navigation/native', () => {
         props.children,
       ),
     createNavigationContainerRef: () => navigationRef,
-    useNavigation: () => {
-      throw new Error('useNavigation must not be reached by this ledger');
+    useNavigation: () => mockScreenNavigation,
+    __RouteContext: routeContext,
+    useRoute: () => React.useContext(routeContext),
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      React.useEffect(callback, [callback]);
     },
   };
 });
@@ -134,8 +144,32 @@ jest.mock('../../src/notifications/service', () => ({
 
 // Screens that RootNavigator only registers (never renders itself) are
 // stubbed so their native/data imports stay out of this suite.
-jest.mock('../../src/screens/HomeScreen', () => ({
-  HomeScreen: () => null,
+jest.mock('../../src/data/db', () => ({ getDb: () => ({}) }));
+jest.mock('../../src/data/repository', () => ({
+  listShots: jest.fn(async () => []),
+  listRealAnalysisFacts: jest.fn(async () => []),
+  getKv: jest.fn(async () => null),
+  setKv: jest.fn(async () => undefined),
+}));
+jest.mock('../../src/state/appStore', () => ({
+  useAppStore: (selector: (state: { profile: null }) => unknown) =>
+    selector({ profile: null }),
+}));
+jest.mock('../../src/consistency/store', () => {
+  const state = { snapshot: null, refresh: jest.fn(async () => undefined) };
+  return {
+    useConsistencyStore: (selector: (value: typeof state) => unknown) =>
+      selector(state),
+  };
+});
+jest.mock('../../src/account/apiSession', () => ({
+  getApiSession: () => null,
+}));
+jest.mock('../../src/components/PlayerRankBanner', () => ({
+  PlayerRankBanner: () => null,
+}));
+jest.mock('../../src/notifications/NotificationPrimingCard', () => ({
+  NotificationPrimingCard: () => null,
 }));
 jest.mock('../../src/screens/LibraryScreen', () => ({
   LibraryScreen: () => null,
@@ -174,8 +208,17 @@ jest.mock('../../src/screens/AnalyzeScreen', () => {
   const React = require('react');
   const { Text } = require('react-native');
   return {
-    AnalyzeScreen: () =>
-      React.createElement(Text, { testID: 'analyze-screen' }, 'Analyze stub'),
+    AnalyzeScreen: () => {
+      const route = require('@react-navigation/native').useRoute();
+      React.useEffect(() => {
+        mockAnalyzeMounted(route.params?.source ?? 'camera');
+      }, []);
+      return React.createElement(
+        Text,
+        { testID: 'analyze-screen' },
+        'Analyze stub',
+      );
+    },
   };
 });
 
@@ -197,6 +240,7 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
 import type {
   MainTabParams,
@@ -448,11 +492,13 @@ function renderRoute(
   params?: unknown,
 ): Renderer {
   const Route = routeComponent(renderer, name);
+  const RouteProvider = require('@react-navigation/native').__RouteContext
+    .Provider;
+  const route = { key: `${name}-1`, name, params };
   return render(
-    <Route
-      navigation={navigation}
-      route={{ key: `${name}-1`, name, params }}
-    />,
+    <RouteProvider value={route}>
+      <Route navigation={navigation} route={route} />
+    </RouteProvider>,
   );
 }
 
@@ -471,6 +517,11 @@ describe('RootNavigator button ledger', () => {
     clearAccessStoreConfiguration();
     useAccessStore.setState({ initialize: realInitialize });
     useAuthStore.setState({ session: syncedSession, busy: false, error: null });
+    setActiveDataOwner(syncedSession.canonicalAppUserId!);
+    mockAnalyzeMounted.mockClear();
+    mockScreenNavigation.navigate.mockClear();
+    mockScreenNavigation.goBack.mockClear();
+    mockScreenNavigation.replace.mockClear();
   });
 
   afterEach(() => {
@@ -708,17 +759,20 @@ describe('RootNavigator button ledger', () => {
       unmount();
     });
 
-    it('already-premium members get Close membership / Continue coaching -> goBack', async () => {
-      const navigation = fakeNavigation();
-      const { paywall, unmount } = await renderPaywall(
-        navigation,
-        billingDependencies({ access: premiumAccess }),
-      );
-      await press(paywall, { label: 'Close membership' });
-      await press(paywall, { label: 'Continue coaching' });
-      expect(navigation.goBack).toHaveBeenCalledTimes(2);
-      unmount();
-    });
+    it.each(['Close membership', 'Continue coaching'])(
+      'already-premium members use %s to go back once',
+      async label => {
+        const navigation = fakeNavigation();
+        const { paywall, unmount } = await renderPaywall(
+          navigation,
+          billingDependencies({ access: premiumAccess }),
+        );
+        await press(paywall, { label });
+        await press(paywall, { label });
+        expect(navigation.goBack).toHaveBeenCalledTimes(1);
+        unmount();
+      },
+    );
   });
 
   describe('ConnectAccountRoute', () => {
@@ -783,11 +837,12 @@ describe('RootNavigator button ledger', () => {
   });
 
   describe('AnalyzeRoute (useRatingRouteGate)', () => {
-    function renderAnalyze(navigation: ReturnType<typeof fakeNavigation>) {
+    function renderAnalyze(
+      navigation: ReturnType<typeof fakeNavigation>,
+      source: 'camera' | 'library' = 'camera',
+    ) {
       const root = render(<RootNavigator />);
-      const analyze = renderRoute(root, 'Analyze', navigation, {
-        source: 'camera',
-      });
+      const analyze = renderRoute(root, 'Analyze', navigation, { source });
       return {
         analyze,
         unmount: () => {
@@ -861,39 +916,330 @@ describe('RootNavigator button ledger', () => {
       unmount();
     });
 
-    it.each(['error', 'unconfigured'] as const)(
-      'access %s with no canonical state -> replace(Paywall, rating) (fail closed)',
-      status => {
+    it.each(['error', 'unconfigured', 'ready'] as const)(
+      'access %s with no canonical state stays fail closed with an accessible retry and cancel, not a sale',
+      async status => {
         useAccessStore.setState({
           status,
           canonicalAccess: null,
           initialize: jest.fn(async () => undefined),
         });
         const navigation = fakeNavigation();
-        const { unmount } = renderAnalyze(navigation);
-        expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
-          source: 'rating',
-        });
-        expect(navigation.replace).toHaveBeenCalledTimes(1);
-        unmount();
+        const { analyze, unmount } = renderAnalyze(navigation);
+        try {
+          expect(navigation.replace).not.toHaveBeenCalled();
+          expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+          expect(allText(analyze)).toContain(
+            'Rating access couldn’t be checked',
+          );
+          expect(
+            analyze.root.findAll(n => n.props.accessibilityRole === 'alert')
+              .length,
+          ).toBeGreaterThan(0);
+          expect(
+            findPressable(analyze, { label: 'Retry access check' }),
+          ).toBeTruthy();
+          await press(analyze, { label: 'Cancel' });
+          expect(navigation.goBack).toHaveBeenCalledTimes(1);
+        } finally {
+          unmount();
+        }
       },
     );
 
-    it('initialize() failure lands on the paywall, never an endless spinner', async () => {
+    it.each(['camera', 'library'] as const)(
+      'an access failure recovers to the intended %s source only after a successful backend retry',
+      async source => {
+        const deps = billingDependencies();
+        const getAccess = deps.backend.getAccess as jest.Mock;
+        getAccess.mockRejectedValueOnce(new Error('backend down'));
+        configureAccessStore(deps);
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation, source);
+        try {
+          expect(allText(analyze)).toContain('Checking access…');
+          await flushAsync();
+          expect(useAccessStore.getState().status).toBe('error');
+          expect(allText(analyze)).toContain(
+            'Membership verification is temporarily unavailable.',
+          );
+          expect(navigation.replace).not.toHaveBeenCalled();
+          expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+          let resolve!: (value: CanonicalAccessState) => void;
+          getAccess.mockImplementationOnce(
+            () =>
+              new Promise<CanonicalAccessState>(r => {
+                resolve = r;
+              }),
+          );
+          const retry = findPressable(analyze, { label: 'Retry access check' })
+            .props.onPress;
+          await act(async () => {
+            retry();
+            retry();
+          });
+          expect(getAccess).toHaveBeenCalledTimes(2);
+          expect(allText(analyze)).toContain('Checking access…');
+          expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+          expect(findPressable(analyze, { label: 'Cancel' })).toBeTruthy();
+          await act(async () => resolve(freeAccess));
+          expect(mockAnalyzeMounted).toHaveBeenCalledTimes(1);
+          expect(mockAnalyzeMounted).toHaveBeenCalledWith(source);
+          expect(navigation.replace).not.toHaveBeenCalled();
+          expect(deps.store.configure).toHaveBeenCalledTimes(1);
+          expect(deps.store.loadPlans).toHaveBeenCalledTimes(1);
+          expect(deps.store.purchase).not.toHaveBeenCalled();
+          expect(deps.store.restore).not.toHaveBeenCalled();
+          expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+        } finally {
+          unmount();
+        }
+      },
+    );
+
+    it.each(['camera', 'library'] as const)(
+      'cached allowance cannot start %s while a new access check is still pending',
+      async source => {
+        const deps = billingDependencies();
+        configureAccessStore(deps);
+        await act(async () => useAccessStore.getState().initialize());
+        let resolve!: (value: CanonicalAccessState) => void;
+        (deps.backend.getAccess as jest.Mock).mockImplementationOnce(
+          () =>
+            new Promise<CanonicalAccessState>(r => {
+              resolve = r;
+            }),
+        );
+        const refresh = useAccessStore.getState().refreshAccess();
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation, source);
+        try {
+          expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+          expect(allText(analyze)).toContain('Checking access…');
+          await act(async () => {
+            resolve(freeAccess);
+            await refresh;
+          });
+          expect(mockAnalyzeMounted).toHaveBeenCalledTimes(1);
+          expect(mockAnalyzeMounted).toHaveBeenCalledWith(source);
+          expect(navigation.replace).not.toHaveBeenCalled();
+          expect(deps.store.purchase).not.toHaveBeenCalled();
+          expect(deps.store.restore).not.toHaveBeenCalled();
+        } finally {
+          unmount();
+        }
+      },
+    );
+
+    it('a store-offering failure never blocks a server-verified free allowance', async () => {
       const deps = billingDependencies();
-      (deps.backend.getAccess as jest.Mock).mockRejectedValue(
-        new Error('backend down'),
+      (deps.store.loadPlans as jest.Mock).mockRejectedValueOnce(
+        new Error('store offline'),
+      );
+      configureAccessStore(deps);
+      const navigation = fakeNavigation();
+      const { unmount } = renderAnalyze(navigation, 'library');
+      try {
+        await flushAsync();
+        expect(useAccessStore.getState().status).toBe('error');
+        expect(mockAnalyzeMounted).toHaveBeenCalledWith('library');
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(deps.store.purchase).not.toHaveBeenCalled();
+        expect(deps.store.restore).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+      }
+    });
+
+    it('a resolved non-paywall denial is recoverable and is not sold as exhausted quota', async () => {
+      useAccessStore.setState({
+        status: 'ready',
+        canonicalAccess: { ...exhaustedAccess, paywallRequired: false },
+      });
+      const navigation = fakeNavigation();
+      const { analyze, unmount } = renderAnalyze(navigation);
+      try {
+        expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(allText(analyze)).toContain('Rating access couldn’t be checked');
+        expect(
+          findPressable(analyze, { label: 'Retry access check' }),
+        ).toBeTruthy();
+      } finally {
+        unmount();
+      }
+    });
+
+    it.each(['owner', 'session'] as const)(
+      'a changed %s cannot reuse a pending access retry or resume the prior capture intent',
+      async changed => {
+        const deps = billingDependencies();
+        (deps.backend.getAccess as jest.Mock).mockRejectedValueOnce(
+          new Error('offline'),
+        );
+        configureAccessStore(deps);
+        const navigation = fakeNavigation();
+        const { analyze, unmount } = renderAnalyze(navigation, 'library');
+        try {
+          await flushAsync();
+          let resolve!: (value: CanonicalAccessState) => void;
+          (deps.backend.getAccess as jest.Mock).mockImplementationOnce(
+            () =>
+              new Promise<CanonicalAccessState>(r => {
+                resolve = r;
+              }),
+          );
+          const retry = findPressable(analyze, { label: 'Retry access check' })
+            .props.onPress;
+          await act(async () => retry());
+          const nextDeps = billingDependencies();
+          await act(async () => {
+            if (changed === 'owner') {
+              setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+            }
+            useAuthStore.setState({ session: { ...syncedSession } });
+            configureAccessStore(nextDeps);
+            retry();
+            resolve(freeAccess);
+          });
+          await flushAsync();
+          expect(nextDeps.backend.getAccess).not.toHaveBeenCalled();
+          expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+          expect(navigation.replace).not.toHaveBeenCalled();
+          await press(analyze, { label: 'Cancel' });
+          expect(navigation.goBack).toHaveBeenCalledTimes(1);
+        } finally {
+          unmount();
+        }
+      },
+    );
+
+    it('unmounting during an access retry ignores the response and disables a retained retry handler', async () => {
+      const deps = billingDependencies();
+      (deps.backend.getAccess as jest.Mock).mockRejectedValueOnce(
+        new Error('offline'),
+      );
+      configureAccessStore(deps);
+      const navigation = fakeNavigation();
+      const { analyze, unmount } = renderAnalyze(navigation, 'library');
+      await flushAsync();
+      let resolve!: (value: CanonicalAccessState) => void;
+      (deps.backend.getAccess as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<CanonicalAccessState>(r => {
+            resolve = r;
+          }),
+      );
+      const retry = findPressable(analyze, { label: 'Retry access check' })
+        .props.onPress;
+      await act(async () => retry());
+      unmount();
+      await act(async () => resolve(freeAccess));
+      await act(async () => retry());
+      expect(deps.backend.getAccess).toHaveBeenCalledTimes(2);
+      expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+      expect(navigation.replace).not.toHaveBeenCalled();
+      expect(navigation.goBack).not.toHaveBeenCalled();
+    });
+
+    it('cancel during an access retry prevents a late success from mounting Analyze', async () => {
+      const deps = billingDependencies();
+      const getAccess = deps.backend.getAccess as jest.Mock;
+      getAccess.mockRejectedValueOnce(new Error('offline'));
+      configureAccessStore(deps);
+      const navigation = fakeNavigation();
+      const { analyze, unmount } = renderAnalyze(navigation, 'library');
+      try {
+        await flushAsync();
+        let resolve!: (value: CanonicalAccessState) => void;
+        getAccess.mockImplementationOnce(
+          () =>
+            new Promise<CanonicalAccessState>(r => {
+              resolve = r;
+            }),
+        );
+        await press(analyze, { label: 'Retry access check' });
+        await press(analyze, { label: 'Cancel' });
+        await act(async () => resolve(freeAccess));
+        expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(navigation.goBack).toHaveBeenCalledTimes(1);
+        expect(deps.store.purchase).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+      }
+    });
+
+    it('a retry that confirms exhaustion keeps the legitimate Paywall path', async () => {
+      const deps = billingDependencies({ access: exhaustedAccess });
+      (deps.backend.getAccess as jest.Mock).mockRejectedValueOnce(
+        new Error('offline'),
       );
       configureAccessStore(deps);
       const navigation = fakeNavigation();
       const { analyze, unmount } = renderAnalyze(navigation);
-      expect(allText(analyze)).toContain('Checking access…');
-      await flushAsync();
-      expect(useAccessStore.getState().status).toBe('error');
-      expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
-        source: 'rating',
-      });
-      unmount();
+      try {
+        await flushAsync();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        await press(analyze, { label: 'Retry access check' });
+        await flushAsync();
+        expect(navigation.replace).toHaveBeenCalledTimes(1);
+        expect(navigation.replace).toHaveBeenCalledWith('Paywall', {
+          source: 'rating',
+        });
+        expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+        expect(deps.store.purchase).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+      }
+    });
+
+    it('Home’s real Stroke Analysis button enters the same recoverable gate with its camera source', async () => {
+      const deps = billingDependencies();
+      (deps.backend.getAccess as jest.Mock).mockRejectedValueOnce(
+        new Error('offline'),
+      );
+      configureAccessStore(deps);
+      const root = render(<RootNavigator />);
+      const Tabs_ = routeComponent(root, 'Tabs');
+      const tabs = render(
+        <Tabs_
+          navigation={fakeNavigation()}
+          route={{ key: 'Tabs-1', name: 'Tabs' }}
+        />,
+      );
+      const Home = tabs.root
+        .findAllByType(Tabs.Screen)
+        .find(n => n.props.name === 'Home')!.props.component;
+      const home = render(<Home />);
+      let analyze: Renderer | null = null;
+      try {
+        await flushAsync();
+        await press(home, {
+          label:
+            'Stroke Analysis. Analyze one movement with fast, detailed feedback.',
+        });
+        expect(mockScreenNavigation.navigate).toHaveBeenCalledWith('Analyze', {
+          source: 'camera',
+        });
+        const [route, params] = mockScreenNavigation.navigate.mock.calls[0]!;
+        const navigation = fakeNavigation();
+        analyze = renderRoute(root, route, navigation, params);
+        await flushAsync();
+        expect(mockAnalyzeMounted).not.toHaveBeenCalled();
+        expect(navigation.replace).not.toHaveBeenCalled();
+        expect(allText(analyze)).toContain('Rating access couldn’t be checked');
+        await press(analyze, { label: 'Retry access check' });
+        await flushAsync();
+        expect(mockAnalyzeMounted).toHaveBeenCalledWith('camera');
+        expect(deps.store.purchase).not.toHaveBeenCalled();
+        expect(deps.store.restore).not.toHaveBeenCalled();
+      } finally {
+        if (analyze) act(() => analyze!.unmount());
+        act(() => home.unmount());
+        act(() => tabs.unmount());
+        act(() => root.unmount());
+      }
     });
   });
 

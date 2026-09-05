@@ -24,6 +24,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
   private var hasEventListeners = false
   private var sessionCoordinator: SessionCaptureCoordinator?
   private let motionTimestampFormatter = ISO8601DateFormatter()
+  private let captureCleanupQueue = DispatchQueue(label: "com.picklesensei.capture-cleanup", qos: .utility)
 
   @objc override static func requiresMainQueueSetup() -> Bool { true }
 
@@ -122,6 +123,40 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
       ])
       presenter.present(picker, animated: true)
+    }
+  }
+
+  @objc func deleteCaptureFiles(
+    _ uris: NSArray,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard uris.count <= CaptureMediaCleanup.maximumBatchSize,
+          let values = uris as? [String] else {
+      reject("file.invalid_batch", "A capture cleanup batch must contain at most 128 URIs.", nil)
+      return
+    }
+    captureCleanupQueue.async {
+      do {
+        let support = try FileManager.default.url(
+          for: .applicationSupportDirectory,
+          in: .userDomainMask,
+          appropriateFor: nil,
+          create: false
+        )
+        let results = try CaptureMediaCleanup.deleteFiles(values, applicationSupportDirectory: support)
+        resolve(["results": results.map { result in
+          var acknowledgement = result
+          if acknowledgement["status"] as? String == "rejected" {
+            acknowledgement["status"] = "failed"
+          }
+          return acknowledgement
+        }])
+      } catch CaptureMediaCleanup.Failure.invalidBatch {
+        reject("file.invalid_batch", "A capture cleanup batch must contain at most 128 URIs.", nil)
+      } catch {
+        reject("file.unavailable", "Private capture cleanup is unavailable. Please retry.", nil)
+      }
     }
   }
 

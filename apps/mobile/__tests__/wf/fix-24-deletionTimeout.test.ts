@@ -62,7 +62,7 @@ describe('account deletion request deadline', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('step 1 aborts a hung delete-request after 15s with retryable offline copy', async () => {
+  it('step 1 aborts a hung delete-request after 15s with retryable unconfirmed copy', async () => {
     const fetchFn = hangingFetch();
     // Skipped survey (null) — the survey rides as the second argument, the
     // transport as the third.
@@ -84,7 +84,7 @@ describe('account deletion request deadline', () => {
       code: 'deletion.unavailable',
       retryable: true,
       message:
-        'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+        'Account deletion could not be confirmed. Check your connection and try again.',
     });
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -129,7 +129,7 @@ describe('account deletion request deadline', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('step 2 aborts a hung delete-confirm after 15s with retryable offline copy', async () => {
+  it('step 2 aborts a hung delete-confirm after 15s with retryable unconfirmed copy', async () => {
     const fetchFn = hangingFetch();
     const settled = confirmAccountDeletion(session, 'challenge', fetchFn).then(
       () => 'resolved',
@@ -137,13 +137,20 @@ describe('account deletion request deadline', () => {
     );
 
     await jest.advanceTimersByTimeAsync(15_000);
+    expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
 
     const error = await settled;
     expect(error).toBeInstanceOf(AccountDeletionError);
     expect(error).toMatchObject({
       code: 'deletion.unavailable',
       retryable: true,
+      message:
+        'Account deletion could not be confirmed. Check your connection and try again.',
     });
+    expect(error).toHaveProperty(
+      'message',
+      expect.not.stringContaining('Nothing was deleted'),
+    );
     expect(jest.getTimerCount()).toBe(0);
   });
 });

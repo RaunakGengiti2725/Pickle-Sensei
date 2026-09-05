@@ -59,6 +59,7 @@ jest.mock('../src/account/onboarding', () => ({
 }));
 
 import {
+  CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../src/state/appStore';
@@ -103,6 +104,7 @@ beforeEach(() => {
     hydrated: false,
     ownerKey: null,
     profile: null,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -289,5 +291,195 @@ describe('hydrate with a pre-auth stash', () => {
     const state = useAppStore.getState();
     expect(state.profile).toBeNull();
     expect(mockKvTable.get(profileKeyFor(GUEST_DATA_OWNER))).toBeUndefined();
+  });
+});
+
+describe('canonical profile hydration before a restored bearer is available', () => {
+  const existing: Profile = {
+    skillLevel: '4.0',
+    handedness: 'left',
+    goal: 'drives',
+    biggestProblem: 'contact',
+    focusCheckpoint: 'preparation',
+  };
+  const session = {
+    apiBaseUrl: 'https://api.example.test',
+    bearerToken: 'restored-bearer',
+    canonicalAppUserId: CANONICAL_OWNER,
+    provider: 'apple' as const,
+  };
+
+  it.each([false, true])(
+    'shows a retryable load error without a local profile or bearer (pending answers: %s)',
+    async pending => {
+      if (pending) stashAnswers();
+      const before = [...mockKvTable.entries()];
+      setActiveDataOwner(CANONICAL_OWNER);
+
+      await useAppStore.getState().hydrate();
+
+      expect(useAppStore.getState()).toMatchObject({
+        hydrated: true,
+        ownerKey: CANONICAL_OWNER,
+        profile: null,
+        hydrateError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+      });
+      expect([...mockKvTable.entries()]).toEqual(before);
+      expect(mockFetchCanonical).not.toHaveBeenCalled();
+      expect(mockSaveCanonical).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses the cached profile offline without consuming pending answers locally', async () => {
+    stashAnswers();
+    mockKvTable.set(profileKeyFor(CANONICAL_OWNER), JSON.stringify(existing));
+    const before = [...mockKvTable.entries()];
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState()).toMatchObject({
+      hydrated: true,
+      profile: existing,
+      hydrateError: null,
+    });
+    expect([...mockKvTable.entries()]).toEqual(before);
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+
+    mockApiSession = session;
+    mockSaveCanonical.mockRejectedValueOnce(new Error('still offline'));
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(existing);
+    expect([...mockKvTable.entries()]).toEqual(before);
+
+    await useAppStore.getState().hydrate();
+    expect(mockSaveCanonical).toHaveBeenLastCalledWith(session, answers);
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(pendingRaw()).toBeNull();
+  });
+
+  it('does not mistake a different account bearer for a reachable canonical profile', async () => {
+    stashAnswers();
+    mockApiSession = {
+      ...session,
+      canonicalAppUserId: '44444444-4444-4444-8444-444444444444',
+    };
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+    expect(useAppStore.getState().profile).toBeNull();
+    expect(pendingRaw()).not.toBeNull();
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+    expect(mockFetchCanonical).not.toHaveBeenCalled();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+  });
+
+  it('retries an interrupted canonical fetch without overwriting the server profile or consuming the stash', async () => {
+    stashAnswers();
+    setActiveDataOwner(CANONICAL_OWNER);
+    mockApiSession = session;
+    mockFetchCanonical.mockRejectedValueOnce(new Error('offline'));
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+    expect(pendingRaw()).not.toBeNull();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+
+    mockFetchCanonical.mockResolvedValue(existing);
+    mockSaveCanonical.mockRejectedValueOnce(new Error('save interrupted'));
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(existing);
+    expect(pendingRaw()).not.toBeNull();
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(pendingRaw()).toBeNull();
+  });
+
+  it('requires onboarding only once the server confirms there is no profile', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().hydrateError).toBe(
+      CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    );
+
+    mockApiSession = session;
+    await useAppStore.getState().hydrate();
+    expect(mockFetchCanonical).toHaveBeenCalledWith(session);
+    expect(useAppStore.getState()).toMatchObject({
+      hydrated: true,
+      profile: null,
+      hydrateError: null,
+    });
+  });
+
+  it('does not cache or apply an older concurrent hydrate after a successful retry', async () => {
+    let finish!: (profile: Profile | null) => void;
+    mockApiSession = session;
+    setActiveDataOwner(CANONICAL_OWNER);
+    mockFetchCanonical.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve;
+        }),
+    );
+    const interrupted = useAppStore.getState().hydrate();
+    for (let i = 0; i < 10 && !finish; i += 1) await Promise.resolve();
+    expect(finish).toBeDefined();
+
+    mockFetchCanonical.mockResolvedValue(existing);
+    await useAppStore.getState().hydrate();
+    finish(answers);
+    await interrupted;
+
+    expect(useAppStore.getState().profile).toEqual(existing);
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(existing);
+  });
+
+  it.each(['switch', 'return-to-owner'] as const)(
+    'does not persist a late canonical fetch after %s',
+    async change => {
+      let finish!: (profile: Profile | null) => void;
+      mockApiSession = session;
+      setActiveDataOwner(CANONICAL_OWNER);
+      mockFetchCanonical.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve;
+          }),
+      );
+      const interrupted = useAppStore.getState().hydrate();
+      for (let i = 0; i < 10 && !finish; i += 1) await Promise.resolve();
+      expect(finish).toBeDefined();
+      setActiveDataOwner('44444444-4444-4444-8444-444444444444');
+      if (change === 'return-to-owner') setActiveDataOwner(CANONICAL_OWNER);
+      finish(existing);
+      await interrupted;
+
+      expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+      expect(useAppStore.getState().profile).toBeNull();
+    },
+  );
+
+  it('cannot complete canonical onboarding as a local-only save when the bearer is missing', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().completeOnboarding(answers);
+
+    expect(useAppStore.getState()).toMatchObject({
+      profile: null,
+      onboardingBusy: false,
+      onboardingError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+    });
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
   });
 });

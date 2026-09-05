@@ -1,5 +1,6 @@
 import AVFoundation
 import CryptoKit
+import Darwin
 import Foundation
 import UIKit
 
@@ -20,6 +21,131 @@ enum ClipMediaStoreError: LocalizedError {
   }
 }
 
+enum CaptureMediaCleanup {
+  static let maximumBatchSize = 128
+
+  enum Failure: Error {
+    case invalidBatch
+    case unavailable
+  }
+
+  static func deleteFiles(
+    _ uris: [String],
+    applicationSupportDirectory: URL
+  ) throws -> [[String: Any]] {
+    guard uris.count <= maximumBatchSize else { throw Failure.invalidBatch }
+    guard !uris.isEmpty else { return [] }
+    guard applicationSupportDirectory.isFileURL else { throw Failure.unavailable }
+
+    let support = applicationSupportDirectory.standardizedFileURL
+    let anchor: URL
+    let subdirectories: [String]
+    if support.lastPathComponent == "Application Support",
+       support.deletingLastPathComponent().lastPathComponent == "Library" {
+      anchor = support.deletingLastPathComponent().deletingLastPathComponent()
+      subdirectories = ["Library", "Application Support", "PickleSensei", "Captures"]
+    } else {
+      anchor = support
+      subdirectories = ["PickleSensei", "Captures"]
+    }
+    let roots = [anchor, anchor.resolvingSymlinksInPath()].map { base in
+      systemPathComponents(Array(base.pathComponents.dropFirst()) + subdirectories)
+    }
+    let directory = try openCaptureDirectory(anchor: anchor, subdirectories: subdirectories)
+    defer { if let directory { close(directory) } }
+
+    return uris.enumerated().map { index, uri in
+      guard let name = captureBasename(uri, roots: roots) else {
+        return ["index": index, "status": "rejected", "code": "file.invalid_uri"]
+      }
+      guard let directory else { return ["index": index, "status": "missing"] }
+      var attributes = stat()
+      let inspected = name.withCString {
+        fstatat(directory, $0, &attributes, AT_SYMLINK_NOFOLLOW)
+      }
+      if inspected != 0 {
+        return errno == ENOENT
+          ? ["index": index, "status": "missing"]
+          : ["index": index, "status": "failed", "code": "file.delete_failed"]
+      }
+      guard attributes.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else {
+        return ["index": index, "status": "rejected", "code": "file.not_regular"]
+      }
+      let removed = name.withCString { unlinkat(directory, $0, 0) }
+      if removed == 0 { return ["index": index, "status": "deleted"] }
+      return errno == ENOENT
+        ? ["index": index, "status": "missing"]
+        : ["index": index, "status": "failed", "code": "file.delete_failed"]
+    }
+  }
+
+  private static func openCaptureDirectory(
+    anchor: URL,
+    subdirectories: [String]
+  ) throws -> Int32? {
+    let flags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+    var directory = anchor.path.withCString { open($0, flags) }
+    guard directory >= 0 else {
+      if errno == ENOENT { return nil }
+      throw Failure.unavailable
+    }
+    defer { if directory >= 0 { close(directory) } }
+    for component in subdirectories {
+      let next = component.withCString { openat(directory, $0, flags) }
+      guard next >= 0 else {
+        if errno == ENOENT { return nil }
+        throw Failure.unavailable
+      }
+      close(directory)
+      directory = next
+    }
+    let result = directory
+    directory = -1
+    return result
+  }
+
+  private static func systemPathComponents(_ components: [String]) -> [String] {
+    if components.starts(with: ["private", "var"]) {
+      return Array(components.dropFirst())
+    }
+    return components
+  }
+
+  private static func captureBasename(_ uri: String, roots: [[String]]) -> String? {
+    guard uri.utf8.count <= 8192,
+          uri.hasPrefix("file://"),
+          !uri.contains("?"), !uri.contains("#") else { return nil }
+    var path = uri.dropFirst(7)
+    if path.hasPrefix("localhost/") { path = path.dropFirst(9) }
+    guard path.hasPrefix("/") else { return nil }
+    var components: [String] = []
+    for encoded in path.dropFirst().split(separator: "/", omittingEmptySubsequences: false) {
+      guard let component = String(encoded).removingPercentEncoding,
+            !component.isEmpty, component != ".", component != "..",
+            !component.contains("/"), !component.contains("\\"),
+            !component.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else {
+        return nil
+      }
+      components.append(component)
+    }
+    guard let name = components.last, name.utf8.count <= 255 else { return nil }
+    let parent = systemPathComponents(Array(components.dropLast()))
+    guard roots.contains(where: { root in
+      if parent == root { return true }
+      guard root.count >= 8, parent.count == root.count,
+            Array(root.suffix(4)) == ["Library", "Application Support", "PickleSensei", "Captures"] else {
+        return false
+      }
+      let containerIndex = root.count - 5
+      guard Array(root[(containerIndex - 3)..<containerIndex]) == ["Containers", "Data", "Application"],
+            UUID(uuidString: root[containerIndex]) != nil,
+            UUID(uuidString: parent[containerIndex]) != nil else { return false }
+      return root.indices.allSatisfy { $0 == containerIndex || root[$0] == parent[$0] }
+    }) else { return nil }
+    return name
+  }
+}
+
 enum ClipMediaStore {
   private static var capturesDirectory: URL {
     get throws {
@@ -29,12 +155,15 @@ enum ClipMediaStore {
         appropriateFor: nil,
         create: true
       )
-      let directory = support.appendingPathComponent("PickleSensei/Captures", isDirectory: true)
+      var directory = support.appendingPathComponent("PickleSensei/Captures", isDirectory: true)
       try FileManager.default.createDirectory(
         at: directory,
         withIntermediateDirectories: true,
         attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
       )
+      var resourceValues = URLResourceValues()
+      resourceValues.isExcludedFromBackup = true
+      try directory.setResourceValues(resourceValues)
       return directory
     }
   }
@@ -50,10 +179,11 @@ enum ClipMediaStore {
   /// recorded URL unchanged so the caller fails honestly.
   static func resolveCaptureURL(fromStoredUri uri: String) -> URL? {
     guard let stored = fileURL(from: uri) else { return nil }
+    let directory = try? capturesDirectory
     if FileManager.default.fileExists(atPath: stored.path) { return stored }
     guard
       stored.deletingLastPathComponent().lastPathComponent == "Captures",
-      let directory = try? capturesDirectory
+      let directory
     else { return stored }
     let relocated = directory.appendingPathComponent(stored.lastPathComponent)
     return FileManager.default.fileExists(atPath: relocated.path) ? relocated : stored

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Linking,
@@ -16,6 +16,7 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   LoadingState,
   Pill,
   PressableScale,
@@ -23,6 +24,7 @@ import {
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
+import { getActiveDataOwner } from '../data/accountScope';
 import {
   listPendingCaptures,
   listShots,
@@ -33,7 +35,7 @@ import type { RootStackParams } from '../navigation/params';
 import { SavedDrillCard } from '../training/components';
 import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia } from '../training/types';
-import { useAuthStore } from '../auth/authStore';
+import { useAuthStore, type AuthSession } from '../auth/authStore';
 import { plural } from '../util/plural';
 import { showBrandNotice } from '../design/BrandNotice';
 
@@ -96,10 +98,34 @@ export function pendingCaptureTitle(capture: PendingCapture): string {
 export function LibraryScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
-  const localOnly = useAuthStore(state => state.session?.localOnly === true);
+  const session = useAuthStore(state => state.session);
+  const localOnly = session?.localOnly === true;
+  const owner = getActiveDataOwner();
   const [tab, setTab] = useState<LibraryTab>('reads');
-  const [shots, setShots] = useState<LocalShotRow[] | null>(null);
-  const [captures, setCaptures] = useState<PendingCapture[]>([]);
+  const [readState, setReadState] = useState<{
+    owner: string;
+    session: AuthSession | null;
+    shots: LocalShotRow[] | null;
+    captures: PendingCapture[];
+    loading: boolean;
+    failed: boolean;
+  }>(() => ({
+    owner,
+    session,
+    shots: null,
+    captures: [],
+    loading: true,
+    failed: false,
+  }));
+  const focused = useRef(false);
+  const requestVersion = useRef(0);
+  const readInFlight = useRef(false);
+  const sameReadSession =
+    readState.owner === owner && readState.session === session;
+  const shots = sameReadSession ? readState.shots : null;
+  const captures = sameReadSession ? readState.captures : [];
+  const readsLoading = !sameReadSession || readState.loading;
+  const readsFailed = sameReadSession && readState.failed;
   const savedStatus = useTrainingStore(state => state.savedStatus);
   const planStatus = useTrainingStore(state => state.planStatus);
   const savedDrills = useTrainingStore(state => state.savedDrills);
@@ -115,21 +141,75 @@ export function LibraryScreen() {
     state => state.clearMutationError,
   );
 
+  const loadReads = useCallback(async () => {
+    if (
+      !focused.current ||
+      readInFlight.current ||
+      !session ||
+      owner !== getActiveDataOwner() ||
+      session !== useAuthStore.getState().session
+    )
+      return;
+    readInFlight.current = true;
+    const version = ++requestVersion.current;
+    const isCurrent = () =>
+      focused.current &&
+      version === requestVersion.current &&
+      owner === getActiveDataOwner() &&
+      session === useAuthStore.getState().session;
+    setReadState(previous => {
+      const sameSession =
+        previous.owner === owner && previous.session === session;
+      return {
+        owner,
+        session,
+        shots: sameSession ? previous.shots : null,
+        captures: sameSession ? previous.captures : [],
+        loading: true,
+        failed: false,
+      };
+    });
+    try {
+      const db = getDb();
+      const [realShots, pending] = await Promise.all([
+        listShots(db, 100),
+        listPendingCaptures(db, 100),
+      ]);
+      if (isCurrent()) {
+        setReadState({
+          owner,
+          session,
+          shots: realShots,
+          captures: pending,
+          loading: false,
+          failed: false,
+        });
+      }
+    } catch {
+      if (isCurrent()) {
+        setReadState(previous => ({
+          ...previous,
+          loading: false,
+          failed: true,
+        }));
+      }
+    } finally {
+      if (version === requestVersion.current) readInFlight.current = false;
+    }
+  }, [owner, session]);
+
   useFocusEffect(
     useCallback(() => {
-      const db = getDb();
-      void Promise.all([listShots(db, 100), listPendingCaptures(db, 100)])
-        .then(([realShots, pending]) => {
-          setShots(realShots);
-          setCaptures(pending);
-        })
-        .catch(() => {
-          setShots([]);
-          setCaptures([]);
-        });
+      focused.current = true;
+      void loadReads();
       void loadSavedDrills();
       void loadCurrentPlan();
-    }, [loadCurrentPlan, loadSavedDrills]),
+      return () => {
+        focused.current = false;
+        requestVersion.current += 1;
+        readInFlight.current = false;
+      };
+    }, [loadCurrentPlan, loadReads, loadSavedDrills]),
   );
 
   const openMedia = useCallback(async (media: InstructionalMedia) => {
@@ -219,7 +299,7 @@ export function LibraryScreen() {
           {header}
           {planStatus === 'ready' && currentPlan ? (
             <PressableScale
-              accessibilityLabel="Open your current personalized plan"
+              accessibilityLabel="Review source analysis"
               onPress={() =>
                 navigation.navigate('Result', {
                   analysisId: currentPlan.sourceShotId,
@@ -266,7 +346,7 @@ export function LibraryScreen() {
                   numberOfLines={1}
                   style={[type.bodyBold, styles.openPlanLabel]}
                 >
-                  Continue plan
+                  Review source analysis
                 </Text>
                 <Icon name="arrow" size={19} color={color.volt} />
               </View>
@@ -429,92 +509,111 @@ export function LibraryScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
-      {shots === null ? (
-        <LoadingState label="Opening your library…" />
-      ) : (
-        <FlatList
-          data={reads}
-          keyExtractor={item => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.readsContent,
-            reads.length === 0 && captures.length === 0 && styles.emptyContent,
-          ]}
-          ListHeaderComponent={
-            <>
-              {header}
-              {reads.length || captures.length ? (
-                <View style={styles.readHeader}>
-                  <Text style={[type.body, { color: color.inkSoft }]}>
-                    {reads.length} analyzed {plural(reads.length, 'read')} ·{' '}
-                    {captures.length} pending {plural(captures.length, 'clip')}
-                  </Text>
-                  {captures.length ? (
-                    <View style={styles.pendingGroup}>
-                      <View style={styles.pendingHeader}>
-                        <Text
-                          numberOfLines={2}
-                          style={[type.micro, styles.pendingHeaderLabel]}
-                        >
-                          {PENDING_SECTION_LABEL}
-                        </Text>
-                        <Pill label={PENDING_SECTION_PILL} tone="neutral" />
-                      </View>
-                      {captures.slice(0, 3).map(capture => (
-                        <View key={capture.id} style={styles.pendingRow}>
-                          <View style={styles.pendingIcon}>
-                            <Icon
-                              name={
-                                capture.evidenceStatus === 'valid'
-                                  ? 'person'
-                                  : 'camera'
-                              }
-                              size={18}
-                              color={color.court}
-                            />
-                          </View>
-                          <View style={styles.flex}>
-                            <Text
-                              numberOfLines={1}
-                              style={[type.bodyBold, styles.pendingTitle]}
-                            >
-                              {pendingCaptureTitle(capture)}
-                            </Text>
-                            <Text
-                              numberOfLines={2}
-                              style={[type.caption, styles.pendingMeta]}
-                            >
-                              {pendingEvidenceCopy(capture)}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              style={[type.caption, styles.pendingDate]}
-                            >
-                              {Math.round(capture.durationMs / 1000)}s clip ·{' '}
-                              {new Date(
-                                capture.capturedAtIso,
-                              ).toLocaleDateString()}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                      <Text style={[type.caption, styles.pendingNote]}>
-                        {PENDING_SECTION_NOTE}
+      <FlatList
+        data={reads}
+        refreshing={readsLoading && shots !== null}
+        onRefresh={() => void loadReads()}
+        keyExtractor={item => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.readsContent,
+          reads.length === 0 && captures.length === 0 && styles.emptyContent,
+        ]}
+        ListHeaderComponent={
+          <>
+            {header}
+            {readsFailed ? (
+              <View style={styles.stateBlock}>
+                <ErrorState
+                  title={
+                    shots === null
+                      ? 'Your library couldn’t load'
+                      : 'Your library couldn’t refresh'
+                  }
+                  detail={
+                    shots === null
+                      ? 'Your saved reads and clips could not be opened. Try again to load your library.'
+                      : 'Showing the reads and clips already loaded for this account. Try again to refresh.'
+                  }
+                  onRetry={() => void loadReads()}
+                />
+              </View>
+            ) : null}
+            {reads.length || captures.length ? (
+              <View style={styles.readHeader}>
+                <Text style={[type.body, { color: color.inkSoft }]}>
+                  {reads.length} analyzed {plural(reads.length, 'read')} ·{' '}
+                  {captures.length} pending {plural(captures.length, 'clip')}
+                </Text>
+                {captures.length ? (
+                  <View style={styles.pendingGroup}>
+                    <View style={styles.pendingHeader}>
+                      <Text
+                        numberOfLines={2}
+                        style={[type.micro, styles.pendingHeaderLabel]}
+                      >
+                        {PENDING_SECTION_LABEL}
                       </Text>
+                      <Pill label={PENDING_SECTION_PILL} tone="neutral" />
                     </View>
-                  ) : null}
-                  <View style={styles.filterRow}>
-                    <Pill label="ALL STROKES" tone="dark" />
-                    <Pill label="NEWEST FIRST" />
+                    {captures.slice(0, 3).map(capture => (
+                      <View key={capture.id} style={styles.pendingRow}>
+                        <View style={styles.pendingIcon}>
+                          <Icon
+                            name={
+                              capture.evidenceStatus === 'valid'
+                                ? 'person'
+                                : 'camera'
+                            }
+                            size={18}
+                            color={color.court}
+                          />
+                        </View>
+                        <View style={styles.flex}>
+                          <Text
+                            numberOfLines={1}
+                            style={[type.bodyBold, styles.pendingTitle]}
+                          >
+                            {pendingCaptureTitle(capture)}
+                          </Text>
+                          <Text
+                            numberOfLines={2}
+                            style={[type.caption, styles.pendingMeta]}
+                          >
+                            {pendingEvidenceCopy(capture)}
+                          </Text>
+                          <Text
+                            numberOfLines={1}
+                            style={[type.caption, styles.pendingDate]}
+                          >
+                            {Math.round(capture.durationMs / 1000)}s clip ·{' '}
+                            {new Date(
+                              capture.capturedAtIso,
+                            ).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                    <Text style={[type.caption, styles.pendingNote]}>
+                      {PENDING_SECTION_NOTE}
+                    </Text>
                   </View>
+                ) : null}
+                <View style={styles.filterRow}>
+                  <Pill label="ALL STROKES" tone="dark" />
+                  <Pill label="NEWEST FIRST" />
                 </View>
-              ) : null}
-            </>
-          }
-          ListEmptyComponent={
+              </View>
+            ) : null}
+          </>
+        }
+        ListEmptyComponent={
+          readsFailed ? undefined : shots === null ? (
+            <LoadingState label="Opening your library…" />
+          ) : (
             <EmptyState
               title="Your measured reads, in one place."
-              body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
+              body="Scored analyses appear here with their technique score and model version. Unscored captures stay clearly marked."
               action={
                 <Button
                   label="Analyze your first stroke"
@@ -524,57 +623,55 @@ export function LibraryScreen() {
                 />
               }
             />
-          }
-          renderItem={({ item, index }) => (
-            <PressableScale
-              accessibilityLabel={`Open ${item.shotType.replace(
-                /_/g,
-                ' ',
-              )} result`}
-              onPress={() =>
-                navigation.navigate('Result', { analysisId: item.id })
-              }
-              style={styles.row}
-            >
-              <View style={styles.dateBlock}>
-                <Text style={[type.micro, { color: color.inkSoft }]}>
-                  {new Date(item.capturedAt)
-                    .toLocaleDateString(undefined, { month: 'short' })
-                    .toUpperCase()}
-                </Text>
-                <Text style={[type.h2, styles.dateNumber]}>
-                  {new Date(item.capturedAt).getDate()}
+          )
+        }
+        renderItem={({ item, index }) => (
+          <PressableScale
+            accessibilityLabel={`Open ${item.shotType.replace(
+              /_/g,
+              ' ',
+            )} result`}
+            onPress={() =>
+              navigation.navigate('Result', { analysisId: item.id })
+            }
+            style={styles.row}
+          >
+            <View style={styles.dateBlock}>
+              <Text style={[type.micro, { color: color.inkSoft }]}>
+                {new Date(item.capturedAt)
+                  .toLocaleDateString(undefined, { month: 'short' })
+                  .toUpperCase()}
+              </Text>
+              <Text style={[type.h2, styles.dateNumber]}>
+                {new Date(item.capturedAt).getDate()}
+              </Text>
+            </View>
+            <View style={styles.flex}>
+              <Text numberOfLines={2} style={[type.h3, styles.strokeName]}>
+                {item.shotType.replace(/_/g, ' ')}
+              </Text>
+              <Text numberOfLines={1} style={[type.caption, styles.readMeta]}>
+                Read {String(reads.length - index).padStart(2, '0')} ·{' '}
+                {new Date(item.capturedAt).toLocaleTimeString(undefined, {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
+            {item.resultKind === 'low_confidence' ? (
+              <View style={styles.notRead}>
+                <Icon name="camera" size={17} color={color.warn} />
+                <Text style={[type.micro, { color: color.warn }]}>
+                  NOT READ
                 </Text>
               </View>
-              <View style={styles.flex}>
-                <Text numberOfLines={2} style={[type.h3, styles.strokeName]}>
-                  {item.shotType.replace(/_/g, ' ')}
-                </Text>
-                <Text numberOfLines={1} style={[type.caption, styles.readMeta]}>
-                  Read {String(reads.length - index).padStart(2, '0')} ·{' '}
-                  {new Date(item.capturedAt).toLocaleTimeString(undefined, {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </Text>
-              </View>
-              {item.resultKind === 'low_confidence' ? (
-                <View style={styles.notRead}>
-                  <Icon name="camera" size={17} color={color.warn} />
-                  <Text style={[type.micro, { color: color.warn }]}>
-                    NOT READ
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.score}>
-                  {item.overallScore?.toFixed(1)}
-                </Text>
-              )}
-              <Icon name="chevron" size={18} color={color.inkSoft} />
-            </PressableScale>
-          )}
-        />
-      )}
+            ) : (
+              <Text style={styles.score}>{item.overallScore?.toFixed(1)}</Text>
+            )}
+            <Icon name="chevron" size={18} color={color.inkSoft} />
+          </PressableScale>
+        )}
+      />
     </SafeAreaView>
   );
 }

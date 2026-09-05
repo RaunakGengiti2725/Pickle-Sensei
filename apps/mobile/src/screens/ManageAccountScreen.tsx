@@ -37,7 +37,13 @@ import {
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
 import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
+import {
+  captureAccountDeletionScope,
+  isAccountDeletionScopeCurrent,
+  useAuthStore,
+  type AccountDeletionScope,
+  type AuthProvider,
+} from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
@@ -301,7 +307,10 @@ function ChoiceRow(props: {
 function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
-  onDeleted: (result: AccountDeletionResult) => void;
+  onDeleted: (
+    result: AccountDeletionResult,
+    scope: AccountDeletionScope,
+  ) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -312,6 +321,7 @@ function DeleteAccountDialog(props: {
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deletionScopeRef = useRef<AccountDeletionScope | null>(null);
   // Bumped every time the dialog closes: an async step that started in an
   // earlier presentation must not mutate the state of a later (or closed)
   // one, so every continuation checks it before touching state.
@@ -330,6 +340,7 @@ function DeleteAccountDialog(props: {
   useEffect(() => {
     if (!props.visible) {
       presentationRef.current += 1;
+      deletionScopeRef.current = null;
       stopCountdown();
       setStep({ phase: 'why' });
       setReason(null);
@@ -350,7 +361,10 @@ function DeleteAccountDialog(props: {
         useNativeDriver: true,
       }).start();
     }
-    return stopCountdown;
+    return () => {
+      presentationRef.current += 1;
+      stopCountdown();
+    };
   }, [entrance, props.visible, reduced]);
 
   /** Page change with motion: the card re-lays out smoothly (LayoutAnimation)
@@ -404,16 +418,36 @@ function DeleteAccountDialog(props: {
     goTo({ phase: 'review' }, 'forward');
   };
 
+  const apiSessionForDeletion = (scope: AccountDeletionScope) => {
+    const apiSession = getApiSession();
+    if (
+      !isAccountDeletionScopeCurrent(scope) ||
+      (apiSession &&
+        (apiSession.canonicalAppUserId !== scope.session?.canonicalAppUserId ||
+          apiSession.provider !== scope.session?.provider))
+    ) {
+      throw new AccountDeletionError(
+        'deletion.session_expired',
+        'Your signed-in account changed. Close this dialog and try again from the account you want to delete.',
+        false,
+      );
+    }
+    return apiSession;
+  };
+
   const beginRequest = async () => {
     const presentation = presentationRef.current;
+    const scope = captureAccountDeletionScope();
+    deletionScopeRef.current = scope;
     setError(null);
     setStep({ phase: 'requesting' });
     try {
       const { challenge } = await requestAccountDeletion(
-        getApiSession(),
+        apiSessionForDeletion(scope),
         survey,
       );
       if (presentation !== presentationRef.current) return;
+      apiSessionForDeletion(scope);
       const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
       setStep({ phase: 'armed', challenge, secondsLeft });
       timerRef.current = setInterval(() => {
@@ -439,11 +473,16 @@ function DeleteAccountDialog(props: {
 
   const confirmDeletion = async (challenge: string) => {
     const presentation = presentationRef.current;
+    const scope = deletionScopeRef.current;
+    if (!scope) return;
     setError(null);
     setStep({ phase: 'deleting', challenge });
     try {
-      const result = await confirmAccountDeletion(getApiSession(), challenge);
-      props.onDeleted(result);
+      const result = await confirmAccountDeletion(
+        apiSessionForDeletion(scope),
+        challenge,
+      );
+      props.onDeleted(result, scope);
     } catch (e) {
       if (presentation !== presentationRef.current) return;
       const canRetrySameChallenge =
@@ -456,7 +495,7 @@ function DeleteAccountDialog(props: {
       setError(
         e instanceof AccountDeletionError
           ? e.message
-          : 'The deletion could not be completed. Nothing was deleted.',
+          : 'Account deletion could not be confirmed. Check your connection and try again.',
       );
     }
   };
@@ -829,6 +868,16 @@ export function ManageAccountScreen() {
   const session = useAuthStore(s => s.session);
   const completeAccountDeletion = useAuthStore(s => s.completeAccountDeletion);
   const [confirmingDeletion, setConfirmingDeletion] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    setConfirmingDeletion(false);
+  }, [session]);
 
   const providerLabel = session ? PROVIDER_LABELS[session.provider] : '—';
 
@@ -883,13 +932,15 @@ export function ManageAccountScreen() {
       <DeleteAccountDialog
         visible={confirmingDeletion}
         onCancel={() => setConfirmingDeletion(false)}
-        onDeleted={result => {
-          setConfirmingDeletion(false);
+        onDeleted={(result, scope) => {
+          if (mountedRef.current && isAccountDeletionScopeCurrent(scope)) {
+            setConfirmingDeletion(false);
+          }
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
+          void completeAccountDeletion(scope).then(outcome => {
+            const cleanup = outcome ?? useAuthStore.getState().deletionCleanup;
             if (cleanup?.localPurge === 'failed') {
               showBrandNotice({
                 title: 'Account deleted',

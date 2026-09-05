@@ -31,6 +31,9 @@ const { existsSync, readFileSync } = require('fs') as {
   readFileSync: (path: string, encoding: 'utf8') => string;
 };
 const { join } = require('path') as { join: (...parts: string[]) => string };
+const { env } = require('process') as {
+  env: { PICKLE_REAL_FOOTAGE_RUN_DIR?: string };
+};
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 import type { CapturedClip } from '../src/camera/capture';
 import {
@@ -51,19 +54,26 @@ let mockReadArtifact: (uri: string) => Promise<string> = async () => {
   throw new Error('readCaptureArtifact mock not configured');
 };
 
-const RUN_DIR = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'datasets',
-  'paddle-bench',
-  'runs',
-  'wm-volley-02',
-);
+const RUN_DIR =
+  env.PICKLE_REAL_FOOTAGE_RUN_DIR ||
+  join(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'datasets',
+    'paddle-bench',
+    'runs',
+    'wm-volley-02',
+  );
 const POSE_PATH = join(RUN_DIR, 'pose.json');
 const META_PATH = join(RUN_DIR, 'extract-meta.json');
 const artifactsPresent = existsSync(POSE_PATH) && existsSync(META_PATH);
+if (env.PICKLE_REAL_FOOTAGE_RUN_DIR && !artifactsPresent) {
+  throw new Error(
+    'Configured real-footage run is missing pose.json or extract-meta.json',
+  );
+}
 
 function loadRealSequence(): { sequence: PoseSequence; sidecarJson: string } {
   // The canonical run's pose.json IS a complete pickle.pose-sequence.v1 wire

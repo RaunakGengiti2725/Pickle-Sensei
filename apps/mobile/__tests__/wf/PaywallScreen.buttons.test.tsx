@@ -54,6 +54,7 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import { BrandSpinner, PressableScale } from '../../src/design/components';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
   PaywallScreen,
   type PaywallScreenProps,
@@ -319,6 +320,7 @@ function expectAccessibleTarget(node: TestRenderer.ReactTestInstance) {
 
 beforeEach(() => {
   clearAccessStoreConfiguration();
+  setActiveDataOwner('11111111-1111-4111-8111-111111111111');
 });
 
 afterEach(() => {
@@ -387,6 +389,73 @@ describe('PaywallScreen buttons — value page', () => {
     ).toBeGreaterThan(0);
 
     act(() => renderer.unmount());
+  });
+
+  it('the value page offers only shipping capabilities, never plan completion or reassessment benefits', async () => {
+    const deps = dependencies();
+    configureAccessStore(deps);
+    const renderer = await renderPaywall(screenProps());
+    try {
+      const copy = allText(renderer);
+      expect(copy).toContain('Unlimited technique ratings');
+      expect(copy).toContain('Coaching that follows evidence');
+      expect(copy).not.toMatch(
+        /reassessment|baseline|plan that prescribed|personalized plan/i,
+      );
+      expect(copy).not.toContain('$');
+      expect(deps.store.purchase).not.toHaveBeenCalled();
+      expect(deps.store.restore).not.toHaveBeenCalled();
+      expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('failed store pricing is visible and retryable on the value page, with legal links and close still available', async () => {
+    const deps = dependencies();
+    deps.store.loadPlans.mockRejectedValueOnce(new Error('store offline'));
+    configureAccessStore(deps);
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    try {
+      expect(allText(renderer)).toContain(
+        'Membership pricing is unavailable from the app store right now.',
+      );
+      expect(
+        renderer.root.findAll(n => n.props.accessibilityRole === 'alert')
+          .length,
+      ).toBeGreaterThan(0);
+      expect(allText(renderer)).not.toContain('$');
+      expect(maybeByTestId(renderer, 'paywall-continue')).toHaveLength(0);
+      expect(
+        hostOf(byLabel(renderer, 'Terms of use')).props.accessibilityRole,
+      ).toBe('link');
+      expect(
+        hostOf(byLabel(renderer, 'Privacy policy')).props.accessibilityRole,
+      ).toBe('link');
+      act(() => {
+        byLabel(renderer, 'Terms of use').props.onPress();
+        byLabel(renderer, 'Privacy policy').props.onPress();
+      });
+      expect(props.onOpenTerms).toHaveBeenCalledTimes(1);
+      expect(props.onOpenPrivacy).toHaveBeenCalledTimes(1);
+      const retry = byTestId(renderer, 'paywall-retry').props.onPress;
+      await act(async () => {
+        retry();
+        retry();
+      });
+      await flush();
+      expect(deps.store.loadPlans).toHaveBeenCalledTimes(2);
+      expect(deps.backend.getAccess).toHaveBeenCalledTimes(2);
+      expect(maybeByTestId(renderer, 'paywall-retry')).toHaveLength(0);
+      expect(deps.store.purchase).not.toHaveBeenCalled();
+      expect(deps.store.restore).not.toHaveBeenCalled();
+      expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+      act(() => byLabel(renderer, 'Close membership offer').props.onPress());
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      act(() => renderer.unmount());
+    }
   });
 
   it('"Close membership offer" calls onClose exactly once per press', async () => {
@@ -554,6 +623,145 @@ describe('PaywallScreen buttons — plan podium', () => {
 });
 
 describe('PaywallScreen buttons — purchase CTA', () => {
+  it('loading access blocks both store operations even through a previously enabled handler', async () => {
+    const deps = dependencies();
+    configureAccessStore(deps);
+    const renderer = await renderPaywall(screenProps());
+    try {
+      await openPricing(renderer);
+      const purchase = byTestId(renderer, 'paywall-continue').props.onPress;
+      const restore = byTestId(renderer, 'paywall-restore').props.onPress;
+      const pending = deferred<CanonicalAccessState>();
+      deps.backend.getAccess.mockImplementationOnce(() => pending.promise);
+      let refresh!: Promise<boolean>;
+      act(() => {
+        refresh = useAccessStore.getState().refreshAccess();
+      });
+      expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+      expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+      await act(async () => {
+        purchase();
+        restore();
+      });
+      expect(deps.store.purchase).not.toHaveBeenCalled();
+      expect(deps.store.restore).not.toHaveBeenCalled();
+      await act(async () => {
+        pending.resolve(freeAccess);
+        await refresh;
+      });
+      expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it.each([
+    ['purchase', 'close'],
+    ['purchase', 'unmount'],
+    ['purchase', 'owner change'],
+    ['restore', 'close'],
+    ['restore', 'unmount'],
+    ['restore', 'owner change'],
+  ] as const)(
+    'a verified %s completing after %s never navigates the dismissed screen',
+    async (operation, exit) => {
+      const deps = dependencies();
+      const pending = deferred<StoreEntitlementState>();
+      deps.store[operation].mockImplementationOnce(() => pending.promise);
+      configureAccessStore(deps);
+      const props = screenProps();
+      const renderer = await renderPaywall(props);
+      let mounted = true;
+      try {
+        await openPricing(renderer);
+        const testID =
+          operation === 'purchase' ? 'paywall-continue' : 'paywall-restore';
+        await act(async () => byTestId(renderer, testID).props.onPress());
+        if (exit === 'close') {
+          const close = byLabel(renderer, 'Close membership offer');
+          expect(close.props.disabled).toBeFalsy();
+          act(() => close.props.onPress());
+        } else if (exit === 'unmount') {
+          act(() => renderer.unmount());
+          mounted = false;
+        } else {
+          setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+        }
+        await act(async () => pending.resolve(storeEntitlement));
+        await flush();
+        expect(deps.store[operation]).toHaveBeenCalledTimes(1);
+        expect(deps.backend.syncBilling).toHaveBeenCalledTimes(1);
+        expect(props.onPurchased).not.toHaveBeenCalled();
+      } finally {
+        if (mounted) act(() => renderer.unmount());
+      }
+    },
+  );
+
+  it.each(['value page', 'close', 'unmount', 'owner change'] as const)(
+    'previously enabled purchase and restore handlers cannot reach the store after %s',
+    async exit => {
+      const deps = dependencies();
+      configureAccessStore(deps);
+      const renderer = await renderPaywall(screenProps());
+      let mounted = true;
+      try {
+        await openPricing(renderer);
+        const purchase = byTestId(renderer, 'paywall-continue').props.onPress;
+        const restore = byTestId(renderer, 'paywall-restore').props.onPress;
+        if (exit === 'value page') {
+          await act(async () =>
+            byTestId(renderer, 'paywall-back').props.onPress(),
+          );
+        } else if (exit === 'close') {
+          act(() =>
+            byLabel(renderer, 'Close membership offer').props.onPress(),
+          );
+        } else if (exit === 'unmount') {
+          act(() => renderer.unmount());
+          mounted = false;
+        } else {
+          setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+        }
+        await act(async () => {
+          purchase();
+          restore();
+        });
+        expect(deps.store.purchase).not.toHaveBeenCalled();
+        expect(deps.store.restore).not.toHaveBeenCalled();
+        expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+      } finally {
+        if (mounted) act(() => renderer.unmount());
+      }
+    },
+  );
+
+  it('initialization settling during a pending restore cannot enable a second store operation', async () => {
+    const deps = dependencies();
+    const pending = deferred<StoreEntitlementState>();
+    deps.store.restore.mockImplementationOnce(() => pending.promise);
+    configureAccessStore(deps);
+    const renderer = await renderPaywall(screenProps());
+    try {
+      await openPricing(renderer);
+      const purchase = byTestId(renderer, 'paywall-continue').props.onPress;
+      const restore = byTestId(renderer, 'paywall-restore').props.onPress;
+      await act(async () => restore());
+      await act(async () => useAccessStore.getState().initialize());
+      expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+      expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+      await act(async () => {
+        purchase();
+        restore();
+      });
+      expect(deps.store.purchase).not.toHaveBeenCalled();
+      expect(deps.store.restore).toHaveBeenCalledTimes(1);
+      await act(async () => pending.resolve(storeEntitlement));
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it('success: purchases the selected plan, syncs with the backend, then calls onPurchased once', async () => {
     const deps = dependencies();
     configureAccessStore(deps);
@@ -1017,30 +1225,28 @@ describe('PaywallScreen buttons — legal links', () => {
 });
 
 describe('PaywallScreen buttons — verified membership page', () => {
-  it('"Close membership" and "Continue coaching" both dismiss via onClose', async () => {
-    const deps = dependencies();
-    deps.backend.getAccess.mockResolvedValue(premiumAccess);
-    configureAccessStore(deps);
-    const props = screenProps();
-    const renderer = await renderPaywall(props);
+  it.each(['Close membership', 'Continue coaching'])(
+    '%s dismisses via onClose once, even on a duplicate tap',
+    async label => {
+      const deps = dependencies();
+      deps.backend.getAccess.mockResolvedValue(premiumAccess);
+      configureAccessStore(deps);
+      const props = screenProps();
+      const renderer = await renderPaywall(props);
 
-    expect(allText(renderer)).toContain('Your full court is open.');
-    expect(maybeByTestId(renderer, 'paywall-see-plans')).toHaveLength(0);
-    expect(maybeByTestId(renderer, 'paywall-continue')).toHaveLength(0);
-
-    act(() => {
-      byLabel(renderer, 'Close membership').props.onPress();
-    });
-    expect(props.onClose).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      byLabel(renderer, 'Continue coaching').props.onPress();
-    });
-    expect(props.onClose).toHaveBeenCalledTimes(2);
-    expect(props.onPurchased).not.toHaveBeenCalled();
-
-    act(() => renderer.unmount());
-  });
+      expect(allText(renderer)).toContain('Your full court is open.');
+      expect(maybeByTestId(renderer, 'paywall-see-plans')).toHaveLength(0);
+      expect(maybeByTestId(renderer, 'paywall-continue')).toHaveLength(0);
+      const dismiss = byLabel(renderer, label).props.onPress;
+      act(() => {
+        dismiss();
+        dismiss();
+      });
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+      expect(props.onPurchased).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    },
+  );
 });
 
 describe('PaywallScreen buttons — accessibility and hit targets', () => {
@@ -1050,7 +1256,12 @@ describe('PaywallScreen buttons — accessibility and hit targets', () => {
 
     const pressables = allPressables(renderer);
     expect(pressables.map(n => n.props.accessibilityLabel).sort()).toEqual(
-      ['Close membership offer', 'See membership plans'].sort(),
+      [
+        'Close membership offer',
+        'See membership plans',
+        'Terms of use',
+        'Privacy policy',
+      ].sort(),
     );
     pressables.forEach(expectAccessibleTarget);
 

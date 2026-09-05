@@ -1,5 +1,6 @@
 import type { ApiSession } from './apiSession';
 import type { AccountBootstrapEnvironment } from './deviceContext';
+import { localBearerExpiryMs } from './sessionLifecycle';
 
 export type AccountProvider = ApiSession['provider'];
 
@@ -163,7 +164,11 @@ function parseSessionTokens(payload: unknown): SessionTokens | null {
   ) {
     return null;
   }
-  return { accessToken, refreshToken, expiresAtMs: expiresAt * 1000 };
+  return {
+    accessToken,
+    refreshToken,
+    expiresAtMs: localBearerExpiryMs(expiresAt, session['expiresIn']),
+  };
 }
 
 /**

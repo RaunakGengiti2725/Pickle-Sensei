@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type AccessibilityActionEvent,
   type GestureResponderEvent,
 } from 'react-native';
@@ -14,6 +16,7 @@ import {
   Button,
   Card,
   PressableScale,
+  ScreenHeader,
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
@@ -559,7 +562,7 @@ export function StrokeResult(props: StrokeResultProps) {
         <View style={styles.insightHeader}>
           <Icon name="spark" size={17} color={color.court} />
           <Text style={[type.micro, { color: color.court }]}>
-            {insightMeasured ? 'WHAT THE CAMERA MEASURED' : 'MEASURED INSIGHT'}
+            {insightMeasured ? 'BODY-POSE ESTIMATE' : 'MEASURED INSIGHT'}
           </Text>
         </View>
         <Text style={[type.bodyBold, styles.insightSentence]}>
@@ -693,6 +696,47 @@ export function StrokeResult(props: StrokeResultProps) {
 
 // ─── ANALYZING state — mascot motion + honest stage captions ────────────────
 
+export const ACCESSIBLE_ANALYSIS_FONT_SCALE = 1.3;
+
+export function AnalysisScreenHeader(props: {
+  title: string;
+  onClose: () => void;
+  dark?: boolean;
+}) {
+  const { fontScale } = useWindowDimensions();
+  if (fontScale <= ACCESSIBLE_ANALYSIS_FONT_SCALE) {
+    return <ScreenHeader {...props} />;
+  }
+  const fg = props.dark ? color.onDark : color.ink;
+  return (
+    <View style={styles.accessibleHeader} testID="analysis-screen-header">
+      <PressableScale
+        accessibilityLabel="Close"
+        onPress={props.onClose}
+        hitSlop={8}
+        containerStyle={styles.headerCloseContainer}
+        style={[
+          styles.headerClose,
+          {
+            backgroundColor: props.dark
+              ? color.inkElevated
+              : color.surfaceElevated,
+            borderColor: props.dark ? color.lineDark : color.line,
+          },
+        ]}
+      >
+        <Icon name="close" size={20} color={fg} />
+      </PressableScale>
+      <Text
+        accessibilityRole="header"
+        style={[type.h3, styles.accessibleHeaderTitle, { color: fg }]}
+      >
+        {props.title}
+      </Text>
+    </View>
+  );
+}
+
 export function StrokeResultAnalyzing(props: {
   caption: string;
   detail?: string;
@@ -705,6 +749,8 @@ export function StrokeResultAnalyzing(props: {
   progress?: AnalysisProgressUi | null;
 }) {
   const reduced = useReducedMotion();
+  const { fontScale } = useWindowDimensions();
+  const accessibleLayout = fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -728,13 +774,8 @@ export function StrokeResultAnalyzing(props: {
   const track = props.dark ? color.lineDark : color.line;
   const arc = props.dark ? color.volt : color.court;
 
-  return (
-    <View
-      style={styles.analyzingWrap}
-      accessibilityLiveRegion="polite"
-      accessibilityLabel={`${props.caption} Keep Pickle Sensei open.`}
-      testID="stroke-result-analyzing"
-    >
+  const content = (
+    <>
       <View style={styles.analyzingVisual}>
         <MascotStage
           dark={props.dark}
@@ -805,11 +846,57 @@ export function StrokeResultAnalyzing(props: {
         {props.detail ??
           'Only measured evidence will be shown — nothing is invented.'}
       </Text>
+    </>
+  );
+  return accessibleLayout ? (
+    <ScrollView
+      style={styles.analyzingScroll}
+      contentContainerStyle={styles.analyzingScrollContent}
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={`${props.caption} Keep Pickle Sensei open.`}
+      testID="stroke-result-analyzing"
+    >
+      {content}
+    </ScrollView>
+  ) : (
+    <View
+      style={styles.analyzingWrap}
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={`${props.caption} Keep Pickle Sensei open.`}
+      testID="stroke-result-analyzing"
+    >
+      {content}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  accessibleHeader: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xs,
+    gap: space.md,
+    flexShrink: 0,
+  },
+  accessibleHeaderTitle: { flex: 1 },
+  headerCloseContainer: { width: 44 },
+  headerClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyzingScroll: { flex: 1, minHeight: 0 },
+  analyzingScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+  },
   title: { color: color.ink, marginTop: space.sm },
   subtitle: { color: color.inkSoft, marginTop: space.xs, maxWidth: 370 },
   attemptRow: {

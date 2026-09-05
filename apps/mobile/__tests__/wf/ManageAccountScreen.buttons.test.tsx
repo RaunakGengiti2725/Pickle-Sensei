@@ -956,11 +956,15 @@ describe('ManageAccountScreen button ledger', () => {
       });
       await pressAsync(sheetButton(renderer, 'Permanently delete'));
       expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
+        'Account deletion could not be confirmed. Check your connection and try again.',
       );
+      expect(allText(renderer)).not.toContain('Nothing was deleted');
       expect(sheetButton(renderer, 'Permanently delete').props.disabled).toBe(
         false,
       );
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
     });
   });
 

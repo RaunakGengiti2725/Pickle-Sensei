@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -16,7 +17,13 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, PressableScale, ScreenHeader } from '../design/components';
+import {
+  BrandSpinner,
+  Button,
+  PressableScale,
+  ScreenHeader,
+  useReducedMotion,
+} from '../design/components';
 import { Icon, type IconName } from '../design/icons';
 import {
   MascotMoment,
@@ -46,6 +53,7 @@ import {
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
+import { captureDataOwnerScope } from '../data/accountScope';
 import { triggerOutboxSync } from '../data/syncRuntime';
 import {
   savePendingCapture,
@@ -59,7 +67,7 @@ import {
   planPracticeSet,
   type PracticeSetPlan,
 } from '../analysis/practiceSet';
-import { getApiSession } from '../account/apiSession';
+import { bearerTokenFor, getApiSession } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { useAppStore } from '../state/appStore';
 import { useAccessStore } from '../state/accessStore';
@@ -72,8 +80,12 @@ import {
 import type { CaptureAnalysisRecord } from '@pickle/analysis-pipeline';
 import { TechniqueIntentPicker } from '../flow/TechniqueIntentPicker';
 import type { RootStackParams } from '../navigation/params';
-import { StrokeResultAnalyzing } from '../components/StrokeResult';
 import {
+  ACCESSIBLE_ANALYSIS_FONT_SCALE,
+  AnalysisScreenHeader,
+} from '../components/StrokeResult';
+import {
+  AnalysisProgressBar,
   analysisStageProgress,
   extractionProgress,
   observeExtractionProgress,
@@ -119,6 +131,14 @@ export const ANALYSIS_MASCOT_POSES = {
   recovery: 'lunge',
   outcome: 'reach',
 } satisfies Record<string, MascotPose>;
+
+const ANALYSIS_STAGE_COPY: Record<AnalysisProgressUi['stage'], string> = {
+  verifying: 'Checking the stroke and player selection saved with your clip.',
+  extracting: 'Tracking the player’s movement from your video on this device.',
+  measuring:
+    'Reading your recorded movement. Only checkpoints supported by your capture can be scored.',
+  saving: 'Your read is saved. Getting everything ready for your form review.',
+};
 
 export const READINESS_COPY: Record<CameraReadinessState, string> = {
   no_person: 'Step fully into frame',
@@ -211,9 +231,14 @@ function cornerBracketPath(
  * accessible element — nothing inside is interactive.
  */
 function CameraMockPreview() {
+  const [statusHeight, setStatusHeight] = useState(0);
+  const frameTop = Math.max(FRAME_TOP, statusHeight + space.lg);
   return (
     <View
-      style={styles.preview}
+      style={[
+        styles.preview,
+        { paddingTop: frameTop, height: PREVIEW_HEIGHT + frameTop - FRAME_TOP },
+      ]}
       accessible
       accessibilityRole="image"
       accessibilityLabel="Camera preview: line up with the player outline, tap record and swing"
@@ -245,7 +270,10 @@ function CameraMockPreview() {
           style={styles.previewSilhouette}
         />
       </View>
-      <View style={styles.previewStatus}>
+      <View
+        style={styles.previewStatus}
+        onLayout={event => setStatusHeight(event.nativeEvent.layout.height)}
+      >
         <View style={styles.previewStatusKicker}>
           <View style={styles.previewStatusDot} />
           <Text style={[type.micro, { color: color.mint }]}>SET UP</Text>
@@ -574,6 +602,8 @@ export function AnalyzeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Analyze'>>();
   const source = route.params?.source ?? 'camera';
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   // TRY AGAIN loop (MOBBIN brief §2): a Result screen hands the ORIGINAL
   // run's technique intent back here; it is consumed exactly once (lazy
   // initializer) and seeds the picker/zero-touch gate so the player skips
@@ -586,6 +616,8 @@ export function AnalyzeScreen() {
     return null;
   });
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' });
+  const [showSetup, setShowSetup] = useState(false);
+  const reducedMotion = useReducedMotion();
   const [declaredStroke, setDeclared] = useState<ShotTypeSlug | null>(
     rearm?.declaredStroke ?? null,
   );
@@ -612,6 +644,15 @@ export function AnalyzeScreen() {
   const scoringActive = useRef(false);
   const abandoned = useRef(false);
   const autoLaunchStarted = useRef(false);
+  const dataScope = useRef(captureDataOwnerScope()).current;
+  const dataOwner = dataScope.owner;
+  const ownsRun = useCallback(() => {
+    const current = captureDataOwnerScope();
+    return (
+      current.owner === dataScope.owner &&
+      current.generation === dataScope.generation
+    );
+  }, [dataScope]);
   // Every scoring run reserves a permit that is then consumed or released,
   // so the access snapshot the rest of the app reads (Settings membership
   // row, tab-bar rating gate, Paywall allowance) is stale the moment a run
@@ -623,10 +664,15 @@ export function AnalyzeScreen() {
   useEffect(
     () => () => {
       const access = useAccessStore.getState();
-      if (!ratingLedgerTouched.current || access.status === 'idle') return;
+      if (
+        !ratingLedgerTouched.current ||
+        access.status === 'idle' ||
+        !ownsRun()
+      )
+        return;
       void access.refreshAccess();
     },
-    [],
+    [ownsRun],
   );
   // Honest progress surface for the scoring flow (parallel to `phase`, so
   // every existing message/transition stays byte-identical). Non-null only
@@ -645,6 +691,10 @@ export function AnalyzeScreen() {
   useEffect(
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
+        if (abandoned.current || !ownsRun()) return;
+        if (!operationActive.current && !scoringActive.current) return;
+        if (scoringActive.current && event.type !== 'import_pose_extraction')
+          return;
         if (event.type === 'readiness') {
           usabilityFunnel.log('readiness_state', event.state);
           if (event.state === 'ready') usabilityFunnel.log('ready');
@@ -709,7 +759,11 @@ export function AnalyzeScreen() {
                 : event.state === 'extracting'
                   ? event.progress
                   : undefined;
-            if (matchesRun && typeof fraction === 'number') {
+            if (
+              matchesRun &&
+              typeof fraction === 'number' &&
+              Number.isFinite(fraction)
+            ) {
               const emittedAtMs = Date.parse(event.emittedAtIso);
               run.eta = observeExtractionProgress(
                 run.eta,
@@ -718,13 +772,16 @@ export function AnalyzeScreen() {
               );
               setAnalysisProgress(extractionProgress(run.eta));
             }
-          }
-          if (event.state === 'extracting') {
-            setPhase({ kind: 'working', message: 'Reading player movement…' });
+            if (matchesRun && event.state === 'extracting') {
+              setPhase({
+                kind: 'working',
+                message: 'Reading player movement…',
+              });
+            }
           }
         }
       }),
-    [],
+    [ownsRun],
   );
 
   // Zero-handholding funnel (docs/USABILITY_ZERO_HANDHOLDING.md): observe
@@ -751,9 +808,8 @@ export function AnalyzeScreen() {
       }
       // One capture, one analysis: a second tap while a run is in flight is
       // ignored rather than reserving a second permit for the same clip.
-      if (scoringActive.current) return;
+      if (scoringActive.current || abandoned.current || !ownsRun()) return;
       scoringActive.current = true;
-      const session = getApiSession();
       // Imported clips carry no recorded pose sequence until the explicit
       // native extraction pass runs. When the bridge method exists, this run
       // measures the sequence now (seeded by the user's tap when there is
@@ -783,12 +839,14 @@ export function AnalyzeScreen() {
         if (declaredStroke) {
           await setDeclaredStroke(getDb(), captureId, declaredStroke);
         }
+        if (abandoned.current || !ownsRun()) return;
         // The tap is user input tied to the capture: persist it with the
         // row so it survives restarts and stays available to any later
         // analysis pass, whether or not this run can analyze the clip.
         if (targetSeed) {
           await setCaptureTargetSeed(getDb(), captureId, targetSeed);
         }
+        if (abandoned.current || !ownsRun()) return;
         let analysisClip = clip;
         if (needsPoseExtraction && clip.captureMode === 'imported_video') {
           // Arm the extraction progress surface BEFORE the native pass
@@ -801,6 +859,7 @@ export function AnalyzeScreen() {
               clip,
               targetSeed?.point ?? null,
             );
+            if (!ownsRun()) return;
             analysisClip = {
               ...clip,
               poseSequence: extraction.poseSequence,
@@ -819,7 +878,7 @@ export function AnalyzeScreen() {
               // The run continues on the in-memory clip.
             }
           } catch (error) {
-            if (abandoned.current) return;
+            if (abandoned.current || !ownsRun()) return;
             const message = importedPoseExtractionFailureMessage(error);
             usabilityFunnel.log('error_shown', message);
             setPhase({
@@ -832,10 +891,10 @@ export function AnalyzeScreen() {
           } finally {
             extractionRun.current = null;
           }
+          if (abandoned.current || !ownsRun()) return;
           setPhase({ kind: 'working', message: 'Measuring your swing…' });
         }
-        if (abandoned.current) return;
-        setAnalysisProgress(analysisStageProgress('measuring'));
+        if (abandoned.current || !ownsRun()) return;
         // PRACTICE SET: every scored analysis in one sitting shares a
         // sessionId so the Result and Progress surfaces can show whether the
         // re-record after the advice moved the score. A TRY AGAIN re-arm
@@ -852,8 +911,16 @@ export function AnalyzeScreen() {
         } catch {
           practiceSet = null;
         }
+        if (
+          abandoned.current ||
+          !ownsRun() ||
+          (practiceSet !== null && practiceSet.owner !== dataOwner)
+        )
+          return;
         const sessionId = practiceSet?.sessionId ?? null;
+        setAnalysisProgress(analysisStageProgress('measuring'));
         ratingLedgerTouched.current = true;
+        const session = getApiSession();
         const outcome = await runCaptureAnalysis({
           db: getDb(),
           captureId,
@@ -863,11 +930,14 @@ export function AnalyzeScreen() {
           handedness: profile?.handedness ?? 'right',
           cameraView: 'side',
           apiConfig: {
-            baseUrl: session?.apiBaseUrl ?? '',
+            baseUrl:
+              session?.apiBaseUrl ?? getRuntimePublicConfig().apiBaseUrl ?? '',
             token: session?.bearerToken ?? null,
           },
+          resolveApiToken: () => (ownsRun() ? bearerTokenFor(dataOwner) : null),
           appVersion: getRuntimePublicConfig().appVersion,
           sessionId,
+          practiceSetPlan: practiceSet,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -879,6 +949,24 @@ export function AnalyzeScreen() {
                 )
               : null,
         });
+        if (!ownsRun()) return;
+        if (outcome.kind === 'scored') {
+          if (!abandoned.current) {
+            setAnalysisProgress(analysisStageProgress('saving'));
+          }
+          // The scored analysis is saved with the plan's sessionId: commit
+          // the set now (new sets write their session row + sync entry; the
+          // kv activity stamp keeps the set alive). Best-effort — the score
+          // is already durable.
+          if (
+            practiceSet &&
+            practiceSet.owner === dataOwner &&
+            !outcome.practiceSetCommitted
+          ) {
+            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+          }
+          if (!ownsRun()) return;
+        }
         // The measured/saved boundary lives inside runCaptureAnalysis (no
         // incremental signal is exposed); once it returns, the remaining
         // work is routing the already-persisted outcome.
@@ -888,8 +976,7 @@ export function AnalyzeScreen() {
         // A new rating leaves for the server right away; the access snapshot
         // is deliberately NOT re-read here — see ratingLedgerTouched.
         if (outcome.kind === 'scored') triggerOutboxSync();
-        if (abandoned.current) return;
-        setAnalysisProgress(analysisStageProgress('saving'));
+        if (abandoned.current || !ownsRun()) return;
         if (outcome.kind === 'unavailable') {
           usabilityFunnel.log('error_shown', outcome.reason);
           setPhase({
@@ -913,13 +1000,6 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
@@ -953,7 +1033,7 @@ export function AnalyzeScreen() {
         usabilityFunnel.log('result_opened');
         navigation.replace('Result', { analysisId: outcome.analysisId });
       } catch (error) {
-        if (abandoned.current) return;
+        if (abandoned.current || !ownsRun()) return;
         const message = error instanceof Error ? error.message : String(error);
         usabilityFunnel.log('error_shown', message);
         setPhase({
@@ -967,14 +1047,22 @@ export function AnalyzeScreen() {
         // The progress surface describes ONE scoring run; it never outlives
         // it (error surfaces and the next run start clean).
         extractionRun.current = null;
-        setAnalysisProgress(null);
+        if (!abandoned.current && ownsRun()) setAnalysisProgress(null);
       }
     },
-    [declaredStroke, navigation, profile, rearm, techniqueIntent],
+    [
+      dataOwner,
+      declaredStroke,
+      navigation,
+      ownsRun,
+      profile,
+      rearm,
+      techniqueIntent,
+    ],
   );
 
   const run = useCallback(async () => {
-    if (operationActive.current) return;
+    if (operationActive.current || abandoned.current || !ownsRun()) return;
     operationActive.current = true;
     // Each capture attempt starts with a clean envelope verdict, live
     // evidence buffer, target seed, and live-window signals: all of them
@@ -993,6 +1081,7 @@ export function AnalyzeScreen() {
         source === 'library'
           ? await importStrokeVideo()
           : await captureStrokeVideo();
+      if (!ownsRun()) return;
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
@@ -1008,6 +1097,7 @@ export function AnalyzeScreen() {
         clip,
         declaredStroke,
       );
+      if (abandoned.current || !ownsRun()) return;
       if (
         clip.captureMode === 'automatic_pose_trigger' &&
         (declaredStroke !== null ||
@@ -1032,6 +1122,7 @@ export function AnalyzeScreen() {
       usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
       setPhase({ kind: 'saved', clip, captureId });
     } catch (error) {
+      if (abandoned.current || !ownsRun()) return;
       const message = error instanceof Error ? error.message : String(error);
       if (message.toLowerCase().includes('cancel')) {
         // User cancel is not a startup failure.
@@ -1056,7 +1147,14 @@ export function AnalyzeScreen() {
     } finally {
       operationActive.current = false;
     }
-  }, [declaredStroke, navigation, scoreCapture, source, techniqueIntent]);
+  }, [
+    declaredStroke,
+    navigation,
+    ownsRun,
+    scoreCapture,
+    source,
+    techniqueIntent,
+  ]);
 
   // Library imports auto-launch (no declaration is useful for them yet);
   // guided capture waits for the user to declare a stroke and start.
@@ -1090,46 +1188,110 @@ export function AnalyzeScreen() {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.darkScreen}>
         <StatusBar barStyle="light-content" />
-        <ScreenHeader
+        <AnalysisScreenHeader
           dark
-          title={source === 'library' ? 'Import video' : 'Auto Analyze'}
+          title={
+            analysisProgress
+              ? 'Stroke analysis'
+              : source === 'library'
+                ? 'Import video'
+                : 'Auto Analyze'
+          }
           onClose={() => {
+            if (abandoned.current) return;
             abandoned.current = true;
             cancelCameraOperation();
             navigation.goBack();
           }}
         />
-        {phase.message.startsWith('Measuring') ||
-        phase.message.startsWith('Reading player movement') ? (
+        {analysisProgress ? (
           // ANALYZING state (MOBBIN brief §1): single-state arc with the
           // honest stage caption scoreCapture set, plus the progress bar —
           // determinate ONLY for the natively-measured extraction pass,
           // indeterminate stage pulses everywhere else. Never a fake
           // percentage.
-          <StrokeResultAnalyzing
-            dark
-            caption={phase.message}
-            progress={analysisProgress}
-          />
+          <ScrollView
+            style={styles.workingScroll}
+            contentContainerStyle={[
+              styles.workingBody,
+              accessibleLayout && styles.accessibleWorkingBody,
+            ]}
+            showsVerticalScrollIndicator={accessibleLayout}
+            testID="analysis-processing"
+          >
+            <View
+              style={styles.processingMark}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <BrandSpinner
+                size={72}
+                color={color.volt}
+                trackColor={color.lineDark}
+              />
+            </View>
+            <Text style={[type.micro, styles.processingEyebrow]}>
+              ON-DEVICE ANALYSIS
+            </Text>
+            <Text
+              style={[type.h1, styles.processingTitle]}
+              accessibilityRole="header"
+              accessibilityLiveRegion="polite"
+            >
+              {analysisProgress.label}…
+            </Text>
+            <Text style={[type.body, styles.workingCopy]}>
+              {ANALYSIS_STAGE_COPY[analysisProgress.stage]}
+            </Text>
+            <AnalysisProgressBar
+              dark
+              hideLabel
+              progress={analysisProgress.progress}
+              label={analysisProgress.label}
+              sublabel={analysisProgress.sublabel}
+            />
+          </ScrollView>
         ) : (
-          <View style={styles.workingBody} accessibilityLiveRegion="polite">
+          <ScrollView
+            style={styles.workingScroll}
+            contentContainerStyle={[
+              styles.workingBody,
+              accessibleLayout && styles.accessibleWorkingBody,
+            ]}
+            showsVerticalScrollIndicator={accessibleLayout}
+          >
             <MascotStage
+              compact
               dark
               pose={ANALYSIS_MASCOT_POSES.working}
               tone="volt"
               testID="analysis-mascot-working"
             />
-            <Text style={[type.h2, styles.workingTitle]}>{phase.message}</Text>
+            <Text
+              style={[type.h1, styles.workingTitle]}
+              accessibilityRole="header"
+              accessibilityLiveRegion="polite"
+            >
+              {phase.message}
+            </Text>
             <Text style={[type.body, styles.workingCopy]}>
               {source === 'library'
                 ? 'The selected file is copied into protected app storage before anything else happens.'
-                : 'The native camera guides framing, waits for a stable full-body read, and captures the stroke automatically.'}
+                : 'The camera opens in setup. Tap record when you are ready, then walk into the outline and swing.'}
             </Text>
             {source !== 'library' ? (
               <CaptureGuidancePanel envelope={captureEnvelope} />
             ) : null}
-          </View>
+          </ScrollView>
         )}
+        {analysisProgress ? (
+          <View style={styles.workingFooter} testID="analysis-working-footer">
+            <Icon name="shield" color={color.mint} size={18} />
+            <Text style={[type.caption, styles.workingFooterCopy]}>
+              Your capture is saved on this device.
+            </Text>
+          </View>
+        ) : null}
       </SafeAreaView>
     );
   }
@@ -1146,37 +1308,59 @@ export function AnalyzeScreen() {
           }
           onClose={() => navigation.goBack()}
         />
-        <View style={styles.stateBody} accessibilityRole="alert">
-          <MascotStage
-            compact
-            pose={ANALYSIS_MASCOT_POSES.recovery}
-            tone="danger"
-            testID="analysis-mascot-error"
-          />
-          <Text style={[type.h1, styles.stateTitle]}>Nothing was rated.</Text>
-          <Text style={[type.body, styles.stateCopy]}>{phase.message}</Text>
-          <View style={styles.stateActions}>
-            {phase.recovery === 'upgrade' ? (
-              <Button
-                label="Upgrade to Pro"
-                variant="volt"
-                onPress={() =>
-                  navigation.navigate('Paywall', { source: 'rating' })
-                }
-              />
-            ) : (
+        <ScrollView
+          contentContainerStyle={styles.stateBody}
+          showsVerticalScrollIndicator={false}
+          testID="analysis-recovery-body"
+        >
+          <View style={styles.stateMessage} accessibilityRole="alert">
+            <MascotStage
+              compact
+              pose={ANALYSIS_MASCOT_POSES.recovery}
+              tone="danger"
+              testID="analysis-mascot-error"
+            />
+            <Text style={[type.h1, styles.stateTitle]}>Nothing was rated.</Text>
+            <Text style={[type.body, styles.stateCopy]}>{phase.message}</Text>
+          </View>
+          {phase.stage === 'analysis' ? (
+            <View style={styles.keptCapture} testID="analysis-capture-kept">
+              <Icon name="shield" color={color.court} size={18} />
+              <Text style={[type.caption, styles.keptCaptureCopy]}>
+                Your capture is saved on this device.
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+        <View style={styles.stateActions} testID="analysis-recovery-actions">
+          {phase.recovery === 'upgrade' ? (
+            <Button
+              label="Upgrade to Pro"
+              variant="volt"
+              onPress={() => {
+                if (!ownsRun()) return;
+                navigation.navigate('Paywall', { source: 'rating' });
+              }}
+            />
+          ) : (
+            <>
+              <Text style={[type.caption, styles.recoveryHint]}>
+                {source === 'library'
+                  ? 'Try again opens the video library. Choose a clip with one clear swing.'
+                  : 'Try again opens the camera for a new swing.'}
+              </Text>
               <Button
                 label="Try again"
                 variant="dark"
                 onPress={() => void run()}
               />
-            )}
-            <Button
-              label="Close"
-              variant="ghost"
-              onPress={() => navigation.goBack()}
-            />
-          </View>
+            </>
+          )}
+          <Button
+            label="Close"
+            variant="ghost"
+            onPress={() => navigation.goBack()}
+          />
         </View>
       </SafeAreaView>
     );
@@ -1195,7 +1379,11 @@ export function AnalyzeScreen() {
           title="Stroke analysis"
           onClose={() => navigation.popToTop()}
         />
-        <View style={styles.stateBody} accessibilityLiveRegion="polite">
+        <ScrollView
+          contentContainerStyle={styles.stateBody}
+          showsVerticalScrollIndicator={false}
+          accessibilityLiveRegion="polite"
+        >
           <MascotStage
             compact
             pose={ANALYSIS_MASCOT_POSES.outcome}
@@ -1212,28 +1400,29 @@ export function AnalyzeScreen() {
             {presentation.title}
           </Text>
           <Text style={[type.body, styles.stateCopy]}>{presentation.body}</Text>
-          <View style={styles.stateActions}>
-            {presentation.showResult ? (
-              <Button
-                label="See the full read"
-                variant="volt"
-                onPress={() => navigation.replace('Result', { analysisId })}
-              />
-            ) : null}
+        </ScrollView>
+        <View style={styles.stateActions}>
+          {presentation.showResult ? (
             <Button
-              label={
-                source === 'library' ? 'Import another' : 'Capture another'
-              }
-              variant="dark"
-              icon={source === 'library' ? 'upload' : 'camera'}
-              onPress={() => void run()}
+              label="See the full read"
+              variant="volt"
+              onPress={() => {
+                if (!ownsRun()) return;
+                navigation.replace('Result', { analysisId });
+              }}
             />
-            <Button
-              label="Close"
-              variant="ghost"
-              onPress={() => navigation.goBack()}
-            />
-          </View>
+          ) : null}
+          <Button
+            label={source === 'library' ? 'Import another' : 'Capture another'}
+            variant="dark"
+            icon={source === 'library' ? 'upload' : 'camera'}
+            onPress={() => void run()}
+          />
+          <Button
+            label="Close"
+            variant="ghost"
+            onPress={() => navigation.goBack()}
+          />
         </View>
       </SafeAreaView>
     );
@@ -1244,6 +1433,7 @@ export function AnalyzeScreen() {
     // the player their two free analyses are used up and Pro unlocks more.
     const { analysisId } = phase;
     const seeScore = () => {
+      if (abandoned.current || !ownsRun()) return;
       usabilityFunnel.log('result_opened');
       navigation.replace('Result', { analysisId });
     };
@@ -1254,16 +1444,18 @@ export function AnalyzeScreen() {
         <Modal
           visible
           transparent
-          animationType="fade"
+          animationType={reducedMotion ? 'none' : 'fade'}
           onRequestClose={seeScore}
         >
           <View style={styles.freeLimitRoot}>
-            <View
+            <ScrollView
+              style={styles.freeLimitScroll}
+              contentContainerStyle={styles.freeLimitDialog}
+              showsVerticalScrollIndicator={false}
               accessibilityViewIsModal
               accessibilityLabel={`You've used ${freeAnalysesPhrase(
                 freeRatingsLimit,
               )} free analyses`}
-              style={styles.freeLimitDialog}
             >
               <MascotStage
                 compact
@@ -1271,7 +1463,7 @@ export function AnalyzeScreen() {
                 tone="volt"
                 testID="analysis-mascot-free-limit"
               />
-              <Text style={[type.h2, styles.freeLimitTitle]}>
+              <Text style={[type.h1, styles.freeLimitTitle]}>
                 That was your last free analysis.
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
@@ -1284,6 +1476,7 @@ export function AnalyzeScreen() {
                   label="Upgrade to Pro"
                   variant="volt"
                   onPress={() => {
+                    if (abandoned.current || !ownsRun()) return;
                     navigation.replace('Result', { analysisId });
                     navigation.navigate('Paywall', { source: 'rating' });
                   }}
@@ -1294,7 +1487,7 @@ export function AnalyzeScreen() {
                   onPress={seeScore}
                 />
               </View>
-            </View>
+            </ScrollView>
           </View>
         </Modal>
       </SafeAreaView>
@@ -1458,30 +1651,37 @@ export function AnalyzeScreen() {
       <ScreenHeader
         dark
         title="Auto Analyze"
-        onClose={() => navigation.goBack()}
+        onClose={() => {
+          if (abandoned.current) return;
+          abandoned.current = true;
+          navigation.goBack();
+        }}
       />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        testID="analyze-setup-content"
       >
         <Text style={[type.micro, { color: color.volt }]}>
           AUTOMATIC CAPTURE
         </Text>
-        <Text style={[type.hero, styles.hero]}>
+        <Text style={[type.hero, styles.hero]} accessibilityRole="header">
           Tap record.{`\n`}Swing once.
         </Text>
         <Text style={[type.body, styles.heroCopy]}>
-          Prop the phone side-on at waist height. Tap record, match the outline
-          and swing naturally — your stroke is captured by itself, or tap stop
-          to analyze what you have.
+          Prop the phone side-on at waist height. Tap record, then walk into the
+          outline and make one natural stroke.
         </Text>
 
         <MascotMoment
+          compact
           dark
           pose={ANALYSIS_MASCOT_POSES.ready}
           tone="volt"
           eyebrow="YOUR COURT-SIDE COACH"
-          caption="Choose a technique, frame one natural swing, and Sensei handles the read."
+          caption="The camera opens in setup. Nothing records until you tap record."
           accessibilityLabel="Pickle Sensei mascot demonstrating a forehand"
           testID="analysis-mascot-ready"
           style={styles.readyMascot}
@@ -1509,19 +1709,47 @@ export function AnalyzeScreen() {
           }}
         />
 
-        <CameraMockPreview />
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Camera setup guide"
+          accessibilityHint="Shows the framing preview and four recording steps."
+          accessibilityState={{ expanded: showSetup }}
+          testID="analyze-setup-toggle"
+          onPress={() => setShowSetup(value => !value)}
+          style={styles.setupToggle}
+        >
+          <Icon name="camera" color={color.mint} size={22} />
+          <View style={styles.setupToggleCopy}>
+            <Text style={[type.bodyBold, { color: color.onDark }]}>
+              Camera setup guide
+            </Text>
+            <Text style={[type.caption, { color: color.onDarkSubtle }]}>
+              Where to stand. When to record.
+            </Text>
+          </View>
+          <View
+            style={{ transform: [{ rotate: showSetup ? '270deg' : '90deg' }] }}
+          >
+            <Icon name="chevron" color={color.onDark} size={20} />
+          </View>
+        </PressableScale>
 
-        <View style={styles.steps}>
-          {ANALYZE_STEPS.map(step => (
-            <StepRow
-              key={step.index}
-              index={step.index}
-              icon={step.icon}
-              title={step.title}
-              detail={step.detail}
-            />
-          ))}
-        </View>
+        {showSetup ? (
+          <View testID="analyze-setup-guide">
+            <CameraMockPreview />
+            <View style={styles.steps}>
+              {ANALYZE_STEPS.map(step => (
+                <StepRow
+                  key={step.index}
+                  index={step.index}
+                  icon={step.icon}
+                  title={step.title}
+                  detail={step.detail}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.notes}>
           <View style={styles.noteRow}>
@@ -1540,7 +1768,10 @@ export function AnalyzeScreen() {
           </View>
         </View>
       </ScrollView>
-      <View style={styles.footer}>
+      <View style={styles.footer} testID="analyze-camera-actions">
+        <Text style={[type.caption, styles.footerHint]}>
+          Camera opens first. You control record.
+        </Text>
         <Button
           label="Open automatic camera"
           variant="volt"
@@ -1562,6 +1793,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: space.lg,
   },
+  freeLimitScroll: { width: '100%', maxWidth: 380, flexGrow: 0 },
   freeLimitDialog: {
     width: '100%',
     maxWidth: 380,
@@ -1619,10 +1851,23 @@ const styles = StyleSheet.create({
   },
   hero: { color: color.onDark, marginTop: space.sm },
   heroCopy: { color: color.onDarkSubtle, marginTop: space.sm, maxWidth: 340 },
-  readyMascot: { marginTop: space.xl },
+  readyMascot: { marginTop: space.lg },
+  setupToggle: {
+    minHeight: 64,
+    marginTop: space.lg,
+    padding: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
+    backgroundColor: color.inkElevated,
+  },
+  setupToggleCopy: { flex: 1, gap: space.xs },
   preview: {
     height: PREVIEW_HEIGHT,
-    marginTop: space.xl,
+    marginTop: space.md,
     paddingTop: FRAME_TOP,
     alignItems: 'center',
     borderRadius: radius.xl,
@@ -1718,18 +1963,56 @@ const styles = StyleSheet.create({
   noteCopy: { color: color.onDarkSubtle, flex: 1 },
   footer: {
     paddingHorizontal: space.lg,
-    paddingTop: space.sm,
+    paddingTop: space.md,
     paddingBottom: space.sm,
+    gap: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.lineDark,
     backgroundColor: color.surfaceDark,
   },
+  footerHint: { color: color.onDarkSubtle, textAlign: 'center' },
+  workingScroll: { flex: 1, minHeight: 0 },
+  accessibleWorkingBody: { justifyContent: 'flex-start' },
   workingBody: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xl,
   },
+  processingMark: {
+    width: 128,
+    height: 128,
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
+    backgroundColor: color.cameraSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingEyebrow: {
+    color: color.volt,
+    textAlign: 'center',
+    marginTop: space.xl,
+  },
+  processingTitle: {
+    color: color.onDark,
+    textAlign: 'center',
+    marginTop: space.sm,
+    maxWidth: 340,
+  },
+  workingFooter: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.lineDark,
+  },
+  workingFooterCopy: { color: color.onDarkSubtle, flexShrink: 1 },
   workingTitle: {
     color: color.onDark,
     textAlign: 'center',
@@ -1742,11 +2025,24 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   stateBody: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xl,
   },
+  stateMessage: { alignItems: 'center', maxWidth: 340 },
+  keptCapture: {
+    maxWidth: 340,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.lg,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.courtSoft,
+  },
+  keptCaptureCopy: { color: color.courtDeep, flexShrink: 1 },
   stateTitle: { color: color.ink, textAlign: 'center', marginTop: space.lg },
   intentEyebrow: { textAlign: 'center', marginTop: space.lg },
   intentTitle: { color: color.ink, textAlign: 'center', marginTop: space.sm },
@@ -1756,7 +2052,16 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     maxWidth: 340,
   },
-  stateActions: { alignSelf: 'stretch', gap: 10, marginTop: space.xl },
+  stateActions: {
+    alignSelf: 'stretch',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  recoveryHint: { color: color.inkSoft, textAlign: 'center' },
   savedContent: {
     paddingHorizontal: space.lg,
     paddingTop: space.lg,

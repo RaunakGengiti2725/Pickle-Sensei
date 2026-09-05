@@ -56,6 +56,21 @@ export interface RefreshedTokens {
   bearerExpiresAtMs: number;
 }
 
+export function localBearerExpiryMs(
+  expiresAt: number,
+  expiresIn: unknown,
+): number {
+  if (
+    typeof expiresIn === 'number' &&
+    Number.isFinite(expiresIn) &&
+    expiresIn >= 0
+  ) {
+    const expiry = Date.now() + expiresIn * 1000;
+    if (Number.isSafeInteger(expiry)) return expiry;
+  }
+  return expiresAt * 1000;
+}
+
 /**
  * Exchanges a refresh token for a fresh access/refresh pair. Throws
  * SessionRefreshError — retryable for network/server trouble, non-retryable
@@ -94,6 +109,7 @@ export async function refreshApiSession(
       accessToken?: unknown;
       refreshToken?: unknown;
       expiresAt?: unknown;
+      expiresIn?: unknown;
     };
   } | null;
   const tokens = payload?.session;
@@ -114,7 +130,7 @@ export async function refreshApiSession(
   return {
     bearerToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
-    bearerExpiresAtMs: tokens.expiresAt * 1000,
+    bearerExpiresAtMs: localBearerExpiryMs(tokens.expiresAt, tokens.expiresIn),
   };
 }
 
@@ -124,21 +140,55 @@ export async function refreshApiSession(
  * the refresh token still dies at its natural rotation/expiry.
  */
 export async function revokeApiSession(
-  session: ApiSession,
+  session: Pick<
+    ApiSession,
+    'apiBaseUrl' | 'refreshToken' | 'bearerExpiresAtMs'
+  > & {
+    bearerToken?: string | null;
+  },
   fetchFn: SessionFetch = globalThis.fetch,
 ): Promise<void> {
   try {
-    await post(
-      fetchFn,
-      `${session.apiBaseUrl}/v1/auth/logout`,
-      {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${session.bearerToken}`,
+    let bearerToken = session.bearerToken;
+    let refreshed = false;
+    const refreshForLogout = async () => {
+      if (!session.refreshToken) return;
+      const tokens = await refreshApiSession(
+        { apiBaseUrl: session.apiBaseUrl, refreshToken: session.refreshToken },
+        { fetchFn },
+      );
+      bearerToken = tokens.bearerToken;
+      refreshed = true;
+    };
+    if (
+      !bearerToken ||
+      (session.bearerExpiresAtMs != null &&
+        session.bearerExpiresAtMs <= Date.now())
+    ) {
+      await refreshForLogout();
+    }
+    if (!bearerToken) return;
+    const logout = () =>
+      post(
+        fetchFn,
+        `${session.apiBaseUrl}/v1/auth/logout`,
+        {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${bearerToken}`,
+          },
         },
-      },
-      REQUEST_TIMEOUT_MS,
-    );
+        REQUEST_TIMEOUT_MS,
+      );
+    const response = await logout();
+    if (
+      !refreshed &&
+      session.refreshToken &&
+      (response.status === 401 || response.status === 403)
+    ) {
+      await refreshForLogout();
+      await logout();
+    }
   } catch {
     // Offline sign-out: the caller has already cleared local tokens.
   }

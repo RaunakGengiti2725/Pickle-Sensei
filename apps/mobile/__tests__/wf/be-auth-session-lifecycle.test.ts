@@ -714,9 +714,12 @@ describe('auth-session-lifecycle: the ONE implicit sign-out is a refused refresh
       queueShot(owner);
       const transport = createTransport(liveClientConfig());
 
-      const first = await drainOutbox(mockCurrentDb(), transport);
-      expect(first).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
-      expect(mockOutbox[0]).toMatchObject({ attempts: 0 });
+      await expect(
+        drainOutbox(mockCurrentDb(), transport),
+      ).rejects.toMatchObject({
+        name: 'DataOwnerChangedError',
+      });
+      expect(mockOutbox[0]).toMatchObject({ attempts: 0, last_error: null });
 
       await settleUnauthorizedHandling();
       expect(callsTo(fetchMock, '/v1/auth/refresh')).toHaveLength(1);
@@ -802,14 +805,17 @@ describe('auth-session-lifecycle: a LEGACY provider-token session keeps the pre-
     const transport = createTransport(liveClientConfig());
 
     // Wall clock moves past the identity token's exp; server answers 401.
-    const result = await drainOutbox(mockCurrentDb(), transport);
-    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    await expect(drainOutbox(mockCurrentDb(), transport)).rejects.toMatchObject(
+      {
+        name: 'DataOwnerChangedError',
+      },
+    );
     expect(bearerOf(callsTo(fetchMock, '/v1/shots:sync')[0]![1])).toBe(
       identityToken,
     );
     expect(mockOutbox[0]).toMatchObject({
       attempts: 0,
-      last_error: expect.stringContaining('could not be verified'),
+      last_error: null,
     });
 
     // Nothing to rotate: no refresh call is even attempted. Apple has no

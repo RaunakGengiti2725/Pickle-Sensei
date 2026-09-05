@@ -67,7 +67,13 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import {
+  AppState,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type {
   CheckpointKey,
@@ -79,6 +85,7 @@ import type {
   ShotAnalysis,
 } from '@pickle/shared-types';
 import { FormReviewScreen } from '../src/screens/FormReviewScreen';
+import { ClipPlayer } from '../src/components/ClipPlayer';
 import {
   clearTryAgainHandoff,
   peekTryAgainHandoff,
@@ -339,6 +346,15 @@ beforeEach(() => {
   // suites do) a file never mixes fake and real timers between tests.
   jest.useFakeTimers();
   jest.clearAllMocks();
+  jest.spyOn(Dimensions, 'get').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 3,
+    fontScale: 1,
+  });
+  jest
+    .spyOn(AppState, 'addEventListener')
+    .mockReturnValue({ remove: jest.fn() });
   clearTryAgainHandoff();
   mockRouteParams = { analysisId: 'analysis-1' };
   mockLoadEvidence.mockResolvedValue(evidence());
@@ -353,6 +369,7 @@ afterEach(async () => {
       renderer.unmount();
     });
   }
+  jest.restoreAllMocks();
   jest.useRealTimers();
 });
 
@@ -532,18 +549,27 @@ describe('FormReviewScreen', () => {
     expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
   });
 
-  it('fills the page: no ScrollView, the player and its stage are flex columns, CTAs stay pinned', async () => {
-    const renderer = await renderScreen();
-    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
-    const [player] = hostByTestId(renderer, 'form-review-player');
-    expect(flatStyle(player!)).toMatchObject({ flex: 1 });
-    const [stage] = hostByTestId(renderer, 'form-review-stage');
-    const stageStyle = flatStyle(stage!);
-    expect(stageStyle).toMatchObject({ flex: 1 });
-    expect(stageStyle.height).toBeUndefined();
-    byTestId(renderer, 'form-review-reanalyze');
-    byTestId(renderer, 'form-review-back');
-  });
+  it.each([1, 1.1])(
+    'at font scale %s fills the page without scrolling, with a flex stage and pinned CTAs',
+    async fontScale => {
+      jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 390,
+        height: 844,
+        scale: 3,
+        fontScale,
+      });
+      const renderer = await renderScreen();
+      expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+      const [player] = hostByTestId(renderer, 'form-review-player');
+      expect(flatStyle(player!)).toMatchObject({ flex: 1 });
+      const [stage] = hostByTestId(renderer, 'form-review-stage');
+      const stageStyle = flatStyle(stage!);
+      expect(stageStyle).toMatchObject({ flex: 1 });
+      expect(stageStyle.height).toBeUndefined();
+      byTestId(renderer, 'form-review-reanalyze');
+      byTestId(renderer, 'form-review-back');
+    },
+  );
 
   it('re-analyze arms the same-intent handoff and opens the guided camera', async () => {
     const renderer = await renderScreen();
@@ -596,6 +622,367 @@ describe('FormReviewScreen', () => {
     );
     // The script still exists — stops come from the analysis, not the pose.
     expect(allText(renderer)).toContain('STOP 1 OF 6');
+  });
+
+  it('fits all five transport controls on a 320-point phone without shrinking touch targets', async () => {
+    const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 320,
+      height: 568,
+      scale: 2,
+      fontScale: 1,
+    });
+    try {
+      const renderer = await renderScreen();
+      const controls = hostByTestId(renderer, 'form-review-controls')[0]!;
+      const styles = [
+        'form-review-speed',
+        'form-review-prev-stop',
+        'form-review-play',
+        'form-review-next-stop',
+        'form-review-autopause',
+      ].map(id => flatStyle(byTestId(renderer, id)));
+      for (const style of styles) {
+        expect(style.width).toBeGreaterThanOrEqual(44);
+        expect(style.height).toBeGreaterThanOrEqual(44);
+      }
+      const requiredWidth =
+        styles.reduce((sum, style) => sum + Number(style.width), 0) +
+        Number(flatStyle(controls).gap) * 4;
+      expect(requiredWidth).toBeLessThanOrEqual(320 - 48);
+    } finally {
+      dimensions.mockRestore();
+    }
+  });
+
+  it('lets VoiceOver scrub the timeline, pauses playback, and clamps at both ends', async () => {
+    const renderer = await renderScreen();
+    const timeline = () => hostByTestId(renderer, 'form-review-timeline')[0]!;
+    expect(timeline().props.accessibilityRole).toBe('adjustable');
+    expect(flatStyle(timeline()).height).toBeGreaterThanOrEqual(44);
+    expect(timeline().props.accessibilityValue).toMatchObject({
+      min: 0,
+      now: 0,
+    });
+    await press(renderer, 'form-review-play');
+    await act(async () => {
+      timeline().props.onAccessibilityAction({
+        nativeEvent: { actionName: 'increment' },
+      });
+    });
+    expect(timeline().props.accessibilityValue.now).toBe(100);
+    expect(allText(renderer)).toContain('0.10s');
+    expect(
+      byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
+    for (let i = 0; i < 2; i += 1) {
+      await act(async () => {
+        timeline().props.onAccessibilityAction({
+          nativeEvent: { actionName: 'decrement' },
+        });
+      });
+    }
+    expect(timeline().props.accessibilityValue.now).toBe(0);
+    const duration = timeline().props.accessibilityValue.max;
+    await act(async () => {
+      for (let i = 0; i < Math.ceil(duration / 100) + 2; i += 1) {
+        timeline().props.onAccessibilityAction({
+          nativeEvent: { actionName: 'increment' },
+        });
+      }
+    });
+    expect(timeline().props.accessibilityValue.now).toBe(duration);
+  });
+
+  it('pauses on app suspension and waits for an explicit play when returning', async () => {
+    const subscription = jest.spyOn(AppState, 'addEventListener');
+    try {
+      const renderer = await renderScreen();
+      const change = subscription.mock.calls.find(
+        ([event]) => event === 'change',
+      );
+      expect(change).toBeDefined();
+      await press(renderer, 'form-review-play');
+      await act(async () => {
+        change![1]('background');
+        jest.advanceTimersByTime(500);
+      });
+      expect(
+        byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+      ).toBe('Play replay');
+      expect(allText(renderer)).toContain('0.00s');
+      await act(async () => {
+        change![1]('active');
+        jest.advanceTimersByTime(500);
+      });
+      expect(allText(renderer)).toContain('0.00s');
+    } finally {
+      subscription.mockRestore();
+    }
+  });
+
+  it.each([1.118, 1.235, 1.3])(
+    'at intermediate font scale %s bounds the stage independently of changing cues, retaining the normal overlay layout',
+    async fontScale => {
+      jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 393,
+        height: 852,
+        scale: 3,
+        fontScale,
+      });
+      mockRouteParams = { analysisId: 'analysis-1', phase: 'contact' };
+      const renderer = await renderScreen();
+      const [scroll] = renderer.root.findAllByType(ScrollView);
+      expect(scroll).toBeDefined();
+      expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
+      expect(scroll!.props.testID).toBe('form-review-content-scroll');
+      expect(flatStyle(scroll!)).toMatchObject({ flex: 1, minHeight: 0 });
+      await act(async () => {
+        scroll!.props.onLayout({
+          nativeEvent: { layout: { width: 345, height: 280, x: 0, y: 0 } },
+        });
+      });
+      await layoutStage(renderer);
+      const stageStyle = flatStyle(
+        hostByTestId(renderer, 'form-review-stage')[0]!,
+      );
+      expect(stageStyle.height).toBe(184);
+      expect(stageStyle.flex).toBeUndefined();
+      expect(
+        hostByTestId(renderer, 'form-review-stage')[0]!.findAll(
+          node => node.props.testID === 'form-review-arrow-label',
+        ),
+      ).not.toHaveLength(0);
+      const cues: string[] = [];
+      for (const stop of [4, 5, 6]) {
+        const stage = hostByTestId(renderer, 'form-review-stage')[0]!;
+        expect(flatStyle(stage)).toEqual(stageStyle);
+        const card = hostByTestId(renderer, 'form-review-stop-card')[0]!;
+        expect(card.props.accessibilityLabel).toContain(`stop ${stop} of 6`);
+        const cue = card.findAllByType(Text).at(-1)!;
+        expect(cue.props.numberOfLines).toBeUndefined();
+        expect(cue.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(cue.props.allowFontScaling).not.toBe(false);
+        cues.push(cue.props.children);
+        if (stop < 6) await press(renderer, 'form-review-next-stop');
+      }
+      expect(new Set(cues).size).toBe(3);
+      expect(cues[0]!.length).toBeGreaterThan(cues[1]!.length);
+      for (const id of [
+        'form-review-timeline',
+        'form-review-controls',
+        'form-review-reanalyze',
+        'form-review-back',
+      ]) {
+        expect(scroll!.findAll(node => node.props.testID === id)).toHaveLength(
+          0,
+        );
+      }
+    },
+  );
+
+  it.each([1.35, 2.64, 3.12])(
+    'at font scale %s scrolls only the video/full cue/disclosure, never the transport or CTAs',
+    async fontScale => {
+      const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 390,
+        height: 844,
+        scale: 3,
+        fontScale,
+      });
+      try {
+        mockRouteParams = { analysisId: 'analysis-1', phase: 'contact' };
+        const renderer = await renderScreen();
+        const [scroll] = renderer.root.findAllByType(ScrollView);
+        expect(scroll).toBeDefined();
+        expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
+        expect(scroll!.props.testID).toBe('form-review-content-scroll');
+        expect(flatStyle(scroll!)).toMatchObject({ flex: 1, minHeight: 0 });
+        const inside = (id: string) =>
+          scroll!.findAll(
+            node => typeof node.type === 'string' && node.props.testID === id,
+          );
+        for (const id of [
+          'form-review-stage',
+          'form-review-stop-card',
+          'form-review-disclosure',
+        ]) {
+          expect(inside(id)).toHaveLength(1);
+        }
+        for (const id of [
+          'form-review-timeline',
+          'form-review-play',
+          'form-review-speed',
+          'form-review-autopause',
+          'form-review-reanalyze',
+          'form-review-back',
+        ]) {
+          expect(inside(id)).toHaveLength(0);
+        }
+        await act(async () => {
+          scroll!.props.onLayout({
+            nativeEvent: { layout: { width: 342, height: 280, x: 0, y: 0 } },
+          });
+        });
+        expect(
+          flatStyle(hostByTestId(renderer, 'form-review-stage')[0]!),
+        ).toMatchObject({ height: 184 });
+        await layoutStage(renderer);
+        const [stage] = hostByTestId(renderer, 'form-review-stage');
+        expect(stage!.findAllByType(Text)).toHaveLength(0);
+        expect(inside('form-review-arrow-label')).toHaveLength(1);
+        const [card] = hostByTestId(renderer, 'form-review-stop-card');
+        for (const text of card!.findAllByType(Text)) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+        expect(allText(renderer)).toContain(
+          'Meet the ball further out in front',
+        );
+        expect(allText(renderer)).toContain(
+          'Video and pose stay on this device. Analysis results sync with your account.',
+        );
+        expect(
+          byTestId(renderer, 'form-review-speed').props.accessibilityLabel,
+        ).toBe('Playback speed');
+        expect(
+          byTestId(renderer, 'form-review-autopause').props.accessibilityLabel,
+        ).toBe('Auto-pause at checkpoints');
+        await press(renderer, 'form-review-next-stop');
+        expect(allText(renderer)).toContain('STOP 5 OF 6');
+        await press(renderer, 'form-review-prev-stop');
+        expect(allText(renderer)).toContain('STOP 4 OF 6');
+      } finally {
+        dimensions.mockRestore();
+      }
+    },
+  );
+
+  it('keeps 100ms VoiceOver seeking and background pause in the accessible scroll layout', async () => {
+    const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 390,
+      height: 844,
+      scale: 3,
+      fontScale: 2.64,
+    });
+    const subscription = jest.spyOn(AppState, 'addEventListener');
+    try {
+      const renderer = await renderScreen();
+      const timeline = () => hostByTestId(renderer, 'form-review-timeline')[0]!;
+      expect(flatStyle(timeline()).height).toBe(44);
+      await press(renderer, 'form-review-play');
+      await act(async () => {
+        timeline().props.onAccessibilityAction({
+          nativeEvent: { actionName: 'increment' },
+        });
+      });
+      expect(timeline().props.accessibilityValue.now).toBe(100);
+      expect(
+        byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+      ).toBe('Play replay');
+      await press(renderer, 'form-review-play');
+      await act(async () => {
+        subscription.mock.calls.find(([event]) => event === 'change')![1](
+          'background',
+        );
+        jest.advanceTimersByTime(500);
+      });
+      expect(timeline().props.accessibilityValue.now).toBe(100);
+      expect(
+        byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+      ).toBe('Play replay');
+    } finally {
+      subscription.mockRestore();
+      dimensions.mockRestore();
+    }
+  });
+
+  it('keeps missing-evidence copy below the body and uncapped at large text sizes', async () => {
+    const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 390,
+      height: 844,
+      scale: 3,
+      fontScale: 2.64,
+    });
+    try {
+      mockLoadEvidence.mockResolvedValue(evidence({ clip: null }));
+      const renderer = await renderScreen();
+      await layoutStage(renderer);
+      const [stage] = hostByTestId(renderer, 'form-review-stage');
+      expect(stage!.findAllByType(Text)).toHaveLength(0);
+      expect(allText(renderer)).toContain(
+        'The clip file is gone from this device; the measured pose is shown instead.',
+      );
+    } finally {
+      dimensions.mockRestore();
+    }
+  });
+
+  it('restores the current native frame when Dynamic Type reparents the video, without resuming playback', async () => {
+    const renderer = await renderScreen();
+    await press(renderer, 'form-review-autopause');
+    await press(renderer, 'form-review-play');
+    await act(async () => {
+      jest.advanceTimersByTime(600);
+    });
+    await press(renderer, 'form-review-play');
+    const position = hostByTestId(renderer, 'form-review-timeline')[0]!.props
+      .accessibilityValue.now;
+    expect(position).toBeGreaterThan(500);
+    expect(renderer.root.findByType(ClipPlayer).props.seekMs).toBe(-1);
+    for (const fontScale of [1.235, 2.64, 1.235, 1]) {
+      const window = { width: 390, height: 844, scale: 3, fontScale };
+      jest.spyOn(Dimensions, 'get').mockReturnValue(window);
+      await act(async () => {
+        Dimensions.set({ window, screen: window });
+      });
+      expect(renderer.root.findAllByType(ScrollView)).toHaveLength(
+        fontScale > 1.1 ? 1 : 0,
+      );
+      expect(renderer.root.findByType(ClipPlayer).props.seekMs).toBeCloseTo(
+        position,
+        1,
+      );
+      expect(
+        hostByTestId(renderer, 'form-review-timeline')[0]!.props
+          .accessibilityValue.now,
+      ).toBe(position);
+      expect(
+        byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+      ).toBe('Play replay');
+    }
+  });
+
+  it('uses one primary and an uncapped secondary link on compact AX screens, bounding video by the available viewport', async () => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 3.14 });
+    const renderer = await renderScreen();
+    const back = byTestId(renderer, 'form-review-back');
+    expect(back.props.accessibilityLabel).toBe('Back to results');
+    expect(back.props.variant).toBeUndefined();
+    expect(flatStyle(back).minHeight).toBe(44);
+    expect(allText(renderer)).toContain('Back to results');
+    const [scroll] = renderer.root.findAllByType(ScrollView);
+    await act(async () => {
+      scroll!.props.onLayout({
+        nativeEvent: { layout: { width: 327, height: 100, x: 0, y: 0 } },
+      });
+    });
+    expect(
+      flatStyle(hostByTestId(renderer, 'form-review-stage')[0]!).height,
+    ).toBe(100);
+    expect(
+      scroll!.findAll(node => node.props.testID === 'form-review-play'),
+    ).toHaveLength(0);
+    expect(
+      scroll!.findAll(node => node.props.testID === 'form-review-reanalyze'),
+    ).toHaveLength(0);
+    expect(
+      scroll!.findAll(node => node.props.testID === 'form-review-back'),
+    ).toHaveLength(0);
+    await press(renderer, 'form-review-back');
+    expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   });
 
   it('shows the unavailable state when the analysis is missing', async () => {

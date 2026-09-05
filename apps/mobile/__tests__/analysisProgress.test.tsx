@@ -1,5 +1,10 @@
 import React from 'react';
+import { Dimensions, ScrollView, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import {
+  AnalysisScreenHeader,
+  StrokeResultAnalyzing,
+} from '../src/components/StrokeResult';
 import {
   ANALYSIS_DURATION_HINT,
   ANALYSIS_STAGE_LABELS,
@@ -134,7 +139,7 @@ describe('analysis stage snapshots', () => {
         sublabel: ANALYSIS_DURATION_HINT,
       });
     }
-    expect(ANALYSIS_DURATION_HINT).toBe('usually under ~10 seconds');
+    expect(ANALYSIS_DURATION_HINT).toBe('Time varies by clip and device.');
   });
 
   it('extraction is indeterminate before the first native event, real after', () => {
@@ -227,7 +232,7 @@ describe('AnalysisProgressBar', () => {
         dark
         progress={null}
         label="Measuring your swing"
-        sublabel="usually under ~10 seconds"
+        sublabel="Time varies by clip and device."
       />,
     );
     const node = progressNode(renderer);
@@ -235,7 +240,7 @@ describe('AnalysisProgressBar', () => {
     expect(node.props.accessibilityValue.now).toBeUndefined();
     const rendered = textOf(renderer);
     expect(rendered).toContain('Measuring your swing');
-    expect(rendered).toContain('usually under ~10 seconds');
+    expect(rendered).toContain('Time varies by clip and device.');
     expect(rendered).not.toContain('%');
     await act(async () => renderer.unmount());
   });
@@ -249,5 +254,131 @@ describe('AnalysisProgressBar', () => {
     expect(rendered).not.toContain('%');
     expect(rendered).not.toContain('s left');
     await act(async () => renderer.unmount());
+  });
+});
+
+describe('large-text analysis layouts', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it.each([0.82, 1])(
+    'preserves the normal centered loading layout at %sx',
+    async fontScale => {
+      const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 390,
+        height: 844,
+        scale: 3,
+        fontScale,
+      });
+      const renderer = await render(
+        <StrokeResultAnalyzing
+          caption="Measuring your swing"
+          progress={analysisStageProgress('measuring')}
+        />,
+      );
+      try {
+        expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+        expect(textOf(renderer)).not.toContain('%');
+      } finally {
+        await act(async () => renderer.unmount());
+        dimensions.mockRestore();
+      }
+    },
+  );
+
+  it.each([2.64, 3.12])(
+    'at %sx scrolls full loading copy without changing honest progress',
+    async fontScale => {
+      const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 390,
+        height: 844,
+        scale: 3,
+        fontScale,
+      });
+      const renderer = await render(
+        <StrokeResultAnalyzing
+          dark
+          caption="Measuring your swing"
+          progress={analysisStageProgress('measuring')}
+        />,
+      );
+      try {
+        const [scroll] = renderer.root.findAllByType(ScrollView);
+        expect(scroll).toBeDefined();
+        expect(StyleSheet.flatten(scroll!.props.style)).toMatchObject({
+          flex: 1,
+          minHeight: 0,
+        });
+        expect(
+          StyleSheet.flatten(scroll!.props.contentContainerStyle),
+        ).toMatchObject({ flexGrow: 1 });
+        expect(
+          StyleSheet.flatten(scroll!.props.contentContainerStyle).flex,
+        ).toBeUndefined();
+        for (const text of renderer.root.findAllByType(Text)) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+        expect(
+          progressNode(renderer).props.accessibilityValue.now,
+        ).toBeUndefined();
+        expect(textOf(renderer)).not.toContain('%');
+        await act(async () =>
+          renderer.update(
+            <StrokeResultAnalyzing
+              dark
+              caption="Reading player movement"
+              progress={{
+                stage: 'extracting',
+                progress: 0.6,
+                label: 'Reading player movement',
+                sublabel: '60%',
+              }}
+            />,
+          ),
+        );
+        expect(progressNode(renderer).props.accessibilityValue.now).toBe(60);
+        expect(textOf(renderer)).toContain('60%');
+      } finally {
+        await act(async () => renderer.unmount());
+        dimensions.mockRestore();
+      }
+    },
+  );
+
+  it('wraps the real header title at large text sizes without reducing its type or touch target', async () => {
+    const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 320,
+      height: 844,
+      scale: 3,
+      fontScale: 2.64,
+    });
+    const onClose = jest.fn();
+    const renderer = await render(
+      <AnalysisScreenHeader dark title="Stroke analysis" onClose={onClose} />,
+    );
+    try {
+      const title = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === 'Stroke analysis')!;
+      expect(title.props.numberOfLines).toBeUndefined();
+      expect(title.props.maxFontSizeMultiplier).toBeUndefined();
+      expect(title.props.accessibilityRole).toBe('header');
+      const close = renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'Close' &&
+          typeof node.props.onPress === 'function',
+      )[0]!;
+      expect(StyleSheet.flatten(close.props.style)).toMatchObject({
+        width: 44,
+        height: 44,
+      });
+      await act(async () => close.props.onPress());
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => renderer.unmount());
+      dimensions.mockRestore();
+    }
   });
 });

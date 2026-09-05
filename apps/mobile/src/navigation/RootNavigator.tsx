@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Linking, View } from 'react-native';
 import {
   NavigationContainer,
@@ -11,7 +11,8 @@ import {
   type NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { color } from '../design/tokens';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { color, space } from '../design/tokens';
 import type { MainTabParams, RootStackParams } from './params';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LibraryScreen } from '../screens/LibraryScreen';
@@ -29,9 +30,10 @@ import { ManageAccountScreen } from '../screens/ManageAccountScreen';
 import { ConsentSettingsScreen } from '../screens/ConsentSettingsScreen';
 import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
 import { PremiumTabBar } from './PremiumTabBar';
-import { LoadingState } from '../design/components';
+import { Button, ErrorState, LoadingState } from '../design/components';
 import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
+import { getActiveDataOwner } from '../data/accountScope';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { showBrandNotice } from '../design/BrandNotice';
 
@@ -116,41 +118,128 @@ function useRatingRouteGate<RouteName extends keyof RootStackParams>(
   source: 'rating',
 ) {
   const status = useAccessStore(state => state.status);
+  const operation = useAccessStore(state => state.operation);
   const canonicalAccess = useAccessStore(state => state.canonicalAccess);
+  const error = useAccessStore(state => state.error);
   const initialize = useAccessStore(state => state.initialize);
-  const localOnly = useAuthStore(state => state.session?.localOnly === true);
+  const session = useAuthStore(state => state.session);
+  const localOnly = !session || session.localOnly;
+  const owner = getActiveDataOwner();
+  const startedFor = useRef({ owner, session });
+  const active = useRef(true);
+  const exited = useRef(false);
+  const sameSession =
+    startedFor.current.owner === owner &&
+    startedFor.current.session === session;
+  const pending = status === 'idle' || status === 'loading';
+  const requiresPaywall =
+    canonicalAccess?.canStartRating === false &&
+    canonicalAccess.paywallRequired;
+
+  const isCurrent = useCallback(
+    () =>
+      active.current &&
+      !exited.current &&
+      startedFor.current.owner === getActiveDataOwner() &&
+      startedFor.current.session === useAuthStore.getState().session,
+    [],
+  );
 
   useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isCurrent()) return;
     if (localOnly) {
+      exited.current = true;
       navigation.replace('ConnectAccount');
       return;
     }
-    if (canonicalAccess?.canStartRating) return;
     if (status === 'idle') {
-      void initialize();
+      if (operation === 'idle') void initialize();
       return;
     }
-    if (
-      canonicalAccess !== null ||
-      status === 'ready' ||
-      status === 'unconfigured' ||
-      status === 'error'
-    ) {
+    if (status !== 'loading' && requiresPaywall) {
+      exited.current = true;
       navigation.replace('Paywall', { source });
     }
-  }, [canonicalAccess, initialize, localOnly, navigation, source, status]);
+  }, [
+    initialize,
+    isCurrent,
+    localOnly,
+    navigation,
+    operation,
+    requiresPaywall,
+    source,
+    status,
+    session,
+  ]);
 
-  return canonicalAccess?.canStartRating === true;
+  const retry = useCallback(() => {
+    if (!isCurrent() || localOnly) return;
+    const access = useAccessStore.getState();
+    if (access.status === 'loading' || access.operation !== 'idle') return;
+    void access.refreshAccess();
+  }, [isCurrent, localOnly]);
+
+  const cancel = useCallback(() => {
+    if (!active.current || exited.current) return;
+    exited.current = true;
+    navigation.goBack();
+  }, [navigation]);
+
+  return {
+    allowed:
+      sameSession &&
+      active.current &&
+      !exited.current &&
+      !localOnly &&
+      !pending &&
+      canonicalAccess?.canStartRating === true,
+    checking:
+      sameSession &&
+      (!active.current ||
+        exited.current ||
+        localOnly ||
+        pending ||
+        requiresPaywall),
+    detail: !sameSession
+      ? 'Your account changed. Go back and start a new rating.'
+      : (error?.message ??
+        'Your rating access could not be verified. Check your connection and try again. No rating has started.'),
+    retry: sameSession && operation === 'idle' ? retry : undefined,
+    cancel,
+  };
 }
 
 function AnalyzeRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParams, 'Analyze'>) {
-  const allowed = useRatingRouteGate(navigation, 'rating');
-  return allowed ? (
-    <AnalyzeScreen />
-  ) : (
-    <LoadingState label="Checking access…" />
+  const gate = useRatingRouteGate(navigation, 'rating');
+  if (gate.allowed) return <AnalyzeScreen />;
+  return (
+    <SafeAreaView
+      edges={['bottom']}
+      style={{ flex: 1, backgroundColor: color.surface }}
+    >
+      {gate.checking ? (
+        <LoadingState label="Checking access…" />
+      ) : (
+        <ErrorState
+          title="Rating access couldn’t be checked"
+          detail={gate.detail}
+          {...(gate.retry ? { onRetry: gate.retry } : {})}
+          retryLabel="Retry access check"
+        />
+      )}
+      <View style={{ padding: space.lg }}>
+        <Button label="Cancel" variant="secondary" onPress={gate.cancel} />
+      </View>
+    </SafeAreaView>
   );
 }
 

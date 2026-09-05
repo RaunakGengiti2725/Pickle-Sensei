@@ -44,6 +44,7 @@ import React from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
@@ -63,6 +64,7 @@ import {
   PressableScale,
   ScreenHeader,
 } from '../../src/design/components';
+import { radius, space, type } from '../../src/design/tokens';
 
 function render(element: React.ReactElement): ReactTestRenderer {
   let renderer!: ReactTestRenderer;
@@ -364,6 +366,11 @@ describe('ScreenHeader back/close -> props.onBack / props.onClose', () => {
 });
 
 describe('Button <label> -> props.onPress', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
+  });
   const variants = [
     'primary',
     'secondary',
@@ -393,6 +400,117 @@ describe('Button <label> -> props.onPress', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
+
+  it.each([0.82, 1])(
+    'preserves exact default button geometry at font scale %s',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      const renderer = render(
+        <Button
+          label="Re-analyze this stroke"
+          icon="camera"
+          variant="volt"
+          onPress={jest.fn()}
+        />,
+      );
+      const host = onlyPressable(renderer);
+      const label = renderer.root.findByType(Text);
+      const row = label.parent!;
+      expect(flat(host)).toMatchObject({
+        minHeight: 56,
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        overflow: 'hidden',
+      });
+      expect(flat(row)).toMatchObject({
+        minHeight: 54,
+        paddingHorizontal: space.lg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: space.sm,
+      });
+      expect(flat(row).paddingVertical).toBeUndefined();
+      expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+        fontSize: type.bodyBold.fontSize,
+        lineHeight: type.bodyBold.lineHeight,
+      });
+      expect(StyleSheet.flatten(label.props.style).flexShrink).toBeUndefined();
+      expect(StyleSheet.flatten(label.props.style).textAlign).toBeUndefined();
+      act(() => renderer.unmount());
+    },
+  );
+
+  it.each([1.35, 2.64, 3.12])(
+    'fits full labels beside icons at font scale %s without font caps or new press behavior',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      for (const variant of variants) {
+        for (const compact of [false, true]) {
+          const onPress = jest.fn();
+          const renderer = render(
+            <Button
+              label="Re-analyze this stroke"
+              icon="camera"
+              variant={variant}
+              compact={compact}
+              onPress={onPress}
+            />,
+          );
+          const host = onlyPressable(renderer);
+          const label = renderer.root.findByType(Text);
+          const row = label.parent!;
+          expect(flat(host)).toMatchObject({
+            minHeight: compact ? 46 : 56,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            overflow: 'hidden',
+          });
+          expect(flat(row)).toMatchObject({
+            paddingHorizontal: space.md,
+            paddingVertical: space.sm,
+            gap: space.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          });
+          expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+            flexShrink: 1,
+            textAlign: 'center',
+            fontSize: type.bodyBold.fontSize,
+            lineHeight: type.bodyBold.lineHeight,
+          });
+          expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(label.props.allowFontScaling).not.toBe(false);
+          expect(label.props.numberOfLines).toBeUndefined();
+          expect(host.props.accessibilityLabel).toBe('Re-analyze this stroke');
+          expect(meetsHitTarget(host)).toBe(true);
+          expect(onPress).not.toHaveBeenCalled();
+          click(host);
+          expect(onPress).toHaveBeenCalledTimes(1);
+          act(() =>
+            renderer.update(
+              <Button
+                label="Re-analyze this stroke"
+                icon="camera"
+                variant={variant}
+                compact={compact}
+                onPress={onPress}
+                disabled
+              />,
+            ),
+          );
+          click(onlyPressable(renderer));
+          expect(onPress).toHaveBeenCalledTimes(1);
+          act(() => renderer.unmount());
+        }
+      }
+    },
+  );
 
   it('compact buttons still clear the 44pt hit target', () => {
     const renderer = render(

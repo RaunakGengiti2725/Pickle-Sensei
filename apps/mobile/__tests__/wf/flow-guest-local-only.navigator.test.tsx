@@ -12,9 +12,9 @@
  *   - a guest landing on Analyze is `replace`d to ConnectAccount BEFORE the
  *     access store is initialized (no billing/API call, no 401, no spinner
  *     left behind);
- *   - a canonical session without access is initialized once and then sent
- *     to Paywall {source:'rating'} — the "Checking access…" placeholder never
- *     becomes a permanent state, including on `error`/`unconfigured`;
+ *   - a canonical session without verified access is initialized once, then
+ *     fails closed with Retry/Cancel, not an upsell; only an explicit server
+ *     paywallRequired verdict may route to Paywall {source:'rating'};
  *   - ConnectAccount pops itself the moment a non-guest provider appears, and
  *     its Back button pops it for a guest who changes their mind;
  *   - PaywallRoute wires close/purchase to goBack and exposes real legal links.
@@ -270,7 +270,9 @@ function access(remaining: number): CanonicalAccessState {
 
 function setSession(session: AuthSession | null) {
   setActiveDataOwner(
-    session?.localOnly ? GUEST_DATA_OWNER : SIGNED_OUT_DATA_OWNER,
+    session?.localOnly
+      ? GUEST_DATA_OWNER
+      : (session?.canonicalAppUserId ?? SIGNED_OUT_DATA_OWNER),
   );
   useAuthStore.setState({ hydrated: true, session, busy: false, error: null });
 }
@@ -317,10 +319,15 @@ async function settle() {
 }
 
 const realFetch = globalThis.fetch;
+const realAccessActions = {
+  initialize: useAccessStore.getState().initialize,
+  refreshAccess: useAccessStore.getState().refreshAccess,
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
   clearApiSession();
+  useAccessStore.setState(realAccessActions);
   useAccessStore.getState().reset();
   globalThis.fetch = jest
     .fn()
@@ -371,21 +378,38 @@ describe('RootNavigator Analyze gate (useRatingRouteGate) — guest', () => {
 });
 
 describe('RootNavigator Analyze gate — canonical sessions (no infinite "Checking access…")', () => {
-  it('initializes once, then routes an unconfigured account to Paywall {source:"rating"}', async () => {
+  it('initializes once, then shows Retry/Cancel for unconfigured access without guessing Paywall', async () => {
     setSession(syncedSession);
+    const initialize = jest.spyOn(useAccessStore.getState(), 'initialize');
+    const refresh = jest.spyOn(useAccessStore.getState(), 'refreshAccess');
     const renderer = renderRoute('Analyze');
-    expect(allText(renderer)).toContain('Checking access…');
     await settle();
 
+    expect(initialize).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().status).toBe('unconfigured');
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('Paywall', { source: 'rating' });
-    expect(mockReplace).not.toHaveBeenCalledWith('ConnectAccount');
+    expect(allText(renderer)).toContain('Rating access couldn’t be checked');
+    expect(allText(renderer)).not.toContain('Checking access…');
+    expect(allText(renderer)).not.toContain('[AnalyzeScreen]');
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockGoBack).not.toHaveBeenCalled();
+    await act(async () => {
+      pressable(renderer, 'Retry access check').props.onPress();
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(allText(renderer)).toContain('Rating access couldn’t be checked');
+    expect(mockReplace).not.toHaveBeenCalled();
+    await act(async () => {
+      pressable(renderer, 'Cancel').props.onPress();
+    });
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
     expect(globalThis.fetch).not.toHaveBeenCalled();
     act(() => renderer.unmount());
+    initialize.mockRestore();
+    refresh.mockRestore();
   });
 
-  it('an access-store error also leaves the placeholder: Paywall, not a spinner', async () => {
+  it('an access-store error leaves the spinner for honest recovery, not a purchase offer', async () => {
     setSession(syncedSession);
     useAccessStore.setState({
       status: 'error',
@@ -398,8 +422,21 @@ describe('RootNavigator Analyze gate — canonical sessions (no infinite "Checki
     });
     const renderer = renderRoute('Analyze');
     await settle();
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('Paywall', { source: 'rating' });
+    expect(allText(renderer)).toContain('Rating access couldn’t be checked');
+    expect(allText(renderer)).toContain('Access could not be verified.');
+    expect(allText(renderer)).not.toContain('Checking access…');
+    expect(allText(renderer)).not.toContain('[AnalyzeScreen]');
+    expect(
+      pressable(renderer, 'Retry access check').props.accessibilityRole,
+    ).toBe('button');
+    expect(mockReplace).not.toHaveBeenCalled();
+    await act(async () => {
+      const cancel = pressable(renderer, 'Cancel');
+      cancel.props.onPress();
+      cancel.props.onPress();
+    });
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 

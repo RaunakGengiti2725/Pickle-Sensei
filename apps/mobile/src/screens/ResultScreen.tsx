@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -27,7 +28,6 @@ import {
   Pill,
   PressableScale,
   ScoreRing,
-  ScreenHeader,
   SectionTitle,
   useReducedMotion,
 } from '../design/components';
@@ -67,6 +67,8 @@ import { PlanDrillCard, prescriptionLabel } from '../training/components';
 import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia, TrainingPlanItem } from '../training/types';
 import {
+  ACCESSIBLE_ANALYSIS_FONT_SCALE,
+  AnalysisScreenHeader,
   StrokeResult,
   StrokeResultAnalyzing,
   type StrokeResultClip,
@@ -96,7 +98,8 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * RESULT ROUTE — a stroke's outcome as a short sequential guide, reached
  * from Stroke Analysis (AnalyzeScreen) and Library/Home history rows. One
  * idea per page, stepped through with a pinned Next, and NO page scrolls on
- * a 6.1" phone:
+ * a 6.1" phone at normal text sizes (large Dynamic Type keeps full copy in
+ * bounded scroll areas without scrolling the footer):
  *
  *   1. SCORE       — the technique score ring, the DUPR-style estimate and
  *                    the ONE measured insight (plus this sitting's set).
@@ -343,7 +346,7 @@ export function ResultScreen() {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="light-content" />
-        <ScreenHeader
+        <AnalysisScreenHeader
           title="Stroke analysis"
           dark
           onClose={() => navigation.popToTop()}
@@ -426,6 +429,8 @@ interface ResultGuideProps {
 
 function ResultGuide(props: ResultGuideProps) {
   const { analysis, record, clip, review, sequence } = props;
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   const [stepIndex, setStepIndex] = useState(0);
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
@@ -529,7 +534,12 @@ function ResultGuide(props: ResultGuideProps) {
     setStepIndex(current => Math.min(total - 1, current + 1));
   // THE PROBLEM with a replay and NEXT are fixed flex columns (the player
   // fills the page; the summary is three lines) — nothing to scroll.
-  const fixedPage = (step === 'problem' && reviewAvailable) || step === 'next';
+  // Keep that normal phone layout. At large Dynamic Type the recap can grow
+  // in the shell's scroll area; the replay owns its own content-only scroll,
+  // so its timeline/transport must stay in a NON-scrolling shell at every size.
+  const fixedPage =
+    (step === 'problem' && reviewAvailable) ||
+    (step === 'next' && !accessibleLayout);
 
   return (
     <GuideShell
@@ -826,6 +836,8 @@ function GuideShell(props: {
   children: React.ReactNode;
 }) {
   const scroll = props.scroll !== false;
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   return (
     <SafeAreaView
       edges={['top', 'bottom']}
@@ -833,7 +845,10 @@ function GuideShell(props: {
       testID="result-guide"
     >
       <StatusBar barStyle="light-content" />
-      <View style={styles.topRow}>
+      <View
+        style={[styles.topRow, accessibleLayout && styles.accessibleTopRow]}
+        testID="result-guide-header"
+      >
         <PressableScale
           accessibilityLabel="Close"
           hitSlop={8}
@@ -850,8 +865,12 @@ function GuideShell(props: {
           ) : null}
         </View>
         <Text
-          style={[type.micro, styles.stepLabel]}
-          numberOfLines={1}
+          style={[
+            type.micro,
+            styles.stepLabel,
+            accessibleLayout && styles.accessibleStepLabel,
+          ]}
+          numberOfLines={accessibleLayout ? undefined : 1}
           testID="result-guide-step-label"
         >
           {props.label}
@@ -861,8 +880,9 @@ function GuideShell(props: {
         {scroll ? (
           <ScrollView
             ref={props.scrollRef}
+            style={styles.flex}
             contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={accessibleLayout}
             testID="result-guide-scroll"
           >
             {props.children}
@@ -890,6 +910,8 @@ function GuideFooter(props: {
   back?: () => void;
   done?: () => void;
 }) {
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   return (
     <>
       <Button
@@ -901,7 +923,12 @@ function GuideFooter(props: {
         onPress={props.primary.onPress}
         testID={props.primary.testID}
       />
-      <View style={styles.footerLinks}>
+      <View
+        style={[
+          styles.footerLinks,
+          accessibleLayout && styles.accessibleFooterLinks,
+        ]}
+      >
         {props.back ? (
           <PressableScale
             accessibilityLabel="Back"
@@ -939,6 +966,8 @@ function ScorePage(props: {
   onOpenAttempt: (analysisId: string) => void;
 }) {
   const { analysis, insight } = props;
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   const insightMeasured =
     insight.basis === 'measured_fault' || insight.basis === 'measured_clean';
   return (
@@ -969,8 +998,14 @@ function ScorePage(props: {
       >
         <View style={styles.insightHeader}>
           <Icon name="spark" size={17} color={color.volt} />
-          <Text style={[type.micro, { color: color.volt }]}>
-            {insightMeasured ? 'WHAT THE CAMERA MEASURED' : 'MEASURED INSIGHT'}
+          <Text
+            style={[
+              type.micro,
+              { color: color.volt },
+              accessibleLayout && styles.wrappingText,
+            ]}
+          >
+            {insightMeasured ? 'BODY-POSE ESTIMATE' : 'MEASURED INSIGHT'}
           </Text>
         </View>
         <Text style={[type.bodyBold, styles.insightSentence]}>
@@ -1008,6 +1043,8 @@ function ProblemPage(props: {
   script: FormReviewScript | null;
 }) {
   const fix = props.fixes[0] ?? null;
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   // The replay opens frozen on the priority fault's own checkpoint frame —
   // the arrow points at the joint that was measured off target — and plays
   // the rest of the swing from there. The stop that scored that checkpoint
@@ -1066,10 +1103,16 @@ function ProblemPage(props: {
             : 'THE PROBLEM'
           : 'THE REPLAY'}
       </Text>
-      <Text style={[type.h1, styles.headline]} numberOfLines={2}>
+      <Text
+        style={[type.h1, styles.headline]}
+        numberOfLines={accessibleLayout ? undefined : 2}
+      >
         {fix ? fix.name : clean ? 'Every checkpoint held' : 'Your replay'}
       </Text>
-      <Text style={[type.body, styles.sub]} numberOfLines={2}>
+      <Text
+        style={[type.body, styles.sub]}
+        numberOfLines={accessibleLayout ? undefined : 2}
+      >
         {fix
           ? `Scored ${Math.round(fix.score)} — ${directionPhrase(fix.direction)}.`
           : props.insightSentence}
@@ -1156,6 +1199,8 @@ function NextPage(props: {
   priorityFix: FixItem | null;
 }) {
   const { analysis, priorityFix } = props;
+  const accessibleLayout =
+    useWindowDimensions().fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
   const held = strengthList(analysis, ALL_CHECKPOINTS).length;
   const toFix = fixList(analysis, ALL_CHECKPOINTS).length;
   const strongest = strengthList(analysis, 1)[0] ?? null;
@@ -1173,23 +1218,38 @@ function NextPage(props: {
         style={styles.summaryCard}
         testID="result-guide-summary"
       >
-        <View style={styles.tiles}>
+        <View
+          style={[styles.tiles, accessibleLayout && styles.accessibleTiles]}
+        >
           <RecapTile
+            stacked={accessibleLayout}
             value={analysis.overallScore.toFixed(1)}
             unit="/10"
             label="SCORE"
             accessibilityLabel={`Score ${analysis.overallScore.toFixed(1)} out of 10`}
             testID="result-guide-tile-score"
           />
-          <View style={styles.tileDivider} />
+          <View
+            style={[
+              styles.tileDivider,
+              accessibleLayout && styles.accessibleTileDivider,
+            ]}
+          />
           <RecapTile
+            stacked={accessibleLayout}
             value={String(held)}
             label="HELD"
             accessibilityLabel={`${held} checkpoints held`}
             testID="result-guide-tile-held"
           />
-          <View style={styles.tileDivider} />
+          <View
+            style={[
+              styles.tileDivider,
+              accessibleLayout && styles.accessibleTileDivider,
+            ]}
+          />
           <RecapTile
+            stacked={accessibleLayout}
             value={String(toFix)}
             label="TO FIX"
             accessibilityLabel={`${toFix} checkpoints to fix`}
@@ -1197,13 +1257,29 @@ function NextPage(props: {
           />
         </View>
         {priorityFix || clean ? (
-          <View style={[styles.summaryRow, styles.summaryRowDivider]}>
-            <Text style={[type.caption, styles.summaryLabel]}>
+          <View
+            style={[
+              styles.summaryRow,
+              styles.summaryRowDivider,
+              accessibleLayout && styles.accessibleSummaryRow,
+            ]}
+          >
+            <Text
+              style={[
+                type.caption,
+                styles.summaryLabel,
+                accessibleLayout && styles.accessibleSummaryLabel,
+              ]}
+            >
               Priority fix
             </Text>
             <Text
-              style={[type.bodyBold, styles.summaryValue]}
-              numberOfLines={2}
+              style={[
+                type.bodyBold,
+                styles.summaryValue,
+                accessibleLayout && styles.accessibleSummaryValue,
+              ]}
+              numberOfLines={accessibleLayout ? undefined : 2}
             >
               {priorityFix
                 ? `${priorityFix.name} — ${directionPhrase(priorityFix.direction)}`
@@ -1212,11 +1288,29 @@ function NextPage(props: {
           </View>
         ) : null}
         {strongest ? (
-          <View style={[styles.summaryRow, styles.summaryRowDivider]}>
-            <Text style={[type.caption, styles.summaryLabel]}>Strongest</Text>
+          <View
+            style={[
+              styles.summaryRow,
+              styles.summaryRowDivider,
+              accessibleLayout && styles.accessibleSummaryRow,
+            ]}
+          >
             <Text
-              style={[type.bodyBold, styles.summaryValue]}
-              numberOfLines={2}
+              style={[
+                type.caption,
+                styles.summaryLabel,
+                accessibleLayout && styles.accessibleSummaryLabel,
+              ]}
+            >
+              Strongest
+            </Text>
+            <Text
+              style={[
+                type.bodyBold,
+                styles.summaryValue,
+                accessibleLayout && styles.accessibleSummaryValue,
+              ]}
+              numberOfLines={accessibleLayout ? undefined : 2}
             >
               {`${strongest.name} · ${Math.round(strongest.score)}`}
             </Text>
@@ -1230,6 +1324,7 @@ function NextPage(props: {
 /** One recap tile: a card numeral (the same 30/34 `type.score` role every
  * card score uses) over a micro label. */
 function RecapTile(props: {
+  stacked?: boolean;
   value: string;
   unit?: string;
   label: string;
@@ -1238,7 +1333,7 @@ function RecapTile(props: {
 }) {
   return (
     <View
-      style={styles.tile}
+      style={[styles.tile, props.stacked && styles.accessibleTile]}
       accessible
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
@@ -1699,7 +1794,26 @@ function TrainingPlanSection(props: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
-  flex: { flex: 1 },
+  flex: { flex: 1, minHeight: 0 },
+  accessibleTopRow: {
+    flexWrap: 'wrap',
+    rowGap: space.xs,
+    paddingBottom: space.sm,
+  },
+  accessibleStepLabel: { flexBasis: '100%', flexShrink: 1 },
+  accessibleFooterLinks: { flexWrap: 'wrap', gap: space.md },
+  accessibleTiles: { flexDirection: 'column' },
+  accessibleTile: { flex: 0, alignItems: 'flex-start' },
+  accessibleTileDivider: {
+    width: '100%',
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 0,
+    marginVertical: space.md,
+  },
+  accessibleSummaryRow: { flexDirection: 'column', gap: space.xs },
+  accessibleSummaryLabel: { width: 'auto', alignSelf: 'stretch' },
+  accessibleSummaryValue: { flex: 0, alignSelf: 'stretch', textAlign: 'left' },
+  wrappingText: { flexShrink: 1 },
   // ── Shell ──
   topRow: {
     flexDirection: 'row',
@@ -1732,11 +1846,13 @@ const styles = StyleSheet.create({
   // Non-scrolling page: a flex column between the top row and the footer.
   contentFixed: {
     flex: 1,
+    minHeight: 0,
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.md,
   },
   footer: {
+    flexShrink: 0,
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,

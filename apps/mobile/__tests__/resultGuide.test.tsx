@@ -98,7 +98,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type {
   CheckpointKey,
@@ -472,6 +472,12 @@ function flatStyle(node: { props: { style?: unknown } }) {
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  jest.spyOn(Dimensions, 'get').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 3,
+    fontScale: 1,
+  });
   clearTryAgainHandoff();
   clearTrainingStoreConfiguration();
   mockRouteParams = { analysisId: 'analysis-1' };
@@ -489,6 +495,7 @@ afterEach(async () => {
       renderer.unmount();
     });
   }
+  jest.restoreAllMocks();
   jest.useRealTimers();
 });
 
@@ -512,7 +519,7 @@ describe('Result guide — scored analysis', () => {
     expect(copy).toContain('(≈ DUPR 5.3)');
     expect(copy).toContain(DUPR_ESTIMATE_NOTE);
     // The ONE insight is the engine's worst measured checkpoint + its cue.
-    expect(copy).toContain('WHAT THE CAMERA MEASURED');
+    expect(copy).toContain('BODY-POSE ESTIMATE');
     expect(copy).toContain('Contact position scored 48 — contact came late.');
     expect(copy).toContain(
       coachingCue('contact_position', 'late', 'forehand_drive'),
@@ -703,6 +710,88 @@ describe('Result guide — scored analysis', () => {
     );
   });
 
+  it.each([1.35, 2.64, 3.12])(
+    'at font scale %s keeps the four-page flow and footer while only replay content/recap scroll',
+    async fontScale => {
+      const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 390,
+        height: 844,
+        scale: 3,
+        fontScale,
+      });
+      try {
+        const renderer = await renderScreen();
+        expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
+        const [label] = hostByTestId(renderer, 'result-guide-step-label');
+        expect(label!.props.numberOfLines).toBeUndefined();
+        expect(flatStyle(label!)).toMatchObject({
+          flexBasis: '100%',
+          flexShrink: 1,
+        });
+        await press(renderer, 'result-guide-next');
+        expect(stepLabel(renderer)).toBe('2 OF 4 · THE PROBLEM');
+        expect(hostByTestId(renderer, 'result-guide-page')).toHaveLength(1);
+        const [scroll] = renderer.root.findAllByType(ScrollView);
+        expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
+        expect(scroll!.props.testID).toBe('form-review-content-scroll');
+        for (const id of [
+          'form-review-timeline',
+          'form-review-play',
+          'result-guide-next',
+          'result-guide-back',
+        ]) {
+          expect(
+            scroll!.findAll(node => node.props.testID === id),
+          ).toHaveLength(0);
+        }
+        expect(allText(renderer)).toContain('PRIORITY FIX');
+        await press(renderer, 'result-guide-next');
+        expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
+        await press(renderer, 'result-guide-next');
+        expect(stepLabel(renderer)).toBe('4 OF 4 · NEXT');
+        const [recapScroll] = renderer.root.findAllByType(ScrollView);
+        expect(recapScroll!.props.testID).toBe('result-guide-scroll');
+        for (const id of [
+          'result-guide-try-again',
+          'result-guide-back',
+          'result-guide-done',
+        ]) {
+          expect(
+            recapScroll!.findAll(node => node.props.testID === id),
+          ).toHaveLength(0);
+          pressableByTestId(renderer, id);
+        }
+        for (const id of [
+          'result-guide-tile-score',
+          'result-guide-tile-held',
+          'result-guide-tile-to-fix',
+        ]) {
+          expect(flatStyle(hostByTestId(renderer, id)[0]!)).toMatchObject({
+            flex: 0,
+            alignItems: 'flex-start',
+          });
+        }
+        const [summary] = hostByTestId(renderer, 'result-guide-summary');
+        for (const text of summary!.findAllByType(Text)) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+        const copy = allText(renderer);
+        expect(copy).toContain('7.1 /10 SCORE');
+        expect(copy).toContain('6 HELD');
+        expect(copy).toContain('3 TO FIX');
+        expect(copy).toContain(
+          'Priority fix Contact position — contact came late',
+        );
+        await press(renderer, 'result-guide-back');
+        expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
+      } finally {
+        dimensions.mockRestore();
+      }
+    },
+  );
+
   it('a clean stroke with a replay says "Every checkpoint held" on the recap card', async () => {
     mockLoadEvidence.mockResolvedValue(
       scoredEvidence({
@@ -790,6 +879,67 @@ describe('Result guide — scored analysis', () => {
     ).toHaveLength(0);
     expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
     expect(hostByTestId(renderer, 'form-review-timeline')).toHaveLength(1);
+  });
+
+  it('operates every replay control inside the reachable Result guide and resets on return', async () => {
+    const renderer = await renderScreen();
+    await press(renderer, 'result-guide-next');
+    expect(allText(renderer)).toContain('1.90s');
+
+    await press(renderer, 'form-review-prev-stop');
+    expect(allText(renderer)).toContain('STOP 3 OF 6');
+    await press(renderer, 'form-review-next-stop');
+    expect(allText(renderer)).toContain('STOP 4 OF 6');
+    await press(renderer, 'form-review-play');
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(allText(renderer)).toContain('2.16s');
+    expect(
+      pressableByTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
+
+    await press(renderer, 'form-review-autopause');
+    expect(
+      pressableByTestId(renderer, 'form-review-autopause').props
+        .accessibilityState,
+    ).toMatchObject({ checked: false });
+    await press(renderer, 'form-review-stage');
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(
+      pressableByTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Pause replay');
+    for (const speed of ['½×', '¼×', '1×']) {
+      await press(renderer, 'form-review-speed');
+      expect(allText(renderer)).toContain(speed);
+    }
+    await act(async () => {
+      hostByTestId(
+        renderer,
+        'form-review-timeline',
+      )[0]!.props.onAccessibilityAction({
+        nativeEvent: { actionName: 'decrement' },
+      });
+    });
+    expect(
+      pressableByTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
+
+    await press(renderer, 'result-guide-next');
+    expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
+    expect(hostByTestId(renderer, 'form-review-player')).toHaveLength(0);
+    await press(renderer, 'result-guide-back');
+    expect(stepLabel(renderer)).toBe('2 OF 4 · THE PROBLEM');
+    expect(allText(renderer)).toContain('1.90s');
+    expect(
+      pressableByTestId(renderer, 'form-review-autopause').props
+        .accessibilityState,
+    ).toMatchObject({ checked: true });
+    expect(
+      pressableByTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
   });
 
   it('the DRILLS page saves a drill to the library through the training store', async () => {

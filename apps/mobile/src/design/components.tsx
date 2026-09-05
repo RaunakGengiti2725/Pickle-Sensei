@@ -16,6 +16,7 @@ import {
   Text,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import Svg, {
@@ -393,6 +394,7 @@ export function Button(props: {
   icon?: IconName;
   compact?: boolean;
 }) {
+  const largeText = useWindowDimensions().fontScale > 1.3;
   const variant = props.variant ?? 'primary';
   const palette = {
     primary: { bg: color.court, fg: color.onDark, border: color.court },
@@ -416,17 +418,29 @@ export function Button(props: {
       style={[
         styles.button,
         props.compact && styles.buttonCompact,
+        largeText && styles.buttonLargeText,
         {
           backgroundColor: palette.bg,
           borderColor: palette.border,
         },
       ]}
     >
-      <View style={styles.buttonContent}>
+      <View
+        style={[
+          styles.buttonContent,
+          largeText && styles.buttonContentLargeText,
+        ]}
+      >
         {props.icon ? (
           <Icon name={props.icon} size={18} color={palette.fg} />
         ) : null}
-        <Text style={[type.bodyBold, { color: palette.fg }]}>
+        <Text
+          style={[
+            type.bodyBold,
+            { color: palette.fg },
+            largeText && styles.buttonLabelLargeText,
+          ]}
+        >
           {props.label}
         </Text>
         {variant === 'primary' || variant === 'volt' || variant === 'dark' ? (
@@ -1119,6 +1133,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   buttonCompact: { minHeight: 46 },
+  buttonLargeText: { borderRadius: radius.lg },
+  buttonContentLargeText: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  buttonLabelLargeText: { flexShrink: 1, textAlign: 'center' },
   buttonContent: {
     minHeight: 54,
     paddingHorizontal: space.lg,
