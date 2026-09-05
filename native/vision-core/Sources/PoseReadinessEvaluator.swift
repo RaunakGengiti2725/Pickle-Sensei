@@ -114,10 +114,13 @@ public final class PoseReadinessEvaluator {
       return ingestMissing(timestampMs: pose.timestampMs)
     }
 
+    // A provider may report a joint twice; keep the more visible sample rather
+    // than trapping on the duplicate key.
     let visible = Dictionary(
-      uniqueKeysWithValues: pose.landmarks
+      pose.landmarks
         .filter { $0.visibility >= config.minimumJointVisibility }
-        .map { ($0.name, $0) }
+        .map { ($0.name, $0) },
+      uniquingKeysWith: { $1.visibility > $0.visibility ? $1 : $0 }
     )
     let missing = Self.requiredJoints.filter { visible[$0] == nil }
     let coverage = Double(Self.requiredJoints.count - missing.count) / Double(Self.requiredJoints.count)
@@ -170,8 +173,13 @@ public final class PoseReadinessEvaluator {
       height: height
     )
     stableSamples.append(sample)
+    // The newest sample at or before the cutoff anchors the window, so its
+    // measured span is at least `stableDurationMs` regardless of frame cadence
+    // or dropped frames.
     let cutoff = pose.timestampMs - config.stableDurationMs
-    stableSamples.removeAll { $0.timestampMs < cutoff }
+    if let anchor = stableSamples.lastIndex(where: { $0.timestampMs <= cutoff }) {
+      stableSamples.removeFirst(anchor)
+    }
 
     let stableForMs = max(0, pose.timestampMs - (stableSamples.first?.timestampMs ?? pose.timestampMs))
     let centerTravel = maximumPairwiseTravel(in: stableSamples)
