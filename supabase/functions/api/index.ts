@@ -711,7 +711,7 @@ async function authRequest<T>(
       headers,
       body: init.body ? JSON.stringify(init.body) : undefined,
       signal,
-    })
+    }),
   );
   return authVerdictOf(answer, parse);
 }
@@ -736,7 +736,7 @@ function authGatewayTransport(): {
       fetch(input, {
         ...init,
         signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
-      })
+      }),
     );
     last = answer;
     if (answer.kind === "unreachable") throw new TypeError(answer.detail);
@@ -796,9 +796,7 @@ async function exchangeIdToken(
 /** The response for an ID-token exchange that did not yield a session. Only
  * a refusal is the 401 the outer handler charges to the auth-failure budget;
  * GoTrue throttling or being down is retryable and charges nothing. */
-function idTokenExchangeFailure(
-  verdict: Exclude<AuthVerdict<unknown>, { kind: "ok" }>,
-): Response {
+function idTokenExchangeFailure(verdict: Exclude<AuthVerdict<unknown>, { kind: "ok" }>): Response {
   if (verdict.kind === "refused") {
     return errorJson(401, "The identity token could not be verified.");
   }

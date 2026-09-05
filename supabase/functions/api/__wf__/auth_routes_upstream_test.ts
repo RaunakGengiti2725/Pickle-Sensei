@@ -198,72 +198,128 @@ for (const route of routes) {
 const bootstrapRequest = (ip: string) =>
   userRequest("POST", "/v1/account/bootstrap", { ip, token: fakeGoogleIdToken(), body: {} });
 
-const onToken = (respond: (request: Request) => Response | Promise<Response>): GoTrueFault =>
-(
-  request,
-  url,
-) => (url.pathname === "/auth/v1/token" ? respond(request) : null);
+const onToken =
+  (respond: (request: Request) => Response | Promise<Response>): GoTrueFault =>
+  (request, url) =>
+    url.pathname === "/auth/v1/token" ? respond(request) : null;
 
-Deno.test("bootstrap × GoTrue 429 → 429 with the upstream Retry-After and the generic body", async () => {
-  h.reset();
-  const ip = freshIp();
-  let attempts = 0;
-  const response = await withGoTrue(
-    onToken(() => {
-      attempts += 1;
-      return goTrueJson(
-        429,
-        { code: 429, error_code: "over_request_rate_limit", msg: UPSTREAM_DETAIL },
-        { "Retry-After": "7" },
-      );
-    }),
-    () => h.handler(bootstrapRequest(ip)),
-  );
-  const body = await response.text();
-  assertEquals(response.status, 429, body);
-  assertEquals(response.headers.get("Retry-After"), "7", "upstream Retry-After must be forwarded");
-  const parsed = JSON.parse(body) as { error?: { message?: unknown } };
-  assertEquals(typeof parsed.error?.message, "string", body);
-  assertEquals(body.includes(UPSTREAM_DETAIL), false, `upstream detail leaked: ${body}`);
-  assertEquals(attempts, 1, "an upstream 429 is not a connection fault: no retry");
-});
-
-for (
-  const [label, respond] of [
-    ["500", () => goTrueJson(500, { code: 500, msg: UPSTREAM_DETAIL })],
-    ["502", () => new Response("<html>bad gateway</html>", { status: 502 })],
-    ["503", () => goTrueJson(503, { code: 503, msg: UPSTREAM_DETAIL })],
-    ["504", () => new Response(UPSTREAM_DETAIL, { status: 504 })],
-    ["520", () => new Response("", { status: 520 })],
-    ["200 non-JSON", () => new Response("<html>ok</html>", { status: 200 })],
-    ["200 {}", () => goTrueJson(200, {})],
-    [
-      "200 without refresh_token",
-      () =>
-        goTrueJson(200, {
-          access_token: supabaseAccessToken("no-refresh"),
-          token_type: "bearer",
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          user: { id: TEST_USER_ID, email: null },
-        }),
-    ],
-  ] as const
-) {
-  Deno.test(`bootstrap × GoTrue ${label} → 503 "Sign-in is temporarily unavailable", nothing charged`, async () => {
+Deno.test(
+  "bootstrap × GoTrue 429 → 429 with the upstream Retry-After and the generic body",
+  async () => {
     h.reset();
     const ip = freshIp();
-    const response = await withGoTrue(onToken(respond), () => h.handler(bootstrapRequest(ip)));
+    let attempts = 0;
+    const response = await withGoTrue(
+      onToken(() => {
+        attempts += 1;
+        return goTrueJson(
+          429,
+          { code: 429, error_code: "over_request_rate_limit", msg: UPSTREAM_DETAIL },
+          { "Retry-After": "7" },
+        );
+      }),
+      () => h.handler(bootstrapRequest(ip)),
+    );
+    const body = await response.text();
+    assertEquals(response.status, 429, body);
+    assertEquals(
+      response.headers.get("Retry-After"),
+      "7",
+      "upstream Retry-After must be forwarded",
+    );
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+    assertEquals(typeof parsed.error?.message, "string", body);
+    assertEquals(body.includes(UPSTREAM_DETAIL), false, `upstream detail leaked: ${body}`);
+    assertEquals(attempts, 1, "an upstream 429 is not a connection fault: no retry");
+  },
+);
+
+for (const [label, respond] of [
+  ["500", () => goTrueJson(500, { code: 500, msg: UPSTREAM_DETAIL })],
+  ["502", () => new Response("<html>bad gateway</html>", { status: 502 })],
+  ["503", () => goTrueJson(503, { code: 503, msg: UPSTREAM_DETAIL })],
+  ["504", () => new Response(UPSTREAM_DETAIL, { status: 504 })],
+  ["520", () => new Response("", { status: 520 })],
+  ["200 non-JSON", () => new Response("<html>ok</html>", { status: 200 })],
+  ["200 {}", () => goTrueJson(200, {})],
+  [
+    "200 without refresh_token",
+    () =>
+      goTrueJson(200, {
+        access_token: supabaseAccessToken("no-refresh"),
+        token_type: "bearer",
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: TEST_USER_ID, email: null },
+      }),
+  ],
+] as const) {
+  Deno.test(
+    `bootstrap × GoTrue ${label} → 503 "Sign-in is temporarily unavailable", nothing charged`,
+    async () => {
+      h.reset();
+      const ip = freshIp();
+      const response = await withGoTrue(onToken(respond), () => h.handler(bootstrapRequest(ip)));
+      const body = await response.text();
+      assertEquals(response.status, 503, body);
+      assert(response.headers.get("Retry-After"), "a 503 carries Retry-After");
+      assertEquals(
+        body,
+        JSON.stringify({
+          error: { message: "Sign-in is temporarily unavailable. Please try again." },
+        }),
+      );
+      // Not charged: the next bootstrap from this IP reaches GoTrue.
+      const before = h.callsTo("/auth/v1/token").length;
+      const healthy = await h.handler(bootstrapRequest(ip));
+      await healthy.body?.cancel();
+      assertNotEquals(
+        healthy.status,
+        429,
+        "the transient failure spent the IP's auth-failure budget",
+      );
+      assertEquals(
+        h.callsTo("/auth/v1/token").length,
+        before + 1,
+        "post-outage bootstrap reaches GoTrue",
+      );
+    },
+  );
+}
+
+Deno.test(
+  "bootstrap × GoTrue fetch throws → 503 after the bounded connect retry, nothing charged",
+  async () => {
+    h.reset();
+    const ip = freshIp();
+    let attempts = 0;
+    const started = performance.now();
+    const response = await withShortUpstreamDeadline(() =>
+      withGoTrue(
+        onToken(() => {
+          attempts += 1;
+          throw new TypeError(UPSTREAM_DETAIL);
+        }),
+        () => h.handler(bootstrapRequest(ip)),
+      ),
+    );
+    const elapsedMs = performance.now() - started;
     const body = await response.text();
     assertEquals(response.status, 503, body);
-    assert(response.headers.get("Retry-After"), "a 503 carries Retry-After");
     assertEquals(
       body,
       JSON.stringify({
         error: { message: "Sign-in is temporarily unavailable. Please try again." },
       }),
     );
-    // Not charged: the next bootstrap from this IP reaches GoTrue.
+    assert(
+      attempts >= 2,
+      `connection faults are retried inside the deadline (attempts=${attempts})`,
+    );
+    assert(
+      elapsedMs < 2_000,
+      `bounded by AUTH_UPSTREAM_TIMEOUT_MS=150 (took ${elapsedMs.toFixed(0)}ms)`,
+    );
     const before = h.callsTo("/auth/v1/token").length;
     const healthy = await h.handler(bootstrapRequest(ip));
     await healthy.body?.cancel();
@@ -277,79 +333,44 @@ for (
       before + 1,
       "post-outage bootstrap reaches GoTrue",
     );
-  });
-}
-
-Deno.test("bootstrap × GoTrue fetch throws → 503 after the bounded connect retry, nothing charged", async () => {
-  h.reset();
-  const ip = freshIp();
-  let attempts = 0;
-  const started = performance.now();
-  const response = await withShortUpstreamDeadline(() =>
-    withGoTrue(
-      onToken(() => {
-        attempts += 1;
-        throw new TypeError(UPSTREAM_DETAIL);
-      }),
-      () => h.handler(bootstrapRequest(ip)),
-    )
-  );
-  const elapsedMs = performance.now() - started;
-  const body = await response.text();
-  assertEquals(response.status, 503, body);
-  assertEquals(
-    body,
-    JSON.stringify({
-      error: { message: "Sign-in is temporarily unavailable. Please try again." },
-    }),
-  );
-  assert(attempts >= 2, `connection faults are retried inside the deadline (attempts=${attempts})`);
-  assert(
-    elapsedMs < 2_000,
-    `bounded by AUTH_UPSTREAM_TIMEOUT_MS=150 (took ${elapsedMs.toFixed(0)}ms)`,
-  );
-  const before = h.callsTo("/auth/v1/token").length;
-  const healthy = await h.handler(bootstrapRequest(ip));
-  await healthy.body?.cancel();
-  assertNotEquals(healthy.status, 429, "the transient failure spent the IP's auth-failure budget");
-  assertEquals(
-    h.callsTo("/auth/v1/token").length,
-    before + 1,
-    "post-outage bootstrap reaches GoTrue",
-  );
-});
+  },
+);
 
 // ── Controls: genuine refusals stay 401 and charge the budget ────────────────
 
-for (
-  const [status, body] of [
-    [400, { error: "invalid_grant", error_description: "Bad ID token" }],
-    [401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" }],
-    [403, { code: 403, error_code: "provider_disabled", msg: "Provider is not enabled" }],
-  ] as const
-) {
-  Deno.test(`control: bootstrap with GoTrue ${status} refusal of the ID token → 401 and charges authfail`, async () => {
-    h.reset();
-    const ip = freshIp();
-    const statuses = new Set<number>();
-    await withGoTrue(onToken(() => goTrueJson(status, body)), async () => {
-      for (let i = 0; i < AUTH_FAILURE_LIMIT; i += 1) {
-        const response = await h.handler(bootstrapRequest(ip));
-        statuses.add(response.status);
-        await response.body?.cancel();
-      }
-    });
-    assertEquals([...statuses], [401], "a genuine refusal of the ID token is 401");
-    const tokenCallsBefore = h.callsTo("/auth/v1/token").length;
-    const locked = await h.handler(bootstrapRequest(ip));
-    await locked.body?.cancel();
-    assertEquals(locked.status, 429, "refused ID tokens must spend the auth-failure budget");
-    assertEquals(
-      h.callsTo("/auth/v1/token").length,
-      tokenCallsBefore,
-      "refused pre-auth: no GoTrue call",
-    );
-  });
+for (const [status, body] of [
+  [400, { error: "invalid_grant", error_description: "Bad ID token" }],
+  [401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" }],
+  [403, { code: 403, error_code: "provider_disabled", msg: "Provider is not enabled" }],
+] as const) {
+  Deno.test(
+    `control: bootstrap with GoTrue ${status} refusal of the ID token → 401 and charges authfail`,
+    async () => {
+      h.reset();
+      const ip = freshIp();
+      const statuses = new Set<number>();
+      await withGoTrue(
+        onToken(() => goTrueJson(status, body)),
+        async () => {
+          for (let i = 0; i < AUTH_FAILURE_LIMIT; i += 1) {
+            const response = await h.handler(bootstrapRequest(ip));
+            statuses.add(response.status);
+            await response.body?.cancel();
+          }
+        },
+      );
+      assertEquals([...statuses], [401], "a genuine refusal of the ID token is 401");
+      const tokenCallsBefore = h.callsTo("/auth/v1/token").length;
+      const locked = await h.handler(bootstrapRequest(ip));
+      await locked.body?.cancel();
+      assertEquals(locked.status, 429, "refused ID tokens must spend the auth-failure budget");
+      assertEquals(
+        h.callsTo("/auth/v1/token").length,
+        tokenCallsBefore,
+        "refused pre-auth: no GoTrue call",
+      );
+    },
+  );
 }
 
 Deno.test("control: refresh with GoTrue 400 invalid_grant → 401 and charges authfail", async () => {
