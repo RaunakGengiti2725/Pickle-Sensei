@@ -8,6 +8,7 @@ import {
   evaluateCertificationReadiness,
   evaluateHoldout,
   HOLDOUT_LEDGER_PATH,
+  HoldoutLedgerError,
   INSPECTION_BUDGETS,
   loadHoldoutLedger,
   type HoldoutEntry,
@@ -384,6 +385,76 @@ describe("certification readiness fails closed (ADJ-02)", () => {
     );
     expect(readiness.status).toBe("BLOCKED");
     expect(readiness.reasons.join(" ")).toContain("fresh-y");
+  });
+
+  it("an ungoverned tier yields an INVALID verdict with a finite zero budget, even uninspected", () => {
+    const evaluation = evaluateHoldout(entry({ caseId: "odd", tier: "BOGUS" as HoldoutTier }));
+    expect(evaluation.verdict).toBe("INVALID");
+    expect(Number.isFinite(evaluation.budget)).toBe(true);
+    expect(evaluation.budget).toBe(0);
+    expect(evaluation.violations.join(" ")).toMatch(/odd.*tier/i);
+  });
+
+  it("a non-object ledger and a ledger with a foreign policyVersion are NOT_EVALUABLE", () => {
+    const nothing = evaluateCertificationReadiness(null as unknown as HoldoutLedger);
+    expect(nothing.status).toBe("NOT_EVALUABLE");
+    expect(nothing.holdouts).toEqual([]);
+
+    const foreign = evaluateCertificationReadiness(
+      ledger({ holdouts: [entry()], policyVersion: "holdout-rotation-v99" }),
+    );
+    expect(foreign.status).toBe("NOT_EVALUABLE");
+    expect(foreign.reasons.join(" ")).toContain("holdout-rotation-v99");
+  });
+
+  it("a successor designated twice or already inspected as an ACTIVE holdout is BLOCKED", () => {
+    const duplicated = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [retiredTo("old-1", "fresh-y")],
+        successors: [successor(), successor()],
+      }),
+    );
+    expect(duplicated.status).toBe("BLOCKED");
+    expect(duplicated.reasons.join(" ")).toContain("designated more than once");
+
+    const inspectedElsewhere = evaluateCertificationReadiness(
+      ledger({
+        holdouts: [
+          retiredTo("old-1", "fresh-y"),
+          entry({ caseId: "fresh-y", tier: "SHADOW_HOLDOUT", inspections: [event()] }),
+        ],
+        successors: [successor()],
+      }),
+    );
+    expect(inspectedElsewhere.status).toBe("BLOCKED");
+    expect(inspectedElsewhere.reasons.join(" ")).toContain("fresh-y");
+  });
+
+  it("loadHoldoutLedger rejects a foreign policyVersion with a HoldoutLedgerError", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-policy-"));
+    tmpRoots.push(root);
+    mkdirSync(join(root, "datasets", "holdouts"), { recursive: true });
+    writeFileSync(
+      join(root, HOLDOUT_LEDGER_PATH),
+      JSON.stringify({ ...ledger({ holdouts: [entry()] }), policyVersion: "holdout-rotation-v99" }),
+    );
+    expect(() => loadHoldoutLedger(root)).toThrowError(HoldoutLedgerError);
+    expect(() => loadHoldoutLedger(root)).toThrowError(/holdout ledger.*holdout-rotation-v99/i);
+  });
+
+  it("loadHoldoutLedger accepts a well-formed ledger and evaluation of it is ELIGIBLE", () => {
+    const root = mkdtempSync(join(tmpdir(), "holdout-ok-"));
+    tmpRoots.push(root);
+    mkdirSync(join(root, "datasets", "holdouts"), { recursive: true });
+    writeFileSync(
+      join(root, HOLDOUT_LEDGER_PATH),
+      JSON.stringify(
+        ledger({ holdouts: [retiredTo("old-1", "fresh-y")], successors: [successor()] }),
+      ),
+    );
+    const loaded = loadHoldoutLedger(root);
+    expect(Array.isArray(loaded.holdouts)).toBe(true);
+    expect(evaluateCertificationReadiness(loaded).status).toBe("ELIGIBLE");
   });
 });
 
