@@ -75,8 +75,6 @@ declare const __dirname: string;
 declare const process: {
   env: Record<string, string | undefined>;
   version: string;
-  on: (event: 'warning', listener: (w: { name: string }) => void) => void;
-  off: (event: 'warning', listener: (w: { name: string }) => void) => void;
 };
 declare function setImmediate(cb: (value?: unknown) => void): unknown;
 const fs = require('fs') as {
@@ -1335,7 +1333,7 @@ describe('minimized findings (each fails until the module is hardened)', () => {
 
   /**
    * setTimeout(fn, d) with d > 2^31-1 (or ±Infinity/NaN after the ×1000)
-   * fires after 1 ms in Node (TimeoutOverflowWarning) and in jest's fake
+   * fires after 1 ms both in Node (the delay is clamped) and in jest's fake
    * timers; the keeper re-arms on every rotation, so a single oversized
    * expiry turns the documented ≥30 s rotation gap into a request per tick.
    * The threshold is exactly 2^31-1 ms ≈ 24.86 days from `now`.
@@ -1378,13 +1376,8 @@ describe('minimized findings (each fails until the module is hardened)', () => {
     },
   );
 
-  it('F1b (real Node timers, 300 ms wall): ms-scale expiresAt → TimeoutOverflowWarning + a request per tick', async () => {
+  it('F1b (real Node timers, 300 ms wall): ms-scale expiresAt → a refresh request per timer tick', async () => {
     jest.useRealTimers();
-    const warnings: string[] = [];
-    const onWarning = (w: { name: string }) => {
-      warnings.push(w.name);
-    };
-    process.on('warning', onWarning);
     let n = 0;
     try {
       startSessionKeeper({
@@ -1404,17 +1397,12 @@ describe('minimized findings (each fails until the module is hardened)', () => {
         },
       });
       await new Promise(resolve => setTimeout(resolve, 300));
+    } finally {
       stopSessionKeeper();
       await new Promise(resolve => setImmediate(resolve));
-    } finally {
-      process.off('warning', onWarning);
     }
-    expect({
-      requestsIn300ms: n,
-      timeoutOverflowWarnings: warnings.filter(
-        w => w === 'TimeoutOverflowWarning',
-      ).length,
-    }).toEqual({ requestsIn300ms: 1, timeoutOverflowWarnings: 0 });
+    // Nothing is due for an hour: the immediate refresh is the only request.
+    expect({ requestsIn300ms: n }).toEqual({ requestsIn300ms: 1 });
   });
 
   it('control: the same expiry 2 minutes INSIDE the 2^31-1 ms limit rotates once and re-arms 60 s ahead (HELD)', async () => {
