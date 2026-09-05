@@ -1023,10 +1023,14 @@ async function readProfile(user: AuthedUser): Promise<ProfileRow | Response> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Advisory permit lifetime, mirroring services/api PERMIT_LIFETIME_HOURS.
- * Expiry is enforced in three layers: access counting ignores reserved
- * permits older than this window, apply_synced_shot refuses to consume one
- * (access.permit_expired), and an hourly pg_cron sweep releases stragglers
- * (migration 20260831000000) — so the advertised expiresAt is honest. */
+ * The window governs RESERVATION accounting only: access counting ignores
+ * reserved permits older than it and an hourly pg_cron sweep releases
+ * stragglers as expired (migration 20260831000000), so the advertised
+ * expiresAt is honest about when the slot is handed back. It does NOT gate
+ * sync: a shot captured against a permit this user reserved is accepted by
+ * apply_synced_shot at any age — still reserved or already swept — because
+ * the free allowance is enforced by the lifetime-count backstop, not by
+ * permit age (migration 20260906130000; the device may be offline for days). */
 const PERMIT_LIFETIME_HOURS = 24;
 const PERMIT_COLUMNS = "id, status, outcome, created_at";
 
@@ -1204,6 +1208,14 @@ const RELEASABLE_OUTCOMES = new Set([
   "incorrect_recognition",
 ]);
 
+// analysis_permits_guard_lifecycle (20260906140000) refuses an illegal permit
+// transition with check_violation and this hint; PostgREST relays both.
+const PERMIT_TRANSITION_REJECTED = "access.permit_transition_rejected";
+
+function isPermitTransitionRejected(error: { code?: string; hint?: string | null }): boolean {
+  return error.code === "23514" && error.hint === PERMIT_TRANSITION_REJECTED;
+}
+
 /** POST /v1/analysis-permits/:id/finalize — mirrors apps/mobile/src/data/
  * api.ts:136-147. The client ignores the response body; { permit, access }
  * is returned for parity with services/api. */
@@ -1272,6 +1284,16 @@ async function finalizeAnalysisPermitRoute(
     .select(PERMIT_COLUMNS)
     .maybeSingle();
   if (updated.error) {
+    if (isPermitTransitionRejected(updated.error)) {
+      // The table's lifecycle guard refused the move: the permit is settled
+      // and this request cannot change it — a client-side conflict, not an
+      // outage.
+      return codedError(
+        409,
+        PERMIT_TRANSITION_REJECTED,
+        "Analysis permit is already settled and cannot be finalized again.",
+      );
+    }
     return serviceUnavailable("Rating finalize", updated.error.message);
   }
   if (!updated.data) {
@@ -1579,6 +1601,9 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
   "auth.required": "Sign in again to sync analyses.",
   "access.permit_not_found": "Analysis permit not found.",
   "access.permit_not_reserved": "Analysis permit is no longer reserved.",
+  // Retired by migration 20260906130000 (a late permit backs its shot at any
+  // age); kept so an edge deployed ahead of that migration still renders the
+  // old RPC's verdict instead of collapsing it into shot.write_failed.
   "access.permit_expired": "Analysis permit expired.",
   // Free-limit backstop in apply_synced_shot: the permit was valid but the
   // account is already at its two lifetime scored ratings, so the scored shot
