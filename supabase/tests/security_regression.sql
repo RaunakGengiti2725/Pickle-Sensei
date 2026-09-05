@@ -1803,6 +1803,53 @@ begin
   end if;
 end $$;
 
+-- L1b: a LIVE reserved permit owned by ANOTHER user does not open the gate —
+-- the permit lookup is owner-scoped (RLS + user_id), never "any live permit".
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000016', 'noah@example.com',
+        '{"full_name":"Noah"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-noah', '00000000-0000-4000-8000-000000000016',
+        '{"sub":"apple-sub-noah","email":"noah@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000016';
+do $$
+declare r record;
+begin
+  select * into r from public.reserve_analysis_permit('noah-live-1');
+  if r.result <> 'accepted' then
+    raise exception 'L1b: setup — noah must be able to reserve (got %)', r.result;
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000014';
+do $$
+begin
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000000bf',
+      '00000000-0000-4000-8000-000000000014',
+      'drive', now(), 0, 1000, 9.9, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'L1b: another user''s live permit must not admit a direct scored INSERT';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots where user_id = (select auth.uid())) then
+    raise exception 'L1b: the refused row must not persist';
+  end if;
+  if (select count(*) from public.analysis_permits where status = 'reserved') <> 0 then
+    raise exception 'L1b: RLS must hide the foreign permit from this session';
+  end if;
+end $$;
+
 -- L2: an abstention needs no permit (unscored attempts are free) but must not
 -- carry a score — the CHECK the edge parser already enforces on its side.
 do $$
