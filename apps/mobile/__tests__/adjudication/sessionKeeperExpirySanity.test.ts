@@ -19,9 +19,10 @@
  * like no expiry at all: rotations are self-paced (never closer than
  * MIN_ROTATION_GAP_MS, widening while the server keeps answering with an
  * untrusted expiry), a healthy answer restores the exact 60 s-before-expiry
- * schedule, and every entry point into a refresh (timer, foreground,
- * `refreshSessionNow`) shares ONE rate gate keyed on the last successful
- * rotation.
+ * schedule, and every rotation the keeper decides on by itself (timer, or a
+ * foreground while the expiry is untrusted) shares ONE rate gate keyed on
+ * the last successful rotation — while `refreshSessionNow()`, a route that
+ * actually saw the bearer refused, still rotates at once.
  */
 import { AppState } from 'react-native';
 import {
@@ -244,7 +245,7 @@ describe('sessionKeeper treats an implausible expiry as no expiry: self-paced, r
     expect(onRevoked).not.toHaveBeenCalled();
   });
 
-  it('refreshSessionNow() and foreground storms inside the rotation gap collapse into ONE rotation at exactly lastRotation + MIN_ROTATION_GAP_MS', async () => {
+  it('foreground flapping inside the rotation gap with an untrusted expiry collapses into ONE rotation at exactly lastRotation + MIN_ROTATION_GAP_MS', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-09-06T12:00:00Z'));
     const foreground = captureForeground();
@@ -257,7 +258,6 @@ describe('sessionKeeper treats an implausible expiry as no expiry: self-paced, r
 
     for (let i = 0; i < 10; i++) {
       await jest.advanceTimersByTimeAsync(1_000);
-      refreshSessionNow();
       foreground();
       await jest.advanceTimersByTimeAsync(0);
     }
@@ -266,6 +266,35 @@ describe('sessionKeeper treats an implausible expiry as no expiry: self-paced, r
     await jest.advanceTimersByTimeAsync(MIN_ROTATION_GAP_MS);
     expect(requestedAtMs).toHaveLength(2);
     expect(requestedAtMs[1]).toBe(rotatedAt + MIN_ROTATION_GAP_MS);
+    expect(onRevoked).not.toHaveBeenCalled();
+  });
+
+  it('refreshSessionNow() (a route saw the bearer refused) still rotates at once inside the gap, and foreground with a trusted bearer under 5 min left still refreshes immediately', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-06T12:00:00Z'));
+    const foreground = captureForeground();
+    // Trusted but short bearer: 200 s.
+    const { fetchFn, onRevoked, requestedAtMs } = keeperAnsweringExpiry(
+      () => Math.floor(Date.now() / 1000) + 200,
+      Date.now() + 200_000,
+    );
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fetchFn).not.toHaveBeenCalled(); // trusted: waits for expiry - 60 s
+
+    foreground();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(requestedAtMs).toHaveLength(1);
+
+    await jest.advanceTimersByTimeAsync(5_000);
+    refreshSessionNow();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(requestedAtMs).toHaveLength(2);
+    expect(requestedAtMs[1]).toBe((requestedAtMs[0] ?? 0) + 5_000);
+
+    await jest.advanceTimersByTimeAsync(5_000);
+    foreground();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(requestedAtMs).toHaveLength(3);
     expect(onRevoked).not.toHaveBeenCalled();
   });
 });

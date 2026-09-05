@@ -111,4 +111,19 @@ describe('sessionKeeper with a bearer that is short-lived or already expired by 
     expect(served).toHaveLength(2);
     expect(served[1]?.requestedAtMs).toBe(first + 3600_000 - 60_000);
   });
+
+  it('still rotates the longest legitimate bearer (6 days, under the trust ceiling) exactly 60s before it expires — the ceiling neither delays nor advances it', async () => {
+    const SIX_DAYS_S = 6 * 24 * 3600;
+    const onRotated = jest.fn();
+    const served = keeperFor(SIX_DAYS_S, onRotated, jest.fn());
+    await jest.advanceTimersByTimeAsync(0);
+    expect(served).toHaveLength(1);
+    const first = served[0]?.requestedAtMs ?? Number.NaN;
+
+    await jest.advanceTimersByTimeAsync(SIX_DAYS_S * 1000 - 60_000 - 1);
+    expect(served).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(served).toHaveLength(2);
+    expect(served[1]?.requestedAtMs).toBe(first + SIX_DAYS_S * 1000 - 60_000);
+  });
 });
