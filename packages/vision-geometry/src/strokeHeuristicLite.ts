@@ -146,6 +146,19 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * A torso landmark below TORSO_MIN_VISIBILITY (the kinematics.landmark floor)
  * is treated exactly like an absent one: UNKNOWN / torso_not_measured_at_contact.
  *
+ * stroke-heuristic-9 closes the rest of ADJ-VG-01: the reference frame was not
+ * the only torso reader. The facing consensus (shoulder x-order votes across
+ * ±FACING_WINDOW_MS), the overhead raise scan (per-frame shoulder line and
+ * torso extent across ±OVERHEAD_WINDOW_MS) and the sequence-median torso
+ * extent all read torso joints from OTHER frames by presence only, so
+ * visibility-0 shoulders could out-vote the measured reference and mirror the
+ * side, an unmeasured torso dragged below the wrist could manufacture an
+ * OVERHEAD, and unmeasured hips could drag the sequence median down to defeat
+ * the torso-collapse abstention. Every torso reader now goes through ONE
+ * visibility-gated lookup (measuredTorso / measuredShoulders): a torso joint
+ * below TORSO_MIN_VISIBILITY contributes nothing anywhere, and its
+ * coordinates can never reach a verdict.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -169,7 +182,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-9 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -404,18 +417,11 @@ export function classifyStroke(input: {
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
-  const joints = new Map(
-    frame.landmarks
-      .filter((mark) => mark.visibility >= TORSO_MIN_VISIBILITY)
-      .map((mark) => [mark.name, mark]),
-  );
-  const leftShoulder = joints.get("left_shoulder");
-  const rightShoulder = joints.get("right_shoulder");
-  const leftHip = joints.get("left_hip");
-  const rightHip = joints.get("right_hip");
-  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) {
+  const referenceTorso = measuredTorso(frame);
+  if (!referenceTorso) {
     return unknown("torso_not_measured_at_contact", evidence, limitingFactors);
   }
+  const { leftShoulder, rightShoulder, leftHip, rightHip } = referenceTorso;
   const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
   const hipY = (leftHip.y + rightHip.y) / 2;
   const midX = (leftShoulder.x + rightShoulder.x) / 2;
@@ -992,17 +998,61 @@ function unknown(
   };
 }
 
+type LegacyPoseFrame = ReturnType<typeof toLegacyPoseFrames>[number];
+type LegacyLandmark = LegacyPoseFrame["landmarks"][number];
+
+/**
+ * A landmark counts as MEASURED only at visibility ≥ minVisibility. Apple
+ * Vision forwards an unrecognised joint as a landmark with visibility 0, so
+ * presence alone says nothing about whether the coordinates were observed.
+ */
+function measuredLandmark(
+  frame: LegacyPoseFrame,
+  name: string,
+  minVisibility: number,
+): LegacyLandmark | undefined {
+  return frame.landmarks.find(
+    (landmark) => landmark.name === name && landmark.visibility >= minVisibility,
+  );
+}
+
+/** Both shoulders measured at ≥ TORSO_MIN_VISIBILITY, else null. */
+function measuredShoulders(
+  frame: LegacyPoseFrame,
+): { leftShoulder: LegacyLandmark; rightShoulder: LegacyLandmark } | null {
+  const leftShoulder = measuredLandmark(frame, "left_shoulder", TORSO_MIN_VISIBILITY);
+  const rightShoulder = measuredLandmark(frame, "right_shoulder", TORSO_MIN_VISIBILITY);
+  if (!leftShoulder || !rightShoulder) return null;
+  return { leftShoulder, rightShoulder };
+}
+
+/**
+ * All four torso joints measured at ≥ TORSO_MIN_VISIBILITY, else null. The
+ * ONLY way any consumer reads torso geometry: an absent joint and a present-
+ * but-unmeasured joint are indistinguishable here, so neither can supply a
+ * midline, shoulder width, shoulder line or torso extent anywhere.
+ */
+function measuredTorso(frame: LegacyPoseFrame): {
+  leftShoulder: LegacyLandmark;
+  rightShoulder: LegacyLandmark;
+  leftHip: LegacyLandmark;
+  rightHip: LegacyLandmark;
+} | null {
+  const shoulders = measuredShoulders(frame);
+  const leftHip = measuredLandmark(frame, "left_hip", TORSO_MIN_VISIBILITY);
+  const rightHip = measuredLandmark(frame, "right_hip", TORSO_MIN_VISIBILITY);
+  if (!shoulders || !leftHip || !rightHip) return null;
+  return { ...shoulders, leftHip, rightHip };
+}
+
 /** Median torso extent (hip line minus shoulder line) over all frames where
- * all four torso joints are present; null below TORSO_MEDIAN_MIN_FRAMES. */
+ * all four torso joints are measured; null below TORSO_MEDIAN_MIN_FRAMES. */
 function medianTorsoExtent(frames: ReturnType<typeof toLegacyPoseFrames>): number | null {
   const extents: number[] = [];
   for (const frame of frames) {
-    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
-    const leftShoulder = find("left_shoulder");
-    const rightShoulder = find("right_shoulder");
-    const leftHip = find("left_hip");
-    const rightHip = find("right_hip");
-    if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
+    const torso = measuredTorso(frame);
+    if (!torso) continue;
+    const { leftShoulder, rightShoulder, leftHip, rightHip } = torso;
     extents.push((leftHip.y + rightHip.y) / 2 - (leftShoulder.y + rightShoulder.y) / 2);
   }
   if (extents.length < TORSO_MEDIAN_MIN_FRAMES) return null;
@@ -1014,8 +1064,9 @@ function medianTorsoExtent(frames: ReturnType<typeof toLegacyPoseFrames>): numbe
  * Frames vote rear (+1) when the right shoulder sits at image-right of the
  * left, front (-1) otherwise; frames whose image-plane shoulder separation
  * is below FACING_MIN_SHOULDER_SEPARATION are near-profile — their x-order
- * is noise-scale — and are skipped. A consensus exists when ≥FACING_MIN_VOTES
- * frames voted and one sign holds ≥FACING_CONSENSUS_MIN_RATIO of the votes. */
+ * is noise-scale — and are skipped, as are frames whose shoulders are absent
+ * or unmeasured. A consensus exists when ≥FACING_MIN_VOTES frames voted and
+ * one sign holds ≥FACING_CONSENSUS_MIN_RATIO of the votes. */
 function scanFacingWindow(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
@@ -1025,10 +1076,9 @@ function scanFacingWindow(
   let skippedSmallSeparation = 0;
   for (const frame of frames) {
     if (Math.abs(frame.timestampMs - contactMs) > FACING_WINDOW_MS) continue;
-    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
-    const leftShoulder = find("left_shoulder");
-    const rightShoulder = find("right_shoulder");
-    if (!leftShoulder || !rightShoulder) continue;
+    const shoulders = measuredShoulders(frame);
+    if (!shoulders) continue;
+    const { leftShoulder, rightShoulder } = shoulders;
     if (Math.abs(rightShoulder.x - leftShoulder.x) < FACING_MIN_SHOULDER_SEPARATION) {
       skippedSmallSeparation += 1;
       continue;
@@ -1195,13 +1245,9 @@ function estimateArmLength(
   const lengths: number[] = [];
   for (const frame of frames) {
     if (Math.abs(frame.timestampMs - contactMs) > 300) continue;
-    const find = (name: string) =>
-      frame.landmarks.find(
-        (landmark) => landmark.name === name && landmark.visibility >= WRIST_RELIABLE_VISIBILITY,
-      );
-    const shoulder = find(`${side}_shoulder`);
-    const elbow = find(`${side}_elbow`);
-    const wrist = find(`${side}_wrist`);
+    const shoulder = measuredLandmark(frame, `${side}_shoulder`, WRIST_RELIABLE_VISIBILITY);
+    const elbow = measuredLandmark(frame, `${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
+    const wrist = measuredLandmark(frame, `${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
     if (!shoulder || !elbow || !wrist) continue;
     lengths.push(
       Math.hypot(shoulder.x - elbow.x, shoulder.y - elbow.y) +
@@ -1215,8 +1261,10 @@ function estimateArmLength(
 
 /**
  * Raise evidence for the dominant wrist/elbow relative to the per-frame
- * shoulder line across ±OVERHEAD_WINDOW_MS of contact (visibility-gated at
- * 0.5 — only well-measured frames count). Frames whose own torso extent is
+ * shoulder line across ±OVERHEAD_WINDOW_MS of contact (wrist/elbow
+ * visibility-gated at 0.5 — only well-measured frames count; the per-frame
+ * shoulder line and torso extent come from measuredTorso, so an unmeasured
+ * torso supplies no raise baseline). Frames whose own torso extent is
  * degenerate are skipped: they cannot support a normalized raise claim.
  * Also computes the ±80ms visibility-gated median, recorded as evidence: on
  * the dev overhead that slice holds a single post-contact frame (the arm
@@ -1245,20 +1293,14 @@ function scanRaiseWindow(
   for (const frame of frames) {
     const delta = Math.abs(frame.timestampMs - contactMs);
     if (delta > OVERHEAD_WINDOW_MS) continue;
-    const find = (name: string, minVisibility: number) =>
-      frame.landmarks.find(
-        (landmark) => landmark.name === name && landmark.visibility >= minVisibility,
-      );
-    const leftShoulder = find("left_shoulder", 0);
-    const rightShoulder = find("right_shoulder", 0);
-    const leftHip = find("left_hip", 0);
-    const rightHip = find("right_hip", 0);
-    if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
+    const frameTorso = measuredTorso(frame);
+    if (!frameTorso) continue;
+    const { leftShoulder, rightShoulder, leftHip, rightHip } = frameTorso;
     const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
     const torsoExtent = (leftHip.y + rightHip.y) / 2 - shoulderY;
     if (torsoExtent < TORSO_MIN_EXTENT) continue;
     const torso = torsoExtent;
-    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
+    const wrist = measuredLandmark(frame, `${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
     if (wrist) {
       const raiseAmount = (shoulderY - wrist.y) / torso;
       wristMeasuredFrames += 1;
@@ -1266,7 +1308,7 @@ function scanRaiseWindow(
       if (maxWristRaise === null || raiseAmount > maxWristRaise) maxWristRaise = raiseAmount;
       if (delta <= OVERHEAD_MEDIAN_WINDOW_MS) raises80.push(raiseAmount);
     }
-    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
+    const elbow = measuredLandmark(frame, `${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
     if (elbow) {
       elbowMeasuredFrames += 1;
       if ((shoulderY - elbow.y) / torso >= OVERHEAD_ELBOW_RAISE_TORSO) elbowRaisedFrames += 1;

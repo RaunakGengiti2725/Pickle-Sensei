@@ -485,24 +485,30 @@ describe("gate: every torso consumer must be MEASURED, not merely present (ADJ-V
 
   describe("sequence-median torso extent (torso-collapse abstention)", () => {
     // Reference hips lifted to half the extent (still visible) must abstain
-    // against the honest median; hips that were never measured in the other
-    // frames must not be able to drag that median down to match.
+    // against the honest median. The median needs TORSO_MEDIAN_MIN_FRAMES (5)
+    // measured torsos, so five off-reference frames keep honest visible hips;
+    // the hips in every OTHER off-reference frame are the attack surface —
+    // unmeasured hips there must not be able to drag the median down to the
+    // collapsed extent, and their coordinates must be irrelevant.
+    const honestFrame = (frame: LiteFrame) => offReference(frame) && frame.timestampMs < 1640;
+    const poisonable = (frame: LiteFrame) => offReference(frame) && !honestFrame(frame);
     const collapsedReference = mutate(measuredFrames(), atReference, HIPS, (mark) => ({
       ...mark,
       y: mark.y - 0.1,
     }));
-    const collapsedInvisible = mutate(collapsedReference, offReference, HIPS, (mark) => ({
+    const collapsedInvisible = mutate(collapsedReference, poisonable, HIPS, (mark) => ({
       ...mark,
       y: mark.y - 0.1,
       visibility: 0,
     }));
-    const inPlaceInvisible = mutate(collapsedReference, offReference, HIPS, (mark) => ({
+    const inPlaceInvisible = mutate(collapsedReference, poisonable, HIPS, (mark) => ({
       ...mark,
       visibility: 0,
     }));
-    const absent = remove(collapsedReference, offReference, HIPS);
+    const absent = remove(collapsedReference, poisonable, HIPS);
 
     it("precondition: a collapsed visible reference torso abstains against the honest median", () => {
+      expect(measuredFrames().frames.filter(honestFrame)).toHaveLength(5);
       const honest = classify(collapsedReference);
       expect(honest.label).toBe("UNKNOWN");
       expect(honest.limitingFactors).toContain("torso_extent_collapsed_vs_sequence_median");
@@ -517,6 +523,7 @@ describe("gate: every torso consumer must be MEASURED, not merely present (ADJ-V
       const poisoned = classify(collapsedInvisible);
       expect(poisoned.label).toBe("UNKNOWN");
       expect(poisoned.taxonomyDepth).toBe(1);
+      expect(poisoned.limitingFactors).toContain("torso_extent_collapsed_vs_sequence_median");
     });
   });
 });
