@@ -35,13 +35,15 @@ export interface AccessStoreState {
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
 /**
- * Ownership slot for the single refreshAccess() read that is allowed to land.
- * Every canonical write — a later refresh, or a backend-verified
- * syncBilling/purchaseSelected/restorePurchases commit — takes the slot, so a
- * GET /v1/me/access response (or failure) requested before that write can no
- * longer replace the newer snapshot. Null means no refresh may commit.
+ * Ownership slot for the single GET /v1/me/access read that is allowed to
+ * land. Both readers — initialize() and refreshAccess() — claim it with a fresh
+ * identity the moment their read goes on the wire, and every canonical write
+ * (a later read, or a backend-verified syncBilling/purchaseSelected/
+ * restorePurchases commit) takes the slot, so a response or failure requested
+ * before that write can no longer replace the newer snapshot. Null means no
+ * in-flight read may commit.
  */
-let refreshOwner: object | null = null;
+let accessReadOwner: object | null = null;
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -84,17 +86,37 @@ function isCurrentConfiguration(
   return dependencies === clients && configurationVersion === version;
 }
 
-/** Called by every canonical-access write; in-flight refreshes become stale. */
-function supersedeRefresh(): void {
-  refreshOwner = null;
+/** Called by every canonical-access write; in-flight reads become stale. */
+function supersedeAccessReads(): void {
+  accessReadOwner = null;
 }
 
-function ownsRefresh(
+/** Claim the slot for a read that is being issued right now. */
+function claimAccessRead(): object {
+  const owner = {};
+  accessReadOwner = owner;
+  return owner;
+}
+
+function ownsAccessRead(
   clients: BillingAccessDependencies,
   version: number,
   owner: object,
 ): boolean {
-  return isCurrentConfiguration(clients, version) && refreshOwner === owner;
+  return isCurrentConfiguration(clients, version) && accessReadOwner === owner;
+}
+
+/**
+ * Result of a refreshAccess() call once it has settled: true when the store
+ * holds a verified snapshot (supplied by this read or by the newer write that
+ * superseded it), false when it fails closed or the configuration changed.
+ */
+function settledWithAccess(
+  clients: BillingAccessDependencies,
+  version: number,
+  canonicalAccess: CanonicalAccessState | null,
+): boolean {
+  return isCurrentConfiguration(clients, version) && canonicalAccess !== null;
 }
 
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
@@ -149,6 +171,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     }
     if (!isCurrentConfiguration(clients, version)) return;
 
+    const owner = claimAccessRead();
     const [accessResult, plansResult] = await Promise.all([
       clients.backend
         .getAccess()
@@ -166,13 +189,6 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     ]);
     if (!isCurrentConfiguration(clients, version)) return;
 
-    const accessError = accessResult.error
-      ? billingError(
-          accessResult.error,
-          'billing.backend_unavailable',
-          'Membership verification is temporarily unavailable.',
-        )
-      : null;
     const plansError = plansResult.error
       ? billingError(
           plansResult.error,
@@ -180,22 +196,45 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
           'Membership pricing is unavailable from the app store right now.',
         )
       : null;
+    const plans = plansResult.value;
+    const selectedPeriod: BillingPeriod = plans?.annual
+      ? 'annual'
+      : plans?.lifetime
+        ? 'lifetime'
+        : plans?.monthly
+          ? 'monthly'
+          : 'annual';
+    if (!ownsAccessRead(clients, version, owner)) {
+      // A newer canonical write landed while this read was in flight: the
+      // access result (or failure) is stale and must not touch the snapshot,
+      // the status that write settled, or an operation still in progress.
+      // The store plans are not part of that ordering and still land.
+      const current = get();
+      set({
+        plans,
+        selectedPeriod,
+        ...(plansError && current.error === null
+          ? { status: statusFor(plansError), error: plansError.toState() }
+          : {}),
+      });
+      return;
+    }
+    supersedeAccessReads();
+    const accessError = accessResult.error
+      ? billingError(
+          accessResult.error,
+          'billing.backend_unavailable',
+          'Membership verification is temporarily unavailable.',
+        )
+      : null;
     // Free-rating access is server-authoritative and must remain available even
     // when the store SDK or offerings are not configured. Store failure blocks
     // purchase presentation; it never erases a verified free allowance.
     const error = accessError ?? plansError;
-    const plans = plansResult.value;
     set({
       status: error ? statusFor(error) : 'ready',
-      operation: 'idle',
       plans,
-      selectedPeriod: plans?.annual
-        ? 'annual'
-        : plans?.lifetime
-          ? 'lifetime'
-          : plans?.monthly
-            ? 'monthly'
-            : 'annual',
+      selectedPeriod,
       canonicalAccess: accessResult.value,
       error: error?.toState() ?? null,
     });
@@ -213,18 +252,21 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
-    const owner = {};
-    refreshOwner = owner;
+    const owner = claimAccessRead();
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
-      if (!ownsRefresh(clients, version, owner)) return false;
-      supersedeRefresh();
+      if (!ownsAccessRead(clients, version, owner)) {
+        return settledWithAccess(clients, version, get().canonicalAccess);
+      }
+      supersedeAccessReads();
       set({ status: 'ready', canonicalAccess, error: null });
       return true;
     } catch (cause) {
-      if (!ownsRefresh(clients, version, owner)) return false;
-      supersedeRefresh();
+      if (!ownsAccessRead(clients, version, owner)) {
+        return settledWithAccess(clients, version, get().canonicalAccess);
+      }
+      supersedeAccessReads();
       const error = billingError(
         cause,
         'billing.backend_unavailable',
@@ -256,7 +298,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       set({
         status: 'ready',
         operation: 'idle',
@@ -266,7 +308,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return synced.access.premium;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       const source = billingError(
         cause,
         'billing.backend_unavailable',
@@ -339,7 +381,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.backend_verification_pending',
@@ -363,7 +405,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
@@ -406,7 +448,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.restore_failed',
@@ -430,7 +472,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
-      supersedeRefresh();
+      supersedeAccessReads();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'Restored purchases could not be verified yet. Please try again.',
@@ -452,7 +494,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   reset: () => {
     configurationVersion += 1;
-    supersedeRefresh();
+    supersedeAccessReads();
     set(dataDefaults());
   },
 }));
@@ -466,7 +508,7 @@ export function configureAccessStore(
 ): void {
   dependencies = nextDependencies;
   configurationVersion += 1;
-  supersedeRefresh();
+  supersedeAccessReads();
   useAccessStore.setState(dataDefaults());
 }
 
@@ -474,6 +516,6 @@ export function configureAccessStore(
 export function clearAccessStoreConfiguration(): void {
   dependencies = null;
   configurationVersion += 1;
-  supersedeRefresh();
+  supersedeAccessReads();
   useAccessStore.setState(dataDefaults());
 }
