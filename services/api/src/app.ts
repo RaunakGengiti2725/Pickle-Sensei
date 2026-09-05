@@ -162,6 +162,26 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   });
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
+  // PostgreSQL closing an IDLE pooled client (restart, failover,
+  // idle_session_timeout, pg_terminate_backend) surfaces as 'error' on the
+  // Pool — unhandled, that exits the process. pg-pool has already discarded
+  // the client; the next checkout reconnects. `err.client` is the whole
+  // pg.Client, so only the server-side fields are logged.
+  pool?.on("error", (err) => {
+    const pgError = err instanceof pg.DatabaseError ? err : null;
+    app.log.error(
+      {
+        pgError: {
+          type: err.constructor.name,
+          message: err.message,
+          code: pgError?.code,
+          severity: pgError?.severity,
+        },
+        pool: { totalCount: pool.totalCount, idleCount: pool.idleCount },
+      },
+      "postgres pool: idle client error",
+    );
+  });
   const queue =
     options.queue ??
     (config.sqsQueueUrl
