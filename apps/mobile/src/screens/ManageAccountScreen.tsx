@@ -36,8 +36,13 @@ import {
 } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
-import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
+import { showBrandNotice, type BrandNotice } from '../design/BrandNotice';
+import {
+  useAuthStore,
+  type AccountDeletionCleanup,
+  type AuthProvider,
+  type DeletedAccount,
+} from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
@@ -57,6 +62,70 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
   google: 'Google',
   guest: 'Guest',
 };
+
+/**
+ * How the end of the account became known here: the server's answer to the
+ * confirm, or — when that answer never reached the phone — the server
+ * refusing the bearer on the retry of the same challenge (`unverified`: the
+ * account is gone, but whether Sign in with Apple was disconnected is not
+ * known on this device).
+ */
+type DeletionOutcome =
+  AccountDeletionResult | { appleAuthorizationRevocation: 'unverified' };
+
+const LOCAL_CLEANUP_DETAIL =
+  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.';
+const APPLE_STEP_DETAIL =
+  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.';
+const APPLE_CHECK_DETAIL =
+  'The reply confirming this deletion did not reach this phone, so it could not check that Sign in with Apple was disconnected. If Pickle Sensei still appears under iPhone Settings → your name → Sign in with Apple, choose Stop Using Apple ID.';
+
+/** What to tell the user once the account is gone. Every condition that
+ * applies is said in the one notice the host can show — a failed local purge
+ * must never hide the Apple step — and a single condition keeps its own copy. */
+function deletionNotice(input: {
+  cleanup: AccountDeletionCleanup | null;
+  outcome: DeletionOutcome;
+  provider: AuthProvider | undefined;
+}): BrandNotice | null {
+  const localCleanupNeeded = input.cleanup?.localPurge === 'failed';
+  const revocation = input.outcome?.appleAuthorizationRevocation;
+  const appleDetail =
+    revocation === 'manual_action_required'
+      ? APPLE_STEP_DETAIL
+      : revocation === 'unverified' && input.provider === 'apple'
+        ? APPLE_CHECK_DETAIL
+        : null;
+  const appleEyebrow =
+    revocation === 'manual_action_required'
+      ? 'ONE APPLE STEP'
+      : 'CHECK APPLE SIGN-IN';
+  if (localCleanupNeeded && appleDetail) {
+    return {
+      title: 'Account deleted',
+      detail: `${LOCAL_CLEANUP_DETAIL}\n\n${appleDetail}`,
+      tone: 'danger',
+      eyebrow: `LOCAL CLEANUP + ${appleEyebrow}`,
+    };
+  }
+  if (localCleanupNeeded) {
+    return {
+      title: 'Account deleted',
+      detail: LOCAL_CLEANUP_DETAIL,
+      tone: 'danger',
+      eyebrow: 'LOCAL CLEANUP NEEDED',
+    };
+  }
+  if (appleDetail) {
+    return {
+      title: 'Account deleted',
+      detail: appleDetail,
+      tone: 'neutral',
+      eyebrow: appleEyebrow,
+    };
+  }
+  return null;
+}
 
 /** Final-confirm hold-off (ms). Must exceed the server's 3s minimum age
  * between delete-request and delete-confirm; also honest UX friction. */
@@ -301,7 +370,7 @@ function ChoiceRow(props: {
 function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
-  onDeleted: (result: AccountDeletionResult) => void;
+  onDeleted: (outcome: DeletionOutcome) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -316,6 +385,10 @@ function DeleteAccountDialog(props: {
   // earlier presentation must not mutate the state of a later (or closed)
   // one, so every continuation checks it before touching state.
   const presentationRef = useRef(0);
+  // The challenge whose confirm left the phone without a server verdict.
+  // The account may already be gone: a 401 on retrying THIS challenge is the
+  // server refusing a deleted account's bearer, not a merely expired one.
+  const unconfirmedChallengeRef = useRef<string | null>(null);
   const directionRef = useRef<PageDirection>('none');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const entrance = useRef(new Animated.Value(0)).current;
@@ -330,6 +403,7 @@ function DeleteAccountDialog(props: {
   useEffect(() => {
     if (!props.visible) {
       presentationRef.current += 1;
+      unconfirmedChallengeRef.current = null;
       stopCountdown();
       setStep({ phase: 'why' });
       setReason(null);
@@ -443,8 +517,23 @@ function DeleteAccountDialog(props: {
     setStep({ phase: 'deleting', challenge });
     try {
       const result = await confirmAccountDeletion(getApiSession(), challenge);
+      unconfirmedChallengeRef.current = null;
       props.onDeleted(result);
     } catch (e) {
+      if (e instanceof AccountDeletionError) {
+        if (e.outcomeUnknown) {
+          unconfirmedChallengeRef.current = challenge;
+        } else if (
+          e.code === 'deletion.session_expired' &&
+          unconfirmedChallengeRef.current === challenge
+        ) {
+          // Not gated on the presentation: the account is gone whether or
+          // not the sheet is still up, so it must be ended locally either way.
+          unconfirmedChallengeRef.current = null;
+          props.onDeleted({ appleAuthorizationRevocation: 'unverified' });
+          return;
+        }
+      }
       if (presentation !== presentationRef.current) return;
       const canRetrySameChallenge =
         e instanceof AccountDeletionError ? e.retryable : true;
@@ -883,32 +972,29 @@ export function ManageAccountScreen() {
       <DeleteAccountDialog
         visible={confirmingDeletion}
         onCancel={() => setConfirmingDeletion(false)}
-        onDeleted={result => {
+        onDeleted={outcome => {
           setConfirmingDeletion(false);
+          // Named from this render's session: when the bearer was refused,
+          // the auth store's unauthorized handler may already have dropped
+          // the live session, and the purge must still target the deleted
+          // owner's rows.
+          const deleted: DeletedAccount | undefined =
+            session?.canonicalAppUserId
+              ? {
+                  canonicalAppUserId: session.canonicalAppUserId,
+                  provider: session.provider,
+                }
+              : undefined;
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
-            if (cleanup?.localPurge === 'failed') {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
-                tone: 'danger',
-                eyebrow: 'LOCAL CLEANUP NEEDED',
-              });
-            } else if (
-              result?.appleAuthorizationRevocation === 'manual_action_required'
-            ) {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
-                tone: 'neutral',
-                eyebrow: 'ONE APPLE STEP',
-              });
-            }
+          void completeAccountDeletion(deleted).then(() => {
+            const notice = deletionNotice({
+              cleanup: useAuthStore.getState().deletionCleanup,
+              outcome,
+              provider: deleted?.provider,
+            });
+            if (notice) showBrandNotice(notice);
           });
         }}
       />

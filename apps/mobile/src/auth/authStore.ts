@@ -105,6 +105,12 @@ export interface AccountDeletionCleanup {
   localPurge: 'complete' | 'failed' | 'not_needed';
 }
 
+/** The account a completed deletion belonged to. */
+export interface DeletedAccount {
+  canonicalAppUserId: string;
+  provider: AuthProvider;
+}
+
 const LOCAL_PURGE_ATTEMPTS = 3;
 
 export const SESSION_EXPIRED_MESSAGE =
@@ -137,8 +143,11 @@ interface AuthState {
   signOut: () => Promise<void>;
   /** After the SERVER confirms deletion: purge this account's local data,
    * disconnect the provider SDK, and land signed out. Never call before the
-   * backend has acknowledged the deletion. */
-  completeAccountDeletion: () => Promise<void>;
+   * backend has acknowledged the deletion. `deleted` names the account when
+   * the store may already have dropped the session (the bearer was refused
+   * before the caller learned the account was gone); it defaults to the
+   * current session. */
+  completeAccountDeletion: (deleted?: DeletedAccount) => Promise<void>;
   clearError: () => void;
 }
 
@@ -778,12 +787,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  completeAccountDeletion: async () => {
+  completeAccountDeletion: async deleted => {
     const session = get().session;
-    const provider = session?.provider;
-    const deletedOwner = session?.canonicalAppUserId
-      ? canonicalDataOwner(session.canonicalAppUserId)
-      : null;
+    const provider = deleted?.provider ?? session?.provider;
+    const deletedId =
+      deleted?.canonicalAppUserId ?? session?.canonicalAppUserId;
+    const deletedOwner = deletedId ? canonicalDataOwner(deletedId) : null;
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false, deletionCleanup: null });

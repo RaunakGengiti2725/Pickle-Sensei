@@ -1,4 +1,4 @@
-import type { ApiSession } from './apiSession';
+import { reportApiUnauthorized, type ApiSession } from './apiSession';
 
 /**
  * Client for the backend's two-step account deletion
@@ -18,6 +18,16 @@ import type { ApiSession } from './apiSession';
  * the account (and the bearer) cease to exist; the server keeps it
  * anonymized after deletion. It is always skippable — the survey must never
  * stand between a player and deleting their account.
+ *
+ * Step 2 is the one request whose LOSS matters: once it has left the device
+ * the server may have deleted the account (and with it the bearer's user)
+ * even though no answer came back, and every later call — including a retry
+ * of the same confirm — is refused with 401. So a confirm that fails
+ * without a server answer is reported with `outcomeUnknown` and never
+ * claims that nothing was deleted, and a 401 on either step is reported
+ * through `reportApiUnauthorized` like every other API client so the auth
+ * store learns the bearer is dead. The screen turns "unanswered confirm,
+ * then 401 on the same challenge" into the local end of the account.
  */
 
 export type AccountDeletionFetch = (
@@ -77,6 +87,10 @@ export class AccountDeletionError extends Error {
       | 'deletion.unavailable',
     message: string,
     readonly retryable: boolean,
+    /** The request left the device and no server verdict came back, so the
+     * account may already be gone. Only a delete-confirm can be in this
+     * state; step 1 destroys nothing. */
+    readonly outcomeUnknown: boolean = false,
   ) {
     super(message);
     this.name = 'AccountDeletionError';
@@ -97,9 +111,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+type DeletionStep = 'request' | 'confirm';
+
+/** No server answer at all (offline, timeout). Step 1 truthfully deleted
+ * nothing; step 2 may have, so its copy leaves the outcome open. */
+function unreachableError(step: DeletionStep): AccountDeletionError {
+  if (step === 'request') {
+    return new AccountDeletionError(
+      'deletion.unavailable',
+      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      true,
+    );
+  }
+  return new AccountDeletionError(
+    'deletion.unavailable',
+    'The server did not answer in time, so it is not yet known whether your account was deleted. Tap Permanently delete again to check.',
+    true,
+    true,
+  );
+}
+
 async function post(
   session: ApiSession,
   fetchFn: AccountDeletionFetch,
+  step: DeletionStep,
   path: string,
   body?: unknown,
 ): Promise<Record<string, unknown>> {
@@ -118,11 +153,7 @@ async function post(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
-    throw new AccountDeletionError(
-      'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
-      true,
-    );
+    throw unreachableError(step);
   } finally {
     clearTimeout(timeout);
   }
@@ -133,6 +164,7 @@ async function post(
     // Non-JSON error bodies fall through to the status checks below.
   }
   if (response.status === 401) {
+    reportApiUnauthorized(session.bearerToken);
     throw new AccountDeletionError(
       'deletion.session_expired',
       'Your sign-in has expired. Sign in again, then delete your account.',
@@ -145,7 +177,9 @@ async function post(
     const message =
       error && typeof error['message'] === 'string'
         ? error['message']
-        : 'The deletion request could not be completed. Nothing was deleted.';
+        : step === 'request'
+          ? 'The deletion request could not be completed. Nothing was deleted.'
+          : 'The deletion could not be completed. Please try again.';
     throw new AccountDeletionError(
       'deletion.rejected',
       message,
@@ -179,6 +213,7 @@ export async function requestAccountDeletion(
   const payload = await post(
     session,
     fetchFn,
+    'request',
     '/v1/me/delete-request',
     survey ? { survey } : undefined,
   );
@@ -207,9 +242,13 @@ export async function confirmAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-confirm', {
-    challenge,
-  });
+  const payload = await post(
+    session,
+    fetchFn,
+    'confirm',
+    '/v1/me/delete-confirm',
+    { challenge },
+  );
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
       'deletion.rejected',

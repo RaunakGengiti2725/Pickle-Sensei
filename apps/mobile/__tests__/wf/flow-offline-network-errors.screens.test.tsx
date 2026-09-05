@@ -9,11 +9,14 @@
  * it needs fake timers.)
  */
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
+const mockReportApiUnauthorized = jest.fn();
 jest.mock('../../src/account/apiSession', () => {
   let session: unknown = null;
   return {
     getApiSession: () => session,
     subscribeToApiSession: () => () => {},
+    reportApiUnauthorized: (...args: unknown[]) =>
+      mockReportApiUnauthorized(...args),
     __setSession: (next: unknown) => {
       session = next;
     },
@@ -319,6 +322,10 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     await flush();
     expect(allText(renderer)).toContain(
       'Your sign-in has expired. Sign in again, then delete your account.',
+    );
+    // The refused bearer reaches the auth store like every other API client's.
+    expect(mockReportApiUnauthorized).toHaveBeenCalledWith(
+      apiSession.bearerToken,
     );
     expect(
       useAuthStore.getState().completeAccountDeletion,

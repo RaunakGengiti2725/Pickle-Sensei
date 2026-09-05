@@ -1,10 +1,16 @@
 /**
  * Two-step account deletion: the client for /v1/me/delete-request +
- * /v1/me/delete-confirm (step-2 must present step-1's challenge; failures
- * always say NOTHING was deleted unless the server confirmed), and the
- * post-confirmation local purge that removes every owner-scoped row.
+ * /v1/me/delete-confirm (step-2 must present step-1's challenge; a step-1
+ * failure always says NOTHING was deleted, a step-2 failure without a server
+ * verdict says the outcome is unknown), and the post-confirmation local
+ * purge that removes every owner-scoped row.
  */
-import type { ApiSession } from '../src/account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+  type ApiSession,
+} from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
@@ -171,6 +177,127 @@ describe('account deletion client', () => {
     await expect(
       confirmAccountDeletion(session, 'challenge', down),
     ).rejects.toBeInstanceOf(AccountDeletionError);
+  });
+
+  describe('no server answer (offline / aborted)', () => {
+    const down = jest.fn(async () => {
+      throw new Error('network down');
+    });
+
+    it('step 1 truthfully promises nothing was deleted; the outcome is known', async () => {
+      await expect(
+        requestAccountDeletion(session, null, down),
+      ).rejects.toMatchObject({
+        code: 'deletion.unavailable',
+        retryable: true,
+        outcomeUnknown: false,
+        message:
+          'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      } satisfies Partial<AccountDeletionError>);
+    });
+
+    it('step 2 leaves the outcome open: the server may have deleted the account', async () => {
+      const error = await confirmAccountDeletion(
+        session,
+        'challenge',
+        down,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(AccountDeletionError);
+      expect(error).toMatchObject({
+        code: 'deletion.unavailable',
+        retryable: true,
+        outcomeUnknown: true,
+      } satisfies Partial<AccountDeletionError>);
+      expect((error as AccountDeletionError).message).not.toMatch(
+        /Nothing was deleted/,
+      );
+      expect((error as AccountDeletionError).message).toContain(
+        'Permanently delete',
+      );
+    });
+
+    it('a server error body without a message never promises step 2 deleted nothing', async () => {
+      const gateway = jest.fn(
+        async () => new Response('<html>504</html>', { status: 504 }),
+      );
+      await expect(
+        requestAccountDeletion(session, null, gateway),
+      ).rejects.toMatchObject({
+        code: 'deletion.rejected',
+        retryable: true,
+        message:
+          'The deletion request could not be completed. Nothing was deleted.',
+      } satisfies Partial<AccountDeletionError>);
+      const confirmError = await confirmAccountDeletion(
+        session,
+        'challenge',
+        gateway,
+      ).catch((e: unknown) => e);
+      expect(confirmError).toMatchObject({
+        code: 'deletion.rejected',
+        retryable: true,
+      } satisfies Partial<AccountDeletionError>);
+      expect((confirmError as AccountDeletionError).message).not.toMatch(
+        /Nothing was deleted/,
+      );
+    });
+  });
+
+  describe('401 reports the rejected bearer to the auth store', () => {
+    const listener = jest.fn();
+    const unauthorized = jest.fn(async () =>
+      jsonResponse(401, {
+        error: { message: 'The session is no longer valid. Sign in again.' },
+      }),
+    );
+
+    beforeEach(() => {
+      listener.mockReset();
+      establishApiSession(session);
+      setApiUnauthorizedListener(listener);
+    });
+
+    afterEach(() => {
+      setApiUnauthorizedListener(null);
+      clearApiSession();
+    });
+
+    it('step 1: reported once, before the typed non-retryable error', async () => {
+      await expect(
+        requestAccountDeletion(session, null, unauthorized),
+      ).rejects.toMatchObject({
+        code: 'deletion.session_expired',
+        retryable: false,
+        outcomeUnknown: false,
+      } satisfies Partial<AccountDeletionError>);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0]?.[0]).toMatchObject({
+        bearerToken: session.bearerToken,
+        canonicalAppUserId: session.canonicalAppUserId,
+      });
+    });
+
+    it('step 2: reported once, before the typed non-retryable error', async () => {
+      await expect(
+        confirmAccountDeletion(session, 'challenge', unauthorized),
+      ).rejects.toMatchObject({
+        code: 'deletion.session_expired',
+        retryable: false,
+        outcomeUnknown: false,
+      } satisfies Partial<AccountDeletionError>);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('a bearer that is no longer the live one is not reported (rotated meanwhile)', async () => {
+      await expect(
+        confirmAccountDeletion(
+          { ...session, bearerToken: 'stale-bearer' },
+          'challenge',
+          unauthorized,
+        ),
+      ).rejects.toMatchObject({ code: 'deletion.session_expired' });
+      expect(listener).not.toHaveBeenCalled();
+    });
   });
 });
 
