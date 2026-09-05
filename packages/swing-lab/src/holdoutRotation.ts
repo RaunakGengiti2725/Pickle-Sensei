@@ -26,9 +26,10 @@ import { REPO_ROOT } from "./engine/corpus.js";
  * never fabricates events. Every verdict fails closed, in three layers:
  *
  *  1. structure — `decodeHoldoutLedger` turns untrusted JSON into a typed
- *     ledger or a list of defects; a defective, empty or foreign-policy
- *     ledger is NOT_EVALUABLE (loading it throws a `HoldoutLedgerError`),
- *     which blocks certification exactly like FAIL,
+ *     ledger or a list of defects; the decoder implements exactly one
+ *     ledger schema version, so a defective, empty, foreign-schema or
+ *     foreign-policy ledger is NOT_EVALUABLE (loading it throws a
+ *     `HoldoutLedgerError`), which blocks certification exactly like FAIL,
  *  2. tier policy — budgets are looked up through the closed tier list, so
  *     a tier the policy does not govern has no budget to be within and is
  *     UNGOVERNED_TIER (a violation), never WITHIN_BUDGET,
@@ -39,6 +40,8 @@ import { REPO_ROOT } from "./engine/corpus.js";
  */
 
 export const HOLDOUT_LEDGER_PATH = "datasets/holdouts/ledger.json" as const;
+/** The only ledger schema this decoder implements; any other version is undecodable. */
+export const HOLDOUT_LEDGER_SCHEMA_VERSION = 1 as const;
 export const HOLDOUT_ROTATION_POLICY_VERSION = "holdout-rotation-v1" as const;
 
 export const HOLDOUT_TIERS = ["DEV", "VALIDATION", "LOCKED_TEST", "SHADOW_HOLDOUT"] as const;
@@ -351,7 +354,14 @@ export function decodeHoldoutLedger(input: unknown): HoldoutLedgerDecodeResult {
     };
   }
   const defects: string[] = [];
-  requireCount(input, "schemaVersion", "", defects, 1);
+  if (input.schemaVersion !== HOLDOUT_LEDGER_SCHEMA_VERSION) {
+    defects.push(
+      defect(
+        "schemaVersion",
+        `must be ${HOLDOUT_LEDGER_SCHEMA_VERSION} — this decoder implements holdout ledger schema ${HOLDOUT_LEDGER_SCHEMA_VERSION} only and cannot evaluate a ledger written under another schema (got ${JSON.stringify(input.schemaVersion)})`,
+      ),
+    );
+  }
   requireString(input, "policyVersion", "", defects, true);
   requireString(input, "generatedAtIso", "", defects, true);
   if (requireArray(input.holdouts, "holdouts", defects)) {
@@ -414,6 +424,11 @@ export function evaluateHoldout(entry: HoldoutEntry): HoldoutEvaluation {
     if (!entry.retirement) {
       violations.push(`${entry.caseId}: retired status without a retirement record`);
     }
+  } else if (entry.retirement) {
+    verdict = "RETIRED";
+    violations.push(
+      `${entry.caseId}: ACTIVE status but carries a retirement record dated ${entry.retirement.dateIso} — a retired (contaminated) case can never return to active duty; keep it RETIRED_TO_REGRESSION`,
+    );
   } else if (overBudget) {
     verdict = "OVER_INSPECTED";
     violations.push(
@@ -493,7 +508,12 @@ export function auditSuccessorDesignations(ledger: HoldoutLedger): string[] {
       );
       continue;
     }
-    claimants.set(successorId, [...(claimants.get(successorId) ?? []), entry.caseId]);
+    const retirees = claimants.get(successorId);
+    if (retirees) {
+      retirees.push(entry.caseId);
+    } else {
+      claimants.set(successorId, [entry.caseId]);
+    }
     if (successorId === entry.caseId) {
       findings.push(
         `${entry.caseId}: names itself as its own successor — a retired (contaminated) case can never succeed itself`,
@@ -516,7 +536,9 @@ export function auditSuccessorDesignations(ledger: HoldoutLedger): string[] {
   }
 
   for (const successor of ledger.successors) {
-    findings.push(...auditDesignation(successor, holdoutsById.get(successor.caseId)));
+    for (const finding of auditDesignation(successor, holdoutsById.get(successor.caseId))) {
+      findings.push(finding);
+    }
   }
 
   if (retired.length > 0 && ledger.successors.length === 0) {
@@ -532,11 +554,11 @@ function notEvaluable(reasons: string[]): CertificationReadiness {
 
 /**
  * Certification claims require:
- *  1. a structurally valid ledger under this policy that governs at least
- *     one holdout (otherwise NOT_EVALUABLE — there is nothing to certify
- *     against),
- *  2. every holdout on a governed tier and no ACTIVE holdout over its
- *     inspection budget,
+ *  1. a structurally valid ledger under this schema and policy that governs
+ *     at least one holdout (otherwise NOT_EVALUABLE — there is nothing to
+ *     certify against),
+ *  2. every holdout on a governed tier, no ACTIVE holdout over its
+ *     inspection budget, and no ACTIVE holdout carrying a retirement record,
  *  3. every retired holdout names a designated successor that exists, is a
  *     SHADOW_HOLDOUT, is not the retiree itself, is not a retired or
  *     inspected holdout, and is named by no other retiree,
@@ -558,8 +580,9 @@ export function evaluateCertificationReadiness(ledger: HoldoutLedger): Certifica
   }
 
   const evaluations = decoded.ledger.holdouts.map(evaluateHoldout);
-  const reasons = evaluations.flatMap((evaluation) => evaluation.violations);
-  reasons.push(...auditSuccessorDesignations(decoded.ledger));
+  const reasons = evaluations
+    .flatMap((evaluation) => evaluation.violations)
+    .concat(auditSuccessorDesignations(decoded.ledger));
 
   return {
     status: reasons.length === 0 ? "ELIGIBLE" : "BLOCKED",

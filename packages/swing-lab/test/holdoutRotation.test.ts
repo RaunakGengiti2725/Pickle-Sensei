@@ -10,6 +10,7 @@ import {
   evaluateCertificationReadiness,
   evaluateHoldout,
   HOLDOUT_LEDGER_PATH,
+  HOLDOUT_LEDGER_SCHEMA_VERSION,
   HoldoutLedgerError,
   INSPECTION_BUDGETS,
   isHoldoutTier,
@@ -230,6 +231,28 @@ describe("certification readiness enforcement", () => {
     );
     expect(readiness.status).toBe("ELIGIBLE");
     expect(readiness.reasons).toEqual([]);
+  });
+
+  it("an ACTIVE holdout that carries a retirement record is a violation — retirement is irreversible", () => {
+    const reactivated = entry({
+      caseId: "zombie",
+      status: "ACTIVE",
+      retirement: {
+        dateIso: "2026-08-29",
+        workstream: "test",
+        reason: "over budget",
+        regressionRole: "regression fixture",
+        successorId: "fresh-y",
+      },
+    });
+    const evaluation = evaluateHoldout(reactivated);
+    expect(evaluation.verdict).not.toBe("WITHIN_BUDGET");
+    expect(evaluation.violations.join(" ")).toMatch(/zombie.*retirement record/i);
+    const readiness = evaluateCertificationReadiness(
+      ledger({ holdouts: [reactivated], successors: [successor()] }),
+    );
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.join(" ")).toContain("zombie");
   });
 });
 
@@ -452,6 +475,36 @@ describe("ledger decoder: structural defects are NOT_EVALUABLE, never partial ve
     }
   });
 
+  it("the decoder implements exactly one schemaVersion; any other is a defect, never evaluated under v1 rules", () => {
+    expect(HOLDOUT_LEDGER_SCHEMA_VERSION).toBe(1);
+    for (const schemaVersion of [0, 2, 99, 1.5, -1, "1", null, undefined]) {
+      const decoded = decodeHoldoutLedger({ ...ledger({ holdouts: [entry()] }), schemaVersion });
+      expect(decoded.ok, JSON.stringify(schemaVersion)).toBe(false);
+      if (!decoded.ok) {
+        expect(decoded.defects.join(" ")).toMatch(/schemaVersion/i);
+      }
+      const readiness = evaluateCertificationReadiness({
+        ...ledger({ holdouts: [entry()] }),
+        schemaVersion,
+      } as unknown as HoldoutLedger);
+      expect(readiness.status, JSON.stringify(schemaVersion)).toBe("NOT_EVALUABLE");
+      expect(readiness.reasons.join(" ")).toMatch(/schemaVersion/i);
+    }
+    const root = writeLedger(
+      "schema-future",
+      JSON.stringify(ledger({ holdouts: [entry()], schemaVersion: 2 })),
+    );
+    let caught: unknown = null;
+    try {
+      loadHoldoutLedger(root);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(HoldoutLedgerError);
+    expect((caught as HoldoutLedgerError).code).toBe("LEDGER_MALFORMED");
+    expect(String(caught)).toMatch(/holdout ledger.*schemaVersion/i);
+  });
+
   it("a ledger under a different policy version is NOT_EVALUABLE under this policy", () => {
     const readiness = evaluateCertificationReadiness(
       ledger({ holdouts: [entry()], policyVersion: "holdout-rotation-v0" }),
@@ -647,6 +700,32 @@ describe("successor designation graph audit", () => {
     const readiness = evaluateCertificationReadiness(ledger({ holdouts: [entry()] }));
     expect(readiness.status).toBe("ELIGIBLE");
     expect(readiness.reasons).toEqual([]);
+  });
+
+  it("scales linearly: 60k retirees sharing one successor audit in bounded time and name every claimant", () => {
+    const retirees = Array.from({ length: 60_000 }, (_, index) =>
+      retiredTo(`retired-${index}`, "fresh-y"),
+    );
+    const started = performance.now();
+    const findings = auditSuccessorDesignations(
+      ledger({ holdouts: retirees, successors: [successor()] }),
+    );
+    const elapsedMs = performance.now() - started;
+    expect(elapsedMs).toBeLessThan(3_000);
+    const shared = findings.filter((finding) => /claimed by 60000 retired holdouts/.test(finding));
+    expect(shared).toHaveLength(1);
+    expect(shared[0]).toContain("retired-0");
+    expect(shared[0]).toContain("retired-59999");
+  });
+
+  it("a ledger that yields more findings than a spread call can carry is still BLOCKED, not a RangeError", () => {
+    const orphans = Array.from({ length: 200_000 }, (_, index) =>
+      retiredTo(`orphan-${index}`, `ghost-${index}`),
+    );
+    const readiness = evaluateCertificationReadiness(ledger({ holdouts: orphans }));
+    expect(readiness.status).toBe("BLOCKED");
+    expect(readiness.reasons.length).toBeGreaterThanOrEqual(orphans.length);
+    expect(readiness.reasons.join("\n")).toContain("orphan-199999: names successor ghost-199999");
   });
 });
 
