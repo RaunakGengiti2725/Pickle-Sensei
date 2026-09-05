@@ -185,6 +185,26 @@ const serviceUnavailable = (
   return response;
 };
 
+/** Upstream is rate-limiting US — a fleet-wide condition, since every isolate
+ * shares the egress addresses Supabase Auth counts — so the client is asked to
+ * back off for the time upstream named. Not the caller's own budget: no
+ * RateLimit-* headers, and nothing is charged to it. */
+const upstreamThrottled = (
+  context: string,
+  detail: unknown,
+  retryAfterSeconds: number,
+): Response => {
+  console.error(`[api] ${context} throttled upstream:`, detail);
+  const response = json(429, {
+    error: {
+      code: "rate_limited",
+      message: `${context} is busy right now. Please try again shortly.`,
+    },
+  });
+  response.headers.set("Retry-After", String(retryAfterSeconds));
+  return response;
+};
+
 // Coded errors: the app's ApiError reads error.code (e.g. the feedback prompt
 // treats analysis.feedback_exists as already-done).
 const codedError = (status: number, code: string, message: string): Response =>
@@ -419,22 +439,20 @@ function userScopedClient(accessToken: string): ReturnType<typeof createClient> 
   });
 }
 
-function anonAuthClient(): ReturnType<typeof createClient> {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
 // ── Supabase Auth (GoTrue) gateway ──────────────────────────────────────────
 //
-// Session verification and refresh talk to GoTrue's REST API directly rather
-// than through the supabase-js auth client. The client folds every failure
-// into one `error` (an HTTP verdict, a network fault, a body it could not
-// parse, its own internal retry loop of ~25 s on a dead socket) and the
-// routes then had nothing but "failed" to hand the app — which reads a 401
-// as "the server refused your session" and signs the user out. The gateway
-// keeps the verdict typed: `refused` is the ONE outcome that may become a
-// 401 (and the one that charges the auth-failure budget); `unavailable` is
+// Every call that asks GoTrue about a credential goes through one gateway:
+// session verification and refresh call its REST API directly, and the
+// ID-token exchange keeps supabase-js for the protocol but runs it over the
+// gateway's transport (`authGatewayTransport`). The client alone folds every
+// failure into one `error` (an HTTP verdict, a network fault as status 0, a
+// 429 as a plain AuthApiError, a body it could not parse, its own internal
+// retry loop of ~25 s on a dead socket) and the routes then had nothing but
+// "failed" to hand the app — which reads a 401 as "the server refused your
+// credential", charges it to the per-IP auth-failure budget, and signs the
+// user out. The gateway keeps the verdict typed from what GoTrue actually
+// answered on the wire: `refused` is the ONE outcome that may become a 401
+// (and the one that charges the auth-failure budget); `unavailable` is
 // retryable for the app and says nothing about the credential.
 
 /** Deadline for one Auth round trip. The app gives a refresh 15 s
@@ -465,7 +483,15 @@ function authUpstreamTimeoutMs(): number {
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
   | { kind: "refused"; status: number; detail: string }
-  | { kind: "unavailable"; detail: string; retryAfterSeconds: number };
+  /** `throttled`: GoTrue answered 429 — it is rate-limiting this edge, and
+   * `retryAfterSeconds` is the wait it named (or the default). */
+  | { kind: "unavailable"; detail: string; retryAfterSeconds: number; throttled: boolean };
+
+/** What one bounded round trip to GoTrue came back with, before any reading
+ * of it: the HTTP answer as sent, or the reason none arrived. */
+type AuthAnswer =
+  | { kind: "answered"; status: number; headers: Headers; text: string }
+  | { kind: "unreachable"; detail: string };
 
 interface AuthUserLike {
   id: string;
@@ -560,26 +586,13 @@ function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** One bounded GoTrue call. `parse` turns a 2xx JSON body into the value the
- * caller needs; a 2xx it cannot read is an outage (a gateway page, a
- * half-written answer), never a verdict on the credential. Connection-level
- * faults are re-sent per `AUTH_CONNECT_RETRY_BACKOFF_MS` inside the single
- * deadline; the first HTTP answer, whatever its status, is final. */
-async function authRequest<T>(
-  path: string,
-  init: {
-    method: "GET" | "POST";
-    bearer?: string;
-    body?: Record<string, unknown>;
-  },
-  parse: (payload: unknown) => T | null,
-): Promise<AuthVerdict<T>> {
-  const headers: Record<string, string> = {
-    apikey: SUPABASE_ANON_KEY,
-    Accept: "application/json",
-  };
-  if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
-  if (init.body) headers["Content-Type"] = "application/json";
+/** One bounded round trip to GoTrue. `send` performs the HTTP call under the
+ * given signal; connection-level faults are re-sent per
+ * `AUTH_CONNECT_RETRY_BACKOFF_MS` inside the single deadline, and the first
+ * HTTP answer, whatever its status, is final. */
+async function authRoundTrip(
+  send: (signal: AbortSignal) => Promise<Response>,
+): Promise<AuthAnswer> {
   const timeoutMs = authUpstreamTimeoutMs();
   const startedAt = Date.now();
   const controller = new AbortController();
@@ -593,30 +606,23 @@ async function authRequest<T>(
   // A deadline that fires while nothing races it must not surface as an
   // unhandled rejection.
   deadline.catch(() => undefined);
-  const unreachable = (detail: string): AuthVerdict<T> => ({
-    kind: "unavailable",
+  const unreachable = (detail: string): AuthAnswer => ({
+    kind: "unreachable",
     detail: `Supabase Auth unreachable: ${detail}`,
-    retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
   });
-  const attemptOnce = async () => {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
-      method: init.method,
-      headers,
-      body: init.body ? JSON.stringify(init.body) : undefined,
-      signal: controller.signal,
-    });
+  const attemptOnce = async (): Promise<AuthAnswer> => {
+    const response = await send(controller.signal);
     return {
+      kind: "answered",
       status: response.status,
-      retryAfter: response.headers.get("Retry-After"),
+      headers: response.headers,
       text: await response.text(),
     };
   };
-  let answer: { status: number; retryAfter: string | null; text: string };
   try {
     for (let attempt = 0; ; attempt += 1) {
       try {
-        answer = await Promise.race([attemptOnce(), deadline]);
-        break;
+        return await Promise.race([attemptOnce(), deadline]);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (error instanceof AuthDeadlineError || controller.signal.aborted) {
@@ -634,6 +640,23 @@ async function authRequest<T>(
     }
   } finally {
     clearTimeout(deadlineTimer);
+  }
+}
+
+/** Read the verdict off a wire answer. `parse` turns a 2xx JSON body into the
+ * value the caller needs; a 2xx it cannot read is an outage (a gateway page,
+ * a half-written answer), never a verdict on the credential. */
+function authVerdictOf<T>(
+  answer: AuthAnswer,
+  parse: (payload: unknown) => T | null,
+): AuthVerdict<T> {
+  if (answer.kind === "unreachable") {
+    return {
+      kind: "unavailable",
+      detail: answer.detail,
+      retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+      throttled: false,
+    };
   }
   let body: unknown = answer.text;
   try {
@@ -655,13 +678,74 @@ async function authRequest<T>(
       kind: "unavailable",
       detail: `Supabase Auth answered HTTP ${answer.status} without a usable body`,
       retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+      throttled: false,
     };
   }
   return {
     kind: "unavailable",
     detail: `Supabase Auth answered ${authErrorDetail(answer.status, body)}`,
-    retryAfterSeconds: retryAfterOf(answer.retryAfter),
+    retryAfterSeconds: retryAfterOf(answer.headers.get("Retry-After")),
+    throttled: answer.status === 429,
   };
+}
+
+/** One bounded GoTrue REST call, classified. */
+async function authRequest<T>(
+  path: string,
+  init: {
+    method: "GET" | "POST";
+    bearer?: string;
+    body?: Record<string, unknown>;
+  },
+  parse: (payload: unknown) => T | null,
+): Promise<AuthVerdict<T>> {
+  const headers: Record<string, string> = {
+    apikey: SUPABASE_ANON_KEY,
+    Accept: "application/json",
+  };
+  if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
+  if (init.body) headers["Content-Type"] = "application/json";
+  const answer = await authRoundTrip((signal) =>
+    fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+      method: init.method,
+      headers,
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal,
+    })
+  );
+  return authVerdictOf(answer, parse);
+}
+
+/** Statuses whose response carries no body by definition. */
+const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 103, 204, 205, 304]);
+
+/** A `fetch` for the supabase-js auth client that runs each of its GoTrue
+ * calls as a gateway round trip (deadline, bounded connect retry) and keeps
+ * the wire answer, so the caller reads the verdict from what GoTrue said
+ * rather than from the client's error taxonomy. The client is handed the
+ * answer verbatim (status, headers, body) so its own protocol handling is
+ * unchanged; an unreachable upstream is a thrown fetch to it, as it would
+ * be without the gateway. */
+function authGatewayTransport(): {
+  fetch: typeof fetch;
+  lastAnswer: () => AuthAnswer | null;
+} {
+  let last: AuthAnswer | null = null;
+  const transport: typeof fetch = async (input, init) => {
+    const answer = await authRoundTrip((signal) =>
+      fetch(input, {
+        ...init,
+        signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+      })
+    );
+    last = answer;
+    if (answer.kind === "unreachable") throw new TypeError(answer.detail);
+    return new Response(NULL_BODY_STATUSES.has(answer.status) ? null : answer.text, {
+      status: answer.status,
+      headers: answer.headers,
+    });
+  };
+  return { fetch: transport, lastAnswer: () => last };
 }
 
 /** GET /auth/v1/user — the user behind a Supabase access token, which also
@@ -678,6 +762,50 @@ const rotateRefreshToken = (
     { method: "POST", body: { refresh_token: refreshToken } },
     authSessionOf,
   );
+
+/** POST /auth/v1/token?grant_type=id_token — spend a Google/Apple ID token
+ * for a Supabase session. supabase-js composes the grant (provider, token,
+ * the pinned client's protocol headers); the gateway transport carries it
+ * and the verdict is read from the wire answer. A refusal here is GoTrue
+ * rejecting the ID token (bad signature/audience/issuer, provider disabled),
+ * the one outcome that says anything about the credential. */
+async function exchangeIdToken(
+  provider: "google" | "apple",
+  token: string,
+): Promise<AuthVerdict<SupabaseSessionLike & { user: AuthUserLike }>> {
+  const transport = authGatewayTransport();
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: transport.fetch },
+  });
+  const signIn = await client.auth.signInWithIdToken({ provider, token });
+  const answer = transport.lastAnswer();
+  if (answer === null) {
+    // The client failed before anything went on the wire: GoTrue was never
+    // asked, so nothing is known about the credential.
+    return {
+      kind: "unavailable",
+      detail: `Supabase Auth client sent nothing: ${signIn.error?.message ?? "(no error)"}`,
+      retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
+      throttled: false,
+    };
+  }
+  return authVerdictOf(answer, authSessionOf);
+}
+
+/** The response for an ID-token exchange that did not yield a session. Only
+ * a refusal is the 401 the outer handler charges to the auth-failure budget;
+ * GoTrue throttling or being down is retryable and charges nothing. */
+function idTokenExchangeFailure(
+  verdict: Exclude<AuthVerdict<unknown>, { kind: "ok" }>,
+): Response {
+  if (verdict.kind === "refused") {
+    return errorJson(401, "The identity token could not be verified.");
+  }
+  return verdict.throttled
+    ? upstreamThrottled("Sign-in", verdict.detail, verdict.retryAfterSeconds)
+    : serviceUnavailable("Sign-in", verdict.detail, verdict.retryAfterSeconds);
+}
 
 /** A bearer whose own `exp` has passed is dead whatever else is true of it:
  * refuse it before the auth cache or Supabase Auth is consulted (a cached
@@ -813,21 +941,17 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({
-    provider,
-    token,
-  });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(401, "The identity token could not be verified.");
-  }
+  const exchanged = await exchangeIdToken(provider, token);
+  if (exchanged.kind !== "ok") return idTokenExchangeFailure(exchanged);
+  const { user, ...session } = exchanged.value;
   return {
     authed: {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: user.id,
+      email: user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     },
-    session: signIn.data.session,
+    session,
     providerSubject,
   };
 }
@@ -869,29 +993,25 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (cached.authed) return cached.authed;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({
-      provider,
-      token,
-    });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
-      return errorJson(401, "The identity token could not be verified.");
-    }
+    const exchanged = await exchangeIdToken(provider, token);
+    if (exchanged.kind !== "ok") return idTokenExchangeFailure(exchanged);
+    const { user, ...session } = exchanged.value;
     await writeAuthCache(
       cacheKey,
       {
-        userId: signIn.data.user.id,
-        email: signIn.data.user.email ?? null,
+        userId: user.id,
+        email: user.email ?? null,
         provider,
-        accessToken: signIn.data.session.access_token,
+        accessToken: session.access_token,
       },
       payload?.exp,
-      signIn.data.session.expires_at,
+      session.expires_at,
     );
     return {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: user.id,
+      email: user.email ?? null,
       provider,
-      db: userScopedClient(signIn.data.session.access_token),
+      db: userScopedClient(session.access_token),
     };
   }
 

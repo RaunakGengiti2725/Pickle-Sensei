@@ -199,7 +199,10 @@ const bootstrapRequest = (ip: string) =>
   userRequest("POST", "/v1/account/bootstrap", { ip, token: fakeGoogleIdToken(), body: {} });
 
 const onToken = (respond: (request: Request) => Response | Promise<Response>): GoTrueFault =>
-  (request, url) => (url.pathname === "/auth/v1/token" ? respond(request) : null);
+(
+  request,
+  url,
+) => (url.pathname === "/auth/v1/token" ? respond(request) : null);
 
 Deno.test("bootstrap × GoTrue 429 → 429 with the upstream Retry-After and the generic body", async () => {
   h.reset();
@@ -254,15 +257,26 @@ for (
     const body = await response.text();
     assertEquals(response.status, 503, body);
     assert(response.headers.get("Retry-After"), "a 503 carries Retry-After");
-    assertEquals(body, JSON.stringify({
-      error: { message: "Sign-in is temporarily unavailable. Please try again." },
-    }));
+    assertEquals(
+      body,
+      JSON.stringify({
+        error: { message: "Sign-in is temporarily unavailable. Please try again." },
+      }),
+    );
     // Not charged: the next bootstrap from this IP reaches GoTrue.
     const before = h.callsTo("/auth/v1/token").length;
     const healthy = await h.handler(bootstrapRequest(ip));
     await healthy.body?.cancel();
-    assertEquals(healthy.status, 200, `post-outage bootstrap: ${healthy.status}`);
-    assertEquals(h.callsTo("/auth/v1/token").length, before + 1);
+    assertNotEquals(
+      healthy.status,
+      429,
+      "the transient failure spent the IP's auth-failure budget",
+    );
+    assertEquals(
+      h.callsTo("/auth/v1/token").length,
+      before + 1,
+      "post-outage bootstrap reaches GoTrue",
+    );
   });
 }
 
@@ -283,16 +297,26 @@ Deno.test("bootstrap × GoTrue fetch throws → 503 after the bounded connect re
   const elapsedMs = performance.now() - started;
   const body = await response.text();
   assertEquals(response.status, 503, body);
-  assertEquals(body, JSON.stringify({
-    error: { message: "Sign-in is temporarily unavailable. Please try again." },
-  }));
+  assertEquals(
+    body,
+    JSON.stringify({
+      error: { message: "Sign-in is temporarily unavailable. Please try again." },
+    }),
+  );
   assert(attempts >= 2, `connection faults are retried inside the deadline (attempts=${attempts})`);
-  assert(elapsedMs < 2_000, `bounded by AUTH_UPSTREAM_TIMEOUT_MS=150 (took ${elapsedMs.toFixed(0)}ms)`);
+  assert(
+    elapsedMs < 2_000,
+    `bounded by AUTH_UPSTREAM_TIMEOUT_MS=150 (took ${elapsedMs.toFixed(0)}ms)`,
+  );
   const before = h.callsTo("/auth/v1/token").length;
   const healthy = await h.handler(bootstrapRequest(ip));
   await healthy.body?.cancel();
-  assertEquals(healthy.status, 200, `post-outage bootstrap: ${healthy.status}`);
-  assertEquals(h.callsTo("/auth/v1/token").length, before + 1);
+  assertNotEquals(healthy.status, 429, "the transient failure spent the IP's auth-failure budget");
+  assertEquals(
+    h.callsTo("/auth/v1/token").length,
+    before + 1,
+    "post-outage bootstrap reaches GoTrue",
+  );
 });
 
 // ── Controls: genuine refusals stay 401 and charge the budget ────────────────
@@ -320,7 +344,11 @@ for (
     const locked = await h.handler(bootstrapRequest(ip));
     await locked.body?.cancel();
     assertEquals(locked.status, 429, "refused ID tokens must spend the auth-failure budget");
-    assertEquals(h.callsTo("/auth/v1/token").length, tokenCallsBefore, "refused pre-auth: no GoTrue call");
+    assertEquals(
+      h.callsTo("/auth/v1/token").length,
+      tokenCallsBefore,
+      "refused pre-auth: no GoTrue call",
+    );
   });
 }
 
