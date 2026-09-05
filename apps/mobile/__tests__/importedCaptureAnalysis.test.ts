@@ -89,11 +89,13 @@ function jsonResponse(body: unknown): Response {
 
 /** An imported clip whose extraction pass already attached a REAL sidecar
  * ref (hash of the actual serialized sequence, exactly as native records). */
-function importedClipWithSidecar(): {
+function importedClipWithSidecar(
+  overrides: Parameters<typeof generateSwingSequence>[0] = {},
+): {
   clip: CapturedClip;
   sidecarJson: string;
 } {
-  const { sequence, window } = generateSwingSequence();
+  const { sequence, window } = generateSwingSequence(overrides);
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
     uri: 'file:///imports/rally-clip.mov',
@@ -180,6 +182,33 @@ describe('runCaptureAnalysis imported-video gate', () => {
         call.sql.includes('INSERT OR REPLACE INTO local_shot'),
       ),
     ).toBe(true);
+  });
+
+  it('imported clip with the player too small in frame is refused by the pose-quality gate — permit released as unsupported, no record, no rating', async () => {
+    const { db, calls } = recordingDb();
+    // torso 2% of frame height → library `player_too_small_in_frame`.
+    const { clip, sidecarJson } = importedClipWithSidecar({
+      torsoLength: 0.02,
+    });
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('quality_blocked');
+    if (outcome.kind !== 'quality_blocked') return;
+    expect(outcome.poseQuality?.analyzable).toBe(false);
+    expect(outcome.poseQuality?.reasons).toContain('person_implausible_scale');
+    expect(outcome.reason).toContain('Nothing was rated');
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith('/v1/analysis-permits'),
+      ),
+    ).toHaveLength(1);
+    expect(finalized).toEqual([
+      expect.objectContaining({ outcome: 'unsupported', ratingId: null }),
+    ]);
+    expect(calls).toHaveLength(0);
   });
 
   it('keeps the honest refusal for imported clips without a pose sequence — no permit is touched', async () => {

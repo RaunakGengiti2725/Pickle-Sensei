@@ -351,6 +351,36 @@ describe('runCaptureAnalysis', () => {
     expect(persisted.captureEnvelope.overall).toBe('DEGRADED');
   });
 
+  it('player too small in frame (far camera) is refused by the pose-quality gate BEFORE inference — permit released as unsupported, no record, no score', async () => {
+    const { db, calls } = recordingDb();
+    // torso 2% of frame height: the library gate's `player_too_small_in_frame`
+    // (QUALITY_THRESHOLDS.minTorsoLengthNorm 0.08). Same truth swing as the
+    // scored control, only farther from the camera.
+    const { clip, sidecarJson } = swingClipWithSidecar({ torsoLength: 0.02 });
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('quality_blocked');
+    if (outcome.kind !== 'quality_blocked') return;
+    expect(outcome.poseQuality?.analyzable).toBe(false);
+    expect(outcome.poseQuality?.reasons).toContain('person_implausible_scale');
+    expect(outcome.reason).toContain('too small or too close');
+    expect(outcome.reason).toContain('Nothing was rated');
+    // One reserve, one release as `unsupported`, no analysis record, no
+    // rating, nothing synced.
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith('/v1/analysis-permits'),
+      ),
+    ).toHaveLength(1);
+    expect(finalized).toEqual([
+      expect.objectContaining({ outcome: 'unsupported', ratingId: null }),
+    ]);
+    expect(calls).toHaveLength(0);
+  });
+
   it('releases the permit on abstention and never syncs an unscored rating', async () => {
     const { db, calls } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
