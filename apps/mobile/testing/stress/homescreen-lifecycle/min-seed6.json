@@ -1,0 +1,90 @@
+[
+  {
+    "seed": 6001,
+    "world": {
+      "start": "persisted-A",
+      "dbLatency": { "kvGet": 0, "kvSet": 900, "shots": 0 },
+      "shotsHold": false,
+      "progressMode": "ok",
+      "rankMode": "ok",
+      "apiLatencyMs": 5,
+      "bearerTtlSec": 3600,
+      "shotsA": 1,
+      "shotsB": 6,
+      "shotsGuest": 1
+    },
+    "steps": [
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "signOut" },
+      { "kind": "advance", "ms": 2000 }
+    ]
+  },
+  {
+    "seed": 6002,
+    "world": {
+      "start": "persisted-A",
+      "dbLatency": { "kvGet": 0, "kvSet": 900, "shots": 0 },
+      "shotsHold": false,
+      "progressMode": "ok",
+      "rankMode": "ok",
+      "apiLatencyMs": 5,
+      "bearerTtlSec": 3600,
+      "shotsA": 1,
+      "shotsB": 6,
+      "shotsGuest": 1
+    },
+    "steps": [
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "signOut" },
+      { "kind": "advance", "ms": 2000 },
+      { "kind": "signIn", "account": "B" },
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "advance", "ms": 5000 }
+    ]
+  },
+  {
+    "seed": 6003,
+    "world": {
+      "start": "persisted-A",
+      "dbLatency": { "kvGet": 0, "kvSet": 900, "shots": 0 },
+      "shotsHold": false,
+      "progressMode": "ok",
+      "rankMode": "ok",
+      "apiLatencyMs": 5,
+      "bearerTtlSec": 3600,
+      "shotsA": 1,
+      "shotsB": 6,
+      "shotsGuest": 1
+    },
+    "steps": [
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "switchAccount", "to": "B" },
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "advance", "ms": 5000 }
+    ]
+  },
+  {
+    "seed": 6004,
+    "world": {
+      "start": "persisted-A",
+      "dbLatency": { "kvGet": 0, "kvSet": 0, "shots": 0 },
+      "shotsHold": false,
+      "progressMode": "ok",
+      "rankMode": "ok",
+      "apiLatencyMs": 5,
+      "bearerTtlSec": 3600,
+      "shotsA": 1,
+      "shotsB": 6,
+      "shotsGuest": 1
+    },
+    "steps": [
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "advance", "ms": 2000 },
+      { "kind": "signOut" },
+      { "kind": "advance", "ms": 2000 },
+      { "kind": "signIn", "account": "B" },
+      { "kind": "settle", "maxMs": 12000 },
+      { "kind": "advance", "ms": 5000 }
+    ]
+  }
+]
