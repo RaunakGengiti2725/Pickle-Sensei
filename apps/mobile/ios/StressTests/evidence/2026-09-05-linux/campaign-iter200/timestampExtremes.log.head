@@ -1,0 +1,92 @@
+$ /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario timestampExtremes --seed-start 1 --count 200 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200/timestampExtremes.jsonl
+→ exit -4 (SIGILL) in 0.0s
+
+*** Signal 4: Backtracing from 0x5588bb0fff55... done ***
+
+*** Swift runtime failure: arithmetic overflow ***
+
+Thread 0 "stress-runner" crashed:
+
+0 [inlined] [system] 0x00005588bb0fff55 Swift runtime failure: arithmetic overflow in stress-runner at //<compiler-generated>
+1                    0x00005588bb0fff55 StrokeCompletionMonitor.observeFrame(timestampMs:) + 933 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressCore/Generated/StrokeCompletionMonitor.swift:237:49
+2 [ra]               0x00005588bb13cb32 static StressScenario.timestampExtremes(_:_:) + 1313 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:777:15
+3 [ra]               0x00005588bb12afb6 StressScenario.run(seed:) + 613 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:95:35
+4 [ra]               0x00005588bb146575 stress_runner_main + 4036 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/stress-runner/main.swift:124:32
+
+
+Registers:
+
+rax 0x8000000000000901  9223372036854778113
+rdx 0x0000000000000000  0
+rcx 0x0000000000000000  0
+rbx 0x00007ffd811ef9e0  a0 a2 e2 dd 88 55 00 00 ed fd 0f bb 88 55 00 00   ¢âÝ·U··íý·»·U··
+rsi 0x00007fe43a38bfb0  01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ················
+rdi 0x00007ffd811ef9e0  a0 a2 e2 dd 88 55 00 00 ed fd 0f bb 88 55 00 00   ¢âÝ·U··íý·»·U··
+rbp 0x00007ffd811efaa0  20 fd 1e 81 fd 7f 00 00 32 cb 13 bb 88 55 00 00   ý··ý···2Ë·»·U··
+rsp 0x00007ffd811ef920  01 00 00 00 00 00 00 00 b8 a2 e2 dd 88 55 00 00  ········¸¢âÝ·U··
+ r8 0x0000000000000001  1
+ r9 0x0000000000000000  0
+r10 0x00007ffd811ee908  38 be 49 3a e4 7f 00 00 80 e9 1e 81 fd 7f 00 00  8¾I:ä····é··ý···
+r11 0x00007ffd811ed301  00 00 00 00 00 00 00 20 e1 1e 81 fd 7f 00 00 48  ······· á··ý···H
+r12 0x0000000000000000  0
+r13 0x00005588dde2a270  b8 7a 1c bb 88 55 00 00 03 00 00 00 00 00 00 00  ¸z·»·U··········
+r14 0x00005588bb1bf2e8  28 62 1c bb 88 55 00 00 e8 e0 3b 3a e4 7f 00 00  (b·»·U··èà;:ä···
+r15 0x00007fe43a529040  e0 a2 52 3a e4 7f 00 00 15 00 00 00 00 00 00 00  à¢R:ä···········
+rip 0x00005588bb0fff55  0f 0b 0f 0b 0f 1f 80 00 00 00 00 55 48 89 e5 41  ···········UH·åA
+
+rflags 0x0000000000010202  
+
+cs 0x0033  fs 0x0000  gs 0x0000
+
+
+Images (19 omitted):
+
+0x00005588bb0dc000–0x00005588bb1bd9d8 <no build ID> stress-runner /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/x86_64-unknown-linux-gnu/debug/stress-runner
+
+Backtrace took 0.03s
+
+
+$ /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario timestampExtremes --seed-start 2 --count 199 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200/timestampExtremes.jsonl
+→ exit -4 (SIGILL) in 0.0s
+
+*** Signal 4: Backtracing from 0x5649162f2f55... done ***
+
+*** Swift runtime failure: arithmetic overflow ***
+
+Thread 0 "stress-runner" crashed:
+
+0 [inlined] [system] 0x00005649162f2f55 Swift runtime failure: arithmetic overflow in stress-runner at //<compiler-generated>
+1                    0x00005649162f2f55 StrokeCompletionMonitor.observeFrame(timestampMs:) + 933 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressCore/Generated/StrokeCompletionMonitor.swift:237:49
+2 [ra]               0x000056491632fb32 static StressScenario.timestampExtremes(_:_:) + 1313 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:777:15
+3 [ra]               0x000056491631dfb6 StressScenario.run(seed:) + 613 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:95:35
+4 [ra]               0x0000564916339575 stress_runner_main + 4036 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/stress-runner/main.swift:124:32
+
+
+Registers:
+
+rax 0x8000000000000901  9223372036854778113
+rdx 0x0000000000000000  0
+rcx 0x0000000000000000  0
+rbx 0x00007ffdfe722c80  a0 42 1e 24 49 56 00 00 ed 2d 2f 16 49 56 00 00   B·$IV··í-/·IV··
+rsi 0x00007fa226c0bfb0  01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ················
+rdi 0x00007ffdfe722c80  a0 42 1e 24 49 56 00 00 ed 2d 2f 16 49 56 00 00   B·$IV··í-/·IV··
+rbp 0x00007ffdfe722d40  c0 2f 72 fe fd 7f 00 00 32 fb 32 16 49 56 00 00  À/rþý···2û2·IV··
+rsp 0x00007ffdfe722bc0  01 00 00 00 00 00 00 00 b8 42 1e 24 49 56 00 00  ········¸B·$IV··
+ r8 0x0000000000000001  1
+ r9 0x0000000000000000  0
+r10 0x00007ffdfe721ba8  c8 b9 d1 26 a2 7f 00 00 20 1c 72 fe fd 7f 00 00  È¹Ñ&¢··· ·rþý···
+r11 0x00007ffdfe720601  06 72 fe fd 7f 00 00 60 07 72 fe fd 7f 00 00 ff  ·rþý···`·rþý···ÿ
+r12 0x0000000000000000  0
+r13 0x00005649241e4270  b8 aa 3b 16 49 56 00 00 03 00 00 00 00 00 00 00  ¸ª;·IV··········
+r14 0x00005649163b22e8  28 92 3b 16 49 56 00 00 e8 e0 c3 26 a2 7f 00 00  (·;·IV··èàÃ&¢···
+r15 0x00007fa226da9040  e0 a2 da 26 a2 7f 00 00 15 00 00 00 00 00 00 00  à¢Ú&¢···········
+rip 0x00005649162f2f55  0f 0b 0f 0b 0f 1f 80 00 00 00 00 55 48 89 e5 41  ···········UH·åA
+
+rflags 0x0000000000010202  
+
+cs 0x0033  fs 0x0000  gs 0x0000
+
+
+Images (19 omitted):
+
+0x00005649162cf000–0x00005649163b09d8 <no build ID> stress-runner /home/ubuntu/repos/Pickle-Sensei/apps/mobile/i

@@ -1,0 +1,83 @@
+$ /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario readinessDuplicateLandmark --seed-start 1 --count 200 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200/readinessDuplicateLandmark.jsonl
+→ exit -4 (SIGILL) in 0.0s
+Swift/NativeDictionary.swift:783: Fatal error: Duplicate values for key: 'right_hip'
+
+*** Signal 4: Backtracing from 0x7fd74fad9b6f... done ***
+
+*** Program crashed: Illegal instruction at 0x00007fd74fad9b6f ***
+
+Thread 0 "stress-runner" crashed:
+
+0              0x00007fd74fad9b6f _assertionFailure(_:_:file:line:flags:) + 351 in libswiftCore.so
+1 [ra]         0x00007fd74fa91ef5 specialized _NativeDictionary.merge<A>(_:isUnique:uniquingKeysWith:) + 1940 in libswiftCore.so
+2 [ra] [thunk] 0x00007fd74fb109ef Dictionary.init<A>(uniqueKeysWithValues:) + 366 in libswiftCore.so
+3 [ra]         0x0000564ce18083b8 PoseReadinessEvaluator.ingest(pose:) + 919 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressCore/Generated/PoseReadinessEvaluator.swift:117:19
+4 [ra]         0x0000564ce1847c33 static StressScenario.readinessDuplicateLandmark(_:_:) + 1202 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:537:45
+5 [ra]         0x0000564ce183bf2b StressScenario.run(seed:) + 474 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:90:44
+6 [ra]         0x0000564ce1857575 stress_runner_main + 4036 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/stress-runner/main.swift:124:32
+
+
+Registers:
+
+rax 0x0000000200000003  8589934595
+rdx 0x00007fd74fdb9a28  46 61 74 61 6c 20 65 72 72 6f 72 00 6f 66 66 73  Fatal error·offs
+rcx 0xfffffffe00000000  18446744065119617024
+rbx 0x0000000000000003  3
+rsi 0x0000564d05852f18  03 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00  ········@·······
+rdi 0x0000564d05840010  01 00 03 00 02 00 04 00 01 00 00 00 03 00 01 00  ················
+rbp 0x00007ffc80224450  d0 46 22 80 fc 7f 00 00 f5 1e a9 4f d7 7f 00 00  ÐF"·ü···õ·©O×···
+rsp 0x00007ffc802243b0  90 43 22 80 fc 7f 00 00 a0 43 22 80 fc 7f 00 00  ·C"·ü··· C"·ü···
+ r8 0x0000564d058577d0  77 67 55 61 48 56 00 00 a4 3e 45 ce 95 93 fe 85  wgUaHV··¤>EÎ··þ·
+ r9 0x00007ffc80224120  46 61 74 61 6c 20 65 72 72 6f 72 3a 20 44 75 70  Fatal error: Dup
+r10 0x0000000000000000  0
+r11 0x85fe9395ce453ea4  9655316922748976804
+r12 0x00007fd74fdc65e0  53 77 69 66 74 2f 4e 61 74 69 76 65 44 69 63 74  Swift/NativeDict
+r13 0x0000000000000025  37
+r14 0x0000564d05852f10  70 83 da 4f d7 7f 00 00 03 00 00 00 00 00 00 00  p·ÚO×···········
+r15 0x000000000000000b  11
+rip 0x00007fd74fad9b6f  0f 0b 48 83 ec 08 48 8d 05 94 bd 2e 00 48 8d 3d  ··H·ì·H···½.·H·=
+
+rflags 0x0000000000010246  ZF PF
+
+cs 0x0033  fs 0x0000  gs 0x0000
+
+
+Images (18 omitted):
+
+0x0000564ce17ed000–0x0000564ce18ce9d8 <no build ID>                            stress-runner   /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/x86_64-unknown-linux-gnu/debug/stress-runner
+0x00007fd74f7f7000–0x00007fd74fd8c930 b9f29f81b467904a40bdaaa0b0f84468865569b7 libswiftCore.so /home/ubuntu/toolchains/swift-6.0.3-RELEASE-ubuntu22.04/usr/lib/swift/linux/libswiftCore.so
+
+Backtrace took 0.04s
+
+
+$ /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario readinessDuplicateLandmark --seed-start 2 --count 199 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200/readinessDuplicateLandmark.jsonl
+→ exit -4 (SIGILL) in 0.0s
+Swift/NativeDictionary.swift:783: Fatal error: Duplicate values for key: 'right_elbow'
+
+*** Signal 4: Backtracing from 0x7f19f7c27b6f... done ***
+
+*** Program crashed: Illegal instruction at 0x00007f19f7c27b6f ***
+
+Thread 0 "stress-runner" crashed:
+
+0              0x00007f19f7c27b6f _assertionFailure(_:_:file:line:flags:) + 351 in libswiftCore.so
+1 [ra]         0x00007f19f7bdfef5 specialized _NativeDictionary.merge<A>(_:isUnique:uniquingKeysWith:) + 1940 in libswiftCore.so
+2 [ra] [thunk] 0x00007f19f7c5e9ef Dictionary.init<A>(uniqueKeysWithValues:) + 366 in libswiftCore.so
+3 [ra]         0x000055dfdecb33b8 PoseReadinessEvaluator.ingest(pose:) + 919 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressCore/Generated/PoseReadinessEvaluator.swift:117:19
+4 [ra]         0x000055dfdecf2c33 static StressScenario.readinessDuplicateLandmark(_:_:) + 1202 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:537:45
+5 [ra]         0x000055dfdece6f2b StressScenario.run(seed:) + 474 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/PickleNativeStressKit/StressScenarios.swift:90:44
+6 [ra]         0x000055dfded02575 stress_runner_main + 4036 in stress-runner at /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Sources/stress-runner/main.swift:124:32
+
+
+Registers:
+
+rax 0x0000000200000003  8589934595
+rdx 0x00007f19f7f07a28  46 61 74 61 6c 20 65 72 72 6f 72 00 6f 66 66 73  Fatal error·offs
+rcx 0xfffffffe00000000  18446744065119617024
+rbx 0x0000000000000003  3
+rsi 0x000055e00c429f18  03 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00  ········@·······
+rdi 0x000055e00c417010  01 00 03 00 02 00 04 00 01 00 00 00 03 00 01 00  ················
+rbp 0x00007ffdef5f1670  f0 18 5f ef fd 7f 00 00 f5 fe bd f7 19 7f 00 00  ð·_ïý···õþ½÷····
+rsp 0x00007ffdef5f15d0  b0 15 5f ef fd 7f 00 00 c0 15 5f ef fd 7f 00 00  °·_ïý···À·_ïý···
+ r8 0x000055e00c42e520  0e 6b 42 52 e5 55 00 00 5c 6c ff 3b 62 21 ba 0f  ·kBRåU··\lÿ;b!º·
+ r9 0x00007ffdef5f1340  46 61 74 61 6c 20 65 72 72 6f 72 3a 20 44 75

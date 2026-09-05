@@ -1,0 +1,32 @@
+# default hashing, 10 runs
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+exit=0
+nanWristPathMakesStrokeCompletionOrderDependent: held
+exit=0
+# SWIFT_DETERMINISTIC_HASHING=1, 10 runs
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated
+nanWristPathMakesStrokeCompletionOrderDependent: violated

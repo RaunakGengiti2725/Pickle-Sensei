@@ -1,0 +1,102 @@
+Building for debugging...
+[0/3] Write swift-version--6C6C986A75F0294B.txt
+Build complete! (0.18s)
+Test Suite 'All tests' started at 2026-09-05 00:03:57.154
+Test Suite 'debug.xctest' started at 2026-09-05 00:03:57.155
+Test Suite 'BufferShapeStressTests' started at 2026-09-05 00:03:57.155
+Test Case 'BufferShapeStressTests.testCorruptLandmarksNeverLeakIntoSummariesOrOverlays' started at 2026-09-05 00:03:57.155
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/BufferShapeStressTests.swift:15: error: BufferShapeStressTests.testCorruptLandmarksNeverLeakIntoSummariesOrOverlays : failed - hugeAndCorruptInputs seed 1: completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false) — replay: swift run stress-runner replay --scenario hugeAndCorruptInputs --seed 1
+Test Case 'BufferShapeStressTests.testCorruptLandmarksNeverLeakIntoSummariesOrOverlays' failed (0.112 seconds)
+Test Case 'BufferShapeStressTests.testEmptyAndSingleFrameNeverProduceEvidenceOrEvents' started at 2026-09-05 00:03:57.267
+Test Case 'BufferShapeStressTests.testEmptyAndSingleFrameNeverProduceEvidenceOrEvents' passed (0.006 seconds)
+Test Case 'BufferShapeStressTests.testEveryCorruptionKindIsSurvivedByEveryConsumerExceptDuplicateNames' started at 2026-09-05 00:03:57.273
+Test Case 'BufferShapeStressTests.testEveryCorruptionKindIsSurvivedByEveryConsumerExceptDuplicateNames' passed (0.251 seconds)
+Test Case 'BufferShapeStressTests.testHugeLandmarkListsStayLinearInTime' started at 2026-09-05 00:03:57.524
+Test Case 'BufferShapeStressTests.testHugeLandmarkListsStayLinearInTime' passed (1.173 seconds)
+Test Case 'BufferShapeStressTests.testNonFiniteWristCoordinateNeverReachesTheCompletionPayload' started at 2026-09-05 00:03:58.697
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/BufferShapeStressTests.swift:90: error: BufferShapeStressTests.testNonFiniteWristCoordinateNeverReachesTheCompletionPayload : XCTAssertTrue failed - SessionMotionStream forwarded speed inf
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/BufferShapeStressTests.swift:95: error: BufferShapeStressTests.testNonFiniteWristCoordinateNeverReachesTheCompletionPayload : XCTAssertTrue failed - completion payload carries a non-finite number
+Test Case 'BufferShapeStressTests.testNonFiniteWristCoordinateNeverReachesTheCompletionPayload' failed (0.0 seconds)
+Test Case 'BufferShapeStressTests.testPoseSidecarDocumentIsRefusedByJSONSerializationForNonFiniteLandmarks' started at 2026-09-05 00:03:58.697
+Test Case 'BufferShapeStressTests.testPoseSidecarDocumentIsRefusedByJSONSerializationForNonFiniteLandmarks' passed (0.082 seconds)
+Test Suite 'BufferShapeStressTests' failed at 2026-09-05 00:03:58.779
+	 Executed 6 tests, with 3 failures (0 unexpected) in 1.624 (1.624) seconds
+Test Suite 'CompletionMonitorStressTests' started at 2026-09-05 00:03:58.779
+Test Case 'CompletionMonitorStressTests.testConcurrentIngestObserveArmAndTelemetryNeverDeadlockOrCorrupt' started at 2026-09-05 00:03:58.779
+Test Case 'CompletionMonitorStressTests.testConcurrentIngestObserveArmAndTelemetryNeverDeadlockOrCorrupt' passed (0.044 seconds)
+Test Case 'CompletionMonitorStressTests.testDecisionsStayInsideTheAnchorWindowAndTelemetryIsCapped' started at 2026-09-05 00:03:58.823
+Test Case 'CompletionMonitorStressTests.testDecisionsStayInsideTheAnchorWindowAndTelemetryIsCapped' passed (0.435 seconds)
+Test Case 'CompletionMonitorStressTests.testTeardownWhileVisionWorkIsInFlightDeliversNothingAfterStop' started at 2026-09-05 00:03:59.258
+Test Case 'CompletionMonitorStressTests.testTeardownWhileVisionWorkIsInFlightDeliversNothingAfterStop' passed (0.001 seconds)
+Test Suite 'CompletionMonitorStressTests' passed at 2026-09-05 00:03:59.259
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.48 (0.48) seconds
+Test Suite 'DetectorLifecycleStressTests' started at 2026-09-05 00:03:59.259
+Test Case 'DetectorLifecycleStressTests.testEvidenceRetentionMatchesAnIndependentWindowModel' started at 2026-09-05 00:03:59.259
+Test Case 'DetectorLifecycleStressTests.testEvidenceRetentionMatchesAnIndependentWindowModel' passed (1.028 seconds)
+Test Case 'DetectorLifecycleStressTests.testMotionTrailStaysBoundedAndInsideTheFrame' started at 2026-09-05 00:04:00.287
+Test Case 'DetectorLifecycleStressTests.testMotionTrailStaysBoundedAndInsideTheFrame' passed (0.588 seconds)
+Test Case 'DetectorLifecycleStressTests.testRandomSessionsProduceWellFormedOrderedEvents' started at 2026-09-05 00:04:00.875
+Test Case 'DetectorLifecycleStressTests.testRandomSessionsProduceWellFormedOrderedEvents' passed (1.057 seconds)
+Test Case 'DetectorLifecycleStressTests.testRapidResetNeverLeaksHistoryAcrossStarts' started at 2026-09-05 00:04:01.933
+Test Case 'DetectorLifecycleStressTests.testRapidResetNeverLeaksHistoryAcrossStarts' passed (0.286 seconds)
+Test Case 'DetectorLifecycleStressTests.testReadinessStateMachineInvariants' started at 2026-09-05 00:04:02.219
+Test Case 'DetectorLifecycleStressTests.testReadinessStateMachineInvariants' passed (0.636 seconds)
+Test Case 'DetectorLifecycleStressTests.testStartStopStormOnFreshDetectorsIsAllocationNeutral' started at 2026-09-05 00:04:02.855
+Test Case 'DetectorLifecycleStressTests.testStartStopStormOnFreshDetectorsIsAllocationNeutral' passed (2.322 seconds)
+Test Case 'DetectorLifecycleStressTests.testTwoPeopleAlternatingAsPrimaryDoesNotSpoofStrokes' started at 2026-09-05 00:04:05.177
+Test Case 'DetectorLifecycleStressTests.testTwoPeopleAlternatingAsPrimaryDoesNotSpoofStrokes' passed (0.902 seconds)
+Test Suite 'DetectorLifecycleStressTests' passed at 2026-09-05 00:04:06.079
+	 Executed 7 tests, with 0 failures (0 unexpected) in 6.82 (6.82) seconds
+Test Suite 'ImportExtractionStressTests' started at 2026-09-05 00:04:06.079
+Test Case 'ImportExtractionStressTests.testCancellationRequestMidExtractionIsIgnoredByTheLoop' started at 2026-09-05 00:04:06.079
+Test Case 'ImportExtractionStressTests.testCancellationRequestMidExtractionIsIgnoredByTheLoop' passed (0.005 seconds)
+Test Case 'ImportExtractionStressTests.testCancelledAndCorruptedMediaFailuresBecomeGapsNotAbort' started at 2026-09-05 00:04:06.084
+Test Case 'ImportExtractionStressTests.testCancelledAndCorruptedMediaFailuresBecomeGapsNotAbort' passed (0.0 seconds)
+Test Case 'ImportExtractionStressTests.testEmptyMediaIsInvalidNotNoPerson' started at 2026-09-05 00:04:06.084
+Test Case 'ImportExtractionStressTests.testEmptyMediaIsInvalidNotNoPerson' passed (0.0 seconds)
+Test Case 'ImportExtractionStressTests.testHugeSlowMotionTimelineIsCappedAndDecimated' started at 2026-09-05 00:04:06.084
+Test Case 'ImportExtractionStressTests.testHugeSlowMotionTimelineIsCappedAndDecimated' passed (0.073 seconds)
+Test Case 'ImportExtractionStressTests.testOneFrameProducesAOneFrameSequenceAtZero' started at 2026-09-05 00:04:06.157
+Test Case 'ImportExtractionStressTests.testOneFrameProducesAOneFrameSequenceAtZero' passed (0.0 seconds)
+Test Case 'ImportExtractionStressTests.testRewindingPresentationTimestampsAreSkippedNotRemapped' started at 2026-09-05 00:04:06.157
+Test Case 'ImportExtractionStressTests.testRewindingPresentationTimestampsAreSkippedNotRemapped' passed (0.001 seconds)
+Test Case 'ImportExtractionStressTests.testSeededTimelinesHoldDecimationCapAndGapInvariants' started at 2026-09-05 00:04:06.158
+Test Case 'ImportExtractionStressTests.testSeededTimelinesHoldDecimationCapAndGapInvariants' passed (1.822 seconds)
+Test Suite 'ImportExtractionStressTests' passed at 2026-09-05 00:04:07.980
+	 Executed 7 tests, with 0 failures (0 unexpected) in 1.901 (1.901) seconds
+Test Suite 'MemoryPressureStressTests' started at 2026-09-05 00:04:07.980
+Test Case 'MemoryPressureStressTests.testAccumulatorsStayBoundedThroughLongSyntheticPlay' started at 2026-09-05 00:04:07.980
+Test Case 'MemoryPressureStressTests.testAccumulatorsStayBoundedThroughLongSyntheticPlay' passed (8.444 seconds)
+Test Case 'MemoryPressureStressTests.testSixtyThousandFrameSessionsKeepResidentMemoryBounded' started at 2026-09-05 00:04:16.424
+Test Case 'MemoryPressureStressTests.testSixtyThousandFrameSessionsKeepResidentMemoryBounded' passed (10.349 seconds)
+Test Suite 'MemoryPressureStressTests' passed at 2026-09-05 00:04:26.773
+	 Executed 2 tests, with 0 failures (0 unexpected) in 18.793 (18.793) seconds
+Test Suite 'MinimalReproTests' started at 2026-09-05 00:04:26.773
+Test Case 'MinimalReproTests.testDuplicateVisibleLandmarkNameDoesNotTrapTheReadinessEvaluator' started at 2026-09-05 00:04:26.773
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:70: error: MinimalReproTests.testDuplicateVisibleLandmarkNameDoesNotTrapTheReadinessEvaluator : XCTAssertFalse failed - PoseReadinessEvaluator.ingest trapped: Swift/NativeDictionary.swift:783: Fatal error: Duplicate values for key: 'right_hip'
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:71: error: MinimalReproTests.testDuplicateVisibleLandmarkNameDoesNotTrapTheReadinessEvaluator : XCTAssertEqual failed: ("4") is not equal to ("0") - Swift/NativeDictionary.swift:783: Fatal error: Duplicate values for key: 'right_hip'
+Test Case 'MinimalReproTests.testDuplicateVisibleLandmarkNameDoesNotTrapTheReadinessEvaluator' failed (0.1 seconds)
+Test Case 'MinimalReproTests.testEveryMinimalReproIsExecutable' started at 2026-09-05 00:04:26.874
+Test Case 'MinimalReproTests.testEveryMinimalReproIsExecutable' passed (0.113 seconds)
+Test Case 'MinimalReproTests.testInfiniteWristCoordinateStaysOutOfTheCompletionPayload' started at 2026-09-05 00:04:26.987
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:83: error: MinimalReproTests.testInfiniteWristCoordinateStaysOutOfTheCompletionPayload : XCTAssertEqual failed: ("3") is not equal to ("0") - exit 3 infiniteWristCoordinateInPayload: violated
+
+Test Case 'MinimalReproTests.testInfiniteWristCoordinateStaysOutOfTheCompletionPayload' failed (0.056 seconds)
+Test Case 'MinimalReproTests.testObserveFrameNearIntMaxDoesNotOverflow' started at 2026-09-05 00:04:27.043
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:76: error: MinimalReproTests.testObserveFrameNearIntMaxDoesNotOverflow : XCTAssertFalse failed - StrokeCompletionMonitor.observeFrame trapped: *** Swift runtime failure: arithmetic overflow ***
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:77: error: MinimalReproTests.testObserveFrameNearIntMaxDoesNotOverflow : XCTAssertEqual failed: ("4") is not equal to ("0") - *** Swift runtime failure: arithmetic overflow ***
+Test Case 'MinimalReproTests.testObserveFrameNearIntMaxDoesNotOverflow' failed (0.086 seconds)
+Test Case 'MinimalReproTests.testStrokeCompletionDoesNotDependOnDictionaryOrderWhenAWristPathIsNaN' started at 2026-09-05 00:04:27.129
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:100: error: MinimalReproTests.testStrokeCompletionDoesNotDependOnDictionaryOrderWhenAWristPathIsNaN : XCTAssertEqual failed: ("2") is not equal to ("1") - TemporalStrokeDetector gave different answers to the same frames: ["none": 4, "event": 6]
+/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/Tests/PickleNativeStressTests/MinimalReproTests.swift:101: error: MinimalReproTests.testStrokeCompletionDoesNotDependOnDictionaryOrderWhenAWristPathIsNaN : XCTAssertEqual failed: ("Optional(6)") is not equal to ("Optional(10)") - finite wrist path ≥ gate should complete the stroke: ["none": 4, "event": 6]
+Test Case 'MinimalReproTests.testStrokeCompletionDoesNotDependOnDictionaryOrderWhenAWristPathIsNaN' failed (0.739 seconds)
+Test Suite 'MinimalReproTests' failed at 2026-09-05 00:04:27.868
+	 Executed 5 tests, with 7 failures (0 unexpected) in 1.094 (1.094) seconds
+Test Suite 'debug.xctest' failed at 2026-09-05 00:04:27.868
+	 Executed 30 tests, with 10 failures (0 unexpected) in 30.712 (30.712) seconds
+Test Suite 'All tests' failed at 2026-09-05 00:04:27.868
+	 Executed 30 tests, with 10 failures (0 unexpected) in 30.712 (30.712) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.
+swift test exit=1

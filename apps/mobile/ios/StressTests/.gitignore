@@ -1,0 +1,4 @@
+.build/
+Sources/PickleNativeStressCore/Generated/
+results/
+__pycache__/

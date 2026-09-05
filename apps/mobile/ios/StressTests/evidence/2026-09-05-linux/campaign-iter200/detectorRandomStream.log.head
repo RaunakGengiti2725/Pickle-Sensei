@@ -1,0 +1,2 @@
+$ /home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario detectorRandomStream --seed-start 1 --count 200 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200/detectorRandomStream.jsonl
+→ exit 3 in 9.4s

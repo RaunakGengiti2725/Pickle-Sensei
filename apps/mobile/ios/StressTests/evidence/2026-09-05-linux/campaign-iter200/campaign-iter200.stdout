@@ -1,0 +1,18 @@
+emptyAndSingleFrame              executed=  200 held=  200 violated=  0 crashed=  0
+hugeAndCorruptInputs             executed=  200 held=  102 violated= 98 crashed=  0  first failing seed=1
+detectorRandomStream             executed=  200 held=  198 violated=  2 crashed=  0  first failing seed=49
+detectorRapidReset               executed=  200 held=  200 violated=  0 crashed=  0
+twoPeopleAlternating             executed=  200 held=  200 violated=  0 crashed=  0
+evidenceRetentionExact           executed=  200 held=  200 violated=  0 crashed=  0
+readinessRandom                  executed=  200 held=  200 violated=  0 crashed=  0
+readinessDuplicateLandmark       executed=  200 held=    0 violated=  0 crashed=200  first failing seed=1
+motionStreamAndMonitor           executed=  200 held=  200 violated=  0 crashed=  0
+monitorConcurrent                executed=    1 held=    1 violated=  0 crashed=  0
+motionTrailRandom                executed=  200 held=  200 violated=  0 crashed=  0
+memoryPressureLoop               executed=    1 held=    1 violated=  0 crashed=  0
+timestampExtremes                executed=  200 held=    0 violated=  0 crashed=200  first failing seed=1
+importExtractionModel            executed=  200 held=  200 violated=  0 crashed=  0
+
+executed=2402 held=1902 violated=100 crashed=400
+artifacts: /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200
+campaign200 exit=3

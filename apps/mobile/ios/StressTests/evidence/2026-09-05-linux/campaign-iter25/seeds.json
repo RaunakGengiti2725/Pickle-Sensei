@@ -1,0 +1,3879 @@
+[
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 1",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 2",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 3",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 4",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 5",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 6",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 7",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 8",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 9",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 10",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 11",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 12",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 13",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 14",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 15",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 16",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 17",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 18",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 19",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 20",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 21",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 22",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 23",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 24",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {},
+    "operations": 5,
+    "replay": "stress-runner replay --scenario emptyAndSingleFrame --seed 25",
+    "scenario": "emptyAndSingleFrame",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 111,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 170,
+      "events": 0,
+      "nonFiniteSpeedSamples": 8,
+      "observedSampleCount": 276,
+      "payloadValidJSON": 0
+    },
+    "operations": 349,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 1",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 1,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 23,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 47,
+      "events": 0,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 144,
+      "payloadValidJSON": 1
+    },
+    "operations": 173,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 2",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 23,
+    "metrics": {
+      "armed": 1,
+      "corruptedFrames": 29,
+      "events": 1,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 58,
+      "payloadValidJSON": 0
+    },
+    "operations": 113,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 3",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 3,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 32,
+    "metrics": {
+      "armed": 1,
+      "corruptedFrames": 44,
+      "events": 1,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 42,
+      "payloadValidJSON": 1
+    },
+    "operations": 121,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 4",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 55,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 26,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 78,
+      "payloadValidJSON": 1
+    },
+    "operations": 88,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 5",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 162,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 174,
+      "events": 0,
+      "nonFiniteSpeedSamples": 6,
+      "observedSampleCount": 260,
+      "payloadValidJSON": 0
+    },
+    "operations": 323,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 6",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 6,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 50,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 39,
+      "events": 0,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 66,
+      "payloadValidJSON": 0
+    },
+    "operations": 100,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 7",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 7,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 43,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 46,
+      "events": 0,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 155,
+      "payloadValidJSON": 0
+    },
+    "operations": 187,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 8",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 8,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 40,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 32,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 128,
+      "payloadValidJSON": 1
+    },
+    "operations": 146,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 9",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 84,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 144,
+      "events": 0,
+      "nonFiniteSpeedSamples": 4,
+      "observedSampleCount": 102,
+      "payloadValidJSON": 1
+    },
+    "operations": 159,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 10",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 21,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 41,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 85,
+      "payloadValidJSON": 1
+    },
+    "operations": 116,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 11",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 142,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 186,
+      "events": 0,
+      "nonFiniteSpeedSamples": 4,
+      "observedSampleCount": 135,
+      "payloadValidJSON": 0
+    },
+    "operations": 204,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 12",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 12,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 248,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 355,
+      "events": 0,
+      "nonFiniteSpeedSamples": 8,
+      "observedSampleCount": 262,
+      "payloadValidJSON": 0
+    },
+    "operations": 355,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 13",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 13,
+    "status": "violated"
+  },
+  {
+    "detail": "peakMotionValue inf not finite \u2014 non-JSON number in the completion payload",
+    "durationMs": 99,
+    "metrics": {
+      "armed": 1,
+      "corruptedFrames": 109,
+      "events": 1,
+      "nonFiniteSpeedSamples": 4,
+      "observedSampleCount": 35,
+      "payloadValidJSON": 0
+    },
+    "operations": 109,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 14",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 14,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 89,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 83,
+      "events": 0,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 288,
+      "payloadValidJSON": 1
+    },
+    "operations": 404,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 15",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 52,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 43,
+      "events": 0,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 58,
+      "payloadValidJSON": 0
+    },
+    "operations": 94,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 16",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 16,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 64,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 45,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 134,
+      "payloadValidJSON": 1
+    },
+    "operations": 157,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 17",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 41,
+    "metrics": {
+      "armed": 1,
+      "corruptedFrames": 26,
+      "events": 3,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 98,
+      "payloadValidJSON": 1
+    },
+    "operations": 145,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 18",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 172,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 393,
+      "events": 0,
+      "nonFiniteSpeedSamples": 6,
+      "observedSampleCount": 286,
+      "payloadValidJSON": 0
+    },
+    "operations": 421,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 19",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 19,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 34,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 11,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 45,
+      "payloadValidJSON": 1
+    },
+    "operations": 49,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 20",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": "peakMotionValue inf not finite \u2014 non-JSON number in the completion payload",
+    "durationMs": 29,
+    "metrics": {
+      "armed": 1,
+      "corruptedFrames": 22,
+      "events": 1,
+      "nonFiniteSpeedSamples": 2,
+      "observedSampleCount": 44,
+      "payloadValidJSON": 0
+    },
+    "operations": 92,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 21",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 21,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 458,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 639,
+      "events": 0,
+      "nonFiniteSpeedSamples": 18,
+      "observedSampleCount": 390,
+      "payloadValidJSON": 0
+    },
+    "operations": 639,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 22",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 22,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 405,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 537,
+      "events": 0,
+      "nonFiniteSpeedSamples": 13,
+      "observedSampleCount": 389,
+      "payloadValidJSON": 0
+    },
+    "operations": 646,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 23",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 23,
+    "status": "violated"
+  },
+  {
+    "detail": "completion payload carries a non-finite postCompletionMotion sample (isValidJSONObject == false)",
+    "durationMs": 218,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 255,
+      "events": 0,
+      "nonFiniteSpeedSamples": 5,
+      "observedSampleCount": 181,
+      "payloadValidJSON": 0
+    },
+    "operations": 255,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 24",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 24,
+    "status": "violated"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {
+      "armed": 0,
+      "corruptedFrames": 22,
+      "events": 0,
+      "nonFiniteSpeedSamples": 0,
+      "observedSampleCount": 70,
+      "payloadValidJSON": 1
+    },
+    "operations": 92,
+    "replay": "stress-runner replay --scenario hugeAndCorruptInputs --seed 25",
+    "scenario": "hugeAndCorruptInputs",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 111,
+    "metrics": {
+      "events": 0,
+      "frames": 973,
+      "swingSegments": 7
+    },
+    "operations": 955,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 1",
+    "scenario": "detectorRandomStream",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 88,
+    "metrics": {
+      "events": 0,
+      "frames": 968,
+      "swingSegments": 10
+    },
+    "operations": 966,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 2",
+    "scenario": "detectorRandomStream",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 34,
+    "metrics": {
+      "events": 3,
+      "frames": 366,
+      "swingSegments": 7
+    },
+    "operations": 338,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 3",
+    "scenario": "detectorRandomStream",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 45,
+    "metrics": {
+      "events": 1,
+      "frames": 551,
+      "swingSegments": 6
+    },
+    "operations": 498,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 4",
+    "scenario": "detectorRandomStream",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 29,
+    "metrics": {
+      "events": 4,
+      "frames": 475,
+      "swingSegments": 4
+    },
+    "operations": 466,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 5",
+    "scenario": "detectorRandomStream",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 32,
+    "metrics": {
+      "events": 0,
+      "frames": 664,
+      "swingSegments": 4
+    },
+    "operations": 649,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 6",
+    "scenario": "detectorRandomStream",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {
+      "events": 1,
+      "frames": 77,
+      "swingSegments": 0
+    },
+    "operations": 56,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 7",
+    "scenario": "detectorRandomStream",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 42,
+    "metrics": {
+      "events": 0,
+      "frames": 840,
+      "swingSegments": 7
+    },
+    "operations": 826,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 8",
+    "scenario": "detectorRandomStream",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 42,
+    "metrics": {
+      "events": 0,
+      "frames": 996,
+      "swingSegments": 4
+    },
+    "operations": 865,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 9",
+    "scenario": "detectorRandomStream",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 22,
+    "metrics": {
+      "events": 2,
+      "frames": 393,
+      "swingSegments": 5
+    },
+    "operations": 367,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 10",
+    "scenario": "detectorRandomStream",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 12,
+    "metrics": {
+      "events": 1,
+      "frames": 237,
+      "swingSegments": 1
+    },
+    "operations": 217,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 11",
+    "scenario": "detectorRandomStream",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 53,
+    "metrics": {
+      "events": 0,
+      "frames": 1209,
+      "swingSegments": 11
+    },
+    "operations": 1034,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 12",
+    "scenario": "detectorRandomStream",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 63,
+    "metrics": {
+      "events": 0,
+      "frames": 1046,
+      "swingSegments": 3
+    },
+    "operations": 991,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 13",
+    "scenario": "detectorRandomStream",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 6,
+    "metrics": {
+      "events": 1,
+      "frames": 103,
+      "swingSegments": 1
+    },
+    "operations": 99,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 14",
+    "scenario": "detectorRandomStream",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 73,
+    "metrics": {
+      "events": 1,
+      "frames": 1038,
+      "swingSegments": 3
+    },
+    "operations": 944,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 15",
+    "scenario": "detectorRandomStream",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 5,
+    "metrics": {
+      "events": 0,
+      "frames": 124,
+      "swingSegments": 1
+    },
+    "operations": 110,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 16",
+    "scenario": "detectorRandomStream",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 29,
+    "metrics": {
+      "events": 0,
+      "frames": 599,
+      "swingSegments": 4
+    },
+    "operations": 534,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 17",
+    "scenario": "detectorRandomStream",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 20,
+    "metrics": {
+      "events": 2,
+      "frames": 366,
+      "swingSegments": 5
+    },
+    "operations": 342,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 18",
+    "scenario": "detectorRandomStream",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {
+      "events": 0,
+      "frames": 282,
+      "swingSegments": 1
+    },
+    "operations": 255,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 19",
+    "scenario": "detectorRandomStream",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "events": 0,
+      "frames": 75,
+      "swingSegments": 0
+    },
+    "operations": 75,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 20",
+    "scenario": "detectorRandomStream",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 31,
+    "metrics": {
+      "events": 2,
+      "frames": 453,
+      "swingSegments": 4
+    },
+    "operations": 408,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 21",
+    "scenario": "detectorRandomStream",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 111,
+    "metrics": {
+      "events": 0,
+      "frames": 2387,
+      "swingSegments": 10
+    },
+    "operations": 2234,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 22",
+    "scenario": "detectorRandomStream",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 79,
+    "metrics": {
+      "events": 0,
+      "frames": 1646,
+      "swingSegments": 10
+    },
+    "operations": 1549,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 23",
+    "scenario": "detectorRandomStream",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 41,
+    "metrics": {
+      "events": 0,
+      "frames": 909,
+      "swingSegments": 9
+    },
+    "operations": 866,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 24",
+    "scenario": "detectorRandomStream",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 30,
+    "metrics": {
+      "events": 0,
+      "frames": 322,
+      "swingSegments": 1
+    },
+    "operations": 322,
+    "replay": "stress-runner replay --scenario detectorRandomStream --seed 25",
+    "scenario": "detectorRandomStream",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 16,
+    "metrics": {
+      "resets": 5
+    },
+    "operations": 937,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 1",
+    "scenario": "detectorRapidReset",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {
+      "resets": 8
+    },
+    "operations": 805,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 2",
+    "scenario": "detectorRapidReset",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 5,
+    "metrics": {
+      "resets": 4
+    },
+    "operations": 300,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 3",
+    "scenario": "detectorRapidReset",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {
+      "resets": 3
+    },
+    "operations": 511,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 4",
+    "scenario": "detectorRapidReset",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 8,
+    "metrics": {
+      "resets": 8
+    },
+    "operations": 466,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 5",
+    "scenario": "detectorRapidReset",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 11,
+    "metrics": {
+      "resets": 3
+    },
+    "operations": 649,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 6",
+    "scenario": "detectorRapidReset",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "resets": 0
+    },
+    "operations": 99,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 7",
+    "scenario": "detectorRapidReset",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "resets": 34
+    },
+    "operations": 871,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 8",
+    "scenario": "detectorRapidReset",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {
+      "resets": 11
+    },
+    "operations": 1039,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 9",
+    "scenario": "detectorRapidReset",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 6,
+    "metrics": {
+      "resets": 4
+    },
+    "operations": 367,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 10",
+    "scenario": "detectorRapidReset",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "resets": 3
+    },
+    "operations": 197,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 11",
+    "scenario": "detectorRapidReset",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {
+      "resets": 3
+    },
+    "operations": 1034,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 12",
+    "scenario": "detectorRapidReset",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 17,
+    "metrics": {
+      "resets": 4
+    },
+    "operations": 958,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 13",
+    "scenario": "detectorRapidReset",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "resets": 2
+    },
+    "operations": 99,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 14",
+    "scenario": "detectorRapidReset",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {
+      "resets": 13
+    },
+    "operations": 974,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 15",
+    "scenario": "detectorRapidReset",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "resets": 1
+    },
+    "operations": 108,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 16",
+    "scenario": "detectorRapidReset",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {
+      "resets": 71
+    },
+    "operations": 498,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 17",
+    "scenario": "detectorRapidReset",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 6,
+    "metrics": {
+      "resets": 8
+    },
+    "operations": 391,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 18",
+    "scenario": "detectorRapidReset",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "resets": 1
+    },
+    "operations": 262,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 19",
+    "scenario": "detectorRapidReset",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "resets": 1
+    },
+    "operations": 72,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 20",
+    "scenario": "detectorRapidReset",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 7,
+    "metrics": {
+      "resets": 12
+    },
+    "operations": 436,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 21",
+    "scenario": "detectorRapidReset",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 40,
+    "metrics": {
+      "resets": 8
+    },
+    "operations": 2234,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 22",
+    "scenario": "detectorRapidReset",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 28,
+    "metrics": {
+      "resets": 6
+    },
+    "operations": 1549,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 23",
+    "scenario": "detectorRapidReset",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 19,
+    "metrics": {
+      "resets": 4
+    },
+    "operations": 866,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 24",
+    "scenario": "detectorRapidReset",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "resets": 3
+    },
+    "operations": 265,
+    "replay": "stress-runner replay --scenario detectorRapidReset --seed 25",
+    "scenario": "detectorRapidReset",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 51,
+    "metrics": {
+      "absoluteSpikesFromFlips": 104,
+      "flips": 104
+    },
+    "operations": 1888,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 1",
+    "scenario": "twoPeopleAlternating",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 25,
+    "metrics": {
+      "absoluteSpikesFromFlips": 70,
+      "flips": 70
+    },
+    "operations": 988,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 2",
+    "scenario": "twoPeopleAlternating",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 41,
+    "metrics": {
+      "absoluteSpikesFromFlips": 161,
+      "flips": 161
+    },
+    "operations": 1614,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 3",
+    "scenario": "twoPeopleAlternating",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 38,
+    "metrics": {
+      "absoluteSpikesFromFlips": 94,
+      "flips": 94
+    },
+    "operations": 1508,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 4",
+    "scenario": "twoPeopleAlternating",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 27,
+    "metrics": {
+      "absoluteSpikesFromFlips": 132,
+      "flips": 132
+    },
+    "operations": 1062,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 5",
+    "scenario": "twoPeopleAlternating",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 56,
+    "metrics": {
+      "absoluteSpikesFromFlips": 84,
+      "flips": 84
+    },
+    "operations": 2020,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 6",
+    "scenario": "twoPeopleAlternating",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 21,
+    "metrics": {
+      "absoluteSpikesFromFlips": 38,
+      "flips": 38
+    },
+    "operations": 778,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 7",
+    "scenario": "twoPeopleAlternating",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 26,
+    "metrics": {
+      "absoluteSpikesFromFlips": 262,
+      "flips": 262
+    },
+    "operations": 1050,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 8",
+    "scenario": "twoPeopleAlternating",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {
+      "absoluteSpikesFromFlips": 40,
+      "flips": 40
+    },
+    "operations": 486,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 9",
+    "scenario": "twoPeopleAlternating",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 70,
+    "metrics": {
+      "absoluteSpikesFromFlips": 63,
+      "flips": 63
+    },
+    "operations": 2290,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 10",
+    "scenario": "twoPeopleAlternating",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 36,
+    "metrics": {
+      "absoluteSpikesFromFlips": 178,
+      "flips": 178
+    },
+    "operations": 1432,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 11",
+    "scenario": "twoPeopleAlternating",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 26,
+    "metrics": {
+      "absoluteSpikesFromFlips": 24,
+      "flips": 24
+    },
+    "operations": 874,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 12",
+    "scenario": "twoPeopleAlternating",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 32,
+    "metrics": {
+      "absoluteSpikesFromFlips": 29,
+      "flips": 29
+    },
+    "operations": 994,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 13",
+    "scenario": "twoPeopleAlternating",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 34,
+    "metrics": {
+      "absoluteSpikesFromFlips": 25,
+      "flips": 25
+    },
+    "operations": 954,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 14",
+    "scenario": "twoPeopleAlternating",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 58,
+    "metrics": {
+      "absoluteSpikesFromFlips": 276,
+      "flips": 276
+    },
+    "operations": 2210,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 15",
+    "scenario": "twoPeopleAlternating",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 21,
+    "metrics": {
+      "absoluteSpikesFromFlips": 28,
+      "flips": 28
+    },
+    "operations": 738,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 16",
+    "scenario": "twoPeopleAlternating",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 10,
+    "metrics": {
+      "absoluteSpikesFromFlips": 207,
+      "flips": 207
+    },
+    "operations": 416,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 17",
+    "scenario": "twoPeopleAlternating",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 54,
+    "metrics": {
+      "absoluteSpikesFromFlips": 370,
+      "flips": 370
+    },
+    "operations": 2224,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 18",
+    "scenario": "twoPeopleAlternating",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 68,
+    "metrics": {
+      "absoluteSpikesFromFlips": 72,
+      "flips": 72
+    },
+    "operations": 2312,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 19",
+    "scenario": "twoPeopleAlternating",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "absoluteSpikesFromFlips": 101,
+      "flips": 101
+    },
+    "operations": 612,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 20",
+    "scenario": "twoPeopleAlternating",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 31,
+    "metrics": {
+      "absoluteSpikesFromFlips": 306,
+      "flips": 306
+    },
+    "operations": 1226,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 21",
+    "scenario": "twoPeopleAlternating",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 58,
+    "metrics": {
+      "absoluteSpikesFromFlips": 57,
+      "flips": 57
+    },
+    "operations": 1942,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 22",
+    "scenario": "twoPeopleAlternating",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 41,
+    "metrics": {
+      "absoluteSpikesFromFlips": 43,
+      "flips": 43
+    },
+    "operations": 1388,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 23",
+    "scenario": "twoPeopleAlternating",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 35,
+    "metrics": {
+      "absoluteSpikesFromFlips": 39,
+      "flips": 39
+    },
+    "operations": 1330,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 24",
+    "scenario": "twoPeopleAlternating",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 8,
+    "metrics": {
+      "absoluteSpikesFromFlips": 39,
+      "flips": 39
+    },
+    "operations": 316,
+    "replay": "stress-runner replay --scenario twoPeopleAlternating --seed 25",
+    "scenario": "twoPeopleAlternating",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 112,
+    "metrics": {},
+    "operations": 1223,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 1",
+    "scenario": "evidenceRetentionExact",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 81,
+    "metrics": {},
+    "operations": 796,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 2",
+    "scenario": "evidenceRetentionExact",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 19,
+    "metrics": {},
+    "operations": 834,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 3",
+    "scenario": "evidenceRetentionExact",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 69,
+    "metrics": {},
+    "operations": 2229,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 4",
+    "scenario": "evidenceRetentionExact",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 29,
+    "metrics": {},
+    "operations": 927,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 5",
+    "scenario": "evidenceRetentionExact",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {},
+    "operations": 124,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 6",
+    "scenario": "evidenceRetentionExact",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {},
+    "operations": 456,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 7",
+    "scenario": "evidenceRetentionExact",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 90,
+    "metrics": {},
+    "operations": 961,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 8",
+    "scenario": "evidenceRetentionExact",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 112,
+    "metrics": {},
+    "operations": 899,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 9",
+    "scenario": "evidenceRetentionExact",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 11,
+    "metrics": {},
+    "operations": 275,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 10",
+    "scenario": "evidenceRetentionExact",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 19,
+    "metrics": {},
+    "operations": 416,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 11",
+    "scenario": "evidenceRetentionExact",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 112,
+    "metrics": {},
+    "operations": 851,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 12",
+    "scenario": "evidenceRetentionExact",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {},
+    "operations": 406,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 13",
+    "scenario": "evidenceRetentionExact",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {},
+    "operations": 70,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 14",
+    "scenario": "evidenceRetentionExact",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 205,
+    "metrics": {},
+    "operations": 1527,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 15",
+    "scenario": "evidenceRetentionExact",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 16,
+    "metrics": {},
+    "operations": 453,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 16",
+    "scenario": "evidenceRetentionExact",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {},
+    "operations": 283,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 17",
+    "scenario": "evidenceRetentionExact",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {},
+    "operations": 622,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 18",
+    "scenario": "evidenceRetentionExact",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {},
+    "operations": 219,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 19",
+    "scenario": "evidenceRetentionExact",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {},
+    "operations": 175,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 20",
+    "scenario": "evidenceRetentionExact",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 35,
+    "metrics": {},
+    "operations": 1451,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 21",
+    "scenario": "evidenceRetentionExact",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {},
+    "operations": 436,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 22",
+    "scenario": "evidenceRetentionExact",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 6,
+    "metrics": {},
+    "operations": 176,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 23",
+    "scenario": "evidenceRetentionExact",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 5,
+    "metrics": {},
+    "operations": 170,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 24",
+    "scenario": "evidenceRetentionExact",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 25,
+    "metrics": {},
+    "operations": 485,
+    "replay": "stress-runner replay --scenario evidenceRetentionExact --seed 25",
+    "scenario": "evidenceRetentionExact",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 46,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 973,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 1",
+    "scenario": "readinessRandom",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 41,
+    "metrics": {
+      "readyFrames": 2
+    },
+    "operations": 968,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 2",
+    "scenario": "readinessRandom",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 16,
+    "metrics": {
+      "readyFrames": 9
+    },
+    "operations": 366,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 3",
+    "scenario": "readinessRandom",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 17,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 551,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 4",
+    "scenario": "readinessRandom",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 476,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 5",
+    "scenario": "readinessRandom",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 22,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 638,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 6",
+    "scenario": "readinessRandom",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 77,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 7",
+    "scenario": "readinessRandom",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 30,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 840,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 8",
+    "scenario": "readinessRandom",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 30,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 996,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 9",
+    "scenario": "readinessRandom",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {
+      "readyFrames": 27
+    },
+    "operations": 393,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 10",
+    "scenario": "readinessRandom",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 7,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 237,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 11",
+    "scenario": "readinessRandom",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 40,
+    "metrics": {
+      "readyFrames": 1
+    },
+    "operations": 1209,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 12",
+    "scenario": "readinessRandom",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 31,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 1041,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 13",
+    "scenario": "readinessRandom",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 103,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 14",
+    "scenario": "readinessRandom",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 42,
+    "metrics": {
+      "readyFrames": 2
+    },
+    "operations": 1077,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 15",
+    "scenario": "readinessRandom",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 124,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 16",
+    "scenario": "readinessRandom",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 23,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 625,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 17",
+    "scenario": "readinessRandom",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 11,
+    "metrics": {
+      "readyFrames": 13
+    },
+    "operations": 366,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 18",
+    "scenario": "readinessRandom",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "readyFrames": 1
+    },
+    "operations": 293,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 19",
+    "scenario": "readinessRandom",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 2,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 75,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 20",
+    "scenario": "readinessRandom",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "readyFrames": 17
+    },
+    "operations": 453,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 21",
+    "scenario": "readinessRandom",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 98,
+    "metrics": {
+      "readyFrames": 1
+    },
+    "operations": 2387,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 22",
+    "scenario": "readinessRandom",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 61,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 1646,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 23",
+    "scenario": "readinessRandom",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 30,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 909,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 24",
+    "scenario": "readinessRandom",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {
+      "readyFrames": 0
+    },
+    "operations": 322,
+    "replay": "stress-runner replay --scenario readinessRandom --seed 25",
+    "scenario": "readinessRandom",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 1",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 1,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 2",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 2,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 3",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 3,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 4",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 4,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 5",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 5,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 6",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 6,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 7",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 7,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 8",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 8,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 9",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 9,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 10",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 10,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 11",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 11,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 12",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 12,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 13",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 13,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 14",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 14,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 15",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 15,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 16",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 16,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 17",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 17,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 18",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 18,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 19",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 19,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 20",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 20,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 21",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 21,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 22",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 22,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 23",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 23,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 24",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 24,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in readinessDuplicateLandmark.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario readinessDuplicateLandmark --seed 25",
+    "scenario": "readinessDuplicateLandmark",
+    "seed": 25,
+    "status": "crashed"
+  },
+  {
+    "detail": null,
+    "durationMs": 50,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 843
+    },
+    "operations": 973,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 1",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 33,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 834
+    },
+    "operations": 968,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 2",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 10,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 325
+    },
+    "operations": 366,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 3",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 435
+    },
+    "operations": 551,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 4",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 10,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 345
+    },
+    "operations": 476,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 5",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 12,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 454
+    },
+    "operations": 638,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 6",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 49
+    },
+    "operations": 77,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 7",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 20,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 739
+    },
+    "operations": 840,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 8",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 20,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 711
+    },
+    "operations": 996,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 9",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 6,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 327
+    },
+    "operations": 393,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 10",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 5,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 178
+    },
+    "operations": 237,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 11",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 25,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 930
+    },
+    "operations": 1209,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 12",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 21,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 707
+    },
+    "operations": 1041,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 13",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 2,
+    "metrics": {
+      "armed": 1,
+      "decided": 0,
+      "motionSamples": 85
+    },
+    "operations": 103,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 14",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 32,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 908
+    },
+    "operations": 1077,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 15",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 2,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 99
+    },
+    "operations": 124,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 16",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 545
+    },
+    "operations": 625,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 17",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 7,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 285
+    },
+    "operations": 366,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 18",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 269
+    },
+    "operations": 293,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 19",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 64
+    },
+    "operations": 75,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 20",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 8,
+    "metrics": {
+      "armed": 1,
+      "decided": 1,
+      "motionSamples": 363
+    },
+    "operations": 453,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 21",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 53,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 1930
+    },
+    "operations": 2387,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 22",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 38,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 1395
+    },
+    "operations": 1646,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 23",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 19,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 704
+    },
+    "operations": 909,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 24",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 13,
+    "metrics": {
+      "armed": 0,
+      "decided": 0,
+      "motionSamples": 272
+    },
+    "operations": 322,
+    "replay": "stress-runner replay --scenario motionStreamAndMonitor --seed 25",
+    "scenario": "motionStreamAndMonitor",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 48,
+    "metrics": {
+      "decisionObservations": 1798
+    },
+    "operations": 7664,
+    "replay": "stress-runner replay --scenario monitorConcurrent --seed 1",
+    "scenario": "monitorConcurrent",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 18,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 318,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 1",
+    "scenario": "motionTrailRandom",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 54,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 989,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 2",
+    "scenario": "motionTrailRandom",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 169,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 3",
+    "scenario": "motionTrailRandom",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "clears": 1
+    },
+    "operations": 292,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 4",
+    "scenario": "motionTrailRandom",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "clears": 1
+    },
+    "operations": 132,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 5",
+    "scenario": "motionTrailRandom",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 10,
+    "metrics": {
+      "clears": 1
+    },
+    "operations": 293,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 6",
+    "scenario": "motionTrailRandom",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 16,
+    "metrics": {
+      "clears": 3
+    },
+    "operations": 645,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 7",
+    "scenario": "motionTrailRandom",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 21,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 219,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 8",
+    "scenario": "motionTrailRandom",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 28,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 841,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 9",
+    "scenario": "motionTrailRandom",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 72,
+    "metrics": {
+      "clears": 4
+    },
+    "operations": 2233,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 10",
+    "scenario": "motionTrailRandom",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 345,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 11",
+    "scenario": "motionTrailRandom",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 74,
+    "metrics": {
+      "clears": 3
+    },
+    "operations": 2341,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 12",
+    "scenario": "motionTrailRandom",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 12,
+    "metrics": {
+      "clears": 2
+    },
+    "operations": 527,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 13",
+    "scenario": "motionTrailRandom",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 24,
+    "metrics": {
+      "clears": 2
+    },
+    "operations": 1138,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 14",
+    "scenario": "motionTrailRandom",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 7,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 128,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 15",
+    "scenario": "motionTrailRandom",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 23,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 899,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 16",
+    "scenario": "motionTrailRandom",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 2,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 88,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 17",
+    "scenario": "motionTrailRandom",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 9,
+    "metrics": {
+      "clears": 1
+    },
+    "operations": 276,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 18",
+    "scenario": "motionTrailRandom",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 14,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 403,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 19",
+    "scenario": "motionTrailRandom",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 2,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 117,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 20",
+    "scenario": "motionTrailRandom",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 3,
+    "metrics": {
+      "clears": 8
+    },
+    "operations": 255,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 21",
+    "scenario": "motionTrailRandom",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 49,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 1071,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 22",
+    "scenario": "motionTrailRandom",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 62,
+    "metrics": {
+      "clears": 9
+    },
+    "operations": 1975,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 23",
+    "scenario": "motionTrailRandom",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 36,
+    "metrics": {
+      "clears": 3
+    },
+    "operations": 1109,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 24",
+    "scenario": "motionTrailRandom",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 5,
+    "metrics": {
+      "clears": 0
+    },
+    "operations": 199,
+    "replay": "stress-runner replay --scenario motionTrailRandom --seed 25",
+    "scenario": "motionTrailRandom",
+    "seed": 25,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 10402,
+    "metrics": {
+      "events": 1,
+      "rssAfterBytes": 21803008,
+      "rssBeforeBytes": 21155840,
+      "rssGrowthBytes": 647168
+    },
+    "operations": 60000,
+    "replay": "stress-runner replay --scenario memoryPressureLoop --seed 1",
+    "scenario": "memoryPressureLoop",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 1",
+    "scenario": "timestampExtremes",
+    "seed": 1,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 2",
+    "scenario": "timestampExtremes",
+    "seed": 2,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 3",
+    "scenario": "timestampExtremes",
+    "seed": 3,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 4",
+    "scenario": "timestampExtremes",
+    "seed": 4,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 5",
+    "scenario": "timestampExtremes",
+    "seed": 5,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 6",
+    "scenario": "timestampExtremes",
+    "seed": 6,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 7",
+    "scenario": "timestampExtremes",
+    "seed": 7,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 8",
+    "scenario": "timestampExtremes",
+    "seed": 8,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 9",
+    "scenario": "timestampExtremes",
+    "seed": 9,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 10",
+    "scenario": "timestampExtremes",
+    "seed": 10,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 11",
+    "scenario": "timestampExtremes",
+    "seed": 11,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 12",
+    "scenario": "timestampExtremes",
+    "seed": 12,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 13",
+    "scenario": "timestampExtremes",
+    "seed": 13,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 14",
+    "scenario": "timestampExtremes",
+    "seed": 14,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 15",
+    "scenario": "timestampExtremes",
+    "seed": 15,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 16",
+    "scenario": "timestampExtremes",
+    "seed": 16,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 17",
+    "scenario": "timestampExtremes",
+    "seed": 17,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 18",
+    "scenario": "timestampExtremes",
+    "seed": 18,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 19",
+    "scenario": "timestampExtremes",
+    "seed": 19,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 20",
+    "scenario": "timestampExtremes",
+    "seed": 20,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 21",
+    "scenario": "timestampExtremes",
+    "seed": 21,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 22",
+    "scenario": "timestampExtremes",
+    "seed": 22,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 23",
+    "scenario": "timestampExtremes",
+    "seed": 23,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 24",
+    "scenario": "timestampExtremes",
+    "seed": 24,
+    "status": "crashed"
+  },
+  {
+    "detail": "process exited -4 (SIGILL) during iteration; stderr tail in timestampExtremes.log",
+    "durationMs": 0,
+    "metrics": {
+      "exitCode": -4
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario timestampExtremes --seed 25",
+    "scenario": "timestampExtremes",
+    "seed": 25,
+    "status": "crashed"
+  },
+  {
+    "detail": null,
+    "durationMs": 57,
+    "metrics": {
+      "poses": 3023,
+      "providerCalls": 3191,
+      "ranPastCancellation": 1,
+      "rewinds": 1483,
+      "scriptedGaps": 402
+    },
+    "operations": 10379,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 1",
+    "scenario": "importExtractionModel",
+    "seed": 1,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 260,
+    "metrics": {
+      "poses": 3376,
+      "providerCalls": 3544,
+      "ranPastCancellation": 1,
+      "rewinds": 359,
+      "scriptedGaps": 1861
+    },
+    "operations": 39544,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 2",
+    "scenario": "importExtractionModel",
+    "seed": 2,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 0,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 3",
+    "scenario": "importExtractionModel",
+    "seed": 3,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 110,
+    "metrics": {
+      "poses": 3383,
+      "providerCalls": 3383,
+      "ranPastCancellation": 1,
+      "rewinds": 2915,
+      "scriptedGaps": 0
+    },
+    "operations": 17783,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 4",
+    "scenario": "importExtractionModel",
+    "seed": 4,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 0,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 5",
+    "scenario": "importExtractionModel",
+    "seed": 5,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 0,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 6",
+    "scenario": "importExtractionModel",
+    "seed": 6,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 60,
+      "providerCalls": 60,
+      "ranPastCancellation": 1,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 120,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 7",
+    "scenario": "importExtractionModel",
+    "seed": 7,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 31,
+    "metrics": {
+      "poses": 2924,
+      "providerCalls": 2924,
+      "ranPastCancellation": 0,
+      "rewinds": 704,
+      "scriptedGaps": 0
+    },
+    "operations": 6584,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 8",
+    "scenario": "importExtractionModel",
+    "seed": 8,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 265,
+    "metrics": {
+      "poses": 3541,
+      "providerCalls": 3541,
+      "ranPastCancellation": 1,
+      "rewinds": 370,
+      "scriptedGaps": 0
+    },
+    "operations": 39541,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 9",
+    "scenario": "importExtractionModel",
+    "seed": 9,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 75,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 3158,
+      "ranPastCancellation": 0,
+      "rewinds": 14240,
+      "scriptedGaps": 72000
+    },
+    "operations": 75158,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 10",
+    "scenario": "importExtractionModel",
+    "seed": 10,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 15,
+    "metrics": {
+      "poses": 1669,
+      "providerCalls": 1768,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 100
+    },
+    "operations": 3566,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 11",
+    "scenario": "importExtractionModel",
+    "seed": 11,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 735,
+    "metrics": {
+      "poses": 3272,
+      "providerCalls": 3456,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 5299
+    },
+    "operations": 107820,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 12",
+    "scenario": "importExtractionModel",
+    "seed": 12,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 1,
+    "metrics": {
+      "poses": 150,
+      "providerCalls": 150,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 300,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 13",
+    "scenario": "importExtractionModel",
+    "seed": 13,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 59,
+      "ranPastCancellation": 1,
+      "rewinds": 0,
+      "scriptedGaps": 61
+    },
+    "operations": 120,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 14",
+    "scenario": "importExtractionModel",
+    "seed": 14,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 1,
+      "providerCalls": 1,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 2,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 15",
+    "scenario": "importExtractionModel",
+    "seed": 15,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 40,
+      "providerCalls": 60,
+      "ranPastCancellation": 1,
+      "rewinds": 0,
+      "scriptedGaps": 20
+    },
+    "operations": 120,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 16",
+    "scenario": "importExtractionModel",
+    "seed": 16,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 1,
+      "providerCalls": 1,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 2,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 17",
+    "scenario": "importExtractionModel",
+    "seed": 17,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 44,
+    "metrics": {
+      "poses": 2230,
+      "providerCalls": 3207,
+      "ranPastCancellation": 0,
+      "rewinds": 1431,
+      "scriptedGaps": 2172
+    },
+    "operations": 10527,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 18",
+    "scenario": "importExtractionModel",
+    "seed": 18,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 0,
+      "providerCalls": 0,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 0,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 19",
+    "scenario": "importExtractionModel",
+    "seed": 19,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 0,
+    "metrics": {
+      "poses": 5,
+      "providerCalls": 5,
+      "ranPastCancellation": 0,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 10,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 20",
+    "scenario": "importExtractionModel",
+    "seed": 20,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "poses": 384,
+      "providerCalls": 404,
+      "ranPastCancellation": 1,
+      "rewinds": 103,
+      "scriptedGaps": 23
+    },
+    "operations": 919,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 21",
+    "scenario": "importExtractionModel",
+    "seed": 21,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 85,
+    "metrics": {
+      "poses": 2444,
+      "providerCalls": 3519,
+      "ranPastCancellation": 1,
+      "rewinds": 0,
+      "scriptedGaps": 4269
+    },
+    "operations": 17826,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 22",
+    "scenario": "importExtractionModel",
+    "seed": 22,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 4,
+    "metrics": {
+      "poses": 393,
+      "providerCalls": 558,
+      "ranPastCancellation": 0,
+      "rewinds": 143,
+      "scriptedGaps": 206
+    },
+    "operations": 1259,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 23",
+    "scenario": "importExtractionModel",
+    "seed": 23,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 23,
+    "metrics": {
+      "poses": 1978,
+      "providerCalls": 2862,
+      "ranPastCancellation": 0,
+      "rewinds": 697,
+      "scriptedGaps": 1129
+    },
+    "operations": 6522,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 24",
+    "scenario": "importExtractionModel",
+    "seed": 24,
+    "status": "held"
+  },
+  {
+    "detail": null,
+    "durationMs": 12,
+    "metrics": {
+      "poses": 1407,
+      "providerCalls": 1407,
+      "ranPastCancellation": 1,
+      "rewinds": 0,
+      "scriptedGaps": 0
+    },
+    "operations": 2847,
+    "replay": "stress-runner replay --scenario importExtractionModel --seed 25",
+    "scenario": "importExtractionModel",
+    "seed": 25,
+    "status": "held"
+  }
+]

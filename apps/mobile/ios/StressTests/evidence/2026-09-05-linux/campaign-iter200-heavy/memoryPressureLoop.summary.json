@@ -1,0 +1,32 @@
+{
+  "crashed": 0,
+  "executed": 8,
+  "held": 8,
+  "requestedIterations": 200,
+  "runner": "/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner",
+  "scenarios": {
+    "memoryPressureLoop": {
+      "executed": 8,
+      "expectsProcessTrap": false,
+      "failingSeeds": [],
+      "firstFailureDetail": null,
+      "heavy": true,
+      "operations": 480000,
+      "processExits": [
+        {
+          "command": "/home/ubuntu/repos/Pickle-Sensei/apps/mobile/ios/StressTests/.build/debug/stress-runner run --scenario memoryPressureLoop --seed-start 1 --count 8 --out /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200-memoryPressureLoop/memoryPressureLoop.jsonl",
+          "exit": 0,
+          "signal": null
+        }
+      ],
+      "requested": 8,
+      "reruns": {},
+      "smallestFailingSeed": null,
+      "statuses": {
+        "held": 8
+      }
+    }
+  },
+  "seedStart": 1,
+  "violated": 0
+}

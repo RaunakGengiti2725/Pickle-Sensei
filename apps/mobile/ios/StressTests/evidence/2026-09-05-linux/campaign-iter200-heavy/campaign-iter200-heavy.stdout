@@ -1,0 +1,10 @@
+monitorConcurrent                executed=    8 held=    8 violated=  0 crashed=  0
+
+executed=8 held=8 violated=0 crashed=0
+artifacts: /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200-monitorConcurrent
+exit=0
+memoryPressureLoop               executed=    8 held=    8 violated=  0 crashed=  0
+
+executed=8 held=8 violated=0 crashed=0
+artifacts: /home/ubuntu/stress-artifacts/native-ios-bridges/campaign-iter200-memoryPressureLoop
+exit=0
