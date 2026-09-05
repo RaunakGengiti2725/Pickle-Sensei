@@ -227,3 +227,86 @@ describe("gate: degenerate shoulder separation abstains the side decision (E10-F
     expect(prediction.label).toBe("FOREHAND");
   });
 });
+
+describe("gate: reference-frame torso must be MEASURED, not merely present (ADJ-VG-01)", () => {
+  // Apple Vision forwards an unrecognised joint as visibility 0 (still a
+  // landmark entry). The torso gate has to use the same 0.3 visibility floor
+  // as kinematics.landmark(): a present-but-unmeasured torso is an absent torso.
+  type LiteSequence = Parameters<typeof classifyStroke>[0]["sequence"];
+  type LiteLandmark = LiteSequence["frames"][number]["landmarks"][number];
+  const TORSO = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"] as const;
+  const MIN_LANDMARK_VISIBILITY = 0.3;
+
+  function torsoFrames(torsoVisibility: number, torsoShiftX = 0) {
+    const frames = [];
+    for (let t = 1500; t <= 2500; t += 33) {
+      const landmarks = [
+        { name: "left_shoulder", x: 0.62 + torsoShiftX, y: 0.4, visibility: torsoVisibility },
+        { name: "right_shoulder", x: 0.78 + torsoShiftX, y: 0.4, visibility: torsoVisibility },
+        { name: "left_hip", x: 0.65 + torsoShiftX, y: 0.6, visibility: torsoVisibility },
+        { name: "right_hip", x: 0.75 + torsoShiftX, y: 0.6, visibility: torsoVisibility },
+        { name: "right_elbow", x: 0.8, y: 0.48, visibility: 0.9 },
+        { name: "left_elbow", x: 0.62, y: 0.48, visibility: 0.8 },
+        { name: "right_wrist", x: 0.85 + (t % 200) / 4000, y: 0.55, visibility: 0.9 },
+        { name: "left_wrist", x: 0.6, y: 0.55, visibility: 0.8 },
+      ];
+      frames.push({ timestampMs: t, landmarks });
+    }
+    return { fps: 30, frames } as unknown as LiteSequence;
+  }
+
+  function withoutTorso(sequence: LiteSequence): LiteSequence {
+    return {
+      ...sequence,
+      frames: sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.filter(
+          (mark: LiteLandmark) => !(TORSO as readonly string[]).includes(mark.name),
+        ),
+      })),
+    } as LiteSequence;
+  }
+
+  function classify(sequence: LiteSequence) {
+    return classifyStroke({
+      sequence,
+      window: { startMs: 1700, endMs: 2300 },
+      contactMs: 2000,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+  }
+
+  it("precondition: a measured torso commits FOREHAND", () => {
+    const prediction = classify(torsoFrames(0.9));
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.limitingFactors).not.toContain("torso_not_measured_at_contact");
+  });
+
+  it("a torso just below the visibility floor abstains exactly like an absent torso", () => {
+    const belowFloor = classify(torsoFrames(MIN_LANDMARK_VISIBILITY - 0.01));
+    expect(belowFloor.label).toBe("UNKNOWN");
+    expect(belowFloor.taxonomyDepth).toBe(1);
+    expect(belowFloor.limitingFactors).toContain("torso_not_measured_at_contact");
+    expect(JSON.stringify(belowFloor)).toBe(
+      JSON.stringify(classify(withoutTorso(torsoFrames(0.9)))),
+    );
+  });
+
+  it("a torso exactly at the visibility floor is measured and commits a side", () => {
+    const atFloor = classify(torsoFrames(MIN_LANDMARK_VISIBILITY));
+    expect(atFloor.label).toBe("FOREHAND");
+    expect(atFloor.limitingFactors).not.toContain("torso_not_measured_at_contact");
+  });
+
+  it("visibility-0 torso coordinates cannot decide the side: shifting them does not flip the label", () => {
+    const shifted = [-0.45, 0, 0.45].map((shift) => classify(torsoFrames(0, shift)));
+    for (const prediction of shifted) {
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.limitingFactors).toContain("torso_not_measured_at_contact");
+    }
+    expect(new Set(shifted.map((prediction) => JSON.stringify(prediction))).size).toBe(1);
+  });
+});
