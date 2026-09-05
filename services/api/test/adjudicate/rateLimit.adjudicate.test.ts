@@ -55,9 +55,20 @@ describe("ADJUDICATE rate limiter (no datastore)", () => {
   let app: FastifyInstance;
   const minter = new DevTokenVerifier("test", devAuthSecret);
   const mintValid = () => minter.mint(`adjudicate|${randomUUID()}`);
+  /**
+   * Requests per client address that reached the preHandler phase, i.e. were
+   * NOT refused in `onRequest`. An instance-level preHandler runs before any
+   * route's own `verifyToken` / `authenticate`, so this counts exactly the
+   * requests on which token verification (and, with a datastore, the
+   * `app_user` lookup) would have been spent.
+   */
+  const reachedAuth = new Map<string, number>();
 
   beforeAll(async () => {
     app = buildApp(config, { objectStore: null });
+    app.addHook("preHandler", async (request) => {
+      reachedAuth.set(request.ip, (reachedAuth.get(request.ip) ?? 0) + 1);
+    });
     await app.ready();
   });
   afterAll(async () => {
@@ -172,5 +183,56 @@ describe("ADJUDICATE rate limiter (no datastore)", () => {
     expect((await bootstrap("garbage", "203.0.113.60")).statusCode).toBe(401);
     // The exhausted credential stays exhausted from any address.
     expect((await bootstrap(token, "203.0.113.61")).statusCode).toBe(429);
+  });
+
+  it("ADJ-RL-SPENT-CREDENTIAL-EARLY: a spent verified credential is refused before its route's auth runs", async () => {
+    const token = await mintValid();
+    const ip = "203.0.113.70";
+    for (let i = 0; i < LIMIT; i++) expect((await bootstrap(token, ip)).statusCode).toBe(503);
+
+    // Every served request had to be verified (the budget follows the
+    // credential, which is only known after verification). From here on the
+    // credential's window is spent, so its requests must be refused in
+    // `onRequest` like any other over-budget caller: no token verification,
+    // no datastore round trip.
+    const before = reachedAuth.get(ip) ?? 0;
+    expect(before).toBe(LIMIT);
+    const statuses: number[] = [];
+    for (let i = 0; i < 20; i++) statuses.push((await bootstrap(token, ip)).statusCode);
+    const after = reachedAuth.get(ip) ?? 0;
+    console.log(
+      `ADJ-RL-SPENT-CREDENTIAL-EARLY: 20 requests on a spent credential → 429=${statuses.filter((s) => s === 429).length}, reached auth: ${after - before} (expected 0)`,
+    );
+    expect(statuses.every((s) => s === 429)).toBe(true);
+    expect(after - before, "over-budget requests must not reach token verification").toBe(0);
+    // The address budget was never touched by the verified credential, spent or not.
+    expect((await bootstrap("garbage", ip)).statusCode).toBe(401);
+  });
+
+  it("ADJ-RL-ANON: requests without any bearer share the address budget with invalid bearers", async () => {
+    const ip = "203.0.113.80";
+    const anon = () =>
+      app.inject({
+        method: "POST",
+        url: "/v1/account/bootstrap",
+        remoteAddress: ip,
+        payload: bootstrapBody,
+      });
+    const statuses: number[] = [];
+    for (let i = 0; i < LIMIT / 2; i++) statuses.push((await anon()).statusCode);
+    for (let i = 0; i < LIMIT / 2; i++)
+      statuses.push((await bootstrap(`garbage-${randomUUID()}`, ip)).statusCode);
+    expect(statuses.every((s) => s === 401)).toBe(true);
+    expect((await anon()).statusCode, "anonymous request after the shared budget").toBe(429);
+    expect((await bootstrap("garbage", ip)).statusCode).toBe(429);
+    // Once an address has burnt its pre-auth budget, nothing from it is
+    // verified until the window rolls over — not even a valid credential.
+    // The budget is only known to belong to a credential AFTER verification,
+    // and letting a spent address reach verification would make the pre-auth
+    // limit purely cosmetic. (Same posture as the production edge function's
+    // auth-failure budget in `supabase/functions/api/rateLimit.ts`.)
+    const rescued = await bootstrap(await mintValid(), ip);
+    expect(rescued.statusCode, "spent address is refused before verification").toBe(429);
+    expect(reachedAuth.get(ip) ?? 0, "no request from the spent address reached auth").toBe(LIMIT);
   });
 });
