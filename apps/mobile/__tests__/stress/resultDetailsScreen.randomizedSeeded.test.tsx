@@ -148,8 +148,8 @@ import {
   type Action,
   type HarnessEnvironment,
   type SequenceResult,
-} from './resultDetailsScreen.randomizedSeeded.harness';
-import { Rng } from './resultDetailsScreen.randomizedSeeded.fixtures';
+} from '../../__harness__/stress/resultDetailsScreen.randomizedSeeded.harness';
+import { Rng } from '../../__harness__/stress/resultDetailsScreen.randomizedSeeded.fixtures';
 
 // ─── Campaign configuration ─────────────────────────────────────────────────
 
