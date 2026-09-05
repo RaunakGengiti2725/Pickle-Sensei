@@ -1,0 +1,3407 @@
+{
+  "unit": "scr-progressscreen",
+  "lens": "failure-injection",
+  "commit": "1fb0efd7f3157060af4c61342f5102e068d2ddc5",
+  "harness": [
+    "apps/mobile/__tests__/stress/progressScreen.failureInjection.stress.test.tsx",
+    "apps/mobile/xc-harness/stress/progressScreenFaultCatalog.ts"
+  ],
+  "runs": [
+    {
+      "label": "default",
+      "command": "cd apps/mobile && npx jest --ci --silent __tests__/stress/progressScreen",
+      "exit": 1,
+      "executed": 110,
+      "held": 101,
+      "broken": 9,
+      "log": "/home/ubuntu/stress-artifacts/default-run.log",
+      "json": "/home/ubuntu/stress-artifacts/default-run/progressscreen-failure-injection-2026-09-05T00-34-03-057Z.json"
+    },
+    {
+      "label": "campaign",
+      "command": "cd apps/mobile && STRESS_ITER=200 npx jest --ci __tests__/stress/progressScreen",
+      "exit": 1,
+      "executed": 298,
+      "held": 253,
+      "broken": 45,
+      "log": "/home/ubuntu/stress-artifacts/campaign-200b.log",
+      "json": "/home/ubuntu/stress-artifacts/campaign-200b/progressscreen-failure-injection-2026-09-05T00-33-29-842Z.json"
+    }
+  ],
+  "flake_10x": {
+    "1000010": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000012": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000015": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000016": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000017": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000018": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000030": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000057": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    },
+    "1000097": {
+      "runs": 10,
+      "failures": 10,
+      "rate": "10/10"
+    }
+  },
+  "catalogSize": 98,
+  "notReachable": [
+    "react-native-keychain (sessionVault) \u2014 not imported by ProgressScreen",
+    "camera / Vision provider \u2014 AnalyzeScreen only",
+    "TTS / audio coach \u2014 not imported by ProgressScreen",
+    "RevenueCat / billing \u2014 accessStore only, not read by ProgressScreen",
+    "permissions \u2014 no permission request on the Progress tab"
+  ],
+  "rows": [
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000000,
+      "faultId": "sqlite.open.throw",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000001,
+      "faultId": "sqlite.open.throw.transient",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000002,
+      "faultId": "sqlite.migrate.throw.first",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000003,
+      "faultId": "sqlite.migrate.throw.mid",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000004,
+      "faultId": "sqlite.migrate.throw.transient",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000005,
+      "faultId": "sqlite.reject.any",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000006,
+      "faultId": "sqlite.reject.facts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000007,
+      "faultId": "sqlite.reject.captures",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000008,
+      "faultId": "sqlite.reject.facts.transient1",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000009,
+      "faultId": "sqlite.reject.captures.transient2",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000010,
+      "faultId": "sqlite.reject.kvRead",
+      "outcome": "BROKEN",
+      "failures": [
+        "persistedIntact: durable drill records lost: drill-0,drill-1"
+      ],
+      "finding": "F2 data loss: ledger read failure -> empty ledger persisted"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000011,
+      "faultId": "sqlite.reject.kvWrite",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000012,
+      "faultId": "sqlite.reject.activity",
+      "outcome": "BROKEN",
+      "failures": [
+        "noSilentFailure: consistency read failed but the card claims a fresh 0-day start"
+      ],
+      "finding": "F3 silent failure: consistency read error rendered as brand-new streak"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000013,
+      "faultId": "sqlite.throwSync.facts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000014,
+      "faultId": "sqlite.throwSync.captures",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000015,
+      "faultId": "sqlite.throwSync.activity",
+      "outcome": "BROKEN",
+      "failures": [
+        "noSilentFailure: consistency read failed but the card claims a fresh 0-day start"
+      ],
+      "finding": "F3 silent failure: consistency read error rendered as brand-new streak"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000016,
+      "faultId": "sqlite.never.facts",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000017,
+      "faultId": "sqlite.never.captures",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000018,
+      "faultId": "sqlite.never.kvRead",
+      "outcome": "BROKEN",
+      "failures": [
+        "persistedIntact: durable drill records lost: drill-0,drill-1"
+      ],
+      "finding": "F2 data loss: ledger read failure -> empty ledger persisted"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000019,
+      "faultId": "sqlite.never.activity",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000020,
+      "faultId": "sqlite.never.kvWrite",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000021,
+      "faultId": "sqlite.slow.facts.5s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000022,
+      "faultId": "sqlite.slow.captures.20s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000023,
+      "faultId": "sqlite.slow.any.45s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000024,
+      "faultId": "sqlite.slow.facts.59s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000025,
+      "faultId": "sqlite.result.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000026,
+      "faultId": "sqlite.result.undefinedRows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000027,
+      "faultId": "sqlite.result.objectRows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000028,
+      "faultId": "sqlite.rows.facts.nonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000029,
+      "faultId": "sqlite.rows.facts.wrongShape",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000030,
+      "faultId": "sqlite.rows.facts.stringScores",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000031,
+      "faultId": "sqlite.rows.facts.invalidDates",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000032,
+      "faultId": "sqlite.rows.facts.futureDates",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000033,
+      "faultId": "sqlite.rows.facts.missingColumn",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000034,
+      "faultId": "sqlite.rows.facts.fixtureSource",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000035,
+      "faultId": "sqlite.rows.captures.nonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000036,
+      "faultId": "sqlite.rows.captures.mismatch",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000037,
+      "faultId": "sqlite.rows.captures.stringNumbers",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000038,
+      "faultId": "sqlite.rows.captures.missingStatus",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000039,
+      "faultId": "sqlite.rows.captures.legacyNull",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000040,
+      "faultId": "sqlite.rows.ledger.truncated",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000041,
+      "faultId": "sqlite.rows.ledger.array",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000042,
+      "faultId": "sqlite.rows.ledger.number",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000043,
+      "faultId": "sqlite.rows.ledger.drillsGarbage",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000044,
+      "faultId": "sqlite.rows.rank.garbage",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000045,
+      "faultId": "sqlite.rows.rank.wrongTypes",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000046,
+      "faultId": "sqlite.rows.oversized",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000047,
+      "faultId": "sqlite.kvRead.transient.ledgerClobber",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000048,
+      "faultId": "fetch.progress.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000049,
+      "faultId": "fetch.progress.throwSync",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000050,
+      "faultId": "fetch.progress.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000051,
+      "faultId": "fetch.progress.slow10s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000052,
+      "faultId": "fetch.progress.slow30s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000053,
+      "faultId": "fetch.progress.500",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000054,
+      "faultId": "fetch.progress.401",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000055,
+      "faultId": "fetch.progress.429",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000056,
+      "faultId": "fetch.progress.bodyNonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000057,
+      "faultId": "fetch.progress.jsonNever",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000058,
+      "faultId": "fetch.progress.malformed.shape",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000059,
+      "faultId": "fetch.progress.partial.series",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000060,
+      "faultId": "fetch.progress.partial.streak",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000061,
+      "faultId": "fetch.progress.nan",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000062,
+      "faultId": "fetch.progress.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000063,
+      "faultId": "fetch.progress.array",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000064,
+      "faultId": "fetch.rank.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000065,
+      "faultId": "fetch.rank.throwSync",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000066,
+      "faultId": "fetch.rank.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000067,
+      "faultId": "fetch.rank.slow20s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000068,
+      "faultId": "fetch.rank.500",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000069,
+      "faultId": "fetch.rank.403",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000070,
+      "faultId": "fetch.rank.bodyNonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000071,
+      "faultId": "fetch.rank.jsonNever",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000072,
+      "faultId": "fetch.rank.malformed",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000073,
+      "faultId": "fetch.rank.partial",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000074,
+      "faultId": "fetch.rank.outOfRange",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000075,
+      "faultId": "fetch.both.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000076,
+      "faultId": "fetch.both.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000077,
+      "faultId": "session.none",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000078,
+      "faultId": "session.malformed",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000079,
+      "faultId": "session.clearMidFlight",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000080,
+      "faultId": "clock.farFuture",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000081,
+      "faultId": "clock.epoch",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000082,
+      "faultId": "clock.jumpBack",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000083,
+      "faultId": "clock.jumpForward",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000084,
+      "faultId": "clock.intlThrows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000085,
+      "faultId": "nav.unmountMidFlight.slowFacts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000086,
+      "faultId": "nav.tabAway.duringSlowLoad",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000087,
+      "faultId": "nav.calendar.roundtrip.underFault",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000088,
+      "faultId": "nav.calendar.roundtrip.refocusFails",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000089,
+      "faultId": "nav.retry.double",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000090,
+      "faultId": "nav.sections.underFetchFault",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000091,
+      "faultId": "store.profile.garbageSkill",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000092,
+      "faultId": "store.profile.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000093,
+      "faultId": "store.empty",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000094,
+      "faultId": "combo.kvReject+fetchReject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000095,
+      "faultId": "combo.slowFacts+progressNever",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000096,
+      "faultId": "combo.transientFacts+rank500+farFuture",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 1000097,
+      "faultId": "combo.malformedRows+malformedProgress",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7001,
+      "faultId": "combo.kvReject+fetchReject#7001",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7014,
+      "faultId": "fetch.rank.throwSync#7014",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7027,
+      "faultId": "fetch.rank.reject#7027",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7040,
+      "faultId": "fetch.progress.partial.series#7040",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7053,
+      "faultId": "sqlite.rows.captures.stringNumbers#7053",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7066,
+      "faultId": "fetch.rank.reject#7066",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7079,
+      "faultId": "session.none#7079",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7092,
+      "faultId": "sqlite.rows.oversized#7092",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7105,
+      "faultId": "fetch.progress.partial.series#7105",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7118,
+      "faultId": "nav.calendar.roundtrip.underFault#7118",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7131,
+      "faultId": "sqlite.rows.facts.fixtureSource#7131",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "default(STRESS_ITER=12)",
+      "seed": 7144,
+      "faultId": "fetch.progress.partial.series#7144",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000000,
+      "faultId": "sqlite.open.throw",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000001,
+      "faultId": "sqlite.open.throw.transient",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000002,
+      "faultId": "sqlite.migrate.throw.first",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000003,
+      "faultId": "sqlite.migrate.throw.mid",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000004,
+      "faultId": "sqlite.migrate.throw.transient",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000005,
+      "faultId": "sqlite.reject.any",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000006,
+      "faultId": "sqlite.reject.facts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000007,
+      "faultId": "sqlite.reject.captures",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000008,
+      "faultId": "sqlite.reject.facts.transient1",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000009,
+      "faultId": "sqlite.reject.captures.transient2",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000010,
+      "faultId": "sqlite.reject.kvRead",
+      "outcome": "BROKEN",
+      "failures": [
+        "persistedIntact: durable drill records lost: drill-0,drill-1"
+      ],
+      "finding": "F2 data loss: ledger read failure -> empty ledger persisted"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000011,
+      "faultId": "sqlite.reject.kvWrite",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000012,
+      "faultId": "sqlite.reject.activity",
+      "outcome": "BROKEN",
+      "failures": [
+        "noSilentFailure: consistency read failed but the card claims a fresh 0-day start"
+      ],
+      "finding": "F3 silent failure: consistency read error rendered as brand-new streak"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000013,
+      "faultId": "sqlite.throwSync.facts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000014,
+      "faultId": "sqlite.throwSync.captures",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000015,
+      "faultId": "sqlite.throwSync.activity",
+      "outcome": "BROKEN",
+      "failures": [
+        "noSilentFailure: consistency read failed but the card claims a fresh 0-day start"
+      ],
+      "finding": "F3 silent failure: consistency read error rendered as brand-new streak"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000016,
+      "faultId": "sqlite.never.facts",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000017,
+      "faultId": "sqlite.never.captures",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000018,
+      "faultId": "sqlite.never.kvRead",
+      "outcome": "BROKEN",
+      "failures": [
+        "persistedIntact: durable drill records lost: drill-0,drill-1"
+      ],
+      "finding": "F2 data loss: ledger read failure -> empty ledger persisted"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000019,
+      "faultId": "sqlite.never.activity",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000020,
+      "faultId": "sqlite.never.kvWrite",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000021,
+      "faultId": "sqlite.slow.facts.5s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000022,
+      "faultId": "sqlite.slow.captures.20s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000023,
+      "faultId": "sqlite.slow.any.45s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000024,
+      "faultId": "sqlite.slow.facts.59s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000025,
+      "faultId": "sqlite.result.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000026,
+      "faultId": "sqlite.result.undefinedRows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000027,
+      "faultId": "sqlite.result.objectRows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000028,
+      "faultId": "sqlite.rows.facts.nonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000029,
+      "faultId": "sqlite.rows.facts.wrongShape",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000030,
+      "faultId": "sqlite.rows.facts.stringScores",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000031,
+      "faultId": "sqlite.rows.facts.invalidDates",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000032,
+      "faultId": "sqlite.rows.facts.futureDates",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000033,
+      "faultId": "sqlite.rows.facts.missingColumn",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000034,
+      "faultId": "sqlite.rows.facts.fixtureSource",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000035,
+      "faultId": "sqlite.rows.captures.nonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000036,
+      "faultId": "sqlite.rows.captures.mismatch",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000037,
+      "faultId": "sqlite.rows.captures.stringNumbers",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000038,
+      "faultId": "sqlite.rows.captures.missingStatus",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000039,
+      "faultId": "sqlite.rows.captures.legacyNull",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000040,
+      "faultId": "sqlite.rows.ledger.truncated",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000041,
+      "faultId": "sqlite.rows.ledger.array",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000042,
+      "faultId": "sqlite.rows.ledger.number",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000043,
+      "faultId": "sqlite.rows.ledger.drillsGarbage",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000044,
+      "faultId": "sqlite.rows.rank.garbage",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000045,
+      "faultId": "sqlite.rows.rank.wrongTypes",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000046,
+      "faultId": "sqlite.rows.oversized",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000047,
+      "faultId": "sqlite.kvRead.transient.ledgerClobber",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000048,
+      "faultId": "fetch.progress.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000049,
+      "faultId": "fetch.progress.throwSync",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000050,
+      "faultId": "fetch.progress.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000051,
+      "faultId": "fetch.progress.slow10s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000052,
+      "faultId": "fetch.progress.slow30s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000053,
+      "faultId": "fetch.progress.500",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000054,
+      "faultId": "fetch.progress.401",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000055,
+      "faultId": "fetch.progress.429",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000056,
+      "faultId": "fetch.progress.bodyNonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000057,
+      "faultId": "fetch.progress.jsonNever",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000058,
+      "faultId": "fetch.progress.malformed.shape",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000059,
+      "faultId": "fetch.progress.partial.series",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000060,
+      "faultId": "fetch.progress.partial.streak",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000061,
+      "faultId": "fetch.progress.nan",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000062,
+      "faultId": "fetch.progress.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000063,
+      "faultId": "fetch.progress.array",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000064,
+      "faultId": "fetch.rank.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000065,
+      "faultId": "fetch.rank.throwSync",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000066,
+      "faultId": "fetch.rank.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000067,
+      "faultId": "fetch.rank.slow20s",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000068,
+      "faultId": "fetch.rank.500",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000069,
+      "faultId": "fetch.rank.403",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000070,
+      "faultId": "fetch.rank.bodyNonJson",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000071,
+      "faultId": "fetch.rank.jsonNever",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000072,
+      "faultId": "fetch.rank.malformed",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000073,
+      "faultId": "fetch.rank.partial",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000074,
+      "faultId": "fetch.rank.outOfRange",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000075,
+      "faultId": "fetch.both.reject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000076,
+      "faultId": "fetch.both.never",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000077,
+      "faultId": "session.none",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000078,
+      "faultId": "session.malformed",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000079,
+      "faultId": "session.clearMidFlight",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000080,
+      "faultId": "clock.farFuture",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000081,
+      "faultId": "clock.epoch",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000082,
+      "faultId": "clock.jumpBack",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000083,
+      "faultId": "clock.jumpForward",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000084,
+      "faultId": "clock.intlThrows",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000085,
+      "faultId": "nav.unmountMidFlight.slowFacts",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000086,
+      "faultId": "nav.tabAway.duringSlowLoad",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000087,
+      "faultId": "nav.calendar.roundtrip.underFault",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000088,
+      "faultId": "nav.calendar.roundtrip.refocusFails",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000089,
+      "faultId": "nav.retry.double",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000090,
+      "faultId": "nav.sections.underFetchFault",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000091,
+      "faultId": "store.profile.garbageSkill",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000092,
+      "faultId": "store.profile.null",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000093,
+      "faultId": "store.empty",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000094,
+      "faultId": "combo.kvReject+fetchReject",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000095,
+      "faultId": "combo.slowFacts+progressNever",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000096,
+      "faultId": "combo.transientFacts+rank500+farFuture",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 1000097,
+      "faultId": "combo.malformedRows+malformedProgress",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7001,
+      "faultId": "combo.kvReject+fetchReject#7001",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7014,
+      "faultId": "fetch.rank.throwSync#7014",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7027,
+      "faultId": "fetch.rank.reject#7027",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7040,
+      "faultId": "fetch.progress.partial.series#7040",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7053,
+      "faultId": "sqlite.rows.captures.stringNumbers#7053",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7066,
+      "faultId": "fetch.rank.reject#7066",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7079,
+      "faultId": "session.none#7079",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7092,
+      "faultId": "sqlite.rows.oversized#7092",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7105,
+      "faultId": "fetch.progress.partial.series#7105",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7118,
+      "faultId": "nav.calendar.roundtrip.underFault#7118",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7131,
+      "faultId": "sqlite.rows.facts.fixtureSource#7131",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7144,
+      "faultId": "fetch.progress.partial.series#7144",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7157,
+      "faultId": "sqlite.never.captures#7157",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7170,
+      "faultId": "combo.transientFacts+rank500+farFuture#7170",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7183,
+      "faultId": "sqlite.slow.any.45s#7183",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7196,
+      "faultId": "session.clearMidFlight#7196",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7209,
+      "faultId": "fetch.rank.500#7209",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7222,
+      "faultId": "fetch.progress.slow30s#7222",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7235,
+      "faultId": "sqlite.rows.captures.stringNumbers#7235",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7248,
+      "faultId": "sqlite.never.kvWrite#7248",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7261,
+      "faultId": "fetch.progress.jsonNever#7261",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7274,
+      "faultId": "fetch.rank.partial#7274",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7287,
+      "faultId": "fetch.progress.reject#7287",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7300,
+      "faultId": "combo.slowFacts+progressNever#7300",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7313,
+      "faultId": "sqlite.rows.facts.fixtureSource#7313",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7326,
+      "faultId": "fetch.progress.never#7326",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7339,
+      "faultId": "sqlite.rows.facts.fixtureSource#7339",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7352,
+      "faultId": "fetch.progress.jsonNever#7352",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7365,
+      "faultId": "fetch.progress.429#7365",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7378,
+      "faultId": "store.profile.garbageSkill#7378",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7391,
+      "faultId": "sqlite.rows.rank.wrongTypes#7391",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7404,
+      "faultId": "fetch.both.never#7404",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7417,
+      "faultId": "nav.tabAway.duringSlowLoad#7417",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7430,
+      "faultId": "session.none#7430",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7443,
+      "faultId": "clock.intlThrows#7443",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7456,
+      "faultId": "sqlite.reject.any#7456",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7469,
+      "faultId": "fetch.progress.throwSync#7469",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7482,
+      "faultId": "sqlite.migrate.throw.mid#7482",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7495,
+      "faultId": "sqlite.rows.facts.stringScores#7495",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7508,
+      "faultId": "fetch.both.never#7508",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7521,
+      "faultId": "session.none#7521",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7534,
+      "faultId": "fetch.progress.slow30s#7534",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7547,
+      "faultId": "fetch.progress.partial.series#7547",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7560,
+      "faultId": "sqlite.rows.rank.wrongTypes#7560",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7573,
+      "faultId": "sqlite.rows.facts.stringScores#7573",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7586,
+      "faultId": "fetch.progress.jsonNever#7586",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7599,
+      "faultId": "fetch.progress.array#7599",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7612,
+      "faultId": "clock.jumpForward#7612",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7625,
+      "faultId": "sqlite.result.null#7625",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7638,
+      "faultId": "clock.epoch#7638",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7651,
+      "faultId": "sqlite.open.throw#7651",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7664,
+      "faultId": "fetch.progress.reject#7664",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7677,
+      "faultId": "fetch.progress.500#7677",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7690,
+      "faultId": "nav.calendar.roundtrip.underFault#7690",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7703,
+      "faultId": "sqlite.migrate.throw.mid#7703",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7716,
+      "faultId": "sqlite.throwSync.activity#7716",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7729,
+      "faultId": "sqlite.reject.facts#7729",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7742,
+      "faultId": "sqlite.rows.captures.nonJson#7742",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7755,
+      "faultId": "sqlite.reject.captures#7755",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7768,
+      "faultId": "sqlite.never.kvWrite#7768",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7781,
+      "faultId": "sqlite.rows.oversized#7781",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7794,
+      "faultId": "sqlite.rows.ledger.drillsGarbage#7794",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7807,
+      "faultId": "store.profile.garbageSkill#7807",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7820,
+      "faultId": "fetch.progress.malformed.shape#7820",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7833,
+      "faultId": "fetch.rank.throwSync#7833",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7846,
+      "faultId": "fetch.rank.500#7846",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7859,
+      "faultId": "nav.sections.underFetchFault#7859",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7872,
+      "faultId": "sqlite.rows.ledger.truncated#7872",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7885,
+      "faultId": "fetch.progress.never#7885",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7898,
+      "faultId": "sqlite.kvRead.transient.ledgerClobber#7898",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7911,
+      "faultId": "store.profile.garbageSkill#7911",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7924,
+      "faultId": "sqlite.result.objectRows#7924",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7937,
+      "faultId": "combo.transientFacts+rank500+farFuture#7937",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7950,
+      "faultId": "sqlite.rows.rank.wrongTypes#7950",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7963,
+      "faultId": "sqlite.slow.facts.59s#7963",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7976,
+      "faultId": "sqlite.rows.facts.fixtureSource#7976",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 7989,
+      "faultId": "sqlite.rows.facts.wrongShape#7989",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8002,
+      "faultId": "clock.epoch#8002",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8015,
+      "faultId": "sqlite.never.captures#8015",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8028,
+      "faultId": "sqlite.reject.facts#8028",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8041,
+      "faultId": "sqlite.result.objectRows#8041",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8054,
+      "faultId": "sqlite.rows.ledger.truncated#8054",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8067,
+      "faultId": "sqlite.rows.captures.legacyNull#8067",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8080,
+      "faultId": "fetch.progress.401#8080",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8093,
+      "faultId": "nav.retry.double#8093",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8106,
+      "faultId": "fetch.rank.throwSync#8106",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8119,
+      "faultId": "sqlite.rows.facts.wrongShape#8119",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8132,
+      "faultId": "sqlite.throwSync.activity#8132",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8145,
+      "faultId": "session.none#8145",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8158,
+      "faultId": "fetch.both.reject#8158",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8171,
+      "faultId": "fetch.progress.slow10s#8171",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8184,
+      "faultId": "session.none#8184",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8197,
+      "faultId": "fetch.progress.partial.streak#8197",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8210,
+      "faultId": "sqlite.slow.captures.20s#8210",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8223,
+      "faultId": "nav.calendar.roundtrip.refocusFails#8223",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8236,
+      "faultId": "sqlite.rows.captures.legacyNull#8236",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8249,
+      "faultId": "sqlite.result.null#8249",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8262,
+      "faultId": "sqlite.rows.captures.legacyNull#8262",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8275,
+      "faultId": "sqlite.result.objectRows#8275",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8288,
+      "faultId": "nav.calendar.roundtrip.underFault#8288",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8301,
+      "faultId": "sqlite.reject.kvRead#8301",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8314,
+      "faultId": "nav.retry.double#8314",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8327,
+      "faultId": "sqlite.reject.captures#8327",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8340,
+      "faultId": "store.empty#8340",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8353,
+      "faultId": "nav.tabAway.duringSlowLoad#8353",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8366,
+      "faultId": "fetch.progress.jsonNever#8366",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "dashboardVisible: dashboard=false error=false spinner=true"
+      ],
+      "finding": "F4 infinite spinner: /v1/progress body never arrives (Promise.all)"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8379,
+      "faultId": "sqlite.rows.ledger.number#8379",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8392,
+      "faultId": "session.none#8392",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8405,
+      "faultId": "fetch.progress.array#8405",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8418,
+      "faultId": "sqlite.result.null#8418",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8431,
+      "faultId": "combo.transientFacts+rank500+farFuture#8431",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8444,
+      "faultId": "sqlite.rows.ledger.number#8444",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8457,
+      "faultId": "sqlite.migrate.throw.mid#8457",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8470,
+      "faultId": "sqlite.rows.ledger.drillsGarbage#8470",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8483,
+      "faultId": "sqlite.reject.facts.transient1#8483",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8496,
+      "faultId": "nav.retry.double#8496",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8509,
+      "faultId": "fetch.both.never#8509",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8522,
+      "faultId": "fetch.rank.bodyNonJson#8522",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8535,
+      "faultId": "fetch.progress.null#8535",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8548,
+      "faultId": "sqlite.migrate.throw.mid#8548",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8561,
+      "faultId": "nav.retry.double#8561",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8574,
+      "faultId": "sqlite.rows.facts.stringScores#8574",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8587,
+      "faultId": "nav.calendar.roundtrip.underFault#8587",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8600,
+      "faultId": "combo.kvReject+fetchReject#8600",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8613,
+      "faultId": "fetch.rank.never#8613",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8626,
+      "faultId": "fetch.rank.slow20s#8626",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8639,
+      "faultId": "sqlite.rows.rank.wrongTypes#8639",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8652,
+      "faultId": "sqlite.rows.captures.nonJson#8652",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8665,
+      "faultId": "combo.malformedRows+malformedProgress#8665",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8678,
+      "faultId": "clock.jumpBack#8678",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8691,
+      "faultId": "fetch.rank.jsonNever#8691",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8704,
+      "faultId": "fetch.progress.reject#8704",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8717,
+      "faultId": "nav.calendar.roundtrip.underFault#8717",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8730,
+      "faultId": "fetch.rank.malformed#8730",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8743,
+      "faultId": "sqlite.rows.captures.legacyNull#8743",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8756,
+      "faultId": "sqlite.migrate.throw.mid#8756",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8769,
+      "faultId": "fetch.both.never#8769",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8782,
+      "faultId": "sqlite.result.undefinedRows#8782",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8795,
+      "faultId": "fetch.rank.malformed#8795",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8808,
+      "faultId": "sqlite.throwSync.captures#8808",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8821,
+      "faultId": "nav.unmountMidFlight.slowFacts#8821",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8834,
+      "faultId": "nav.unmountMidFlight.slowFacts#8834",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8847,
+      "faultId": "sqlite.result.objectRows#8847",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8860,
+      "faultId": "sqlite.throwSync.captures#8860",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8873,
+      "faultId": "sqlite.slow.captures.20s#8873",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8886,
+      "faultId": "fetch.progress.slow10s#8886",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8899,
+      "faultId": "fetch.rank.throwSync#8899",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8912,
+      "faultId": "nav.calendar.roundtrip.refocusFails#8912",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8925,
+      "faultId": "sqlite.never.facts#8925",
+      "outcome": "BROKEN",
+      "failures": [
+        "noInfiniteSpinner: loading state still visible after 60s",
+        "visibleControl: no retry/back control while the local read hangs"
+      ],
+      "finding": "F5 infinite spinner: hung SQLite read has no timeout / control"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8938,
+      "faultId": "store.profile.garbageSkill#8938",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8951,
+      "faultId": "fetch.rank.outOfRange#8951",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8964,
+      "faultId": "store.profile.null#8964",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8977,
+      "faultId": "combo.kvReject+fetchReject#8977",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 8990,
+      "faultId": "sqlite.reject.kvRead#8990",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9003,
+      "faultId": "nav.tabAway.duringSlowLoad#9003",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9016,
+      "faultId": "fetch.progress.slow30s#9016",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9029,
+      "faultId": "sqlite.reject.captures.transient2#9029",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9042,
+      "faultId": "sqlite.reject.facts#9042",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9055,
+      "faultId": "fetch.rank.slow20s#9055",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9068,
+      "faultId": "sqlite.never.activity#9068",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9081,
+      "faultId": "sqlite.rows.oversized#9081",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9094,
+      "faultId": "sqlite.kvRead.transient.ledgerClobber#9094",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9107,
+      "faultId": "sqlite.rows.captures.mismatch#9107",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9120,
+      "faultId": "sqlite.rows.rank.wrongTypes#9120",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9133,
+      "faultId": "sqlite.rows.facts.stringScores#9133",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9146,
+      "faultId": "combo.malformedRows+malformedProgress#9146",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9159,
+      "faultId": "fetch.rank.outOfRange#9159",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9172,
+      "faultId": "sqlite.throwSync.facts#9172",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9185,
+      "faultId": "fetch.rank.jsonNever#9185",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9198,
+      "faultId": "fetch.rank.never#9198",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9211,
+      "faultId": "sqlite.rows.captures.legacyNull#9211",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9224,
+      "faultId": "clock.epoch#9224",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9237,
+      "faultId": "store.profile.garbageSkill#9237",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9250,
+      "faultId": "sqlite.result.undefinedRows#9250",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9263,
+      "faultId": "store.profile.garbageSkill#9263",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9276,
+      "faultId": "sqlite.open.throw.transient#9276",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9289,
+      "faultId": "sqlite.rows.ledger.truncated#9289",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9302,
+      "faultId": "fetch.rank.malformed#9302",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9315,
+      "faultId": "sqlite.reject.captures#9315",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9328,
+      "faultId": "clock.jumpForward#9328",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9341,
+      "faultId": "sqlite.never.kvRead#9341",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9354,
+      "faultId": "sqlite.reject.any#9354",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9367,
+      "faultId": "sqlite.never.kvRead#9367",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9380,
+      "faultId": "nav.unmountMidFlight.slowFacts#9380",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9393,
+      "faultId": "session.malformed#9393",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9406,
+      "faultId": "sqlite.rows.ledger.array#9406",
+      "outcome": "BROKEN",
+      "failures": ["noCrash: latestScore.toFixed is not a function"],
+      "finding": "F1 render crash: non-numeric overall_score in persisted local_shot payload"
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9419,
+      "faultId": "sqlite.throwSync.activity#9419",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9432,
+      "faultId": "nav.calendar.roundtrip.underFault#9432",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9445,
+      "faultId": "combo.kvReject+fetchReject#9445",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9458,
+      "faultId": "sqlite.rows.captures.missingStatus#9458",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9471,
+      "faultId": "sqlite.slow.any.45s#9471",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9484,
+      "faultId": "sqlite.reject.captures.transient2#9484",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9497,
+      "faultId": "sqlite.rows.facts.wrongShape#9497",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9510,
+      "faultId": "store.profile.null#9510",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9523,
+      "faultId": "sqlite.rows.facts.fixtureSource#9523",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9536,
+      "faultId": "sqlite.reject.captures#9536",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9549,
+      "faultId": "sqlite.open.throw#9549",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9562,
+      "faultId": "sqlite.slow.facts.5s#9562",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9575,
+      "faultId": "combo.slowFacts+progressNever#9575",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    },
+    {
+      "campaign": "campaign(STRESS_ITER=200)",
+      "seed": 9588,
+      "faultId": "sqlite.never.kvWrite#9588",
+      "outcome": "HELD",
+      "failures": [],
+      "finding": null
+    }
+  ]
+}
