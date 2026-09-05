@@ -157,7 +157,7 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
         { session: setInput(SET(n)) },
       );
     }
-    const { transport, sessionCalls } = manualTransport();
+    const { transport, sessionCalls, shotCalls } = manualTransport();
     const drain = track(drainOutbox(db, transport));
     await ticks(200);
     expect(sessionCalls).toHaveLength(1);
@@ -187,6 +187,24 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
       await ticks(500);
     }
     await save.promise;
+    // Plumbing only: once the save no longer waits on any round trip, the
+    // manual transport still owes the drain its answers — fail every call it
+    // makes (transiently) so the drain can finish before the assertion.
+    let answered = roundTripsWaited;
+    let shotsAnswered = 0;
+    while (!drain.settled()) {
+      for (; answered < sessionCalls.length; answered += 1) {
+        sessionCalls[answered]!.reject(
+          new ApiError(503, 'server.unavailable', 'down'),
+        );
+      }
+      for (; shotsAnswered < shotCalls.length; shotsAnswered += 1) {
+        shotCalls[shotsAnswered]!.d.reject(
+          new ApiError(503, 'server.unavailable', 'down'),
+        );
+      }
+      await ticks(500);
+    }
     await drain.promise;
 
     // OBSERVED on candidate: settledWhileNetworkPending=false,
@@ -346,9 +364,21 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
         ),
       ),
     );
-    await ticks(300);
-    const pending = waiters.filter(w => !w.settled()).length;
-    expect(pending).toBe(25); // lease_waiters_max measured = 25
+    // Re-pinned (L1): on the unmodified candidate every one of the 25 saves
+    // was still pending here (lease_waiters_max measured = 25 — the drain held
+    // the connection across its network await). The lease is released during
+    // every round trip, so the saves commit, in arrival order, while the
+    // drain's createSession is still unanswered.
+    let pending = waiters.length;
+    for (let i = 0; i < 200 && pending > 0; i += 1) {
+      await ticks(300);
+      pending = waiters.filter(w => !w.settled()).length;
+    }
+    expect({ pending, drainSettled: drain.settled() }).toEqual({
+      pending: 0,
+      drainSettled: false,
+    });
+    await Promise.all(waiters.map(w => w.promise));
     sessionCalls[0]!.resolve();
     await ticks(300);
     shotCalls[0]!.d.resolve(acceptAll(shotCalls[0]!.shots));

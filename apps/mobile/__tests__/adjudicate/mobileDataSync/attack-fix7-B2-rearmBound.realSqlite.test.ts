@@ -1,5 +1,8 @@
 /**
- * Adversary round 7 — candidate B (`devin/fix6-mds-sqlite-b` @ 7bd9d7af).
+ * Adversary round 7 — candidate B (`devin/fix6-mds-sqlite-b` @ 7bd9d7af),
+ * ported to candidate A in fix round 8 (imports/helpers only; the
+ * description below is of the candidate it was written against, and the
+ * assertions pin the corrected semantics candidate A now implements).
  *
  * Claim attacked: (5) "exhausted session.create rows are re-armed with a
  * BOUNDED cadence when a new shot of the set is saved or a shot receives

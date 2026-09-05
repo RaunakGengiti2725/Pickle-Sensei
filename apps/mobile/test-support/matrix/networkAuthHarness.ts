@@ -260,6 +260,8 @@ export function fakeDb() {
         );
         if (row) {
           if (statement.includes('attempts = attempts + 1')) row.attempts += 1;
+          const quarantine = /SET attempts = (\d+),/.exec(statement);
+          if (quarantine) row.attempts = Number(quarantine[1]);
           row.last_error = String(params[0]);
         }
         return { rows: [] };

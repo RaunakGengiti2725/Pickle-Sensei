@@ -6,7 +6,11 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
-import { runInTransaction, runPreemptingTransaction } from './transaction';
+import {
+  runInTransaction,
+  runPreemptingTransaction,
+  withConnection,
+} from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import {
   getActiveDataOwner,
@@ -131,8 +135,11 @@ export async function purgeOwnerData(
         `${namespace}:${owner}`,
       ]);
     }
+    // Inside the transaction, so the generation has moved before the
+    // connection passes to whoever waits behind the purge: a drain resuming
+    // from the network is fenced by construction, not by microtask order.
+    markOwnerPurged(owner);
   });
-  markOwnerPurged(owner);
 }
 
 export interface SessionInput {
@@ -243,22 +250,24 @@ export async function saveLocalOnlyAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `INSERT OR REPLACE INTO local_shot
+  await withConnection(db, () =>
+    db.execute(
+      `INSERT OR REPLACE INTO local_shot
      (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      owner,
-      analysis.id,
-      analysis.sessionId,
-      analysis.shotType,
-      analysis.capturedAtIso,
-      analysis.overallScore,
-      analysis.analysisConfidence,
-      analysis.resultKind,
-      analysis.source,
-      JSON.stringify(analysis),
-    ],
+      [
+        owner,
+        analysis.id,
+        analysis.sessionId,
+        analysis.shotType,
+        analysis.capturedAtIso,
+        analysis.overallScore,
+        analysis.analysisConfidence,
+        analysis.resultKind,
+        analysis.source,
+        JSON.stringify(analysis),
+      ],
+    ),
   );
 }
 
@@ -483,23 +492,25 @@ export async function savePendingCapture(
   declaredStroke: ShotTypeSlug | null = null,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `INSERT INTO local_capture
+  await withConnection(db, () =>
+    db.execute(
+      `INSERT INTO local_capture
       (owner_key, id, uri, shot_type, declared_stroke, captured_at, duration_ms, fps, width, height, status, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_model', ?)`,
-    [
-      owner,
-      id,
-      clip.uri,
-      shotType,
-      declaredStroke,
-      clip.capturedAtIso,
-      clip.durationMs,
-      clip.fps,
-      clip.width,
-      clip.height,
-      JSON.stringify(clip),
-    ],
+      [
+        owner,
+        id,
+        clip.uri,
+        shotType,
+        declaredStroke,
+        clip.capturedAtIso,
+        clip.durationMs,
+        clip.fps,
+        clip.width,
+        clip.height,
+        JSON.stringify(clip),
+      ],
+    ),
   );
 }
 
@@ -527,19 +538,21 @@ export async function saveAnalysisRecord(
   record: AnalysisRecord,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `INSERT INTO local_analysis_record
+  await withConnection(db, () =>
+    db.execute(
+      `INSERT INTO local_analysis_record
       (owner_key, id, capture_id, created_at, engine_version, scoring_model_version, record)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      owner,
-      record.id,
-      record.captureId,
-      record.createdAtIso,
-      record.engineVersion,
-      record.result?.versionVector.scoringModelVersion ?? 'abstained',
-      JSON.stringify(record),
-    ],
+      [
+        owner,
+        record.id,
+        record.captureId,
+        record.createdAtIso,
+        record.engineVersion,
+        record.result?.versionVector.scoringModelVersion ?? 'abstained',
+        JSON.stringify(record),
+      ],
+    ),
   );
 }
 
@@ -576,10 +589,12 @@ export async function setDeclaredStroke(
   declaredStroke: ShotTypeSlug,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `UPDATE local_capture SET declared_stroke = ?
+  await withConnection(db, () =>
+    db.execute(
+      `UPDATE local_capture SET declared_stroke = ?
      WHERE owner_key = ? AND id = ?`,
-    [declaredStroke, owner, captureId],
+      [declaredStroke, owner, captureId],
+    ),
   );
 }
 
@@ -617,10 +632,12 @@ export async function setCaptureTargetSeed(
   seed: CaptureTargetSeed,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `UPDATE local_capture SET target_seed = ?
+  await withConnection(db, () =>
+    db.execute(
+      `UPDATE local_capture SET target_seed = ?
      WHERE owner_key = ? AND id = ?`,
-    [JSON.stringify(seed), owner, captureId],
+      [JSON.stringify(seed), owner, captureId],
+    ),
   );
 }
 
@@ -639,10 +656,12 @@ export async function updateCaptureClipPayload(
   clip: CapturedClip,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `UPDATE local_capture SET payload = ?
+  await withConnection(db, () =>
+    db.execute(
+      `UPDATE local_capture SET payload = ?
      WHERE owner_key = ? AND id = ?`,
-    [JSON.stringify(clip), owner, captureId],
+      [JSON.stringify(clip), owner, captureId],
+    ),
   );
 }
 
@@ -672,10 +691,12 @@ export async function markCaptureAnalyzed(
   captureId: string,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
-    `UPDATE local_capture SET status = 'analyzed'
+  await withConnection(db, () =>
+    db.execute(
+      `UPDATE local_capture SET status = 'analyzed'
      WHERE owner_key = ? AND id = ?`,
-    [owner, captureId],
+      [owner, captureId],
+    ),
   );
 }
 
@@ -889,6 +910,10 @@ export type ShotOutboxStatus =
  * server does not know yet (its session.create row was refused, or none
  * exists on this device); a drain offers them again as soon as a
  * session.create for that set is accepted.
+ *
+ * `attempts` is the number of times the server refused the read over the
+ * row's LIFETIME (`outbox.refusals`, monotone): the retry budget a released
+ * parked row gets back never lowers what the Result surface reports.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -900,7 +925,7 @@ export async function getShotOutboxStatus(
   // payload, and one such row must not make every healthy shot's lookup
   // throw. CASE evaluates in order, unlike a bare AND.
   const { rows } = await db.execute(
-    `SELECT attempts, last_error FROM outbox
+    `SELECT attempts, refusals, last_error FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
        AND CASE WHEN json_valid(payload)
                 THEN json_extract(payload, '$.id') END = ?
@@ -909,7 +934,8 @@ export async function getShotOutboxStatus(
   );
   const row = rows[0];
   if (!row) return { state: 'absent' };
-  const attempts = Number(row['attempts'] ?? 0);
+  const budget = Number(row['attempts'] ?? 0);
+  const attempts = Math.max(budget, Number(row['refusals'] ?? 0));
   const lastError =
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
@@ -917,10 +943,10 @@ export async function getShotOutboxStatus(
   if (isSessionOrphanedVerdict(lastError)) {
     return { state: 'orphaned', attempts, lastError };
   }
-  if (attempts >= OUTBOX_MAX_ATTEMPTS) {
+  if (budget >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
   }
-  if (attempts > 0) return { state: 'rejected', attempts, lastError };
+  if (budget > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };
 }
 
@@ -936,8 +962,10 @@ export async function setKv(
   key: string,
   value: string,
 ): Promise<void> {
-  await db.execute(`INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)`, [
-    key,
-    value,
-  ]);
+  await withConnection(db, () =>
+    db.execute(`INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)`, [
+      key,
+      value,
+    ]),
+  );
 }

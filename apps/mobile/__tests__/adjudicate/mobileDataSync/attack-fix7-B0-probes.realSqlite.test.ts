@@ -33,6 +33,7 @@ import {
 } from '../../../src/data/repository';
 import {
   OUTBOX_MAX_ATTEMPTS,
+  SESSION_CREATE_REARM_BOUND,
   SESSION_NOT_FOUND_REJECTION,
   drainOutbox,
   type SyncTransport,
@@ -183,9 +184,18 @@ describe('attack round 7 probes (real SQLite)', () => {
     await saveAnalysis(db, realAnalysis({ id: shotId(1) }), PERMIT_ID);
     const t = acceptAllTransport();
     const r1 = await drainOutbox(db, t);
+    // Ported from the sibling candidate, where the exhausted corrupt row cost
+    // one reported failure per drain (B7-1). Here the session pass selects
+    // only rows under budget (S1): an exhausted row is never re-read, so its
+    // per-drain cost is nothing — failed = 0, the owner's backoff untouched.
     expect({ r1, receipt: await hasShotSyncReceipt(db, shotId(1)) }).toEqual({
-      r1: { synced: 1, failed: 1, remaining: 1 },
+      r1: { synced: 1, failed: 0, remaining: 1 },
       receipt: true,
+    });
+    expect(await drainOutbox(db, t)).toEqual({
+      synced: 0,
+      failed: 0,
+      remaining: 1,
     });
   });
 
@@ -222,6 +232,11 @@ describe('attack round 7 probes (real SQLite)', () => {
     const r = await drain;
     await purge;
     const receipts = await db.execute(`SELECT count(*) AS n FROM sync_receipt`);
+    // Ported from the sibling, where the page was read before the purge and
+    // the upload still went out (calls: 1). Here the purge preempts the
+    // connection between the drain's first two statement groups and bumps
+    // the owner's generation inside its transaction, so the page read that
+    // follows is fenced and NOTHING of the purged bucket is sent: calls 0.
     expect({
       r,
       calls: t.syncCalls.length,
@@ -229,7 +244,7 @@ describe('attack round 7 probes (real SQLite)', () => {
       receipts: receipts.rows[0]!['n'],
     }).toEqual({
       r: { synced: 0, failed: 0, remaining: 0 },
-      calls: 1,
+      calls: 0,
       gen: 1,
       receipts: 0,
     });
@@ -364,7 +379,13 @@ describe('attack round 7 probes (real SQLite)', () => {
       rows: rows.length,
       sessionRows,
     });
-    expect(createCalls).toBeLessThanOrEqual(N * OUTBOX_MAX_ATTEMPTS);
+    // Ported from the sibling (N * OUTBOX_MAX_ATTEMPTS). Here each new shot
+    // also grants the set SESSION_CREATE_REARM_BOUND automatic revivals of
+    // its exhausted session.create on later drains (O1), one offer each:
+    // N * (OUTBOX_MAX_ATTEMPTS + SESSION_CREATE_REARM_BOUND) = 50 for N = 5.
+    expect(createCalls).toBeLessThanOrEqual(
+      N * (OUTBOX_MAX_ATTEMPTS + SESSION_CREATE_REARM_BOUND),
+    );
     expect(sessionRows).toHaveLength(1);
     expect(rows).toHaveLength(N + 1);
     // Server now accepts the set: one more shot → everything lands.
@@ -482,11 +503,12 @@ describe('attack round 7 probes (real SQLite)', () => {
     const receipts = await db.execute(
       `SELECT owner_key, entity_id FROM sync_receipt ORDER BY entity_id`,
     );
-    // rStale.remaining = 1 is the fresh incarnation's still-queued row: the
-    // stale drain's final count is a read, not a write, and the fresh drain
-    // is chained behind it.
+    // Ported from the sibling, whose fenced drain still counted the fresh
+    // incarnation's queued row (remaining: 1). Here a fenced drain reports
+    // the bucket it started under as gone — remaining 0, the same as A2.3 of
+    // this base pins — and the fresh row is the fresh drain's to count.
     expect({ rStale, rFresh, receipts: receipts.rows }).toEqual({
-      rStale: { synced: 0, failed: 0, remaining: 1 },
+      rStale: { synced: 0, failed: 0, remaining: 0 },
       rFresh: { synced: 1, failed: 0, remaining: 0 },
       receipts: [{ owner_key: OWNER, entity_id: shotId(0x91) }],
     });
@@ -529,11 +551,15 @@ describe('attack round 7 probes (real SQLite)', () => {
       expectAttempts: number;
     }> = [
       {
+        // Ported from the sibling (attempts 7). Here the refusal that
+        // parks the shot is counted too (settleSessionNotFound path 3: the
+        // set is re-queued from the local row and the attempt that would
+        // exhaust the shot parks it instead), so the lifetime count is 8.
         name: 'session_not_found + local session',
         withSession: true,
         reject: { code: SESSION_NOT_FOUND_REJECTION },
         expectState: 'orphaned',
-        expectAttempts: 7,
+        expectAttempts: 8,
       },
       {
         name: 'session_not_found, no local session',

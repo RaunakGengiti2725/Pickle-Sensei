@@ -256,11 +256,17 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
     await settleMicrotasks(20);
 
     serverAnswers.resolve();
-    const result = await drain;
-    expect(result.failed).toBe(1);
-
+    // Plumbing only: the lease is released during the drain's network wait,
+    // so the save now holds the connection (its BEGIN IMMEDIATE is open,
+    // parked on the injected fault) and the drain's verdict queues behind
+    // it. Let the save fail before awaiting the drain; the assertions below
+    // are unchanged — the verdict lands in its own transaction, after the
+    // save's rollback, and is durable.
+    await settleMicrotasks(20);
     releaseSave.resolve();
     await expect(save).rejects.toThrow(/SQLITE_FULL/);
+    const result = await drain;
+    expect(result.failed).toBe(1);
 
     // Expected: the verdict the drain just recorded is durable.
     // Observed on the candidate: { state: 'queued', attempts: 0, lastError: null }.
@@ -339,7 +345,12 @@ describe('attack round 5 / fix4-mds-sqlite-b (real SQLite)', () => {
     for (let i = 0; i <= OUTBOX_MAX_ATTEMPTS; i += 1) {
       await drainOutbox(db, emulator);
     }
-    expect(emulator.created).toHaveLength(OUTBOX_MAX_ATTEMPTS);
+    // Re-pinned (O1): the drain after the one that exhausts the set no
+    // longer leaves its parked read waiting for a new shot that may never
+    // come — it revives the exhausted session.create for ONE more offer
+    // (bounded by SESSION_CREATE_REARM_BOUND per set, in
+    // `local_session.rearms`), so the ninth drain makes a ninth create call.
+    expect(emulator.created).toHaveLength(OUTBOX_MAX_ATTEMPTS + 1);
     expect((await getShotOutboxStatus(db, firstShot)).state).toBe('orphaned');
 
     // The server recovers (e.g. a 4xx from a since-fixed deploy, or a 403

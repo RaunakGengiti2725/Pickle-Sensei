@@ -26,6 +26,7 @@ import {
 } from '../../../src/data/repository';
 import {
   OUTBOX_MAX_ATTEMPTS,
+  SESSION_CREATE_REARM_BOUND,
   SESSION_NOT_FOUND_REJECTION,
   SESSION_ORPHANED_VERDICT,
   drainOutbox,
@@ -174,21 +175,25 @@ describe('attack-fix7-A3 uniqueness / liveness / re-arm / budget (claims 3-5)', 
         ),
       ),
     };
-    // Bound: ONE session.create row (re-armed in place); OUTBOX_MAX_ATTEMPTS
-    // create calls per re-arm occasion — a save only re-arms a row that is
-    // exhausted at that moment (saves at drains 0,12,24,36,48 do; the ones
-    // at 6,18,30,42,54 find the row live) → 5 × 8 = 40 create calls; one
-    // syncShots per occasion (the not-yet-parked shot is offered once in
-    // the drain that exhausts the row, then parked uncharged).
+    // Bound: ONE session.create row (re-armed in place); per re-arm
+    // occasion OUTBOX_MAX_ATTEMPTS create calls for the row's budget plus
+    // SESSION_CREATE_REARM_BOUND automatic revivals (O1: one more offer per
+    // drain for the exhausted set with parked shots, until the set's re-arm
+    // budget is spent) — a save only re-arms a row that is exhausted at that
+    // moment and resets that budget (saves at drains 0,12,24,36,48 do; the
+    // ones at 6,18,30,42,54 find the row live) → 5 × (8 + 2) = 50 create
+    // calls; one syncShots per occasion (the not-yet-parked shot is offered
+    // once in the drain that exhausts the row, then parked uncharged; a
+    // revival that fails again offers nothing).
     expect(measured).toEqual({
       rearm_rows: 1,
-      rearm_calls: OUTBOX_MAX_ATTEMPTS * 5,
+      rearm_calls: (OUTBOX_MAX_ATTEMPTS + SESSION_CREATE_REARM_BOUND) * 5,
       syncShots_calls: 5,
       shotAttempts: Array.from({ length: N }, () => 0),
       statuses: Array.from({ length: N }, () => 'orphaned'),
     });
-    // The server would now accept the set — but an exhausted set is never
-    // re-asked on its own (see A4.3): a drain does nothing…
+    // The server would now accept the set — but the set's automatic re-arm
+    // budget (SESSION_CREATE_REARM_BOUND) is spent: a drain does nothing…
     const idle = scripted({});
     expect(await drainOutbox(db, idle.transport)).toEqual({
       synced: 0,
@@ -473,9 +478,15 @@ describe('attack-fix7-A3 uniqueness / liveness / re-arm / budget (claims 3-5)', 
       syncShots: async s => rejectAll(SESSION_NOT_FOUND_REJECTION)(s),
     });
     for (let i = 0; i < 20; i += 1) await drainOutbox(db, t.transport);
-    expect(t.calls.createSession).toBe(OUTBOX_MAX_ATTEMPTS);
+    // Set Y's budget, plus SESSION_CREATE_REARM_BOUND automatic revivals
+    // (O1) for each of the two exhausted sets with parked shots — X and Y —
+    // after which both are paused: 8 + 2 + 2 calls in 20 drains, not 20+.
+    expect(t.calls.createSession).toBe(
+      OUTBOX_MAX_ATTEMPTS + 2 * SESSION_CREATE_REARM_BOUND,
+    );
     // Shot 2 is offered exactly once (in the drain that exhausts set Y),
-    // then parked; shot 1 is never offered again.
+    // then parked; shot 1 is never offered again (a revival that is refused
+    // again offers nothing).
     expect(t.shotsOffered).toEqual([shotId(2)]);
     expect(await shotRow(db, 1)).toEqual(marker);
     expect(await shotRow(db, 2)).toMatchObject({ attempts: 0 });

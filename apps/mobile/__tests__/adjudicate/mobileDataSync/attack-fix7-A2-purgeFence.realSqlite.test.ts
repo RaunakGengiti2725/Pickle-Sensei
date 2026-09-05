@@ -265,15 +265,23 @@ describe('attack-fix7-A2 purge / owner fence (claim 2)', () => {
     await ticks(50);
     expect(ta.shotCalls).toHaveLength(1);
     setActiveDataOwner(OWNER_B);
-    const saveB = saveShot(db, 2, SET_Y); // waits for A's drain
+    const saveB = saveShot(db, 2, SET_Y);
     const tb = manualTransport();
-    const drainB = drainOutbox(db, tb.transport); // waits too
-    await ticks(50);
-    expect(tb.sessionCalls).toHaveLength(0);
+    const drainB = drainOutbox(db, tb.transport);
+    // Fix round 8 (L1): the connection is let go while A awaits the network,
+    // so B's save commits and B's drain reaches its own transport call while
+    // A's shot upload is still pending — no owner waits behind another
+    // owner's network round trip. (Written against the round-6 base, this
+    // probe pinned the opposite: B's save and drain queued behind A's WHOLE
+    // drain, the L1 starvation the round fixes.)
+    await saveB;
+    for (let i = 0; i < 2000 && tb.sessionCalls.length === 0; i += 1) {
+      await ticks(1);
+    }
+    expect(tb.sessionCalls).toHaveLength(1);
+    expect(ta.shotCalls).toHaveLength(1);
     ta.shotCalls[0]!.d.resolve(acceptAll(ta.shotCalls[0]!.shots));
     const ra = await drainA;
-    await saveB;
-    await ticks(50);
     tb.sessionCalls[0]!.resolve();
     await ticks(50);
     tb.shotCalls[0]!.d.resolve(acceptAll(tb.shotCalls[0]!.shots));

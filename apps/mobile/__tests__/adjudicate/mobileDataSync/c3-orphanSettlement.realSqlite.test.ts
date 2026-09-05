@@ -36,6 +36,7 @@ import {
 } from '../../../src/data/repository';
 import {
   OUTBOX_MAX_ATTEMPTS,
+  SESSION_CREATE_REARM_BOUND,
   SESSION_NOT_FOUND_REJECTION,
   SESSION_ORPHANED_VERDICT,
   drainOutbox,
@@ -58,6 +59,8 @@ interface Emulator extends SyncTransport {
   knownSessions: Set<string>;
   /** Every shot id the server was asked to write, per drain call. */
   offered: string[][];
+  /** Every session id the server was asked to create, in order. */
+  created: string[];
   /** Shot ids the server keeps refusing with the transient write_failed. */
   flaky: Set<string>;
 }
@@ -65,13 +68,16 @@ interface Emulator extends SyncTransport {
 function serverEmulator(): Emulator {
   const knownSessions = new Set<string>();
   const offered: string[][] = [];
+  const created: string[] = [];
   const flaky = new Set<string>();
   return {
     knownSessions,
     offered,
+    created,
     flaky,
     async createSession(session) {
       const id = String((session as { id: unknown }).id);
+      created.push(id);
       if (id === DEAD_SESSION) {
         throw new ApiError(
           409,
@@ -245,11 +251,40 @@ describe('C3: orphan settlement and full-backlog paging (real SQLite)', () => {
       }
     }
 
-    // Later drains neither offer the orphans nor count them as failures.
+    // Later drains never offer the orphans and never count them as failures.
+    // Re-pinned (O1): the set they wait for IS asked for again — once per
+    // drain, SESSION_CREATE_REARM_BOUND times in all without a new read
+    // (durable `local_session.rearms`) — so the one failure each of those
+    // drains reports is the set's refusal, not an orphan; after the bound the
+    // set parks for good and later drains report nothing.
     expect(server.offered).toHaveLength(offeredBefore + 1);
-    const later = await drainOutbox(db, server);
-    expect(later).toEqual({ synced: 0, failed: 0, remaining: 3 });
+    const createsBefore = server.created.length;
+    const revivals: Array<{
+      synced: number;
+      failed: number;
+      remaining: number;
+    }> = [];
+    for (let i = 0; i < SESSION_CREATE_REARM_BOUND + 1; i += 1) {
+      revivals.push(await drainOutbox(db, server));
+    }
+    expect(revivals).toEqual([
+      ...Array.from({ length: SESSION_CREATE_REARM_BOUND }, () => ({
+        synced: 0,
+        failed: 1,
+        remaining: 3,
+      })),
+      { synced: 0, failed: 0, remaining: 3 },
+    ]);
+    expect(server.created).toHaveLength(
+      createsBefore + SESSION_CREATE_REARM_BOUND,
+    );
     expect(server.offered).toHaveLength(offeredBefore + 1);
+    for (const n of [0x400, 0x401]) {
+      expect(await getShotOutboxStatus(db, shotId(n))).toMatchObject({
+        state: 'orphaned',
+        attempts: 0,
+      });
+    }
 
     // A new practice set behind the settled rows syncs immediately.
     await saveShot(db, 0x900, NEW_SESSION);

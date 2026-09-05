@@ -13,7 +13,11 @@
 import { AppState } from 'react-native';
 import type { LocalDb } from '../src/data/db';
 import { ApiError, api, API_REQUEST_TIMEOUT_MS } from '../src/data/api';
-import { drainOutbox, isPermanentSyncFailure } from '../src/data/sync';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  drainOutbox,
+  isPermanentSyncFailure,
+} from '../src/data/sync';
 import {
   clearSyncRuntime,
   configureSyncRuntime,
@@ -73,6 +77,8 @@ function fakeDb() {
         );
         if (row) {
           if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
+          const quarantine = /SET attempts = (\d+),/.exec(sql);
+          if (quarantine) row.attempts = Number(quarantine[1]);
           row.last_error = String(params[0]);
         }
         return { rows: [] };
@@ -249,7 +255,12 @@ describe('Gate 11 — drop during upload / expired auth keep rows durable', () =
     });
     expect(result).toMatchObject({ synced: 1, failed: 1, remaining: 1 });
     const corrupt = outbox.find(row => row.id === 999);
-    expect(corrupt?.attempts).toBe(1);
+    // Fix round 8 (S1): a row that can never become a request is quarantined
+    // ONCE — its whole budget is spent in that one drain with a truthful
+    // last_error — so no later drain re-reads, re-charges or reports it.
+    // (It used to be charged one attempt per drain, eight failing drains.)
+    expect(corrupt?.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+    expect(corrupt?.last_error).not.toBeNull();
   });
 });
 

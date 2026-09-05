@@ -41,6 +41,7 @@ const LOCAL_MIGRATIONS: string[] = [
      ended_at TEXT,
      completed INTEGER NOT NULL DEFAULT 0,
      summary TEXT,
+     rearms INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (owner_key, id)
    )`,
   `CREATE TABLE IF NOT EXISTS local_capture (
@@ -65,7 +66,8 @@ const LOCAL_MIGRATIONS: string[] = [
      payload TEXT NOT NULL,
      attempts INTEGER NOT NULL DEFAULT 0,
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-     last_error TEXT
+     last_error TEXT,
+     refusals INTEGER NOT NULL DEFAULT 0
    )`,
   `CREATE TABLE IF NOT EXISTS sync_receipt (
      owner_key TEXT NOT NULL,
@@ -226,6 +228,24 @@ function ensureAccountScopedSchema(db: DB): void {
     if (!hasColumn(db, 'outbox', 'owner_key')) {
       db.executeSync(
         `ALTER TABLE outbox ADD COLUMN owner_key TEXT NOT NULL DEFAULT '${GUEST_DATA_OWNER}'`,
+      );
+    }
+    // Lifetime count of the server's permanent refusals of an outbox row. It
+    // only grows, unlike `attempts` (the budget of the row's current arming,
+    // which a released parked shot gets back), so the Result surface can
+    // report how often a read was actually refused. Rows written before the
+    // column existed start at 0 and are reported by their `attempts`.
+    if (!hasColumn(db, 'outbox', 'refusals')) {
+      db.executeSync(
+        'ALTER TABLE outbox ADD COLUMN refusals INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    // How many times a drain re-armed the set's `session.create` on its own
+    // (no new shot joined the set); saveAnalysis resets it. Bounded by
+    // SESSION_CREATE_REARM_BOUND (sync.ts).
+    if (!hasColumn(db, 'local_session', 'rearms')) {
+      db.executeSync(
+        'ALTER TABLE local_session ADD COLUMN rearms INTEGER NOT NULL DEFAULT 0',
       );
     }
     db.executeSync(

@@ -1634,7 +1634,11 @@ function TrainingPlanSection(props: {
             {syncEvidence.kind === 'pending'
               ? 'This real score is still in the secure outbox. Personalized training unlocks after the server accepts the shot.'
               : syncEvidence.kind === 'rejected'
-                ? `The server refused this read ${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times${
+                ? `The server refused this read ${
+                    syncEvidence.attempts > OUTBOX_MAX_ATTEMPTS
+                      ? `${syncEvidence.attempts} times so far`
+                      : `${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times`
+                  }${
                     syncEvidence.lastError
                       ? ` (last response: ${syncEvidence.lastError})`
                       : ''

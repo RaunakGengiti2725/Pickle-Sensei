@@ -22,6 +22,8 @@ export interface OutboxRow {
   payload: string;
   attempts: number;
   last_error: string | null;
+  /** Lifetime permanent refusals (monotone; a re-arm never lowers it). */
+  refusals: number;
 }
 
 export interface FakeLocalDb {
@@ -38,6 +40,8 @@ export interface FakeLocalDb {
     shotType: string | null;
     focusCheckpoint: string | null;
     startedAt: string;
+    /** Automatic re-arms spent on the set (sync.ts SESSION_CREATE_REARM_BOUND). */
+    rearms: number;
   }>;
   captures: Array<{ owner: string; id: string }>;
   analysisRecords: Array<{ owner: string; id: string }>;
@@ -72,19 +76,6 @@ function pageAcceptsKind(sql: string, kind: string): boolean {
   return true;
 }
 
-/** Mirrors the pass's budget predicate (exhausted opt-ins included). */
-function pageAcceptsBudget(
-  sql: string,
-  row: OutboxRow,
-  maxAttempts: number,
-): boolean {
-  if (row.attempts < maxAttempts) return true;
-  if (sql.includes("OR kind = 'session.create'")) {
-    return row.kind === 'session.create';
-  }
-  return false;
-}
-
 /** A live (budgeted) `session.create` row naming `sessionId`. */
 function hasLiveSessionCreate(
   outbox: OutboxRow[],
@@ -101,22 +92,62 @@ function hasLiveSessionCreate(
   );
 }
 
+/** The newest EXHAUSTED `session.create` row naming `sessionId`, if any. */
+function newestExhaustedSessionCreate(
+  outbox: OutboxRow[],
+  owner: string,
+  sessionId: unknown,
+  maxAttempts: number,
+): OutboxRow | undefined {
+  return outbox
+    .filter(
+      r =>
+        r.owner_key === owner &&
+        r.attempts >= maxAttempts &&
+        r.kind === 'session.create' &&
+        payloadField(r, 'id') === sessionId,
+    )
+    .sort((a, b) => b.id - a.id)[0];
+}
+
+function isParkedShot(r: OutboxRow, owner: string, sessionId: unknown) {
+  return (
+    r.owner_key === owner &&
+    r.kind === 'shot.sync' &&
+    r.last_error !== null &&
+    r.last_error.startsWith(PARKED_PREFIX) &&
+    payloadField(r, 'sessionId') === sessionId
+  );
+}
+
 const MAX_ATTEMPTS_IN_SQL = /s\.attempts < (\d+)/;
+const REARM_BOUND_IN_SQL = /ls\.rearms > (\d+)/;
 
 /** Mirrors the shot pass's `AND NOT (… IN (SELECT … session.create …))`
- * predicate: a shot whose set still has a live session.create row is not
- * offered. */
-function pageOffersRow(sql: string, row: OutboxRow, outbox: OutboxRow[]) {
+ * and `AND NOT (… IN (SELECT ls.id … rearms > …))` predicates: a shot
+ * whose set still has a live session.create row, or whose set is paused past
+ * its automatic re-arm budget, is not offered. */
+function pageOffersRow(
+  sql: string,
+  row: OutboxRow,
+  outbox: OutboxRow[],
+  sessions: FakeLocalDb['sessions'],
+) {
   const live = MAX_ATTEMPTS_IN_SQL.exec(sql);
   if (!live || !sql.includes('AND NOT (')) return true;
   if (row.kind !== 'shot.sync') return true;
   const sessionId = payloadField(row, 'sessionId');
   if (typeof sessionId !== 'string') return true;
-  return !hasLiveSessionCreate(
-    outbox,
-    row.owner_key,
-    sessionId,
-    Number(live[1]),
+  if (hasLiveSessionCreate(outbox, row.owner_key, sessionId, Number(live[1]))) {
+    return false;
+  }
+  const bound = REARM_BOUND_IN_SQL.exec(sql);
+  if (!bound) return true;
+  return !sessions.some(
+    s =>
+      s.owner === row.owner_key &&
+      s.id === sessionId &&
+      s.rearms > Number(bound[1]),
   );
 }
 
@@ -227,6 +258,7 @@ export function createFakeLocalDb(): FakeLocalDb {
               }),
               attempts: 0,
               last_error: null,
+              refusals: 0,
             });
           }
           return { rows: [] };
@@ -255,6 +287,7 @@ export function createFakeLocalDb(): FakeLocalDb {
           payload,
           attempts: 0,
           last_error: null,
+          refusals: 0,
         });
         return { rows: [] };
       }
@@ -265,10 +298,10 @@ export function createFakeLocalDb(): FakeLocalDb {
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                pageAcceptsBudget(sql, r, Number(params[1])) &&
+                r.attempts < Number(params[1]) &&
                 r.id > cursor &&
                 pageAcceptsKind(sql, r.kind) &&
-                pageOffersRow(sql, r, outbox),
+                pageOffersRow(sql, r, outbox, sessions),
             )
             .sort((a, b) => a.id - b.id)
             .slice(0, 50)
@@ -285,26 +318,67 @@ export function createFakeLocalDb(): FakeLocalDb {
         );
         return { rows: hit ? [{ '1': 1 }] : [] };
       }
+      if (sql.startsWith('SELECT last_error FROM outbox')) {
+        // exhaustedSessionCreateVerdict.
+        const exhausted = newestExhaustedSessionCreate(
+          outbox,
+          String(params[0]),
+          params[2],
+          Number(params[1]),
+        );
+        return {
+          rows: exhausted ? [{ last_error: exhausted.last_error }] : [],
+        };
+      }
+      if (sql.startsWith('SELECT rearms FROM local_session')) {
+        const s = sessions.find(
+          row => row.owner === params[0] && row.id === params[1],
+        );
+        return { rows: s ? [{ rearms: s.rearms }] : [] };
+      }
+      if (sql.startsWith('UPDATE local_session SET rearms = ?')) {
+        // pauseSession: [rearms, owner, id, bound]
+        const s = sessions.find(
+          row => row.owner === params[1] && row.id === params[2],
+        );
+        if (s && s.rearms <= Number(params[3])) s.rearms = Number(params[0]);
+        return { rows: [] };
+      }
+      if (sql.startsWith('UPDATE local_session SET rearms')) {
+        const s = sessions.find(
+          row => row.owner === params[0] && row.id === params[1],
+        );
+        if (s) s.rearms = sql.includes('rearms = 0') ? 0 : s.rearms + 1;
+        return { rows: [] };
+      }
       if (sql.startsWith('SELECT ls.id AS id FROM local_session ls')) {
-        // selectParkedSetsWithoutQueueEntry.
+        const bound = /ls\.rearms < (\d+)/.exec(sql);
+        const maxAttempts = Number(
+          /attempts >= (\d+)/.exec(sql)?.[1] ?? Number.POSITIVE_INFINITY,
+        );
+        const revivable = sql.includes('x.refusals');
+        // selectParkedSetsWithoutQueueEntry / selectRevivableExhaustedSets.
         const ids = sessions
           .filter(
             s =>
               s.owner === params[0] &&
-              outbox.some(
-                r =>
-                  r.owner_key === s.owner &&
-                  r.kind === 'shot.sync' &&
-                  r.last_error !== null &&
-                  r.last_error.startsWith(PARKED_PREFIX) &&
-                  payloadField(r, 'sessionId') === s.id,
-              ) &&
-              !outbox.some(
-                r =>
-                  r.owner_key === s.owner &&
-                  r.kind === 'session.create' &&
-                  payloadField(r, 'id') === s.id,
-              ),
+              (!bound || s.rearms < Number(bound[1])) &&
+              outbox.some(r => isParkedShot(r, s.owner, s.id)) &&
+              (revivable
+                ? outbox.some(
+                    r =>
+                      r.owner_key === s.owner &&
+                      r.kind === 'session.create' &&
+                      r.attempts >= maxAttempts &&
+                      r.refusals >= maxAttempts &&
+                      payloadField(r, 'id') === s.id,
+                  ) && !hasLiveSessionCreate(outbox, s.owner, s.id, maxAttempts)
+                : !outbox.some(
+                    r =>
+                      r.owner_key === s.owner &&
+                      r.kind === 'session.create' &&
+                      payloadField(r, 'id') === s.id,
+                  )),
           )
           .sort((a, b) =>
             a.startedAt === b.startedAt
@@ -339,37 +413,89 @@ export function createFakeLocalDb(): FakeLocalDb {
       }
       if (sql.startsWith('UPDATE outbox')) {
         if (sql.includes('SELECT max(id) FROM outbox')) {
-          // rearmExhaustedSessionCreate: the newest exhausted session.create
-          // for `$.id`, unless a live one exists.
-          const max = Number(params[2]);
-          if (hasLiveSessionCreate(outbox, String(params[0]), params[3], max)) {
+          if (sql.includes('SET attempts = 0, last_error = NULL')) {
+            // rearmExhaustedSessionCreate: the newest exhausted
+            // session.create for `$.id`, unless a live one exists.
+            const max = Number(params[2]);
+            if (
+              hasLiveSessionCreate(outbox, String(params[0]), params[3], max)
+            ) {
+              return { rows: [] };
+            }
+            const exhausted = newestExhaustedSessionCreate(
+              outbox,
+              String(params[0]),
+              params[3],
+              max,
+            );
+            if (exhausted) {
+              exhausted.attempts = 0;
+              exhausted.last_error = null;
+            }
             return { rows: [] };
           }
-          const exhausted = outbox
-            .filter(
-              r =>
-                r.owner_key === params[0] &&
-                r.attempts >= max &&
-                r.kind === 'session.create' &&
-                payloadField(r, 'id') === params[3],
-            )
-            .sort((a, b) => b.id - a.id)[0];
-          if (exhausted) {
-            exhausted.attempts = 0;
-            exhausted.last_error = null;
-          }
+          // reviveExhaustedSessionCreate: one more offer for the newest
+          // exhausted session.create of `$.id`.
+          const exhausted = newestExhaustedSessionCreate(
+            outbox,
+            String(params[1]),
+            params[4],
+            Number(params[3]),
+          );
+          if (exhausted) exhausted.attempts = Number(params[0]);
           return { rows: [] };
         }
-        if (sql.includes('SET attempts = 0, last_error = NULL')) {
-          // releaseParkedShotsOfSession: parked shots of `$.sessionId`.
+        if (
+          sql.includes("SET last_error = 'shot.session_orphaned: ") ||
+          (sql.startsWith('SELECT 1 AS present FROM outbox') &&
+            sql.includes("NOT LIKE 'shot.session_orphaned:%'"))
+        ) {
+          // parkShotsOfRefusedSets: unparked shots of a set with an
+          // exhausted session.create and no live one — probed first, parked
+          // only when the probe finds one.
+          const owner = String(params[0]);
+          const max = Number(/attempts < (\d+)/.exec(sql)?.[1]);
+          const park = sql.startsWith('UPDATE');
+          let present = 0;
           for (const r of outbox) {
             if (
-              r.owner_key === params[0] &&
-              r.kind === 'shot.sync' &&
-              r.last_error !== null &&
-              r.last_error.startsWith(PARKED_PREFIX) &&
-              payloadField(r, 'sessionId') === params[1]
+              r.owner_key !== owner ||
+              r.kind !== 'shot.sync' ||
+              r.attempts >= max ||
+              (r.last_error !== null && r.last_error.startsWith(PARKED_PREFIX))
             ) {
+              continue;
+            }
+            const sessionId = payloadField(r, 'sessionId');
+            if (typeof sessionId !== 'string') continue;
+            const exhausted = newestExhaustedSessionCreate(
+              outbox,
+              owner,
+              sessionId,
+              max,
+            );
+            if (
+              !exhausted ||
+              hasLiveSessionCreate(outbox, owner, sessionId, max)
+            ) {
+              continue;
+            }
+            present += 1;
+            if (park) {
+              r.last_error = `${PARKED_PREFIX} Its practice set was refused (${exhausted.last_error ?? ''}) before this read could be sent; this read is paused until the set is accepted.`;
+            }
+          }
+          return { rows: !park && present > 0 ? [{ present: 1 }] : [] };
+        }
+        if (
+          /SET attempts = 0, last_error = NULL\s+WHERE owner_key = \? AND kind = 'shot\.sync'/.test(
+            sql,
+          )
+        ) {
+          // retireAcceptedSessionCreate: parked shots of `$.sessionId` are
+          // released with a fresh budget; `refusals` is kept.
+          for (const r of outbox) {
+            if (isParkedShot(r, String(params[0]), params[1])) {
               r.attempts = 0;
               r.last_error = null;
             }
@@ -380,7 +506,17 @@ export function createFakeLocalDb(): FakeLocalDb {
           r => r.owner_key === params[1] && r.id === params[2],
         );
         if (row) {
-          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
+          if (sql.includes('attempts = attempts + 1')) {
+            row.attempts += 1;
+            row.refusals += 1;
+          } else if (sql.includes('refusals = refusals + 1')) {
+            row.refusals += 1;
+          }
+          const quarantine = /SET attempts = (\d+), refusals = (\d+)/.exec(sql);
+          if (quarantine) {
+            row.attempts = Number(quarantine[1]);
+            row.refusals = Number(quarantine[2]);
+          }
           row.last_error = String(params[0]);
         }
         return { rows: [] };
@@ -439,6 +575,7 @@ export function createFakeLocalDb(): FakeLocalDb {
           shotType: params[3] == null ? null : String(params[3]),
           focusCheckpoint: params[4] == null ? null : String(params[4]),
           startedAt: String(params[5]),
+          rearms: 0,
         });
         return { rows: [] };
       }
@@ -504,6 +641,7 @@ export function createFakeLocalDb(): FakeLocalDb {
         payload: JSON.stringify(payload),
         attempts: 0,
         last_error: null,
+        refusals: 0,
       });
       return id;
     },

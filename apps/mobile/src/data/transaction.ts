@@ -6,179 +6,147 @@ import type { LocalDb } from './db';
  * that transaction (and is rolled back with it), and a SELECT issued then
  * reads its uncommitted rows. Every statement group that must do neither
  * takes the connection through this module, which hands it to one holder at
- * a time, in arrival order.
+ * a time, in arrival order, for exactly one statement group:
  *
- *  - `runInTransaction` holds the connection for exactly one
+ *  - `runInTransaction` holds the connection for one
  *    BEGIN IMMEDIATE … COMMIT/ROLLBACK.
- *  - `withConnection` holds it for a longer unit of work (an outbox drain:
- *    read a page, offer it, settle it). Inside, `lease.transaction` opens a
- *    transaction directly — never nested — and `lease.suspendWhile` brackets
- *    an await that does not touch the connection (a network call). Ordinary
- *    callers still wait for the whole unit; only a PREEMPTING caller
- *    (`runPreemptingTransaction`: purging an owner's bucket) may run inside
- *    such a window, so the drain's statements never interleave with anyone
- *    else's and its verdicts land only in committed state.
+ *  - `withConnection` holds it for a short run of autocommit statements
+ *    (a page SELECT, a verdict UPDATE) that must not land inside anyone
+ *    else's open transaction.
+ *  - `connectionLease` gives a longer unit of work (an outbox drain) a handle
+ *    whose `hold` / `transaction` take the connection per statement group
+ *    and let it go before returning. Nothing is held BETWEEN groups — in
+ *    particular not while the unit awaits the network — so a repository
+ *    transaction started during a network round trip commits before the
+ *    unit's next statement group, and a purge of the owner can run in the
+ *    same window (the unit re-reads what it relies on after every gap).
+ *    Nested `hold`/`transaction` calls on the same lease run inline on the
+ *    already-held connection instead of waiting for themselves.
  *
- * A holder must not take the connection again from inside its own unit of
- * work (it would wait for itself).
+ * Every acquire is paired with a release in a `finally`, so a statement that
+ * throws (disk full, SQLITE_BUSY on BEGIN, a closed database) hands the
+ * connection to the next waiter exactly as a successful one does.
  */
 export interface ConnectionLease {
-  /** BEGIN IMMEDIATE … COMMIT (ROLLBACK on error) on the held connection. */
+  /** Runs `statements` (autocommit, no BEGIN) while holding the connection. */
+  hold<T>(statements: () => Promise<T>): Promise<T>;
+  /** BEGIN IMMEDIATE … COMMIT (ROLLBACK on error) while holding the connection. */
   transaction<T>(operation: () => Promise<T>): Promise<T>;
-  /**
-   * Runs `work` (which must not touch the connection) and holds the
-   * connection again before returning; a preempting caller may have used it
-   * meanwhile, so the holder re-reads whatever it relies on.
-   */
-  suspendWhile<T>(work: () => Promise<T>): Promise<T>;
 }
 
-class Lease implements ConnectionLease {
-  suspended = false;
-  resumeWaiter: (() => void) | null = null;
-
-  constructor(
-    private readonly db: LocalDb,
-    readonly start: () => void,
-  ) {}
-
-  async transaction<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.suspended) {
-      throw new Error(
-        'A suspended connection lease cannot open a transaction.',
-      );
-    }
-    await this.db.execute('BEGIN IMMEDIATE');
-    try {
-      const result = await operation();
-      await this.db.execute('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await this.db.execute('ROLLBACK');
-      } catch {
-        // Preserve the original persistence error.
-      }
-      throw error;
-    }
-  }
-
-  async suspendWhile<T>(work: () => Promise<T>): Promise<T> {
-    if (holder !== this || this.suspended) {
-      throw new Error('Only the connection holder can suspend its lease.');
-    }
-    this.suspended = true;
-    startPreemptor();
-    try {
-      return await work();
-    } finally {
-      if (preemptor !== null) {
-        // `release` clears `suspended` synchronously before resuming, so no
-        // further preemptor can start in the gap.
-        await new Promise<void>(resolve => {
-          this.resumeWaiter = resolve;
-        });
-      } else {
-        this.suspended = false;
-      }
-    }
-  }
+interface Waiter {
+  start(): void;
 }
 
-/** The lease that owns the connection (it may be suspended). */
-let holder: Lease | null = null;
-/** A preempting lease running while `holder` is suspended. */
-let preemptor: Lease | null = null;
-const preemptingQueue: Lease[] = [];
-const waitingQueue: Lease[] = [];
+/** Whether some caller currently holds the connection. */
+let held = false;
+/** Callers that may run ahead of ordinary waiters (an owner purge). */
+const preemptingQueue: Waiter[] = [];
+/** Ordinary callers, served in arrival order. */
+const waitingQueue: Waiter[] = [];
 
-function startPreemptor(): void {
-  if (
-    holder !== null &&
-    holder.suspended &&
-    preemptor === null &&
-    preemptingQueue.length > 0
-  ) {
-    preemptor = preemptingQueue.shift()!;
-    preemptor.start();
+function acquire(preempting: boolean): Promise<void> {
+  if (!held) {
+    held = true;
+    return Promise.resolve();
   }
-}
-
-function release(lease: Lease): void {
-  if (lease === preemptor) {
-    preemptor = null;
-    const owner = holder;
-    if (owner !== null && owner.resumeWaiter !== null) {
-      const resume = owner.resumeWaiter;
-      owner.resumeWaiter = null;
-      owner.suspended = false;
-      resume();
-      return;
-    }
-    startPreemptor();
-    return;
-  }
-  if (lease !== holder) return;
-  holder = preemptingQueue.shift() ?? waitingQueue.shift() ?? null;
-  holder?.start();
-}
-
-function acquire(db: LocalDb, preempting: boolean): Promise<Lease> {
-  return new Promise<Lease>(resolve => {
-    const lease = new Lease(db, () => resolve(lease));
-    if (holder === null) {
-      holder = lease;
-      lease.start();
-      return;
-    }
-    if (preempting) {
-      preemptingQueue.push(lease);
-      startPreemptor();
-      return;
-    }
-    waitingQueue.push(lease);
+  return new Promise<void>(resolve => {
+    (preempting ? preemptingQueue : waitingQueue).push({ start: resolve });
   });
 }
 
-async function hold<T>(
-  db: LocalDb,
-  preempting: boolean,
-  operation: (lease: ConnectionLease) => Promise<T>,
-): Promise<T> {
-  const lease = await acquire(db, preempting);
-  try {
-    return await operation(lease);
-  } finally {
-    release(lease);
+function release(): void {
+  const next = preemptingQueue.shift() ?? waitingQueue.shift();
+  if (next === undefined) {
+    held = false;
+    return;
+  }
+  // The connection passes straight to `next`: `held` stays true.
+  next.start();
+}
+
+/** Number of callers waiting for the connection right now (diagnostics). */
+export function connectionWaiters(): number {
+  return preemptingQueue.length + waitingQueue.length;
+}
+
+class Lease implements ConnectionLease {
+  private depth = 0;
+
+  constructor(
+    private readonly db: LocalDb,
+    private readonly preempting: boolean,
+  ) {}
+
+  async hold<T>(statements: () => Promise<T>): Promise<T> {
+    if (this.depth > 0) {
+      this.depth += 1;
+      try {
+        return await statements();
+      } finally {
+        this.depth -= 1;
+      }
+    }
+    await acquire(this.preempting);
+    this.depth = 1;
+    try {
+      return await statements();
+    } finally {
+      this.depth = 0;
+      release();
+    }
+  }
+
+  transaction<T>(operation: () => Promise<T>): Promise<T> {
+    return this.hold(async () => {
+      await this.db.execute('BEGIN IMMEDIATE');
+      try {
+        const result = await operation();
+        await this.db.execute('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await this.db.execute('ROLLBACK');
+        } catch {
+          // Preserve the original persistence error.
+        }
+        throw error;
+      }
+    });
   }
 }
 
-/** Holds the connection for `operation`; see the module comment. */
-export function withConnection<T>(
-  db: LocalDb,
-  operation: (lease: ConnectionLease) => Promise<T>,
-): Promise<T> {
-  return hold(db, false, operation);
+/** A lease for a unit of work that takes the connection per statement group. */
+export function connectionLease(db: LocalDb): ConnectionLease {
+  return new Lease(db, false);
 }
 
-/** One transaction, serialized behind every earlier holder. */
+/** Holds the connection for one group of autocommit statements. */
+export function withConnection<T>(
+  db: LocalDb,
+  statements: () => Promise<T>,
+): Promise<T> {
+  return new Lease(db, false).hold(statements);
+}
+
+/** One transaction, serialized behind every earlier caller. */
 export function runInTransaction<T>(
   db: LocalDb,
   operation: () => Promise<T>,
 ): Promise<T> {
-  return hold(db, false, lease => lease.transaction(operation));
+  return new Lease(db, false).transaction(operation);
 }
 
 /**
- * One transaction that may run INSIDE a suspended holder's unit of work
- * instead of waiting for it — for writes that invalidate that unit anyway
- * (purging the owner's bucket while a drain awaits the server); the holder
- * learns of it through the state the write leaves behind (a purge
- * generation, the rows themselves).
+ * One transaction served ahead of the ordinary queue, for a write that
+ * invalidates the work of whoever is waiting (purging the owner's bucket
+ * while a drain awaits the server); the affected unit learns of it through
+ * the state the write leaves behind (a purge generation, the rows
+ * themselves). It still waits for the statement group in flight.
  */
 export function runPreemptingTransaction<T>(
   db: LocalDb,
   operation: () => Promise<T>,
 ): Promise<T> {
-  return hold(db, true, lease => lease.transaction(operation));
+  return new Lease(db, true).transaction(operation);
 }

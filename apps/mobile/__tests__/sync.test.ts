@@ -58,22 +58,42 @@ function fakeDb() {
             .map(r => ({ ...r })),
         };
       }
+      const sessionCreateFor = (r: OutboxRow, sessionId: unknown) => {
+        if (r.kind !== 'session.create') return false;
+        try {
+          return (JSON.parse(r.payload) as { id?: unknown }).id === sessionId;
+        } catch {
+          return false;
+        }
+      };
       if (sql.startsWith('SELECT 1 FROM outbox')) {
-        const hit = outbox.some(r => {
-          if (
-            r.owner_key !== params[0] ||
-            r.attempts >= Number(params[1]) ||
-            r.kind !== 'session.create'
-          ) {
-            return false;
-          }
-          try {
-            return (JSON.parse(r.payload) as { id?: unknown }).id === params[2];
-          } catch {
-            return false;
-          }
-        });
+        // hasLiveSessionCreate: a session.create for the set under budget.
+        const hit = outbox.some(
+          r =>
+            r.owner_key === params[0] &&
+            r.attempts < Number(params[1]) &&
+            sessionCreateFor(r, params[2]),
+        );
         return { rows: hit ? [{ '1': 1 }] : [] };
+      }
+      if (sql.startsWith('SELECT last_error FROM outbox')) {
+        // exhaustedSessionCreateVerdict: newest exhausted session.create.
+        const dead = [...outbox]
+          .reverse()
+          .find(
+            r =>
+              r.owner_key === params[0] &&
+              r.attempts >= Number(params[1]) &&
+              sessionCreateFor(r, params[2]),
+          );
+        return { rows: dead ? [{ last_error: dead.last_error }] : [] };
+      }
+      if (
+        sql.startsWith('SELECT rearms FROM local_session') ||
+        sql.startsWith('SELECT 1 AS present FROM outbox')
+      ) {
+        // No local_session rows and no refused set in this fake.
+        return { rows: [] };
       }
       if (sql.startsWith('SELECT mode, shot_type')) {
         return { rows: [] };
@@ -91,6 +111,8 @@ function fakeDb() {
         );
         if (row) {
           if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
+          const quarantine = /SET attempts = (\d+),/.exec(sql);
+          if (quarantine) row.attempts = Number(quarantine[1]);
           row.last_error = String(params[0]);
         }
         return { rows: [] };

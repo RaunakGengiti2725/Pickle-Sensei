@@ -115,6 +115,7 @@ function fakeDb() {
     kind: string;
     payload: string;
     attempts: number;
+    refusals?: number;
     last_error: string | null;
   }
   const outbox: OutboxRow[] = [];
@@ -152,7 +153,7 @@ function fakeDb() {
             .map(r => ({ ...r })),
         };
       }
-      if (sql.startsWith('SELECT attempts, last_error FROM outbox')) {
+      if (sql.startsWith('SELECT attempts, refusals, last_error FROM outbox')) {
         // getShotOutboxStatus: the newest shot.sync row for this shot id.
         const row = [...outbox]
           .reverse()
@@ -164,7 +165,13 @@ function fakeDb() {
           );
         return {
           rows: row
-            ? [{ attempts: row.attempts, last_error: row.last_error }]
+            ? [
+                {
+                  attempts: row.attempts,
+                  refusals: row.refusals ?? 0,
+                  last_error: row.last_error,
+                },
+              ]
             : [],
         };
       }
@@ -181,6 +188,16 @@ function fakeDb() {
         );
         if (row) {
           if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
+          if (sql.includes('refusals = refusals + 1')) {
+            row.refusals = (row.refusals ?? 0) + 1;
+          }
+          const quarantine = /SET attempts = (\d+), refusals = (\d+),/.exec(
+            sql,
+          );
+          if (quarantine) {
+            row.attempts = Number(quarantine[1]);
+            row.refusals = Number(quarantine[2]);
+          }
           row.last_error = String(params[0]);
         }
         return { rows: [] };

@@ -192,10 +192,13 @@ describe('attack-fix7-A4 compat / ordering / receipts / copy (claim 6)', () => {
     for (let i = 0; i < OUTBOX_MAX_ATTEMPTS + 2; i += 1) {
       failedPerDrain.push((await drainOutbox(db, t.transport)).failed);
     }
-    // The dead set is never re-asked, the parked and exhausted shots never
-    // offered, the corrupt row charged 8 times then silent.
+    // The dead set is never re-asked (it was exhausted by an earlier build:
+    // no refusal recorded, so no automatic revival — a new read of the set
+    // re-arms it), the parked and exhausted shots never offered, the corrupt
+    // row quarantined ONCE (S1: charged straight to exhausted with a truthful
+    // last_error in the first drain, never re-read) then silent.
     expect(t.calls).toEqual([]);
-    expect(failedPerDrain).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 0, 0]);
+    expect(failedPerDrain).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect((await getShotOutboxStatus(db, shotId(1))).state).toBe('orphaned');
     expect((await getShotOutboxStatus(db, shotId(2))).state).toBe('exhausted');
 

@@ -1,4 +1,4 @@
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, isSessionOrphanedVerdict } from './sync';
 
 /**
  * OFFLINE / WEAK-NETWORK CAPABILITY MAP (workstream i28).
@@ -214,7 +214,10 @@ export interface OutboxRowStatus {
  * never from an in-flight request — so a hung or lost network call can never
  * pin the UI in a perpetual "uploading" state: there is no 'uploading'
  * variant at all. Rows below the attempt cap are 'queued' (will retry);
- * rows at the cap failed permanently and need attention.
+ * rows at the cap failed permanently and need attention. A PARKED shot
+ * (`shot.session_orphaned:` verdict) is neither: it waits for its practice
+ * set to be accepted and is offered again then, whatever its attempt count,
+ * so it counts as pending.
  */
 export type UploadQueueStatus =
   | { readonly state: 'idle' }
@@ -230,7 +233,9 @@ export function deriveUploadQueueStatus(
 ): UploadQueueStatus {
   if (rows.length === 0) return { state: 'idle' };
   const exhausted = rows.filter(
-    row => row.attempts >= OUTBOX_MAX_ATTEMPTS,
+    row =>
+      row.attempts >= OUTBOX_MAX_ATTEMPTS &&
+      !isSessionOrphanedVerdict(row.lastError),
   ).length;
   const pending = rows.length - exhausted;
   if (exhausted > 0) return { state: 'needs_attention', pending, exhausted };

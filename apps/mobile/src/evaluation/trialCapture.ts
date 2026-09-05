@@ -8,6 +8,7 @@ import { EVALUATION_TELEMETRY_CONSENT_VERSION } from '@pickle/shared-types';
 import type { CaptureAnalysisOutcome } from '../analysis/runCaptureAnalysis';
 import type { LocalDb } from '../data/db';
 import { getActiveDataOwner } from '../data/accountScope';
+import { withConnection } from '../data/transaction';
 import { makeUuid } from '../util/uuid';
 
 /**
@@ -177,10 +178,12 @@ export async function enqueueEvaluationTrial(
   db: LocalDb,
   trial: EvaluationTrialRecord,
 ): Promise<void> {
-  await db.execute(
-    `INSERT INTO outbox (owner_key, kind, payload)
+  await withConnection(db, () =>
+    db.execute(
+      `INSERT INTO outbox (owner_key, kind, payload)
      VALUES (?, 'evaluation.trial', ?)`,
-    [getActiveDataOwner(), JSON.stringify(trial)],
+      [getActiveDataOwner(), JSON.stringify(trial)],
+    ),
   );
 }
 

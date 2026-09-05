@@ -68,6 +68,8 @@ function fakeDb() {
         );
         if (row) {
           if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
+          const quarantine = /SET attempts = (\d+),/.exec(sql);
+          if (quarantine) row.attempts = Number(quarantine[1]);
           row.last_error = String(params[0]);
         }
         return { rows: [] };
@@ -233,7 +235,15 @@ describe('transient per-item rejections keep the attempt budget', () => {
     ]);
     expect(outbox).toHaveLength(1);
     expect(outbox[0]!.id).toBe(1);
-    expect(outbox[0]!.attempts).toBe(1);
+    // Fix round 8 (S1): a row that can never become a request is quarantined
+    // ONCE — its whole budget is spent in that one drain with a truthful
+    // last_error — so no later drain re-reads, re-charges or reports it.
+    // (It used to be charged one attempt per drain, eight failing drains.)
+    expect(outbox[0]!.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+    expect(outbox[0]!.last_error).not.toBeNull();
+    const again = await drainOutbox(db, transport);
+    expect(again).toEqual({ synced: 0, failed: 0, remaining: 1 });
+    expect(transport.uploadEvaluationTrials).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -243,13 +243,17 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
       open: 0,
     });
     expect(await hasShotSyncReceipt(db, shotId(0x800))).toBe(true);
+    // Re-pinned (L1): the lease is released during the drain's network
+    // round trip, so both repository writes commit BEFORE the drain's next
+    // statement group (they were queued first) — and that group, a page
+    // read against the committed queue, then offers them in the same drain.
+    // Before, the writes waited behind the whole drain and their rows were
+    // still queued when it returned.
     const rows = await outboxRows(db, OWNER);
-    expect(rows.map(r => r.kind).sort()).toEqual([
-      'session.create',
-      'shot.sync',
-    ]);
-    expect(await getShotOutboxStatus(db, shotId(0x801))).toMatchObject({
-      state: 'queued',
+    expect(rows).toEqual([]);
+    expect(await hasShotSyncReceipt(db, shotId(0x801))).toBe(true);
+    expect(await getShotOutboxStatus(db, shotId(0x801))).toEqual({
+      state: 'absent',
     });
   });
 
@@ -298,10 +302,23 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
     // null, array, string) fail alone, permanently, and none of them poisons
     // the page or throws out of the drain.
     expect(first).toEqual({ synced: 3, failed: 5, remaining: 5 });
+    // Re-pinned (S1): a row that can never become a request is quarantined
+    // ONCE — its whole budget spent in the drain that finds it, with a
+    // truthful last_error — and is never re-read, so later drains of this
+    // queue report failed = 0 (the owner's backoff is not held down by it).
+    // Before, it was charged one attempt per drain for eight drains.
     const rows = await outboxRows(db, OWNER);
-    expect(rows.map(r => r.attempts)).toEqual([1, 1, 1, 1, 1]);
+    expect(rows.map(r => r.attempts)).toEqual(
+      Array.from({ length: 5 }, () => OUTBOX_MAX_ATTEMPTS),
+    );
     expect(rows.every(r => r.last_error !== null)).toBe(true);
-    for (let i = 1; i < OUTBOX_MAX_ATTEMPTS; i++) await drainOutbox(db, server);
+    const failedLater: number[] = [];
+    for (let i = 1; i < OUTBOX_MAX_ATTEMPTS; i++) {
+      failedLater.push((await drainOutbox(db, server)).failed);
+    }
+    expect(failedLater).toEqual(
+      Array.from({ length: OUTBOX_MAX_ATTEMPTS - 1 }, () => 0),
+    );
     const settled = await outboxRows(db, OWNER);
     expect(settled.every(r => r.attempts === OUTBOX_MAX_ATTEMPTS)).toBe(true);
     // And a fresh healthy shot behind them still syncs.
@@ -329,8 +346,16 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
     const result = await drainOutbox(db, server);
     expect(result).toEqual({ synced: 1, failed: 2, remaining: 2 });
     expect(await hasShotSyncReceipt(db, shotId(0xa00))).toBe(true);
+    // Re-pinned (S1): both corrupt rows are quarantined once (budget spent,
+    // truthful last_error) rather than charged one attempt per drain.
     const rows = await outboxRows(db, OWNER);
-    expect(rows.every(r => r.attempts === 1)).toBe(true);
+    expect(rows.every(r => r.attempts === OUTBOX_MAX_ATTEMPTS)).toBe(true);
+    expect(rows.every(r => r.last_error !== null)).toBe(true);
+    expect(await drainOutbox(db, server)).toEqual({
+      synced: 0,
+      failed: 0,
+      remaining: 2,
+    });
   });
 
   it('account switch after a drain started: the in-flight drain stays bound to its starting owner', async () => {
