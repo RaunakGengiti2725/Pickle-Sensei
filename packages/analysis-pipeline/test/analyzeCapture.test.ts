@@ -13,7 +13,11 @@ import {
   unavailable,
   type StrokeIdentity,
 } from "@pickle/swing-domain";
-import { GeometricPhaseSegmenter, GeometryBiomechanicsExtractor } from "@pickle/vision-geometry";
+import {
+  evaluateCaptureQuality,
+  GeometricPhaseSegmenter,
+  GeometryBiomechanicsExtractor,
+} from "@pickle/vision-geometry";
 import type { ITechniqueScorer } from "@pickle/vision-contracts";
 import {
   analyzeCapture,
@@ -48,8 +52,9 @@ function providers(overrides: Partial<FusionProviders> = {}): FusionProviders {
 
 function captureInput(
   stroke: StrokeIdentity = { declared: "forehand_drive", predicted: null },
+  swing: ReturnType<typeof generateSwingSequence> = generateSwingSequence(),
 ): CaptureAnalysisInput {
-  const { sequence, window } = generateSwingSequence();
+  const { sequence, window } = swing;
   return {
     captureId: "capture-123",
     pose: sequence,
@@ -120,6 +125,80 @@ describe("analyzeCapture fusion engine", () => {
     const contact = record.evidence.find((e) => e.claim === "checkpoint:contact_position");
     expect(contact?.window).not.toBeNull();
     expect(contact?.metricKeys).toContain("contact_forward_of_hip_norm");
+  });
+
+  describe("pose sequences that fail the library capture-quality gate", () => {
+    const stretched = (factor: number) => {
+      const { sequence, window } = generateSwingSequence();
+      return {
+        sequence: {
+          ...sequence,
+          frames: sequence.frames.map((frame) => ({
+            ...frame,
+            timestampMs: frame.timestampMs * factor,
+          })),
+        },
+        window: {
+          startMs: window.startMs * factor,
+          endMs: window.endMs * factor,
+          peakMs: window.peakMs * factor,
+        },
+      };
+    };
+    const cases: Array<{
+      name: string;
+      reason: string;
+      swing: () => ReturnType<typeof generateSwingSequence>;
+    }> = [
+      {
+        name: "player far from the camera (torso 0.02 of frame)",
+        reason: "player_too_small_in_frame",
+        swing: () => generateSwingSequence({ torsoLength: 0.02 }),
+      },
+      {
+        name: "player too close / cropped (torso 0.62 of frame)",
+        reason: "player_too_close_or_cropped",
+        swing: () => generateSwingSequence({ torsoLength: 0.62 }),
+      },
+      {
+        name: "timestamps stretched ×10 (6 fps effective)",
+        reason: "insufficient_fps",
+        swing: () => stretched(10),
+      },
+    ];
+
+    for (const { name, reason, swing } of cases) {
+      it(`abstains with guidance instead of scoring: ${name}`, async () => {
+        const input = captureInput(undefined, swing());
+        // Precondition: the library's own quality gate rejects this sequence.
+        const quality = evaluateCaptureQuality(input.pose);
+        expect(quality.analyzable).toBe(false);
+        expect(quality.reasons).toContain(reason);
+
+        const result = await analyzeCapture(providers(), input, options());
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.failure.kind).toBe("low_confidence");
+        expect(result.failure.code).toBe(`capture.not_analyzable.${quality.reasons[0]}`);
+        expect(result.failure.retryable).toBe(false);
+        // The message is user guidance, not a bare reason slug.
+        expect(result.failure.message).toMatch(/Nothing was rated/);
+        expect(result.failure.message).toMatch(/try again/i);
+        expect(result.failure.message).not.toMatch(/_/);
+        // The measured report travels with the abstention for explainability.
+        expect(result.failure.cause).toEqual(quality);
+      });
+    }
+
+    it("the control swing passes the same gate and still scores normally", async () => {
+      const input = captureInput();
+      expect(evaluateCaptureQuality(input.pose).analyzable).toBe(true);
+      const result = await analyzeCapture(providers(), input, options());
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.result?.resultKind).toBe("scored");
+      expect(result.value.result?.overallScore).not.toBeNull();
+    });
   });
 
   it("refuses to analyze when the stroke is honestly unresolved", async () => {

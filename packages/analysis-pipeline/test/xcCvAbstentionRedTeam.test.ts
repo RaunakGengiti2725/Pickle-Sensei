@@ -14,8 +14,10 @@
  * Scale: XC_CV_SEEDS seeds per seeded family (default 40 → ~1k fusion runs).
  * Replay one row: `XC_CV_ONLY=<fixture id> npx vitest run test/xcCvAbstentionRedTeam.test.ts`.
  *
- * Assertions pin what the pipeline provably does today; the harness rows
- * document the adversarial gaps as findings (never as passing tests).
+ * Assertions pin what the pipeline provably does today (including that the
+ * library capture-quality gate is enforced inside analyzeCapture itself); the
+ * harness rows document any remaining adversarial gaps as findings (never as
+ * passing tests).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -248,6 +250,31 @@ describe("CV failure detection & abstention red team (Linux replay of the fusion
       expect(row.verdict, `${row.id}: ${row.failureCode ?? row.outcome}`).toBe("control_ok");
     }
   });
+
+  it(
+    "a pose sequence the library capture-quality gate rejects never produces a numeric score",
+    { timeout: 600_000 },
+    async () => {
+      // analyzeCapture must refuse (typed low_confidence abstention with
+      // guidance) every sequence whose own evaluateCaptureQuality report says
+      // analyzable=false — far/tiny, too close/cropped, low fps, partial body,
+      // dropout gaps, low confidence — regardless of which caller reaches it.
+      const gated: RowResult[] = [];
+      for (const fixture of fixtures()) {
+        const row = await runFixture(fixture);
+        if (!row.libraryQuality.analyzable) gated.push(row);
+      }
+      if (!ONLY) expect(gated.length).toBeGreaterThan(0);
+      for (const row of gated) {
+        expect(
+          row.overallScore,
+          `${row.id} [${row.libraryQuality.reasons.join(",")}] scored ${row.overallScore} (${row.presentation})`,
+        ).toBeNull();
+        expect(row.verdict).not.toBe("confident_wrong");
+        expect(row.verdict).not.toBe("lower_confidence_wrong");
+      }
+    },
+  );
 
   it("empty / too-short / motionless / low-visibility no-player inputs never produce a numeric score", async () => {
     // The seeded idle-sway sweep (`np-idle-sway-*`) is deliberately NOT
