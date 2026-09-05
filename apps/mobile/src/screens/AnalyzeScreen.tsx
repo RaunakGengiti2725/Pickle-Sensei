@@ -908,20 +908,36 @@ export function AnalyzeScreen() {
                 )
               : null,
         });
-        ledgerRunSettled.current = analysisRun.then(
+        // Bookkeeping that belongs to the RUN, not to this screen. The scored
+        // shot is durable with the plan's sessionId the moment
+        // runCaptureAnalysis resolves, so its practice set (session row +
+        // session.create outbox entry + kv activity stamp) is committed on
+        // the run's own promise chain — ahead of the outbox drain that
+        // carries the shot, and whether or not the player is still here when
+        // the run settles. Set errors never fail the analysis in hand: the
+        // score is already saved.
+        const settledRun = analysisRun.then(async outcome => {
+          if (outcome.kind !== 'scored') return outcome;
+          if (practiceSet) {
+            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+          }
+          // A new rating leaves for the server right away; the access
+          // snapshot is deliberately NOT re-read here — see
+          // ratingLedgerTouched.
+          triggerOutboxSync();
+          return outcome;
+        });
+        ledgerRunSettled.current = settledRun.then(
           () => undefined,
           () => undefined,
         );
-        const outcome = await analysisRun;
+        const outcome = await settledRun;
         // The measured/saved boundary lives inside runCaptureAnalysis (no
-        // incremental signal is exposed); once it returns, the remaining
-        // work is routing the already-persisted outcome.
+        // incremental signal is exposed); once the run has settled, the
+        // remaining work is routing the already-persisted outcome.
         const paywallRequired =
           outcome.kind === 'unavailable' &&
           outcome.cause === 'paywall_required';
-        // A new rating leaves for the server right away; the access snapshot
-        // is deliberately NOT re-read here — see ratingLedgerTouched.
-        if (outcome.kind === 'scored') triggerOutboxSync();
         if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('saving'));
         if (outcome.kind === 'unavailable') {
@@ -947,13 +963,7 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
+          // The set is already committed on the run's settlement chain above.
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
