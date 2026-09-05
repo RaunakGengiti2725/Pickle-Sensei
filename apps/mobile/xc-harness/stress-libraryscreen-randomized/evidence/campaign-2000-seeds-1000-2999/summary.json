@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-09-05T00:41:35.612Z",
+  "iterations": 2000,
+  "executed": 2000,
+  "seedBase": 1000,
+  "held": 1983,
+  "broken": 17,
+  "error": 0,
+  "lengths": {
+    "min": 5,
+    "max": 60,
+    "total": 66470
+  },
+  "loadsIssued": 4496,
+  "fetchesIssued": 9797,
+  "worlds": {
+    "guest": 798,
+    "signedIn": 1202,
+    "configured": 1286,
+    "initialHome": 615
+  },
+  "wallMs": 492397,
+  "failingSeeds": [
+    1155, 1168, 1288, 1405, 1417, 1447, 1639, 1703, 1879, 1896, 2059, 2144,
+    2327, 2450, 2511, 2529, 2661
+  ],
+  "observations": {
+    "segmentsHiddenWhileLoadingSteps": 18273,
+    "sequencesWithSegmentsHiddenWhileLoading": 1921
+  }
+}

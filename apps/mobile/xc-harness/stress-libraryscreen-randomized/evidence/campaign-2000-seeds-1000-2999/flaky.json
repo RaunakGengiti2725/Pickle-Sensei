@@ -1,0 +1,121 @@
+[
+  {
+    "seed": 1155,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["13f03795"]
+  },
+  {
+    "seed": 1168,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["3334e60f"]
+  },
+  {
+    "seed": 1288,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["0d9eaaa3"]
+  },
+  {
+    "seed": 1405,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["08730540"]
+  },
+  {
+    "seed": 1417,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["7ea7e441"]
+  },
+  {
+    "seed": 1447,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["81a5e59d"]
+  },
+  {
+    "seed": 1639,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["8b68c660"]
+  },
+  {
+    "seed": 1703,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["36e9a636"]
+  },
+  {
+    "seed": 1879,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["be17b8cb"]
+  },
+  {
+    "seed": 1896,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["3013a45b"]
+  },
+  {
+    "seed": 2059,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["f67316a6"]
+  },
+  {
+    "seed": 2144,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["a90aee29"]
+  },
+  {
+    "seed": 2327,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["d1b5db43"]
+  },
+  {
+    "seed": 2450,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["bb697fc4"]
+  },
+  {
+    "seed": 2511,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["eafa7ccc"]
+  },
+  {
+    "seed": 2529,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["f0331071"]
+  },
+  {
+    "seed": 2661,
+    "reruns": 10,
+    "failed": 10,
+    "rate": 1,
+    "traceHashes": ["41631f86"]
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "command": "cd apps/mobile && STRESS_ITER=2000 STRESS_SEED_BASE=1000 STRESS_BATCH=100 STRESS_DETERMINISM=50 STRESS_OUT=$HOME/stress-out/libraryScreen-randomized-seeded npx jest --ci __tests__/stress/libraryScreen.randomizedSeeded",
+  "exit": 1,
+  "node": "22.23.2",
+  "baseCommit": "1fb0efd7f3157060af4c61342f5102e068d2ddc5",
+  "note": "exit 1 = 17/2000 seeds violate S7 (see minimized.json); all 17 reproduce 10/10 with one trace hash each (flaky.json); 50/50 same-seed replays identical (determinism.json)"
+}

@@ -1,0 +1,255 @@
+{
+  "seeds": [
+    {
+      "seed": 1000,
+      "first": "2c910b78",
+      "second": "2c910b78"
+    },
+    {
+      "seed": 1040,
+      "first": "d39b3c63",
+      "second": "d39b3c63"
+    },
+    {
+      "seed": 1080,
+      "first": "1ef203d5",
+      "second": "1ef203d5"
+    },
+    {
+      "seed": 1120,
+      "first": "1b23e3dc",
+      "second": "1b23e3dc"
+    },
+    {
+      "seed": 1160,
+      "first": "cfbc0407",
+      "second": "cfbc0407"
+    },
+    {
+      "seed": 1200,
+      "first": "b8dab439",
+      "second": "b8dab439"
+    },
+    {
+      "seed": 1240,
+      "first": "57302476",
+      "second": "57302476"
+    },
+    {
+      "seed": 1280,
+      "first": "47d292be",
+      "second": "47d292be"
+    },
+    {
+      "seed": 1320,
+      "first": "868c63a6",
+      "second": "868c63a6"
+    },
+    {
+      "seed": 1360,
+      "first": "59aa8177",
+      "second": "59aa8177"
+    },
+    {
+      "seed": 1400,
+      "first": "08045202",
+      "second": "08045202"
+    },
+    {
+      "seed": 1440,
+      "first": "05b275cf",
+      "second": "05b275cf"
+    },
+    {
+      "seed": 1480,
+      "first": "e0ff8099",
+      "second": "e0ff8099"
+    },
+    {
+      "seed": 1520,
+      "first": "681abf15",
+      "second": "681abf15"
+    },
+    {
+      "seed": 1560,
+      "first": "06b2d33f",
+      "second": "06b2d33f"
+    },
+    {
+      "seed": 1600,
+      "first": "4e99de34",
+      "second": "4e99de34"
+    },
+    {
+      "seed": 1640,
+      "first": "cbea7ef3",
+      "second": "cbea7ef3"
+    },
+    {
+      "seed": 1680,
+      "first": "a08970c7",
+      "second": "a08970c7"
+    },
+    {
+      "seed": 1720,
+      "first": "b157cea9",
+      "second": "b157cea9"
+    },
+    {
+      "seed": 1760,
+      "first": "9c4adad9",
+      "second": "9c4adad9"
+    },
+    {
+      "seed": 1800,
+      "first": "98f487da",
+      "second": "98f487da"
+    },
+    {
+      "seed": 1840,
+      "first": "016ed362",
+      "second": "016ed362"
+    },
+    {
+      "seed": 1880,
+      "first": "f429b31f",
+      "second": "f429b31f"
+    },
+    {
+      "seed": 1920,
+      "first": "be139ed8",
+      "second": "be139ed8"
+    },
+    {
+      "seed": 1960,
+      "first": "38a9f5d0",
+      "second": "38a9f5d0"
+    },
+    {
+      "seed": 2000,
+      "first": "69d38426",
+      "second": "69d38426"
+    },
+    {
+      "seed": 2040,
+      "first": "178edb1c",
+      "second": "178edb1c"
+    },
+    {
+      "seed": 2080,
+      "first": "5db347d0",
+      "second": "5db347d0"
+    },
+    {
+      "seed": 2120,
+      "first": "f14aa660",
+      "second": "f14aa660"
+    },
+    {
+      "seed": 2160,
+      "first": "efd189fa",
+      "second": "efd189fa"
+    },
+    {
+      "seed": 2200,
+      "first": "390a844e",
+      "second": "390a844e"
+    },
+    {
+      "seed": 2240,
+      "first": "be6cdeb4",
+      "second": "be6cdeb4"
+    },
+    {
+      "seed": 2280,
+      "first": "98a767f8",
+      "second": "98a767f8"
+    },
+    {
+      "seed": 2320,
+      "first": "a29f3473",
+      "second": "a29f3473"
+    },
+    {
+      "seed": 2360,
+      "first": "b2758379",
+      "second": "b2758379"
+    },
+    {
+      "seed": 2400,
+      "first": "d0bd48d5",
+      "second": "d0bd48d5"
+    },
+    {
+      "seed": 2440,
+      "first": "4a7ca2c1",
+      "second": "4a7ca2c1"
+    },
+    {
+      "seed": 2480,
+      "first": "dbd922a9",
+      "second": "dbd922a9"
+    },
+    {
+      "seed": 2520,
+      "first": "83e04ffc",
+      "second": "83e04ffc"
+    },
+    {
+      "seed": 2560,
+      "first": "93527269",
+      "second": "93527269"
+    },
+    {
+      "seed": 2600,
+      "first": "9e0e4634",
+      "second": "9e0e4634"
+    },
+    {
+      "seed": 2640,
+      "first": "9b5b2477",
+      "second": "9b5b2477"
+    },
+    {
+      "seed": 2680,
+      "first": "684b033b",
+      "second": "684b033b"
+    },
+    {
+      "seed": 2720,
+      "first": "4185d693",
+      "second": "4185d693"
+    },
+    {
+      "seed": 2760,
+      "first": "f06793d7",
+      "second": "f06793d7"
+    },
+    {
+      "seed": 2800,
+      "first": "0b9f78f8",
+      "second": "0b9f78f8"
+    },
+    {
+      "seed": 2840,
+      "first": "916fe436",
+      "second": "916fe436"
+    },
+    {
+      "seed": 2880,
+      "first": "9f40a479",
+      "second": "9f40a479"
+    },
+    {
+      "seed": 2920,
+      "first": "c2cf1e5f",
+      "second": "c2cf1e5f"
+    },
+    {
+      "seed": 2960,
+      "first": "a22f5120",
+      "second": "a22f5120"
+    }
+  ],
+  "mismatches": []
+}
