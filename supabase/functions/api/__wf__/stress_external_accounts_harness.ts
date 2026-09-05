@@ -35,8 +35,14 @@ export const CREDENTIALS_TABLE = "account_external_credentials";
 export const DELETION_TABLE = "account_deletion_requests";
 
 export const BASE_SEED = Number(Deno.env.get("STRESS_SEED") ?? "20260905");
-export const STRESS_ITER = Math.max(1, Number(Deno.env.get("STRESS_ITER") ?? "3"));
-export const STRESS_USERS = Math.max(1, Number(Deno.env.get("STRESS_USERS") ?? "1500"));
+export const STRESS_ITER = Math.max(
+  1,
+  Number(Deno.env.get("STRESS_ITER") ?? "3"),
+);
+export const STRESS_USERS = Math.max(
+  1,
+  Number(Deno.env.get("STRESS_USERS") ?? "1500"),
+);
 
 export function seedFor(campaign: string, index: number): number {
   // FNV-1a over the campaign name mixed with the base seed and index so every
@@ -51,7 +57,10 @@ export function seedFor(campaign: string, index: number): number {
 
 export function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
-  const rank = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  const rank = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil((p / 100) * sorted.length) - 1),
+  );
   return sorted[rank];
 }
 
@@ -80,7 +89,10 @@ export function outputDir(): string {
   return `${here}../../../../artifacts/stress-edge-external-accounts`;
 }
 
-export async function writeReport(name: string, report: unknown): Promise<string> {
+export async function writeReport(
+  name: string,
+  report: unknown,
+): Promise<string> {
   const dir = outputDir();
   await Deno.mkdir(dir, { recursive: true });
   const path = `${dir}/${name}.json`;
@@ -108,9 +120,13 @@ export function abortError(): DOMException {
 export function faultResponse(fault: Fault): Promise<Response> | Response {
   switch (fault.kind) {
     case "ok":
-      throw new Error("faultResponse(ok) — caller must serve the healthy response");
+      throw new Error(
+        "faultResponse(ok) — caller must serve the healthy response",
+      );
     case "reject":
-      return Promise.reject(fault.error ?? new TypeError("error sending request: connection reset"));
+      return Promise.reject(
+        fault.error ?? new TypeError("error sending request: connection reset"),
+      );
     case "timeout":
       return Promise.reject(abortError());
     case "status":
@@ -140,7 +156,9 @@ export function describeFault(fault: Fault): string {
     case "timeout":
       return "timeout(abort)";
     case "status":
-      return `http-${fault.status}${fault.body ? `:${fault.body.slice(0, 24)}` : ""}`;
+      return `http-${fault.status}${
+        fault.body ? `:${fault.body.slice(0, 24)}` : ""
+      }`;
     case "malformed_json":
       return `malformed-json(${fault.status ?? 200})`;
     case "json":
@@ -225,7 +243,12 @@ export interface StatefulWorld {
   credentials: Map<string, CredentialRow>;
   deletions: Map<
     string,
-    { challenge: string; user_id: string; created_at: string; expires_at: string }
+    {
+      challenge: string;
+      user_id: string;
+      created_at: string;
+      expires_at: string;
+    }
   >;
   deletedUsers: Set<string>;
   /** Apple authorization codes accepted exactly once (models Apple's
@@ -313,7 +336,9 @@ export async function loadWorld(): Promise<StatefulWorld> {
     revenueCatDeleted: [],
     issuedRefreshTokens: new Set(),
     resetCounters() {
-      for (const key of Object.keys(counters) as (keyof UpstreamCounters)[]) counters[key] = 0;
+      for (const key of Object.keys(counters) as (keyof UpstreamCounters)[]) {
+        counters[key] = 0;
+      }
       world.calls = [];
     },
     install() {
@@ -330,7 +355,10 @@ export async function loadWorld(): Promise<StatefulWorld> {
     return faultResponse(fault);
   };
 
-  const intercept = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const intercept = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
     const request = new Request(input, init);
     const url = request.url;
     const method = request.method;
@@ -392,12 +420,22 @@ export async function loadWorld(): Promise<StatefulWorld> {
         } catch {
           // fall through
         }
-        const idToken = typeof payload.id_token === "string" ? payload.id_token : "";
+        const idToken = typeof payload.id_token === "string"
+          ? payload.id_token
+          : "";
         const provider = payload.provider === "apple" ? "apple" : "google";
         const sub = decodeJwtSub(idToken) ?? "";
-        if (!sub) return json(400, { error: "invalid_grant", error_description: "bad token" });
+        if (!sub) {
+          return json(400, {
+            error: "invalid_grant",
+            error_description: "bad token",
+          });
+        }
         if (world.deletedUsers.has(sub)) {
-          return json(400, { error: "invalid_grant", error_description: "user deleted" });
+          return json(400, {
+            error: "invalid_grant",
+            error_description: "user deleted",
+          });
         }
         const expiresAt = Math.floor(Date.now() / 1000) + 3600;
         return json(200, {
@@ -413,7 +451,8 @@ export async function loadWorld(): Promise<StatefulWorld> {
         counters.supabaseAuth += 1;
         const f = faulted(TARGETS.authGetUser);
         if (f) return f;
-        const bearer = request.headers.get("authorization")?.replace(/^Bearer /i, "") ?? "";
+        const bearer =
+          request.headers.get("authorization")?.replace(/^Bearer /i, "") ?? "";
         const sub = decodeJwtSub(bearer) ?? "";
         if (!sub || world.deletedUsers.has(sub)) {
           return json(401, { code: 401, msg: "invalid JWT" });
@@ -421,13 +460,23 @@ export async function loadWorld(): Promise<StatefulWorld> {
         const provider = sub.startsWith("a") ? "apple" : "google";
         return json(200, supabaseUser(sub, provider));
       }
-      if (method === "DELETE" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
+      if (
+        method === "DELETE" &&
+        url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)
+      ) {
         counters.supabaseAuth += 1;
         const f = faulted(TARGETS.authDeleteUser);
         if (f) return f;
-        const id = url.slice(`${SUPABASE_URL}/auth/v1/admin/users/`.length).split("?")[0];
+        const id =
+          url.slice(`${SUPABASE_URL}/auth/v1/admin/users/`.length).split(
+            "?",
+          )[0];
         if (world.deletedUsers.has(id)) {
-          return json(404, { code: 404, error_code: "user_not_found", msg: "User not found" });
+          return json(404, {
+            code: 404,
+            error_code: "user_not_found",
+            msg: "User not found",
+          });
         }
         world.deletedUsers.add(id);
         world.credentials.delete(id);
@@ -454,11 +503,16 @@ export async function loadWorld(): Promise<StatefulWorld> {
             const f = faulted(TARGETS.credentialsGet);
             if (f) return f;
             const row = userId ? world.credentials.get(userId) : undefined;
-            const rows = row ? [projectRow(row, parsed.searchParams.get("select"))] : [];
+            const rows = row
+              ? [projectRow(row, parsed.searchParams.get("select"))]
+              : [];
             return single
-              ? rows.length
-                ? json(200, rows[0])
-                : json(406, { code: "PGRST116", message: "0 rows", details: null, hint: null })
+              ? rows.length ? json(200, rows[0]) : json(406, {
+                code: "PGRST116",
+                message: "0 rows",
+                details: null,
+                hint: null,
+              })
               : json(200, rows);
           }
           const f = faulted(TARGETS.credentialsWrite);
@@ -468,13 +522,19 @@ export async function loadWorld(): Promise<StatefulWorld> {
             // column lands in DO UPDATE, unspecified columns keep their value.
             const id = String(body.user_id ?? "");
             const existing = world.credentials.get(id) ?? emptyRow(id);
-            world.credentials.set(id, { ...existing, ...(body as Partial<CredentialRow>) });
+            world.credentials.set(id, {
+              ...existing,
+              ...(body as Partial<CredentialRow>),
+            });
             return new Response(null, { status: 201 });
           }
           if (method === "PATCH" && isRecord(body) && userId) {
             const existing = world.credentials.get(userId);
             if (existing) {
-              world.credentials.set(userId, { ...existing, ...(body as Partial<CredentialRow>) });
+              world.credentials.set(userId, {
+                ...existing,
+                ...(body as Partial<CredentialRow>),
+              });
             }
             return new Response(null, { status: 204 });
           }
@@ -488,9 +548,12 @@ export async function loadWorld(): Promise<StatefulWorld> {
             const row = userId ? world.deletions.get(userId) : undefined;
             const rows = row ? [row] : [];
             return single
-              ? rows.length
-                ? json(200, rows[0])
-                : json(406, { code: "PGRST116", message: "0 rows", details: null, hint: null })
+              ? rows.length ? json(200, rows[0]) : json(406, {
+                code: "PGRST116",
+                message: "0 rows",
+                details: null,
+                hint: null,
+              })
               : json(200, rows);
           }
           const f = faulted(TARGETS.deletionWrite);
@@ -502,7 +565,9 @@ export async function loadWorld(): Promise<StatefulWorld> {
               challenge: String(body.challenge ?? crypto.randomUUID()),
               user_id: id,
               created_at: String(body.created_at ?? now),
-              expires_at: String(body.expires_at ?? new Date(Date.now() + 900_000).toISOString()),
+              expires_at: String(
+                body.expires_at ?? new Date(Date.now() + 900_000).toISOString(),
+              ),
             };
             world.deletions.set(id, row);
             return json(201, [row]);
@@ -520,7 +585,12 @@ export async function loadWorld(): Promise<StatefulWorld> {
           const id = eqFilter(parsed, "id") ?? "";
           if (world.deletedUsers.has(id)) {
             return single
-              ? json(406, { code: "PGRST116", message: "0 rows", details: null, hint: null })
+              ? json(406, {
+                code: "PGRST116",
+                message: "0 rows",
+                details: null,
+                hint: null,
+              })
               : json(200, []);
           }
           const provider = id.startsWith("a") ? "apple" : "google";
@@ -561,7 +631,10 @@ function emptyRow(userId: string): CredentialRow {
   };
 }
 
-function projectRow(row: CredentialRow, select: string | null): Record<string, unknown> {
+function projectRow(
+  row: CredentialRow,
+  select: string | null,
+): Record<string, unknown> {
   if (!select || select === "*") return { ...row };
   const out: Record<string, unknown> = {};
   for (const col of select.split(",").map((s) => s.trim())) {
@@ -594,7 +667,10 @@ const b64url = (value: string): string =>
  * is fixed per process — so a revisit bears the SAME bearer a real client
  * would reuse (the auth cache is keyed by token hash). */
 const SESSION_EXP = Math.floor(Date.now() / 1000) + 6 * 3600;
-export function sessionTokenFor(userId: string, sessionId = `sess-${userId}`): string {
+export function sessionTokenFor(
+  userId: string,
+  sessionId = `sess-${userId}`,
+): string {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = b64url(
     JSON.stringify({
@@ -619,14 +695,23 @@ export interface AppleUser {
 export function mintAppleUser(world: StatefulWorld, rng: Prng): AppleUser {
   const id = userIdFor(rng, "apple");
   const code = `c_${rng.uuid().replace(/-/g, "")}`;
-  const refreshToken = `rt_${rng.uuid().replace(/-/g, "")}${rng.uuid().replace(/-/g, "")}`;
+  const refreshToken = `rt_${rng.uuid().replace(/-/g, "")}${
+    rng.uuid().replace(/-/g, "")
+  }`;
   world.appleCodes.set(code, { refreshToken, subject: id });
-  return { id, ip: ipFor(rng), idToken: fakeAppleIdToken(id), code, refreshToken };
+  return {
+    id,
+    ip: ipFor(rng),
+    idToken: fakeAppleIdToken(id),
+    code,
+    refreshToken,
+  };
 }
 
 export function bootstrapRequest(
   user: AppleUser,
-  options: { code?: string | null | unknown; protocol?: boolean; ip?: string } = {},
+  options: { code?: string | null | unknown; protocol?: boolean; ip?: string } =
+    {},
 ): Request {
   const body: Record<string, unknown> = {};
   const code = options.code === undefined ? user.code : options.code;
@@ -635,7 +720,9 @@ export function bootstrapRequest(
     token: user.idToken,
     ip: options.ip ?? user.ip,
     body,
-    headers: options.protocol === false ? {} : { "X-Apple-Revocation-Protocol": "1" },
+    headers: options.protocol === false
+      ? {}
+      : { "X-Apple-Revocation-Protocol": "1" },
   });
 }
 
@@ -649,7 +736,11 @@ export function googleBootstrapRequest(userId: string, ip: string): Request {
 
 /** Seeds a challenge old enough to confirm (min age 3s) directly in the
  * stateful table so delete-confirm can be exercised without sleeping. */
-export function seedDeletionChallenge(world: StatefulWorld, userId: string, rng: Prng): string {
+export function seedDeletionChallenge(
+  world: StatefulWorld,
+  userId: string,
+  rng: Prng,
+): string {
   const challenge = rng.uuid();
   const created = new Date(Date.now() - 10_000).toISOString();
   world.deletions.set(userId, {
@@ -661,7 +752,11 @@ export function seedDeletionChallenge(world: StatefulWorld, userId: string, rng:
   return challenge;
 }
 
-export function deleteConfirmRequest(userId: string, ip: string, challenge: string): Request {
+export function deleteConfirmRequest(
+  userId: string,
+  ip: string,
+  challenge: string,
+): Request {
   return userRequest("POST", "/v1/me/delete-confirm", {
     token: sessionTokenFor(userId),
     ip,
@@ -695,7 +790,9 @@ export async function storeAppleCredential(
   return row;
 }
 
-export async function readJson(response: Response): Promise<Record<string, unknown>> {
+export async function readJson(
+  response: Response,
+): Promise<Record<string, unknown>> {
   const text = await response.text();
   try {
     const parsed = JSON.parse(text);
@@ -715,12 +812,17 @@ export type ErrorClass =
   | "other_5xx"
   | "unexpected";
 
-export function classify(status: number, body: Record<string, unknown>): ErrorClass {
+export function classify(
+  status: number,
+  body: Record<string, unknown>,
+): ErrorClass {
   if (status >= 200 && status < 300) return "ok";
   if (status === 429) return "rate_limited_429";
   if (status === 503) return "retryable_503";
   if (status >= 500) return "other_5xx";
-  if (status >= 400) return typeof body.code === "string" ? "coded_4xx" : "generic_4xx";
+  if (status >= 400) {
+    return typeof body.code === "string" ? "coded_4xx" : "generic_4xx";
+  }
   return "unexpected";
 }
 
@@ -740,7 +842,10 @@ const LEAK_MARKERS = [
 /** 5xx bodies must be generic: no table names, upstream hosts, PostgREST
  * codes, exception names or the injected fault text. Returns the offending
  * marker or null. */
-export function leakMarker(bodyText: string, extra: string[] = []): string | null {
+export function leakMarker(
+  bodyText: string,
+  extra: string[] = [],
+): string | null {
   const lowered = bodyText.toLowerCase();
   for (const marker of [...LEAK_MARKERS, ...extra]) {
     if (marker && lowered.includes(marker.toLowerCase())) return marker;

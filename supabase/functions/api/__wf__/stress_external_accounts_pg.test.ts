@@ -23,10 +23,19 @@
 import postgres from "postgres";
 import { assert, assertEquals } from "@std/assert";
 import { Prng } from "./xc_concurrency_harness.ts";
-import { decryptAppleRefreshToken, encryptAppleRefreshToken } from "../externalAccounts.ts";
-import { BASE_SEED, round, seedFor, writeReport } from "./stress_external_accounts_harness.ts";
+import {
+  decryptAppleRefreshToken,
+  encryptAppleRefreshToken,
+} from "../externalAccounts.ts";
+import {
+  BASE_SEED,
+  round,
+  seedFor,
+  writeReport,
+} from "./stress_external_accounts_harness.ts";
 
-const PG_URL = Deno.env.get("XC_PG_URL") ?? Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
+const PG_URL = Deno.env.get("XC_PG_URL") ??
+  Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
 const ignore = PG_URL === "";
 const PG_USERS = Math.max(3, Number(Deno.env.get("STRESS_PG_USERS") ?? "12"));
 const LANES = Math.max(2, Number(Deno.env.get("STRESS_PG_LANES") ?? "8"));
@@ -57,7 +66,12 @@ function connect(): Sql {
   return postgres(PG_URL, { max: LANES + 4, onnotice: () => {} });
 }
 
-async function createUser(sql: Sql, userId: string, provider: "apple" | "google", sub: string) {
+async function createUser(
+  sql: Sql,
+  userId: string,
+  provider: "apple" | "google",
+  sub: string,
+) {
   await sql.unsafe(`delete from auth.users where id = '${userId}'`);
   await sql.unsafe(
     `insert into auth.users (id, email, raw_app_meta_data) values ('${userId}', '${userId}@example.com', '{"provider":"${provider}"}')`,
@@ -69,29 +83,45 @@ async function createUser(sql: Sql, userId: string, provider: "apple" | "google"
 }
 
 async function readRow(sql: Sql, userId: string): Promise<CredRow | null> {
-  const rows = await sql.unsafe(`select * from ${TABLE} where user_id = '${userId}'`);
+  const rows = await sql.unsafe(
+    `select * from ${TABLE} where user_id = '${userId}'`,
+  );
   return (rows[0] as unknown as CredRow) ?? null;
 }
 
 /** PostgREST `upsert(payload, {onConflict:"user_id"})` (merge-duplicates). */
-async function pgrstUpsert(sql: Sql | Tx, payload: Record<string, unknown>): Promise<void> {
+async function pgrstUpsert(
+  sql: Sql | Tx,
+  payload: Record<string, unknown>,
+): Promise<void> {
   const cols = Object.keys(payload);
   const values = cols.map((_, i) => `$${i + 1}`).join(", ");
-  const sets = cols.filter((c) => c !== "user_id").map((c) => `${c} = excluded.${c}`).join(", ");
+  const sets = cols.filter((c) => c !== "user_id").map((c) =>
+    `${c} = excluded.${c}`
+  ).join(", ");
   await sql.unsafe(
-    `insert into ${TABLE} (${cols.join(", ")}) values (${values}) on conflict (user_id) do update set ${sets}`,
+    `insert into ${TABLE} (${
+      cols.join(", ")
+    }) values (${values}) on conflict (user_id) do update set ${sets}`,
     cols.map((c) => payload[c] as never),
   );
 }
 
 /** PostgREST `.update(patch).eq("user_id", id)`. */
-async function pgrstUpdate(sql: Sql | Tx, userId: string, patch: Record<string, unknown>): Promise<number> {
+async function pgrstUpdate(
+  sql: Sql | Tx,
+  userId: string,
+  patch: Record<string, unknown>,
+): Promise<number> {
   const cols = Object.keys(patch);
   const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
-  const r = await sql.unsafe(`update ${TABLE} set ${sets} where user_id = $${cols.length + 1}`, [
-    ...cols.map((c) => patch[c] as never),
-    userId as never,
-  ]);
+  const r = await sql.unsafe(
+    `update ${TABLE} set ${sets} where user_id = $${cols.length + 1}`,
+    [
+      ...cols.map((c) => patch[c] as never),
+      userId as never,
+    ],
+  );
   return r.count;
 }
 
@@ -101,7 +131,11 @@ function sqlstate(error: unknown): string {
     : String(error);
 }
 
-async function expectSqlState(fn: () => Promise<unknown>, code: string, what: string): Promise<void> {
+async function expectSqlState(
+  fn: () => Promise<unknown>,
+  code: string,
+  what: string,
+): Promise<void> {
   try {
     await fn();
   } catch (error) {
@@ -130,7 +164,8 @@ interface Outcome {
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "stress/externalAccounts pg: EA1 credential-row lifecycle (bootstrap upsert → re-bootstrap → revoke checkpoint → RC checkpoint → permanent clear → cascade) with real ciphertext",
+  name:
+    "stress/externalAccounts pg: EA1 credential-row lifecycle (bootstrap upsert → re-bootstrap → revoke checkpoint → RC checkpoint → permanent clear → cascade) with real ciphertext",
   ignore,
   async fn() {
     const sql = connect();
@@ -166,22 +201,47 @@ Deno.test({
         let row = await readRow(sql, uid);
         if (!row) problems.push("bootstrap upsert stored no row");
         else {
-          const back = await decryptAppleRefreshToken(row.apple_refresh_token_encrypted ?? "", uid, KEY);
-          if (back !== token1) problems.push("stored ciphertext does not decrypt to the token");
-          if (!row.apple_token_captured_at) problems.push("captured_at missing after bootstrap");
+          const back = await decryptAppleRefreshToken(
+            row.apple_refresh_token_encrypted ?? "",
+            uid,
+            KEY,
+          );
+          if (back !== token1) {
+            problems.push("stored ciphertext does not decrypt to the token");
+          }
+          if (!row.apple_token_captured_at) {
+            problems.push("captured_at missing after bootstrap");
+          }
         }
 
         // 2. RC checkpoint upsert (index.ts ~3014) must MERGE — token survives
         const now2 = new Date().toISOString();
-        await time("rc_checkpoint_upsert", () =>
-          pgrstUpsert(sql, { user_id: uid, revenuecat_deleted_at: now2, updated_at: now2 }));
+        await time(
+          "rc_checkpoint_upsert",
+          () =>
+            pgrstUpsert(sql, {
+              user_id: uid,
+              revenuecat_deleted_at: now2,
+              updated_at: now2,
+            }),
+        );
         row = await readRow(sql, uid);
-        if (row?.apple_refresh_token_encrypted !== enc1) problems.push("RC checkpoint upsert clobbered the Apple token");
-        if (!row?.revenuecat_deleted_at) problems.push("RC checkpoint not stored");
+        if (row?.apple_refresh_token_encrypted !== enc1) {
+          problems.push("RC checkpoint upsert clobbered the Apple token");
+        }
+        if (!row?.revenuecat_deleted_at) {
+          problems.push("RC checkpoint not stored");
+        }
 
         // 3. re-bootstrap (second sign-in) with a NEW token — resets apple_revoked_at only
-        await time("revoke_checkpoint_update", () =>
-          pgrstUpdate(sql, uid, { apple_revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+        await time(
+          "revoke_checkpoint_update",
+          () =>
+            pgrstUpdate(sql, uid, {
+              apple_revoked_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+        );
         const token2 = `rt_${"y".repeat(rng.int(29, 509))}`;
         const enc2 = await encryptAppleRefreshToken(token2, uid, KEY);
         const now3 = new Date().toISOString();
@@ -194,8 +254,12 @@ Deno.test({
             updated_at: now3,
           }));
         row = await readRow(sql, uid);
-        if (row?.apple_refresh_token_encrypted !== enc2) problems.push("re-bootstrap did not replace the token");
-        if (row?.apple_revoked_at !== null) problems.push("re-bootstrap did not reset apple_revoked_at");
+        if (row?.apple_refresh_token_encrypted !== enc2) {
+          problems.push("re-bootstrap did not replace the token");
+        }
+        if (row?.apple_revoked_at !== null) {
+          problems.push("re-bootstrap did not reset apple_revoked_at");
+        }
         const rcSurvivesRebootstrap = row?.revenuecat_deleted_at !== null;
 
         // 4. permanent clear (index.ts ~2981): both columns null together — accepted
@@ -206,7 +270,10 @@ Deno.test({
             updated_at: new Date().toISOString(),
           }));
         row = await readRow(sql, uid);
-        if (row?.apple_refresh_token_encrypted !== null || row?.apple_token_captured_at !== null) {
+        if (
+          row?.apple_refresh_token_encrypted !== null ||
+          row?.apple_token_captured_at !== null
+        ) {
           problems.push("permanent clear left a half-cleared row");
         }
 
@@ -220,7 +287,8 @@ Deno.test({
         });
         try {
           await expectSqlState(
-            () => pgrstUpdate(sql, uid, { apple_refresh_token_encrypted: null }),
+            () =>
+              pgrstUpdate(sql, uid, { apple_refresh_token_encrypted: null }),
             "23514",
             "token-only clear",
           );
@@ -236,7 +304,12 @@ Deno.test({
         // 6. checkpoint for a user with no profile → FK refusal (edge maps to 503)
         try {
           await expectSqlState(
-            () => pgrstUpsert(sql, { user_id: rng.uuid(), revenuecat_deleted_at: now2, updated_at: now2 }),
+            () =>
+              pgrstUpsert(sql, {
+                user_id: rng.uuid(),
+                revenuecat_deleted_at: now2,
+                updated_at: now2,
+              }),
             "23503",
             "orphan RC checkpoint",
           );
@@ -245,9 +318,14 @@ Deno.test({
         }
 
         // 7. auth.admin.deleteUser → auth.users delete → profile → credential row cascade
-        await time("auth_user_delete_cascade", () => sql.unsafe(`delete from auth.users where id = '${uid}'`));
+        await time(
+          "auth_user_delete_cascade",
+          () => sql.unsafe(`delete from auth.users where id = '${uid}'`),
+        );
         row = await readRow(sql, uid);
-        if (row) problems.push("credential row survived the auth.users cascade");
+        if (row) {
+          problems.push("credential row survived the auth.users cascade");
+        }
 
         outcomes.push({
           scenario: "EA1",
@@ -258,7 +336,10 @@ Deno.test({
             ? problems.join("; ")
             : `lifecycle ok; revenuecat_deleted_at survives re-bootstrap=${rcSurvivesRebootstrap}`,
         });
-        assert(rcSurvivesRebootstrap, "schema-level confirmation of the R24 observation: re-bootstrap does not reset revenuecat_deleted_at");
+        assert(
+          rcSurvivesRebootstrap,
+          "schema-level confirmation of the R24 observation: re-bootstrap does not reset revenuecat_deleted_at",
+        );
       }
     } finally {
       await sql.end();
@@ -266,12 +347,23 @@ Deno.test({
     const summary = Object.fromEntries(
       Object.entries(latencies).map(([op, ms]) => {
         const sorted = [...ms].sort((a, b) => a - b);
-        return [op, { n: ms.length, p50_ms: sorted[Math.floor(sorted.length / 2)], max_ms: sorted[sorted.length - 1] }];
+        return [op, {
+          n: ms.length,
+          p50_ms: sorted[Math.floor(sorted.length / 2)],
+          max_ms: sorted[sorted.length - 1],
+        }];
       }),
     );
-    const path = await writeReport("pg_lifecycle", { baseSeed: BASE_SEED, users: PG_USERS, latency: summary, outcomes });
+    const path = await writeReport("pg_lifecycle", {
+      baseSeed: BASE_SEED,
+      users: PG_USERS,
+      latency: summary,
+      outcomes,
+    });
     const broken = outcomes.filter((o) => o.verdict === "BROKEN");
-    console.log(`[stress pg/EA1] ${PG_USERS} users × 7 steps, ${broken.length} BROKEN → ${path}`);
+    console.log(
+      `[stress pg/EA1] ${PG_USERS} users × 7 steps, ${broken.length} BROKEN → ${path}`,
+    );
     assertEquals(broken, []);
   },
 });
@@ -281,7 +373,8 @@ Deno.test({
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "stress/externalAccounts pg: EA2 ciphertext size boundary — find the refresh-token length at which the 8192 check refuses the bootstrap upsert",
+  name:
+    "stress/externalAccounts pg: EA2 ciphertext size boundary — find the refresh-token length at which the 8192 check refuses the bootstrap upsert",
   ignore,
   async fn() {
     const sql = connect();
@@ -289,8 +382,16 @@ Deno.test({
       const rng = new Prng(seedFor("pg.size", 0));
       const uid = rng.uuid();
       await createUser(sql, uid, "apple", `apple-${rng.uuid()}`);
-      const probe = async (tokenLength: number): Promise<{ cipherLength: number; accepted: boolean; code?: string }> => {
-        const enc = await encryptAppleRefreshToken("t".repeat(tokenLength), uid, KEY);
+      const probe = async (
+        tokenLength: number,
+      ): Promise<
+        { cipherLength: number; accepted: boolean; code?: string }
+      > => {
+        const enc = await encryptAppleRefreshToken(
+          "t".repeat(tokenLength),
+          uid,
+          KEY,
+        );
         const now = new Date().toISOString();
         try {
           await pgrstUpsert(sql, {
@@ -302,13 +403,26 @@ Deno.test({
           });
           return { cipherLength: enc.length, accepted: true };
         } catch (error) {
-          return { cipherLength: enc.length, accepted: false, code: sqlstate(error) };
+          return {
+            cipherLength: enc.length,
+            accepted: false,
+            code: sqlstate(error),
+          };
         }
       };
       // Realistic Apple refresh tokens (observed ~64-ish chars) and generous headroom.
       const realistic = [1, 16, 64, 128, 512, 2048, 4096];
-      const table: Array<{ tokenLength: number; cipherLength: number; accepted: boolean; code?: string }> = [];
-      for (const n of realistic) table.push({ tokenLength: n, ...(await probe(n)) });
+      const table: Array<
+        {
+          tokenLength: number;
+          cipherLength: number;
+          accepted: boolean;
+          code?: string;
+        }
+      > = [];
+      for (const n of realistic) {
+        table.push({ tokenLength: n, ...(await probe(n)) });
+      }
       // Binary search the first refused length.
       let lo = 4096, hi = 8192;
       while (hi - lo > 1) {
@@ -335,9 +449,19 @@ Deno.test({
         short = sqlstate(error);
       }
       await sql.unsafe(`delete from auth.users where id = '${uid}'`);
-      const path = await writeReport("pg_ciphertext_size_boundary", { table, shortCiphertext: short });
-      console.log(`[stress pg/EA2] realistic lengths accepted=${table.slice(0, realistic.length).every((r) => r.accepted)}; last accepted token length=${lo} (cipher ${lastAccepted.cipherLength}), first refused=${hi} (${firstRefused.code}); short ciphertext → ${short} → ${path}`);
-      assert(table.slice(0, realistic.length).every((r) => r.accepted), "every realistic token length is storable");
+      const path = await writeReport("pg_ciphertext_size_boundary", {
+        table,
+        shortCiphertext: short,
+      });
+      console.log(
+        `[stress pg/EA2] realistic lengths accepted=${
+          table.slice(0, realistic.length).every((r) => r.accepted)
+        }; last accepted token length=${lo} (cipher ${lastAccepted.cipherLength}), first refused=${hi} (${firstRefused.code}); short ciphertext → ${short} → ${path}`,
+      );
+      assert(
+        table.slice(0, realistic.length).every((r) => r.accepted),
+        "every realistic token length is storable",
+      );
       assertEquals(firstRefused.code, "23514");
       assertEquals(short, "23514");
     } finally {
@@ -351,7 +475,8 @@ Deno.test({
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "stress/externalAccounts pg: EA3 duplicate delivery — N concurrent RC-checkpoint upserts + revoke updates + a bootstrap upsert on the same row commit without deadlock, one row remains, token intact",
+  name:
+    "stress/externalAccounts pg: EA3 duplicate delivery — N concurrent RC-checkpoint upserts + revoke updates + a bootstrap upsert on the same row commit without deadlock, one row remains, token intact",
   ignore,
   async fn() {
     const sql = connect();
@@ -362,7 +487,11 @@ Deno.test({
         const rng = new Prng(seed);
         const uid = rng.uuid();
         await createUser(sql, uid, "apple", `apple-${rng.uuid()}`);
-        const enc = await encryptAppleRefreshToken(`rt_${rng.uuid()}`, uid, KEY);
+        const enc = await encryptAppleRefreshToken(
+          `rt_${rng.uuid()}`,
+          uid,
+          KEY,
+        );
         const now = new Date().toISOString();
         await pgrstUpsert(sql, {
           user_id: uid,
@@ -383,10 +512,17 @@ Deno.test({
               const ts = new Date().toISOString();
               switch (lane % 3) {
                 case 0:
-                  await pgrstUpsert(t, { user_id: uid, revenuecat_deleted_at: ts, updated_at: ts });
+                  await pgrstUpsert(t, {
+                    user_id: uid,
+                    revenuecat_deleted_at: ts,
+                    updated_at: ts,
+                  });
                   return "rc_checkpoint";
                 case 1:
-                  await pgrstUpdate(t, uid, { apple_revoked_at: ts, updated_at: ts });
+                  await pgrstUpdate(t, uid, {
+                    apple_revoked_at: ts,
+                    updated_at: ts,
+                  });
                   return "revoke_checkpoint";
                 default:
                   await pgrstUpsert(t, {
@@ -399,33 +535,48 @@ Deno.test({
                   return "bootstrap_upsert";
               }
             })
-            .then((r) => results.push(`${r}:ok`), (e) => results.push(`${sqlstate(e)}`)));
+            .then((r) => results.push(`${r}:ok`), (e) =>
+              results.push(`${sqlstate(e)}`)));
         while (ready < LANES) await new Promise((r) => setTimeout(r, 1));
         b.open();
         await Promise.all(lanes);
-        const rows = await sql.unsafe(`select count(*)::int as n from ${TABLE} where user_id = '${uid}'`);
+        const rows = await sql.unsafe(
+          `select count(*)::int as n from ${TABLE} where user_id = '${uid}'`,
+        );
         const row = await readRow(sql, uid);
         const failures = results.filter((r) => !r.endsWith(":ok"));
         const problems: string[] = [];
-        if (failures.length) problems.push(`lanes failed: ${failures.join(",")}`);
+        if (failures.length) {
+          problems.push(`lanes failed: ${failures.join(",")}`);
+        }
         if (rows[0].n !== 1) problems.push(`row count ${rows[0].n}`);
-        if (row?.apple_refresh_token_encrypted !== enc) problems.push("token changed under concurrent checkpoints");
+        if (row?.apple_refresh_token_encrypted !== enc) {
+          problems.push("token changed under concurrent checkpoints");
+        }
         if (!row?.revenuecat_deleted_at) problems.push("RC checkpoint lost");
         outcomes.push({
           scenario: "EA3",
           seed,
           user: uid,
           verdict: problems.length ? "BROKEN" : "HELD",
-          detail: problems.length ? problems.join("; ") : `${LANES} lanes committed: ${results.join(" ")}`,
+          detail: problems.length
+            ? problems.join("; ")
+            : `${LANES} lanes committed: ${results.join(" ")}`,
         });
         await sql.unsafe(`delete from auth.users where id = '${uid}'`);
       }
     } finally {
       await sql.end();
     }
-    const path = await writeReport("pg_duplicate_delivery", { baseSeed: BASE_SEED, lanes: LANES, outcomes });
+    const path = await writeReport("pg_duplicate_delivery", {
+      baseSeed: BASE_SEED,
+      lanes: LANES,
+      outcomes,
+    });
     const broken = outcomes.filter((o) => o.verdict === "BROKEN");
-    console.log(`[stress pg/EA3] ${outcomes.length} bursts × ${LANES} lanes, ${broken.length} BROKEN → ${path}`);
+    console.log(
+      `[stress pg/EA3] ${outcomes.length} bursts × ${LANES} lanes, ${broken.length} BROKEN → ${path}`,
+    );
     assertEquals(broken, []);
   },
 });
@@ -452,7 +603,9 @@ async function asUser(tx: Tx, userId: string): Promise<void> {
 }
 
 async function spendOne(tx: Tx, key: string, shotId: string): Promise<string> {
-  const p = await tx.unsafe(`select x.result, x.permit_id::text as permit_id from public.reserve_analysis_permit('${key}') x`);
+  const p = await tx.unsafe(
+    `select x.result, x.permit_id::text as permit_id from public.reserve_analysis_permit('${key}') x`,
+  );
   if (String(p[0].result) !== "accepted") return `reserve:${p[0].result}`;
   const shot = {
     id: shotId,
@@ -471,12 +624,16 @@ async function spendOne(tx: Tx, key: string, shotId: string): Promise<string> {
     checkpoints: [],
     versionVector: VERSION_VECTOR,
   };
-  const a = await tx.unsafe(`select public.apply_synced_shot($1::text::jsonb) as result`, [JSON.stringify(shot)]);
+  const a = await tx.unsafe(
+    `select public.apply_synced_shot($1::text::jsonb) as result`,
+    [JSON.stringify(shot)],
+  );
   return `apply:${a[0].result}`;
 }
 
 Deno.test({
-  name: "stress/externalAccounts pg: EA4 free-rating ledger survives the account-deletion cascade — spend 2, deleteUser, re-bootstrap the same Apple subject → lifetime_scored_count()=2, reserve paywalled (double-spend = P0)",
+  name:
+    "stress/externalAccounts pg: EA4 free-rating ledger survives the account-deletion cascade — spend 2, deleteUser, re-bootstrap the same Apple subject → lifetime_scored_count()=2, reserve paywalled (double-spend = P0)",
   ignore,
   async fn() {
     const sql = connect();
@@ -487,13 +644,17 @@ Deno.test({
         const rng = new Prng(seed);
         const sub = `apple-sub-${rng.uuid()}`;
         const oldUid = rng.uuid();
-        await sql.unsafe(`delete from public.free_rating_ledger where identity_hash = public.free_rating_identity_hash('apple', '${sub}')`);
+        await sql.unsafe(
+          `delete from public.free_rating_ledger where identity_hash = public.free_rating_identity_hash('apple', '${sub}')`,
+        );
         await createUser(sql, oldUid, "apple", sub);
         const spends: string[] = [];
         await sql.begin(async (tx) => {
           const t = tx as unknown as Tx;
           await asUser(t, oldUid);
-          for (let k = 0; k < 2; k += 1) spends.push(await spendOne(t, `spend-${i}-${k}`, rng.uuid()));
+          for (let k = 0; k < 2; k += 1) {
+            spends.push(await spendOne(t, `spend-${i}-${k}`, rng.uuid()));
+          }
         });
         // The edge fn's deletion: external cleanup, then auth.admin.deleteUser → cascade.
         await sql.unsafe(`delete from auth.users where id = '${oldUid}'`);
@@ -508,29 +669,59 @@ Deno.test({
         await sql.begin(async (tx) => {
           const t = tx as unknown as Tx;
           await asUser(t, newUid);
-          lifetime = Number((await t.unsafe(`select public.lifetime_scored_count()::int as n`))[0].n);
-          reserve = String((await t.unsafe(`select x.result from public.reserve_analysis_permit('after-${i}') x`))[0].result);
+          lifetime = Number(
+            (await t.unsafe(`select public.lifetime_scored_count()::int as n`))[
+              0
+            ].n,
+          );
+          reserve = String(
+            (await t.unsafe(
+              `select x.result from public.reserve_analysis_permit('after-${i}') x`,
+            ))[0].result,
+          );
         });
         const problems: string[] = [];
-        if (spends.join() !== "apply:accepted,apply:accepted") problems.push(`setup spends: ${spends.join()}`);
-        if (Number(ledgerAfterDelete[0]?.n) !== 2) problems.push(`ledger after delete = ${ledgerAfterDelete[0]?.n ?? "missing"}`);
-        if (lifetime !== 2) problems.push(`recreated account lifetime_scored_count()=${lifetime} (expected 2 — free ratings RESET = double spend)`);
-        if (reserve !== "access.paywall_required") problems.push(`recreated account reserve → ${reserve} (expected access.paywall_required)`);
+        if (spends.join() !== "apply:accepted,apply:accepted") {
+          problems.push(`setup spends: ${spends.join()}`);
+        }
+        if (Number(ledgerAfterDelete[0]?.n) !== 2) {
+          problems.push(
+            `ledger after delete = ${ledgerAfterDelete[0]?.n ?? "missing"}`,
+          );
+        }
+        if (lifetime !== 2) {
+          problems.push(
+            `recreated account lifetime_scored_count()=${lifetime} (expected 2 — free ratings RESET = double spend)`,
+          );
+        }
+        if (reserve !== "access.paywall_required") {
+          problems.push(
+            `recreated account reserve → ${reserve} (expected access.paywall_required)`,
+          );
+        }
         outcomes.push({
           scenario: "EA4",
           seed,
           user: `${oldUid}→${newUid}`,
           verdict: problems.length ? "BROKEN" : "HELD",
-          detail: problems.length ? problems.join("; ") : `ledger=2 after cascade, lifetime=2, reserve=${reserve}`,
+          detail: problems.length
+            ? problems.join("; ")
+            : `ledger=2 after cascade, lifetime=2, reserve=${reserve}`,
         });
         await sql.unsafe(`delete from auth.users where id = '${newUid}'`);
       }
     } finally {
       await sql.end();
     }
-    const path = await writeReport("pg_free_rating_ledger_cascade", { baseSeed: BASE_SEED, users: PG_USERS, outcomes });
+    const path = await writeReport("pg_free_rating_ledger_cascade", {
+      baseSeed: BASE_SEED,
+      users: PG_USERS,
+      outcomes,
+    });
     const broken = outcomes.filter((o) => o.verdict === "BROKEN");
-    console.log(`[stress pg/EA4] ${outcomes.length} delete→re-bootstrap cycles, ${broken.length} BROKEN → ${path}`);
+    console.log(
+      `[stress pg/EA4] ${outcomes.length} delete→re-bootstrap cycles, ${broken.length} BROKEN → ${path}`,
+    );
     assertEquals(broken, []);
   },
 });
