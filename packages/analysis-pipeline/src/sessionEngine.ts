@@ -579,9 +579,15 @@ export function selectTargetEvent(
  *
  *  1. EVENT IDENTITY = stroke-event-2 (D-030, strokeEvents.ts). The engine
  *     never invents its own proposer: on every reconciliation it runs
- *     `proposeStrokeEventsV2` over the ACCUMULATED series (target BODY
+ *     `proposeStrokeEventsV2` over the RETAINED series (target BODY
  *     motion proposes; paddle only confirms/ranks/refines). Emitted events
  *     carry the canonical `StrokeEventProposalV2` — no second event type.
+ *     Retention is BOUNDED (`SESSION_RETENTION`): history that can no
+ *     longer shape a candidate is retired, while the one session-wide
+ *     statistic the proposer reads from the whole series — the strongest
+ *     stroke, which sets the relative proposal floor — is kept as an anchor
+ *     segment, so per-push work is independent of session length and the
+ *     proposals stay those of the full-series run.
  *
  *  2. EVENT COMPLETION = D-029 adaptive settle-or-valley-or-safety
  *     (eventCompletionBench.ts, ADAPTIVE variant). Constants are mirrored
@@ -600,11 +606,13 @@ export function selectTargetEvent(
  *     suppression — recorded, not silent);
  *   - a batch proposal whose peak lies after the frontier is a NEW candidate
  *     and may close per D-029;
- *   - wrist samples at/before the frontier arriving late are DROPPED and
- *     counted (`droppedLateSamples`) — they may not rewrite history. Paddle
- *     samples are kept regardless: per D-030 paddle evidence can never
- *     create/delete/re-bound a proposal, so late paddle history only feeds
- *     the confirm-normalization of FUTURE candidates.
+ *   - wrist samples at/before the frontier (or behind the retained window)
+ *     arriving late are DROPPED and counted (`droppedLateSamples`) — they
+ *     may not rewrite history. Paddle samples are kept regardless: per
+ *     D-030 paddle evidence can never create/delete/re-bound a proposal, so
+ *     late paddle history only feeds the confirm-normalization of FUTURE
+ *     candidates (a late sample behind the retained window contributes
+ *     exactly its magnitude, via the paddle anchor).
  *
  * BOUND-STABILITY WAIT (why emission is not instant on settle): proposal
  * boundaries walk outward while smoothed wrist speed stays above the
@@ -650,6 +658,50 @@ export const SESSION_COMPLETION = {
  * there): once the stream passes peak+this, no sample can extend the
  * proposal's boundaries any further — bounds are stable and freezable. */
 export const BOUND_STABILITY_MS = 1200;
+
+/**
+ * BOUNDED RETENTION — why minute 30 of a live session costs the same per
+ * push as minute 1. Every push re-runs the canonical proposer over the
+ * retained series, so the RETAINED series (not the session) must bound the
+ * work. A sample is retired once it trails the newest sample by more than
+ * `horizonMs`; everything that can still shape a candidate past the frontier
+ * is far younger (D-029 closes any candidate by trigger+2500ms; boundaries
+ * reach ±1200ms, baseline context ±1500ms, fragment glue 350ms — < 6s).
+ *
+ * The proposer reads exactly one session-wide statistic from the whole
+ * series: the peak smoothed speed, which sets the relative proposal floor
+ * (max(0.5, 30% of it); low tier max(0.3, 30% of it)) and, for the paddle,
+ * the raw maximum that normalizes paddle confirmation. Retiring history must
+ * not lower either — that would admit strokes the full-series run rejects
+ * and make the floor depend on how long ago the strongest stroke happened.
+ * So the strongest stroke's neighbourhood is kept as an ANCHOR segment ahead
+ * of the window: samples are scanned for the session maximum once they are
+ * `anchorScanLagMs` old (both smoothing neighbours and the full context are
+ * still present, so the value is exact), the ±`anchorContextMs` around the
+ * maximum — widened to the nearest quiet samples — is protected from
+ * retirement, and the join between anchor and window is only accepted in a
+ * lull where smoothing across it can neither forge a peak nor top the anchor.
+ * The anchor trails any live candidate by ≥ horizon − lag, so it cannot glue,
+ * clamp or re-bound anything. The paddle series keeps its raw maximum sample
+ * the same way. Quality notes that compare emitted events against the batch
+ * (`SESSION_EVENT_RETRO_SUPPRESSED`) are evaluated while the event is well
+ * inside the window — `retroEdgeMs` (2× boundary reach + glue gap) clear of
+ * the join.
+ */
+export const SESSION_RETENTION = {
+  horizonMs: 30_000,
+  anchorScanLagMs: 15_000,
+  anchorContextMs: 1_500,
+  retroEdgeMs: 3_000,
+} as const;
+
+/** Below this raw speed a sample can be no peak in any tier
+ * (LOW_AMPLITUDE_GATES.minPeakSpeed): a safe place to cut the series. */
+const QUIET_SPEED = LOW_AMPLITUDE_GATES.minPeakSpeed;
+
+/** Up to this smoothed peak the session maximum does not move either
+ * proposal floor (0.3 · peak ≤ the low tier's absolute floor). */
+const ANCHOR_RELEVANCE_FLOOR = LOW_AMPLITUDE_GATES.minPeakSpeed / EVENT_GATES.minPeakFractionOfMax;
 
 export interface SpeedSample {
   timestampMs: number;
@@ -712,9 +764,12 @@ export interface SessionCaptureMeta {
 }
 
 export interface SessionQualityState {
+  /** Wrist samples received (retained, retired and dropped alike). */
   wristSamples: number;
+  /** Paddle samples received (retained and retired alike). */
   paddleSamples: number;
-  /** Late wrist samples at/before the frontier — dropped, never rewritten. */
+  /** Late wrist samples at/before the frontier (or behind the retained
+   * window) — dropped, never rewritten. */
   droppedLateSamples: number;
   lastSampleMs: number | null;
   /** Recorded oddities (e.g. suppressed merged proposals) — never silent. */
@@ -804,11 +859,29 @@ function adaptiveCompletion(
 }
 
 export class SessionEventEngine {
+  /** Time-ordered: [anchor segment][retired gap][retained window]. */
   private readonly wrist: SpeedSample[] = [];
+  /** Time-ordered: [anchor sample?][retired gap][retained window]. */
   private readonly paddle: SpeedSample[] = [];
   private readonly events: SessionStrokeEvent[] = [];
   private frontierMs = Number.NEGATIVE_INFINITY;
   private droppedLateSamples = 0;
+  /** Leading wrist samples that form the anchor segment. */
+  private wristAnchorLen = 0;
+  /** Exact smoothed speed of the session's strongest scanned wrist sample. */
+  private wristAnchorValue = ANCHOR_RELEVANCE_FLOOR;
+  /** Newest wrist sample already scanned for the session maximum. */
+  private wristScanMs = Number.NEGATIVE_INFINITY;
+  /** Neighbourhood of a new session maximum, still ageing into the anchor. */
+  private wristProtect: { fromMs: number; toMs: number } | null = null;
+  /** Newest wrist sample ever retired; late wrist data at/before it is dropped. */
+  private retiredWristMs = Number.NEGATIVE_INFINITY;
+  private retiredWrist = 0;
+  /** 1 while the leading paddle sample is the session's raw maximum. */
+  private paddleAnchorLen = 0;
+  private paddleAnchorValue = 0;
+  private retiredPaddleMs = Number.NEGATIVE_INFINITY;
+  private retiredPaddle = 0;
   private readonly notes: string[] = [];
   private readonly suppressionNoted = new Set<number>();
   private readonly retroNoted = new Set<string>();
@@ -832,17 +905,25 @@ export class SessionEventEngine {
   }): SessionStrokeEvent[] {
     for (const sample of input.paddle ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
+      if (sample.timestampMs <= this.retiredPaddleMs) {
+        // Behind the retained window only its magnitude can still matter
+        // (paddle confirmation normalizes by the session's paddle maximum).
+        if (sample.value > this.paddleAnchorValue) this.setPaddleAnchor(sample, false);
+        else this.retiredPaddle += 1;
+        continue;
+      }
       insertSorted(this.paddle, sample);
     }
     for (const sample of input.wrist ?? []) {
       if (!Number.isFinite(sample.timestampMs) || !Number.isFinite(sample.value)) continue;
-      if (sample.timestampMs <= this.frontierMs) {
+      if (sample.timestampMs <= this.frontierMs || sample.timestampMs <= this.retiredWristMs) {
         // Late data behind the frontier could only rewrite closed events.
         this.droppedLateSamples += 1;
         continue;
       }
       insertSorted(this.wrist, sample);
     }
+    this.retire();
     return this.reconcile(false);
   }
 
@@ -892,8 +973,8 @@ export class SessionEventEngine {
           "adaptive-completion (D-029 settle-or-valley-or-safety; constants mirrored from eventCompletionBench.ts)",
       },
       qualityState: {
-        wristSamples: this.wrist.length + this.droppedLateSamples,
-        paddleSamples: this.paddle.length,
+        wristSamples: this.wrist.length + this.retiredWrist + this.droppedLateSamples,
+        paddleSamples: this.paddle.length + this.retiredPaddle,
         droppedLateSamples: this.droppedLateSamples,
         lastSampleMs: this.lastSampleMs(),
         notes: [...this.notes],
@@ -949,7 +1030,7 @@ export class SessionEventEngine {
     return last ?? null;
   }
 
-  /** Canonical proposals over the accumulated series (stroke-event-2). Clip
+  /** Canonical proposals over the retained series (stroke-event-2). Clip
    * bounds are the observed sample span — in proposeStrokeEventsV2 they only
    * gate coverage, so a live session (full coverage by construction) sees
    * identical events to the offline batch run. */
@@ -1026,7 +1107,19 @@ export class SessionEventEngine {
    * downstream confidence handling.
    */
   private noteRetroSubthreshold(batch: readonly StrokeEventProposalV2[]): void {
-    for (const event of this.events) {
+    // Only events well inside the retained window can be compared against
+    // the batch; older ones were checked while they were.
+    let checkableFromMs = Number.NEGATIVE_INFINITY;
+    if (this.retiredWristMs !== Number.NEGATIVE_INFINITY) {
+      const windowFront = this.wrist[this.wristAnchorLen];
+      checkableFromMs = windowFront
+        ? windowFront.timestampMs + SESSION_RETENTION.retroEdgeMs
+        : Number.POSITIVE_INFINITY;
+    }
+    let start = this.events.length;
+    while (start > 0 && this.events[start - 1]!.proposal.startMs >= checkableFromMs) start -= 1;
+    for (let index = start; index < this.events.length; index += 1) {
+      const event = this.events[index]!;
       if (this.retroNoted.has(event.eventId)) continue;
       const stillProposed = batch.some(
         (proposal) =>
@@ -1060,6 +1153,165 @@ export class SessionEventEngine {
       );
     }
   }
+
+  // ── bounded retention (SESSION_RETENTION) ────────────────────────────────
+
+  private retire(): void {
+    const newestMs = Math.max(
+      this.wrist[this.wrist.length - 1]?.timestampMs ?? Number.NEGATIVE_INFINITY,
+      this.paddle[this.paddle.length - 1]?.timestampMs ?? Number.NEGATIVE_INFINITY,
+    );
+    if (newestMs === Number.NEGATIVE_INFINITY) return;
+    const cutMs = newestMs - SESSION_RETENTION.horizonMs;
+    const lineMs = newestMs - SESSION_RETENTION.anchorScanLagMs;
+    this.scanWristAnchor(lineMs);
+    this.retireWrist(cutMs, lineMs);
+    this.retirePaddle(cutMs);
+  }
+
+  /** Samples crossing the scan line have both smoothing neighbours and
+   * their full context retained: their smoothed speed is exactly what the
+   * proposer computes. A new session maximum re-anchors the series there. */
+  private scanWristAnchor(lineMs: number): void {
+    const series = this.wrist;
+    let index = upperBound(series, this.wristScanMs);
+    for (; index < series.length && series[index]!.timestampMs <= lineMs; index += 1) {
+      const value = smoothedAt(series, index);
+      this.wristScanMs = series[index]!.timestampMs;
+      if (value <= this.wristAnchorValue) continue;
+      this.wristAnchorValue = value;
+      if (this.wristAnchorLen > 0) {
+        // The previous anchor no longer holds the maximum; drop it.
+        series.splice(0, this.wristAnchorLen);
+        this.retiredWrist += this.wristAnchorLen;
+        index -= this.wristAnchorLen;
+        this.wristAnchorLen = 0;
+      }
+      const peakMs = series[index]!.timestampMs;
+      let from = index;
+      while (
+        from > 0 &&
+        peakMs - series[from - 1]!.timestampMs <= SESSION_RETENTION.anchorContextMs
+      ) {
+        from -= 1;
+      }
+      // Widen to quiet edges: a quiet sample is no peak in any tier and
+      // cannot lift a neighbour across the join; nor may the edge pair's
+      // own smoothing exceed the anchor.
+      while (from > 0 && !quietEdge(series, from, from + 1, value)) from -= 1;
+      let to = index;
+      while (
+        to < series.length - 1 &&
+        series[to + 1]!.timestampMs - peakMs <= SESSION_RETENTION.anchorContextMs
+      ) {
+        to += 1;
+      }
+      while (to < series.length - 1 && !quietEdge(series, to, to - 1, value)) to += 1;
+      this.wristProtect = { fromMs: series[from]!.timestampMs, toMs: series[to]!.timestampMs };
+    }
+  }
+
+  /** Retire wrist samples past the horizon (absorbing a protected
+   * neighbourhood into the anchor segment as it ages), then advance the
+   * window front to a lull — never past the scan line — so smoothing across
+   * the join can neither forge a peak nor top the anchor. */
+  private retireWrist(cutMs: number, lineMs: number): void {
+    const series = this.wrist;
+    for (;;) {
+      const front = this.wristAnchorLen;
+      if (front >= series.length - 1) return;
+      const sample = series[front]!;
+      const protect = this.wristProtect;
+      if (sample.timestampMs < cutMs) {
+        if (protect && sample.timestampMs >= protect.fromMs && sample.timestampMs <= protect.toMs) {
+          this.wristAnchorLen += 1;
+          continue;
+        }
+        if (protect && sample.timestampMs > protect.toMs) this.wristProtect = null;
+      } else {
+        if (sample.timestampMs >= lineMs) return;
+        if (protect && sample.timestampMs >= protect.fromMs) return;
+        if (this.joinIsSafe()) return;
+      }
+      series.splice(front, 1);
+      this.retiredWristMs = Math.max(this.retiredWristMs, sample.timestampMs);
+      this.retiredWrist += 1;
+    }
+  }
+
+  private joinIsSafe(): boolean {
+    const series = this.wrist;
+    const front = this.wristAnchorLen;
+    if (this.retiredWristMs === Number.NEGATIVE_INFINITY) return true;
+    // Anchor still contiguous with the window (nothing retired after it).
+    if (front > 0 && this.retiredWristMs < series[front - 1]!.timestampMs) return true;
+    if (series[front]!.value >= QUIET_SPEED) return false;
+    if (smoothedAt(series, front) > this.wristAnchorValue) return false;
+    return front === 0 || smoothedAt(series, front - 1) <= this.wristAnchorValue;
+  }
+
+  private retirePaddle(cutMs: number): void {
+    const series = this.paddle;
+    for (;;) {
+      const sample = series[this.paddleAnchorLen];
+      if (!sample || sample.timestampMs >= cutMs) return;
+      if (sample.value > this.paddleAnchorValue) {
+        this.setPaddleAnchor(sample, true);
+      } else {
+        series.splice(this.paddleAnchorLen, 1);
+        this.retiredPaddle += 1;
+      }
+      this.retiredPaddleMs = Math.max(this.retiredPaddleMs, sample.timestampMs);
+    }
+  }
+
+  /** Keep exactly one paddle sample — the session's raw maximum — ahead of
+   * the window. Its timestamp is inert (no candidate reaches back to it);
+   * its magnitude keeps paddle confirmation normalized as in the full run.
+   * `atWindowFront`: the sample is the window's leading sample (being
+   * retired) rather than a late arrival from behind the window. */
+  private setPaddleAnchor(sample: SpeedSample, atWindowFront: boolean): void {
+    const series = this.paddle;
+    if (atWindowFront) series.splice(this.paddleAnchorLen, 1);
+    series.splice(0, this.paddleAnchorLen, { ...sample });
+    this.retiredPaddle += this.paddleAnchorLen;
+    this.paddleAnchorLen = 1;
+    this.paddleAnchorValue = sample.value;
+  }
+}
+
+/** The proposer's 3-sample smoothing at `index` (2 samples at the ends). */
+function smoothedAt(series: readonly SpeedSample[], index: number): number {
+  const from = Math.max(0, index - 1);
+  const to = Math.min(series.length - 1, index + 1);
+  let total = 0;
+  for (let cursor = from; cursor <= to; cursor += 1) total += series[cursor]!.value;
+  return total / (to - from + 1);
+}
+
+/** `edge` is a safe series end next to `inner`: quiet, and the pair's own
+ * 2-sample smoothing stays under the anchor's smoothed peak. */
+function quietEdge(
+  series: readonly SpeedSample[],
+  edge: number,
+  inner: number,
+  anchorValue: number,
+): boolean {
+  const edgeValue = series[edge]!.value;
+  const innerValue = series[inner]?.value ?? edgeValue;
+  return edgeValue < QUIET_SPEED && (edgeValue + innerValue) / 2 <= anchorValue;
+}
+
+/** First index whose timestamp is strictly after `timestampMs`. */
+function upperBound(series: readonly SpeedSample[], timestampMs: number): number {
+  let low = 0;
+  let high = series.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (series[mid]!.timestampMs <= timestampMs) low = mid + 1;
+    else high = mid;
+  }
+  return low;
 }
 
 function insertSorted(series: SpeedSample[], sample: SpeedSample): void {

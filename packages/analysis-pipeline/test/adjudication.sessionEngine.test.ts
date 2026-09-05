@@ -222,4 +222,76 @@ describe("ADJ-AP-001 SessionEventEngine per-push cost must not grow with session
     );
     expect(engine.snapshot().qualityState.notes).toEqual([]);
   });
+
+  it("a strong stroke minutes ago keeps setting the session's proposal floor and paddle normalization (batch-exact)", () => {
+    // The proposer's floor is relative to the SESSION peak (30% of it) and
+    // paddle confirmation normalizes by the session paddle maximum. Bounding
+    // the retained history must not forget either: after a 6.0 smash, 1.5
+    // dinks stay below the 1.8 floor for the rest of the session and 1.5
+    // paddle peaks stay non-decisive against the 4.0 paddle maximum — exactly
+    // as the offline batch run over the full series decides.
+    const totalMs = 150_000;
+    const smashMs = 5_000;
+    const wrist: SpeedSample[] = [];
+    const paddle: SpeedSample[] = [];
+    const drives: number[] = [];
+    const bumps: Array<{ peakMs: number; wrist: number; paddle: number }> = [
+      { peakMs: smashMs, wrist: 6.0, paddle: 4.0 },
+    ];
+    for (let peak = 10_000, drive = true; peak <= totalMs - 5_000; peak += STROKE_PERIOD_MS) {
+      bumps.push({ peakMs: peak, wrist: drive ? 2.5 : 1.5, paddle: 1.5 });
+      if (drive) drives.push(peak);
+      drive = !drive;
+    }
+    for (let t = 0; t <= totalMs; t += 33) {
+      let wristValue = IDLE;
+      let paddleValue = 0.05;
+      for (const bump of bumps) {
+        wristValue += bump.wrist * Math.exp(-0.5 * ((t - bump.peakMs) / 120) ** 2);
+        paddleValue += bump.paddle * Math.exp(-0.5 * ((t - bump.peakMs) / 80) ** 2);
+      }
+      wrist.push({ timestampMs: t, value: wristValue });
+      paddle.push({ timestampMs: t, value: paddleValue });
+    }
+    const batch = proposeStrokeEventsV2({
+      paddleSpeeds: paddle,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: totalMs,
+    }).events;
+    // Sanity: the batch itself proposes the smash + every drive and no dink
+    // (peaks land on the 33 ms sample grid).
+    expect(batch.length).toBe(1 + drives.length);
+    for (const [index, expectedPeak] of [smashMs, ...drives].entries()) {
+      expect(Math.abs(batch[index]!.peakMs - expectedPeak)).toBeLessThanOrEqual(33);
+    }
+    expect(batch.map((event) => event.paddleConfirmed)).toEqual([true, ...drives.map(() => false)]);
+
+    const engine = new SessionEventEngine({ sessionId: "adj-session-floor" });
+    const emitted: SessionStrokeEvent[] = [];
+    for (let index = 0; index < wrist.length; index += 1) {
+      emitted.push(...engine.push({ wrist: [wrist[index]!], paddle: [paddle[index]!] }));
+    }
+    emitted.push(...engine.flush());
+    const view = (event: {
+      startMs: number;
+      endMs: number;
+      peakMs: number;
+      peakSpeed: number;
+      paddleConfirmed: boolean;
+      paddleSupport: number;
+    }) => [
+      event.startMs,
+      event.endMs,
+      event.peakMs,
+      event.peakSpeed,
+      event.paddleConfirmed,
+      event.paddleSupport,
+    ];
+    expect(emitted.map((event) => view(event.proposal))).toEqual(batch.map(view));
+    const quality = engine.snapshot().qualityState;
+    expect(quality.notes).toEqual([]);
+    expect(quality.wristSamples).toBe(wrist.length);
+    expect(quality.paddleSamples).toBe(paddle.length);
+  });
 });
