@@ -97,8 +97,9 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   delay collapses to 1 ms on Node and would rotate + write the Keychain
   every millisecond). An untrusted expiry is never a sign-out reason;
   `__tests__/adjudication/sessionKeeperExpirySanity.test.ts` +
-  `sessionKeeperExpiryAttack.test.ts`. The keeper
-  retries transient failures with backoff, and
+  `sessionKeeperExpiryAttack.test.ts` + `sessionKeeperExpiryAttackR2.test.ts`
+  (clock jumps, bursts, payload variants, callback faults, real wall clock).
+  The keeper retries transient failures with backoff, and
   re-checks on every foreground (timers don't fire while suspended). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
   legacy Google silent-restore flag is only a fallback for devices that
