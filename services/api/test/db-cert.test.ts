@@ -74,6 +74,48 @@ describe.skipIf(!testUrl)("db reliability certification (real PostgreSQL)", () =
     await pool.query("DROP TABLE tx_cert_probe");
   });
 
+  it("a transaction whose backend PostgreSQL terminates rejects with the FATAL, discards the client, and the pool recovers", async () => {
+    // A bare pool: no app-level listeners. withTransaction() alone must keep a
+    // checked-out client's 'error' from becoming an unhandled event.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown) => unhandled.push(err);
+    process.on("uncaughtException", onUnhandled);
+    const before = pool.totalCount;
+    try {
+      await expect(
+        withTransaction(pool, async (client) => {
+          const { rows } = await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid");
+          await adminPool.query("SELECT pg_terminate_backend($1)", [rows[0]!.pid]);
+          // Idle in transaction while the FATAL arrives on the socket.
+          await new Promise((r) => setTimeout(r, 300));
+          await client.query("SELECT 1");
+        }),
+      ).rejects.toMatchObject({ code: "57P01" });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(unhandled).toEqual([]);
+      // The dead client was destroyed, not re-idled.
+      expect(pool.totalCount).toBe(Math.max(before - 1, 0));
+      expect(pool.idleCount).toBe(pool.totalCount);
+      await expect(
+        withTransaction(pool, async (c) => (await c.query("SELECT 1 AS ok")).rows[0]),
+      ).resolves.toEqual({ ok: 1 });
+    } finally {
+      process.removeListener("uncaughtException", onUnhandled);
+    }
+  });
+
+  it("an ordinary transaction failure is rolled back and the client is returned to the pool idle", async () => {
+    await expect(
+      withTransaction(pool, async (client) => {
+        await client.query("SELECT 1/0");
+      }),
+    ).rejects.toMatchObject({ code: "22012" });
+    expect(pool.totalCount).toBeGreaterThanOrEqual(1);
+    expect(pool.idleCount).toBe(pool.totalCount);
+    // The same connection still serves: nothing left aborted or in flight.
+    await expect(pool.query("SELECT 1 AS ok")).resolves.toMatchObject({ rows: [{ ok: 1 }] });
+  });
+
   it("a successful transaction commits atomically", async () => {
     await pool.query(
       "CREATE TABLE IF NOT EXISTS tx_cert_probe2 (id serial PRIMARY KEY, v text NOT NULL)",

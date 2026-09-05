@@ -20,21 +20,54 @@ export async function many<T extends Record<string, unknown>>(
   return rows as T[];
 }
 
+/** A server-reported failure carries a SQLSTATE (or a socket code) in `code`. */
+function hasErrorCode(error: unknown): boolean {
+  return typeof (error as { code?: unknown }).code === "string";
+}
+
+/**
+ * Runs `fn` inside BEGIN … COMMIT on one pooled client.
+ *
+ * A checked-out pg.Client emits 'error' on ITSELF when PostgreSQL closes the
+ * connection underneath it (pg_terminate_backend, restart/failover,
+ * idle_in_transaction_session_timeout, a dropped socket) — pg-pool detaches
+ * its own listener for the duration of the checkout. The client is watched
+ * for the whole transaction: a dead connection surfaces as the connection
+ * error (unless the statement itself already reported a coded failure),
+ * ROLLBACK is not attempted on it, and the client is handed back with the
+ * error so the pool destroys it instead of re-idling a dead socket.
+ */
 export async function withTransaction<T>(
   pool: pg.Pool,
   fn: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
+  let connectionError: Error | null = null;
+  const onConnectionError = (error: Error) => {
+    connectionError ??= error;
+  };
+  client.on("error", onConnectionError);
+  let releaseError: Error | undefined;
   try {
     await client.query("BEGIN");
     const result = await fn(client);
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
+    if (connectionError === null) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        // The transaction state is unknown; the client must not go back idle.
+        releaseError =
+          rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+      }
+    }
+    const connectionDied = connectionError !== null && !hasErrorCode(error);
+    throw connectionDied ? connectionError : error;
   } finally {
-    client.release();
+    client.removeListener("error", onConnectionError);
+    client.release(connectionError ?? releaseError);
   }
 }
 

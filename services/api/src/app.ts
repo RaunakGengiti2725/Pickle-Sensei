@@ -67,8 +67,9 @@ const PG_INVALID_INPUT_CODES = new Set(["22P02", "22003", "22021"]);
 
 /**
  * Datastore outages: connection refused/reset plus the Postgres classes for
- * connection failure (08…), admin/crash shutdown, server-side idle session
- * timeout, and exhausted resources.
+ * connection failure (08…), admin/crash shutdown, the server-side session
+ * timeouts (idle_session_timeout 57P05, idle_in_transaction_session_timeout
+ * 25P03 — both FATAL, the session is gone), and exhausted resources.
  */
 const UNAVAILABLE_SYSTEM_CODES = new Set([
   "ECONNREFUSED",
@@ -81,16 +82,24 @@ const UNAVAILABLE_SYSTEM_CODES = new Set([
   "57P02",
   "57P03",
   "57P05",
+  "25P03",
   "53300",
   "53400",
 ]);
+
+/** pg's own messages for a socket that closed without a server error. */
+const UNAVAILABLE_PG_MESSAGES = [
+  "Connection terminated unexpectedly",
+  "Connection terminated",
+  "Client has encountered a connection error and is not queryable",
+];
 
 function isDatastoreUnavailable(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   if (typeof code === "string" && (UNAVAILABLE_SYSTEM_CODES.has(code) || code.startsWith("08")))
     return true;
   const message = error instanceof Error ? error.message : "";
-  return message === "Connection terminated unexpectedly" || message.startsWith("timeout exceeded");
+  return UNAVAILABLE_PG_MESSAGES.includes(message) || message.startsWith("timeout exceeded");
 }
 
 function samplePool(pool: pg.Pool): PoolSaturationSample {
@@ -103,14 +112,22 @@ function samplePool(pool: pg.Pool): PoolSaturationSample {
 }
 
 /**
- * Connection pool whose idle-client failures are operational telemetry, not
- * process faults. When PostgreSQL closes an idle pooled connection (restart,
- * failover, idle_session_timeout, pg_terminate_backend) pg-pool purges the
- * client and re-emits its 'error' on the pool; the next checkout opens a
- * fresh connection. The failure is logged through the app logger — a warning
- * for a recognised datastore-unavailable class, an error otherwise — and the
- * shrunken pool is sampled into the SLO snapshot so it is visible on
- * /v1/health/slo before any request notices.
+ * Connection pool whose client failures are operational telemetry, not
+ * process faults. PostgreSQL closing a pooled connection (restart, failover,
+ * session timeouts, pg_terminate_backend, a dropped socket) surfaces as an
+ * 'error' event: pg-pool re-emits an IDLE client's error on the pool after
+ * purging it, but detaches that listener while a client is CHECKED OUT
+ * (`pool.connect()`), so a checked-out client emits on itself and would
+ * otherwise be an unhandled 'error' event that ends the process. Every client
+ * therefore carries a listener for the whole of its checkout (`acquire` →
+ * `release`), attached synchronously at hand-out: the caller's `await
+ * pool.connect()` resumes a microtask later, and a FATAL parsed from the same
+ * socket chunk as the connection's ReadyForQuery lands before that. The
+ * caller still sees its statements reject and decides what to answer. Each
+ * failure is logged through the app logger — a warning for a recognised
+ * datastore-unavailable class, an error otherwise — and the pool is sampled
+ * into the SLO snapshot so the loss is visible on /v1/health/slo before any
+ * request notices.
  */
 function buildPool(
   connectionString: string,
@@ -118,7 +135,7 @@ function buildPool(
   sloRecorder: ApiSloRecorder,
 ): pg.Pool {
   const pool = new pg.Pool({ connectionString });
-  pool.on("error", (err) => {
+  const report = (err: Error, subject: string) => {
     // pg-pool tags the purged client onto the error; the log line must carry
     // the Postgres error, not a serialised socket and connection parameters.
     if ("client" in err) Object.defineProperty(err, "client", { enumerable: false });
@@ -126,10 +143,18 @@ function buildPool(
     const sample = samplePool(pool);
     sloRecorder.recordPoolSample(sample);
     if (isDatastoreUnavailable(err)) {
-      log.warn({ err, pgCode, pool: sample }, "postgres pool: idle client closed by server");
+      log.warn({ err, pgCode, pool: sample }, `postgres pool: ${subject} closed by server`);
       return;
     }
-    log.error({ err, pgCode, pool: sample }, "postgres pool: idle client error");
+    log.error({ err, pgCode, pool: sample }, `postgres pool: ${subject} error`);
+  };
+  pool.on("error", (err) => report(err, "idle client"));
+  const onCheckedOutClientError = (err: Error) => report(err, "checked-out client");
+  pool.on("acquire", (client) => {
+    client.on("error", onCheckedOutClientError);
+  });
+  pool.on("release", (_err, client) => {
+    client.removeListener("error", onCheckedOutClientError);
   });
   return pool;
 }
