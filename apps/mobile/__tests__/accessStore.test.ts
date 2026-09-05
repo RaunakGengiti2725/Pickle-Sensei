@@ -342,7 +342,7 @@ describe('accessStore', () => {
     expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
 
     rejectStale(new Error('network dropped'));
-    await expect(staleRefresh).resolves.toBe(false);
+    await expect(staleRefresh).resolves.toBe(true);
 
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
@@ -374,7 +374,7 @@ describe('accessStore', () => {
       canStartRating: false,
       paywallRequired: true,
     });
-    await expect(staleRefresh).resolves.toBe(false);
+    await expect(staleRefresh).resolves.toBe(true);
 
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
@@ -414,10 +414,43 @@ describe('accessStore', () => {
       canStartRating: false,
       paywallRequired: true,
     });
-    await expect(olderRefresh).resolves.toBe(false);
+    await expect(olderRefresh).resolves.toBe(true);
 
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('an initialize() read superseded by a restore commit still lands its plans but never its access snapshot', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().refreshAccess();
+    expect(useAccessStore.getState().plans).toBeNull();
+
+    let resolveStale!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<CanonicalAccessState>(resolve => {
+          resolveStale = resolve;
+        }),
+    );
+    const retry = useAccessStore.getState().initialize();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(2);
+
+    await expect(useAccessStore.getState().restorePurchases()).resolves.toBe(
+      true,
+    );
+    expect(useAccessStore.getState().plans).toBeNull();
+
+    resolveStale(freeAccess);
+    await retry;
+
+    const state = useAccessStore.getState();
+    expect(state.plans?.annual?.id).toBe('annual-plan');
+    expect(state.status).toBe('ready');
+    expect(state.error).toBeNull();
     expect(state.canonicalAccess).toEqual(paidAccess);
     expect(selectHasPremium(state)).toBe(true);
   });

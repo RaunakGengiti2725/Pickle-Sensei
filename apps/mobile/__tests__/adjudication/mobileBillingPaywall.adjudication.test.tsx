@@ -222,7 +222,7 @@ describe('MBP-1 stale refreshAccess GET overwrites a verified purchase', () => {
 
     // The stale response lands last and is discarded.
     slowGet.resolve(freeAccess);
-    await staleRefresh;
+    await expect(staleRefresh).resolves.toBe(true);
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
     expect(state.canonicalAccess).toEqual(paidAccess);
