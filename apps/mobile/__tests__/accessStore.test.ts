@@ -322,6 +322,141 @@ describe('accessStore', () => {
     expect(selectHasPremium(state)).toBe(true);
   });
 
+  it('a refresh failure that started before purchaseSelected() resolved never nulls the verified premium snapshot', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let rejectStale!: (reason: unknown) => void;
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<CanonicalAccessState>((_resolve, reject) => {
+          rejectStale = reject;
+        }),
+    );
+    const staleRefresh = useAccessStore.getState().refreshAccess();
+
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      true,
+    );
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    rejectStale(new Error('network dropped'));
+    await expect(staleRefresh).resolves.toBe(false);
+
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.error).toBeNull();
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+    expect(selectCanStartRating(state)).toBe(true);
+  });
+
+  it('a refresh that started before syncBilling() resolved never overwrites the synced snapshot', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let resolveStale!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<CanonicalAccessState>(resolve => {
+          resolveStale = resolve;
+        }),
+    );
+    const staleRefresh = useAccessStore.getState().refreshAccess();
+
+    await expect(useAccessStore.getState().syncBilling()).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    resolveStale({
+      ...freeAccess,
+      canStartRating: false,
+      paywallRequired: true,
+    });
+    await expect(staleRefresh).resolves.toBe(false);
+
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('an older refresh response cannot overwrite the result of a newer refresh', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let resolveOlder!: (value: CanonicalAccessState) => void;
+    let resolveNewer!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock)
+      .mockImplementationOnce(
+        () =>
+          new Promise<CanonicalAccessState>(resolve => {
+            resolveOlder = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<CanonicalAccessState>(resolve => {
+            resolveNewer = resolve;
+          }),
+      );
+    const olderRefresh = useAccessStore.getState().refreshAccess();
+    const newerRefresh = useAccessStore.getState().refreshAccess();
+
+    resolveNewer(paidAccess);
+    await expect(newerRefresh).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(paidAccess);
+
+    resolveOlder({
+      ...freeAccess,
+      canStartRating: false,
+      paywallRequired: true,
+    });
+    await expect(olderRefresh).resolves.toBe(false);
+
+    const state = useAccessStore.getState();
+    expect(state.status).toBe('ready');
+    expect(state.canonicalAccess).toEqual(paidAccess);
+    expect(selectHasPremium(state)).toBe(true);
+  });
+
+  it('a refresh that outlives a purchase the store rejected still applies its server read', async () => {
+    const clients = dependencies();
+    (clients.store.purchase as jest.Mock).mockRejectedValueOnce(
+      new Error('store declined'),
+    );
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+
+    let resolveRefresh!: (value: CanonicalAccessState) => void;
+    (clients.backend.getAccess as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<CanonicalAccessState>(resolve => {
+          resolveRefresh = resolve;
+        }),
+    );
+    const refresh = useAccessStore.getState().refreshAccess();
+
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      false,
+    );
+    expect(clients.backend.syncBilling).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess);
+
+    const spent: CanonicalAccessState = {
+      ...freeAccess,
+      freeRatings: { ...freeAccess.freeRatings, used: 2, remaining: 0 },
+      canStartRating: false,
+      paywallRequired: true,
+    };
+    resolveRefresh(spent);
+    await expect(refresh).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess).toEqual(spent);
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(false);
+  });
+
   it('cannot repopulate the previous account after sign-out mid-refresh', async () => {
     const clients = dependencies();
     configureAccessStore(clients);

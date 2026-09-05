@@ -34,6 +34,14 @@ export interface AccessStoreState {
 
 let dependencies: BillingAccessDependencies | null = null;
 let configurationVersion = 0;
+/**
+ * Ownership slot for the single refreshAccess() read that is allowed to land.
+ * Every canonical write — a later refresh, or a backend-verified
+ * syncBilling/purchaseSelected/restorePurchases commit — takes the slot, so a
+ * GET /v1/me/access response (or failure) requested before that write can no
+ * longer replace the newer snapshot. Null means no refresh may commit.
+ */
+let refreshOwner: object | null = null;
 
 const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
@@ -74,6 +82,19 @@ function isCurrentConfiguration(
   version: number,
 ): boolean {
   return dependencies === clients && configurationVersion === version;
+}
+
+/** Called by every canonical-access write; in-flight refreshes become stale. */
+function supersedeRefresh(): void {
+  refreshOwner = null;
+}
+
+function ownsRefresh(
+  clients: BillingAccessDependencies,
+  version: number,
+  owner: object,
+): boolean {
+  return isCurrentConfiguration(clients, version) && refreshOwner === owner;
 }
 
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
@@ -192,14 +213,18 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return false;
     }
     const version = configurationVersion;
+    const owner = {};
+    refreshOwner = owner;
     set({ status: 'loading', error: null });
     try {
       const canonicalAccess = await clients.backend.getAccess();
-      if (!isCurrentConfiguration(clients, version)) return false;
+      if (!ownsRefresh(clients, version, owner)) return false;
+      supersedeRefresh();
       set({ status: 'ready', canonicalAccess, error: null });
       return true;
     } catch (cause) {
-      if (!isCurrentConfiguration(clients, version)) return false;
+      if (!ownsRefresh(clients, version, owner)) return false;
+      supersedeRefresh();
       const error = billingError(
         cause,
         'billing.backend_unavailable',
@@ -231,6 +256,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       set({
         status: 'ready',
         operation: 'idle',
@@ -240,6 +266,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return synced.access.premium;
     } catch (cause) {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       const source = billingError(
         cause,
         'billing.backend_unavailable',
@@ -312,6 +339,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.backend_verification_pending',
@@ -335,6 +363,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
@@ -377,6 +406,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
     try {
       const synced = await clients.backend.syncBilling();
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       if (!synced.access.premium) {
         const error = new BillingError(
           'billing.restore_failed',
@@ -400,6 +430,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       return true;
     } catch {
       if (!isCurrentConfiguration(clients, version)) return false;
+      supersedeRefresh();
       const error = new BillingError(
         'billing.backend_verification_pending',
         'Restored purchases could not be verified yet. Please try again.',
@@ -421,6 +452,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   reset: () => {
     configurationVersion += 1;
+    supersedeRefresh();
     set(dataDefaults());
   },
 }));
@@ -434,6 +466,7 @@ export function configureAccessStore(
 ): void {
   dependencies = nextDependencies;
   configurationVersion += 1;
+  supersedeRefresh();
   useAccessStore.setState(dataDefaults());
 }
 
@@ -441,5 +474,6 @@ export function configureAccessStore(
 export function clearAccessStoreConfiguration(): void {
   dependencies = null;
   configurationVersion += 1;
+  supersedeRefresh();
   useAccessStore.setState(dataDefaults());
 }
