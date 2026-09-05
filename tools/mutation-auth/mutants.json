@@ -548,8 +548,8 @@
       "symbol": "authenticate() provider branch",
       "category": "auth-cache",
       "description": "Verified provider-token sessions are never cached (Supabase Auth consulted on every request).",
-      "find": "    await writeAuthCache(\n      cacheKey,\n      {\n        userId: signIn.data.user.id,",
-      "replace": "    if (false) await writeAuthCache(\n      cacheKey,\n      {\n        userId: signIn.data.user.id,"
+      "find": "    await writeAuthCache(\n      cacheKey,\n      {\n        userId: session.user.id,",
+      "replace": "    if (false) await writeAuthCache(\n      cacheKey,\n      {\n        userId: session.user.id,"
     },
     {
       "id": "ED-04",
@@ -697,9 +697,9 @@
       "file": "supabase/functions/api/index.ts",
       "symbol": "authenticate() provider branch",
       "category": "authenticate",
-      "description": "A provider-token verification failure is not turned into 401 (null user dereferenced → 500 instead of a clean refusal).",
-      "find": "    if (signIn.error || !signIn.data.user || !signIn.data.session) {\n      return errorJson(401, \"The identity token could not be verified.\");\n    }\n    await writeAuthCache(",
-      "replace": "    if (false) {\n      return errorJson(401, \"The identity token could not be verified.\");\n    }\n    await writeAuthCache("
+      "description": "A provider-token verification failure is not turned into 401/403/429/503 (a refused/unavailable verdict is dereferenced as a session → 500 instead of a clean verdict).",
+      "find": "    if (signIn.kind !== \"ok\") return providerSignInFailure(signIn);\n    const session = signIn.value;\n    await writeAuthCache(",
+      "replace": "    if (false) return providerSignInFailure(signIn);\n    const session = (signIn as { value: SupabaseSessionLike & { user: AuthUserLike } }).value;\n    await writeAuthCache("
     },
     {
       "id": "ED-19",

@@ -318,3 +318,138 @@ Deno.test(
     }
   },
 );
+
+/** GoTrue's id_token grant also refuses the ACCOUNT behind a valid token
+ * (422 signup_disabled / email_exists / identity_already_exists, …). Nothing
+ * a retry changes, and nothing wrong with the token either: a final 403 the
+ * app shows (bootstrap.ts: 401/403 → account.rejected, not retried) that
+ * charges no auth failure. */
+const accountVerdicts: Array<[string, () => Response]> = [
+  [
+    "422 signup_disabled",
+    () =>
+      jsonResponse(422, {
+        code: 422,
+        error_code: "signup_disabled",
+        msg: "Signups not allowed for this instance",
+      }),
+  ],
+  [
+    "422 email_exists",
+    () =>
+      jsonResponse(422, {
+        code: 422,
+        error_code: "email_exists",
+        msg: "Email address already registered by another user",
+      }),
+  ],
+  ["404", () => jsonResponse(404, { code: 404, msg: "gotrue-account-detail-must-not-leak" })],
+  ["410", () => new Response("", { status: 410 })],
+];
+
+Deno.test(
+  "authfail: bootstrap under a GoTrue account verdict (422 / 404 / 410) is a final 403 — never 401 (charged) and never 503 (retried)",
+  async () => {
+    const h = await loadHarness();
+    const ip = "10.7.0.35";
+    for (const [label, respond] of accountVerdicts) {
+      const verdict = await withAuthUpstream(onIdTokenEndpoint(respond), () =>
+        postBootstrap(h.handler, ip),
+      );
+      assertEquals(verdict.status, 403, `GoTrue ${label}: ${verdict.body}`);
+      const body = JSON.parse(verdict.body) as { error: { message?: unknown } };
+      assertEquals(typeof body.error.message, "string", `generic body: ${verdict.body}`);
+      assertEquals(verdict.body.includes("must-not-leak"), false, `leaked: ${verdict.body}`);
+      assertEquals(verdict.body.includes("temporarily unavailable"), false, verdict.body);
+    }
+    assertEquals(await chargedFailures(ip), 0, "an account verdict is not a bad credential");
+  },
+);
+
+Deno.test(
+  "authfail: a refresh answered 409 by GoTrue (concurrent rotation of the same token) is 503 and charges nothing — only 400/401/403 refuse a refresh token",
+  async () => {
+    const h = await loadHarness();
+    const ip = "10.7.0.36";
+    const conflicted = await withAuthUpstream(
+      onRefreshEndpoint(() =>
+        jsonResponse(409, {
+          code: 409,
+          error_code: "conflict",
+          msg: "Too many concurrent token refresh requests on the same session or refresh token",
+        }),
+      ),
+      () => postRefresh(h.handler, ip),
+    );
+    assertEquals(conflicted.status, 503, "a 409 clears on retry; it is not a refusal");
+    assertEquals(await chargedFailures(ip), 0);
+  },
+);
+
+/** GET /v1/me bearing a Google ID token (transitional, pre-session app builds):
+ * authenticate()'s provider branch runs the same id_token exchange as
+ * bootstrap and must follow the same verdicts. Every bearer is distinct so
+ * the auth cache never answers. */
+async function getMeWithProviderToken(
+  handler: (request: Request) => Promise<Response>,
+  ip: string,
+): Promise<{ status: number; retryAfter: string | null; body: string }> {
+  const response = await handler(
+    userRequest("GET", "/v1/me", { ip, token: fakeGoogleIdToken(crypto.randomUUID()) }),
+  );
+  return {
+    status: response.status,
+    retryAfter: response.headers.get("Retry-After"),
+    body: await response.text(),
+  };
+}
+
+Deno.test(
+  "authfail: the transitional provider-token bearer on GET /v1/me follows the bootstrap verdicts — 429 → 429 + Retry-After, outage → 503, 422 → 403, all uncharged; 400/401/403 → 401 charged",
+  async () => {
+    const h = await loadHarness();
+    const ip = "10.7.0.37";
+    const upstreamDetail = "gotrue-detail-must-not-leak";
+
+    const limited = await withAuthUpstream(
+      onIdTokenEndpoint(
+        () =>
+          new Response(JSON.stringify({ code: 429, msg: upstreamDetail }), {
+            status: 429,
+            headers: { "Content-Type": "application/json", "Retry-After": "5" },
+          }),
+      ),
+      () => getMeWithProviderToken(h.handler, ip),
+    );
+    assertEquals(limited.status, 429, limited.body);
+    assertEquals(limited.retryAfter, "5");
+    assertEquals(limited.body.includes(upstreamDetail), false, `leaked: ${limited.body}`);
+
+    const outages: Array<() => Promise<Response> | Response> = [
+      () => jsonResponse(503, { code: 503, msg: upstreamDetail }),
+      () => Promise.reject(new TypeError(upstreamDetail)),
+      () => jsonResponse(200, { ok: true }),
+    ];
+    for (const [index, respond] of outages.entries()) {
+      const outage = await withShortUpstreamDeadline(() =>
+        withAuthUpstream(onIdTokenEndpoint(respond), () => getMeWithProviderToken(h.handler, ip)),
+      );
+      assertEquals(outage.status, 503, `outage ${index} must be retryable: ${outage.body}`);
+      assertStringIncludes(outage.body, "is temporarily unavailable. Please try again.");
+      assertEquals(outage.body.includes(upstreamDetail), false, `leaked: ${outage.body}`);
+    }
+
+    const verdict = await withAuthUpstream(onIdTokenEndpoint(accountVerdicts[0][1]), () =>
+      getMeWithProviderToken(h.handler, ip),
+    );
+    assertEquals(verdict.status, 403, verdict.body);
+    assertEquals(await chargedFailures(ip), 0, "nothing above was a bad credential");
+
+    const refused = await withAuthUpstream(
+      onIdTokenEndpoint(() => jsonResponse(400, { code: 400, error_code: "bad_id_token" })),
+      () => getMeWithProviderToken(h.handler, ip),
+    );
+    assertEquals(refused.status, 401, refused.body);
+    assertEquals(await chargedFailures(ip), 1, "a refused ID token is a real auth failure");
+  },
+);

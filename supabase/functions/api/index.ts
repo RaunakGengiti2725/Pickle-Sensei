@@ -446,8 +446,16 @@ const AUTH_RETRY_AFTER_SECONDS = 2;
 /** GoTrue statuses that are a verdict on the credential itself: bad/expired
  * JWT (401), session or user gone / banned (403), refresh token not found or
  * already rotated (400 invalid_grant). Everything else is the service, not
- * the credential. */
+ * the credential — including a 409 on the refresh grant (a concurrent
+ * rotation of the same token), which clears on retry. */
 const AUTH_REFUSAL_STATUSES: ReadonlySet<number> = new Set([400, 401, 403]);
+const isCredentialRefusal = (status: number): boolean => AUTH_REFUSAL_STATUSES.has(status);
+/** The id_token grant also answers with verdicts on the ACCOUNT behind a
+ * valid token — 422 signup_disabled / email_exists / identity_already_exists
+ * / provider_disabled — that no retry changes; it has no concurrency class,
+ * so every 4xx but 429 (GoTrue throttling us) is final. */
+const isIdTokenGrantRefusal = (status: number): boolean =>
+  status >= 400 && status < 500 && status !== 429;
 
 function authUpstreamTimeoutMs(): number {
   const configured = Number(Deno.env.get("AUTH_UPSTREAM_TIMEOUT_MS"));
@@ -572,9 +580,12 @@ async function authRequest<T>(
     method: "GET" | "POST";
     bearer?: string;
     body?: Record<string, unknown>;
+    /** Which HTTP statuses are `refused`; defaults to `isCredentialRefusal`. */
+    refusal?: (status: number) => boolean;
   },
   parse: (payload: unknown) => T | null,
 ): Promise<AuthVerdict<T>> {
+  const isRefusal = init.refusal ?? isCredentialRefusal;
   const headers: Record<string, string> = {
     apikey: SUPABASE_ANON_KEY,
     Accept: "application/json",
@@ -643,7 +654,7 @@ async function authRequest<T>(
   } catch {
     // Non-JSON body: a verdict status still stands; a 2xx is malformed below.
   }
-  if (AUTH_REFUSAL_STATUSES.has(answer.status)) {
+  if (isRefusal(answer.status)) {
     return {
       kind: "refused",
       status: answer.status,
@@ -686,36 +697,48 @@ const rotateRefreshToken = (
 /** POST /auth/v1/token?grant_type=id_token — exchange a Google/Apple ID
  * token for a Supabase session (the signInWithIdToken grant). GoTrue verifies
  * the token against the provider; a 400/401/403 is its refusal of THAT
- * token, anything else is the service. */
+ * token, any other 4xx (bar 429) its refusal of the account behind it, and
+ * everything else is the service. */
 const exchangeProviderIdToken = (
   provider: "google" | "apple",
   idToken: string,
 ): Promise<AuthVerdict<SupabaseSessionLike & { user: AuthUserLike }>> =>
   authRequest(
     "/token?grant_type=id_token",
-    { method: "POST", body: { provider, id_token: idToken } },
+    { method: "POST", body: { provider, id_token: idToken }, refusal: isIdTokenGrantRefusal },
     authSessionOf,
   );
 
-/** Copy for a failed ID-token exchange: `refused` is the one 401 (charged to
- * the auth-failure budget by the caller's route); `unavailable` is retryable
- * and says nothing about the token — GoTrue's per-IP /token limit is shared
- * by every edge isolate, so its 429 is relayed as a 429 with its Retry-After
- * (the app treats 429 and 5xx alike as retryable), and every other outage
- * is the generic 503. */
+/** GoTrue throttling us (429) is relayed as a 429 with its Retry-After — the
+ * app treats 429 like 5xx, retryable — never as a verdict on anything. Its
+ * per-IP limits are shared by every edge isolate, so this is fleet-wide. */
+function upstreamThrottled(context: string, detail: unknown, retryAfterSeconds: number): Response {
+  console.error(`[api] ${context} rate limited upstream:`, detail);
+  const response = codedError(
+    429,
+    "rate_limited",
+    `${context} is temporarily unavailable. Please try again.`,
+  );
+  response.headers.set("Retry-After", String(retryAfterSeconds));
+  return response;
+}
+
+/** Copy for a failed ID-token exchange. `refused` is final: a bad token
+ * (400/401/403) is the one 401, charged to the auth-failure budget by the
+ * caller's route; a verdict on the account (422 and the like) is a 403 the
+ * app shows and does not retry, uncharged — the token was not bad.
+ * `unavailable` is retryable and says nothing about either: GoTrue's 429 is
+ * relayed with its Retry-After, every other outage is the generic 503. */
 function providerSignInFailure(verdict: Exclude<AuthVerdict<unknown>, { kind: "ok" }>): Response {
   if (verdict.kind === "refused") {
-    return errorJson(401, "The identity token could not be verified.");
+    if (isCredentialRefusal(verdict.status)) {
+      return errorJson(401, "The identity token could not be verified.");
+    }
+    console.error("[api] Sign-in refused upstream:", verdict.detail);
+    return errorJson(403, "Sign-in was refused for this account.");
   }
   if (verdict.upstreamStatus === 429) {
-    console.error("[api] Sign-in rate limited upstream:", verdict.detail);
-    const response = codedError(
-      429,
-      "rate_limited",
-      "Sign-in is temporarily unavailable. Please try again.",
-    );
-    response.headers.set("Retry-After", String(verdict.retryAfterSeconds));
-    return response;
+    return upstreamThrottled("Sign-in", verdict.detail, verdict.retryAfterSeconds);
   }
   return serviceUnavailable("Sign-in", verdict.detail, verdict.retryAfterSeconds);
 }
@@ -1008,7 +1031,14 @@ async function logoutRoute(request: Request): Promise<Response> {
   }
   await response.body?.cancel().catch(() => undefined);
   // 401/403/404 here mean the session is already gone — the outcome the
-  // caller wanted. Only a server-side failure is worth reporting.
+  // caller wanted. A 429 or a server-side failure revoked nothing.
+  if (response.status === 429) {
+    return upstreamThrottled(
+      "Sign-out",
+      `status ${response.status}`,
+      retryAfterOf(response.headers.get("Retry-After")),
+    );
+  }
   if (!response.ok && response.status >= 500) {
     return serviceUnavailable("Sign-out", `status ${response.status}`);
   }
