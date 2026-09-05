@@ -19,7 +19,11 @@
  */
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { generateSwingSequence } from '@pickle/evaluation';
-import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
+import {
+  parsePoseSequence,
+  serializePoseSequence,
+  sha256Hex,
+} from '@pickle/swing-domain';
 import type { CapturedClip } from '../../src/camera/capture';
 import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
@@ -117,6 +121,48 @@ function fixture(id: string, handed: 'right' | 'left') {
     },
   };
   return { clip, sidecarJson };
+}
+
+/** Same real swing, with every pose frame inside a `gapMs` stretch of the
+ * stroke window removed — a tracking dropout through the backswing wider
+ * than QUALITY_THRESHOLDS.maxGapMs, ending 200 ms before contact so the
+ * contact peak itself survives and the engine WOULD score it. The sidecar
+ * hash and frame count describe the gapped sequence, so only the
+ * pose-quality gate can refuse it. */
+function dropoutFixture(id: string, handed: 'right' | 'left', gapMs: number) {
+  const { clip, sidecarJson: fullJson } = fixture(id, handed);
+  const full = parsePoseSequence(fullJson, {
+    providerId: 'pose.apple-vision',
+    runtime: 'vision_framework',
+    executionTarget: 'on_device',
+    artifactHash: null,
+  });
+  if (!full.ok) throw new Error(full.failure.message);
+  const peakMs = clip.trigger!.peakMotionMs!;
+  const gapEnd = peakMs - 200;
+  const gapStart = gapEnd - gapMs;
+  expect(gapStart).toBeGreaterThan(0);
+  const frames = full.value.frames.filter(
+    frame => frame.timestampMs < gapStart || frame.timestampMs > gapEnd,
+  );
+  expect(frames.length).toBeLessThan(full.value.frames.length);
+  expect(frames.length).toBeGreaterThan(0);
+  const gapped = serializePoseSequence({ ...full.value, frames });
+  const subject: CapturedClip = {
+    ...clip,
+    captureEvidence: {
+      ...clip.captureEvidence,
+      analysisInputFrameCount: frames.length,
+      poseFrameCount: frames.length,
+      poseMissingFrameCount: full.value.frames.length - frames.length,
+    },
+    poseSequence: {
+      ...clip.poseSequence!,
+      frameCount: frames.length,
+      sha256: sha256Hex(gapped),
+    },
+  };
+  return { clip: subject, sidecarJson: gapped };
 }
 
 function envelope(overall: 'DEGRADED' | 'UNSUPPORTED'): EnvelopeVerdict {
@@ -385,6 +431,62 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
             return {
               kind: outcome!.kind,
               reason: (outcome as { reason?: string }).reason,
+            };
+          },
+        );
+      });
+    }
+  });
+
+  describe('pose-quality gate AFTER reserve: a dropout-gap sidecar is never scored, releases exactly once, writes nothing', () => {
+    for (const seed of scenarioSeeds('permitDropoutGap')) {
+      it(`seed ${seed}`, async () => {
+        const random = seededRandom(seed);
+        const declared = random() < 0.6 ? 'forehand_drive' : null;
+        const handed = random() < 0.5 ? 'right' : 'left';
+        // A tracking hole wider than QUALITY_THRESHOLDS.maxGapMs (700 ms),
+        // straddling contact so it cannot be padding.
+        const gapMs = randomInt(random, 750, 850);
+        await recordScenario(
+          SUITE,
+          'permitDropoutGap',
+          seed,
+          { declared, handed, gapMs },
+          async () => {
+            const fake = createFakeLocalDb();
+            const { clip, sidecarJson } = dropoutFixture(
+              `dropout-${seed}`,
+              handed,
+              gapMs,
+            );
+            mockReadArtifact = async () => sidecarJson;
+            const { outcome, error } = await runOnce(fake, clip, declared);
+            expect(error).toBeNull();
+            expect(outcome).not.toBeNull();
+            expect(outcome!.kind).not.toBe('scored');
+            expect(outcome!.kind).toBe('quality_blocked');
+            if (outcome!.kind === 'quality_blocked') {
+              expect(outcome!.poseQuality?.analyzable).toBe(false);
+              expect(outcome!.poseQuality?.reasons).toContain(
+                'tracking_dropout_gap',
+              );
+            }
+            expect(server.reserves).toBe(1);
+            expect(server.releases).toEqual([
+              { permitId: 'permit-1', outcome: 'unsupported' },
+            ]);
+            expect(fake.shots).toHaveLength(0);
+            expect(fake.outbox).toHaveLength(0);
+            expect(fake.analysisRecords).toHaveLength(0);
+            expect(fake.openTransactions()).toBe(0);
+            return {
+              kind: outcome!.kind,
+              reasons:
+                outcome!.kind === 'quality_blocked'
+                  ? (outcome!.poseQuality?.reasons ?? [])
+                  : [],
+              releases: server.releases,
+              shots: fake.shots.length,
             };
           },
         );
