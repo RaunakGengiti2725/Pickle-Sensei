@@ -208,6 +208,41 @@ Deno.test(
 );
 
 Deno.test(
+  "webhook: a persisted event replay is acknowledged without repeated billing work",
+  async () => {
+    // index.ts comments claim "an already-seen event is acknowledged without
+    // another RevenueCat round trip", but the upsert result is never inspected.
+    const sim = await simulate();
+    try {
+      const h = sim.h;
+      h.subscriber = activeSubscriber();
+      const event = {
+        id: "evt-persisted-replay",
+        type: "RENEWAL",
+        app_user_id: TEST_USER_ID,
+      };
+      const first = await h.handler(webhookRequest(event));
+      assertEquals(first.status, 200);
+      await first.json();
+      const persisted = sim.auditRows.get(event.id);
+      assert(persisted?.processed_at);
+      sim.auditRows.set(event.id, JSON.parse(JSON.stringify(persisted)));
+      for (let i = 0; i < 2; i += 1) {
+        const replay = await h.handler(webhookRequest(event));
+        assertEquals(replay.status, 200);
+        assertEquals(await replay.json(), { received: true, duplicate: true });
+      }
+      assertEquals(h.callsTo(RC_URL).length, 1);
+      assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 1);
+      assertEquals(sim.auditRows.size, 1);
+      assertEquals(sim.auditUpserts(), 3);
+    } finally {
+      sim.restore();
+    }
+  },
+);
+
+Deno.test(
   "webhook: TRANSFER events (no app_user_id/aliases) re-verify BOTH transferred_from and transferred_to",
   async () => {
     // Per RevenueCat docs, TRANSFER uses only Common + Transfer fields

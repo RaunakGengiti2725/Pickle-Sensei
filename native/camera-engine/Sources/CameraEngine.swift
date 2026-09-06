@@ -587,6 +587,15 @@ public final class CameraEngine: NSObject, @unchecked Sendable {
     }
   }
 
+  public var currentRecordingSnapshot: RecordingArtifact? {
+    recordingLock.lock()
+    defer { recordingLock.unlock() }
+    guard let url = activeRecordingURL,
+          let first = recordingFirstFrameTimestampMs,
+          let last = recordingLastFrameTimestampMs else { return nil }
+    return RecordingArtifact(url: url, firstFrameTimestampMs: first, lastFrameTimestampMs: last)
+  }
+
   public var currentRecordingFirstFrameTimestampMs: Int? {
     recordingLock.lock()
     defer { recordingLock.unlock() }

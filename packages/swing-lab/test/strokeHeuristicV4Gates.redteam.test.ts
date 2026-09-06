@@ -78,7 +78,7 @@ describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong output
     );
   });
 
-  it("F20-F2 RESOLVED (stroke-heuristic-6): torso extent parked at 62.5% of the sequence median no longer commits a false OVERHEAD — the median-normalization cross-check abstains", () => {
+  it("F20-F2 remains abstained in stroke-heuristic-9: a compressed local torso does not replace independent arm-raise evidence", () => {
     // Ground truth: a shoulder-high punch volley (contact 0.22 REAL
     // torso-units above the shoulder line — below the 0.25 overhead line).
     // A partial hip occlusion compresses the measured extent to 0.125u
@@ -92,9 +92,9 @@ describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong output
     // motion — abstain.
     const prediction = classifyFixture(torsoCollapseBoundaryOverheadFixture());
     expect(prediction.label).toBe("UNKNOWN");
-    expect(prediction.limitingFactors).toContain(
-      "overhead_decision_flips_under_median_torso_normalization",
-    );
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.confidence).toBe(0.2);
+    expect(prediction.limitingFactors).toContain("overhead_requires_independent_arm_raise");
   });
 
   it("F20-F2 counterfactual: the byte-identical motion with an honestly-measured torso commits FOREHAND, not OVERHEAD", () => {
@@ -108,7 +108,7 @@ describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong output
 });
 
 describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on genuine strokes)", () => {
-  it("F20-F3: a genuine deep-crouch dink abstains on the torso-collapse gate (real crouch reads as occlusion collapse)", () => {
+  it("F20-F3 RESOLVED (stroke-heuristic-9): a genuine deep-crouch dink keeps its FOREHAND side using only the local torso", () => {
     // Ground truth: FOREHAND dink hit in a deep crouch — the reference
     // frame's REAL torso extent is 0.11u vs the standing sequence median
     // 0.20u (55%). ROOT CAUSE: the v4 relative gate cannot distinguish a
@@ -117,8 +117,11 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
     // median (deep crouch, lunge, dive) is unclassifiable by construction.
     // This is the gate's coverage floor.
     const prediction = classifyFixture(crouchDinkFixture());
-    expect(prediction.label).toBe("UNKNOWN");
-    expect(prediction.limitingFactors).toContain("torso_extent_collapsed_vs_sequence_median");
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.leaf).toBeNull();
+    expect(prediction.limitingFactors).not.toContain("torso_extent_collapsed_vs_sequence_median");
+    expect(prediction.limitingFactors).toContain("bounce_not_observed_level3_uncommitted");
   });
 
   it("F20-F4: a genuine forehand with the rival arm fully occluded abstains — a measured coverage REGRESSION vs stroke-heuristic-3", () => {
@@ -150,14 +153,14 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
       paddleSpeeds: null,
       wristSpeeds: fixture.wristSpeeds,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-7");
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-9");
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain(
       "dominant_wrist_attribution_unverifiable_rival_unmeasured",
     );
   });
 
-  it("F20-F5: a one-sided 3-sample speed slice reads a genuine fast swing as 'no swing energy'", () => {
+  it("F20-F5 RESOLVED (stroke-heuristic-9): a genuine fast swing with only 3 local speeds keeps its FOREHAND side without an intensity claim", () => {
     // Ground truth: FOREHAND drive; the speed estimator dropped out for the
     // swing itself, leaving only 3 pre-swing 0.1 u/s samples inside the
     // window (the pose frames show a full-speed stroke). ROOT CAUSE: the v4
@@ -167,8 +170,15 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
     // measurement" back into "evidence of no energy", the exact contract
     // the v4 fix was written to enforce.
     const prediction = classifyFixture(speedDropoutDuringSwingFixture());
-    expect(prediction.label).toBe("UNKNOWN");
-    expect(prediction.limitingFactors).toContain("no_swing_energy_in_window");
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.leaf).toBeNull();
+    expect(prediction.limitingFactors).not.toContain("no_swing_energy_in_window");
+    expect(prediction.limitingFactors).toContain("no_speed_series_for_intensity");
+    expect(prediction.limitingFactors).toContain(
+      "speed_window_sparsely_sampled_gate_not_applicable",
+    );
+    expect(prediction.evidence.some((entry) => entry.includes("speed peak"))).toBe(false);
   });
 
   it("F20-F6: clustered mid-swing wrist dropout defeats the MIN_TRAVEL_SAMPLE_FRAMES contract and a loop swing reads as stillness", () => {
@@ -188,25 +198,33 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
 });
 
 describe("f20 fixtures never silently change shape (umbrella pins)", () => {
-  it("the resolved F20-F1/F20-F2 and four coverage pins abstain; the honest-torso counterfactual still commits", () => {
+  it("F20-F1/F20-F2 and unresolved coverage findings abstain; F20-F3/F20-F5 and the honest-torso control commit FOREHAND", () => {
     // If any of these flips, a classifier change touched the v4 gate
     // surface — re-run the F20 forensics before accepting it.
     // Both confidently-wrong pins moved to the abstaining set when
     // stroke-heuristic-6 closed them; the counterfactual guards against
     // the fix over-reaching into honestly-measured strokes.
-    const counterfactual = classifyFixture(torsoHonestShoulderVolleyFixture());
-    expect(counterfactual.label).toBe("FOREHAND");
+    const forehands = [
+      torsoHonestShoulderVolleyFixture(),
+      crouchDinkFixture(),
+      speedDropoutDuringSwingFixture(),
+    ];
+    for (const fixture of forehands) {
+      const prediction = classifyFixture(fixture);
+      expect(prediction.label, fixture.id).toBe("FOREHAND");
+      expect(prediction.taxonomyDepth, fixture.id).toBe(2);
+      expect(prediction.leaf, fixture.id).toBeNull();
+    }
     const abstaining = [
       sparseRivalWrongArmFixture(),
       torsoCollapseBoundaryOverheadFixture(),
-      crouchDinkFixture(),
       occludedRivalGenuineForehandFixture(),
-      speedDropoutDuringSwingFixture(),
       clusteredDropoutLoopSwingFixture(),
     ];
     for (const fixture of abstaining) {
       const prediction = classifyFixture(fixture);
       expect(prediction.label, fixture.id).toBe("UNKNOWN");
+      expect(prediction.leaf, fixture.id).toBe("UNKNOWN");
     }
   });
 });

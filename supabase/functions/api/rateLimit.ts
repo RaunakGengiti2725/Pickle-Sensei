@@ -22,27 +22,41 @@ interface MemoryWindow {
 
 const MEMORY_WINDOW_MAX = 20_000;
 const windows = new Map<string, MemoryWindow>();
+let nextMemoryExpiryAtMs = Infinity;
 
-function memoryIncr(key: string, windowSeconds: number): number {
+function memoryHasCapacity(now: number): boolean {
+  if (windows.size < MEMORY_WINDOW_MAX) return true;
+  if (now >= nextMemoryExpiryAtMs) {
+    nextMemoryExpiryAtMs = Infinity;
+    for (const [key, window] of windows) {
+      if (window.resetAtMs <= now) {
+        windows.delete(key);
+      } else {
+        nextMemoryExpiryAtMs = Math.min(nextMemoryExpiryAtMs, window.resetAtMs);
+      }
+    }
+  }
+  return windows.size < MEMORY_WINDOW_MAX;
+}
+
+function memoryIncr(key: string, resetAtMs: number): number {
   const now = Date.now();
   const existing = windows.get(key);
   if (existing && existing.resetAtMs > now) {
     existing.count += 1;
     return existing.count;
   }
-  if (windows.size >= MEMORY_WINDOW_MAX) {
-    for (const [k, v] of windows) {
-      if (v.resetAtMs <= now) windows.delete(k);
-    }
-    if (windows.size >= MEMORY_WINDOW_MAX) windows.clear();
-  }
-  windows.set(key, { count: 1, resetAtMs: now + windowSeconds * 1_000 });
+  if (!memoryHasCapacity(now)) return Infinity;
+  windows.set(key, { count: 1, resetAtMs });
+  nextMemoryExpiryAtMs = Math.min(nextMemoryExpiryAtMs, resetAtMs);
   return 1;
 }
 
 function memoryGet(key: string): number {
+  const now = Date.now();
   const existing = windows.get(key);
-  return existing && existing.resetAtMs > Date.now() ? existing.count : 0;
+  if (existing && existing.resetAtMs > now) return existing.count;
+  return memoryHasCapacity(now) ? 0 : Infinity;
 }
 
 function windowKey(scope: string, id: string, windowSeconds: number) {
@@ -83,7 +97,7 @@ export async function enforceRateLimit(
     count = await redisWindowIncr(key, windowSeconds);
   }
   if (count === null) {
-    count = memoryIncr(key, windowSeconds);
+    count = memoryIncr(key, (bucket + 1) * windowSeconds * 1_000);
   }
   return toResult(count, limit, bucket, windowSeconds, count <= limit);
 }

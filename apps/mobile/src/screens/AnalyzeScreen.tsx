@@ -630,6 +630,10 @@ export function AnalyzeScreen() {
     s => s.canonicalAccess?.freeRatings.limit ?? 2,
   );
   const operationActive = useRef(false);
+  const cameraRun = useRef<{
+    captureId: string | null;
+    stage: 'watching' | 'captured' | 'saving';
+  } | null>(null);
   const scoringActive = useRef(false);
   const abandoned = useRef(false);
   const autoLaunchStarted = useRef(false);
@@ -673,6 +677,36 @@ export function AnalyzeScreen() {
   useEffect(
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
+        if (abandoned.current) return;
+        const capture = cameraRun.current;
+        if (event.type === 'session') {
+          if (
+            capture &&
+            capture.captureId === null &&
+            typeof event.captureId === 'string' &&
+            ['configured', 'composing', 'observing'].includes(event.state)
+          ) {
+            capture.captureId = event.captureId;
+          }
+          return;
+        }
+        if (
+          event.type === 'readiness' ||
+          event.type === 'capture_quality' ||
+          event.type === 'stroke_detected' ||
+          event.type === 'processing'
+        ) {
+          if (
+            !capture ||
+            (event.captureId !== undefined &&
+              event.captureId !== capture.captureId) ||
+            (event.type !== 'processing' && capture.stage !== 'watching') ||
+            (event.type === 'processing' && capture.stage === 'saving')
+          )
+            return;
+          if (event.type === 'stroke_detected') capture.stage = 'captured';
+          if (event.type === 'processing') capture.stage = 'saving';
+        }
         if (event.type === 'readiness') {
           usabilityFunnel.log('readiness_state', event.state);
           if (event.state === 'ready') usabilityFunnel.log('ready');
@@ -703,7 +737,7 @@ export function AnalyzeScreen() {
           setCaptureEnvelope(null);
           setPhase({
             kind: 'working',
-            message: 'Motion captured — saving the motion window…',
+            message: 'Motion captured — no need to swing again.',
           });
         } else if (event.type === 'processing') {
           setPhase({ kind: 'working', message: 'Saving the private clip…' });
@@ -746,9 +780,12 @@ export function AnalyzeScreen() {
               );
               setAnalysisProgress(extractionProgress(run.eta));
             }
-          }
-          if (event.state === 'extracting') {
-            setPhase({ kind: 'working', message: 'Reading player movement…' });
+            if (matchesRun && event.state === 'extracting') {
+              setPhase({
+                kind: 'working',
+                message: 'Reading player movement…',
+              });
+            }
           }
         }
       }),
@@ -1012,6 +1049,8 @@ export function AnalyzeScreen() {
   const run = useCallback(async () => {
     if (operationActive.current) return;
     operationActive.current = true;
+    cameraRun.current =
+      source === 'camera' ? { captureId: null, stage: 'watching' } : null;
     // Each capture attempt starts with a clean envelope verdict, live
     // evidence buffer, target seed, and live-window signals: all of them
     // describe ONE clip's live window and must never carry into the next one.
@@ -1030,7 +1069,9 @@ export function AnalyzeScreen() {
         clip =
           source === 'library'
             ? await importStrokeVideo()
-            : await captureStrokeVideo();
+            : await captureStrokeVideo({
+                handedness: profile?.handedness ?? 'right',
+              });
       } catch (error) {
         if (isUserCancelledCapture(error)) {
           // User cancel is not a startup failure.
@@ -1055,6 +1096,7 @@ export function AnalyzeScreen() {
         });
         return;
       }
+      cameraRun.current = null;
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
@@ -1087,7 +1129,6 @@ export function AnalyzeScreen() {
             }
           : null;
         usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
-        setPhase({ kind: 'saved', clip, captureId });
         void scoreCapture(captureId, clip, liveSeed);
         return;
       }
@@ -1105,9 +1146,17 @@ export function AnalyzeScreen() {
         recovery: 'retry',
       });
     } finally {
+      cameraRun.current = null;
       operationActive.current = false;
     }
-  }, [declaredStroke, navigation, scoreCapture, source, techniqueIntent]);
+  }, [
+    declaredStroke,
+    navigation,
+    profile?.handedness,
+    scoreCapture,
+    source,
+    techniqueIntent,
+  ]);
 
   // Library imports auto-launch (no declaration is useful for them yet);
   // guided capture waits for the user to declare a stroke and start.
@@ -1175,7 +1224,10 @@ export function AnalyzeScreen() {
             <Text style={[type.body, styles.workingCopy]}>
               {source === 'library'
                 ? 'The selected file is copied into protected app storage before anything else happens.'
-                : 'The native camera guides framing, waits for a stable full-body read, and captures the stroke automatically.'}
+                : cameraRun.current?.stage === 'captured' ||
+                    cameraRun.current?.stage === 'saving'
+                  ? 'Your swing is captured. Keep the app open while your private clip is prepared.'
+                  : 'Tap record, take your spot, and swing once. The camera saves the swing automatically.'}
             </Text>
             {source !== 'library' ? (
               <CaptureGuidancePanel envelope={captureEnvelope} />

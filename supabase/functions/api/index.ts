@@ -77,7 +77,7 @@
 // TypeScript is Deno-targeted (not part of the pnpm workspace typecheck).
 // Verify with `supabase functions serve api` + a real Google ID token.
 
-import { createClient } from "npm:@supabase/supabase-js@2.112.4";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import {
@@ -128,12 +128,15 @@ import {
 // has no write policy to any of those server-owned records.
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_AUTH_SECRET_KEY = ((key) => (key.startsWith("sb_secret_") ? key : null))(
+  Deno.env.get("SB_SECRET_KEY") ?? "",
+);
 
 /** Service-role client for verified billing/webhook writes, encrypted Apple
  * revocation-token storage, retry-safe external-deletion checkpoints, and
  * Auth admin deleteUser. Lazy so unrelated routes do not depend on the key. */
-let billingAdminClient: ReturnType<typeof createClient> | null = null;
-function billingAdminDb(): ReturnType<typeof createClient> | null {
+let billingAdminClient: SupabaseClient | null = null;
+function billingAdminDb(): SupabaseClient | null {
   if (billingAdminClient) return billingAdminClient;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceRoleKey) return null;
@@ -246,6 +249,11 @@ const logSafeStatus = (status: string): string => sanitizeUserText(status, RPC_S
  * 200; evaluation trials are the biggest legitimate payload and get the
  * same ceiling (their per-trial cap is enforced separately). */
 const MAX_JSON_BODY_BYTES = 5_000_000;
+const SMALL_JSON_BODY_BYTES = 65_536;
+const WEBHOOK_JSON_BODY_BYTES = 524_288;
+const BODY_READ_TIMEOUT_MS = 30_000;
+const MAX_REFRESH_TOKEN_LENGTH = 4_096;
+const MAX_WEBHOOK_SUBJECTS = 16;
 
 /** Thrown while streaming a body that exceeds MAX_JSON_BODY_BYTES; the
  * outermost handler turns it into a 413 so no route buffers past the cap. */
@@ -256,50 +264,96 @@ class RequestBodyTooLarge extends Error {
   }
 }
 
+class RequestBodyInvalid extends Error {
+  constructor(message = "Request body must be a JSON object.") {
+    super(message);
+    this.name = "RequestBodyInvalid";
+  }
+}
+
+class RequestBodyTimeout extends Error {
+  constructor() {
+    super("Request body was not received in time.");
+    this.name = "RequestBodyTimeout";
+  }
+}
+
 /** Read the body as text while counting BYTES on the wire, cancelling the
  * stream the moment it passes the cap (Content-Length is advisory only —
  * chunked uploads carry none). */
 async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(declared) && declared > maxBytes) {
+    void request.body?.cancel().catch(() => undefined);
     throw new RequestBodyTooLarge();
   }
-  if (!request.body) return "";
+  if (!request.body) {
+    if (request.signal.aborted) throw new RequestBodyInvalid("Request body could not be read.");
+    return "";
+  }
   const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    cancelReader();
+  }, BODY_READ_TIMEOUT_MS);
+  request.signal.addEventListener("abort", cancelReader, { once: true });
   try {
+    if (request.signal.aborted) {
+      cancelReader();
+      throw new RequestBodyInvalid("Request body could not be read.");
+    }
+    const initialBytes = Number.isFinite(declared) && declared > 0 ? declared : 8_192;
+    let bytes = new Uint8Array(Math.min(maxBytes, Math.max(initialBytes, 8_192)));
+    let received = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      received += value.byteLength;
-      if (received > maxBytes) {
-        await reader.cancel().catch(() => undefined);
+      if (received + value.byteLength > maxBytes) {
+        cancelReader();
         throw new RequestBodyTooLarge();
       }
-      chunks.push(value);
+      if (received + value.byteLength > bytes.byteLength) {
+        const grown = new Uint8Array(
+          Math.min(maxBytes, Math.max(bytes.byteLength * 2, received + value.byteLength)),
+        );
+        grown.set(bytes.subarray(0, received));
+        bytes = grown;
+      }
+      bytes.set(value, received);
+      received += value.byteLength;
     }
+    if (timedOut) throw new RequestBodyTimeout();
+    if (request.signal.aborted) throw new RequestBodyInvalid("Request body could not be read.");
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, received));
   } catch (error) {
-    if (error instanceof RequestBodyTooLarge) throw error;
-    return "";
+    if (error instanceof RequestBodyTooLarge || error instanceof RequestBodyTimeout) throw error;
+    if (timedOut) throw new RequestBodyTimeout();
+    throw new RequestBodyInvalid("Request body could not be read.");
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener("abort", cancelReader);
+    reader.releaseLock();
   }
-  const bytes = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
 }
 
-async function readBody(request: Request): Promise<Record<string, unknown>> {
-  const text = await readBoundedText(request, MAX_JSON_BODY_BYTES);
+async function readBody(
+  request: Request,
+  maxBytes = SMALL_JSON_BODY_BYTES,
+): Promise<Record<string, unknown>> {
+  const text = await readBoundedText(request, Math.min(maxBytes, MAX_JSON_BODY_BYTES));
+  if (text.trim() === "") return {};
+  let body: unknown;
   try {
-    const body = JSON.parse(text) as unknown;
-    return isRecord(body) ? body : {};
+    body = JSON.parse(text) as unknown;
   } catch {
-    return {};
+    throw new RequestBodyInvalid("Request body is not valid JSON.");
   }
+  if (!isRecord(body)) throw new RequestBodyInvalid();
+  return body;
 }
 
 /** decodeURIComponent that reports a malformed escape as a 400 instead of
@@ -356,7 +410,7 @@ interface AuthedUser {
   email: string | null;
   provider: "google" | "apple";
   // Supabase client acting AS this user (RLS enforced on every query).
-  db: ReturnType<typeof createClient>;
+  db: SupabaseClient;
 }
 
 /** Cached, verified session material keyed by SHA-256 of the bearer. For a
@@ -412,16 +466,209 @@ async function fenceRevokedSession(token: string): Promise<void> {
   await cacheDel(await authCacheKey(token));
 }
 
-function userScopedClient(accessToken: string): ReturnType<typeof createClient> {
+let databaseRequestKey: { value: string; expiresAtMs: number } | null = null;
+let databaseRequestKeyPending: Promise<string> | null = null;
+
+async function getDatabaseRequestKey(): Promise<string> {
+  if (databaseRequestKey && databaseRequestKey.expiresAtMs > Date.now()) {
+    return databaseRequestKey.value;
+  }
+  if (databaseRequestKeyPending) return databaseRequestKeyPending;
+  databaseRequestKey = null;
+  databaseRequestKeyPending = (async () => {
+    const admin = billingAdminDb();
+    if (!admin) throw new Error("Database authorization is unavailable.");
+    const { data, error } = await admin
+      .rpc("get_api_request_key")
+      .abortSignal(AbortSignal.timeout(5_000));
+    if (error || typeof data !== "string" || !/^[0-9a-f]{64}$/.test(data)) {
+      throw new Error("Database authorization is unavailable.");
+    }
+    databaseRequestKey = { value: data, expiresAtMs: Date.now() + 60_000 };
+    return data;
+  })();
+  try {
+    return await databaseRequestKeyPending;
+  } finally {
+    databaseRequestKeyPending = null;
+  }
+}
+
+const DATABASE_READINESS_TIMEOUT_MS = 2_000;
+const DATABASE_READINESS_CACHE_MS = 30_000;
+let databaseReadinessResult: { ready: boolean; checkedAtMs: number } | null = null;
+let databaseReadinessPending: Promise<boolean> | null = null;
+
+async function databaseReady(): Promise<boolean> {
+  const age = databaseReadinessResult ? Date.now() - databaseReadinessResult.checkedAtMs : -1;
+  if (databaseReadinessResult && age >= 0 && age < DATABASE_READINESS_CACHE_MS) {
+    return databaseReadinessResult.ready;
+  }
+  if (databaseReadinessPending) return databaseReadinessPending;
+  const controller = new AbortController();
+  let response: Response | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      void reader?.cancel().catch(() => undefined);
+      resolve(false);
+    }, DATABASE_READINESS_TIMEOUT_MS);
+  });
+  const request = (async (): Promise<boolean> => {
+    try {
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!SUPABASE_URL || !serviceRoleKey) return false;
+      response = await fetch(
+        `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/rpc/get_api_request_key`,
+        {
+          method: "GET",
+          headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+          redirect: "error",
+          signal: controller.signal,
+        },
+      );
+      if (
+        controller.signal.aborted ||
+        response.status !== 200 ||
+        response.redirected ||
+        response.headers.get("content-type")?.split(";")[0].trim() !== "application/json" ||
+        Number(response.headers.get("content-length")) > 128
+      ) {
+        return false;
+      }
+      reader = response.body?.getReader();
+      if (!reader) return false;
+      const bytes = new Uint8Array(128);
+      let size = 0;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        if (size + chunk.value.byteLength > bytes.byteLength) return false;
+        bytes.set(chunk.value, size);
+        size += chunk.value.byteLength;
+      }
+      const data: unknown = JSON.parse(new TextDecoder().decode(bytes.subarray(0, size)));
+      return !controller.signal.aborted && typeof data === "string" && /^[0-9a-f]{64}$/.test(data);
+    } catch {
+      return false;
+    } finally {
+      void (reader ? reader.cancel() : response?.body?.cancel())?.catch(() => undefined);
+      reader?.releaseLock();
+    }
+  })();
+  const pending = Promise.race([request, deadline])
+    .then((ready) => {
+      databaseReadinessResult = { ready, checkedAtMs: Date.now() };
+      return ready;
+    })
+    .finally(() => clearTimeout(timer));
+  databaseReadinessPending = pending;
+  void request
+    .then(() => pending)
+    .then(() => {
+      if (databaseReadinessPending === pending) databaseReadinessPending = null;
+    });
+  return pending;
+}
+
+function userScopedClient(accessToken: string): SupabaseClient {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      fetch: async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.startsWith(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/`)) {
+          throw new Error("Unexpected database request target.");
+        }
+        const key = await getDatabaseRequestKey();
+        const outbound = new Request(input, init);
+        outbound.headers.set("Authorization", `Bearer ${accessToken}`);
+        outbound.headers.set("apikey", SUPABASE_ANON_KEY);
+        outbound.headers.set("x-pickle-api-key", key);
+        return fetch(outbound, {
+          redirect: "error",
+          signal: AbortSignal.any([outbound.signal, AbortSignal.timeout(10_000)]),
+        });
+      },
+    },
   });
 }
 
-function anonAuthClient(): ReturnType<typeof createClient> {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const AUTH_FETCH_TIMEOUT_MS = 10_000;
+
+async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    const outbound = new Request(input, init);
+    response = await fetch(outbound, {
+      redirect: "error",
+      signal: AbortSignal.any([outbound.signal, AbortSignal.timeout(AUTH_FETCH_TIMEOUT_MS)]),
+    });
+  } catch {
+    return new Response(null, { status: 503 });
+  }
+  if (!Number.isInteger(response.status) || response.status === 0 || response.status >= 500) {
+    await response.body?.cancel().catch(() => undefined);
+    return new Response(null, {
+      status: response.status >= 500 && response.status <= 599 ? response.status : 503,
+    });
+  }
+  return response;
+}
+
+function isRetryableAuthError(error: unknown): boolean {
+  if (!isRecord(error)) return true;
+  const status = error.status;
+  return (
+    error.name === "AuthRetryableFetchError" ||
+    typeof status !== "number" ||
+    !Number.isFinite(status) ||
+    status === 0 ||
+    status === 429 ||
+    status >= 500
+  );
+}
+
+function authErrorDetail(error: unknown): Record<string, string | number> {
+  const detail = isRecord(error) ? error : {};
+  return {
+    name: typeof detail.name === "string" ? detail.name : "AuthError",
+    code: typeof detail.code === "string" ? detail.code : "no-code",
+    status: typeof detail.status === "number" ? detail.status : "no-status",
+  };
+}
+
+const IPV4_LITERAL =
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+function forwardableClientIp(request: Request): string | null {
+  const ip = clientIp(request);
+  if (IPV4_LITERAL.test(ip)) return ip;
+  if (!ip.includes(":") || !/^[0-9a-fA-F:.]+$/.test(ip)) return null;
+  try {
+    new URL(`http://[${ip}]/`);
+    return ip;
+  } catch {
+    return null;
+  }
+}
+
+function authApiHeaders(request: Request): Record<string, string> {
+  if (!SUPABASE_AUTH_SECRET_KEY) return { apikey: SUPABASE_ANON_KEY };
+  const headers: Record<string, string> = { apikey: SUPABASE_AUTH_SECRET_KEY };
+  const ip = forwardableClientIp(request);
+  if (ip) headers["sb-forwarded-for"] = ip;
+  return headers;
+}
+
+function anonAuthClient(request: Request): SupabaseClient {
+  const { apikey, ...forwarded } = authApiHeaders(request);
+  return createClient(SUPABASE_URL, apikey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: authFetch, headers: forwarded },
   });
 }
 
@@ -485,7 +732,7 @@ function authUserOf(payload: unknown): AuthUserLike | null {
 }
 
 function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUserLike }) | null {
-  if (!isRecord(payload)) return null;
+  if (!isRecord(payload) || !validSession(payload)) return null;
   const user = authUserOf(payload.user);
   if (
     !user ||
@@ -521,16 +768,7 @@ function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUse
 
 /** GoTrue error bodies come as `{code, error_code, msg}` or
  * `{error, error_description}`; keep a short operator-facing summary. */
-function authErrorDetail(status: number, body: unknown): string {
-  if (isRecord(body)) {
-    const code = [body.error_code, body.error, body.code].find(
-      (candidate) => typeof candidate === "string" && candidate,
-    );
-    const message = [body.msg, body.error_description, body.message].find(
-      (candidate) => typeof candidate === "string" && candidate,
-    );
-    return `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`.slice(0, 200);
-  }
+function authResponseErrorDetail(status: number, body: unknown): string {
   return `HTTP ${status}${typeof body === "string" && body ? " (non-JSON body)" : ""}`;
 }
 
@@ -566,6 +804,7 @@ function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
  * faults are re-sent per `AUTH_CONNECT_RETRY_BACKOFF_MS` inside the single
  * deadline; the first HTTP answer, whatever its status, is final. */
 async function authRequest<T>(
+  request: Request,
   path: string,
   init: {
     method: "GET" | "POST";
@@ -575,7 +814,7 @@ async function authRequest<T>(
   parse: (payload: unknown) => T | null,
 ): Promise<AuthVerdict<T>> {
   const headers: Record<string, string> = {
-    apikey: SUPABASE_ANON_KEY,
+    ...authApiHeaders(request),
     Accept: "application/json",
   };
   if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
@@ -584,7 +823,14 @@ async function authRequest<T>(
   const startedAt = Date.now();
   const controller = new AbortController();
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort = () => {};
   const deadline = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      controller.abort();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    request.signal.addEventListener("abort", onAbort, { once: true });
+    if (request.signal.aborted) onAbort();
     deadlineTimer = setTimeout(() => {
       controller.abort();
       reject(new AuthDeadlineError(timeoutMs));
@@ -598,18 +844,34 @@ async function authRequest<T>(
     detail: `Supabase Auth unreachable: ${detail}`,
     retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
   });
+  let httpAnswered = false;
   const attemptOnce = async () => {
     const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
       method: init.method,
       headers,
       body: init.body ? JSON.stringify(init.body) : undefined,
+      redirect: "error",
       signal: controller.signal,
     });
-    return {
+    httpAnswered = true;
+    const answer = {
       status: response.status,
       retryAfter: response.headers.get("Retry-After"),
-      text: await response.text(),
+      text: "",
     };
+    if (response.status === 0 || response.status === 429 || response.status >= 500) {
+      await response.body?.cancel().catch(() => undefined);
+      return answer;
+    }
+    answer.text = await readBoundedText(
+      new Request(`${SUPABASE_URL}/auth/v1${path}`, {
+        method: "POST",
+        body: response.body,
+        signal: controller.signal,
+      }),
+      SMALL_JSON_BODY_BYTES,
+    );
+    return answer;
   };
   let answer: { status: number; retryAfter: string | null; text: string };
   try {
@@ -618,9 +880,18 @@ async function authRequest<T>(
         answer = await Promise.race([attemptOnce(), deadline]);
         break;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = error instanceof AuthDeadlineError ? error.message : "transport failure";
         if (error instanceof AuthDeadlineError || controller.signal.aborted) {
           return unreachable(attempt === 0 ? message : `${message} (${attempt + 1} attempts)`);
+        }
+        if (
+          httpAnswered ||
+          !(error instanceof TypeError) ||
+          !/\b(?:connection (?:reset|refused)|dns|econnreset|econnrefused|enotfound)\b/i.test(
+            error.message,
+          )
+        ) {
+          return unreachable(message);
         }
         const backoffMs = AUTH_CONNECT_RETRY_BACKOFF_MS[attempt];
         const remainingMs = timeoutMs - (Date.now() - startedAt);
@@ -634,6 +905,7 @@ async function authRequest<T>(
     }
   } finally {
     clearTimeout(deadlineTimer);
+    request.signal.removeEventListener("abort", onAbort);
   }
   let body: unknown = answer.text;
   try {
@@ -641,11 +913,11 @@ async function authRequest<T>(
   } catch {
     // Non-JSON body: a verdict status still stands; a 2xx is malformed below.
   }
-  if (AUTH_REFUSAL_STATUSES.has(answer.status)) {
+  if (AUTH_REFUSAL_STATUSES.has(answer.status) && (path !== "/user" || isRecord(body))) {
     return {
       kind: "refused",
       status: answer.status,
-      detail: authErrorDetail(answer.status, body),
+      detail: authResponseErrorDetail(answer.status, body),
     };
   }
   if (answer.status >= 200 && answer.status < 300) {
@@ -659,21 +931,26 @@ async function authRequest<T>(
   }
   return {
     kind: "unavailable",
-    detail: `Supabase Auth answered ${authErrorDetail(answer.status, body)}`,
+    detail: `Supabase Auth answered ${authResponseErrorDetail(answer.status, body)}`,
     retryAfterSeconds: retryAfterOf(answer.retryAfter),
   };
 }
 
 /** GET /auth/v1/user — the user behind a Supabase access token, which also
  * fails (refused) once the session was logged out or the account deleted. */
-const verifyAccessToken = (accessToken: string): Promise<AuthVerdict<AuthUserLike>> =>
-  authRequest("/user", { method: "GET", bearer: accessToken }, authUserOf);
+const verifyAccessToken = (
+  request: Request,
+  accessToken: string,
+): Promise<AuthVerdict<AuthUserLike>> =>
+  authRequest(request, "/user", { method: "GET", bearer: accessToken }, authUserOf);
 
 /** POST /auth/v1/token?grant_type=refresh_token — rotate a refresh token. */
 const rotateRefreshToken = (
+  request: Request,
   refreshToken: string,
 ): Promise<AuthVerdict<SupabaseSessionLike & { user: AuthUserLike }>> =>
   authRequest(
+    request,
     "/token?grant_type=refresh_token",
     { method: "POST", body: { refresh_token: refreshToken } },
     authSessionOf,
@@ -813,11 +1090,13 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
-  const signIn = await anonAuthClient().auth.signInWithIdToken({
-    provider,
-    token,
-  });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
+  const signIn = await anonAuthClient(request)
+    .auth.signInWithIdToken({ provider, token })
+    .catch((error: unknown) => ({ data: { user: null, session: null }, error }));
+  if (signIn.error || !signIn.data.user?.id || !signIn.data.session) {
+    if (isRetryableAuthError(signIn.error)) {
+      return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
+    }
     return errorJson(401, "The identity token could not be verified.");
   }
   return {
@@ -869,11 +1148,13 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   if (cached.authed) return cached.authed;
 
   if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({
-      provider,
-      token,
-    });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
+    const signIn = await anonAuthClient(request)
+      .auth.signInWithIdToken({ provider, token })
+      .catch((error: unknown) => ({ data: { user: null, session: null }, error }));
+    if (signIn.error || !signIn.data.user?.id || !signIn.data.session) {
+      if (isRetryableAuthError(signIn.error)) {
+        return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
+      }
       return errorJson(401, "The identity token could not be verified.");
     }
     await writeAuthCache(
@@ -895,7 +1176,7 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     };
   }
 
-  const verified = await verifyAccessToken(token);
+  const verified = await verifyAccessToken(request, token);
   if (verified.kind === "unavailable") {
     return serviceUnavailable("Session verification", verified.detail, verified.retryAfterSeconds);
   }
@@ -932,6 +1213,38 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   };
 }
 
+function validSession(value: unknown): value is SupabaseSessionLike {
+  if (
+    !isRecord(value) ||
+    typeof value.access_token !== "string" ||
+    !value.access_token ||
+    /\s/.test(value.access_token) ||
+    typeof value.refresh_token !== "string" ||
+    !value.refresh_token ||
+    /\s/.test(value.refresh_token) ||
+    value.refresh_token.length > MAX_REFRESH_TOKEN_LENGTH
+  )
+    return false;
+  if (
+    value.expires_in !== undefined &&
+    (typeof value.expires_in !== "number" ||
+      !Number.isSafeInteger(value.expires_in) ||
+      value.expires_in <= 0)
+  )
+    return false;
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt =
+    value.expires_at === undefined
+      ? now + (typeof value.expires_in === "number" ? value.expires_in : Number.NaN)
+      : value.expires_at;
+  return (
+    typeof expiresAt === "number" &&
+    Number.isSafeInteger(expiresAt) &&
+    expiresAt > now &&
+    Number.isFinite(new Date(expiresAt * 1000).getTime())
+  );
+}
+
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
  * session. 401 means Supabase Auth REFUSED the refresh token (revoked or
  * already rotated away): the app must sign in again. Anything else — Auth
@@ -940,10 +1253,14 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
-  if (typeof refreshToken !== "string" || !refreshToken.trim()) {
+  if (
+    typeof refreshToken !== "string" ||
+    !refreshToken.trim() ||
+    refreshToken.length > MAX_REFRESH_TOKEN_LENGTH
+  ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const rotated = await rotateRefreshToken(refreshToken.trim());
+  const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
     return serviceUnavailable("Session refresh", rotated.detail, rotated.retryAfterSeconds);
   }
@@ -964,20 +1281,16 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
  * it is signed out while the server session lives on. */
 async function logoutRoute(request: Request): Promise<Response> {
   const token = bearerOf(request);
-  let response: Response;
-  try {
-    response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
-      method: "POST",
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-    });
-  } catch (error) {
-    return serviceUnavailable("Sign-out", error);
-  }
+  const response = await authFetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
+    method: "POST",
+    headers: { ...authApiHeaders(request), Authorization: `Bearer ${token}` },
+    signal: request.signal,
+  });
   await response.body?.cancel().catch(() => undefined);
   // 401/403/404 here mean the session is already gone — the outcome the
   // caller wanted. Only a server-side failure is worth reporting.
-  if (!response.ok && response.status >= 500) {
-    return serviceUnavailable("Sign-out", `status ${response.status}`);
+  if (!response.ok && ![401, 403, 404].includes(response.status)) {
+    return serviceUnavailable("Sign-out", authErrorDetail({ status: response.status }));
   }
   await fenceRevokedSession(token);
   return noContent();
@@ -1623,7 +1936,7 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
  * with compensating deletes. Replays are detected with one batched lookup
  * for the whole request. */
 async function syncShots(authed: AuthedUser, request: Request): Promise<Response> {
-  const body = await readBody(request);
+  const body = await readBody(request, MAX_JSON_BODY_BYTES);
   const shotsRaw = body.shots;
   if (!Array.isArray(shotsRaw) || shotsRaw.length < 1 || shotsRaw.length > 200) {
     return codedError(400, "validation.shots_sync", "Body must be { shots: [1..200 entries] }.");
@@ -1931,7 +2244,7 @@ const TRIAL_WRITE_FAILED_MESSAGE =
  * import, so structural checks here are minimal and labeling tools
  * re-validate offline. */
 async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Promise<Response> {
-  const body = await readBody(request);
+  const body = await readBody(request, MAX_JSON_BODY_BYTES);
   const trials = body.trials;
   if (!Array.isArray(trials) || trials.length < 1 || trials.length > 200) {
     return codedError(
@@ -2532,6 +2845,9 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
   if (!DRILL_SLUG_RE.test(slug)) {
     return codedError(400, "validation.saved_drill", "Invalid drill slug.");
   }
+  if (!(await drillCatalogEntry(slug))) {
+    return codedError(404, "drill.not_found", "This drill is not in the catalog.");
+  }
   const upserted = await authed.db.from("user_saved_drills").upsert(
     { user_id: authed.id, slug },
     {
@@ -2913,7 +3229,7 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     return errorJson(401, "Invalid webhook credentials.");
   }
 
-  const body = await readBody(request);
+  const body = await readBody(request, WEBHOOK_JSON_BODY_BYTES);
   const event = isRecord(body.event) ? body.event : null;
   if (!event) {
     return errorJson(400, "Missing event payload.");
@@ -2937,6 +3253,9 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   for (const id of uuidList(event.transferred_from)) subjectIds.add(id);
   for (const id of uuidList(event.transferred_to)) subjectIds.add(id);
   const appUserId: string | null = subjectIds.values().next().value ?? null;
+  if (subjectIds.size > MAX_WEBHOOK_SUBJECTS) {
+    return errorJson(400, "Too many subscriber ids in one event.");
+  }
 
   const adminDb = billingAdminDb();
   if (!adminDb) {
@@ -3250,7 +3569,7 @@ type AppleDeletionOutcome = "revoked" | "not_applicable" | "manual_action_requir
  * later provider/database failure can be retried safely. */
 async function deleteExternalAccounts(
   authed: AuthedUser,
-  adminDb: ReturnType<typeof createClient>,
+  adminDb: SupabaseClient,
 ): Promise<AppleDeletionOutcome | Response> {
   const externalQ = await adminDb
     .from("account_external_credentials")
@@ -3263,7 +3582,11 @@ async function deleteExternalAccounts(
   const external = externalQ.data as ExternalCredentialRow | null;
   let appleOutcome: AppleDeletionOutcome = "not_applicable";
 
-  if (authed.provider === "apple") {
+  if (
+    authed.provider === "apple" ||
+    external?.apple_refresh_token_encrypted ||
+    external?.apple_revoked_at
+  ) {
     if (external?.apple_revoked_at) {
       appleOutcome = "revoked";
     } else if (external?.apple_refresh_token_encrypted) {
@@ -3416,7 +3739,7 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     authError?.code === "user_not_found" ||
     authError?.error_code === "user_not_found";
   if (authError && !alreadyDeleted) {
-    return serviceUnavailable("Account deletion", deleted.error.message);
+    return serviceUnavailable("Account deletion", authErrorDetail(authError));
   }
 
   // Drop this user's cached derived state AND fence the session that just
@@ -3496,6 +3819,7 @@ const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
  * healthy device needs it about once per access-token lifetime, so a tight
  * per-IP budget costs real users nothing and starves refresh-token guessing. */
 const AUTH_REFRESH_LIMIT = { limit: 30, windowSeconds: 60 };
+const AUTH_BOOTSTRAP_LIMIT = { limit: 30, windowSeconds: 60 };
 const PUBLIC_PAGE_LIMIT = { limit: 60, windowSeconds: 60 };
 const WEBHOOK_LIMIT = { limit: 240, windowSeconds: 60 };
 
@@ -3508,6 +3832,7 @@ async function bootstrapAccount(
   providerSubject: string,
   request: Request,
 ): Promise<Response> {
+  const body = await readBody(request);
   const profile = await readProfile(authed);
   if (profile instanceof Response) return profile;
   if (profile.provider !== authed.provider) {
@@ -3515,7 +3840,6 @@ async function bootstrapAccount(
   }
 
   if (authed.provider === "apple") {
-    const body = await readBody(request);
     const authorizationCode = body.appleAuthorizationCode;
     const supportsRevocationProtocol = request.headers.get("X-Apple-Revocation-Protocol") === "1";
     const usableAuthorizationCode =
@@ -3604,6 +3928,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
   } catch (error) {
     if (error instanceof RequestBodyTooLarge) {
       response = errorJson(413, "Request body is too large.");
+    } else if (error instanceof RequestBodyInvalid) {
+      response = errorJson(400, error.message);
+    } else if (error instanceof RequestBodyTimeout) {
+      response = errorJson(408, error.message);
     } else {
       console.error(`[api] unhandled error (${requestId}):`, error);
       response = errorJson(500, "Something went wrong. Please try again.");
@@ -3611,7 +3939,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
   const code = await errorCodeOf(response);
   emitAccessLog(accessLogEntry(request, response, requestId, startedAt, code));
-  return withRequestId(response, requestId);
+  const identified = withRequestId(response, requestId);
+  return response.status >= 400
+    ? new Response(await identified.arrayBuffer(), identified)
+    : identified;
 });
 
 async function handleRequest(request: Request): Promise<Response> {
@@ -3631,6 +3962,10 @@ async function handleRequest(request: Request): Promise<Response> {
       PUBLIC_PAGE_LIMIT.windowSeconds,
     );
     if (!rl.allowed) return rateLimitResponse(rl);
+    if (url.searchParams.get("readiness") === "1") {
+      const ready = await databaseReady();
+      return json(ready ? 200 : 503, { ok: ready, readiness: { database: ready } });
+    }
     return json(200, { ok: true });
   }
   if (isPublicRead && url.pathname.endsWith("/support")) {
@@ -3712,6 +4047,13 @@ async function handleRequest(request: Request): Promise<Response> {
   // token in its body. Both count toward the per-IP auth-failure budget so
   // token stuffing is throttled exactly like a bad bearer.
   if (route === "POST /v1/account/bootstrap") {
+    const rl = await enforceRateLimit(
+      "auth_bootstrap",
+      ip,
+      AUTH_BOOTSTRAP_LIMIT.limit,
+      AUTH_BOOTSTRAP_LIMIT.windowSeconds,
+    );
+    if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
       if (exchanged.status === 401) await recordAuthFailure();
@@ -3760,6 +4102,24 @@ async function handleRequest(request: Request): Promise<Response> {
     routeLimit?.windowSeconds ?? GENERAL_USER_LIMIT.windowSeconds,
   );
   if (!userLimit.allowed) return rateLimitResponse(userLimit);
+
+  if (route !== "POST /v1/auth/logout") {
+    const live = await authed.db.rpc("is_api_session_active");
+    if (live.error || typeof live.data !== "boolean") {
+      return serviceUnavailable(
+        "Session check",
+        authErrorDetail({
+          name: "SessionCheckError",
+          code: live.error?.code,
+          status: live.status,
+        }),
+      );
+    }
+    if (!live.data) {
+      await cacheDel(await authCacheKey(bearerOf(request)));
+      return errorJson(401, "The session is no longer valid. Sign in again.");
+    }
+  }
 
   // ── Parameterized routes (an id/slug in the path) are regex-matched first;
   // everything static falls through to the exact-route switch below.
@@ -3871,7 +4231,7 @@ async function handleRequest(request: Request): Promise<Response> {
         }
         gender = genderRaw;
       }
-      const focusSlug = GOAL_FOCUS[goal] ?? "contact_position";
+      const focusSlug = Object.hasOwn(GOAL_FOCUS, goal) ? GOAL_FOCUS[goal] : "contact_position";
       const patch: Record<string, unknown> = {
         skill_level: skillLevel,
         handedness,

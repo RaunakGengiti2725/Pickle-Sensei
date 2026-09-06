@@ -15,8 +15,10 @@ Deno.test(
       const b = await loadIsolate();
       for (let i = 0; i < 3; i += 1)
         assertEquals((await a.rateLimit.enforceRateLimit("ip", "1.2.3.4", 5, 60)).allowed, true);
+      assertEquals((await b.rateLimit.peekRateLimit("ip", "1.2.3.4", 5, 60)).remaining, 2);
       assertEquals((await b.rateLimit.enforceRateLimit("ip", "1.2.3.4", 5, 60)).allowed, true);
       assertEquals((await b.rateLimit.enforceRateLimit("ip", "1.2.3.4", 5, 60)).allowed, true);
+      assertEquals((await a.rateLimit.peekRateLimit("ip", "1.2.3.4", 5, 60)).allowed, false);
       const sixth = await b.rateLimit.enforceRateLimit("ip", "1.2.3.4", 5, 60);
       assertEquals(sixth.allowed, false);
       assertEquals(sixth.remaining, 0);
@@ -100,7 +102,7 @@ Deno.test(
 );
 
 Deno.test(
-  "[defect] memory fallback: 20 000 distinct ids wipe EVERY live window, un-blocking a limited client",
+  "memory fallback: 20 000 live windows deny new identities without resetting existing budgets",
   async () => {
     // rateLimit.ts memoryIncr(): when the map is full and nothing has expired it
     // calls windows.clear(). Any client that can present >= 20 000 distinct
@@ -108,6 +110,8 @@ Deno.test(
     // all in-flight budgets on that isolate, including its own.
     configureRedis(false);
     const redis = fakeUpstash();
+    const originalNow = Date.now;
+    Date.now = () => 60_250;
     try {
       const iso = await loadIsolate();
       for (let i = 0; i < 3; i += 1)
@@ -116,14 +120,50 @@ Deno.test(
         (await iso.rateLimit.enforceRateLimit("ip", "victim-limited-me", 3, 60)).allowed,
         false,
       );
+      assertEquals(
+        (await iso.rateLimit.enforceRateLimit("ip", "active-budget", 3, 60)).remaining,
+        2,
+      );
 
+      for (let i = 0; i < 19_998; i += 1) {
+        assertEquals(
+          (await iso.rateLimit.enforceRateLimit("ip", `flood-${i}`, 300, 60)).allowed,
+          true,
+        );
+      }
       for (let i = 0; i < 20_000; i += 1) {
-        await iso.rateLimit.enforceRateLimit("ip", `flood-${i}`, 300, 60);
+        const denied = await iso.rateLimit.enforceRateLimit("ip", `overflow-${i}`, 300, 60);
+        assertEquals(denied, {
+          allowed: false,
+          limit: 300,
+          remaining: 0,
+          retryAfterSeconds: 60,
+        });
       }
       const after = await iso.rateLimit.enforceRateLimit("ip", "victim-limited-me", 3, 60);
-      assertEquals(after.allowed, true, "window was cleared: the limited client is allowed again");
-      assertEquals(after.remaining, 2, "counter restarted from 1");
+      assertEquals(after.allowed, false, "a flood cannot reopen a live exhausted window");
+      assertEquals(after.remaining, 0);
+      assertEquals(await iso.rateLimit.peekRateLimit("ip", "victim-limited-me", 3, 60), after);
+      const untracked = await iso.rateLimit.peekRateLimit("ip", "untracked", 300, 60);
+      assertEquals(untracked.allowed, false);
+      assertEquals(untracked.remaining, 0);
+      assertEquals((await iso.rateLimit.peekRateLimit("ip", "active-budget", 3, 60)).remaining, 2);
+      for (let remaining = 1; remaining >= 0; remaining -= 1) {
+        const active = await iso.rateLimit.enforceRateLimit("ip", "active-budget", 3, 60);
+        assertEquals(active.allowed, true);
+        assertEquals(active.remaining, remaining);
+      }
+      assertEquals(
+        (await iso.rateLimit.peekRateLimit("ip", "active-budget", 3, 60)).allowed,
+        false,
+      );
+      assertEquals(
+        (await iso.rateLimit.enforceRateLimit("ip", "active-budget", 3, 60)).allowed,
+        false,
+      );
+      assertEquals(redis.calls, 0);
     } finally {
+      Date.now = originalNow;
       redis.restore();
     }
   },
@@ -144,3 +184,165 @@ Deno.test("memory fallback: a new fixed window replaces the expired one in place
     redis.restore();
   }
 });
+
+Deno.test(
+  "memory fallback: capacity recovers at aligned expiry and retains longer live windows",
+  async () => {
+    configureRedis(false);
+    const redis = fakeUpstash();
+    const originalNow = Date.now;
+    let now = 60_250;
+    Date.now = () => now;
+    try {
+      const iso = await loadIsolate();
+      await iso.rateLimit.enforceRateLimit("authfail", "long-lived", 1, 300);
+      for (let i = 0; i < 19_999; i += 1) {
+        assertEquals(
+          (await iso.rateLimit.enforceRateLimit("ip", `short-${i}`, 1, 60)).allowed,
+          true,
+        );
+      }
+
+      now = 119_999;
+      const full = await iso.rateLimit.peekRateLimit("ip", "newcomer", 1, 60);
+      assertEquals(full, { allowed: false, limit: 1, remaining: 0, retryAfterSeconds: 1 });
+      assertEquals(await iso.rateLimit.enforceRateLimit("ip", "newcomer", 1, 60), full);
+      assertEquals(await iso.rateLimit.peekRateLimit("ip", "short-0", 1, 60), full);
+
+      now = 120_000;
+      for (let i = 0; i < 50; i += 1) {
+        assertEquals(await iso.rateLimit.peekRateLimit("ip", "newcomer", 1, 60), {
+          allowed: true,
+          limit: 1,
+          remaining: 1,
+          retryAfterSeconds: 60,
+        });
+      }
+      assertEquals(
+        (await iso.rateLimit.peekRateLimit("authfail", "long-lived", 1, 300)).allowed,
+        false,
+      );
+      assertEquals(
+        (await iso.rateLimit.enforceRateLimit("authfail", "long-lived", 1, 300)).allowed,
+        false,
+      );
+      for (let i = 0; i < 19_999; i += 1) {
+        const fresh = await iso.rateLimit.enforceRateLimit("ip", `short-${i}`, 1, 60);
+        assertEquals(fresh.allowed, true);
+        assertEquals(fresh.remaining, 0);
+      }
+      assertEquals((await iso.rateLimit.peekRateLimit("ip", "newcomer", 1, 60)).allowed, false);
+      assertEquals((await iso.rateLimit.enforceRateLimit("ip", "newcomer", 1, 60)).allowed, false);
+
+      now = 300_000;
+      const recovered = await iso.rateLimit.peekRateLimit("authfail", "long-lived", 1, 300);
+      assertEquals(recovered, { allowed: true, limit: 1, remaining: 1, retryAfterSeconds: 300 });
+      assertEquals(
+        (await iso.rateLimit.enforceRateLimit("authfail", "long-lived", 1, 300)).allowed,
+        true,
+      );
+    } finally {
+      Date.now = originalNow;
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "memory fallback: repeated capacity denials do not rescan every live window",
+  async () => {
+    configureRedis(false);
+    const redis = fakeUpstash();
+    const originalNow = Date.now;
+    const originalIterator = Map.prototype[Symbol.iterator];
+    let now = 60_250;
+    let visitedEntries = 0;
+    Date.now = () => now;
+    try {
+      const iso = await loadIsolate();
+      for (let i = 0; i < 20_000; i += 1) {
+        await iso.rateLimit.enforceRateLimit("ip", `live-${i}`, 1, 60);
+      }
+      Map.prototype[Symbol.iterator] = function* () {
+        for (const entry of originalIterator.call(this)) {
+          visitedEntries += 1;
+          yield entry;
+        }
+        return undefined;
+      };
+      for (let i = 0; i < 1_000; i += 1) {
+        now += 1;
+        assertEquals(
+          (await iso.rateLimit.enforceRateLimit("ip", `denied-${i}`, 1, 60)).allowed,
+          false,
+        );
+        assertEquals((await iso.rateLimit.peekRateLimit("ip", `peek-${i}`, 1, 60)).allowed, false);
+      }
+      assert(
+        visitedEntries <= 20_000,
+        `capacity checks revisited ${visitedEntries} entries without any window expiring`,
+      );
+    } finally {
+      Map.prototype[Symbol.iterator] = originalIterator;
+      Date.now = originalNow;
+      redis.restore();
+    }
+  },
+);
+
+Deno.test(
+  "invalid Redis pipelines reuse the existing local budget for increments and peeks",
+  async () => {
+    configureRedis(true);
+    const originalFetch = globalThis.fetch;
+    const originalNow = Date.now;
+    let now = 60_250;
+    let httpFailure = true;
+    let payload: unknown;
+    Date.now = () => now;
+    globalThis.fetch = async () =>
+      httpFailure ? new Response("unavailable", { status: 503 }) : Response.json(payload);
+    try {
+      const iso = await loadIsolate();
+      const invalidResponses = [
+        { increment: [{ result: null }, { result: 1 }], get: [] },
+        { increment: [{ result: "" }, { result: 1 }], get: [{}] },
+        { increment: [{ result: false }, { result: 1 }], get: [{ error: "ERR counter" }] },
+        {
+          increment: [{ result: 1 }, { error: "ERR expiry" }],
+          get: [{ result: null, error: "ERR counter" }],
+        },
+        { increment: [{ result: 1 }], get: [null] },
+        { increment: [{ result: 0 }, { result: 1 }], get: [{ result: " " }] },
+        { increment: [{ result: 1 }, { result: null }], get: [{ result: false }] },
+      ];
+      for (const [index, invalid] of invalidResponses.entries()) {
+        const id = `fallback-${index}`;
+        httpFailure = true;
+        assertEquals((await iso.rateLimit.enforceRateLimit("ip", id, 2, 60)).remaining, 1);
+        httpFailure = false;
+        payload = invalid.get;
+        assertEquals((await iso.rateLimit.peekRateLimit("ip", id, 2, 60)).remaining, 1);
+        payload = invalid.increment;
+        const lastAllowed = await iso.rateLimit.enforceRateLimit("ip", id, 2, 60);
+        assertEquals(lastAllowed.allowed, true);
+        assertEquals(lastAllowed.remaining, 0);
+        payload = invalid.get;
+        const closed = await iso.rateLimit.peekRateLimit("ip", id, 2, 60);
+        assertEquals(closed.allowed, false);
+        assertEquals(closed.remaining, 0);
+        payload = invalid.increment;
+        assertEquals((await iso.rateLimit.enforceRateLimit("ip", id, 2, 60)).allowed, false);
+        httpFailure = true;
+        assertEquals((await iso.rateLimit.peekRateLimit("ip", id, 2, 60)).allowed, false);
+      }
+      now = 120_000;
+      assertEquals((await iso.rateLimit.peekRateLimit("ip", "fallback-0", 2, 60)).remaining, 2);
+      assertEquals((await iso.rateLimit.enforceRateLimit("ip", "fallback-0", 2, 60)).remaining, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      Date.now = originalNow;
+      configureRedis(false);
+    }
+  },
+);

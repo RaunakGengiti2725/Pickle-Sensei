@@ -72,6 +72,77 @@ const automaticClip = {
   postRollMs: 1500,
 };
 
+function withCaptureBridge(bridge: {
+  capture: jest.Mock;
+  captureWithOptions?: jest.Mock;
+}) {
+  let module!: typeof import('../src/camera/capture');
+  jest.doMock('react-native', () => ({
+    NativeModules: { PickleVideoCapture: bridge },
+    Platform: { OS: 'ios' },
+    NativeEventEmitter: jest.fn(),
+  }));
+  try {
+    jest.isolateModules(() => {
+      module = jest.requireActual<typeof import('../src/camera/capture')>(
+        '../src/camera/capture',
+      );
+    });
+  } finally {
+    jest.dontMock('react-native');
+  }
+  return module;
+}
+
+describe('guided capture uses the declared hitting hand', () => {
+  it.each(['left', 'right'] as const)(
+    'passes %s handedness to the capable native bridge',
+    async handedness => {
+      const bridge = {
+        capture: jest.fn(),
+        captureWithOptions: jest.fn().mockResolvedValue(automaticClip),
+      };
+      const camera = withCaptureBridge(bridge);
+      const clip = await camera.captureStrokeVideo({ handedness });
+      expect(bridge.captureWithOptions).toHaveBeenCalledWith({ handedness });
+      expect(bridge.capture).not.toHaveBeenCalled();
+      expect(clip.recognition.status).toBe('unknown');
+    },
+  );
+
+  it('preserves the legacy native capture signature on older binaries', async () => {
+    const bridge = { capture: jest.fn().mockResolvedValue(automaticClip) };
+    const camera = withCaptureBridge(bridge);
+    await camera.captureStrokeVideo({ handedness: 'left' });
+    expect(bridge.capture.mock.calls).toEqual([[]]);
+  });
+
+  it('keeps both wrists available for an ambidextrous declaration', async () => {
+    const bridge = {
+      capture: jest.fn().mockResolvedValue(automaticClip),
+      captureWithOptions: jest.fn().mockResolvedValue(automaticClip),
+    };
+    const camera = withCaptureBridge(bridge);
+    await camera.captureStrokeVideo({ handedness: 'ambidextrous' });
+    expect(bridge.capture.mock.calls).toEqual([[]]);
+    expect(bridge.captureWithOptions).not.toHaveBeenCalled();
+  });
+
+  it('does not start a second capture if the configured native capture fails', async () => {
+    const bridge = {
+      capture: jest.fn(),
+      captureWithOptions: jest
+        .fn()
+        .mockRejectedValue(new Error('Camera interrupted')),
+    };
+    const camera = withCaptureBridge(bridge);
+    await expect(
+      camera.captureStrokeVideo({ handedness: 'right' }),
+    ).rejects.toThrow('Camera interrupted');
+    expect(bridge.capture).not.toHaveBeenCalled();
+  });
+});
+
 describe('native camera result boundary', () => {
   it('accepts measured pose evidence while preserving unknown recognition', () => {
     const clip = assertCapturedClip(automaticClip);

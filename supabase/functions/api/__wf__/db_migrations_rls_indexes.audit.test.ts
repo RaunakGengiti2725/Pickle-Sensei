@@ -21,6 +21,16 @@ const REPO_ROOT = fromFileUrl(new URL("../../../../", import.meta.url));
 const MIGRATIONS_DIR = join(REPO_ROOT, "supabase", "migrations");
 const SHIM = join(REPO_ROOT, "supabase", "tests", "shim_auth.sql");
 const CONTAINER = `wf-db-audit-${Date.now()}`;
+const LOCAL_PG_URL = Deno.env.get("PICKLE_AUDIT_MATRIX_PG_URL");
+if (LOCAL_PG_URL) {
+  const url = new URL(LOCAL_PG_URL);
+  if (
+    !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
+    !/^\/pickle_audit_[a-z0-9_]+$/.test(url.pathname)
+  ) {
+    throw new Error("The audit matrix requires a disposable loopback pickle_audit_* database");
+  }
+}
 
 const USER_A = "00000000-0000-4000-8000-00000000aaaa";
 
@@ -59,6 +69,12 @@ async function dockerAvailable(): Promise<boolean> {
  * with `-A -t` (unaligned, tuples only) so single-column probes are one value
  * per line. */
 async function psql(sql: string, opts: { allowFail?: boolean } = {}) {
+  if (LOCAL_PG_URL) {
+    return await run(["psql", LOCAL_PG_URL, "-v", "ON_ERROR_STOP=1", "-q", "-A", "-t"], {
+      stdin: sql,
+      allowFail: opts.allowFail,
+    });
+  }
   return await run(
     [
       "docker",
@@ -79,6 +95,21 @@ async function psql(sql: string, opts: { allowFail?: boolean } = {}) {
 }
 
 async function bootDatabase() {
+  if (LOCAL_PG_URL) {
+    const existing = await psql(
+      "select count(*) from pg_tables where schemaname in ('public', 'auth', 'api_private')",
+    );
+    assertEquals(existing.stdout.trim(), "0", "the local audit database must be empty");
+    await psql(await Deno.readTextFile(SHIM));
+    const files: string[] = [];
+    for await (const entry of Deno.readDir(MIGRATIONS_DIR)) {
+      if (entry.isFile && entry.name.endsWith(".sql")) files.push(entry.name);
+    }
+    for (const file of files.sort()) {
+      await psql(await Deno.readTextFile(join(MIGRATIONS_DIR, file)));
+    }
+    return;
+  }
   await run([
     "docker",
     "run",
@@ -135,6 +166,7 @@ async function bootDatabase() {
 }
 
 async function teardown() {
+  if (LOCAL_PG_URL) return;
   await run(["docker", "rm", "-f", CONTAINER], { allowFail: true });
 }
 
@@ -153,6 +185,9 @@ function scoredShotJson(id: string, permitKey: string) {
 }
 
 const asUser = (uid: string) => `
+  do $$ begin
+    perform set_config('request.headers', jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text, true);
+  end $$;
   set local role authenticated;
   select set_config('request.jwt.claim.sub', '${uid}', true);
   select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -169,7 +204,7 @@ const lines = (s: string) =>
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-const skip = !(await dockerAvailable());
+const skip = !LOCAL_PG_URL && !(await dockerAvailable());
 
 Deno.test({
   name: "db-migrations-rls-indexes audit matrix",

@@ -113,6 +113,8 @@ function shotId(): string {
 }
 
 async function asUser(tx: Tx, userId: string): Promise<void> {
+  await tx.unsafe(`select set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key())::text, true)`);
   await tx.unsafe(`set local role authenticated`);
   await tx.unsafe(`set local request.jwt.claim.sub = '${userId}'`);
 }

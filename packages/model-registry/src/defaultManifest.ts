@@ -72,12 +72,26 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "trigger.temporal-heuristic",
+      version: "temporal-stroke-heuristic-5",
+      task: "stroke_trigger",
+      runtime: "deterministic",
+      executionTarget: "on_device",
+      deploymentStatus: "production",
+      supportedPlatforms: ["ios"],
+      supportedStrokes: "all",
+      supportedCaptureEnvelope: CAPTURE_ENVELOPE,
+      notes:
+        "Hip-relative single-swing trigger with independent wrist onset and observed settlement. The captured event must fit inside the recorded spool. Synthetic regression coverage is not field accuracy evidence; motion detection never names a stroke.",
+    },
+    {
+      ...CODE_PROVIDER_LINEAGE,
+      id: "trigger.temporal-heuristic",
       version: "temporal-stroke-heuristic-4",
       task: "stroke_trigger",
       runtime: "deterministic",
       executionTarget: "on_device",
       deploymentStatus: "production",
-      supportedPlatforms: ["ios", "android"],
+      supportedPlatforms: ["android"],
       supportedStrokes: "all",
       supportedCaptureEnvelope: CAPTURE_ENVELOPE,
       notes:
@@ -280,12 +294,12 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["server"],
       supportedStrokes: "all",
       notes:
-        "Frozen v5 baseline (strokeHeuristicV5Frozen.ts, exported suffix '(uncalibrated)'). Kept as the registered rollback predecessor of stroke-heuristic-7.",
+        "Frozen v5 baseline (strokeHeuristicV5Frozen.ts, exported suffix '(uncalibrated)'). Kept as the registered rollback predecessor of stroke-heuristic-9.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "stroke.heuristic-hierarchical",
-      version: "stroke-heuristic-7",
+      version: "stroke-heuristic-9",
       task: "stroke_classification",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -299,7 +313,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "auto.declared-null-resolution",
-      version: "fusion-1",
+      version: "fusion-2",
       task: "stroke_auto_resolution",
       runtime: "deterministic",
       executionTarget: "on_device",

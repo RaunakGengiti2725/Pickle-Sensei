@@ -18,7 +18,7 @@ async function refreshWith(
     if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/token`)) {
       return gotrue(request);
     }
-    return harnessFetch(input, init);
+    return harnessFetch(request);
   }) as typeof fetch;
   try {
     return await harness.handler(

@@ -41,7 +41,9 @@ import Foundation
 /// trigger and the close or the candidate is dropped silently (short flicks,
 /// grip adjustments).
 public final class TemporalStrokeDetector: StrokeDetecting {
-  public let modelVersion = "temporal-stroke-heuristic-4"
+  public let modelVersion = "temporal-stroke-heuristic-5"
+
+  public enum Handedness: String, Sendable { case left, right }
 
   private enum State { case idle, candidate }
 
@@ -87,6 +89,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     /// and the close, in body-heights relative to the hips. A dink covers
     /// ≈ 0.4–0.6, a drive ≈ 0.7–1.0; a grip adjustment or a flick ≈ 0.1.
     public var minWristPathBodyHeights: Double
+    public var handedness: Handedness?
 
     public init(
       triggerWristSpeed: Double = 1.15,
@@ -98,7 +101,8 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       quietWristSpeed: Double = 0.45,
       minQuietBeforeMs: Int = 350,
       maxOnsetToTriggerMs: Int = 1200,
-      minWristPathBodyHeights: Double = 0.3
+      minWristPathBodyHeights: Double = 0.3,
+      handedness: Handedness? = nil
     ) {
       self.triggerWristSpeed = triggerWristSpeed
       self.endWristSpeed = endWristSpeed
@@ -110,6 +114,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       self.minQuietBeforeMs = minQuietBeforeMs
       self.maxOnsetToTriggerMs = maxOnsetToTriggerMs
       self.minWristPathBodyHeights = minWristPathBodyHeights
+      self.handedness = handedness
     }
   }
 
@@ -137,6 +142,11 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// Spans smaller than this (normalized-image units) are not a standing body
   /// (lying down, a collapsed detection) and are ignored for scale.
   private static let minimumMeasurableBodyScale = 0.05
+  private static let maximumStillnessGapMs = 125
+  private static let minimumStillnessIntervals = 2
+  private static let cadenceWindowIntervals = 8
+  private static let limitedCadenceIntervals = 3
+  private static let cadenceRecoveryMs = 750
 
   /// The visible hips of one frame: the body anchor wrist motion is measured
   /// against.
@@ -181,11 +191,19 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     let distance: Double
     /// Start of the interval that produced this sample.
     let previousTimestampMs: Int
+    let isContinuous: Bool
   }
 
   private let config: Config
   private var state: State = .idle
   private var lastPoints: [String: Observation] = [:]
+  private var lastFrameTimestampMs: Int?
+  private var recentCadenceSupport: [Bool] = []
+  private var supportedCadenceSinceMs: Int?
+  private var candidateKeys: Set<String> = []
+  private var settlingKey: String?
+  private var settledRunEndMs: Int?
+  private var settledRunIntervals = 0
   /// Emitted `startMs`: the motion onset (last quiet sample) the candidate
   /// grew out of.
   private var strokeStartMs = 0
@@ -204,12 +222,13 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// Start of the current run of quiet (≤ `quietWristSpeed`) samples — the
   /// interval start of its first sample — and the timestamp of its latest
   /// sample. nil while moving or when no evidence of stillness exists.
-  private var quietRunSinceMs: Int?
-  private var quietRunEndMs: Int?
+  private var quietRunSinceMs: [String: Int] = [:]
+  private var quietRunEndMs: [String: Int] = [:]
+  private var quietRunIntervals: [String: Int] = [:]
   /// Last sample of the most recent quiet run that lasted ≥ `minQuietBeforeMs`
   /// — the motion onset a trigger may grow out of. Consumed by a trigger and
   /// cleared when a candidate ends, so every stroke needs a fresh quiet run.
-  private var onsetMs: Int?
+  private var onsetMs: [String: Int] = [:]
 
   /// Body scale (normalized-image units) that the most recent speeds were
   /// normalized by: the EMA-smoothed vertical span from the shoulder midpoint
@@ -217,12 +236,17 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// use `fallbackBodyScale`) and after `reset()`. Diagnostics only — read it
   /// on the queue that calls `ingest`.
   public private(set) var lastBodyScale: Double?
+  public private(set) var isTrackingLimited: Bool = false
 
   public init(config: Config = Config()) {
     self.config = config
   }
 
   public func ingest(pose: PoseFrame, paddle: PaddleFrame?) -> StrokeEvent? {
+    if let previous = lastFrameTimestampMs, pose.timestampMs <= previous { return nil }
+    let previousFrameMs = lastFrameTimestampMs
+    lastFrameTimestampMs = pose.timestampMs
+    if let previousFrameMs { trackCadence(from: previousFrameMs, to: pose.timestampMs) }
     guard pose.confidence >= config.minPoseConfidence else { return nil }
     // Scale is scene information: refresh it from every trusted pose frame,
     // even one whose wrists or hips are hidden, so a later sample divides by
@@ -237,9 +261,11 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     if let center = paddle?.center, (paddle?.confidence ?? 0) > 0.5 {
       points = [("paddle", Double(center.x), Double(center.y))]
     } else {
+      let selectedWrist = config.handedness.map { "\($0.rawValue)_wrist" }
       points = pose.landmarks
         .filter {
           ($0.name == "right_wrist" || $0.name == "left_wrist")
+            && (selectedWrist == nil || $0.name == selectedWrist)
             && $0.visibility >= Self.minimumLandmarkVisibility
         }
         .map { ($0.name, $0.x, $0.y) }
@@ -267,7 +293,8 @@ public final class TemporalStrokeDetector: StrokeDetecting {
             key: point.key,
             speed: distance / dt,
             distance: distance,
-            previousTimestampMs: previous.tMs
+            previousTimestampMs: previous.tMs,
+            isContinuous: previous.tMs == previousFrameMs && elapsedMs <= Self.maximumStillnessGapMs
           ))
         }
       }
@@ -276,31 +303,45 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     guard let fastest = samples.max(by: { $0.speed < $1.speed }) else { return nil }
     let speed = fastest.speed
 
+    for sample in samples { trackQuietRun(sample, at: pose.timestampMs) }
+    let triggering = samples.filter {
+      guard $0.speed >= config.triggerWristSpeed, let onset = onsetMs[$0.key] else { return false }
+      return pose.timestampMs - onset <= config.maxOnsetToTriggerMs
+    }
+
     switch state {
     case .idle:
       // Stillness is tracked through the refractory period too, so the next
       // stroke's quiet run can build while re-triggering is still blocked.
-      trackQuietRun(fastest, at: pose.timestampMs)
       guard pose.timestampMs >= refractoryUntilMs, speed >= config.triggerWristSpeed else { return nil }
-      guard let onset = onsetMs, pose.timestampMs - onset <= config.maxOnsetToTriggerMs else {
+      guard let fastest = triggering.max(by: { $0.speed < $1.speed }),
+            let onset = onsetMs[fastest.key] else {
         // Fast without a recent still start: walking, fidgeting, a scramble.
         return nil
       }
       state = .candidate
-      strokeStartMs = onset
+      strokeStartMs = triggering.compactMap { onsetMs[$0.key] }.min() ?? onset
       triggerMs = fastest.previousTimestampMs
-      peakSpeed = speed
+      peakSpeed = fastest.speed
       peakSpeedMs = pose.timestampMs
-      settledSinceMs = nil
-      wristPaths = [fastest.key: fastest.distance]
+      clearSettledRun()
+      candidateKeys = Set(triggering.map(\.key))
+      settlingKey = fastest.key
+      wristPaths = Dictionary(uniqueKeysWithValues: samples.map { ($0.key, $0.distance) })
       // The onset is consumed: whatever follows this candidate needs a new
       // quiet run of its own.
-      clearQuietRun()
+      for key in candidateKeys { clearQuietRun(for: key) }
       return nil
 
     case .candidate:
-      if speed > peakSpeed {
-        peakSpeed = speed
+      for sample in triggering where !candidateKeys.contains(sample.key) {
+        candidateKeys.insert(sample.key)
+        strokeStartMs = min(strokeStartMs, onsetMs[sample.key] ?? strokeStartMs)
+        clearQuietRun(for: sample.key)
+      }
+      if let motion = samples.filter({ candidateKeys.contains($0.key) }).max(by: { $0.speed < $1.speed }),
+         motion.speed > peakSpeed {
+        peakSpeed = motion.speed
         peakSpeedMs = pose.timestampMs
       }
       // Every tracked point accumulates its own path; the gate reads the
@@ -316,17 +357,29 @@ public final class TemporalStrokeDetector: StrokeDetecting {
         drop()
         return nil
       }
-      guard speed <= config.endWristSpeed else {
+      for key in candidateKeys {
+        if (wristPaths[key] ?? 0) > (wristPaths[settlingKey ?? ""] ?? 0) {
+          settlingKey = key
+          clearSettledRun()
+        }
+      }
+      guard let key = settlingKey else { return nil }
+      guard let sample = samples.first(where: { $0.key == key }),
+            sample.isContinuous, sample.speed <= config.endWristSpeed else {
         // Still moving: any settled run so far was a pause, not the end.
-        settledSinceMs = nil
+        clearSettledRun()
         return nil
       }
+      if let end = settledRunEndMs, sample.previousTimestampMs != end { clearSettledRun() }
       // The settled run began with the interval that produced this sample.
-      let settledSince = settledSinceMs ?? fastest.previousTimestampMs
+      let settledSince = settledSinceMs ?? sample.previousTimestampMs
       settledSinceMs = settledSince
+      settledRunEndMs = pose.timestampMs
+      settledRunIntervals = min(Self.minimumStillnessIntervals, settledRunIntervals + 1)
       guard elapsed >= config.minStrokeMs,
+            settledRunIntervals >= Self.minimumStillnessIntervals,
             pose.timestampMs - settledSince >= Self.settledWindowMs else { return nil }
-      guard (wristPaths.values.max() ?? 0) >= config.minWristPathBodyHeights else {
+      guard (wristPaths[key] ?? 0) >= config.minWristPathBodyHeights else {
         // Fast but tiny: a flick or a grip adjustment, not a swing.
         drop()
         return nil
@@ -338,8 +391,14 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   public func reset() {
     state = .idle
     lastPoints.removeAll(keepingCapacity: true)
+    lastFrameTimestampMs = nil
+    recentCadenceSupport.removeAll(keepingCapacity: true)
+    supportedCadenceSinceMs = nil
+    isTrackingLimited = false
     refractoryUntilMs = 0
-    settledSinceMs = nil
+    clearSettledRun()
+    candidateKeys.removeAll(keepingCapacity: true)
+    settlingKey = nil
     wristPaths.removeAll(keepingCapacity: true)
     clearQuietRun()
     // Scale is re-seeded from the next trusted frame rather than blended with
@@ -349,7 +408,9 @@ public final class TemporalStrokeDetector: StrokeDetecting {
 
   private func complete(endMs: Int) -> StrokeEvent {
     state = .idle
-    settledSinceMs = nil
+    clearSettledRun()
+    candidateKeys.removeAll(keepingCapacity: true)
+    settlingKey = nil
     clearQuietRun()
     refractoryUntilMs = endMs + config.refractoryMs
     return StrokeEvent(
@@ -364,8 +425,35 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// trigger needs a fresh quiet run.
   private func drop() {
     state = .idle
+    clearSettledRun()
+    for key in candidateKeys { onsetMs[key] = nil }
+    candidateKeys.removeAll(keepingCapacity: true)
+    settlingKey = nil
+  }
+
+  private func clearSettledRun() {
     settledSinceMs = nil
-    clearQuietRun()
+    settledRunEndMs = nil
+    settledRunIntervals = 0
+  }
+
+  private func trackCadence(from previousMs: Int, to timestampMs: Int) {
+    let supported = timestampMs - previousMs <= Self.maximumStillnessGapMs
+    if recentCadenceSupport.count == Self.cadenceWindowIntervals { recentCadenceSupport.removeFirst() }
+    recentCadenceSupport.append(supported)
+    if supported {
+      if supportedCadenceSinceMs == nil { supportedCadenceSinceMs = previousMs }
+    } else {
+      supportedCadenceSinceMs = nil
+    }
+    if recentCadenceSupport.filter({ !$0 }).count >= Self.limitedCadenceIntervals {
+      isTrackingLimited = true
+    } else if let since = supportedCadenceSinceMs,
+              timestampMs - since >= Self.cadenceRecoveryMs,
+              recentCadenceSupport.count == Self.cadenceWindowIntervals,
+              recentCadenceSupport.allSatisfy({ $0 }) {
+      isTrackingLimited = false
+    }
   }
 
   // MARK: - Quiet onset
@@ -375,14 +463,20 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     // Continuity: the interval behind this sample must touch the run. An
     // uncovered stretch (occlusion, dropped frames, a low-confidence pose) is
     // no evidence of stillness, so the run ends where the evidence did.
-    if let end = quietRunEndMs, sample.previousTimestampMs > end {
-      endQuietRun()
+    let key = sample.key
+    if let end = quietRunEndMs[key], sample.previousTimestampMs != end {
+      endQuietRun(for: key)
+    }
+    guard sample.isContinuous else {
+      endQuietRun(for: key)
+      return
     }
     if sample.speed <= config.quietWristSpeed {
-      if quietRunSinceMs == nil { quietRunSinceMs = sample.previousTimestampMs }
-      quietRunEndMs = timestampMs
+      if quietRunSinceMs[key] == nil { quietRunSinceMs[key] = sample.previousTimestampMs }
+      quietRunEndMs[key] = timestampMs
+      quietRunIntervals[key] = min(Self.minimumStillnessIntervals, (quietRunIntervals[key] ?? 0) + 1)
     } else {
-      endQuietRun()
+      endQuietRun(for: key)
     }
   }
 
@@ -390,18 +484,29 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// sample as the motion onset (a shorter one leaves the previous onset in
   /// place — a brief paddle-set pause between backswing and swing does not
   /// erase the ready position it grew out of).
-  private func endQuietRun() {
-    if let since = quietRunSinceMs, let end = quietRunEndMs, end - since >= config.minQuietBeforeMs {
-      onsetMs = end
+  private func endQuietRun(for key: String) {
+    if let since = quietRunSinceMs[key], let end = quietRunEndMs[key],
+       (quietRunIntervals[key] ?? 0) >= Self.minimumStillnessIntervals,
+       end - since >= config.minQuietBeforeMs {
+      onsetMs[key] = end
     }
-    quietRunSinceMs = nil
-    quietRunEndMs = nil
+    quietRunSinceMs[key] = nil
+    quietRunEndMs[key] = nil
+    quietRunIntervals[key] = nil
+  }
+
+  private func clearQuietRun(for key: String) {
+    quietRunSinceMs[key] = nil
+    quietRunEndMs[key] = nil
+    quietRunIntervals[key] = nil
+    onsetMs[key] = nil
   }
 
   private func clearQuietRun() {
-    quietRunSinceMs = nil
-    quietRunEndMs = nil
-    onsetMs = nil
+    quietRunSinceMs.removeAll(keepingCapacity: true)
+    quietRunEndMs.removeAll(keepingCapacity: true)
+    quietRunIntervals.removeAll(keepingCapacity: true)
+    onsetMs.removeAll(keepingCapacity: true)
   }
 
   /// The hips visible on this frame (visibility ≥ 0.35); nil when neither is.
@@ -486,8 +591,12 @@ extension TemporalStrokeDetector {
   /// highest-confidence event — i.e. the strongest swing-like window — or nil
   /// when nothing in the history moved like a stroke. Pure: the live detector
   /// is untouched.
-  public static func strongestEvent(in poses: [PoseFrame], config: Config = manualStopConfig) -> StrokeEvent? {
-    let pass = TemporalStrokeDetector(config: config)
+  public static func strongestEvent(
+    in poses: [PoseFrame], config: Config = manualStopConfig, handedness: Handedness? = nil
+  ) -> StrokeEvent? {
+    var passConfig = config
+    if let handedness { passConfig.handedness = handedness }
+    let pass = TemporalStrokeDetector(config: passConfig)
     var best: StrokeEvent?
     for pose in poses {
       guard let event = pass.ingest(pose: pose, paddle: nil) else { continue }

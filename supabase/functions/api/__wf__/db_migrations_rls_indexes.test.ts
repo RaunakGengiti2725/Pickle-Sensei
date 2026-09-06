@@ -75,7 +75,7 @@ type Migration = { file: string; statements: string[]; raw: string };
 function functionBodies(raw: string, name: string): string[] {
   const bodies: string[] = [];
   const re = new RegExp(
-    `create or replace function public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
+    `create(?: or replace)? function public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
     "gi",
   );
   for (const match of raw.matchAll(re)) bodies.push(match[0].toLowerCase());
@@ -1176,6 +1176,116 @@ Deno.test(
       ok(
         !/^npm:@supabase\/supabase-js@(\d+|\^|~)/.test(key) || key === SUPABASE_JS_PIN,
         `deno.lock records a floating supabase-js specifier: ${key}`,
+      );
+    }
+  },
+);
+
+Deno.test(
+  "user database RPCs never switch to SECURITY DEFINER and bypass the API gate",
+  async () => {
+    const chain = await loadChain();
+    const invokers = [
+      "access_lock_key",
+      "access_state",
+      "apply_synced_shot",
+      "complete_onboarding",
+      "is_api_session_active",
+      "lifetime_scored_count",
+      "reserve_analysis_permit",
+    ];
+    for (const name of invokers) {
+      let definitions = 0;
+      for (const migration of chain) {
+        for (const body of functionBodies(migration.raw, name)) {
+          definitions += 1;
+          const header = body.slice(0, body.indexOf("$$"));
+          ok(
+            !/security\s+definer/.test(header),
+            `${migration.file}: public.${name} must execute under the user's RLS`,
+          );
+        }
+        for (const statement of migration.statements) {
+          ok(
+            !(
+              statement.startsWith(`alter function public.${name}(`) &&
+              statement.includes("security definer")
+            ),
+            `${migration.file}: public.${name} must not be promoted to SECURITY DEFINER`,
+          );
+        }
+      }
+      ok(definitions > 0, `public.${name} must exist`);
+    }
+  },
+);
+
+Deno.test(
+  "combined audit: definer readers retain API proof and owner scoping after the last migration",
+  async () => {
+    const chain = await loadChain();
+    const integration = chain.find((m) => m.file === "20260907110000_api_audit_integration.sql");
+    ok(integration, "the combined audit requires a new forward migration");
+    ok(
+      integration.file > PERMIT_SETTLED_NO_DELETE,
+      "the integration migration must follow the upstream chain",
+    );
+    for (const name of ["identity_scored_count", "permit_tombstoned"]) {
+      const latest = chain.flatMap((m) => functionBodies(m.raw, name)).at(-1);
+      ok(latest, `public.${name} must exist`);
+      ok(latest.includes("security definer"), `public.${name} is a narrowly scoped ledger reader`);
+      ok(
+        latest.includes("api_private.is_api_request()"),
+        `public.${name} must require the API proof`,
+      );
+      ok(
+        latest.includes("(select auth.uid())"),
+        `public.${name} must scope its read to the caller`,
+      );
+      ok(latest.includes("set search_path = ''"), `public.${name} must pin its search_path`);
+    }
+    for (const column of ["id", "user_id", "idempotency_key", "created_at"]) {
+      ok(
+        integration.raw.includes(`new.${column} is distinct from old.${column}`),
+        `permit ${column} must stay immutable`,
+      );
+    }
+    for (const outcome of ["scored", "low_confidence", "free_limit_exceeded"]) {
+      ok(integration.raw.includes(`'${outcome}'`), `late sync must retain ${outcome} settlement`);
+    }
+  },
+);
+
+Deno.test(
+  "combined audit: webhook lifecycle grants never permit completed audit mutation",
+  async () => {
+    const chain = await loadChain();
+    const integration = chain.find((m) => m.file === "20260907110000_api_audit_integration.sql");
+    ok(integration, "the combined audit requires a new forward migration");
+    ok(
+      integration.statements.includes(
+        "grant update (claimed_at, processed_at), delete on public.webhook_events to service_role",
+      ),
+      "service-role grants must be limited to reservation lifecycle writes",
+    );
+    ok(
+      integration.raw.includes("if old.processed_at is not null then"),
+      "completed audit rows must be immutable",
+    );
+    ok(
+      integration.raw.includes("old.claimed_at > now() - interval '5 minutes'"),
+      "a live lease must not be reclaimed",
+    );
+    ok(
+      integration.statements.includes(
+        "create trigger webhook_events_guard_lifecycle before update or delete on public.webhook_events for each row execute function api_private.enforce_webhook_lifecycle()",
+      ),
+      "every webhook mutation must pass the lifecycle guard",
+    );
+    for (const later of after(chain, integration.file)) {
+      ok(
+        !dropsTriggerWithoutRecreating(later, "webhook_events_guard_lifecycle"),
+        `${later.file} removes audit immutability`,
       );
     }
   },

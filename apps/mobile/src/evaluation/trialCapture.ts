@@ -153,7 +153,9 @@ export function buildEvaluationTrial(
     latencyMs: input.latencyMs,
     appVersion: input.appVersion,
     engineVersion: isRecorded ? outcome.record.engineVersion : null,
-    modelBundleVersion: isRecorded ? 'on-device-fusion-1' : null,
+    modelBundleVersion: isRecorded
+      ? (outcome.record.result?.versionVector.modelBundleVersion ?? null)
+      : null,
     declaredStroke: input.declaredStroke,
     claims: claimsFor(outcome),
     limitingFactors: isRecorded

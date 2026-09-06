@@ -21,6 +21,9 @@ export interface Harness {
   tables: Record<string, unknown[]>;
   /** Rows returned for PostgREST RPC POST by function name. */
   rpcs: Record<string, unknown>;
+  rpcErrors: Record<string, number>;
+  userStatus: number;
+  logoutStatus: number;
   /** Test-only copy of the generated AES key used by the lazy edge config. */
   appleTokenEncryptionKey: string;
   reset(): void;
@@ -63,6 +66,32 @@ export function fakeAppleIdToken(sub = TEST_USER_ID): string {
     }),
   );
   return `${header}.${payload}.sig`;
+}
+
+export function fakeSupabaseAccessToken(
+  sub = TEST_USER_ID,
+  sessionId = crypto.randomUUID(),
+): string {
+  return `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(
+    JSON.stringify({
+      iss: `${SUPABASE_URL}/auth/v1`,
+      sub,
+      aud: "authenticated",
+      role: "authenticated",
+      session_id: sessionId,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+  )}.sig`;
+}
+
+function jwtSubject(token: string): string | null {
+  try {
+    const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const sub = JSON.parse(atob(segment)).sub;
+    return typeof sub === "string" ? sub : null;
+  } catch {
+    return null;
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -115,13 +144,19 @@ export async function loadHarness(): Promise<Harness> {
     calls: [],
     subscriber: {},
     tables: {},
-    rpcs: {},
+    rpcs: { is_api_session_active: true },
+    rpcErrors: {},
+    userStatus: 200,
+    logoutStatus: 204,
     appleTokenEncryptionKey,
     reset() {
       state.calls = [];
       state.subscriber = {};
       state.tables = {};
-      state.rpcs = {};
+      state.rpcs = { is_api_session_active: true };
+      state.rpcErrors = {};
+      state.userStatus = 200;
+      state.logoutStatus = 204;
     },
     callsTo(fragment: string) {
       return state.calls.filter((call) => call.url.includes(fragment));
@@ -198,6 +233,23 @@ export async function loadHarness(): Promise<Harness> {
         },
       });
     }
+    if (url.startsWith(`${SUPABASE_URL}/auth/v1/logout`)) {
+      return state.logoutStatus === 204
+        ? new Response(null, { status: 204 })
+        : jsonResponse(state.logoutStatus, { error_code: "injected", msg: "upstream down" });
+    }
+    if (url.startsWith(`${SUPABASE_URL}/auth/v1/user`)) {
+      if (state.userStatus !== 200) {
+        return jsonResponse(state.userStatus, { error_code: "injected", msg: "upstream down" });
+      }
+      return jsonResponse(200, {
+        id: jwtSubject((headers.authorization ?? "").replace(/^Bearer /, "")) ?? TEST_USER_ID,
+        email: "user@example.com",
+        aud: "authenticated",
+        role: "authenticated",
+        app_metadata: { provider: "google", providers: ["google"] },
+      });
+    }
     if (request.method === "DELETE" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
       return jsonResponse(200, {});
     }
@@ -205,6 +257,17 @@ export async function loadHarness(): Promise<Harness> {
       const table = new URL(url).pathname.slice("/rest/v1/".length);
       if (table.startsWith("rpc/")) {
         const fn = table.slice("rpc/".length);
+        if (fn === "get_api_request_key" && !(fn in state.rpcs)) {
+          return headers.authorization === "Bearer service-role-test-key"
+            ? jsonResponse(200, "a1".repeat(32))
+            : jsonResponse(403, { message: "server credentials required" });
+        }
+        if (fn in state.rpcErrors) {
+          return jsonResponse(state.rpcErrors[fn], {
+            code: "XX000",
+            message: "injected rpc failure",
+          });
+        }
         if (!(fn in state.rpcs)) {
           return jsonResponse(404, {
             code: "PGRST202",

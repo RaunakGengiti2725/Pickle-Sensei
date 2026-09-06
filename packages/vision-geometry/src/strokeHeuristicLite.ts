@@ -161,7 +161,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-9 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -377,7 +377,16 @@ export function classifyStroke(input: {
 }): HeuristicStrokePrediction {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
-  const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
+  if (
+    !Number.isFinite(input.window.startMs) ||
+    !Number.isFinite(input.window.endMs) ||
+    input.window.startMs >= input.window.endMs
+  ) {
+    return unknown("stroke_window_invalid", evidence, limitingFactors);
+  }
+  const inStrokeWindow = (sample: { timestampMs: number }) =>
+    sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs;
+  const frames = (input.legacyFrames ?? toLegacyPoseFrames(input.sequence)).filter(inStrokeWindow);
   let contactMs: number;
   let referenceIsEventPeak = false;
   if (input.contactMs !== null) {
@@ -390,6 +399,9 @@ export function classifyStroke(input: {
     return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
   }
 
+  if (!(contactMs >= input.window.startMs && contactMs <= input.window.endMs)) {
+    return unknown("reference_outside_stroke_window", evidence, limitingFactors);
+  }
   const frame = nearestFrame(frames, contactMs);
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
@@ -434,7 +446,7 @@ export function classifyStroke(input: {
     return unknown("torso_extent_collapsed_vs_sequence_median", evidence, limitingFactors);
   }
 
-  const wristInfo = dominantWristInfo(frames, contactMs);
+  const wristInfo = dominantWristInfo(frames, contactMs, frame);
 
   // ── Gate: dominant-wrist attribution must be verifiable (v4) ──────────
   // The dominant wrist is chosen by comparative travel. When the rival
@@ -508,17 +520,16 @@ export function classifyStroke(input: {
   // walking-arm pace inside the event window, or a repeatedly-measured
   // dominant wrist that barely moved around the reference. Absent
   // measurements never fire them.
+  const paddleSpeeds = input.paddleSpeeds?.filter(inStrokeWindow);
+  const wristSpeeds = input.wristSpeeds?.filter(inStrokeWindow);
   const speeds =
-    input.paddleSpeeds && input.paddleSpeeds.length >= 5
-      ? { series: input.paddleSpeeds, source: "paddle" }
-      : input.wristSpeeds && input.wristSpeeds.length >= 5
-        ? { series: input.wristSpeeds, source: "wrist" }
+    paddleSpeeds && paddleSpeeds.length >= 5
+      ? { series: paddleSpeeds, source: "paddle" }
+      : wristSpeeds && wristSpeeds.length >= 5
+        ? { series: wristSpeeds, source: "wrist" }
         : null;
   if (speeds) {
-    const windowSamples = speeds.series.filter(
-      (sample) =>
-        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
-    );
+    const windowSamples = speeds.series;
     const windowPeak = windowSamples.reduce((best, sample) => Math.max(best, sample.value), 0);
     if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < NON_SWING_SPEED_FLOOR) {
       evidence.push(
@@ -526,9 +537,8 @@ export function classifyStroke(input: {
       );
       return unknown("no_swing_energy_in_window", evidence, limitingFactors);
     }
-    if (windowSamples.length > 0 && windowSamples.length < MIN_WINDOW_SPEED_SAMPLES) {
-      limitingFactors.push("speed_window_sparsely_sampled_gate_not_applicable");
-    }
+  } else if ((paddleSpeeds?.length ?? 0) > 0 || (wristSpeeds?.length ?? 0) > 0) {
+    limitingFactors.push("speed_window_sparsely_sampled_gate_not_applicable");
   }
   if (
     wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
@@ -553,7 +563,10 @@ export function classifyStroke(input: {
   let contactPointReliability: "strong" | "degraded" = "degraded";
 
   const paddleNear = input.paddle
-    ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
+    ?.filter(
+      (observation) =>
+        inStrokeWindow(observation) && Math.abs(observation.timestampMs - contactMs) <= 80,
+    )
     .sort((a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs))[0];
   const paddleNearConfidence = paddleNear?.confidence ?? null;
   const paddleNearTrusted =
@@ -678,6 +691,26 @@ export function classifyStroke(input: {
   const windowWristRaised = raise.wristRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
   const windowElbowRaised = raise.elbowRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
   const windowMeasured = raise.wristMeasuredFrames > 0 || raise.elbowMeasuredFrames > 0;
+  const overheadCandidate = pointRaised
+    ? windowWristRaised ||
+      windowElbowRaised ||
+      (!windowMeasured && contactPointReliability === "strong")
+    : windowWristRaised && windowElbowRaised && contactPointReliability === "degraded";
+  if (overheadCandidate) {
+    evidence.push(
+      `hip-independent arm raise: wrist and elbow above the ${wristInfo.side} shoulder in ` +
+        `${raise.armRaisedFrames}/${raise.armMeasuredFrames} measured in-window frames ±${OVERHEAD_WINDOW_MS}ms (requires ${OVERHEAD_MIN_RAISED_FRAMES})`,
+    );
+    if (raise.armRaisedFrames < OVERHEAD_MIN_RAISED_FRAMES) {
+      return unknown(
+        "overhead_requires_independent_arm_raise",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+  }
 
   if (pointRaised) {
     evidence.push(`contact ${aboveShoulder.toFixed(2)} torso-units above shoulders`);
@@ -928,11 +961,7 @@ export function classifyStroke(input: {
       contactPointReliability,
     };
   }
-  const inWindow = speeds.series.filter(
-    (sample) =>
-      sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
-  );
-  const peak = inWindow.reduce((best, sample) => Math.max(best, sample.value), 0);
+  const peak = speeds.series.reduce((best, sample) => Math.max(best, sample.value), 0);
   const lowContact = contactPoint.y > hipY - 0.35 * torso;
   const intensity = peak < 0.9 ? "slow" : peak >= 1.4 ? "fast" : "medium";
   evidence.push(
@@ -1035,6 +1064,7 @@ function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs
   let best: (typeof frames)[number] | null = null;
   let bestDelta = Infinity;
   for (const frame of frames) {
+    if (frame.landmarks.length === 0) continue;
     const delta = Math.abs(frame.timestampMs - timestampMs);
     if (delta < bestDelta) {
       bestDelta = delta;
@@ -1051,6 +1081,7 @@ function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs
 function dominantWristInfo(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
+  referenceFrame: (typeof frames)[number],
 ): {
   side: "left" | "right";
   point: { x: number; y: number } | null;
@@ -1078,12 +1109,11 @@ function dominantWristInfo(
     }
   }
   const chosen = travel.right >= travel.left ? "right" : "left";
-  const frame = nearestFrame(frames, contactMs);
-  const mark = frame?.landmarks.find(
+  const mark = referenceFrame.landmarks.find(
     (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
   );
   const rival = chosen === "right" ? "left" : "right";
-  const rivalMark = frame?.landmarks.find(
+  const rivalMark = referenceFrame.landmarks.find(
     (landmark) => landmark.name === `${rival}_wrist` && landmark.visibility >= 0.25,
   );
   return {
@@ -1221,12 +1251,16 @@ function scanRaiseWindow(
   elbowRaisedFrames: number;
   wristMeasuredFrames80: number;
   medianWristRaise80: number | null;
+  armMeasuredFrames: number;
+  armRaisedFrames: number;
 } {
   let wristMeasuredFrames = 0;
   let wristRaisedFrames = 0;
   let maxWristRaise: number | null = null;
   let elbowMeasuredFrames = 0;
   let elbowRaisedFrames = 0;
+  let armMeasuredFrames = 0;
+  let armRaisedFrames = 0;
   const raises80: number[] = [];
   for (const frame of frames) {
     const delta = Math.abs(frame.timestampMs - contactMs);
@@ -1235,6 +1269,13 @@ function scanRaiseWindow(
       frame.landmarks.find(
         (landmark) => landmark.name === name && landmark.visibility >= minVisibility,
       );
+    const armShoulder = find(`${side}_shoulder`, WRIST_RELIABLE_VISIBILITY);
+    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
+    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
+    if (armShoulder && wrist && elbow) {
+      armMeasuredFrames += 1;
+      if (wrist.y < armShoulder.y && elbow.y < armShoulder.y) armRaisedFrames += 1;
+    }
     const leftShoulder = find("left_shoulder", 0);
     const rightShoulder = find("right_shoulder", 0);
     const leftHip = find("left_hip", 0);
@@ -1244,7 +1285,6 @@ function scanRaiseWindow(
     const torsoExtent = (leftHip.y + rightHip.y) / 2 - shoulderY;
     if (torsoExtent < TORSO_MIN_EXTENT) continue;
     const torso = torsoExtent;
-    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
     if (wrist) {
       const raiseAmount = (shoulderY - wrist.y) / torso;
       wristMeasuredFrames += 1;
@@ -1252,7 +1292,6 @@ function scanRaiseWindow(
       if (maxWristRaise === null || raiseAmount > maxWristRaise) maxWristRaise = raiseAmount;
       if (delta <= OVERHEAD_MEDIAN_WINDOW_MS) raises80.push(raiseAmount);
     }
-    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
     if (elbow) {
       elbowMeasuredFrames += 1;
       if ((shoulderY - elbow.y) / torso >= OVERHEAD_ELBOW_RAISE_TORSO) elbowRaisedFrames += 1;
@@ -1273,6 +1312,8 @@ function scanRaiseWindow(
     elbowRaisedFrames,
     wristMeasuredFrames80: raises80.length,
     medianWristRaise80,
+    armMeasuredFrames,
+    armRaisedFrames,
   };
 }
 

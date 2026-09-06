@@ -71,6 +71,36 @@ final class VisionCoreContractsTests: XCTestCase {
     XCTAssertEqual(scale ?? 0, 0.65, accuracy: 1e-9)
   }
 
+  func testFirstCompleteSwingDoesNotWaitForAnArbitraryRecordingWarmup() {
+    let event = StrokeEvent(startMs: 350, endMs: 850, peakMotionMs: 550, confidence: 0.85)
+    XCTAssertTrue(event.isContainedInRecording(firstFrameMs: 0, lastFrameMs: 850))
+    XCTAssertTrue(event.isContainedInRecording(firstFrameMs: 350, lastFrameMs: 850))
+  }
+
+  func testLaterRecordingCannotAcceptAStrokeThatStartedInThePreviousSpool() {
+    let event = StrokeEvent(startMs: 49_850, endMs: 50_800, peakMotionMs: 50_150, confidence: 0.85)
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 50_000, lastFrameMs: 52_000))
+  }
+
+  func testCaptureRequiresTheEntireEventToExistInTheRecording() {
+    let event = StrokeEvent(startMs: 350, endMs: 850, peakMotionMs: 550, confidence: 0.85)
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: nil, lastFrameMs: 850))
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 0, lastFrameMs: nil))
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 0, lastFrameMs: 849))
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 351, lastFrameMs: 1_500))
+    XCTAssertTrue(event.isContainedInRecording(firstFrameMs: 0, lastFrameMs: 1_500))
+  }
+
+  func testInvalidCaptureWindowsCannotPassTheRecordingGate() {
+    for (start, end, peak) in [(-1, 850, 550), (350, 350, 350), (850, 350, 550), (350, 850, 900)] {
+      let event = StrokeEvent(startMs: start, endMs: end, peakMotionMs: peak, confidence: 0.85)
+      XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 0, lastFrameMs: 2_000))
+    }
+    let event = StrokeEvent(startMs: 350, endMs: 850, peakMotionMs: 550, confidence: 0.85)
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: -1, lastFrameMs: 2_000))
+    XCTAssertFalse(event.isContainedInRecording(firstFrameMs: 2_000, lastFrameMs: 1_000))
+  }
+
   private func stillBody(at timestampMs: Int) -> PoseFrame {
     let points: [(String, Double, Double)] = [
       ("left_shoulder", 0.43, 0.25), ("right_shoulder", 0.57, 0.25),

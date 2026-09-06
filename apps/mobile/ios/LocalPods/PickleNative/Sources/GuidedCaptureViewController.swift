@@ -487,11 +487,10 @@ final class GuidedCaptureViewController: UIViewController {
 
   private static let preRollMs = 2_000
   private static let postRollMs = 1_500
-  /// The live trigger waits this long after a spool (re)starts before it may
-  /// fire, so a swing already under way when the file began — one the clip
-  /// could not contain — is never half-captured. The export's pre-roll clamps
-  /// to the file start; this is the only warm-up.
-  private static let triggerWarmupMs = 1_000
+  /// The live trigger requires its entire measured stroke window to lie
+  /// inside the current spool, rather than discarding an early complete swing
+  /// during a fixed warm-up. A swing begun before the file is never accepted;
+  /// the export's pre-roll still clamps to the first recorded frame.
   /// STOP & ANALYZE excludes the final stretch before the stop: that is the
   /// athlete walking up to the phone, not the swing. The pass itself is
   /// `TemporalStrokeDetector.strongestEvent(in:)` with its permissive
@@ -528,7 +527,8 @@ final class GuidedCaptureViewController: UIViewController {
 
   private let engine: CameraEngine
   private let poseProvider = ApplePoseProvider()
-  private let detector = TemporalStrokeDetector()
+  private let handedness: TemporalStrokeDetector.Handedness?
+  private let detector: TemporalStrokeDetector
   private let readiness = PoseReadinessEvaluator()
   /// OPTIONAL START-SPOT TAP — for crowded courts. The user may tap WHERE
   /// THEY WILL START while composing; the person who OCCUPIES that region
@@ -671,13 +671,16 @@ final class GuidedCaptureViewController: UIViewController {
   private var lastReadinessEventState: PoseReadinessEvaluator.State?
   private var lastReadinessEventAtMs = 0
   private var presentedCaptureStage: CapturePresentationStage?
+  private var trackingLimitedPresented = false
   /// Short-lived setup notice ("Recording stopped…") shown in composing
   /// until it expires or the user acts; readiness copy resumes after.
   private var transientNotice: (text: String, until: Date)?
   private var lastComposingSnapshot: PoseReadinessEvaluator.Snapshot?
 
-  init(engine: CameraEngine) {
+  init(engine: CameraEngine, handedness: TemporalStrokeDetector.Handedness? = nil) {
     self.engine = engine
+    self.handedness = handedness
+    self.detector = TemporalStrokeDetector(config: .init(handedness: handedness))
     super.init(nibName: nil, bundle: nil)
     modalPresentationStyle = .fullScreen
   }
@@ -911,12 +914,13 @@ final class GuidedCaptureViewController: UIViewController {
     engine.onFrame = { [weak self] pixelBuffer, timestampMs in
       self?.handleFrame(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
     }
-    engine.onRecordingStarted = { [weak self] _ in
+    engine.onRecordingStarted = { [weak self] url in
       guard let self else { return }
       self.stateLock.lock()
-      self.recordingStarted = true
+      let isCurrent = !self.terminal && self.recordingRequested && self.observationURL == url
+      if isCurrent { self.recordingStarted = true }
       self.stateLock.unlock()
-      self.emit(type: "session", values: ["state": "observing"])
+      if isCurrent { self.emit(type: "session", values: ["state": "observing"]) }
     }
     engine.onRecordingFinished = { [weak self] result in self?.recordingFinished(result) }
     engine.onZoomStateChanged = { [weak self] state in
@@ -1409,15 +1413,22 @@ final class GuidedCaptureViewController: UIViewController {
     let history = poseHistory
     stateLock.unlock()
     guard canStop else { return }
+    observationTimer?.invalidate()
+    observationTimer = nil
     controlHaptic.impactOccurred(intensity: 0.8)
-    let fileStartMs = engine.currentRecordingFirstFrameTimestampMs
-    let stopMs = engine.currentRecordingLastFrameTimestampMs ?? history.last?.timestampMs
+    guard let recording = engine.currentRecordingSnapshot else {
+      stopRecordingWithoutCapture(notice: "No swing found — tap record and swing again")
+      return
+    }
+    let fileStartMs = recording.firstFrameTimestampMs
+    let stopMs = recording.lastFrameTimestampMs
     emit(type: "session", values: ["state": "manual_stop_requested"])
 
     onVisionQueue { [self] in
       let version = Self.manualStopModelVersion(detector.modelVersion)
-      guard let stopMs,
-            let event = Self.manualStopEvent(history: history, fileStartMs: fileStartMs, stopMs: stopMs),
+      guard let event = Self.manualStopEvent(
+              history: history, fileStartMs: fileStartMs, stopMs: stopMs, handedness: handedness
+            ),
             let evidence = evidenceAccumulator.summary(
               startMs: event.startMs,
               endMs: event.endMs,
@@ -1433,8 +1444,17 @@ final class GuidedCaptureViewController: UIViewController {
         return
       }
       stateLock.lock()
-      guard pendingStroke == nil, !terminal, recordingRequested else {
+      guard pendingStroke == nil, !terminal, recordingRequested, recordingStarted,
+            observationURL == recording.url, engine.currentRecordingSnapshot?.url == recording.url else {
         stateLock.unlock()
+        DispatchQueue.main.async { [weak self] in
+          guard let self else { return }
+          self.stateLock.lock()
+          let shouldResume = self.recordingRequested && !self.terminal
+            && self.pendingStroke == nil && !self.processingClip
+          self.stateLock.unlock()
+          if shouldResume { self.scheduleObservationTimer() }
+        }
         return
       }
       pendingStroke = event
@@ -1489,12 +1509,15 @@ final class GuidedCaptureViewController: UIViewController {
   /// file (a rolling restart may have replaced it) and older than the
   /// approach window count. The strongest event wins; nil when nothing moved
   /// like a swing.
-  private static func manualStopEvent(history: [PoseFrame], fileStartMs: Int?, stopMs: Int) -> StrokeEvent? {
+  private static func manualStopEvent(
+    history: [PoseFrame], fileStartMs: Int?, stopMs: Int,
+    handedness: TemporalStrokeDetector.Handedness?
+  ) -> StrokeEvent? {
     let cutoff = stopMs - manualStopApproachMs
     let lowerBound = fileStartMs ?? Int.min
     let usable = history.filter { $0.timestampMs >= lowerBound && $0.timestampMs <= cutoff }
     guard usable.count >= 8 else { return nil }
-    return TemporalStrokeDetector.strongestEvent(in: usable)
+    return TemporalStrokeDetector.strongestEvent(in: usable, handedness: handedness)
   }
 
   /// Stop pressed with no swing in the history: the spool is discarded
@@ -1587,6 +1610,7 @@ final class GuidedCaptureViewController: UIViewController {
     }
     visionInFlight = true
     let recording = recordingRequested
+    let recordingURL = observationURL
     stateLock.unlock()
 
     visionQueue.async { [weak self] in
@@ -1606,6 +1630,12 @@ final class GuidedCaptureViewController: UIViewController {
           self.considerTargetAcquisition(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
         }
         let pose = try self.poseProvider.extractPose(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
+        self.stateLock.lock()
+        let isCurrent = !self.terminal && (!recording || (
+          self.recordingRequested && self.observationURL == recordingURL
+        ))
+        self.stateLock.unlock()
+        guard isCurrent else { return }
         let snapshot = self.readiness.ingest(pose: pose)
         if recording {
           if snapshot.state == .noPerson {
@@ -1620,13 +1650,19 @@ final class GuidedCaptureViewController: UIViewController {
           // D-029: the completion monitor mirrors the trigger's wrist-motion
           // series, so it ingests exactly the poses the trigger sees.
           self.completionMonitor.ingest(pose: pose)
-          self.considerTrigger(pose: pose, readiness: snapshot)
+          self.considerTrigger(pose: pose, readiness: snapshot, recordingURL: recordingURL)
         }
       } catch {
         // No person this frame (motion blur mid-swing is the common cause).
         // The detector is NOT reset: its ≤250 ms sample-gap rule already
         // ignores speeds across a gap, so a stroke in progress survives a
         // dropped frame instead of being silently discarded.
+        self.stateLock.lock()
+        let isCurrent = !self.terminal && (!recording || (
+          self.recordingRequested && self.observationURL == recordingURL
+        ))
+        self.stateLock.unlock()
+        guard isCurrent else { return }
         let snapshot = self.readiness.ingestMissing(timestampMs: timestampMs)
         if recording { self.evidenceAccumulator.ingestMissing(timestampMs: timestampMs) }
         self.handleReadiness(snapshot, pose: nil)
@@ -1709,6 +1745,9 @@ final class GuidedCaptureViewController: UIViewController {
         timestampMs: timestampMs
       ) {
         self.completionMonitor.ingest(pose: pose)
+        self.handleReadiness(self.readiness.ingest(pose: pose), pose: pose)
+      } else {
+        self.handleReadiness(self.readiness.ingestMissing(timestampMs: timestampMs), pose: nil)
       }
     }
   }
@@ -1727,13 +1766,14 @@ final class GuidedCaptureViewController: UIViewController {
 
   private func considerTrigger(
     pose: PoseFrame,
-    readiness snapshot: PoseReadinessEvaluator.Snapshot
+    readiness snapshot: PoseReadinessEvaluator.Snapshot,
+    recordingURL: URL?
   ) {
     stateLock.lock()
     let wasTracked = armed
     let isTerminal = terminal
     let hasPending = pendingStroke != nil
-    let recordingIsActive = recordingStarted && recordingRequested
+    let recordingIsActive = recordingStarted && recordingRequested && observationURL == recordingURL
     stateLock.unlock()
     guard !isTerminal, !hasPending, recordingIsActive else { return }
 
@@ -1744,7 +1784,7 @@ final class GuidedCaptureViewController: UIViewController {
     // ("Move a little closer") could swing all day and nothing was ever
     // detected. Now the detector sees every trackable frame; readiness only
     // decides what the status card says.
-    if snapshot.isReady {
+    if snapshot.isReady && !detector.isTrackingLimited {
       armedLossStreak = 0
       if !wasTracked {
         stateLock.lock()
@@ -1772,16 +1812,10 @@ final class GuidedCaptureViewController: UIViewController {
       armedLossStreak = 0
     }
 
-    // Warm-up: a swing already under way when this file began could not be
-    // exported whole, so the trigger waits `triggerWarmupMs` after the first
-    // recorded frame (the detector keeps ingesting so its speed history is
-    // continuous when the gate opens).
-    let warmedUp: Bool
-    if let first = engine.currentRecordingFirstFrameTimestampMs {
-      warmedUp = pose.timestampMs - first >= Self.triggerWarmupMs
-    } else {
-      warmedUp = false
-    }
+    // Recorded-window proof: the first complete swing is accepted without
+    // an arbitrary warm-up delay. A stroke that began before the current
+    // spool, or whose final frame has not been recorded, cannot be exported
+    // whole and is rejected by the event's containment check below.
 
     // NO CONFIDENCE GATE HERE, BY CONSTRUCTION. `StrokeEvent.confidence` is
     // `min(0.95, 0.5 + peakSpeed / (triggerWristSpeed * 4))` and an event is
@@ -1792,8 +1826,12 @@ final class GuidedCaptureViewController: UIViewController {
     // peak wrist speed, not a calibrated probability, so the real quality
     // controls are the detector's own `triggerWristSpeed` / `minStrokeMs` /
     // `maxStrokeMs` thresholds. Re-adding a gate here needs calibration data.
+    guard let recording = engine.currentRecordingSnapshot, recording.url == recordingURL else { return }
     let detected = detector.ingest(pose: pose, paddle: nil)
-    guard warmedUp, let event = detected else { return }
+    guard let event = detected, event.isContainedInRecording(
+      firstFrameMs: recording.firstFrameTimestampMs,
+      lastFrameMs: recording.lastFrameTimestampMs
+    ) else { return }
     guard let captureEvidence = evidenceAccumulator.summary(
       startMs: event.startMs,
       endMs: event.endMs,
@@ -1809,7 +1847,8 @@ final class GuidedCaptureViewController: UIViewController {
       return
     }
     stateLock.lock()
-    guard pendingStroke == nil, !terminal else {
+    guard pendingStroke == nil, !terminal, recordingRequested, recordingStarted,
+          observationURL == recording.url, engine.currentRecordingSnapshot?.url == recording.url else {
       stateLock.unlock()
       return
     }
@@ -1845,10 +1884,10 @@ final class GuidedCaptureViewController: UIViewController {
       self.observationTimer = nil
       self.updateCapturePresentation(
         stage: .capturing,
-        title: "MOTION CAPTURED",
-        detail: "Hold — saving the swing",
+        title: "SWING CAPTURED",
+        detail: "Done — saving your swing",
         overlayState: .capturing,
-        announcement: "Motion captured. Hold position while the final frames are recorded."
+        announcement: "Swing captured. No need to swing again. Saving your clip."
       )
       self.closeButton.isEnabled = false
       self.closeButton.alpha = 0.55
@@ -1861,8 +1900,16 @@ final class GuidedCaptureViewController: UIViewController {
   /// rejects for low whole-frame confidence, which used to blank the body.
   /// Arming still goes through the evaluator's verdict only.
   private func handleReadiness(_ snapshot: PoseReadinessEvaluator.Snapshot, pose: PoseFrame?) {
+    let trackingLimited = detector.isTrackingLimited
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
+      self.stateLock.lock()
+      let isTerminal = self.terminal
+      let preservingCapture = self.pendingStroke != nil || self.processingClip
+      let currentlyArmed = self.armed
+      let recording = self.recordingRequested
+      self.stateLock.unlock()
+      guard !isTerminal else { return }
       self.overlayView.update(
         pose: pose,
         readinessState: snapshot.state,
@@ -1871,17 +1918,33 @@ final class GuidedCaptureViewController: UIViewController {
       )
 
       self.lastComposingSnapshot = snapshot
-      self.stateLock.lock()
-      let currentlyArmed = self.armed
-      let recording = self.recordingRequested
-      self.stateLock.unlock()
+      guard !preservingCapture else { return }
       if !recording {
+        self.trackingLimitedPresented = false
         self.presentComposing(snapshot: snapshot)
+      } else if trackingLimited {
+        self.trackingLimitedPresented = true
+        self.updateCapturePresentation(
+          stage: .positioning,
+          title: "TRACKING SLOWLY",
+          detail: "More light. Let phone cool.",
+          overlayState: .positioning,
+          prominent: true,
+          announcement: "Tracking is too slow to capture reliably. Improve the lighting or let the phone cool, then try again."
+        )
+      } else if self.trackingLimitedPresented && currentlyArmed {
+        self.trackingLimitedPresented = false
+        self.presentBodyLocked(jointCoverage: snapshot.jointCoverage)
       } else if !currentlyArmed {
+        self.trackingLimitedPresented = false
         self.presentPositioning(snapshot: snapshot)
       }
     }
 
+    stateLock.lock()
+    let preservingCapture = pendingStroke != nil || processingClip || terminal
+    stateLock.unlock()
+    guard !preservingCapture else { return }
     let shouldEmit = snapshot.state != lastReadinessEventState
       || snapshot.timestampMs - lastReadinessEventAtMs >= 500
     guard shouldEmit else { return }
@@ -2440,12 +2503,13 @@ final class GuidedCaptureViewController: UIViewController {
     }
 
     statusContainer.accessibilityLabel = "Camera status. \(title). \(detail)"
-    if stageChanged, let announcement, UIAccessibility.isVoiceOverRunning {
+    if let announcement, UIAccessibility.isVoiceOverRunning {
       // UIKit has no web-style aria-live politeness setting. Queue a single
       // finite announcement after the labels settle and discard it if the
       // camera has already advanced to another stage.
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-        guard self?.presentedCaptureStage == stage else { return }
+        guard self?.presentedCaptureStage == stage,
+              self?.statusLabel.text == title, self?.detailLabel.text == detail else { return }
         UIAccessibility.post(notification: .announcement, argument: announcement)
       }
     }
