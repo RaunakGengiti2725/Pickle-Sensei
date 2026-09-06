@@ -78,7 +78,6 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
 import {
@@ -265,18 +264,6 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
   act(() => node.props.onPress());
 }
 
-function pressButton(renderer: ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
-  const node = candidates[candidates.length - 1];
-  if (!node) throw new Error(`No button labeled ${label}`);
-  act(() => node.props.onPress());
-}
-
 async function flush() {
   await act(async () => {
     await new Promise(resolve => setTimeout(() => resolve(undefined), 0));
@@ -351,7 +338,7 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     pressByLabel(renderer, 'Forehand Drive');
     (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
     armPlanReadGate();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     // The clip is saved; scoreCapture is now parked inside planPracticeSet's
     // kv read.
     await act(async () => {
@@ -399,7 +386,7 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     });
     pressByLabel(renderer, 'Forehand Drive');
     (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
     expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
@@ -438,7 +425,7 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     });
     pressByLabel(renderer, 'Forehand Drive');
     (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
     expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);

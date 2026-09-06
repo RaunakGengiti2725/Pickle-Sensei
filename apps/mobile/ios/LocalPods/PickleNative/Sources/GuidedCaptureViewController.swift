@@ -274,14 +274,15 @@ final class CaptureTextChip: UIControl {
     set { label.text = newValue }
   }
 
-  init(text: String, glass: Bool, minWidth: CGFloat = 40, height: CGFloat = 36) {
+  init(text: String, glass: Bool, minWidth: CGFloat = 44, height: CGFloat = 44) {
+    let controlHeight = max(44, height)
     baseAlpha = glass ? 1 : 0
     super.init(frame: .zero)
     isAccessibilityElement = true
     accessibilityTraits = .button
     translatesAutoresizingMaskIntoConstraints = false
     fill.isUserInteractionEnabled = false
-    fill.layer.cornerRadius = height / 2
+    fill.layer.cornerRadius = controlHeight / 2
     fill.layer.cornerCurve = .continuous
     if glass {
       fill.backgroundColor = CaptureChromePalette.glassFill
@@ -305,8 +306,8 @@ final class CaptureTextChip: UIControl {
       label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
       label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
       label.centerYAnchor.constraint(equalTo: centerYAnchor),
-      heightAnchor.constraint(equalToConstant: height),
-      widthAnchor.constraint(greaterThanOrEqualToConstant: minWidth),
+      heightAnchor.constraint(equalToConstant: controlHeight),
+      widthAnchor.constraint(greaterThanOrEqualToConstant: max(44, minWidth)),
     ])
     render()
   }
@@ -347,7 +348,7 @@ final class CaptureShutterButton: UIControl {
   private static let stopDiameter: CGFloat = 30
 
   private let ring = CALayer()
-  private let core = CAGradientLayer()
+  private let core = CALayer()
   private(set) var isRecording = false
 
   override init(frame: CGRect) {
@@ -357,14 +358,11 @@ final class CaptureShutterButton: UIControl {
     ring.borderColor = CaptureChromePalette.onDark.withAlphaComponent(0.96).cgColor
     ring.borderWidth = 3
     ring.shadowColor = UIColor.black.cgColor
-    ring.shadowOpacity = 0.3
-    ring.shadowRadius = 10
-    ring.shadowOffset = CGSize(width: 0, height: 4)
-    // A faint top-light on the core so it reads as a physical button, not a
-    // flat disc; the gradient stays within the brand volt.
-    core.type = .radial
-    core.startPoint = CGPoint(x: 0.35, y: 0.3)
-    core.endPoint = CGPoint(x: 1, y: 1)
+    ring.shadowOpacity = 0.65
+    ring.shadowRadius = 1.5
+    ring.shadowOffset = .zero
+    // A solid token fill identifies record versus stop without a glossy core.
+    // The ring's narrow contour keeps it readable over variable video.
     layer.addSublayer(ring)
     layer.addSublayer(core)
     setRecording(false, animated: false)
@@ -416,12 +414,7 @@ final class CaptureShutterButton: UIControl {
     let apply = {
       self.core.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
       self.core.cornerRadius = cornerRadius
-      self.core.colors = [
-        base.lighter(by: 0.18).cgColor,
-        base.cgColor,
-        base.darker(by: 0.08).cgColor,
-      ]
-      self.core.locations = [0, 0.55, 1]
+      self.core.backgroundColor = base.cgColor
     }
     guard animated, !UIAccessibility.isReduceMotionEnabled else {
       CATransaction.begin()

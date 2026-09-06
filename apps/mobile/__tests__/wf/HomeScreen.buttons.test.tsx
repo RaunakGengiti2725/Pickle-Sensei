@@ -6,8 +6,10 @@
  * (role, label, hit target) each control must satisfy.
  */
 import React from 'react';
-import { RefreshControl, StyleSheet, Text } from 'react-native';
+import { Dimensions, RefreshControl, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { BrandMark, Pill } from '../../src/design/components';
 
 jest.mock('react-native-linear-gradient', () => {
   const ReactModule = require('react');
@@ -20,7 +22,10 @@ jest.mock('react-native-linear-gradient', () => {
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    ...jest.requireActual('react-native-safe-area-context'),
+    SafeAreaView: View,
+  };
 });
 
 const mockNavigate = jest.fn();
@@ -114,6 +119,7 @@ jest.mock('../../src/notifications/notificationStore', () => ({
 }));
 
 import { HomeScreen } from '../../src/screens/HomeScreen';
+import { color, type as typography } from '../../src/design/tokens';
 import type { LocalShotRow, RealAnalysisFact } from '../../src/data/repository';
 
 const MIN_HIT_TARGET = 44;
@@ -160,7 +166,13 @@ type Node = TestRenderer.ReactTestInstance;
 async function renderHome(): Promise<Renderer> {
   let renderer!: Renderer;
   await act(async () => {
-    renderer = TestRenderer.create(<HomeScreen />);
+    renderer = TestRenderer.create(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 59, bottom: 34, left: 0, right: 0 }}
+      >
+        <HomeScreen />
+      </SafeAreaInsetsContext.Provider>,
+    );
   });
   return renderer;
 }
@@ -244,6 +256,12 @@ async function press(node: Node | null) {
 
 describe('HomeScreen button ledger', () => {
   beforeEach(() => {
+    jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1,
+    });
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockGetDb.mockReset();
@@ -274,7 +292,149 @@ describe('HomeScreen button ledger', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
+
+  it('uses the shared card-score and big-stat roles without changing the measured values', async () => {
+    mockListShots.mockResolvedValue([shot({})]);
+    mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
+    const renderer = await renderHome();
+    const scores = renderer.root
+      .findAllByType(Text)
+      .filter(node => node.props.children === '6.4');
+    expect(scores).toHaveLength(2);
+    for (const score of scores) {
+      expect(StyleSheet.flatten(score.props.style)).toMatchObject({
+        ...typography.score,
+        color: color.ink,
+      });
+    }
+    const counters = renderer.root
+      .findAllByType(Text)
+      .filter(
+        node =>
+          StyleSheet.flatten(node.props.style)?.fontSize ===
+          typography.display.fontSize,
+      );
+    expect(counters).toHaveLength(1);
+    expect(counters[0]!.props.children).toBe(1);
+    expect(StyleSheet.flatten(counters[0]!.props.style)).toMatchObject({
+      ...typography.display,
+      color: color.onDark,
+    });
+    act(() => renderer.unmount());
+  });
+
+  it.each([375, 393])(
+    'selects wrapping header/rank styles and preserves facts and routes at %spt / 3.571x',
+    async width => {
+      const dimensions = jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width,
+        height: width === 375 ? 667 : 852,
+        scale: width === 375 ? 2 : 3,
+        fontScale: 3.571,
+      });
+      mockAppState.profile = { skillLevel: '3.5' };
+      mockConsistencyState.snapshot = { currentStreak: 365, atRisk: true };
+      mockListShots.mockResolvedValue([
+        shot({ overallScore: 6.81, shotType: 'backhand_drive' }),
+      ]);
+      const renderer = await renderHome();
+      try {
+        const brand = renderer.root.findByType(BrandMark);
+        expect(StyleSheet.flatten(brand.parent!.props.style)).toMatchObject({
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        });
+        const wordmark = brand.findByType(Text);
+        expect(StyleSheet.flatten(wordmark.props.style)).toMatchObject({
+          ...typography.h3,
+          flexShrink: 1,
+        });
+        expect(wordmark.props.children).toBe('Pickle Sensei');
+        expect(wordmark.props.numberOfLines).toBeUndefined();
+        expect(wordmark.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(wordmark.props.allowFontScaling).not.toBe(false);
+        const pill = renderer.root.findByType(Pill);
+        expect(pill.props.label).toBe('SELF · 3.5');
+        expect(StyleSheet.flatten(pill.parent!.props.style)).toMatchObject({
+          flexWrap: 'wrap',
+          maxWidth: '100%',
+        });
+        const badge = pressableByTestId(renderer, 'home-streak-badge')!;
+        expect(flatStyle(badge)).toMatchObject({
+          height: 'auto',
+          minHeight: 44,
+        });
+        expect(badge.props.disabled).not.toBe(true);
+        const badgeValue = badge.findByType(Text);
+        expect(badgeValue.props.children).toBe(365);
+        expect(badgeValue.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(badgeValue.props.allowFontScaling).not.toBe(false);
+
+        const toggle = pressableByTestId(
+          renderer,
+          'player-rank-banner-toggle',
+        )!;
+        const streak = pressableByTestId(
+          renderer,
+          'player-rank-banner-streak',
+        )!;
+        expect(StyleSheet.flatten(toggle.parent!.props.style)).toMatchObject({
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        });
+        expect(flatStyle(toggle)).toMatchObject({
+          flex: 0,
+          flexDirection: 'column',
+        });
+        expect(flatStyle(streak)).toMatchObject({
+          minHeight: 44,
+          maxWidth: '100%',
+        });
+        const rankTexts = toggle.findAllByType(Text);
+        const eyebrow = rankTexts.find(
+          node => node.props.children === 'PLAYER RANK',
+        )!;
+        expect(StyleSheet.flatten(eyebrow.parent!.props.style)).toMatchObject({
+          flex: 0,
+          alignSelf: 'stretch',
+        });
+        const title = rankTexts.find(
+          node => node.props.children === 'Platinum III',
+        )!;
+        expect(StyleSheet.flatten(title.parent!.props.style)).toMatchObject({
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        });
+        for (const text of rankTexts) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+        expect(allText(renderer)).toContain('Platinum III');
+        expect(allText(renderer)).toContain('6.81');
+        expect(allText(renderer)).toContain('/10');
+        expect(allText(renderer)).toContain('DUPR');
+        expect(allText(renderer)).toContain('KEEP IT ALIVE');
+        expect(toggle.props.accessibilityLabel).toContain(
+          'rating 6.81 out of 10.',
+        );
+        await press(badge);
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+        expect(mockNavigate).toHaveBeenLastCalledWith('StreakCalendar');
+        await press(toggle);
+        expect(toggle.props.accessibilityState.expanded).toBe(true);
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+        await press(streak);
+        expect(mockNavigate).toHaveBeenCalledTimes(2);
+        expect(mockNavigate).toHaveBeenLastCalledWith('StreakCalendar');
+      } finally {
+        act(() => renderer.unmount());
+        dimensions.mockRestore();
+      }
+    },
+  );
 
   describe('top bar streak badge (home-streak-badge)', () => {
     it('opens the StreakCalendar route and announces the streak', async () => {

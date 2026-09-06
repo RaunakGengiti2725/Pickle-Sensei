@@ -53,6 +53,7 @@ import {
 import { Circle } from 'react-native-svg';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Button } from '../../src/design/components';
+import { color } from '../../src/design/tokens';
 import {
   TargetSelector,
   viewPointToSourcePoint,
@@ -167,7 +168,10 @@ function pressButton(renderer: ReactTestRenderer, label: string) {
 function ringCircles(renderer: ReactTestRenderer) {
   return renderer.root
     .findAllByType(Circle)
-    .filter(node => node.props.r === 26);
+    .filter(
+      node =>
+        node.props.r === 26 && node.props.testID === 'target-selection-ring',
+    );
 }
 
 function expectNormalized(point: { x: number; y: number }) {
@@ -261,6 +265,18 @@ describe('TargetSelector button ledger', () => {
       expect(circles).toHaveLength(1);
       expect(circles[0]!.props.cx).toBe(135);
       expect(circles[0]!.props.cy).toBe(240);
+      const layers = renderer.root
+        .findAllByType(Circle)
+        .filter(node => node.props.r === 26);
+      expect(layers.map(node => node.props.stroke)).toEqual([
+        color.ink,
+        color.volt,
+      ]);
+      expect(layers.map(node => node.props.strokeWidth)).toEqual([6, 3]);
+      expect(layers.every(node => node.props.fill === 'none')).toBe(true);
+      expect(
+        layers.every(node => node.props.cx === 135 && node.props.cy === 240),
+      ).toBe(true);
       expect(allText(renderer)).toContain('Player selected');
       expect(allText(renderer)).not.toContain('Tap the player to analyze');
       expect(pressableFor(renderer, 'Analyze this player').props.disabled).toBe(

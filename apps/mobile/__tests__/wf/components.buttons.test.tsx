@@ -44,6 +44,8 @@ import React from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  Dimensions,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -56,13 +58,20 @@ import TestRenderer, {
 } from 'react-test-renderer';
 import {
   Button,
+  Card,
   CheckpointRow,
   EmptyState,
   ErrorState,
   Page,
+  Pill,
   PressableScale,
+  ScoreRing,
   ScreenHeader,
+  TrendChart,
 } from '../../src/design/components';
+import { color, font, radius, space, type } from '../../src/design/tokens';
+import { Icon } from '../../src/design/icons';
+import { MascotMoment, MascotStage } from '../../src/design/MascotMoment';
 
 function render(element: React.ReactElement): ReactTestRenderer {
   let renderer!: ReactTestRenderer;
@@ -394,6 +403,174 @@ describe('Button <label> -> props.onPress', () => {
     act(() => renderer.unmount());
   });
 
+  it.each([0.82, 1])(
+    'preserves exact default button geometry at font scale %s',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      const renderer = render(
+        <Button
+          label="Re-analyze this stroke"
+          icon="camera"
+          variant="volt"
+          onPress={jest.fn()}
+        />,
+      );
+      const host = onlyPressable(renderer);
+      const label = renderer.root.findByType(Text);
+      const row = label.parent!;
+      expect(flat(host)).toMatchObject({
+        minHeight: 56,
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        overflow: 'hidden',
+      });
+      expect(flat(row)).toMatchObject({
+        minHeight: 54,
+        paddingHorizontal: space.lg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: space.sm,
+      });
+      expect(flat(row).paddingVertical).toBeUndefined();
+      expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+        fontSize: type.bodyBold.fontSize,
+        lineHeight: type.bodyBold.lineHeight,
+      });
+      expect(StyleSheet.flatten(label.props.style).flexShrink).toBeUndefined();
+      expect(StyleSheet.flatten(label.props.style).textAlign).toBeUndefined();
+      act(() => renderer.unmount());
+    },
+  );
+
+  it.each([1.35, 2.64, 3.12, 3.571])(
+    'fits full labels beside icons at font scale %s without font caps or new press behavior',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale });
+      for (const variant of variants) {
+        for (const compact of [false, true]) {
+          const onPress = jest.fn();
+          const renderer = render(
+            <Button
+              label="Re-analyze this stroke"
+              icon="camera"
+              variant={variant}
+              compact={compact}
+              onPress={onPress}
+            />,
+          );
+          const host = onlyPressable(renderer);
+          const label = renderer.root.findByType(Text);
+          const row = label.parent!;
+          expect(flat(host)).toMatchObject({
+            minHeight: compact ? 46 : 56,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            overflow: 'hidden',
+          });
+          expect(flat(row)).toMatchObject({
+            paddingHorizontal: space.md,
+            paddingVertical: space.sm,
+            gap: space.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          });
+          expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+            flexShrink: 1,
+            textAlign: 'center',
+            fontSize: type.bodyBold.fontSize,
+            lineHeight: type.bodyBold.lineHeight,
+          });
+          expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(label.props.allowFontScaling).not.toBe(false);
+          expect(label.props.numberOfLines).toBeUndefined();
+          expect(host.props.accessibilityLabel).toBe('Re-analyze this stroke');
+          expect(texts(renderer)).toEqual(['Re-analyze this stroke']);
+          expect(
+            renderer.root.findAllByType(Icon).map(icon => icon.props.name),
+          ).toEqual(
+            variant === 'primary' || variant === 'volt' || variant === 'dark'
+              ? ['camera', 'arrow']
+              : ['camera'],
+          );
+          expect(meetsHitTarget(host)).toBe(true);
+          expect(onPress).not.toHaveBeenCalled();
+          click(host);
+          expect(onPress).toHaveBeenCalledTimes(1);
+          act(() =>
+            renderer.update(
+              <Button
+                label="Re-analyze this stroke"
+                icon="camera"
+                variant={variant}
+                compact={compact}
+                onPress={onPress}
+                disabled
+              />,
+            ),
+          );
+          click(onlyPressable(renderer));
+          expect(onPress).toHaveBeenCalledTimes(1);
+          act(() => renderer.unmount());
+        }
+      }
+    },
+  );
+
+  it.each([1, 1.3, 1.35, 3.571])(
+    'uses an opted-in large-text label without changing the accessibility name or press guards at %sx',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+      const onPress = jest.fn();
+      const button = (disabled = false) => (
+        <Button
+          label="Open automatic camera"
+          largeTextLabel="Open camera"
+          icon="camera"
+          variant="volt"
+          onPress={onPress}
+          disabled={disabled}
+          testID="adaptive-camera"
+        />
+      );
+      const renderer = render(button());
+      const adapted = fontScale > 1.3;
+      expect(texts(renderer)).toEqual([
+        adapted ? 'Open camera' : 'Open automatic camera',
+      ]);
+      expect(
+        renderer.root.findAllByType(Icon).map(icon => icon.props.name),
+      ).toEqual(adapted ? [] : ['camera', 'arrow']);
+      const label = renderer.root.findByType(Text);
+      expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+      expect(label.props.numberOfLines).toBeUndefined();
+      expect(label.props.adjustsFontSizeToFit).not.toBe(true);
+      expect(label.props.allowFontScaling).not.toBe(false);
+      expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+        fontSize: type.bodyBold.fontSize,
+        lineHeight: type.bodyBold.lineHeight,
+      });
+      const host = onlyPressable(renderer);
+      expect(host.props.accessibilityLabel).toBe('Open automatic camera');
+      expect(host.props.testID).toBe('adaptive-camera');
+      click(host);
+      expect(onPress).toHaveBeenCalledTimes(1);
+      act(() => renderer.update(button(true)));
+      const disabled = onlyPressable(renderer);
+      expect(disabled.props.accessibilityState.disabled).toBe(true);
+      click(disabled);
+      expect(onPress).toHaveBeenCalledTimes(1);
+      act(() => renderer.unmount());
+    },
+  );
+
   it('compact buttons still clear the 44pt hit target', () => {
     const renderer = render(
       <Button label="Skip" onPress={jest.fn()} compact variant="ghost" />,
@@ -536,6 +713,29 @@ describe('CheckpointRow -> props.onPress', () => {
 });
 
 describe('ErrorState "Try again" -> props.onRetry', () => {
+  it('scrolls oversized recovery copy while keeping Retry outside the scrolling viewport', () => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 3.571 });
+    const renderer = render(
+      <ErrorState
+        title="The library could not be loaded"
+        detail="Your saved drills remain available. Check your connection and try again."
+        onRetry={jest.fn()}
+      />,
+    );
+    const scroll = renderer.root.findByType(ScrollView);
+    expect(scroll.props.scrollEnabled).toBe(true);
+    const retry = onlyPressable(renderer);
+    let ancestor = retry.parent;
+    while (ancestor) {
+      expect(ancestor.type).not.toBe(ScrollView);
+      ancestor = ancestor.parent;
+    }
+    expect(meetsHitTarget(retry)).toBe(true);
+    act(() => renderer.unmount());
+  });
+
   it('renders a secondary Try again button wired to onRetry inside an alert region', () => {
     const onRetry = jest.fn();
     const renderer = render(
@@ -595,6 +795,141 @@ describe('EmptyState action slot -> consumer node', () => {
   it('renders no pressable when there is no action', () => {
     const renderer = render(<EmptyState title="Empty" body="Nothing here." />);
     expect(pressableHosts(renderer)).toHaveLength(0);
+    act(() => renderer.unmount());
+  });
+});
+
+describe('Restrained visual primitives', () => {
+  it('requests the registered iOS PostScript faces rather than asset filenames', () => {
+    expect(font).toEqual({
+      regular: 'Manrope-Regular',
+      medium: 'Manrope-Medium',
+      semibold: 'Manrope-SemiBold',
+      bold: 'Manrope-Bold',
+    });
+    expect(type.hero.fontWeight).toBe('600');
+    expect(type.body.fontWeight).toBe('400');
+    expect(type.caption.fontWeight).toBe('500');
+  });
+
+  it('uses the shared card-score and display roles', () => {
+    expect(type.score).toMatchObject({ fontSize: 30, lineHeight: 34 });
+    expect(type.display).toMatchObject({ fontSize: 64, lineHeight: 66 });
+  });
+
+  it.each(['light', 'dark', 'court', 'soft'] as const)(
+    '%s cards separate content without decorative elevation',
+    tone => {
+      const renderer = render(
+        <Card tone={tone} testID="flat-card">
+          <Text>Technique evidence</Text>
+        </Card>,
+      );
+      const host = renderer.root.find(
+        node =>
+          typeof node.type === 'string' && node.props.testID === 'flat-card',
+      );
+      expect(flat(host).borderWidth).toBe(StyleSheet.hairlineWidth);
+      expect(flat(host).shadowOpacity ?? 0).toBe(0);
+      expect(flat(host).elevation ?? 0).toBe(0);
+      expect(flat(host).borderRadius).toBe(radius.lg);
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('keeps warning labels readable without removing their semantic treatment', () => {
+    const renderer = render(<Pill label="Not read" tone="warn" />);
+    expect(
+      StyleSheet.flatten(renderer.root.findByType(Text).props.style).color,
+    ).toBe(color.ink);
+    act(() => renderer.unmount());
+    const checkpoint = render(
+      <CheckpointRow name="Preparation" score={70} band="yellow" />,
+    );
+    const value = checkpoint.root
+      .findAllByType(Text)
+      .find(node => node.props.children === 70);
+    expect(StyleSheet.flatten(value!.props.style).color).toBe(color.ink);
+    expect(
+      checkpoint.root.findAll(
+        node =>
+          StyleSheet.flatten(node.props.style)?.backgroundColor === color.warn,
+      ).length,
+    ).toBeGreaterThan(0);
+    act(() => checkpoint.unmount());
+  });
+
+  it('uses a solid score arc while preserving the actual score label', () => {
+    const renderer = render(<ScoreRing score={7.1} dark />);
+    expect(
+      renderer.root.findAll(node => node.props.id === 'scoreGradient'),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll(node => node.props.stroke === color.volt).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'Technique score 7.1 out of 10',
+      ).length,
+    ).toBeGreaterThan(0);
+    act(() => renderer.unmount());
+  });
+
+  it('draws the exact trend without a gradient area wash', () => {
+    const renderer = render(
+      <TrendChart points={[2, 5, 8]} width={100} height={48} dark />,
+    );
+    expect(
+      renderer.root.findAll(node => node.props.id === 'trendFill'),
+    ).toHaveLength(0);
+    const line = renderer.root.find(
+      node => node.props.points === '0,36 50,24 100,12',
+    );
+    expect(line.props.stroke).toBe(color.volt);
+    expect(line.props.fill).toBe('none');
+    act(() => renderer.unmount());
+  });
+
+  it('keeps contextual guidance text-only unless artwork has an explicit placement', () => {
+    const renderer = render(
+      <MascotMoment
+        pose="question"
+        eyebrow="CAPTURE IN HAND"
+        caption="Review your saved capture."
+        accessibilityLabel="Legacy illustration description"
+      />,
+    );
+    expect(renderer.root.findAllByType(Image).length).toBe(0);
+    expect(texts(renderer)).toEqual([
+      'CAPTURE IN HAND',
+      'Review your saved capture.',
+    ]);
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityRole === 'image',
+      ).length,
+    ).toBe(0);
+    act(() => renderer.unmount());
+  });
+
+  it('uses a compact functional mark instead of a mascot in recovery states', () => {
+    const renderer = render(<MascotStage pose="reach" compact icon="lock" />);
+    expect(renderer.root.findAllByType(Image).length).toBe(0);
+    expect(renderer.root.findByType(Icon).props.name).toBe('lock');
+    act(() => renderer.unmount());
+  });
+
+  it('uses court geometry rather than an AI sparkle for an empty training state', () => {
+    const renderer = render(
+      <EmptyState
+        title="Your court is ready"
+        body="Record your first stroke."
+      />,
+    );
+    expect(renderer.root.findByType(Icon).props.name).toBe('court');
     act(() => renderer.unmount());
   });
 });

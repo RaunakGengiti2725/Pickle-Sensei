@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 /**
@@ -121,6 +122,16 @@ function raiseRank() {
 
 function raiseStreak() {
   useConsistencyStore.setState({ celebration: thirtyDayClub });
+}
+
+function withSafeArea(children: React.ReactNode) {
+  return (
+    <SafeAreaInsetsContext.Provider
+      value={{ top: 44, bottom: 34, left: 0, right: 0 }}
+    >
+      {children}
+    </SafeAreaInsetsContext.Provider>
+  );
 }
 
 function registerAllTargets() {
@@ -393,7 +404,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<RankUpCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
     });
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
     await act(async () => pressLabel(renderer, 'Dismiss rank celebration'));
@@ -406,7 +417,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<RankUpCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
     });
     await act(async () => requestClose(renderer, 'rank-up-celebration'));
     expect(useRankCelebrationStore.getState().current).toBeNull();
@@ -417,7 +428,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<RankUpCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
     });
     const button = hostPressable(renderer, 'rank-up-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -435,7 +446,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<RankUpCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
     });
     expect(() => act(() => renderer.unmount())).not.toThrow();
     useRankCelebrationStore.getState().dismiss();
@@ -448,7 +459,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<StreakCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
     });
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(1);
     await act(async () =>
@@ -463,7 +474,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<StreakCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
     });
     await act(async () => requestClose(renderer, 'streak-celebration'));
     expect(useConsistencyStore.getState().celebration).toBeNull();
@@ -474,7 +485,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<StreakCelebration />);
+      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
     });
     const button = hostPressable(renderer, 'streak-celebration-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -499,7 +510,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     expect(hostByTestId(renderer, 'walkthrough-advance').length).toBe(1);
@@ -512,7 +523,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     const skip = hostPressable(renderer, 'walkthrough-skip');
@@ -533,7 +544,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     for (let i = 0; i < WALKTHROUGH_STEPS.length; i++) {
@@ -556,7 +567,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
     });
     expect(() => act(() => renderer.unmount())).not.toThrow();
     await flush();
@@ -577,11 +588,13 @@ describe('all three global overlays raised together (App.tsx mount order)', () =
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
-        <>
-          <RankUpCelebration />
-          <StreakCelebration />
-          <FirstRunWalkthrough />
-        </>,
+        withSafeArea(
+          <>
+            <RankUpCelebration />
+            <StreakCelebration />
+            <FirstRunWalkthrough />
+          </>,
+        ),
       );
     });
     await flush();

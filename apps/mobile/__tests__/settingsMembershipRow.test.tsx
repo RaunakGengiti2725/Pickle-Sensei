@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -42,6 +43,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { SettingsScreen } from '../src/screens/SettingsScreen';
+import { Card, Pill, PressableScale } from '../src/design/components';
+import { Icon } from '../src/design/icons';
+import { color } from '../src/design/tokens';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
 import { useConsentStore } from '../src/state/consentStore';
 import {
@@ -148,6 +152,7 @@ function membershipValue(renderer: TestRenderer.ReactTestRenderer): string {
 }
 
 beforeEach(() => {
+  mockNavigate.mockClear();
   clearAccessStoreConfiguration();
   useAuthStore.setState({ session: syncedSession });
   useConsentStore.setState({
@@ -163,6 +168,72 @@ afterEach(() => {
 });
 
 describe('Settings membership row', () => {
+  it('keeps account, membership and privacy context neutral without changing their labels or actions', async () => {
+    configureAccessStore(backendReturning(async () => freeAccess(1)));
+    const renderer = renderScreen();
+    await flush();
+    const account = renderer.root
+      .findAllByType(Card)
+      .find(card => card.props.tone === 'soft')!;
+    expect(account).toBeDefined();
+    expect(account.findByType(Pill).props).toMatchObject({
+      label: 'SYNCED',
+      tone: 'neutral',
+    });
+    expect(
+      account
+        .findAllByType(Text)
+        .some(text => text.props.children === 'Alex Chen'),
+    ).toBe(true);
+    const membership = renderer.root
+      .findAllByType(PressableScale)
+      .find(
+        node =>
+          node.props.accessibilityLabel ===
+          'Pickle Sensei Pro, 1 free rating left',
+      )!;
+    expect(
+      StyleSheet.flatten(membership.props.style).minHeight,
+    ).toBeGreaterThanOrEqual(44);
+    expect(
+      membership.findAllByType(Icon).find(icon => icon.props.name === 'crown')!
+        .props.color,
+    ).toBe(color.inkSoft);
+    const privacy = renderer.root.findByProps({
+      testID: 'settings-privacy-context',
+    });
+    expect(StyleSheet.flatten(privacy.props.style).backgroundColor).toBe(
+      color.surfaceAlt,
+    );
+    expect(privacy.findByType(Icon).props).toMatchObject({
+      name: 'shield',
+      color: color.inkSoft,
+    });
+    const copy = privacy
+      .findAllByType(Text)
+      .map(text => text.props.children)
+      .join(' ');
+    expect(copy).toContain(
+      'Current capture behavior, reported without assumptions.',
+    );
+    expect(copy).toContain('App-private storage');
+    expect(copy).toContain('Not configured');
+    act(() => membership.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('Paywall', {
+      source: 'settings',
+    });
+    const consent = renderer.root
+      .findAllByType(PressableScale)
+      .find(
+        node => node.props.accessibilityLabel === 'Data & consent, Manage',
+      )!;
+    expect(
+      StyleSheet.flatten(consent.props.style).minHeight,
+    ).toBeGreaterThanOrEqual(44);
+    act(() => consent.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('ConsentSettings');
+  });
+
   it('re-reads the server ledger on focus instead of the stale snapshot', async () => {
     const clients = backendReturning(async () => freeAccess(1));
     configureAccessStore(clients);

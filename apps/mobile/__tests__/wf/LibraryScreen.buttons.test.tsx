@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, StyleSheet, Text } from 'react-native';
+import { FlatList, Linking, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalShotRow, PendingCapture } from '../../src/data/repository';
 import {
@@ -63,6 +63,7 @@ jest.mock('../../src/auth/authStore', () => ({
 }));
 
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
+import { color, type } from '../../src/design/tokens';
 
 /**
  * Button ledger for LibraryScreen: every pressable the screen renders (in
@@ -403,6 +404,48 @@ describe('LibraryScreen · segmented tabs', () => {
 });
 
 describe('LibraryScreen · reads tab', () => {
+  it('shows scope and ordering as a plain caption while keeping the actual reads and scores', async () => {
+    const renderer = await renderLibrary();
+    try {
+      const caption = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === 'library-read-order')!;
+      expect(caption.props.children).toBe('ALL STROKES · NEWEST FIRST');
+      expect(caption.props.onPress).toBeUndefined();
+      expect(caption.props.accessibilityRole).toBeUndefined();
+      expect(StyleSheet.flatten(caption.props.style)).toMatchObject({
+        ...type.caption,
+        color: color.inkSoft,
+      });
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.label === 'ALL STROKES' ||
+            node.props.label === 'NEWEST FIRST',
+        ),
+      ).toHaveLength(0);
+      expect(renderer.root.findByType(FlatList).props.data).toEqual([
+        shotScored,
+        shotNotRead,
+      ]);
+      const score = renderer.root
+        .findAllByType(Text)
+        .find(
+          node => node.props.children === shotScored.overallScore!.toFixed(1),
+        )!;
+      expect(StyleSheet.flatten(score.props.style)).toMatchObject({
+        ...type.score,
+        color: color.ink,
+      });
+      await pressByLabel(renderer, 'Open forehand drive result');
+      expect(mockNavigate).toHaveBeenCalledWith('Result', {
+        analysisId: shotScored.id,
+      });
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it('shows a loading state until the local repository answers', async () => {
     const pending = deferred<LocalShotRow[]>();
     mockListShots.mockReturnValue(pending.promise);

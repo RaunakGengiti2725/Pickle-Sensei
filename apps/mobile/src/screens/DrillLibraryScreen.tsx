@@ -820,7 +820,7 @@ export function DrillLibraryScreen() {
         {!filtered && focus ? <FocusCard focus={focus} /> : null}
         {!filtered && !catalogEmpty && focus === null ? (
           <View style={styles.focusHint} testID="library-focus-hint">
-            <Icon name="spark" size={17} color={color.court} />
+            <Icon name="stroke" size={17} color={color.court} />
             <Text style={[type.caption, styles.focusHintText]}>
               After two scored analyses of the same technique, this library
               sorts itself around your weakest checkpoint.

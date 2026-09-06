@@ -45,7 +45,6 @@ jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
 }));
 
 import React from 'react';
-import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalDb } from '../../src/data/db';
 import {
@@ -154,18 +153,6 @@ function pressByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
   act(() => node.props.onPress());
 }
 
-function pressButton(renderer: TestRenderer.ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
-  const node = candidates[candidates.length - 1];
-  if (!node) throw new Error(`No button labeled ${label}`);
-  act(() => node.props.onPress());
-}
-
 beforeEach(() => {
   setActiveDataOwner(owner);
   establishApiSession({
@@ -227,7 +214,7 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
     });
     pressByLabel(renderer, 'Forehand Drive');
     mockCaptureImpl = async () => guidedClip();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     expect(backend.getAccess).not.toHaveBeenCalled();
 

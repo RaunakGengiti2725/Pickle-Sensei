@@ -924,3 +924,21 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   RootNavigator's PaywallRoute and Settings → About.
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
+
+## V1 UI and analysis boundary (owner decision, 2026-09-06)
+
+- V1 remains on the existing 2D analysis and replay path. Future 3D work is
+  parked on `codex/3d-analysis-v2`; do not merge its estimator, native bridge,
+  storage, routes or experimental viewer into v1, including Debug entry points.
+- UI refinements preserve current main's auth, permit, scoring, persistence,
+  consent and billing safeguards. Do not replace these with older branch code
+  while resolving visual-change conflicts.
+- Preserve the approved marks and original splash media. Use existing ink,
+  chalk, court and volt tokens, flat surfaces, and meaningful motion only.
+  Contextual guidance is text-first; decorative glows and particles stay out.
+- iOS typography uses bundled Manrope PostScript names and explicit weights;
+  Android retains its asset-name families. Essential text scales and wraps.
+  Native price wrapping switches to wider cards, never a smaller font.
+- Verify safe areas, full prices, rank text, recovery controls and effective
+  touch targets on small phones with maximum Dynamic Type. Renderer tests are
+  not native layout proof; keep synthetic fixtures offline and labelled.

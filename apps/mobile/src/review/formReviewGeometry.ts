@@ -3,12 +3,12 @@ import type { ReviewArrow, ReviewStop } from './formReviewModel';
 /**
  * FORM REVIEW geometry — the pure math between the review script and the
  * screen: letterbox fitting, normalized→stage projection, the body-scaled
- * glow unit, the heat/fault tints, arrow directions, stop selection and the
- * auto-pause crossing rule. No React, no IO, so jest pins every branch.
+ * marker unit, the motion/fault tints, arrow directions, stop selection and
+ * the auto-pause crossing rule. No React, no IO, so jest pins every branch.
  *
- * Color math mirrors the native PoseOverlayView (heatStops ramp and
- * glowRadiusUnit) so the replay exoskeleton reads exactly like the live
- * camera overlay the player just saw.
+ * Body scaling and the motion ramp mirror native PoseOverlayView. Review
+ * faults use their own flame tint, so a correction is not confused with
+ * the neutral-to-volt motion intensity shown by the live camera.
  */
 
 export interface Rect {
@@ -108,13 +108,12 @@ const WARN: Rgb = [168, 100, 22];
 export const FLAME_HEX = '#FF9B42';
 const FLAME: Rgb = [255, 155, 66];
 export const VOLT_HEX = '#D7FA45';
+const VOLT: Rgb = [215, 250, 69];
 
-/** Native heatStops: teal → mint → volt → flame at 0 / .35 / .7 / 1. */
+/** Native motion heatStops: neutral chalk → optic volt at 0 / 1. */
 const HEAT_STOPS: ReadonlyArray<readonly [number, Rgb]> = [
-  [0, [26, 166, 138]],
-  [0.35, [83, 217, 155]],
-  [0.7, [215, 250, 69]],
-  [1, [255, 155, 66]],
+  [0, ON_DARK],
+  [1, VOLT],
 ];
 
 function lerp(a: number, b: number, t: number): number {
@@ -144,18 +143,18 @@ export function heatRampColor(heat: number): Rgb {
     return mix(from[1], to[1], (t - from[0]) / span);
   }
   const last = HEAT_STOPS[HEAT_STOPS.length - 1];
-  return last ? last[1] : FLAME;
+  return last ? last[1] : VOLT;
 }
 
 /**
- * Bone/joint tint: onDark mixed toward the heat ramp color by `heat`, so a
- * cold bone is the plain exoskeleton white and a hot one glows flame.
+ * Bone/joint fault tint: neutral onDark toward flame, independent of speed.
+ * Cold bones stay neutral and supported faults gain one consistent accent.
  * heat ≤ 0 returns the onDark token literally.
  */
 export function heatTint(heat: number): string {
   const t = clamp01(heat);
   if (t === 0) return ON_DARK_HEX;
-  return rgbString(mix(ON_DARK, heatRampColor(t), t));
+  return rgbString(mix(ON_DARK, FLAME, t));
 }
 
 /**

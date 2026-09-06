@@ -178,9 +178,18 @@ export function TargetSelector(props: {
                 cx={tap.view.x}
                 cy={tap.view.y}
                 r={26}
-                stroke={color.courtDeep}
+                stroke={color.ink}
+                strokeWidth={6}
+                fill="none"
+              />
+              <Circle
+                cx={tap.view.x}
+                cy={tap.view.y}
+                r={26}
+                stroke={color.volt}
                 strokeWidth={3}
-                fill="rgba(255,255,255,0.18)"
+                fill="none"
+                testID="target-selection-ring"
               />
             </Svg>
           ) : null}

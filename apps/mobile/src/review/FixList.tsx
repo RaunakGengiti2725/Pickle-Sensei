@@ -120,7 +120,7 @@ export function FixList(props: {
                   item.score,
                 )} out of 100`}
               >
-                <Text style={[type.micro, { color: color.onDark }]}>
+                <Text style={[type.micro, { color: color.surfaceElevated }]}>
                   {Math.round(item.score)}
                 </Text>
               </View>

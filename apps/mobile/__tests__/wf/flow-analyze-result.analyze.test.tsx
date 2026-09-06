@@ -83,7 +83,6 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
@@ -200,8 +199,7 @@ function findButton(renderer: ReactTestRenderer, label: string) {
     n =>
       typeof n.props.onPress === 'function' &&
       n.props.accessibilityRole === 'button' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
+      n.props.accessibilityLabel === label,
   );
   return candidates[candidates.length - 1] ?? null;
 }

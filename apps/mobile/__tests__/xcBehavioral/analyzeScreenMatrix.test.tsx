@@ -334,7 +334,7 @@ async function stormPress(
  * declared stroke, so 'Get my Technique Score' is enabled and idle. */
 async function reachSavedSurface(renderer: TestRenderer.ReactTestRenderer) {
   mockCaptureImpl = async () => guidedClip(true);
-  act(() => byText(renderer, 'Open automatic camera').props.onPress());
+  act(() => byLabel(renderer, 'Open automatic camera').props.onPress());
   await settle();
   expect(hasText(renderer, 'Which stroke was this?')).toBe(true);
   act(() => byLabel(renderer, 'Forehand drive').props.onPress());
@@ -459,7 +459,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             }
             const gate = deferred<CapturedClip>();
             mockCaptureImpl = () => gate.promise;
-            const open = byText(renderer, 'Open automatic camera');
+            const open = byLabel(renderer, 'Open automatic camera');
             const gaps = await stormPress(open, taps, random);
             expect(mockCaptureCalls).toBe(1);
             expect(isWorking(renderer)).toBe(true);
@@ -594,7 +594,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
                 await settle(1);
               }
               act(() =>
-                byText(renderer, 'Open automatic camera').props.onPress(),
+                byLabel(renderer, 'Open automatic camera').props.onPress(),
               );
             } else {
               // Library auto-launches after its 160ms arm timer.
@@ -749,7 +749,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             mockOutcome = () => analysis.promise;
             const button =
               round === 0
-                ? byText(renderer, 'Open automatic camera')
+                ? byLabel(renderer, 'Open automatic camera')
                 : byText(renderer, 'Try again');
             await stormPress(button, randomInt(random, 1, 5), random);
             captureCalls += 1;

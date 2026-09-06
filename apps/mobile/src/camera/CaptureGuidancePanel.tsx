@@ -27,7 +27,7 @@ export function CaptureGuidancePanel(props: {
       {lines.map(line => (
         <View key={line.dimension} style={styles.row}>
           <Icon
-            name={line.status === 'UNSUPPORTED' ? 'shield' : 'spark'}
+            name={line.status === 'UNSUPPORTED' ? 'shield' : 'camera'}
             color={line.status === 'UNSUPPORTED' ? color.warn : color.mint}
             size={16}
           />

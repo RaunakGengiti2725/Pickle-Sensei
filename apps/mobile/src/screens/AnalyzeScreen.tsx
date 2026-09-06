@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -147,7 +148,7 @@ function StepRow(props: {
   return (
     <View style={styles.stepRow}>
       <View style={styles.stepIcon}>
-        <Icon name={props.icon} color={color.courtDeep} size={19} />
+        <Icon name={props.icon} color={color.onDark} size={19} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[type.micro, styles.stepIndex]}>{props.index}</Text>
@@ -294,7 +295,7 @@ export const ANALYZE_STEPS: ReadonlyArray<{
   },
   {
     index: '03',
-    icon: 'spark',
+    icon: 'stroke',
     title: 'Set up until it reads Ready',
     detail:
       'Big on-screen copy tells you to step in, move closer or set your feet — readable from the court. A swing counts even before it says Ready.',
@@ -593,6 +594,7 @@ export function AnalyzeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Analyze'>>();
   const source = route.params?.source ?? 'camera';
+  const accessibleLayout = useWindowDimensions().fontScale > 1.3;
   // TRY AGAIN loop (MOBBIN brief §2): a Result screen hands the ORIGINAL
   // run's technique intent back here; it is consumed exactly once (lazy
   // initializer) and seeds the picker/zero-touch gate so the player skips
@@ -1165,6 +1167,7 @@ export function AnalyzeScreen() {
             <MascotStage
               dark
               pose={ANALYSIS_MASCOT_POSES.working}
+              icon={source === 'library' ? 'upload' : 'camera'}
               tone="volt"
               testID="analysis-mascot-working"
             />
@@ -1236,7 +1239,7 @@ export function AnalyzeScreen() {
     // abstentions, and declared-vs-predicted disagreements. Scored results
     // without any of those never reach this phase (straight to Result).
     const { presentation, analysisId } = phase;
-    const toneColor = presentation.tone === 'warn' ? color.warn : color.good;
+    const toneColor = presentation.tone === 'warn' ? color.ink : color.good;
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
@@ -1249,7 +1252,7 @@ export function AnalyzeScreen() {
             compact
             pose={ANALYSIS_MASCOT_POSES.outcome}
             tone={presentation.tone === 'warn' ? 'warn' : 'court'}
-            accessibilityLabel="Pickle Sensei mascot reaching for the next ball"
+            accessibilityLabel="Stroke analysis outcome"
             testID="analysis-mascot-outcome"
           />
           <Text
@@ -1317,7 +1320,8 @@ export function AnalyzeScreen() {
               <MascotStage
                 compact
                 pose={ANALYSIS_MASCOT_POSES.outcome}
-                tone="volt"
+                icon="lock"
+                tone="court"
                 testID="analysis-mascot-free-limit"
               />
               <Text style={[type.h2, styles.freeLimitTitle]}>
@@ -1379,7 +1383,7 @@ export function AnalyzeScreen() {
                   color:
                     clip.recognition.status === 'recognized'
                       ? color.good
-                      : color.warn,
+                      : color.ink,
                 },
               ]}
             >
@@ -1409,7 +1413,7 @@ export function AnalyzeScreen() {
             tone={clip.recognition.status === 'recognized' ? 'court' : 'warn'}
             eyebrow="CAPTURE IN HAND"
             caption="Review the evidence, then choose how you want this swing analyzed."
-            accessibilityLabel="Pickle Sensei mascot reaching for a shot"
+            accessibilityLabel="Capture review guidance"
             testID="analysis-mascot-saved"
             style={styles.savedMascot}
           />
@@ -1512,6 +1516,7 @@ export function AnalyzeScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        testID="analyze-setup-content"
       >
         <Text style={[type.micro, { color: color.volt }]}>
           AUTOMATIC CAPTURE
@@ -1531,7 +1536,7 @@ export function AnalyzeScreen() {
           tone="volt"
           eyebrow="YOUR COURT-SIDE COACH"
           caption="Choose a technique, frame one natural swing, and Sensei handles the read."
-          accessibilityLabel="Pickle Sensei mascot demonstrating a forehand"
+          accessibilityLabel="Camera setup guidance"
           testID="analysis-mascot-ready"
           style={styles.readyMascot}
         />
@@ -1574,24 +1579,35 @@ export function AnalyzeScreen() {
 
         <View style={styles.notes}>
           <View style={styles.noteRow}>
-            <Icon name="shield" color={color.mint} size={18} />
+            <Icon name="shield" color={color.onDarkMuted} size={18} />
             <Text style={[type.caption, styles.noteCopy]}>
               Camera processing and clip storage stay on this device unless you
               explicitly enable cloud video sync.
             </Text>
           </View>
           <View style={styles.noteRow}>
-            <Icon name="spark" color={color.mint} size={18} />
+            <Icon name="stroke" color={color.onDarkMuted} size={18} />
             <Text style={[type.caption, styles.noteCopy]}>
               You’ll see your exoskeleton and a light motion heat map live, then
               a frame-by-frame form review after the swing.
             </Text>
           </View>
         </View>
+        {accessibleLayout ? (
+          <Text style={[type.caption, styles.footerHint]}>
+            Camera opens first. You control record.
+          </Text>
+        ) : null}
       </ScrollView>
-      <View style={styles.footer}>
+      <View style={styles.footer} testID="analyze-camera-actions">
+        {accessibleLayout ? null : (
+          <Text style={[type.caption, styles.footerHint]}>
+            Camera opens first. You control record.
+          </Text>
+        )}
         <Button
           label="Open automatic camera"
+          largeTextLabel="Open camera"
           variant="volt"
           icon="camera"
           onPress={() => void run()}
@@ -1754,12 +1770,12 @@ const styles = StyleSheet.create({
   stepIcon: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.volt,
+    backgroundColor: color.inkElevated,
   },
-  stepIndex: { color: color.mint, marginBottom: 2 },
+  stepIndex: { color: color.onDarkMuted, marginBottom: space.xxs },
   stepTitle: { color: color.onDark },
   stepDetail: { color: color.onDarkSubtle, marginTop: 3 },
   notes: { paddingVertical: space.lg, gap: space.md },
@@ -1769,10 +1785,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     paddingBottom: space.sm,
+    gap: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.lineDark,
     backgroundColor: color.surfaceDark,
   },
+  footerHint: { color: color.onDarkSubtle, textAlign: 'center' },
   workingBody: {
     flex: 1,
     alignItems: 'center',

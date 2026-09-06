@@ -224,7 +224,7 @@ export function LibraryScreen() {
               <Text
                 style={[
                   type.bodyBold,
-                  { color: selected ? color.onDark : color.inkSoft },
+                  { color: selected ? color.onDark : color.graphite },
                 ]}
               >
                 {label}
@@ -565,10 +565,12 @@ export function LibraryScreen() {
                       </Text>
                     </View>
                   ) : null}
-                  <View style={styles.filterRow}>
-                    <Pill label="ALL STROKES" tone="dark" />
-                    <Pill label="NEWEST FIRST" />
-                  </View>
+                  <Text
+                    style={styles.readOrderCaption}
+                    testID="library-read-order"
+                  >
+                    ALL STROKES · NEWEST FIRST
+                  </Text>
                 </View>
               ) : null}
             </>
@@ -623,7 +625,7 @@ export function LibraryScreen() {
               {item.resultKind === 'low_confidence' ? (
                 <View style={styles.notRead}>
                   <Icon name="camera" size={17} color={color.warn} />
-                  <Text style={[type.micro, { color: color.warn }]}>
+                  <Text style={[type.micro, { color: color.ink }]}>
                     NOT READ
                   </Text>
                 </View>
@@ -672,15 +674,16 @@ const styles = StyleSheet.create({
   },
   emptyContent: { flexGrow: 1 },
   readHeader: { marginBottom: space.lg },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.sm,
+  readOrderCaption: {
+    ...type.caption,
+    color: color.inkSoft,
     marginTop: space.lg,
   },
   pendingGroup: {
     borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     marginTop: space.lg,
     padding: space.md,
   },
@@ -712,7 +715,7 @@ const styles = StyleSheet.create({
   // ('Forehand Drive · auto capture').
   pendingTitle: { color: color.ink },
   pendingMeta: { color: color.inkSoft, marginTop: 2 },
-  pendingDate: { color: color.inkSoft, opacity: 0.72, marginTop: 1 },
+  pendingDate: { color: color.inkSoft, marginTop: 1 },
   pendingNote: {
     color: color.inkSoft,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -723,6 +726,8 @@ const styles = StyleSheet.create({
     minHeight: 104,
     borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     paddingHorizontal: space.md,
     marginBottom: 10,
     flexDirection: 'row',
@@ -743,12 +748,14 @@ const styles = StyleSheet.create({
   },
   strokeName: { color: color.ink, textTransform: 'capitalize' },
   readMeta: { color: color.inkSoft, marginTop: 3 },
-  score: { ...type.score, color: color.ink, fontSize: 30, lineHeight: 34 },
+  score: { ...type.score, color: color.ink },
   notRead: { alignItems: 'center', gap: 4 },
   planSummary: {
     minHeight: 226,
     borderRadius: radius.xl,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     padding: space.lg,
     marginBottom: space.lg,
   },

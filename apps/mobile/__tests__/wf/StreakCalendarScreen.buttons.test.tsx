@@ -13,7 +13,9 @@
  *   5. Achievement badge                 -> toggles the badge detail panel
  */
 import React from 'react';
-import { Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
+import { FlameIcon } from '../../src/consistency/FlameIcon';
+import { color, space, type as typography } from '../../src/design/tokens';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   buildConsistencySnapshot,
@@ -173,6 +175,12 @@ function press(node: TestRenderer.ReactTestInstance) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(Dimensions, 'get').mockReturnValue({
+    width: 375,
+    height: 667,
+    scale: 2,
+    fontScale: 1,
+  });
   // The screen falls back to the wall clock only while `snapshot` is null;
   // pin it so that path is deterministic too.
   jest.useFakeTimers({ now: new Date(AS_OF_ISO) });
@@ -181,9 +189,192 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('StreakCalendarScreen buttons', () => {
+  it.each([375, 393])(
+    'keeps seven non-overlapping 44-point day targets at width %s',
+    width => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width, height: 852, scale: 3, fontScale: 1 });
+      const renderer = renderScreen();
+      try {
+        const cell = dayCell(renderer, '2026-03-31');
+        const host = renderer.root.find(
+          node =>
+            typeof node.type === 'string' &&
+            typeof node.props.onClick === 'function' &&
+            String(node.props.accessibilityLabel).startsWith('2026-03-31'),
+        );
+        const style = StyleSheet.flatten(host.props.style);
+        expect(style.minWidth).toBeGreaterThanOrEqual(44);
+        expect(style.minHeight).toBeGreaterThanOrEqual(44);
+        expect(style.margin).toBeUndefined();
+        const available =
+          width - 2 * space.lg - 2 * space.sm - 2 * StyleSheet.hairlineWidth;
+        expect(available / 7).toBeGreaterThanOrEqual(44);
+        expect(cell.findByType(Text).props.children).toBe(31);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
+
+  it('uses full-date rows when seven safe targets cannot fit the available width', () => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 320, height: 568, scale: 2, fontScale: 1 });
+    const renderer = renderScreen();
+    try {
+      expect(
+        String(dayCell(renderer, '2026-03-31').findByType(Text).props.children),
+      ).toContain('2026');
+      press(dayCell(renderer, '2026-03-09'));
+      expect(allText(renderer)).toContain('2 ACTIVITIES');
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('retains the seven-column geometry but grows the cell height at intermediate text sizes', () => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 1.6 });
+    const renderer = renderScreen();
+    try {
+      const wrapper = renderer.root.findAll(
+        node =>
+          node.props.testID === 'streak-day-cell-2026-03-31' &&
+          typeof node.type === 'string',
+      )[0]!;
+      const style = StyleSheet.flatten(wrapper.props.style);
+      expect(style.aspectRatio).toBe(0.86);
+      expect(style.minHeight).toBeGreaterThanOrEqual(
+        19 + typography.micro.lineHeight * 1.6 + 11,
+      );
+      const label = dayCell(renderer, '2026-03-31').findByType(Text);
+      expect(label.props.children).toBe(31);
+      expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it.each([1.8, 3.571])(
+    'shows full dates without capped text or fixed cell heights at font scale %s',
+    fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+      const renderer = renderScreen();
+      try {
+        for (let day = 1; day <= 31; day += 1) {
+          const key = `2026-03-${String(day).padStart(2, '0')}`;
+          const cell = dayCell(renderer, key);
+          const label = cell.findByType(Text);
+          expect(String(label.props.children)).toContain('2026');
+          expect(String(label.props.children)).toContain(String(day));
+          expect(label.props.numberOfLines).toBeUndefined();
+          expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(label.props.allowFontScaling).not.toBe(false);
+          const wrapper = renderer.root.findAll(
+            node =>
+              node.props.testID === `streak-day-cell-${key}` &&
+              typeof node.type === 'string',
+          )[0]!;
+          expect(
+            StyleSheet.flatten(wrapper.props.style).height,
+          ).toBeUndefined();
+          expect(
+            StyleSheet.flatten(wrapper.props.style).aspectRatio,
+          ).toBeUndefined();
+        }
+        expect(
+          dayCell(renderer, '2026-03-08').props.accessibilityLabel,
+        ).toContain('shield protected');
+        press(dayCell(renderer, '2026-03-09'));
+        expect(allText(renderer)).toContain('2 ACTIVITIES');
+        expect(allText(renderer)).toContain('AVG 7.4');
+        press(byLabel(renderer, 'Previous month'));
+        expect(allText(renderer)).toContain('February 2026');
+        press(byLabel(renderer, 'Next month'));
+        expect(allText(renderer)).toContain('March 2026');
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
+
+  it('preserves three activity heat levels, shield meaning, and the exact streak on flat surfaces', () => {
+    mockStoreState.snapshot = buildConsistencySnapshot(
+      [
+        ...HISTORY,
+        ...Array.from({ length: 3 }, (_, i) =>
+          stroke(`2026-03-07T1${i + 1}:00:00.000Z`, 'serve', 7),
+        ),
+      ],
+      { asOfIso: AS_OF_ISO, timeZone: 'UTC' },
+    );
+    const renderer = renderScreen();
+    expect(
+      renderer.root
+        .findAllByType(FlameIcon)
+        .find(node => node.props.size === 54)!.props.dark,
+    ).toBe(true);
+    for (const [day, count, intensity, opacity] of [
+      ['2026-03-01', 1, 1, 0.12],
+      ['2026-03-09', 2, 2, 0.24],
+      ['2026-03-07', 4, 3, 0.34],
+    ] as const) {
+      const cell = dayCell(renderer, day);
+      expect(cell.props.accessibilityLabel).toContain(
+        `${count} ${count === 1 ? 'activity' : 'activities'}`,
+      );
+      expect(cell.findByType(FlameIcon).props.intensity).toBe(intensity);
+      expect(cell.findByType(FlameIcon).props.dark).not.toBe(true);
+      expect(StyleSheet.flatten(cell.findByType(Text).props.style).color).toBe(
+        color.ink,
+      );
+      const heat = cell.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          StyleSheet.flatten(node.props.style)?.backgroundColor === color.flame,
+      );
+      expect(heat).toHaveLength(1);
+      expect(StyleSheet.flatten(heat[0]!.props.style).opacity).toBe(opacity);
+    }
+    const shielded = dayCell(renderer, '2026-03-08');
+    expect(shielded.props.accessibilityLabel).toContain('shield protected');
+    expect(shielded.findAllByType(FlameIcon)).toHaveLength(0);
+    expect(
+      shielded.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          StyleSheet.flatten(node.props.style)?.backgroundColor ===
+            color.mintTint,
+      ),
+    ).toHaveLength(1);
+    const heroCount = renderer.root
+      .findAllByType(Text)
+      .find(
+        node =>
+          StyleSheet.flatten(node.props.style)?.fontSize ===
+          typography.display.fontSize,
+      )!;
+    expect(heroCount.props.children).toBe(
+      mockStoreState.snapshot.currentStreak,
+    );
+    expect(StyleSheet.flatten(heroCount.props.style)).toMatchObject(
+      typography.display,
+    );
+    press(dayCell(renderer, '2026-03-07'));
+    expect(allText(renderer)).toContain('4 ACTIVITIES');
+    expect(allText(renderer)).toContain('AVG 6.9');
+    act(() => renderer.unmount());
+  });
+
   it('refreshes the consistency store exactly once on focus', () => {
     const renderer = renderScreen();
     expect(mockRefresh).toHaveBeenCalledTimes(1);

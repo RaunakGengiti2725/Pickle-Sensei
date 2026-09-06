@@ -10,6 +10,11 @@ jest.mock('../../src/data/db', () => ({
   },
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+  initialWindowMetrics: { insets: { top: 59, bottom: 34, left: 0, right: 0 } },
+}));
+
 import {
   FirstRunWalkthrough,
   WALKTHROUGH_STEPS,

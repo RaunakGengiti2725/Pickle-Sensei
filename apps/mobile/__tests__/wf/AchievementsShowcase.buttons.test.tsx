@@ -13,7 +13,7 @@ import {
   STREAK_MILESTONES,
   VOLUME_ACHIEVEMENTS,
 } from '../../src/consistency/milestones';
-import { color } from '../../src/design/tokens';
+import { color, type as typography } from '../../src/design/tokens';
 
 /**
  * Button ledger for AchievementsShowcase. Every pressable in the file is a
@@ -144,6 +144,39 @@ function shimmers(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe('AchievementsShowcase button ledger', () => {
+  it.each([false, true])(
+    'keeps rarity text legible independently of badge colors (dark=%s)',
+    async dark => {
+      const renderer = render(threeDaySnapshot, dark);
+      for (const milestone of STREAK_MILESTONES) {
+        await act(async () => {
+          badgeButton(renderer, milestone.title).props.onPress();
+        });
+        const label = renderer.root
+          .findAllByType(Text)
+          .find(
+            node =>
+              node.props.children ===
+              RARITY_LABEL[milestone.rarity].toUpperCase(),
+          )!;
+        expect(StyleSheet.flatten(label.props.style)).toMatchObject({
+          color: dark ? color.volt : color.courtDeep,
+          fontSize: typography.micro.fontSize,
+        });
+        expect(
+          pressableStyle(badgeButton(renderer, milestone.title))
+            .backgroundColor,
+        ).toBe(dark ? color.onDarkTintFaint : color.inkTint);
+      }
+      for (const label of renderer.root.findAllByType(Text)) {
+        expect(
+          StyleSheet.flatten(label.props.style).fontSize,
+        ).toBeGreaterThanOrEqual(typography.micro.fontSize);
+      }
+      act(() => renderer.unmount());
+    },
+  );
+
   it('renders exactly one accessible button per milestone and volume achievement', () => {
     const renderer = render(freshSnapshot);
     const buttons = badgeButtons(renderer);
@@ -166,10 +199,10 @@ describe('AchievementsShowcase button ledger', () => {
       expect(button.props.accessibilityState?.disabled).toBeFalsy();
     }
 
-    // Hit target: every cell is 92pt wide with vertical padding around 64pt art.
+    // Hit target: every cell is 112pt wide with vertical padding around 64pt art.
     for (const button of buttons) {
       const style = pressableStyle(button);
-      expect(style.width).toBe(92);
+      expect(style.width).toBe(112);
       expect(style.paddingVertical).toBeGreaterThan(0);
     }
 
@@ -351,13 +384,25 @@ describe('AchievementsShowcase button ledger', () => {
     act(() => renderer.unmount());
   });
 
-  it('shimmers exactly the next reachable, unearned streak milestone', () => {
+  it('outlines the next reachable, unearned milestone without shimmer', () => {
     const fresh = render(freshSnapshot);
-    expect(shimmers(fresh)).toHaveLength(1);
+    expect(shimmers(fresh)).toHaveLength(0);
+    expect(pressableStyle(badgeButton(fresh, 'First Spark'))).toMatchObject({
+      borderColor: color.line,
+    });
+    expect(pressableStyle(badgeButton(fresh, 'Kindling')).borderColor).toBe(
+      'transparent',
+    );
     act(() => fresh.unmount());
 
-    const three = render(threeDaySnapshot);
-    expect(shimmers(three)).toHaveLength(1);
+    const three = render(threeDaySnapshot, true);
+    expect(shimmers(three)).toHaveLength(0);
+    expect(pressableStyle(badgeButton(three, 'Week One'))).toMatchObject({
+      borderColor: color.lineMutedDark,
+    });
+    expect(pressableStyle(badgeButton(three, 'Kindling')).borderColor).toBe(
+      'transparent',
+    );
     act(() => three.unmount());
 
     const done = render({
@@ -366,6 +411,11 @@ describe('AchievementsShowcase button ledger', () => {
       nextStreakMilestone: null,
     });
     expect(shimmers(done)).toHaveLength(0);
+    expect(
+      badgeButtons(done).every(
+        button => pressableStyle(button).borderColor === 'transparent',
+      ),
+    ).toBe(true);
     act(() => done.unmount());
   });
 
@@ -429,7 +479,8 @@ describe('AchievementsShowcase button ledger', () => {
     });
     const panel = detailPanels(renderer)[0]!;
     expect(StyleSheet.flatten(panel.props.style)).toMatchObject({
-      backgroundColor: color.onDarkTint,
+      backgroundColor: color.inkElevated,
+      borderColor: color.lineDark,
     });
     expect(allText(renderer)).toContain(
       'Unlocks : Permanent Eternal Flame crest · 365 days away',
