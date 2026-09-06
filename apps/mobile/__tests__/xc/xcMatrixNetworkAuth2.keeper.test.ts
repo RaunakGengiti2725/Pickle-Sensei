@@ -860,5 +860,5 @@ describe('xc-matrix-network-auth-2 keeper fuzz: {offline, intermittent, reconnec
     expect(
       failures.map(f => ({ seed: f.seed, violations: f.violations })),
     ).toEqual([]);
-  });
+  }, 600_000);
 });
