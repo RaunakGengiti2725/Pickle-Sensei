@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deniedTitle: { color: color.warn, flex: 1 },
+  deniedTitle: { color: color.ink, flex: 1 },
   deniedBody: { color: color.ink, marginTop: space.sm },
   deniedAction: { marginTop: space.md },
   deniedFootnote: { color: color.bad, marginTop: space.sm },

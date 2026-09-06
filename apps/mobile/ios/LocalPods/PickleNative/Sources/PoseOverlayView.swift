@@ -75,21 +75,21 @@ struct NormalizedImageMapper {
 }
 
 /// Draws only evidence produced by current Apple Vision observations. The
-/// athlete is rendered as an EXOSKELETON over a translucent BODY HEAT MAP:
-/// crisp bone lines and joint nuclei between observed landmarks (so the user
-/// sees exactly what the camera tracks), under soft glows whose color and
-/// size come from each joint's measured movement speed (cool teal at rest →
-/// mint → volt → flame at full swing speed). The heat is deliberately
-/// translucent — it marks where motion is, it never paints the athlete over.
+/// athlete is rendered with contoured bones and bounded motion markers:
+/// crisp bone lines and joint outlines connect observed landmarks so the user
+/// sees what the camera tracks. Motion uses neutral chalk toward optic volt;
+/// marker size and opacity come from each joint's measured movement speed.
+/// Flame is reserved for the separate review fault surface, not live speed.
+/// The local marks retain the visible athlete rather than adding a body glow.
 ///
 /// RENDERING (2026-09-02): everything is Core Animation layers updated once
 /// per pose frame inside a single transaction — shape layers for bones,
-/// joints, limb heat and trails, one radial gradient layer per joint glow.
+/// joints, limb heat and trails, with bounded shape markers for joint motion.
 /// The previous `draw(_:)` implementation re-rasterized the full-screen
 /// bitmap on the CPU with ~90 radial gradients per frame and saturated the
 /// main thread (laggy chrome, delayed touches). Layers are composited on the
 /// GPU; per-frame CPU work is now path building only. Nothing here is
-/// decorative or synthetic: every bone end, glow center and trail segment is
+/// decorative or synthetic: every bone end, marker center and trail segment is
 /// an observed landmark, and every intensity is a measured speed.
 final class PoseOverlayView: UIView {
   enum CaptureState: Equatable {
@@ -112,16 +112,14 @@ final class PoseOverlayView: UIView {
     static let volt = UIColor(red: 215 / 255, green: 250 / 255, blue: 69 / 255, alpha: 1)
     static let flame = UIColor(red: 255 / 255, green: 155 / 255, blue: 66 / 255, alpha: 1)
     static let onDark = UIColor(red: 248 / 255, green: 250 / 255, blue: 245 / 255, alpha: 1)
-    static let contour = UIColor.black.withAlphaComponent(0.32)
+    static let contour = UIColor(red: 7 / 255, green: 23 / 255, blue: 16 / 255, alpha: 1)
   }
 
-  /// Measured-speed heat ramp: deep teal → mint → volt → flame. Values are
-  /// the app's design tokens (color.mint / color.volt / color.flame).
+  /// Measured-speed emphasis uses neutral chalk toward the optic ball accent.
+  /// Fault emphasis belongs to the separate review surface, not this ramp.
   private static let heatStops: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
-    (0.00, 26 / 255, 166 / 255, 138 / 255),
-    (0.35, 83 / 255, 217 / 255, 155 / 255),
-    (0.70, 215 / 255, 250 / 255, 69 / 255),
-    (1.00, 255 / 255, 155 / 255, 66 / 255),
+    (0.00, 248 / 255, 250 / 255, 245 / 255),
+    (1.00, 215 / 255, 250 / 255, 69 / 255),
   ]
 
   weak var previewLayer: AVCaptureVideoPreviewLayer?
@@ -137,10 +135,9 @@ final class PoseOverlayView: UIView {
   }
 
   // ── Layers, bottom → top ─────────────────────────────────────────────────
-  private let torsoGlow = CAGradientLayer()
-  private var jointGlows: [String: CAGradientLayer] = [:]
-  /// Hot limbs as wide translucent strokes, bucketed by heat so each layer
-  /// keeps a single color (mint / volt / flame).
+  private var jointGlows: [String: CAShapeLayer] = [:]
+  /// Hot limbs use bounded translucent strokes, bucketed by measured motion.
+  /// Each layer keeps the same accent with distinct width and opacity.
   private let limbHeatLayers: [CAShapeLayer] = [CAShapeLayer(), CAShapeLayer(), CAShapeLayer()]
   private let trailLayer = CAShapeLayer()
   private let boneContourLayer = CAShapeLayer()
@@ -186,21 +183,21 @@ final class PoseOverlayView: UIView {
     ("right_knee", "right_ankle"),
   ]
   private static let canonicalJoints: [String] = Array(Set(segments.flatMap { [$0.0, $0.1] })).sorted()
-  /// The head landmark glows only when Vision actually observed it
+  /// The head landmark is marked only when Vision actually observed it
   /// (ApplePoseProvider maps VN `.nose` to "head").
   private static let headJoint = "head"
   private static let minimumTrailSpeed = 0.06
   private static let fullIntensitySpeed = 1.25
-  /// Heat translucency: the glows sit UNDER the exoskeleton and are scaled by
-  /// this factor so the body reads through them. Tuned so a full-speed limb is
-  /// clearly flame-colored yet the athlete stays visible.
+  /// Motion translucency: the marks sit UNDER the exoskeleton and use this
+  /// factor so the body reads through them. Full-speed limbs retain a bounded
+  /// optic accent rather than covering the athlete with a glow.
   private static let heatOpacity: CGFloat = 0.55
   /// Exoskeleton stroke geometry, in points at radiusUnit = 15 (scaled with
   /// the observed torso so near and far athletes get proportional bones).
   private static let boneWidthAtUnit: CGFloat = 2.6
   private static let jointRadiusAtUnit: CGFloat = 3.6
   private static let limbHeatBuckets: [(min: CGFloat, color: UIColor)] = [
-    (0.2, Palette.mint), (0.5, Palette.volt), (0.8, Palette.flame),
+    (0.2, Palette.volt), (0.5, Palette.volt), (0.8, Palette.volt),
   ]
 
   override init(frame: CGRect) {
@@ -210,19 +207,12 @@ final class PoseOverlayView: UIView {
     backgroundColor = .clear
     isOpaque = false
 
-    torsoGlow.type = .radial
-    torsoGlow.startPoint = CGPoint(x: 0.5, y: 0.5)
-    torsoGlow.endPoint = CGPoint(x: 1, y: 0.5)
-    torsoGlow.opacity = 0
-    layer.addSublayer(torsoGlow)
     for joint in Self.canonicalJoints + [Self.headJoint] {
-      let glow = CAGradientLayer()
-      glow.type = .radial
-      glow.startPoint = CGPoint(x: 0.5, y: 0.5)
-      glow.endPoint = CGPoint(x: 1, y: 0.5)
-      glow.opacity = 0
-      layer.addSublayer(glow)
-      jointGlows[joint] = glow
+      let mark = CAShapeLayer()
+      mark.fillColor = UIColor.clear.cgColor
+      mark.opacity = 0
+      layer.addSublayer(mark)
+      jointGlows[joint] = mark
     }
     for (index, limb) in limbHeatLayers.enumerated() {
       limb.fillColor = UIColor.clear.cgColor
@@ -254,7 +244,7 @@ final class PoseOverlayView: UIView {
     jointLayer.strokeColor = UIColor.clear.cgColor
     layer.addSublayer(jointLayer)
     hotJointRingLayer.fillColor = UIColor.clear.cgColor
-    hotJointRingLayer.strokeColor = Palette.flame.cgColor
+    hotJointRingLayer.strokeColor = Palette.volt.cgColor
     layer.addSublayer(hotJointRingLayer)
 
     bodyLockLayer.fillColor = UIColor.clear.cgColor
@@ -347,7 +337,7 @@ final class PoseOverlayView: UIView {
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  /// One transaction per pose frame: paths and glow geometry are rebuilt from
+  /// One transaction per pose frame: paths and marker geometry are rebuilt from
   /// the current landmarks and handed to Core Animation with implicit
   /// animations disabled (the pose IS the animation).
   private func render() {
@@ -386,8 +376,8 @@ final class PoseOverlayView: UIView {
     }
     let heat: (String) -> CGFloat = { heatByJoint[$0] ?? 0 }
 
-    // Glow radius follows the observed body scale (torso extent in layer
-    // points) so the aura hugs the athlete whether near or far.
+    // Marker radius follows the observed body scale (torso extent in layer
+    // points) so local emphasis stays proportional whether near or far.
     let radiusUnit = glowRadiusUnit(points: points)
     let scale = max(0.6, min(1.6, radiusUnit / 15))
 
@@ -403,23 +393,9 @@ final class PoseOverlayView: UIView {
     let skeletonAlpha = stateAlpha * coverageAlpha
     let heatAlpha = skeletonAlpha * Self.heatOpacity
 
-    // ── Torso mass glow ──────────────────────────────────────────────────
-    if let leftShoulder = points["left_shoulder"], let rightShoulder = points["right_shoulder"],
-       let leftHip = points["left_hip"], let rightHip = points["right_hip"] {
-      let torsoHeat = (heat("left_shoulder") + heat("right_shoulder") + heat("left_hip") + heat("right_hip")) / 4
-      let centroid = midpoint(midpoint(leftShoulder, rightShoulder), midpoint(leftHip, rightHip))
-      place(
-        glow: torsoGlow,
-        center: centroid,
-        radius: radiusUnit * 2.1 * (1 + 0.35 * torsoHeat),
-        heat: torsoHeat,
-        alpha: (0.1 + 0.14 * torsoHeat) * heatAlpha
-      )
-    } else {
-      torsoGlow.opacity = 0
-    }
+    // ── Torso motion remains on its observed shoulder and hip markers ─────
 
-    // ── Joint glows (the heat map proper) ────────────────────────────────
+    // ── Joint marks (the motion map proper) ───────────────────────────────
     for joint in Self.canonicalJoints {
       guard let glow = jointGlows[joint] else { continue }
       guard let center = points[joint], let landmark = landmarks[joint] else {
@@ -431,14 +407,14 @@ final class PoseOverlayView: UIView {
       place(
         glow: glow,
         center: center,
-        radius: radiusUnit * (1.15 + 1.35 * jointHeat),
+        radius: radiusUnit * (0.4 + 0.4 * jointHeat),
         heat: jointHeat,
         alpha: (0.16 + 0.24 * jointHeat) * visibilityAlpha * heatAlpha
       )
     }
     if let headGlow = jointGlows[Self.headJoint] {
       if let head = points[Self.headJoint] {
-        place(glow: headGlow, center: head, radius: radiusUnit * 1.1, heat: 0, alpha: 0.12 * heatAlpha)
+        place(glow: headGlow, center: head, radius: radiusUnit * 0.4, heat: 0, alpha: 0.6 * skeletonAlpha)
       } else {
         headGlow.opacity = 0
       }
@@ -472,8 +448,8 @@ final class PoseOverlayView: UIView {
     boneLayer.opacity = Float(0.92 * skeletonAlpha)
     for (index, limb) in limbHeatLayers.enumerated() {
       limb.path = limbPaths[index].cgPath
-      limb.lineWidth = radiusUnit * 1.5
-      limb.opacity = Float(0.2 * heatAlpha)
+      limb.lineWidth = max(4, radiusUnit * (0.4 + 0.15 * CGFloat(index)))
+      limb.opacity = Float((0.2 + 0.1 * CGFloat(index)) * heatAlpha)
     }
 
     // ── Joint nuclei + hot rings ─────────────────────────────────────────
@@ -521,34 +497,31 @@ final class PoseOverlayView: UIView {
   }
 
   private func hideBody() {
-    torsoGlow.opacity = 0
     for glow in jointGlows.values { glow.opacity = 0 }
     for shape in [trailLayer, boneContourLayer, boneLayer, jointContourLayer, jointLayer, hotJointRingLayer] + limbHeatLayers {
       shape.path = nil
     }
   }
 
-  /// Positions one radial glow: a square gradient layer centered on the
-  /// landmark whose colors follow the heat ramp. Gradient stops are set every
-  /// frame (cheap — no rasterization happens here; the GPU shades it).
-  private func place(glow: CAGradientLayer, center: CGPoint, radius: CGFloat, heat: CGFloat, alpha: CGFloat) {
+  /// Positions one bounded outline at its observed landmark. Width, color
+  /// and opacity retain measured motion intensity without a blurred halo.
+  /// Core Animation composites the path without full-view rasterization.
+  private func place(glow: CAShapeLayer, center: CGPoint, radius: CGFloat, heat: CGFloat, alpha: CGFloat) {
     guard alpha > 0.015, radius > 1 else {
       glow.opacity = 0
       return
     }
-    let color = heatColor(heat)
+    let width = 1 + min(1, max(0, heat))
     glow.bounds = CGRect(x: 0, y: 0, width: radius * 2, height: radius * 2)
     glow.position = center
-    glow.colors = [
-      color.cgColor,
-      color.withAlphaComponent(0.42).cgColor,
-      color.withAlphaComponent(0).cgColor,
-    ]
-    glow.locations = [0, 0.55, 1]
+    glow.path = UIBezierPath(ovalIn: glow.bounds.insetBy(dx: width / 2, dy: width / 2)).cgPath
+    glow.fillColor = UIColor.clear.cgColor
+    glow.strokeColor = heatColor(heat).cgColor
+    glow.lineWidth = width
     glow.opacity = Float(min(1, alpha))
   }
 
-  /// Piecewise-linear ramp over `heatStops` (teal → mint → volt → flame).
+  /// Piecewise-linear motion ramp over `heatStops` (chalk → optic volt).
   private func heatColor(_ t: CGFloat) -> UIColor {
     let clamped = min(1, max(0, t))
     let stops = Self.heatStops
@@ -568,7 +541,7 @@ final class PoseOverlayView: UIView {
     return UIColor(red: last.1, green: last.2, blue: last.3, alpha: 1)
   }
 
-  /// Base glow radius from the observed torso extent so the aura scales with
+  /// Base marker radius from the observed torso extent so emphasis scales with
   /// the athlete's on-screen size. Falls back to a fixed unit while the torso
   /// is not fully observed.
   private func glowRadiusUnit(points: [String: CGPoint]) -> CGFloat {

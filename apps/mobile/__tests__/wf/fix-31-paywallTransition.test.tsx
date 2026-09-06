@@ -35,7 +35,16 @@ jest.mock('react-native-svg', () => {
   };
 });
 
+let mockReducedMotion = false;
+jest.mock('../../src/design/components', () => {
+  const actual = jest.requireActual<
+    typeof import('../../src/design/components')
+  >('../../src/design/components');
+  return { ...actual, useReducedMotion: () => mockReducedMotion };
+});
+
 import React from 'react';
+import { Animated, StyleSheet } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
   BillingAccessDependencies,
@@ -156,18 +165,29 @@ async function press(renderer: TestRenderer.ReactTestRenderer, testID: string) {
 let consoleError: jest.SpyInstance;
 
 beforeEach(() => {
+  mockReducedMotion = false;
   clearAccessStoreConfiguration();
   consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
   consoleError.mockRestore();
+  jest.restoreAllMocks();
 });
 
 function renderPhaseUpdates() {
   return consoleError.mock.calls.filter(args =>
     String(args[0]).includes('while rendering a different component'),
   );
+}
+
+function expectPageAtRest(renderer: TestRenderer.ReactTestRenderer) {
+  const page = renderer.root.findByProps({ testID: 'paywall-page-body' });
+  const style = StyleSheet.flatten(page.props.style);
+  const value = (animated: number | { __getValue: () => number }) =>
+    typeof animated === 'number' ? animated : animated.__getValue();
+  expect(value(style.opacity)).toBe(1);
+  expect(value(style.transform[0].translateX)).toBe(0);
 }
 
 describe('PaywallScreen page transition', () => {
@@ -179,6 +199,56 @@ describe('PaywallScreen page transition', () => {
     const renderer = await renderPaywall();
     expect(pressable(renderer, 'paywall-see-plans')).toBeTruthy();
     expect(renderPhaseUpdates()).toHaveLength(0);
+    act(() => renderer.unmount());
+  });
+
+  it('uses the native 220ms transition only while motion is enabled', async () => {
+    configureAccessStore(dependencies());
+    const renderer = await renderPaywall();
+    const timing = jest.spyOn(Animated, 'timing');
+    await press(renderer, 'paywall-see-plans');
+    expect(timing).toHaveBeenCalledTimes(2);
+    for (const [, config] of timing.mock.calls) {
+      expect(config).toMatchObject({ duration: 220, useNativeDriver: true });
+    }
+    await press(renderer, 'paywall-back');
+    expect(timing).toHaveBeenCalledTimes(4);
+    expect(renderPhaseUpdates()).toHaveLength(0);
+    act(() => renderer.unmount());
+  });
+
+  it('changes pages at rest under reduced motion and leaves purchase and restore untouched', async () => {
+    mockReducedMotion = true;
+    const deps = dependencies();
+    configureAccessStore(deps);
+    const renderer = await renderPaywall();
+    const timing = jest.spyOn(Animated, 'timing');
+    await press(renderer, 'paywall-see-plans');
+    expect(pressable(renderer, 'paywall-continue')).toBeTruthy();
+    expectPageAtRest(renderer);
+    await press(renderer, 'paywall-back');
+    expect(pressable(renderer, 'paywall-see-plans')).toBeTruthy();
+    expectPageAtRest(renderer);
+    expect(timing).not.toHaveBeenCalled();
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(renderPhaseUpdates()).toHaveLength(0);
+    act(() => renderer.unmount());
+  });
+
+  it('settles an active page when reduced motion is enabled after mounting', async () => {
+    configureAccessStore(dependencies());
+    const renderer = await renderPaywall();
+    await press(renderer, 'paywall-see-plans');
+    mockReducedMotion = true;
+    const timing = jest.spyOn(Animated, 'timing');
+    await act(async () =>
+      renderer.update(<PaywallScreen onClose={jest.fn()} />),
+    );
+    expectPageAtRest(renderer);
+    await press(renderer, 'paywall-back');
+    expectPageAtRest(renderer);
+    expect(timing).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 

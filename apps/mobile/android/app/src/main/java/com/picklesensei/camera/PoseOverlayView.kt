@@ -4,14 +4,9 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.RadialGradient
 import android.graphics.RectF
-import android.graphics.Shader
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
@@ -20,16 +15,15 @@ import android.view.View
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * Draws only current, measured landmarks and short-lived measured paths.
- * Instead of a stick figure, the athlete renders as a BODY HEAT MAP: soft
- * additive glows at observed landmarks and along observed limb lines, colored
- * by each joint's measured movement speed (cool teal at rest → mint → volt →
- * flame at full swing speed). Every glow center is an observed landmark or a
- * point on the straight line between two observed landmarks; every intensity
- * is a measured speed — nothing synthetic is drawn.
+ * The athlete renders as a bounded motion map with crisp, contoured bones
+ * and local joint outlines rather than additive glows. Neutral chalk moves
+ * toward optic volt as measured movement rises; fault emphasis is separate.
+ * Every marker center is an observed landmark and each bone connects two
+ * observed endpoints. Every intensity comes from measured movement speed;
+ * no missing landmark or trajectory is synthesized.
  */
 internal class PoseOverlayView @JvmOverloads constructor(
   context: Context,
@@ -42,7 +36,7 @@ internal class PoseOverlayView @JvmOverloads constructor(
     strokeCap = Paint.Cap.ROUND
   }
   private val guideConfirmationPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    color = Color.rgb(73, 239, 153)
+    color = Color.rgb(83, 217, 155)
     style = Paint.Style.STROKE
     strokeWidth = dp(7f)
     strokeCap = Paint.Cap.ROUND
@@ -51,14 +45,21 @@ internal class PoseOverlayView @JvmOverloads constructor(
     style = Paint.Style.STROKE
     strokeCap = Paint.Cap.ROUND
     strokeJoin = Paint.Join.ROUND
-    xfermode = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
   }
   private val heatPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    style = Paint.Style.FILL
-    xfermode = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
   }
-  private val heatShaderMatrix = Matrix()
-  private val heatShaderCache = HashMap<Int, RadialGradient>()
+  private val bonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    color = Color.rgb(248, 250, 245)
+  }
+  private val contourPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    color = Color.rgb(7, 23, 16)
+  }
   private val guidePath = Path()
   private val guideRect = RectF()
   // Shoulders and knees are tracked in addition to the default joints so the
@@ -156,7 +157,7 @@ internal class PoseOverlayView @JvmOverloads constructor(
   /**
    * Per-joint heat: the newest measured speed, normalized to the full-swing
    * ceiling and faded by sample age. A joint with no fresh measurement has
-   * zero heat — it still glows the cool "observed" base, nothing hotter.
+   * zero heat — it retains the neutral observed mark, nothing hotter.
    */
   private fun measuredHeatByJoint(): Map<String, Float> {
     val heat = HashMap<String, Float>(trails.size)
@@ -184,8 +185,8 @@ internal class PoseOverlayView @JvmOverloads constructor(
     val coverageAlpha = min(1f, max(0.52f, jointCoverage))
     val globalAlpha = phaseAlpha * coverageAlpha
 
-    // The glow radius follows the observed body scale (torso extent in view
-    // pixels) so the aura hugs the athlete whether near or far.
+    // Marker size follows the observed body scale (torso extent in view
+    // pixels) so local emphasis stays proportional whether near or far.
     val leftShoulder = visibleLandmark("left_shoulder")
     val rightShoulder = visibleLandmark("right_shoulder")
     val leftHip = visibleLandmark("left_hip")
@@ -202,19 +203,18 @@ internal class PoseOverlayView @JvmOverloads constructor(
       ).toFloat()
       radiusUnit = (torsoLength * 0.17f).coerceIn(dp(9f), dp(30f))
 
-      // Torso mass: observed shoulder/hip corners fill the trunk.
-      val torsoHeat =
-        (heat("left_shoulder") + heat("right_shoulder") + heat("left_hip") + heat("right_hip")) / 4f
-      val centroidX = (shoulderMidX + hipMidX) / 2f
-      val centroidY = (shoulderMidY + hipMidY) / 2f
-      drawGlow(canvas, centroidX, centroidY, radiusUnit * 2.1f * (1f + 0.35f * torsoHeat), torsoHeat, (0.1f + 0.14f * torsoHeat) * globalAlpha)
-      drawGlow(canvas, shoulderMidX, shoulderMidY, radiusUnit * 1.5f * (1f + 0.35f * torsoHeat), torsoHeat, (0.1f + 0.14f * torsoHeat) * globalAlpha)
-      drawGlow(canvas, hipMidX, hipMidY, radiusUnit * 1.4f * (1f + 0.35f * torsoHeat), torsoHeat, (0.1f + 0.14f * torsoHeat) * globalAlpha)
+      // Torso motion remains on the observed shoulder and hip segments.
     } else {
       radiusUnit = dp(15f)
     }
 
-    // Limb heat: interpolated between each segment's two OBSERVED endpoints.
+    val scale = (radiusUnit / dp(15f)).coerceIn(0.6f, 1.6f)
+    bonePaint.strokeWidth = dp(2.6f) * scale
+    bonePaint.alpha = (0.92f * globalAlpha * 255f).toInt()
+    contourPaint.strokeWidth = dp(4.8f) * scale
+    contourPaint.alpha = (globalAlpha * 255f).toInt()
+
+    // Limb heat stays between each segment's two OBSERVED endpoints.
     for ((startName, endName) in SEGMENTS) {
       val start = visibleLandmark(startName) ?: continue
       val end = visibleLandmark(endName) ?: continue
@@ -222,25 +222,18 @@ internal class PoseOverlayView @JvmOverloads constructor(
       val startY = mapY(start.y)
       val endX = mapX(end.x)
       val endY = mapY(end.y)
-      val startHeat = heat(startName)
-      val endHeat = heat(endName)
-      val length = hypot((endX - startX).toDouble(), (endY - startY).toDouble()).toFloat()
-      val steps = (length / max(radiusUnit, 1f)).toInt().coerceIn(2, 5)
-      for (step in 0..steps) {
-        val t = step.toFloat() / steps
-        val pointHeat = startHeat + (endHeat - startHeat) * t
-        drawGlow(
-          canvas,
-          startX + (endX - startX) * t,
-          startY + (endY - startY) * t,
-          radiusUnit * (0.85f + 1.05f * pointHeat),
-          pointHeat,
-          (0.09f + 0.15f * pointHeat) * globalAlpha,
-        )
+      val intensity = (heat(startName) + heat(endName)) / 2f
+      if (intensity >= 0.2f) {
+        heatPaint.color = Color.rgb(215, 250, 69)
+        heatPaint.alpha = ((0.1f + 0.14f * intensity) * globalAlpha * 255f).toInt()
+        heatPaint.strokeWidth = max(dp(4f), radiusUnit * (0.4f + 0.3f * intensity))
+        canvas.drawLine(startX, startY, endX, endY, heatPaint)
       }
+      canvas.drawLine(startX, startY, endX, endY, contourPaint)
+      canvas.drawLine(startX, startY, endX, endY, bonePaint)
     }
 
-    // Joint cores: brighter nuclei over the aura.
+    // Joint cores: bounded outlines at each observed landmark.
     for (name in JOINT_CORE_NAMES) {
       val landmark = visibleLandmark(name) ?: continue
       val visibilityAlpha =
@@ -250,52 +243,26 @@ internal class PoseOverlayView @JvmOverloads constructor(
         canvas,
         mapX(landmark.x),
         mapY(landmark.y),
-        radiusUnit * (0.55f + 0.95f * jointHeat),
+        radiusUnit * (0.4f + 0.4f * jointHeat),
         jointHeat,
         (0.17f + 0.21f * jointHeat) * visibilityAlpha * globalAlpha,
       )
     }
   }
 
-  /** One soft radial glow. Shaders are cached per heat bucket and repositioned
-   * with a local matrix, so per-frame drawing allocates nothing. */
+  /** One bounded motion outline. Reuses its paint instead of additive shaders,
+   * with size and opacity retaining the observed joint's motion intensity. */
   private fun drawGlow(canvas: Canvas, x: Float, y: Float, radius: Float, heat: Float, alpha: Float) {
     if (alpha <= 0.015f || radius <= 1f) return
-    val bucket = (heat.coerceIn(0f, 1f) * 23f).roundToInt()
-    val shader = heatShaderCache.getOrPut(bucket) {
-      val color = heatColor(bucket / 23f)
-      RadialGradient(
-        0f,
-        0f,
-        1f,
-        intArrayOf(
-          Color.argb(255, Color.red(color), Color.green(color), Color.blue(color)),
-          Color.argb(107, Color.red(color), Color.green(color), Color.blue(color)),
-          Color.argb(0, Color.red(color), Color.green(color), Color.blue(color)),
-        ),
-        floatArrayOf(0f, 0.55f, 1f),
-        Shader.TileMode.CLAMP,
-      )
-    }
-    heatShaderMatrix.reset()
-    heatShaderMatrix.setScale(radius, radius)
-    heatShaderMatrix.postTranslate(x, y)
-    shader.setLocalMatrix(heatShaderMatrix)
-    heatPaint.shader = shader
+    heatPaint.color = heatColor(heat)
+    heatPaint.strokeWidth = dp(1f + heat.coerceIn(0f, 1f))
     heatPaint.alpha = (alpha.coerceIn(0f, 1f) * 255f).toInt()
     canvas.drawCircle(x, y, radius, heatPaint)
   }
 
-  /** Measured-speed ramp: deep teal → mint → volt → flame (design tokens). */
-  private fun heatColor(t: Float): Int {
-    val clamped = t.coerceIn(0f, 1f)
-    return when {
-      clamped <= 0.35f -> blend(Color.rgb(26, 166, 138), Color.rgb(83, 217, 155), clamped / 0.35f)
-      clamped <= 0.70f ->
-        blend(Color.rgb(83, 217, 155), Color.rgb(215, 250, 69), (clamped - 0.35f) / 0.35f)
-      else -> blend(Color.rgb(215, 250, 69), Color.rgb(255, 155, 66), (clamped - 0.70f) / 0.30f)
-    }
-  }
+  /** Measured-speed ramp: neutral chalk → optic volt, separate from faults. */
+  private fun heatColor(t: Float): Int =
+    blend(Color.rgb(248, 250, 245), Color.rgb(215, 250, 69), t.coerceIn(0f, 1f))
 
   private fun drawMeasuredTrails(canvas: Canvas) {
     for (samples in trails.values) {
@@ -355,11 +322,11 @@ internal class PoseOverlayView @JvmOverloads constructor(
 
     guidePaint.color = when (phase) {
       CaptureOverlayPhase.POSITIONING -> when (readinessState) {
-        ReadinessState.READY -> Color.rgb(73, 239, 153)
+        ReadinessState.READY -> Color.rgb(83, 217, 155)
         ReadinessState.HOLD_STILL -> Color.rgb(215, 250, 69)
         else -> Color.WHITE
       }
-      CaptureOverlayPhase.BODY_LOCKED -> Color.rgb(73, 239, 153)
+      CaptureOverlayPhase.BODY_LOCKED -> Color.rgb(83, 217, 155)
       CaptureOverlayPhase.CAPTURED -> Color.rgb(215, 250, 69)
       CaptureOverlayPhase.SAVING -> Color.WHITE
     }

@@ -3,13 +3,15 @@ import {
   AccessibilityInfo,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Button } from '../design/components';
+import { Button, useReducedMotion } from '../design/components';
+import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import {
   hasWalkthroughTarget,
@@ -185,18 +187,45 @@ function StepSpotlight(props: {
   onSkip: () => void;
   isLast: boolean;
 }) {
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const {
+    width: windowWidth,
+    height: windowHeight,
+    fontScale,
+  } = useWindowDimensions();
+  const insets = useReliableSafeAreaInsets();
+  const largeText = fontScale > 1.3;
   const { step, rect } = props;
   const hole = holeForTarget(rect, step.shape);
 
   // Callout below a target in the top half of the screen, above one in the
-  // bottom half — the arrow always has room to travel.
+  // bottom half — oversized targets keep the callout inside the safe area.
   const calloutBelow = hole.y + hole.height / 2 < windowHeight * 0.52;
-  const calloutTop = calloutBelow ? hole.bottom + ARROW_LANE : undefined;
-  const calloutBottomEdge = hole.y - ARROW_LANE;
+  const safeTop = insets.top + SCREEN_MARGIN;
+  const safeBottom = windowHeight - insets.bottom - SCREEN_MARGIN;
+  const availableHeight = calloutBelow
+    ? safeBottom - hole.bottom - ARROW_LANE
+    : hole.y - ARROW_LANE - safeTop;
+  const minControlHeight = Math.max(
+    56,
+    Math.ceil(type.bodyBold.lineHeight * fontScale) +
+      (largeText ? space.sm * 2 : 0) +
+      2,
+  );
+  const hasControlRoom =
+    availableHeight >= minControlHeight + space.lg + space.md + 2;
+  const calloutTop = calloutBelow
+    ? hasControlRoom
+      ? hole.bottom + ARROW_LANE
+      : safeTop
+    : undefined;
+  const calloutBottomEdge = hasControlRoom ? hole.y - ARROW_LANE : safeBottom;
   const calloutBottom = calloutBelow
     ? undefined
     : windowHeight - calloutBottomEdge;
+  const calloutMaxHeight = Math.max(
+    0,
+    hasControlRoom ? availableHeight : safeBottom - safeTop,
+  );
 
   const arrowStartX = Math.max(
     SCREEN_MARGIN + 84,
@@ -258,74 +287,115 @@ function StepSpotlight(props: {
 
       <View
         accessibilityViewIsModal
+        testID="walkthrough-callout"
         style={[
           styles.callout,
+          { maxHeight: calloutMaxHeight },
           calloutTop !== undefined && { top: calloutTop },
           calloutBottom !== undefined && { bottom: calloutBottom },
         ]}
       >
-        <Text style={[type.micro, styles.eyebrow]}>{step.eyebrow}</Text>
-        <Text style={[type.h2, styles.headline]}>{step.headline}</Text>
-        <Text style={[type.body, styles.body]}>{step.body}</Text>
-        {step.finePrint ? (
-          <Text style={[type.caption, styles.finePrint]}>{step.finePrint}</Text>
-        ) : null}
-        <View style={styles.controls}>
-          <View style={styles.dots}>
-            {WALKTHROUGH_STEPS.map((candidate, dotIndex) => (
-              <View
-                key={candidate.key}
-                style={[
-                  styles.dot,
-                  dotIndex === props.stepIndex && styles.dotActive,
-                ]}
+        <ScrollView
+          testID="walkthrough-content-scroll"
+          style={styles.calloutScroll}
+          bounces={false}
+          contentInsetAdjustmentBehavior="never"
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={false}
+          indicatorStyle="white"
+        >
+          <Text style={[type.micro, styles.eyebrow]}>{step.eyebrow}</Text>
+          <Text style={[type.h2, styles.headline]}>{step.headline}</Text>
+          <Text style={[type.body, styles.body]}>{step.body}</Text>
+          {step.finePrint ? (
+            <Text style={[type.caption, styles.finePrint]}>
+              {step.finePrint}
+            </Text>
+          ) : null}
+          <View
+            testID="walkthrough-controls"
+            style={[styles.controls, largeText && styles.controlsStacked]}
+          >
+            <View style={styles.dots}>
+              {WALKTHROUGH_STEPS.map((candidate, dotIndex) => (
+                <View
+                  key={candidate.key}
+                  style={[
+                    styles.dot,
+                    dotIndex === props.stepIndex && styles.dotActive,
+                  ]}
+                />
+              ))}
+            </View>
+            <View
+              testID="walkthrough-control-buttons"
+              style={[
+                styles.controlButtons,
+                largeText && styles.controlButtonsStacked,
+              ]}
+            >
+              {props.isLast ? null : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip walkthrough"
+                  testID="walkthrough-skip"
+                  onPress={props.onSkip}
+                  hitSlop={12}
+                  style={styles.skip}
+                >
+                  <Text style={[type.bodyBold, styles.skipText]}>Skip</Text>
+                </Pressable>
+              )}
+              <Button
+                label={props.isLast ? 'Got it' : 'Next'}
+                variant="volt"
+                compact
+                testID="walkthrough-advance"
+                onPress={props.onAdvance}
               />
-            ))}
+            </View>
           </View>
-          <View style={styles.controlButtons}>
-            {props.isLast ? null : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Skip walkthrough"
-                testID="walkthrough-skip"
-                onPress={props.onSkip}
-                hitSlop={12}
-                style={styles.skip}
-              >
-                <Text style={[type.bodyBold, styles.skipText]}>Skip</Text>
-              </Pressable>
-            )}
-            <Button
-              label={props.isLast ? 'Got it' : 'Next'}
-              variant="volt"
-              compact
-              testID="walkthrough-advance"
-              onPress={props.onAdvance}
-            />
-          </View>
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
 }
 
-/** A target only counts when it is actually in the viewport — a scrolled-away
- * banner still measures, but pointing at coordinates above the screen leaves
- * the user staring at a bare scrim. Center on screen ⇒ at least half of the
- * target is visible, which is enough to spotlight honestly. */
+/** A target only counts when a meaningful part is actually in the viewport.
+ * Enlarged banners may extend beyond the screen; anchor their visible part
+ * instead of requiring an off-screen center. Smaller targets still need at
+ * least half visible, while fully scrolled-away targets remain excluded. */
+function visibleTargetRect(
+  rect: TargetRect,
+  windowWidth: number,
+  windowHeight: number,
+): TargetRect | null {
+  if (
+    ![rect.x, rect.y, rect.width, rect.height, windowWidth, windowHeight].every(
+      Number.isFinite,
+    ) ||
+    rect.width <= 0 ||
+    rect.height <= 0 ||
+    windowWidth <= 0 ||
+    windowHeight <= 0
+  )
+    return null;
+  const x = Math.max(0, rect.x);
+  const y = Math.max(0, rect.y);
+  const width = Math.min(windowWidth, rect.x + rect.width) - x;
+  const height = Math.min(windowHeight, rect.y + rect.height) - y;
+  return width >= Math.min(44, rect.width / 2) &&
+    height >= Math.min(44, rect.height / 2)
+    ? { x, y, width, height }
+    : null;
+}
+
 export function rectVisibleInWindow(
   rect: TargetRect,
   windowWidth: number,
   windowHeight: number,
 ): boolean {
-  const centerX = rect.x + rect.width / 2;
-  const centerY = rect.y + rect.height / 2;
-  return (
-    centerX >= 0 &&
-    centerX <= windowWidth &&
-    centerY >= 0 &&
-    centerY <= windowHeight
-  );
+  return visibleTargetRect(rect, windowWidth, windowHeight) !== null;
 }
 
 function WalkthroughStage() {
@@ -357,11 +427,11 @@ function WalkthroughStage() {
         if (!hasWalkthroughTarget(step.targetKey)) break;
         const measured = await measureWalkthroughTarget(step.targetKey);
         if (cancelled) return;
-        if (
-          measured &&
-          rectVisibleInWindow(measured, windowWidth, windowHeight)
-        ) {
-          setRect(measured);
+        const visible = measured
+          ? visibleTargetRect(measured, windowWidth, windowHeight)
+          : null;
+        if (visible) {
+          setRect(visible);
           return;
         }
         await new Promise<void>(resolve => setTimeout(() => resolve(), 120));
@@ -411,6 +481,7 @@ function WalkthroughStage() {
 }
 
 export function FirstRunWalkthrough() {
+  const reducedMotion = useReducedMotion();
   const visible = useWalkthroughStore(s => s.visible);
   const dismiss = useWalkthroughStore(s => s.dismiss);
 
@@ -419,7 +490,7 @@ export function FirstRunWalkthrough() {
       visible={visible}
       transparent
       statusBarTranslucent
-      animationType="fade"
+      animationType={reducedMotion ? 'none' : 'fade'}
       onRequestClose={dismiss}
     >
       {visible ? <WalkthroughStage /> : null}
@@ -441,6 +512,7 @@ const styles = StyleSheet.create({
     paddingTop: space.lg,
     paddingBottom: space.md,
   },
+  calloutScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   eyebrow: { color: color.volt },
   headline: { color: color.onDark, marginTop: space.sm },
   body: { color: color.onDarkMuted, marginTop: space.sm },
@@ -450,6 +522,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: space.md,
+  },
+  controlsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.md,
   },
   dots: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   dot: {
@@ -464,6 +541,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
   },
-  skip: { paddingVertical: space.sm },
-  skipText: { color: color.onDarkMuted },
+  controlButtonsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  skip: { minHeight: 44, paddingVertical: space.sm, justifyContent: 'center' },
+  skipText: { color: color.onDarkMuted, textAlign: 'center' },
 });

@@ -29,11 +29,7 @@ import {
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
-import {
-  MascotMoment,
-  type MascotPose,
-  type MascotTone,
-} from '../design/MascotMoment';
+import type { MascotPose, MascotTone } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
 import { showBrandNotice } from '../design/BrandNotice';
@@ -142,8 +138,8 @@ export const DELETION_MASCOT_MOMENTS: Record<
   },
 };
 
-/** The 36 pt header glyph buttons keep their compact look; the slop brings
- * the touch target to the 44 pt minimum without changing the layout. */
+/** The header glyph buttons meet the 44 pt minimum directly; extra slop
+ * helps touches near the edge without changing the layout. */
 const HEADER_BUTTON_HIT_SLOP = 4;
 
 type DeleteAccountStep =
@@ -541,13 +537,12 @@ function DeleteAccountDialog(props: {
             Pick the closest one. Nothing you share here stays tied to you after
             deletion.
           </Text>
-          <MascotMoment
-            compact
-            {...DELETION_MASCOT_MOMENTS.why}
-            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.why.caption}`}
-            testID="deletion-mascot-why"
-            style={styles.dialogMascot}
-          />
+          <Text
+            testID="deletion-context-why"
+            style={[type.caption, styles.dialogContext]}
+          >
+            {DELETION_MASCOT_MOMENTS.why.caption}
+          </Text>
           <View accessibilityRole="radiogroup">
             {DELETION_REASON_OPTIONS.map(option => (
               <ChoiceRow
@@ -599,13 +594,12 @@ function DeleteAccountDialog(props: {
           <Text style={[type.body, styles.sub]}>
             Pick one, and add anything you want us to know.
           </Text>
-          <MascotMoment
-            compact
-            {...DELETION_MASCOT_MOMENTS.kept}
-            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.kept.caption}`}
-            testID="deletion-mascot-kept"
-            style={styles.dialogMascot}
-          />
+          <Text
+            testID="deletion-context-kept"
+            style={[type.caption, styles.dialogContext]}
+          >
+            {DELETION_MASCOT_MOMENTS.kept.caption}
+          </Text>
           <View accessibilityRole="radiogroup">
             {DELETION_WANTED_OPTIONS.map(option => (
               <ChoiceRow
@@ -672,12 +666,12 @@ function DeleteAccountDialog(props: {
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
         >
-          <MascotMoment
-            compact
-            {...DELETION_MASCOT_MOMENTS.review}
-            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.review.caption}`}
-            testID="deletion-mascot-review"
-          />
+          <Text
+            testID="deletion-context-review"
+            style={[type.caption, styles.reviewContext]}
+          >
+            {DELETION_MASCOT_MOMENTS.review.caption}
+          </Text>
           <Text
             style={[
               type.h1,
@@ -892,14 +886,14 @@ export function ManageAccountScreen() {
         <Card style={styles.detailsCard}>
           <View style={styles.detailsHeader}>
             <View style={styles.iconWrap}>
-              <Icon name="person" size={20} color={color.court} />
+              <Icon name="person" size={20} color={color.inkSoft} />
             </View>
             <Text style={[type.h3, { color: color.ink, flex: 1 }]}>
               Account details
             </Text>
             <Pill
               label={session && !session.localOnly ? 'SYNCED' : 'LOCAL'}
-              tone="volt"
+              tone="neutral"
             />
           </View>
           <View style={styles.detailRows}>
@@ -980,7 +974,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: radius.md,
-    backgroundColor: color.courtSoft,
+    backgroundColor: color.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1036,13 +1030,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.md,
-    minHeight: 36,
+    minHeight: 44,
   },
-  headerSlot: { width: 36, justifyContent: 'center' },
+  headerSlot: { width: 44, justifyContent: 'center' },
   headerButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: color.surfaceElevated,
@@ -1096,7 +1090,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     marginTop: space.xs,
   },
-  dialogMascot: { marginBottom: space.md },
+  dialogContext: { color: color.inkSoft, marginBottom: space.md },
+  reviewContext: { color: color.inkSoft, textAlign: 'center' },
   // Same input family as onboarding's ChoiceCard/nameInput (elevated
   // surface, hairline border, court fill when selected), sized as a compact
   // single-line row so a question reads as one quick pick.

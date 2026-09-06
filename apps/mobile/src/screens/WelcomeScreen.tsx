@@ -19,53 +19,50 @@ function CourtStory(props: { adaptive: boolean }) {
       style={[styles.courtStory, props.adaptive && styles.courtStoryAdaptive]}
       testID="welcome-court-story"
     >
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 340 300"
-        style={props.adaptive ? StyleSheet.absoluteFill : undefined}
-      >
-        <Path
-          d="M35 42h270v216H35z"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-          fill="none"
-        />
-        <Line
-          x1="170"
-          y1="42"
-          x2="170"
-          y2="258"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Line
-          x1="35"
-          y1="120"
-          x2="305"
-          y2="120"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Line
-          x1="35"
-          y1="180"
-          x2="305"
-          y2="180"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Path
-          d="M84 221c35-72 80-87 147-109"
-          stroke={color.volt}
-          strokeWidth="2.5"
-          fill="none"
-          strokeDasharray="4 7"
-          strokeLinecap="round"
-        />
-        <Circle cx="84" cy="221" r="8" fill={color.volt} />
-        <Circle cx="231" cy="112" r="5" fill={color.onDark} />
-      </Svg>
+      {!props.adaptive ? (
+        <Svg width="100%" height="100%" viewBox="0 0 340 300">
+          <Path
+            d="M35 42h270v216H35z"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Line
+            x1="170"
+            y1="42"
+            x2="170"
+            y2="258"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Line
+            x1="35"
+            y1="120"
+            x2="305"
+            y2="120"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Line
+            x1="35"
+            y1="180"
+            x2="305"
+            y2="180"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Path
+            d="M84 239C116 212 164 182 231 176"
+            stroke={color.volt}
+            strokeWidth="2.5"
+            fill="none"
+            strokeDasharray="4 7"
+            strokeLinecap="round"
+          />
+          <Circle cx="84" cy="239" r="8" fill={color.volt} />
+          <Circle cx="231" cy="176" r="5" fill={color.onDark} />
+        </Svg>
+      ) : null}
       <View style={[styles.readout, props.adaptive && styles.readoutAdaptive]}>
         <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
         <Text style={[type.h1, styles.readoutTitle]}>
@@ -80,7 +77,7 @@ function CourtStory(props: { adaptive: boolean }) {
       <View
         style={[styles.livePill, props.adaptive && styles.livePillAdaptive]}
       >
-        <View style={styles.privateIcon} />
+        <Icon name="shield" size={16} color={color.onDarkMuted} />
         <Text
           style={[
             type.micro,
@@ -290,14 +287,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius.pill,
     backgroundColor: color.overlayDarkSoft,
-  },
-  privateIcon: {
-    width: 8,
-    height: 8,
-    borderRadius: 3,
-    borderWidth: 2,
-    borderColor: color.volt,
-    transform: [{ rotate: '45deg' }],
   },
   footer: {
     paddingHorizontal: space.lg,

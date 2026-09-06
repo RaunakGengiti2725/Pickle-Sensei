@@ -1,7 +1,16 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
+import { plural } from '../util/plural';
+import { ChartDataRows } from './PracticeVolumeChart';
 import type { ScoreTrendBucket } from './techniqueDashboard';
 
 /**
@@ -9,19 +18,21 @@ import type { ScoreTrendBucket } from './techniqueDashboard';
  * chart): value labels ride on top of each bar for short windows, the newest
  * scored bucket wears the accent color, and the latest column sits on a
  * lifted "today" background. Buckets with no comparable reads render a stub —
- * an honest gap, never an interpolated bar.
+ * an honest gap, never an interpolated bar. Enlarged text uses bounded,
+ * flowing rows with the same averages and explicit grouped date ranges.
  */
 export function ScoreTrendChart(props: {
   buckets: readonly ScoreTrendBucket[];
 }) {
   const reducedMotion = useReducedMotion();
+  const largeText = useWindowDimensions().fontScale > 1;
   const reveal = useRef(new Animated.Value(1)).current;
   const signature = props.buckets
     .map(bucket => `${bucket.key}:${bucket.avg ?? 'x'}`)
     .join('|');
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion || largeText) {
       reveal.setValue(1);
       return;
     }
@@ -32,7 +43,7 @@ export function ScoreTrendChart(props: {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [reducedMotion, reveal, signature]);
+  }, [largeText, reducedMotion, reveal, signature]);
 
   const showLabels = props.buckets.length <= 8;
   const barCeiling = showLabels ? 58 : 72;
@@ -49,22 +60,60 @@ export function ScoreTrendChart(props: {
   const middleLabel =
     props.buckets[Math.floor(props.buckets.length / 2)]?.label;
 
+  const grouped = props.buckets.some(bucket => {
+    const [first, last] = bucket.key.split(':');
+    return last !== undefined && last !== first;
+  });
+  const period = grouped ? 'period' : 'day';
+  const summary =
+    scoredBuckets.length === 0
+      ? 'No comparable scored reads in this window yet.'
+      : `Average technique score by ${period}. ${scoredBuckets.length} scored ${plural(scoredBuckets.length, period)}${
+          latestAvg === null
+            ? ''
+            : `, latest average ${latestAvg.toFixed(1)} out of 10`
+        }.`;
+
+  if (largeText) {
+    return (
+      <View
+        accessible={false}
+        accessibilityLabel={summary}
+        importantForAccessibility="no"
+        style={styles.root}
+      >
+        <ChartDataRows
+          key={`${props.buckets[0]?.key}:${props.buckets.at(-1)?.key}`}
+          items={props.buckets}
+          summary={summary}
+          scope={
+            grouped
+              ? 'Each row is one grouped date range, not a single day. Oldest to newest.'
+              : 'Each row is one day, oldest to newest.'
+          }
+          unit="periods"
+          rowForItem={(bucket, index) => {
+            const [first, last] = bucket.key.split(':');
+            const label =
+              last && last !== first ? `${first}–${last}` : bucket.label;
+            const latest = index === latestScoredIndex;
+            const value =
+              bucket.avg === null
+                ? 'No comparable scored reads'
+                : `${bucket.avg.toFixed(1)} out of 10 · ${bucket.count} scored ${plural(bucket.count, 'read')}`;
+            return {
+              key: bucket.key,
+              label: `${label}: ${value}${latest ? ' · Latest scored period' : ''}`,
+              latest,
+            };
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
-    <View
-      accessible
-      accessibilityLabel={
-        scoredBuckets.length === 0
-          ? 'No comparable scored reads in this window yet.'
-          : `Average technique score by day. ${scoredBuckets.length} scored ${
-              scoredBuckets.length === 1 ? 'day' : 'days'
-            }${
-              latestAvg === null
-                ? ''
-                : `, latest average ${latestAvg.toFixed(1)} out of 10`
-            }.`
-      }
-      style={styles.root}
-    >
+    <View accessible accessibilityLabel={summary} style={styles.root}>
       <View importantForAccessibility="no-hide-descendants" style={styles.plot}>
         {props.buckets.map((bucket, index) => {
           const isLatestColumn = index === props.buckets.length - 1;
@@ -137,13 +186,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: color.onDarkTintFaint,
   },
   barValue: {
     ...type.micro,
     color: color.onDarkMuted,
-    fontSize: 10,
-    lineHeight: 13,
     letterSpacing: 0.2,
     marginBottom: 3,
     fontVariant: ['tabular-nums'],
@@ -154,7 +201,7 @@ const styles = StyleSheet.create({
     minWidth: 3,
     maxWidth: 30,
     borderRadius: 5,
-    backgroundColor: color.mint,
+    backgroundColor: color.onDarkMuted,
   },
   barAccent: { backgroundColor: color.volt },
   barEmpty: { backgroundColor: color.lineMutedDark },
@@ -166,9 +213,7 @@ const styles = StyleSheet.create({
   axisLabel: {
     ...type.micro,
     flex: 1,
-    color: color.onDarkFaint,
-    fontSize: 10,
-    lineHeight: 13,
+    color: color.onDarkMuted,
     letterSpacing: 0.2,
   },
   axisLabelStart: { textAlign: 'left' },

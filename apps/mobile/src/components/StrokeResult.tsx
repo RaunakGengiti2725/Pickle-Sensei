@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,9 +8,9 @@ import {
   type AccessibilityActionEvent,
   type GestureResponderEvent,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import {
+  BrandSpinner,
   Button,
   Card,
   PressableScale,
@@ -20,7 +18,6 @@ import {
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
-import { MascotStage } from '../design/MascotMoment';
 import { color, radius, space, type } from '../design/tokens';
 import { ClipPlayer, clipPlaybackAvailable } from './ClipPlayer';
 import {
@@ -98,10 +95,10 @@ export interface StrokeResultProps {
 
 /** Phase colors from the existing palette only — never color-only (legend). */
 const PHASE_COLOR: Record<PhaseSegmentKey, string> = {
-  preparation: color.mint,
+  preparation: color.onDarkMuted,
   acceleration: color.volt,
-  follow_through: color.flame,
-  recovery: color.court,
+  follow_through: color.onDarkMuted,
+  recovery: color.onDarkMuted,
   swing: color.volt,
 };
 
@@ -496,7 +493,7 @@ export function StrokeResult(props: StrokeResultProps) {
         style={[
           type.micro,
           {
-            color: header.tone === 'attention' ? color.warn : color.inkSoft,
+            color: header.tone === 'attention' ? color.ink : color.inkSoft,
           },
         ]}
       >
@@ -560,7 +557,7 @@ export function StrokeResult(props: StrokeResultProps) {
           the cue that matches its measured direction. */}
       <Card tone="soft" style={styles.insightCard} testID="stroke-insight">
         <View style={styles.insightHeader}>
-          <Icon name="spark" size={17} color={color.court} />
+          <Icon name="stroke" size={17} color={color.court} />
           <Text style={[type.micro, { color: color.court }]}>
             {insightMeasured ? 'BODY-POSE ESTIMATE' : 'MEASURED INSIGHT'}
           </Text>
@@ -743,80 +740,22 @@ export function StrokeResultAnalyzing(props: {
   dark?: boolean;
   /**
    * Optional honest progress surface: a REAL measured fraction (imported
-   * pose extraction) or an indeterminate stage pulse. Absent → the classic
-   * arc-only state, byte-identical to before this prop existed.
+   * pose extraction) or an indeterminate stage pulse. Absent → the shared
+   * progress indicator without a fabricated completion fraction.
    */
   progress?: AnalysisProgressUi | null;
 }) {
-  const reduced = useReducedMotion();
   const { fontScale } = useWindowDimensions();
   const accessibleLayout = fontScale > ACCESSIBLE_ANALYSIS_FONT_SCALE;
-  const spin = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (reduced) return;
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 1400,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduced, spin]);
-
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-  const track = props.dark ? color.lineDark : color.line;
-  const arc = props.dark ? color.volt : color.court;
 
   const content = (
     <>
       <View style={styles.analyzingVisual}>
-        <MascotStage
-          dark={props.dark}
-          pose="sprint"
-          tone="volt"
-          testID="stroke-result-analyzing-mascot"
+        <BrandSpinner
+          size={48}
+          color={props.dark ? color.volt : color.court}
+          trackColor={props.dark ? color.lineDark : color.line}
         />
-        <Animated.View
-          style={[
-            styles.analyzingArc,
-            {
-              backgroundColor: props.dark
-                ? color.surfaceDark
-                : color.surfaceElevated,
-              transform: [{ rotate }],
-            },
-          ]}
-        >
-          <Svg width={60} height={60} viewBox="0 0 60 60">
-            <Circle
-              cx="30"
-              cy="30"
-              r="24"
-              stroke={track}
-              strokeWidth="5"
-              fill="none"
-            />
-            <Circle
-              cx="30"
-              cy="30"
-              r="24"
-              stroke={arc}
-              strokeWidth="5"
-              fill="none"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 24 * 0.72} ${
-                2 * Math.PI * 24 * 0.28
-              }`}
-            />
-          </Svg>
-        </Animated.View>
       </View>
       <Text
         style={[
@@ -906,8 +845,8 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   attemptChip: {
-    paddingHorizontal: 14,
-    minHeight: 40,
+    paddingHorizontal: space.md,
+    minHeight: 44,
     justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -1072,15 +1011,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.xl,
   },
-  analyzingVisual: { width: 194, height: 166 },
-  analyzingArc: {
-    position: 'absolute',
-    right: -10,
-    bottom: 0,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
+  analyzingVisual: { width: 48, height: 48 },
   analyzingCaption: { textAlign: 'center', marginTop: space.lg },
   analyzingDetail: { textAlign: 'center', marginTop: space.sm, maxWidth: 320 },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
+import { color } from './tokens';
 
 export type IconName =
   | 'home'
@@ -10,6 +11,7 @@ export type IconName =
   | 'camera'
   | 'upload'
   | 'court'
+  | 'stroke'
   | 'arrow'
   | 'chevron'
   | 'back'
@@ -35,7 +37,7 @@ export function Icon(props: {
   strokeWidth?: number;
 }) {
   const size = props.size ?? 22;
-  const stroke = props.color ?? '#0B1713';
+  const stroke = props.color ?? color.ink;
   const strokeWidth = props.strokeWidth ?? 1.8;
   const common = {
     stroke,
@@ -104,6 +106,14 @@ export function Icon(props: {
           <Line x1="12" y1="3.5" x2="12" y2="20.5" {...common} />
           <Line x1="3" y1="9" x2="21" y2="9" {...common} />
           <Line x1="3" y1="15" x2="21" y2="15" {...common} />
+        </>
+      )}
+      {props.name === 'stroke' && (
+        <>
+          <Rect x="4" y="3.5" width="9" height="11" rx="3.5" {...common} />
+          <Line x1="8.5" y1="14.5" x2="8.5" y2="20.5" {...common} />
+          <Circle cx="19" cy="5.5" r="1.8" {...common} />
+          <Path d="M17 11.5c3 2.5 2.5 6.1-1 8.5" {...common} />
         </>
       )}
       {props.name === 'arrow' && (

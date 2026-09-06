@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
+import { StyleSheet } from 'react-native';
 import type {
   CheckpointKey,
   CheckpointScore,
@@ -258,6 +259,38 @@ describe('recommendedDrillsModel', () => {
 });
 
 describe('RecommendedDrills', () => {
+  it('keeps saved-drill controls at least 44 points and blocks pending presses', async () => {
+    mockGetApiSession.mockReturnValue(session);
+    mockListCatalogDrills.mockResolvedValue(MIXED_DRILLS);
+    const onToggleSaved = jest.fn();
+    const renderer = await render(
+      <RecommendedDrills
+        analysis={analysisFixture()}
+        onOpenLibrary={jest.fn()}
+        onToggleSaved={onToggleSaved}
+        pendingSlug="drive-and-recover"
+      />,
+    );
+    const [pending] = hostByTestId(
+      renderer,
+      'recommended-drill-drive-and-recover-save',
+    );
+    expect(pending).toBeDefined();
+    expect(
+      StyleSheet.flatten(pending!.props.style).minHeight,
+    ).toBeGreaterThanOrEqual(44);
+    expect(pending!.props.accessibilityState.disabled).toBe(true);
+    await act(async () => {
+      pending!.props.onClick({
+        currentTarget: pending,
+        target: pending,
+        nativeEvent: {},
+      });
+    });
+    expect(onToggleSaved).not.toHaveBeenCalled();
+    await unmount(renderer);
+  });
+
   it('fetches the focus family once, renders three drills family-first with the match note and library button', async () => {
     mockGetApiSession.mockReturnValue(session);
     mockListCatalogDrills.mockResolvedValue(MIXED_DRILLS);

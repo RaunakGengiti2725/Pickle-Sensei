@@ -997,7 +997,7 @@ function ScorePage(props: {
         testID="result-guide-insight"
       >
         <View style={styles.insightHeader}>
-          <Icon name="spark" size={17} color={color.volt} />
+          <Icon name="stroke" size={17} color={color.volt} />
           <Text
             style={[
               type.micro,
@@ -1714,7 +1714,7 @@ function TrainingPlanSection(props: {
       ) : (
         <Card style={styles.createPlanCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="spark" size={22} color={color.court} />
+            <Icon name="court" size={22} color={color.court} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             {currentPlan?.status === 'active'

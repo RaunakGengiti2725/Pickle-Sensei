@@ -64,6 +64,7 @@ jest.mock('../../src/auth/authStore', () => {
 });
 
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
+import { color, type } from '../../src/design/tokens';
 import { getDb } from '../../src/data/db';
 import { setActiveDataOwner } from '../../src/data/accountScope';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
@@ -428,6 +429,44 @@ describe('LibraryScreen · segmented tabs', () => {
 });
 
 describe('LibraryScreen · reads tab', () => {
+  it('shows scope and ordering as a plain caption while keeping the actual reads and scores', async () => {
+    const renderer = await renderLibrary();
+    const caption = renderer.root
+      .findAllByType(Text)
+      .find(node => node.props.testID === 'library-read-order')!;
+    expect(caption.props.children).toBe('ALL STROKES · NEWEST FIRST');
+    expect(caption.props.onPress).toBeUndefined();
+    expect(caption.props.accessibilityRole).toBeUndefined();
+    expect(StyleSheet.flatten(caption.props.style)).toMatchObject({
+      ...type.caption,
+      color: color.inkSoft,
+    });
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.label === 'ALL STROKES' ||
+          node.props.label === 'NEWEST FIRST',
+      ),
+    ).toHaveLength(0);
+    expect(renderer.root.findByType(FlatList).props.data).toEqual([
+      shotScored,
+      shotNotRead,
+    ]);
+    const score = renderer.root
+      .findAllByType(Text)
+      .find(
+        node => node.props.children === shotScored.overallScore!.toFixed(1),
+      )!;
+    expect(StyleSheet.flatten(score.props.style)).toMatchObject({
+      ...type.score,
+      color: color.ink,
+    });
+    await pressByLabel(renderer, 'Open forehand drive result');
+    expect(mockNavigate).toHaveBeenCalledWith('Result', {
+      analysisId: shotScored.id,
+    });
+  });
+
   async function focus(
     renderer: TestRenderer.ReactTestRenderer,
     focused: boolean,

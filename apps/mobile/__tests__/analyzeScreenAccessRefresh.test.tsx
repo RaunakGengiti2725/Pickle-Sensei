@@ -223,7 +223,7 @@ function pressButton(renderer: TestRenderer.ReactTestRenderer, label: string) {
 async function runOneAnalysis(renderer: TestRenderer.ReactTestRenderer) {
   pressByLabel(renderer, 'Forehand Drive');
   mockCaptureImpl = async () => guidedClip();
-  pressButton(renderer, 'Open automatic camera');
+  pressByLabel(renderer, 'Open automatic camera');
   await flush();
 }
 

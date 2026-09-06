@@ -84,7 +84,7 @@ jest.mock('../../src/consistency/store', () => ({
   ) => selector(mockConsistencyState),
 }));
 
-import { StyleSheet, Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
 import { HomeScreen } from '../../src/screens/HomeScreen';
 
 const MIN_TOUCH_TARGET_PT = 44;
@@ -115,7 +115,12 @@ describe('Home streak badge hit target (wf fix-21)', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
     mockListRealAnalysisFacts.mockClear();
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('extends the 32pt chip to at least a 44pt touch target via hitSlop', async () => {
     const renderer = await renderHome();

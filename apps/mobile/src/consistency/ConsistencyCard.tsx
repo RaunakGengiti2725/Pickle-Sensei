@@ -1,6 +1,5 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import { PressableScale, RevealFill } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
@@ -54,13 +53,6 @@ export function ConsistencyCard(props: {
       style={styles.card}
       testID="consistency-card"
     >
-      <LinearGradient
-        colors={[color.surfaceDark, '#123125']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
       <View style={styles.headerRow}>
         <Text style={[type.micro, styles.eyebrow]}>CONSISTENCY</Text>
         <View style={styles.shieldRow}>
@@ -83,6 +75,7 @@ export function ConsistencyCard(props: {
           <AnimatedFlame
             intensity={flameIntensityForStreak(streak)}
             size={34}
+            dark
           />
         </View>
         <View style={styles.body}>
@@ -128,7 +121,9 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceDark,
+    backgroundColor: color.inkElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
   },
   headerRow: {
@@ -147,10 +142,10 @@ const styles = StyleSheet.create({
   flameWrap: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,155,66,0.12)',
+    backgroundColor: color.flameTint,
   },
   body: { flex: 1, minWidth: 0 },
   streakText: { color: color.onDark },
