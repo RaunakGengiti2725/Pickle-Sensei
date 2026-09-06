@@ -9,6 +9,7 @@ import type { OperationFailure } from "@pickle/shared-types";
 
 export const MODEL_TASKS = [
   "pose_estimation",
+  "pose_reconstruction_3d",
   "paddle_detection",
   "paddle_tracking",
   "ball_detection",

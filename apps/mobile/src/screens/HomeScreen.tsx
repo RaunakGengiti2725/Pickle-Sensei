@@ -49,6 +49,7 @@ import { useConsistencyStore } from '../consistency/store';
 import { formatDuprEstimate } from '../progress/duprEstimate';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import { plural } from '../util/plural';
+import { Motion3DHistory, useMotion3DHistory } from '../review/Motion3DHistory';
 
 function deviceTimeZone() {
   try {
@@ -94,6 +95,7 @@ export function HomeScreen() {
   const profile = useAppStore(s => s.profile);
   const consistency = useConsistencyStore(s => s.snapshot);
   const refreshConsistency = useConsistencyStore(s => s.refresh);
+  const motionHistory = useMotion3DHistory(5);
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
   const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
   const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
@@ -535,6 +537,10 @@ export function HomeScreen() {
           </>
         ) : null}
 
+        <Motion3DHistory
+          history={motionHistory}
+          onOpen={analysisId => navigation.navigate('Result', { analysisId })}
+        />
         <SectionTitle
           title="Recent reads"
           right={
@@ -545,7 +551,7 @@ export function HomeScreen() {
             ) : undefined
           }
         />
-        {recent.length === 0 ? (
+        {recent.length === 0 && motionHistory.entries.length === 0 ? (
           <Card tone="soft" style={styles.emptyRecent}>
             <View style={styles.emptyIcon}>
               <Icon name="camera" color={color.court} size={21} />

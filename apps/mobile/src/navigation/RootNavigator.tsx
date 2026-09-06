@@ -34,6 +34,7 @@ import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { showBrandNotice } from '../design/BrandNotice';
+import { currentAnalysisPlan } from '../vision/motion3d';
 
 const Stack = createNativeStackNavigator<RootStackParams>();
 const Tabs = createBottomTabNavigator<MainTabParams>();
@@ -119,13 +120,15 @@ function useRatingRouteGate<RouteName extends keyof RootStackParams>(
   const canonicalAccess = useAccessStore(state => state.canonicalAccess);
   const initialize = useAccessStore(state => state.initialize);
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
+  const developmentMotion =
+    !localOnly && currentAnalysisPlan().engine === 'motion_3d';
 
   useEffect(() => {
     if (localOnly) {
       navigation.replace('ConnectAccount');
       return;
     }
-    if (canonicalAccess?.canStartRating) return;
+    if (developmentMotion || canonicalAccess?.canStartRating) return;
     if (status === 'idle') {
       void initialize();
       return;
@@ -138,9 +141,17 @@ function useRatingRouteGate<RouteName extends keyof RootStackParams>(
     ) {
       navigation.replace('Paywall', { source });
     }
-  }, [canonicalAccess, initialize, localOnly, navigation, source, status]);
+  }, [
+    canonicalAccess,
+    developmentMotion,
+    initialize,
+    localOnly,
+    navigation,
+    source,
+    status,
+  ]);
 
-  return canonicalAccess?.canStartRating === true;
+  return developmentMotion || canonicalAccess?.canStartRating === true;
 }
 
 function AnalyzeRoute({

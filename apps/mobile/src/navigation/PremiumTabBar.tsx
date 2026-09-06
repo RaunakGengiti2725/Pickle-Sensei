@@ -20,6 +20,7 @@ import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import type { MainTabParams, RootStackParams } from './params';
+import { currentAnalysisPlan } from '../vision/motion3d';
 
 const BAR_HEIGHT = 70;
 const ACTION_SIZE = 68;
@@ -217,6 +218,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       }
       const { canonicalAccess, status } = useAccessStore.getState();
       if (
+        currentAnalysisPlan().engine !== 'motion_3d' &&
         !canonicalAccess?.canStartRating &&
         (canonicalAccess !== null ||
           status === 'ready' ||

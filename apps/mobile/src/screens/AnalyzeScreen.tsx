@@ -46,14 +46,21 @@ import {
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
+import {
+  captureDataOwnerScope,
+  isDataOwnerScopeCurrent,
+} from '../data/accountScope';
 import { triggerOutboxSync } from '../data/syncRuntime';
 import {
   savePendingCapture,
+  getPendingCapture,
   updateCaptureClipPayload,
   setCaptureTargetSeed,
   setDeclaredStroke,
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
+import { currentAnalysisPlan } from '../vision/motion3d';
+import type { Reconstruction3DProgress } from '@pickle/vision-contracts';
 import {
   commitPracticeSet,
   planPracticeSet,
@@ -108,6 +115,7 @@ type Phase =
       message: string;
       stage: 'capture' | 'analysis';
       recovery: 'retry' | 'upgrade';
+      capture?: { captureId: string; clip: CapturedClip };
     };
 
 /** The four poses left after onboarding and deletion each own one analysis
@@ -574,12 +582,13 @@ export function AnalyzeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Analyze'>>();
   const source = route.params?.source ?? 'camera';
+  const savedCaptureId = route.params?.captureId;
   // TRY AGAIN loop (MOBBIN brief §2): a Result screen hands the ORIGINAL
   // run's technique intent back here; it is consumed exactly once (lazy
   // initializer) and seeds the picker/zero-touch gate so the player skips
   // re-picking and goes straight back to their spot.
   const [rearm] = useState(() => {
-    if (source === 'camera') return consumeTryAgainHandoff();
+    if (source === 'camera' && !savedCaptureId) return consumeTryAgainHandoff();
     // An import run is not a re-arm: drop any armed handoff so it cannot
     // seed a later capture with the abandoned run's declaration.
     clearTryAgainHandoff();
@@ -610,6 +619,7 @@ export function AnalyzeScreen() {
   );
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
+  const reconstructionAbort = useRef<AbortController | null>(null);
   const abandoned = useRef(false);
   const autoLaunchStarted = useRef(false);
   // Every scoring run reserves a permit that is then consumed or released,
@@ -740,10 +750,12 @@ export function AnalyzeScreen() {
       clip: CapturedClip,
       targetSeed: TargetSelection | null,
     ) => {
+      const analysisPlan = currentAnalysisPlan();
       // Declared runs proceed as always. Declared-null runs proceed ONLY on
       // the guided-capture path with Auto Detect explicitly armed; imported
       // videos still require a concrete declared technique.
       if (
+        analysisPlan.engine !== 'motion_3d' &&
         !declaredStroke &&
         !canAutoScoreWithoutDeclaration(clip, techniqueIntent)
       ) {
@@ -753,6 +765,9 @@ export function AnalyzeScreen() {
       // ignored rather than reserving a second permit for the same clip.
       if (scoringActive.current) return;
       scoringActive.current = true;
+      const reconstructionController =
+        analysisPlan.engine === 'motion_3d' ? new AbortController() : null;
+      reconstructionAbort.current = reconstructionController;
       const session = getApiSession();
       // Imported clips carry no recorded pose sequence until the explicit
       // native extraction pass runs. When the bridge method exists, this run
@@ -760,23 +775,36 @@ export function AnalyzeScreen() {
       // one); when it doesn't, the clip proceeds unchanged and
       // runCaptureAnalysis keeps its honest unavailable message.
       const needsPoseExtraction =
+        analysisPlan.engine === 'legacy_2d' &&
         clip.captureMode === 'imported_video' &&
         clip.poseSequence === undefined &&
         importedPoseExtractionAvailable();
       usabilityFunnel.log('analysis_started', declaredStroke ?? 'auto');
       setPhase({
         kind: 'working',
-        message: needsPoseExtraction
-          ? 'Reading player movement…'
-          : declaredStroke
-            ? 'Measuring your swing…'
-            : 'Measuring your swing and reading the stroke…',
+        message:
+          analysisPlan.engine === 'motion_3d'
+            ? 'Reconstructing your movement in 3D…'
+            : needsPoseExtraction
+              ? 'Reading player movement…'
+              : declaredStroke
+                ? 'Measuring your swing…'
+                : 'Measuring your swing and reading the stroke…',
       });
       // Stage model for the progress bar (parallel to the caption above,
       // which keeps its exact strings): stages advance only at boundaries
       // this screen actually observes, and only the extraction stage ever
       // shows a percentage — the one place a real fraction is measured.
-      setAnalysisProgress(analysisStageProgress('verifying'));
+      setAnalysisProgress(
+        analysisPlan.engine === 'motion_3d'
+          ? {
+              stage: 'verifying',
+              progress: null,
+              label: 'Preparing 3D reconstruction',
+              sublabel: null,
+            }
+          : analysisStageProgress('verifying'),
+      );
       try {
         // The declaration column records USER statements only — an AUTO run
         // writes nothing there; the prediction lives in the analysis record.
@@ -835,7 +863,16 @@ export function AnalyzeScreen() {
           setPhase({ kind: 'working', message: 'Measuring your swing…' });
         }
         if (abandoned.current) return;
-        setAnalysisProgress(analysisStageProgress('measuring'));
+        setAnalysisProgress(
+          analysisPlan.engine === 'motion_3d'
+            ? {
+                stage: 'measuring',
+                progress: null,
+                label: 'Reconstructing 3D motion',
+                sublabel: 'On this device · no video upload',
+              }
+            : analysisStageProgress('measuring'),
+        );
         // PRACTICE SET: every scored analysis in one sitting shares a
         // sessionId so the Result and Progress surfaces can show whether the
         // re-record after the advice moved the score. A TRY AGAIN re-arm
@@ -845,16 +882,37 @@ export function AnalyzeScreen() {
         // or failed run bookkeeps nothing. Set errors never fail an analysis.
         let practiceSet: PracticeSetPlan | null = null;
         try {
-          practiceSet = await planPracticeSet(getDb(), {
-            shotType: declaredStroke,
-            preferredSessionId: rearm?.sessionId ?? null,
-          });
+          if (analysisPlan.engine === 'legacy_2d') {
+            practiceSet = await planPracticeSet(getDb(), {
+              shotType: declaredStroke,
+              preferredSessionId: rearm?.sessionId ?? null,
+            });
+          }
         } catch {
           practiceSet = null;
         }
         const sessionId = practiceSet?.sessionId ?? null;
-        ratingLedgerTouched.current = true;
+        if (analysisPlan.engine === 'legacy_2d')
+          ratingLedgerTouched.current = true;
         const outcome = await runCaptureAnalysis({
+          ...(analysisPlan.engine === 'motion_3d'
+            ? {
+                analysisPlan,
+                signal: reconstructionController?.signal,
+                onReconstructionProgress: (
+                  progress: Reconstruction3DProgress,
+                ) => {
+                  if (abandoned.current) return;
+                  const fraction = progress.timestampMs / progress.durationMs;
+                  setAnalysisProgress({
+                    stage: 'measuring',
+                    progress: fraction,
+                    label: 'Reconstructing 3D motion',
+                    sublabel: `${Math.round(fraction * 100)}% of recording processed`,
+                  });
+                },
+              }
+            : {}),
           db: getDb(),
           captureId,
           clip: analysisClip,
@@ -897,6 +955,11 @@ export function AnalyzeScreen() {
             message: outcome.reason,
             stage: 'analysis',
             recovery: paywallRequired ? 'upgrade' : 'retry',
+            ...(analysisPlan.engine === 'motion_3d' &&
+            outcome.cause !== 'owner_changed' &&
+            outcome.cause !== 'invalid_recording'
+              ? { capture: { captureId, clip: analysisClip } }
+              : {}),
           });
           return;
         }
@@ -938,6 +1001,10 @@ export function AnalyzeScreen() {
           void reportScoredAnalysisForReview();
           return;
         }
+        if (outcome.kind === 'motion_3d') {
+          navigation.replace('Result', { analysisId: outcome.analysisId });
+          return;
+        }
         // Non-scored outcomes (family-level low reads, honest abstentions,
         // disagreement-only records) are surfaced with actionable guidance.
         const presentation = strokeIntentPresentation(outcome.record);
@@ -964,6 +1031,8 @@ export function AnalyzeScreen() {
         });
       } finally {
         scoringActive.current = false;
+        if (reconstructionAbort.current === reconstructionController)
+          reconstructionAbort.current = null;
         // The progress surface describes ONE scoring run; it never outlives
         // it (error surfaces and the next run start clean).
         extractionRun.current = null;
@@ -975,6 +1044,10 @@ export function AnalyzeScreen() {
 
   const run = useCallback(async () => {
     if (operationActive.current) return;
+    const captureScope =
+      currentAnalysisPlan().engine === 'motion_3d'
+        ? captureDataOwnerScope()
+        : null;
     operationActive.current = true;
     // Each capture attempt starts with a clean envelope verdict, live
     // evidence buffer, target seed, and live-window signals: all of them
@@ -993,6 +1066,11 @@ export function AnalyzeScreen() {
         source === 'library'
           ? await importStrokeVideo()
           : await captureStrokeVideo();
+      if (
+        captureScope &&
+        (abandoned.current || !isDataOwnerScopeCurrent(captureScope))
+      )
+        return;
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
@@ -1009,21 +1087,23 @@ export function AnalyzeScreen() {
         declaredStroke,
       );
       if (
-        clip.captureMode === 'automatic_pose_trigger' &&
-        (declaredStroke !== null ||
-          canAutoScoreWithoutDeclaration(clip, techniqueIntent))
+        currentAnalysisPlan().engine === 'motion_3d' ||
+        (clip.captureMode === 'automatic_pose_trigger' &&
+          (declaredStroke !== null ||
+            canAutoScoreWithoutDeclaration(clip, techniqueIntent)))
       ) {
         // ZERO-TOUCH PATH: technique declared — or Auto Detect explicitly
         // armed — before recording, target tapped live in the camera, motion
         // auto-captured and auto-finalized, so analysis starts without any
         // further interaction. Auto runs route declared=null through the
         // classifier ladder; they never invent a declaration.
-        const liveSeed = clip.targetSeed
-          ? {
-              point: { x: clip.targetSeed.x, y: clip.targetSeed.y },
-              selectedAtIso: new Date().toISOString(),
-            }
-          : null;
+        const liveSeed =
+          clip.captureMode === 'automatic_pose_trigger' && clip.targetSeed
+            ? {
+                point: { x: clip.targetSeed.x, y: clip.targetSeed.y },
+                selectedAtIso: new Date().toISOString(),
+              }
+            : null;
         usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
         setPhase({ kind: 'saved', clip, captureId });
         void scoreCapture(captureId, clip, liveSeed);
@@ -1058,6 +1138,62 @@ export function AnalyzeScreen() {
     }
   }, [declaredStroke, navigation, scoreCapture, source, techniqueIntent]);
 
+  useEffect(() => {
+    if (!savedCaptureId || autoLaunchStarted.current) return;
+    autoLaunchStarted.current = true;
+    let cancelled = false;
+    const scope = captureDataOwnerScope();
+    if (currentAnalysisPlan().engine !== 'motion_3d') {
+      setPhase({
+        kind: 'error',
+        stage: 'analysis',
+        recovery: 'retry',
+        message:
+          'Saved 3D reconstruction is not enabled in this build. Your recording is unchanged.',
+      });
+      return;
+    }
+    setPhase({
+      kind: 'working',
+      message: 'Reconstructing your saved recording…',
+    });
+    void getPendingCapture(getDb(), savedCaptureId)
+      .then(capture => {
+        if (cancelled || abandoned.current || !isDataOwnerScopeCurrent(scope))
+          return;
+        if (!capture?.clip || capture.evidenceStatus !== 'valid') {
+          setPhase({
+            kind: 'error',
+            stage: 'analysis',
+            recovery: 'retry',
+            message:
+              'This saved recording could not be verified in the current account.',
+          });
+          return;
+        }
+        setPhase({ kind: 'saved', captureId: capture.id, clip: capture.clip });
+        void scoreCapture(capture.id, capture.clip, null);
+      })
+      .catch(() => {
+        if (
+          !cancelled &&
+          !abandoned.current &&
+          isDataOwnerScopeCurrent(scope)
+        ) {
+          setPhase({
+            kind: 'error',
+            stage: 'analysis',
+            recovery: 'retry',
+            message:
+              'The saved recording could not be opened. Try again from Library.',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [savedCaptureId, scoreCapture]);
+
   // Library imports auto-launch (no declaration is useful for them yet);
   // guided capture waits for the user to declare a stroke and start.
   useEffect(() => {
@@ -1081,6 +1217,7 @@ export function AnalyzeScreen() {
   useEffect(
     () => () => {
       abandoned.current = true;
+      reconstructionAbort.current?.abort();
       if (operationActive.current) cancelCameraOperation();
     },
     [],
@@ -1095,11 +1232,13 @@ export function AnalyzeScreen() {
           title={source === 'library' ? 'Import video' : 'Auto Analyze'}
           onClose={() => {
             abandoned.current = true;
+            reconstructionAbort.current?.abort();
             cancelCameraOperation();
             navigation.goBack();
           }}
         />
         {phase.message.startsWith('Measuring') ||
+        phase.message.startsWith('Reconstructing') ||
         phase.message.startsWith('Reading player movement') ? (
           // ANALYZING state (MOBBIN brief §1): single-state arc with the
           // honest stage caption scoreCapture set, plus the progress bar —
@@ -1168,7 +1307,15 @@ export function AnalyzeScreen() {
               <Button
                 label="Try again"
                 variant="dark"
-                onPress={() => void run()}
+                onPress={() => {
+                  if (phase.capture)
+                    void scoreCapture(
+                      phase.capture.captureId,
+                      phase.capture.clip,
+                      targetSeed,
+                    );
+                  else void run();
+                }}
               />
             )}
             <Button

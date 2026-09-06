@@ -230,6 +230,12 @@ export function createNativeSessionAnalysisProvider(
       ) {
         return { status: 'pending', pendingReason: outcome.reason };
       }
+      if (outcome.kind === 'motion_3d') {
+        return {
+          status: 'pending',
+          pendingReason: '3D reconstruction is not a live-session rating.',
+        };
+      }
       return { status: 'ready', analysis: outcome.record };
     },
   };

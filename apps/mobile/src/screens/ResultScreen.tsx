@@ -91,6 +91,8 @@ import {
   formatDuprEstimate,
 } from '../progress/duprEstimate';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
+import { resolveAnalysisPresentation } from '../components/analysisPresentation';
+import { Motion3DResult } from '../review/Motion3DResult';
 
 /**
  * RESULT ROUTE — a stroke's outcome as a short sequential guide, reached
@@ -352,8 +354,19 @@ export function ResultScreen() {
       </SafeAreaView>
     );
   }
+  const presentation = resolveAnalysisPresentation(evidence);
+  if (presentation.kind === 'motion_3d') {
+    return (
+      <Motion3DResult
+        key={analysisId}
+        motion={presentation.motion}
+        videoUri={presentation.clip?.uri ?? ''}
+        onClose={() => navigation.popToTop()}
+      />
+    );
+  }
   const record = evidence.record;
-  if (analysis === null && record === null) {
+  if (presentation.kind === 'missing') {
     return (
       <ErrorState
         title="Result missing"

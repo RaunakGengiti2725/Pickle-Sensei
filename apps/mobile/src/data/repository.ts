@@ -75,11 +75,20 @@ export interface CaptureHistoryEntry extends PendingCapture {
 
 async function inTransaction(
   db: LocalDb,
-  operation: () => Promise<void>,
+  operation: (executor: LocalDb) => Promise<void>,
+): Promise<void> {
+  const transact = (executor: LocalDb) =>
+    executeTransaction(executor, operation);
+  await (db.withExclusive ? db.withExclusive(transact) : transact(db));
+}
+
+async function executeTransaction(
+  db: LocalDb,
+  operation: (executor: LocalDb) => Promise<void>,
 ): Promise<void> {
   await db.execute('BEGIN IMMEDIATE');
   try {
-    await operation();
+    await operation(db);
     await db.execute('COMMIT');
   } catch (error) {
     try {
@@ -98,6 +107,7 @@ const OWNER_SCOPED_TABLES = [
   'local_session',
   'local_capture',
   'local_analysis_record',
+  'local_motion_analysis',
   'outbox',
   'sync_receipt',
 ] as const;
@@ -128,12 +138,14 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  await inTransaction(db, async executor => {
     for (const table of OWNER_SCOPED_TABLES) {
-      await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
+      await executor.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [
+        owner,
+      ]);
     }
     for (const namespace of OWNER_SCOPED_KV_NAMESPACES) {
-      await db.execute(`DELETE FROM kv WHERE key = ?`, [
+      await executor.execute(`DELETE FROM kv WHERE key = ?`, [
         `${namespace}:${owner}`,
       ]);
     }
@@ -154,8 +166,8 @@ export async function saveAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await inTransaction(db, async executor => {
+    await executor.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -172,7 +184,7 @@ export async function saveAnalysis(
         JSON.stringify(analysis),
       ],
     );
-    await db.execute(
+    await executor.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'shot.sync', ?)`,
       [owner, JSON.stringify({ ...analysis, analysisPermitId })],
@@ -746,8 +758,8 @@ export async function saveSession(
   },
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await inTransaction(db, async executor => {
+    await executor.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -760,7 +772,7 @@ export async function saveSession(
         session.startedAt,
       ],
     );
-    await db.execute(
+    await executor.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'session.create', ?)`,
       [owner, JSON.stringify(session)],
@@ -774,14 +786,14 @@ export async function finishSession(
   summary: Record<string, unknown>,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
-    await db.execute(
+  await inTransaction(db, async executor => {
+    await executor.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?
        WHERE owner_key = ? AND id = ?`,
       [JSON.stringify(summary), owner, id],
     );
-    await db.execute(
+    await executor.execute(
       `INSERT INTO outbox (owner_key, kind, payload)
        VALUES (?, 'session.finalize', ?)`,
       [owner, JSON.stringify({ id })],

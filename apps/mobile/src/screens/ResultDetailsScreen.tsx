@@ -14,6 +14,8 @@ import { StrokeResultAnalyzing } from '../components/StrokeResult';
 import { useTrainingStore } from '../training/store';
 import { ResultBreakdownSheet, useStrokeResultEvidence } from './ResultScreen';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
+import { resolveAnalysisPresentation } from '../components/analysisPresentation';
+import { Motion3DResult } from '../review/Motion3DResult';
 
 /**
  * RESULT DETAILS — the "Full breakdown" of one analysis on its own route,
@@ -55,8 +57,19 @@ export function ResultDetailsScreen() {
       </SafeAreaView>
     );
   }
+  const presentation = resolveAnalysisPresentation(evidence);
+  if (presentation.kind === 'motion_3d') {
+    return (
+      <Motion3DResult
+        key={analysisId}
+        motion={presentation.motion}
+        videoUri={presentation.clip?.uri ?? ''}
+        onClose={() => navigation.goBack()}
+      />
+    );
+  }
   const record = evidence.record;
-  if (analysis === null && record === null) {
+  if (presentation.kind === 'missing') {
     return (
       <ErrorState
         title="Result missing"

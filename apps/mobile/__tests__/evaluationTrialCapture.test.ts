@@ -154,6 +154,20 @@ function buildInput(outcome: CaptureAnalysisOutcome, ctx = context) {
 }
 
 describe('buildEvaluationTrial', () => {
+  it('never queues 3D development artifacts under the legacy telemetry consent', async () => {
+    const outcome: CaptureAnalysisOutcome = {
+      kind: 'motion_3d',
+      analysisId: 'development-analysis',
+      get analysis(): never {
+        throw new Error('3D data must not be accessed for legacy telemetry');
+      },
+    };
+    const db: LocalDb = { execute: jest.fn(), close: jest.fn() };
+    expect(buildEvaluationTrial(buildInput(outcome))).toBeNull();
+    expect(await recordEvaluationTrial(db, buildInput(outcome))).toBeNull();
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
   it('returns null without active consent — no record, no exception', () => {
     expect(
       buildEvaluationTrial(

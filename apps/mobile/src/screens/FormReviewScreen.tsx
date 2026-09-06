@@ -30,6 +30,9 @@ import {
 import { FormReviewPlayer } from '../review/FormReviewPlayer';
 import { loadReviewPoseSequence } from '../review/poseSidecar';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
+import type { Motion3DAnalysis } from '@pickle/analysis-pipeline';
+import { resolveAnalysisPresentation } from '../components/analysisPresentation';
+import { Motion3DResult } from '../review/Motion3DResult';
 
 /**
  * FORM REVIEW — the full-screen host of the flagship replay
@@ -51,6 +54,11 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'missing' }
+  | {
+      kind: 'motion_3d';
+      motion: Motion3DAnalysis;
+      clip: StrokeResultClip | null;
+    }
   | {
       kind: 'ready';
       analysis: ShotAnalysis;
@@ -76,8 +84,15 @@ export function FormReviewScreen() {
         getDb(),
         analysisId,
       ).catch(() => null);
+      const presentation = evidence
+        ? resolveAnalysisPresentation(evidence)
+        : null;
+      if (presentation?.kind === 'motion_3d') {
+        if (!cancelled) setState(presentation);
+        return;
+      }
       const analysis = evidence?.analysis ?? evidence?.record?.result ?? null;
-      if (!analysis) {
+      if (!analysis || presentation?.kind === 'missing') {
         if (!cancelled) setState({ kind: 'missing' });
         return;
       }
@@ -114,6 +129,16 @@ export function FormReviewScreen() {
         />
         <StrokeResultAnalyzing caption="Preparing your form review…" dark />
       </SafeAreaView>
+    );
+  }
+  if (state.kind === 'motion_3d') {
+    return (
+      <Motion3DResult
+        key={analysisId}
+        motion={state.motion}
+        videoUri={state.clip?.uri ?? ''}
+        onClose={() => navigation.goBack()}
+      />
     );
   }
   if (state.kind === 'missing') {

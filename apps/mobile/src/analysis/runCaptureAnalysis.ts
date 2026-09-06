@@ -2,8 +2,13 @@ import { Platform } from 'react-native';
 import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  type AnalysisPlan,
   type CaptureAnalysisRecord,
+  type Motion3DAnalysis,
 } from '@pickle/analysis-pipeline';
+import type { Reconstruction3DProgress } from '@pickle/vision-contracts';
+import { currentAnalysisPlan } from '../vision/motion3d';
+import { runMotion3DAnalysis } from './runMotion3DAnalysis';
 import {
   parsePoseSequence,
   sha256Hex,
@@ -45,6 +50,11 @@ import { stabilitySlo } from './stabilityTelemetry';
 
 export type CaptureAnalysisOutcome =
   | {
+      kind: 'motion_3d';
+      analysisId: string;
+      analysis: Motion3DAnalysis;
+    }
+  | {
       kind: 'scored';
       analysisId: string;
       record: CaptureAnalysisRecord;
@@ -66,7 +76,12 @@ export type CaptureAnalysisOutcome =
       kind: 'unavailable';
       reason: string;
       /** HTTP 402 `access.paywall_required`: not retryable without an upgrade. */
-      cause?: 'paywall_required';
+      cause?:
+        | 'paywall_required'
+        | 'owner_changed'
+        | 'storage_failed'
+        | 'invalid_recording'
+        | 'cancelled';
     }
   | {
       /**
@@ -80,6 +95,9 @@ export type CaptureAnalysisOutcome =
     };
 
 export interface RunCaptureAnalysisRequest {
+  signal?: AbortSignal;
+  analysisPlan?: AnalysisPlan;
+  onReconstructionProgress?: (progress: Reconstruction3DProgress) => void;
   db: LocalDb;
   captureId: string;
   clip: CapturedClip;
@@ -131,6 +149,8 @@ export interface RunCaptureAnalysisRequest {
 export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
+  const plan = request.analysisPlan ?? currentAnalysisPlan();
+  if (plan.engine === 'motion_3d') return runMotion3DAnalysis(request, plan);
   const startedAt = Date.now();
   stabilitySlo.record({ kind: 'analysis_started' });
   let outcome: CaptureAnalysisOutcome;

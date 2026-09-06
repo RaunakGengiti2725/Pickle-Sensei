@@ -221,26 +221,31 @@ export async function drainOutbox(
       );
       for (const entry of entries) {
         if (accepted.has(entry.shotId)) {
-          await db.execute('BEGIN IMMEDIATE');
-          try {
-            await db.execute(
-              `INSERT OR REPLACE INTO sync_receipt
-               (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
-              [owner, entry.shotId],
-            );
-            await db.execute(
-              `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
-              [owner, entry.row['id']],
-            );
-            await db.execute('COMMIT');
-          } catch (error) {
+          const acknowledge = async (executor: LocalDb) => {
+            await executor.execute('BEGIN IMMEDIATE');
             try {
-              await db.execute('ROLLBACK');
-            } catch {
-              // Preserve the receipt/delete failure.
+              await executor.execute(
+                `INSERT OR REPLACE INTO sync_receipt
+                 (owner_key, kind, entity_id) VALUES (?, 'shot.sync', ?)`,
+                [owner, entry.shotId],
+              );
+              await executor.execute(
+                `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
+                [owner, entry.row['id']],
+              );
+              await executor.execute('COMMIT');
+            } catch (error) {
+              try {
+                await executor.execute('ROLLBACK');
+              } catch {
+                // Preserve the receipt/delete failure.
+              }
+              throw error;
             }
-            throw error;
-          }
+          };
+          await (db.withExclusive
+            ? db.withExclusive(acknowledge)
+            : acknowledge(db));
           synced++;
           continue;
         }

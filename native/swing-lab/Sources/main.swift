@@ -1,6 +1,8 @@
 import AVFoundation
 import CoreGraphics
 import CoreImage
+import Darwin
+import Dispatch
 import Foundation
 import PickleVisionCore
 import Vision
@@ -27,15 +29,29 @@ import Vision
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
-func usage() -> Never {
-  FileHandle.standardError.write(Data("""
+func usage(exitCode: Int32 = 2) -> Never {
+  let output = exitCode == 0 ? FileHandle.standardOutput : FileHandle.standardError
+  output.write(Data("""
   usage:
     swing-lab extract <video> --out <dir>
+    swing-lab extract-3d <video> --capture-id <id> --out <new-dir> [--policy raw-v1|associated-v2|associated-roi-v3]
+      [--seed-x <0..1> --seed-y <0..1> --seed-ms <actual-sample-PTS-ms>]
     swing-lab overlay <video> --pose <pose.json> [--analysis <debug.json>] --out <file.mp4>
     swing-lab frame <video> --ms <timestamp> --out <file.png>
 
+  extract-3d requires macOS 14+ and a supported Apple Vision 3D device.
+  Its output directory must not exist; its parent must already exist.
+  Writes motion3d.json (unaltered core artifact), motion3d.sha256, and extract3d-meta.json.
+  Capture IDs: 1-128 ASCII letters, digits, dots, underscores, colons, or hyphens.
+  Fixed core limits: 60s video, 512 MiB input, 1800 samples, 8 MiB JSON, 85s reconstruction.
+  The CLI adds a 5s watchdog grace period. No limits or person guards can be disabled.
+  Default policy raw-v1 preserves the single-person baseline. associated-v2 requires target association.
+  associated-roi-v3 uses one fixed inference-only ROI from the initial selected body; XYZ stays in its inference camera.
+  Seed coordinates use normalized display-image top-left space; seed time must be an actual sampled source PTS.
+  Raw uncalibrated estimates only; Mac smoke timing is not device or accuracy validation.
+
   """.utf8))
-  exit(2)
+  exit(exitCode)
 }
 
 func flagValue(_ name: String, in args: [String]) -> String? {
@@ -291,6 +307,129 @@ func runExtract(videoPath: String, outDir: String) async throws {
 func writeJSON(_ object: [String: Any], to path: String) throws {
   let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
   try data.write(to: URL(fileURLWithPath: path))
+}
+
+final class Motion3DCLICompletion: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Motion3DReceipt, Error>?
+
+  init(_ continuation: CheckedContinuation<Motion3DReceipt, Error>) {
+    self.continuation = continuation
+  }
+
+  @discardableResult
+  func finish(_ result: Result<Motion3DReceipt, Error>) -> Bool {
+    lock.lock()
+    let pending = continuation
+    continuation = nil
+    lock.unlock()
+    guard let pending else { return false }
+    pending.resume(with: result)
+    return true
+  }
+}
+
+@available(macOS 14.0, *)
+func reconstruct3D(
+  videoURL: URL, captureId: String, policy: Motion3DPolicy, targetSeed: Motion3DTargetSeed?
+) async throws -> Motion3DReceipt {
+  let cancellation = Motion3DCancellation()
+  return try await withCheckedThrowingContinuation { continuation in
+    let completion = Motion3DCLICompletion(continuation)
+    DispatchQueue.global(qos: .utility).asyncAfter(
+      deadline: .now() + Motion3DLimits.maxWallTimeSeconds + 5
+    ) { [weak completion, weak cancellation] in
+      if completion?.finish(.failure(Motion3DFailure.timeout)) == true { cancellation?.cancel() }
+    }
+    DispatchQueue.global(qos: .userInitiated).async {
+      completion.finish(Result {
+        var lastProgressTime: UInt64 = 0
+        return try AppleMotion3DReconstructor.reconstruct(
+          videoURL: videoURL, captureId: captureId, policy: policy, targetSeed: targetSeed, cancellation: cancellation
+        ) { progress in
+          let now = DispatchTime.now().uptimeNanoseconds
+          if lastProgressTime == 0 || now - lastProgressTime >= 1_000_000_000 {
+            lastProgressTime = now
+            FileHandle.standardError.write(Data(
+              "extract-3d: decoded=\(progress.processedFrames) ptsMs=\(progress.timestampMs) durationMs=\(progress.durationMs)\n".utf8
+            ))
+          }
+        }
+      })
+    }
+  }
+}
+
+@available(macOS 14.0, *)
+func runExtract3D(
+  videoPath: String, captureId: String, outDir: String, policy: Motion3DPolicy = .rawV1, targetSeed: Motion3DTargetSeed? = nil
+) async throws {
+  let outputURL = URL(fileURLWithPath: outDir, isDirectory: true).standardizedFileURL
+  guard mkdir(outputURL.path, 0o700) == 0 else {
+    throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
+      NSLocalizedDescriptionKey: "extract-3d requires a new output directory with an existing parent: \(outputURL.path)",
+    ])
+  }
+  var complete = false
+  defer { if !complete { _ = rmdir(outputURL.path) } }
+  let started = DispatchTime.now().uptimeNanoseconds
+  let receipt = try await reconstruct3D(
+    videoURL: URL(fileURLWithPath: videoPath), captureId: captureId, policy: policy, targetSeed: targetSeed
+  )
+  let wallTimeMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+  let artifactData = Data(receipt.json.utf8)
+  guard artifactData.count <= Motion3DLimits.maxJSONBytes,
+        let artifact = try JSONSerialization.jsonObject(with: artifactData) as? [String: Any],
+        let frames = artifact["frames"] as? [[String: Any]],
+        !frames.isEmpty, frames.count <= Motion3DLimits.maxFrames else { throw Motion3DFailure.decodingFailed }
+  var counts = ["estimated": 0, "no_person": 0, "multiple_people": 0, "unavailable": 0]
+  var jointCount = 0
+  var minimumJoints: Int?
+  var maximumJoints = 0
+  for frame in frames {
+    guard let status = frame["status"] as? String, let count = counts[status],
+          let joints = frame["joints"] as? [[String: Any]] else { throw Motion3DFailure.decodingFailed }
+    counts[status] = count + 1
+    jointCount += joints.count
+    if status == "estimated" {
+      minimumJoints = min(minimumJoints ?? joints.count, joints.count)
+      maximumJoints = max(maximumJoints, joints.count)
+    }
+  }
+  var metadata: [String: Any] = [
+    "captureId": captureId,
+    "artifactFile": "motion3d.json",
+    "artifactSha256": receipt.sha256,
+    "artifactByteLength": artifactData.count,
+    "sampledFrames": frames.count,
+    "statusCounts": counts,
+    "jointCount": jointCount,
+    "estimatedJointCountRange": [minimumJoints ?? 0, maximumJoints],
+    "reconstructionWallTimeMs": wallTimeMs,
+    "wallTimePlatform": "macOS",
+    "validationScope": "inference_smoke_only",
+  ]
+  if policy != .rawV1 {
+    var associationCounts: [String: Int] = [:]
+    for frame in frames {
+      guard let association = frame["association"] as? [String: Any], let status = association["status"] as? String else {
+        throw Motion3DFailure.decodingFailed
+      }
+      associationCounts[status, default: 0] += 1
+    }
+    metadata["policy"] = policy.rawValue
+    metadata["associationStatusCounts"] = associationCounts
+    print("extract-3d: association=" + associationCounts.keys.sorted().map { "\($0)=\(associationCounts[$0]!)" }.joined(separator: " "))
+  }
+  let metadataData = try JSONSerialization.data(withJSONObject: metadata, options: [.sortedKeys])
+  try artifactData.write(to: outputURL.appendingPathComponent("motion3d.json"), options: .withoutOverwriting)
+  try Data("\(receipt.sha256)  motion3d.json\n".utf8).write(
+    to: outputURL.appendingPathComponent("motion3d.sha256"), options: .withoutOverwriting
+  )
+  try metadataData.write(to: outputURL.appendingPathComponent("extract3d-meta.json"), options: .withoutOverwriting)
+  complete = true
+  print("extract-3d: sampled=\(frames.count) estimated=\(counts["estimated"]!) no_person=\(counts["no_person"]!) multiple_people=\(counts["multiple_people"]!) unavailable=\(counts["unavailable"]!) joints=\(jointCount) macWallTimeMs=\(String(format: "%.1f", wallTimeMs))")
+  print("extract-3d: sha256=\(receipt.sha256) bytes=\(artifactData.count) -> \(outputURL.path)")
 }
 
 // MARK: - frame (debug still)
@@ -944,9 +1083,38 @@ guard let command = arguments.first else { usage() }
 
 do {
   switch command {
+  case "--help", "-h", "help":
+    guard arguments.count == 1 else { usage() }
+    usage(exitCode: 0)
   case "extract":
     guard arguments.count >= 2, let outDir = flagValue("--out", in: arguments) else { usage() }
     try await runExtract(videoPath: arguments[1], outDir: outDir)
+  case "extract-3d":
+    if arguments.count == 2, ["--help", "-h"].contains(arguments[1]) { usage(exitCode: 0) }
+    guard arguments.count >= 6, arguments.count % 2 == 0, !arguments[1].isEmpty, !arguments[1].hasPrefix("-") else { usage() }
+    let allowedFlags: Set<String> = ["--capture-id", "--out", "--policy", "--seed-x", "--seed-y", "--seed-ms"]
+    var options: [String: String] = [:]
+    for index in stride(from: 2, to: arguments.count, by: 2) {
+      let flag = arguments[index]
+      guard allowedFlags.contains(flag), options[flag] == nil, !arguments[index + 1].isEmpty else { usage() }
+      options[flag] = arguments[index + 1]
+    }
+    guard let captureId = options["--capture-id"], Motion3DLimits.validIdentifier(captureId),
+          let outDir = options["--out"], !outDir.hasPrefix("-"),
+          let policy = Motion3DPolicy(rawValue: options["--policy"] ?? "raw-v1") else { usage() }
+    let seedFlags = ["--seed-x", "--seed-y", "--seed-ms"]
+    let targetSeed: Motion3DTargetSeed?
+    if seedFlags.contains(where: { options[$0] != nil }) {
+      guard policy != .rawV1,
+            let x = options["--seed-x"].flatMap(Double.init), let y = options["--seed-y"].flatMap(Double.init),
+            let timestampMs = options["--seed-ms"].flatMap(Double.init) else { usage() }
+      targetSeed = try Motion3DTargetSeed(x: x, y: y, timestampMs: timestampMs)
+    } else { targetSeed = nil }
+    if #available(macOS 14.0, *) {
+      try await runExtract3D(videoPath: arguments[1], captureId: captureId, outDir: outDir, policy: policy, targetSeed: targetSeed)
+    } else {
+      throw Motion3DFailure.unavailable
+    }
   case "overlay":
     guard arguments.count >= 2,
           let posePath = flagValue("--pose", in: arguments),
@@ -967,6 +1135,10 @@ do {
   default:
     usage()
   }
+} catch let error as Motion3DFailure {
+  let detail = error == .unavailable ? " (requires macOS 14+ and a supported Apple Vision 3D device)" : ""
+  FileHandle.standardError.write(Data("swing-lab error: \(error.rawValue)\(detail)\n".utf8))
+  exit(1)
 } catch {
   FileHandle.standardError.write(Data("swing-lab error: \(error)\n".utf8))
   exit(1)

@@ -10,7 +10,7 @@ export type MainTabParams = {
 
 export type RootStackParams = {
   Tabs: NavigatorScreenParams<MainTabParams> | undefined;
-  Analyze: { source?: 'camera' | 'library' } | undefined;
+  Analyze: { source?: 'camera' | 'library'; captureId?: string } | undefined;
   Result: { analysisId: string };
   /** The full breakdown of one result (stroke map, evidence ledger, sync +
    * provenance, training plan, feedback) — everything the four-page Result

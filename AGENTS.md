@@ -118,10 +118,12 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `POST /webhooks/revenuecat`
   (secret-gated; entitlements re-verified against RevenueCat, never trusted
   from the event body; audit-logged in `public.webhook_events`).
-- `deno check` on `index.ts` reports pre-existing untyped-supabase-client
-  errors (insert/update infer `never`) — deploy bundling type-strips, and the
-  standalone modules (`cache.ts`, `rateLimit.ts`, `http.ts`, `legal.ts`)
-  check clean.
+- Edge API typecheck: `npx --yes deno@2.5.6 check --node-modules-dir=none
+--frozen --lock=deno.lock supabase/functions/api/index.ts`. The 2026-09-05
+  hardening fixed the old `never` inference errors: use the SDK's
+  `SupabaseClient` type rather than `ReturnType<typeof createClient>`.
+  Keep the SDK import pinned to the version in `deno.lock`. Deno owns that
+  generated lockfile's formatting.
 - Defense in depth (`20260831160000_defense_in_depth.sql`): column-level
   UPDATE grants sized to EXACTLY the writes the edge fn performs (shots have
   NO client update — favorites are device-local, sync is INSERT-only via the
@@ -875,3 +877,153 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   RootNavigator's PaywallRoute and Settings → About.
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
+
+## Canonical 3D Analysis migration (product direction, 2026-09-05)
+
+The new 3D Analysis system is the intended REPLACEMENT for primary 2D
+exoskeleton/heatmap analysis, not a permanent optional viewer or second mode.
+Keep shipping 2D functional during validation, then make released, eligible
+3D analyses canonical through Result, navigation, loaders, state and storage.
+Legacy 2D remains only where a documented technical fallback, regression
+baseline or historical-record reader is necessary. Preserve raw 2D observations
+when the chosen 3D estimator needs them; that does not preserve a competing UI.
+
+The one analysis has synchronized actual reconstructed motion, a qualified
+coach-reviewed compatible exemplar (otherwise eligible earlier own-best,
+otherwise no reference), and a separately labelled modelled correction of the
+player's own body. Preserve proportions, handedness and unaffected movement;
+modify only supported components. Generated motion never becomes measured
+truth, a rating, a reference observation or training ground truth.
+
+Require separate visualization-, comparison-, coaching- and scoring-grade
+validation, plus corrected-motion, UX/performance, physical-device, privacy,
+release and migration checks. Passing one grade does not authorize another.
+Keep unsupported capabilities blocked; do not unlock from finite XYZ values,
+a demo, LLM agreement or synthetic tests. The current 2D operational guidance
+above remains the shipping safety contract until the versioned cutover gates
+pass; it is not a requirement to retain that primary experience forever.
+
+The existing Astra master plan is `docs/prompts/astra-app-improvement.md`.
+It defines the audit, experiments, evidence requirements, strict acceptance
+criteria, route/history parity, rollback and retirement work. Canonical cutover
+requires scoring-grade approval too: no 2D-score/3D-coaching hybrid, and no
+legacy score to rescue a failed 3D-eligible run. Legacy scoring is limited to
+explicit out-of-scope cohorts or an authorized rollback policy for new runs.
+Before 3D writes, partition rank/best/comparison semantics by scoring definition
+across SQL, shared code and Edge; do not blend 2D and 3D scores. Own-best requires
+same-athlete evidence and approved 3D quality/review, not a legacy 2D score.
+Platform/OS scope, same-clip re-analysis charging and rank-partition display
+need explicit decisions before release. Follow the plan's
+VERIFIED / MEASURED / PARTIAL / BLOCKED distinctions. No runtime cutover,
+production deployment or legacy deletion is authorized merely by updating
+the plan. Preserve account, consent, entitlement and scoring-history safeguards.
+
+## Supabase production hardening (2026-09-05)
+
+- `20260905190106_api_only_database_access.sql` and the matching Edge Function
+  require a coordinated rollout. Applying the migration blocks the old
+  function's database requests; deploying the function first leaves its new
+  RPCs unavailable. Obtain approval for a maintenance window, or stage the
+  credential/session helpers before deploying and enforcing the policies.
+  Do not deploy either half alone. No mobile update is required.
+- User database requests carry the user's Supabase bearer plus an internal
+  `x-pickle-api-key`. The Edge Function reads that key through the
+  service-role-only `get_api_request_key()` RPC and caches it for 60 seconds.
+  Keep the credential in `api_private.request_key`; never put it in mobile
+  config, user responses, logs, or Redis. Rotation requires an operator to
+  change the private row and allow the Edge cache to expire.
+- Retain the RESTRICTIVE `api_requests_only` policy alongside owner RLS on
+  user-accessible tables. Keep user RPCs SECURITY INVOKER and derived views
+  `security_invoker=true`. A definer conversion can bypass the API gate.
+  The security matrix pins table/column grants and the callable RPC allowlist.
+  Add explicit grants and policies when introducing a new database surface.
+- `is_api_session_active()` checks the JWT session id against `auth.sessions`
+  and checks `not_after` and `auth.users.banned_until`. Run it after the user
+  rate limit and before protected responses or side effects, including cached
+  rank/progress and billing. Do not cache its verdict. Missing server proof
+  raises a database error, which the API reports as retryable 503 rather than
+  signing users out; a valid proof with a revoked session returns false/401.
+- `service_role` bypasses RLS but still needs SQL grants. The live audit found
+  missing grants on billing, webhook audit, and external-account cleanup.
+  Grant SELECT/INSERT/UPDATE on `billing_entitlements` and
+  `account_external_credentials`, and SELECT/INSERT on `webhook_events`.
+  Keep webhook UPDATE/DELETE and client writes to these records revoked.
+- Permits may move from `reserved` to `finalized` or `released`, not back.
+  Shot/session and detail/shot ownership checks apply at the database layer.
+  Captures and measurements have no API writer; keep their client write
+  grants revoked until an approved feature requires them.
+- Auth network failures, upstream 429s, and 5xx responses return retryable 503,
+  not a revoked-session 401. Refresh uses one bounded REST request, avoiding
+  the SDK's internal retry loop. JSON limits: 64 KiB normally, 512 KiB for
+  webhooks, 5 MB for shot batches/evaluation trials; body deadline 30 seconds.
+- Edge tests: `npx --yes deno@2.5.6 test -A --no-check --config
+supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
+  CI's `supabase-security` job runs these, the frozen-lock typecheck above,
+  and `./supabase/tests/run_rls_tests.sh`. The SQL shim tests broad client
+  defaults AND absent service-role DML defaults; both require explicit grants.
+  The local load stub now needs `SUPABASE_SERVICE_ROLE_KEY=stub-service-role-key`
+  on the local Edge process, alongside its fake URL and anon key.
+- The live secret-name audit on 2026-09-05 found no `UPSTASH_REDIS_REST_URL`
+  or `UPSTASH_REDIS_REST_TOKEN`. Configure shared limiting before launch;
+  fallback counters enforce per-isolate budgets, not a project-wide budget.
+  Supabase Auth also applies an egress-IP budget to the proxy's token requests.
+  End-user IP forwarding requires a modern secret key, server-side
+  `Sb-Forwarded-For`, and the Auth dashboard's IP-forwarding opt-in.
+
+## Real 3D software — development scope (2026-09-05)
+
+- The owner chose iOS 17+ first and confirmed that independent validation data
+  and coach review are not available. The software is implemented on the main
+  checkout; this is NOT production cutover or approval of any scientific grade.
+  `analysis-pipeline/analysisPlan.ts` and mobile `vision/motion3d.ts` select
+  `motion_3d` only in Debug (`__DEV__`) with the registered native capability.
+  Release stays legacy 2D and does not probe the 3D estimator. Keep these gates
+  closed until the master plan's evidence and release requirements pass.
+- `ApplePoseProvider.swift` now also contains the separate genuine
+  `AppleMotion3DReconstructor`: timestamped Vision 3D revision-1 inference on
+  stored video, original decoded frame indices/PTS, source SHA-256, explicit
+  reference/measured height, null per-joint 3D confidence, no smoothing.
+  Multiple detected people produce empty unsupported samples; this is NOT
+  persistent athlete identification. Limits: 60 s, 512 MiB, 1,800 samples,
+  8 MiB JSON, at most 30 samples/s and an 85-second cooperative deadline.
+  `PickleMotion3D` is the cancellable/progress-reporting native bridge.
+- `swing-domain/motion3d.ts` owns the separate strict
+  `pickle.motion-3d.v1` parser. `motion3dAnalysis.ts` derives estimated interior
+  joint angles, not faults or scores. Its verified objects are deeply frozen;
+  only those exact objects may reuse byte verification during persistence.
+  Historical summary counts remain exact; displayed angle rounding may differ
+  by one 0.1-degree display unit without deleting or rewriting the stored value.
+- `runCaptureAnalysis` freezes the plan before legacy extraction/scoring.
+  The 3D branch verifies capture ownership before decoding, deduplicates active
+  requests, cancels on owner changes or an explicit close/unmount, and atomically
+  saves exact JSON plus metadata in owner-scoped `local_motion_analysis`.
+  It creates NO rating, permit, practice-set commit, outbox or legacy evaluation
+  telemetry. Do not feed these development records into rank, own-best, coaching
+  or generated corrections. The owner purge includes their SQLite rows.
+- `LocalDb.withExclusive` serializes across native-connection facades. Inside
+  a transaction use its callback executor, which expires after the callback.
+  `DataOwnerScope` generations catch A-to-B-to-A switches; token rotation for
+  the same owner does not invalidate a run.
+- Result, ResultDetails, FormReview and stored history resolve from record
+  identity, not today's development flag. `PickleMotionReviewView` uses one
+  native AVPlayer clock, checked against source SHA and original frame PTS;
+  missing video permits explicitly labelled pose-only playback. Zero-sample
+  AVAssetReader control buffers are not image frames. Holds use actual adjacent
+  sample times within one supported segment, capped at 100 ms; no interpolation.
+  Seeks coalesce to the newest target and reveal evidence only after exact
+  acknowledgement. The procedural surface is not a body scan.
+- Mobile SQLite regression tests need Node 22.13+ (or a compatible Node with
+  `node:sqlite` enabled); this Mac has `/opt/homebrew/bin/node` 24.5.0 while the
+  terminal defaults to Node 20. Use that binary for `node_modules/jest/bin/jest.js`.
+  The Swift renderer regression skips explicitly without a macOS Swift SDK.
+- Offline diagnostics: `swift run --package-path native/swing-lab swing-lab
+extract-3d <video> --capture-id <id> --out <new-dir>`; the output directory must
+  not exist and its parent must exist. Keep source rights and changed-input
+  provenance. A licensed one-second single-player crop produced 25 numerical
+  frames with byte-identical repeated output; full multi-player examples
+  abstained. These and the exact-view UIKit/React-shim simulator probes are
+  software evidence, NOT independent accuracy, full RN pixel-layout, physical
+  iPhone performance, comparison, coaching, correction or scoring validation.
+- NEVER run Debug and Release Xcode builds concurrently against the same Pods
+  directory, even with separate DerivedData paths: RN's dependency/core/Hermes
+  configuration scripts replace shared prebuilt frameworks. Run them serially.

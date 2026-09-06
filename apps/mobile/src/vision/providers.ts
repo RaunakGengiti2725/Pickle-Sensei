@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { ok, type ShotTypeSlug } from '@pickle/shared-types';
 import type {
+  IPoseReconstructor3D,
   ProviderDescriptor,
   VisionProviderSet,
 } from '@pickle/vision-contracts';
@@ -27,9 +28,14 @@ import {
   type Platform as ModelPlatform,
 } from '@pickle/model-registry';
 import type {
+  AnalysisPlan,
   FusionProviders,
   IHierarchicalStrokeClassifier,
 } from '@pickle/analysis-pipeline';
+import {
+  motion3DNativeAvailable,
+  NativeMotion3DReconstructor,
+} from './motion3d';
 
 /**
  * Centralized provider composition (directive §5/§61).
@@ -255,4 +261,30 @@ export function selectVisionProviders(
     };
   }
   return { kind: 'real', providers: createGeometryProviderSet(recording) };
+}
+
+export function createMotion3DProvider(
+  plan: AnalysisPlan,
+):
+  | { kind: 'real'; provider: IPoseReconstructor3D }
+  | { kind: 'unavailable'; reason: string } {
+  const entry = registry.resolve({
+    task: 'pose_reconstruction_3d',
+    platform: currentPlatform(),
+    status: 'experimental',
+  });
+  if (
+    plan.engine !== 'motion_3d' ||
+    !__DEV__ ||
+    !motion3DNativeAvailable() ||
+    entry?.id !== plan.providerId ||
+    entry.version !== 'apple-vision-3d-raw-1'
+  ) {
+    return {
+      kind: 'unavailable',
+      reason:
+        'The 3D reconstruction provider is not available for this analysis plan.',
+    };
+  }
+  return { kind: 'real', provider: new NativeMotion3DReconstructor(entry) };
 }

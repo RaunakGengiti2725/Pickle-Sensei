@@ -56,6 +56,21 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     },
     {
       ...CODE_PROVIDER_LINEAGE,
+      id: "pose.apple-vision-3d",
+      version: "apple-vision-3d-raw-1",
+      task: "pose_reconstruction_3d",
+      runtime: "vision_framework",
+      executionTarget: "on_device",
+      deploymentStatus: "experimental",
+      supportedPlatforms: ["ios"],
+      supportedStrokes: "all",
+      runtimeRequirements: ["ios-17-or-later", "apple-a12-or-later", "vision-3d-revision-1"],
+      license: "apple-os-framework",
+      notes:
+        "On-device reconstruction from recorded video. Raw root-relative estimates; Apple-managed weights, uncalibrated uncertainty and reference-height scale. Development validation only; no approved coaching or scoring.",
+    },
+    {
+      ...CODE_PROVIDER_LINEAGE,
       id: "pose.mediapipe",
       version: "mediapipe-pose-landmarker-1",
       task: "pose_estimation",

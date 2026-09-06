@@ -1,6 +1,13 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
+import type { Motion3DAnalysis } from '@pickle/analysis-pipeline';
 import type { PoseSequenceSidecarRef } from '../camera/capture';
-import { getActiveDataOwner } from '../data/accountScope';
+import {
+  getActiveDataOwner,
+  captureDataOwnerScope,
+  isDataOwnerScopeCurrent,
+  SIGNED_OUT_DATA_OWNER,
+} from '../data/accountScope';
+import { loadMotion3DAnalysis } from '../data/motion3dRepository';
 import type { LocalDb } from '../data/db';
 import { getAnalysis, getPendingCapture, listShots } from '../data/repository';
 import type { StrokeResultClip } from './StrokeResult';
@@ -42,6 +49,7 @@ export interface StrokeReviewEvidence {
 }
 
 export interface StrokeResultEvidence {
+  motion3d?: Motion3DAnalysis | null;
   analysis: ShotAnalysis | null;
   record: StrokeResultEvidenceRecord | null;
   clip: StrokeResultClip | null;
@@ -103,10 +111,40 @@ export async function loadStrokeResultEvidence(
   db: LocalDb,
   analysisId: string,
 ): Promise<StrokeResultEvidence> {
+  const scope =
+    getActiveDataOwner() === SIGNED_OUT_DATA_OWNER
+      ? null
+      : captureDataOwnerScope();
+  const empty: StrokeResultEvidence = {
+    analysis: null,
+    record: null,
+    clip: null,
+    review: null,
+    attempts: [],
+  };
   const [analysis, record] = await Promise.all([
     getAnalysis(db, analysisId).catch(() => null),
     loadAnalysisRecordById(db, analysisId).catch(() => null),
   ]);
+  if (scope && !isDataOwnerScopeCurrent(scope)) return empty;
+  if (!analysis && !record) {
+    const motion3d = await loadMotion3DAnalysis(db, analysisId);
+    if (scope && !isDataOwnerScopeCurrent(scope)) return empty;
+    if (motion3d) {
+      const capture = await getPendingCapture(db, motion3d.record.captureId);
+      if (scope && !isDataOwnerScopeCurrent(scope)) return empty;
+      return {
+        ...empty,
+        motion3d,
+        clip: capture
+          ? {
+              uri: capture.uri,
+              durationMs: motion3d.artifact.source.durationMs,
+            }
+          : null,
+      };
+    }
+  }
 
   let clip: StrokeResultClip | null = null;
   let review: StrokeReviewEvidence | null = null;
@@ -134,5 +172,6 @@ export async function loadStrokeResultEvidence(
   }
 
   const attempts = await loadSessionAttempts(db, analysis).catch(() => []);
+  if (scope && !isDataOwnerScopeCurrent(scope)) return empty;
   return { analysis, record, clip, review, attempts };
 }

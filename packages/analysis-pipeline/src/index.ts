@@ -1,5 +1,7 @@
 export * from "./analyzeClip.js";
 export * from "./analyzeCapture.js";
+export * from "./analysisPlan.js";
+export * from "./motion3dAnalysis.js";
 export * from "./strokeAutoResolution.js";
 export * from "./preAnalysisGate.js";
 // Session multi-event engine (moved from swing-lab in Wave B/W6 so mobile can

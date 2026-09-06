@@ -36,6 +36,8 @@ import type { InstructionalMedia } from '../training/types';
 import { useAuthStore } from '../auth/authStore';
 import { plural } from '../util/plural';
 import { showBrandNotice } from '../design/BrandNotice';
+import { Motion3DHistory, useMotion3DHistory } from '../review/Motion3DHistory';
+import { currentAnalysisPlan } from '../vision/motion3d';
 
 type LibraryTab = 'reads' | 'saved';
 
@@ -98,6 +100,7 @@ export function LibraryScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
   const [tab, setTab] = useState<LibraryTab>('reads');
+  const motionHistory = useMotion3DHistory(30);
   const [shots, setShots] = useState<LocalShotRow[] | null>(null);
   const [captures, setCaptures] = useState<PendingCapture[]>([]);
   const savedStatus = useTrainingStore(state => state.savedStatus);
@@ -438,11 +441,20 @@ export function LibraryScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.readsContent,
-            reads.length === 0 && captures.length === 0 && styles.emptyContent,
+            reads.length === 0 &&
+              captures.length === 0 &&
+              motionHistory.entries.length === 0 &&
+              styles.emptyContent,
           ]}
           ListHeaderComponent={
             <>
               {header}
+              <Motion3DHistory
+                history={motionHistory}
+                onOpen={analysisId =>
+                  navigation.navigate('Result', { analysisId })
+                }
+              />
               {reads.length || captures.length ? (
                 <View style={styles.readHeader}>
                   <Text style={[type.body, { color: color.inkSoft }]}>
@@ -495,11 +507,28 @@ export function LibraryScreen() {
                                 capture.capturedAtIso,
                               ).toLocaleDateString()}
                             </Text>
+                            {capture.clip &&
+                            capture.evidenceStatus === 'valid' &&
+                            currentAnalysisPlan().engine === 'motion_3d' ? (
+                              <Button
+                                label="Analyze motion"
+                                variant="ghost"
+                                testID={`motion3d-analyze-saved-${capture.id}`}
+                                onPress={() =>
+                                  navigation.navigate('Analyze', {
+                                    source: 'camera',
+                                    captureId: capture.id,
+                                  })
+                                }
+                              />
+                            ) : null}
                           </View>
                         </View>
                       ))}
                       <Text style={[type.caption, styles.pendingNote]}>
-                        {PENDING_SECTION_NOTE}
+                        {currentAnalysisPlan().engine === 'motion_3d'
+                          ? 'Open a saved clip to reconstruct its motion on this device. This development analysis does not use a rating.'
+                          : PENDING_SECTION_NOTE}
                       </Text>
                     </View>
                   ) : null}
@@ -512,18 +541,20 @@ export function LibraryScreen() {
             </>
           }
           ListEmptyComponent={
-            <EmptyState
-              title="Your measured reads, in one place."
-              body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
-              action={
-                <Button
-                  label="Analyze your first stroke"
-                  variant="dark"
-                  icon="camera"
-                  onPress={() => navigation.navigate('Analyze')}
-                />
-              }
-            />
+            motionHistory.entries.length > 0 ? undefined : (
+              <EmptyState
+                title="Your measured reads, in one place."
+                body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
+                action={
+                  <Button
+                    label="Analyze your first stroke"
+                    variant="dark"
+                    icon="camera"
+                    onPress={() => navigation.navigate('Analyze')}
+                  />
+                }
+              />
+            )
           }
           renderItem={({ item, index }) => (
             <PressableScale

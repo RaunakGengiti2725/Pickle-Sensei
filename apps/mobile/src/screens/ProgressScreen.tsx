@@ -62,6 +62,7 @@ import { ConsistencyCard } from '../consistency/ConsistencyCard';
 import { useConsistencyStore } from '../consistency/store';
 import type { RootStackParams } from '../navigation/params';
 import { plural } from '../util/plural';
+import { Motion3DHistory, useMotion3DHistory } from '../review/Motion3DHistory';
 
 /**
  * PROGRESS — a WHOOP-style dark performance dashboard (MOBBIN: WHOOP
@@ -223,6 +224,7 @@ export function ProgressScreen() {
   const { width } = useWindowDimensions();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
+  const motionHistory = useMotion3DHistory(10);
   const profile = useAppStore(state => state.profile);
   const consistency = useConsistencyStore(state => state.snapshot);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
@@ -1117,6 +1119,11 @@ export function ProgressScreen() {
             </Text>
           </>
         )}
+        <Motion3DHistory
+          history={motionHistory}
+          dark
+          onOpen={analysisId => navigation.navigate('Result', { analysisId })}
+        />
       </ScrollView>
     </SafeAreaView>
   );

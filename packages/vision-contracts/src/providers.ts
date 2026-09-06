@@ -43,6 +43,23 @@ export interface ProviderDescriptor {
   outputSchemaVersion: number;
 }
 
+export interface Reconstruction3DProgress {
+  processedFrames: number;
+  timestampMs: number;
+  durationMs: number;
+}
+
+export interface IPoseReconstructor3D {
+  readonly descriptor: ProviderDescriptor;
+  reconstruct(input: {
+    captureId: string;
+    videoUri: string;
+    runId: string;
+    onProgress?: (progress: Reconstruction3DProgress) => void;
+  }): Promise<Result<{ artifactJson: string; artifactSha256: string }>>;
+  cancel(runId: string): void;
+}
+
 /** Canonical sequence-in, prediction-out stroke classifier. */
 export interface IStrokeClassifier {
   readonly descriptor: ProviderDescriptor;

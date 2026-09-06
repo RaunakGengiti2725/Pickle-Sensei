@@ -129,7 +129,7 @@ export function buildEvaluationTrial(
   input: BuildTrialInput,
 ): EvaluationTrialRecord | null {
   const { outcome, context } = input;
-  if (!context.consentActive) return null;
+  if (!context.consentActive || outcome.kind === 'motion_3d') return null;
   const isRecorded =
     outcome.kind === 'scored' || outcome.kind === 'low_confidence';
   return {

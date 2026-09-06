@@ -12,6 +12,7 @@ export interface LocalDb {
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: Record<string, unknown>[] }>;
+  withExclusive?<T>(operation: (executor: LocalDb) => Promise<T>): Promise<T>;
   close(): void;
 }
 
@@ -89,6 +90,21 @@ const LOCAL_MIGRATIONS: string[] = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_local_analysis_capture
      ON local_analysis_record (owner_key, capture_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS local_motion_analysis (
+     owner_key TEXT NOT NULL,
+     id TEXT NOT NULL,
+     capture_id TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     captured_at TEXT NOT NULL,
+     declared_stroke TEXT,
+     record_json TEXT NOT NULL CHECK (length(CAST(record_json AS BLOB)) <= 16384),
+     artifact_json TEXT NOT NULL CHECK (length(CAST(artifact_json AS BLOB)) <= 8388608),
+     PRIMARY KEY (owner_key, id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_local_motion_analysis_capture
+     ON local_motion_analysis (owner_key, capture_id, created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_local_motion_analysis_history
+     ON local_motion_analysis (owner_key, captured_at DESC, created_at DESC, id DESC)`,
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
   // into history, scores, trends, session summaries, or sync.
@@ -246,7 +262,74 @@ function ensureAccountScopedSchema(db: DB): void {
   }
 }
 
-let instance: DB | null = null;
+interface SharedConnection {
+  native: DB;
+  queue: Promise<void>;
+  pending: number;
+  closed: boolean;
+}
+
+let instance: SharedConnection | null = null;
+
+function enqueue<T>(
+  connection: SharedConnection,
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (connection.closed) {
+    return Promise.reject(new Error('The local database is closed.'));
+  }
+  connection.pending += 1;
+  const result = connection.queue.then(operation);
+  const finished = () => {
+    connection.pending -= 1;
+  };
+  connection.queue = result.then(finished, finished);
+  return result;
+}
+
+async function executeNative(
+  connection: SharedConnection,
+  sql: string,
+  params: unknown[],
+): Promise<{ rows: Record<string, unknown>[] }> {
+  const result = await connection.native.execute(sql, params as never[]);
+  return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+}
+
+async function runExclusive<T>(
+  connection: SharedConnection,
+  operation: (executor: LocalDb) => Promise<T>,
+): Promise<T> {
+  let active = true;
+  const pending = new Set<Promise<unknown>>();
+  const assertActive = () => {
+    if (!active) {
+      throw new Error('The exclusive local database executor has expired.');
+    }
+  };
+  const executor: LocalDb = {
+    async execute(sql, params = []) {
+      assertActive();
+      const result = executeNative(connection, sql, params);
+      pending.add(result);
+      const finished = () => {
+        pending.delete(result);
+      };
+      void result.then(finished, finished);
+      return result;
+    },
+    close() {
+      assertActive();
+      throw new Error('An exclusive executor cannot close the local database.');
+    },
+  };
+  try {
+    return await operation(executor);
+  } finally {
+    active = false;
+    await Promise.allSettled(pending);
+  }
+}
 
 function openMigrated(): DB {
   const db = open({ name: 'pickle-sensei.db' });
@@ -268,17 +351,32 @@ function openMigrated(): DB {
 
 export function getDb(): LocalDb {
   if (!instance) {
-    instance = openMigrated();
+    instance = {
+      native: openMigrated(),
+      queue: Promise.resolve(),
+      pending: 0,
+      closed: false,
+    };
   }
-  const db = instance;
+  const connection = instance;
   return {
-    async execute(sql, params = []) {
-      const result = await db.execute(sql, params as never[]);
-      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+    execute(sql, params = []) {
+      const values = [...params];
+      return enqueue(connection, () => executeNative(connection, sql, values));
+    },
+    withExclusive(operation) {
+      return enqueue(connection, () => runExclusive(connection, operation));
     },
     close() {
-      db.close();
-      instance = null;
+      if (connection.closed) return;
+      if (connection.pending > 0) {
+        throw new Error(
+          'Cannot close the local database while work is pending.',
+        );
+      }
+      connection.native.close();
+      connection.closed = true;
+      if (instance === connection) instance = null;
     },
   };
 }

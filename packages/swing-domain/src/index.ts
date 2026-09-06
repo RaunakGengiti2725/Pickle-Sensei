@@ -5,3 +5,4 @@ export * from "./capture.js";
 export * from "./analysis.js";
 export * from "./serialization.js";
 export * from "./sha256.js";
+export * from "./motion3d.js";
