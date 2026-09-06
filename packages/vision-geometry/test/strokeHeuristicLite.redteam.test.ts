@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toLegacyPoseFrames } from "@pickle/swing-domain";
 import {
   abortedSwingFixture,
   generateSwingSequence,
@@ -234,5 +235,290 @@ describe("classifyStroke lite red-team coverage guards (real strokes must surviv
     });
     expect(prediction.label).toBe("FOREHAND");
     expect(prediction.taxonomyDepth).toBe(2);
+  });
+});
+
+describe.each(["before", "after"] as const)("window isolation (%s adjacent swing)", (side) => {
+  type StrokeInput = Parameters<typeof classifyStroke>[0];
+  type Frame = StrokeInput["sequence"]["frames"][number];
+
+  function isolatedInput(): StrokeInput {
+    const { sequence } = generateSwingSequence();
+    return {
+      sequence: {
+        ...sequence,
+        frames: Array.from({ length: 5 }, (_, index) => ({
+          ...sequence.frames[0]!,
+          frameIndex: index,
+          timestampMs: 1000 + index * 20,
+          landmarks: [
+            { name: "left_shoulder", x: 0.4, y: 0.4, visibility: 0.9 },
+            { name: "right_shoulder", x: 0.6, y: 0.4, visibility: 0.9 },
+            { name: "left_hip", x: 0.42, y: 0.6, visibility: 0.9 },
+            { name: "right_hip", x: 0.58, y: 0.6, visibility: 0.9 },
+            { name: "left_elbow", x: 0.35, y: 0.48, visibility: 0.9 },
+            { name: "right_elbow", x: 0.68, y: 0.45, visibility: 0.9 },
+            { name: "left_wrist", x: 0.3, y: 0.55, visibility: 0.9 },
+            { name: "right_wrist", x: 0.7 + index * 0.025, y: 0.55, visibility: 0.9 },
+          ],
+        })),
+      },
+      window: { startMs: 1000, endMs: 1080 },
+      contactMs: 1040,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    };
+  }
+
+  function withAdjacentSwing(
+    input: StrokeInput,
+    transform: (frame: Frame, index: number) => Frame,
+    offsets = Array.from({ length: 11 }, (_, index) => 50 + index * 14),
+  ): StrokeInput {
+    const edge = input.sequence.frames[side === "before" ? 0 : input.sequence.frames.length - 1]!;
+    const adjacent = offsets.map((offset, index) =>
+      transform(
+        {
+          ...edge,
+          timestampMs: input.contactMs! + (side === "before" ? -offset : offset),
+        },
+        index,
+      ),
+    );
+    expect(
+      adjacent.every(
+        (frame) =>
+          frame.timestampMs < input.window.startMs || frame.timestampMs > input.window.endMs,
+      ),
+    ).toBe(true);
+    return {
+      ...input,
+      sequence: {
+        ...input.sequence,
+        frames: [...input.sequence.frames, ...adjacent]
+          .sort((a, b) => a.timestampMs - b.timestampMs)
+          .map((frame, frameIndex) => ({ ...frame, frameIndex })),
+      },
+    };
+  }
+
+  function expectIsolated(input: StrokeInput, contaminated: StrokeInput) {
+    const expected = classifyStroke(input);
+    expect(classifyStroke(contaminated)).toEqual(expected);
+    expect(
+      classifyStroke({
+        ...contaminated,
+        legacyFrames: toLegacyPoseFrames(contaminated.sequence),
+      }),
+    ).toEqual(expected);
+  }
+
+  it("does not use an adjacent torso extent as the current window's median", () => {
+    const input = isolatedInput();
+    const contaminated = withAdjacentSwing(input, (frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name.endsWith("_hip") ? { ...mark, y: 0.9 } : mark,
+      ),
+    }));
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expectIsolated(input, contaminated);
+  });
+
+  it("does not let an adjacent torso median hide a measured in-window collapse", () => {
+    const input = isolatedInput();
+    input.sequence = {
+      ...input.sequence,
+      frames: input.sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          frame.timestampMs === input.contactMs && mark.name.endsWith("_hip")
+            ? { ...mark, y: 0.48 }
+            : mark,
+        ),
+      })),
+    };
+    const contaminated = withAdjacentSwing(input, (frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name.endsWith("_hip") ? { ...mark, y: 0.5 } : mark,
+      ),
+    }));
+    expect(classifyStroke(input).limitingFactors).toContain(
+      "torso_extent_collapsed_vs_sequence_median",
+    );
+    expectIsolated(input, contaminated);
+  });
+
+  it("does not choose the wrist carrying a different, adjacent swing", () => {
+    const input = isolatedInput();
+    const contaminated = withAdjacentSwing(input, (frame, index) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name === "left_wrist" ? { ...mark, x: index % 2 === 0 ? 0.15 : 0.45 } : mark,
+      ),
+    }));
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expectIsolated(input, contaminated);
+  });
+
+  it("cannot borrow rival-wrist visibility from the adjacent swing", () => {
+    const input = isolatedInput();
+    input.sequence = {
+      ...input.sequence,
+      frames: input.sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "left_wrist" ? { ...mark, visibility: 0.24 } : mark,
+        ),
+      })),
+    };
+    const contaminated = withAdjacentSwing(input, (frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name === "left_wrist" ? { ...mark, visibility: 0.9 } : mark,
+      ),
+    }));
+    expect(classifyStroke(input).label).toBe("UNKNOWN");
+    expect(classifyStroke(input).limitingFactors).toContain(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
+    expectIsolated(input, contaminated);
+  });
+
+  it("does not attribute adjacent synchronized bimanual steps to the current swing", () => {
+    const input = isolatedInput();
+    const contaminated = withAdjacentSwing(input, (frame, index) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name.endsWith("_wrist") ? { ...mark, y: 0.45 + (index % 2) * 0.2 } : mark,
+      ),
+    }));
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expectIsolated(input, contaminated);
+  });
+
+  it("bounds the arm-length median even in the helper's wider 300ms neighborhood", () => {
+    const input = isolatedInput();
+    input.paddle = [{ timestampMs: 1040, center: { x: 0.45, y: 0.55 }, confidence: 0.9 }];
+    const contaminated = withAdjacentSwing(
+      input,
+      (frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "right_elbow" ? { ...mark, x: 0.95, y: 0.9 } : mark,
+        ),
+      }),
+      Array.from({ length: 11 }, (_, index) => 210 + index * 8),
+    );
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expect(classifyStroke(input).limitingFactors).toContain("paddle_point_implausible_used_wrist");
+    expectIsolated(input, contaminated);
+  });
+
+  it("does not use adjacent raises to turn a degraded mid-body point into an overhead", () => {
+    const input = isolatedInput();
+    input.paddle = [{ timestampMs: 1040, center: { x: 0.75, y: 0.55 }, confidence: 0.1 }];
+    const contaminated = withAdjacentSwing(
+      input,
+      (frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "right_wrist"
+            ? { ...mark, y: 0.25 }
+            : mark.name === "right_elbow"
+              ? { ...mark, y: 0.3 }
+              : mark,
+        ),
+      }),
+      Array.from({ length: 11 }, (_, index) => 50 + index * 8),
+    );
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expect(classifyStroke(input).confidence).toBeLessThanOrEqual(0.6);
+    expectIsolated(input, contaminated);
+  });
+
+  it("cannot borrow a second visible raised frame to corroborate a partial overhead window", () => {
+    const input = isolatedInput();
+    input.sequence = {
+      ...input.sequence,
+      frames: input.sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "right_wrist" && frame.timestampMs === input.contactMs
+            ? { ...mark, y: 0.25 }
+            : mark.name === "right_wrist" || mark.name === "right_elbow"
+              ? { ...mark, visibility: 0.49 }
+              : mark,
+        ),
+      })),
+    };
+    input.paddle = [{ timestampMs: 1040, center: { x: 0.75, y: 0.25 }, confidence: 0.1 }];
+    const contaminated = withAdjacentSwing(
+      input,
+      (frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "right_wrist"
+            ? { ...mark, y: 0.25, visibility: 0.9 }
+            : mark.name === "right_elbow"
+              ? { ...mark, y: 0.3, visibility: 0.9 }
+              : mark,
+        ),
+      }),
+      Array.from({ length: 11 }, (_, index) => 50 + index * 8),
+    );
+    expect(classifyStroke(input).label).toBe("UNKNOWN");
+    expect(classifyStroke(input).limitingFactors).toContain(
+      "contact_point_contradicted_by_skeletal_window",
+    );
+    expectIsolated(input, contaminated);
+  });
+
+  it("does not let the adjacent swing's facing consensus mirror the current side", () => {
+    const input = isolatedInput();
+    const contaminated = withAdjacentSwing(input, (frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((mark) =>
+        mark.name === "left_shoulder"
+          ? { ...mark, x: 0.6 }
+          : mark.name === "right_shoulder"
+            ? { ...mark, x: 0.4 }
+            : mark,
+      ),
+    }));
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expectIsolated(input, contaminated);
+  });
+
+  it("prefers a measured in-window paddle observation over a closer adjacent observation", () => {
+    const input = isolatedInput();
+    input.contactMs = side === "before" ? input.window.startMs : input.window.endMs;
+    input.sequence = {
+      ...input.sequence,
+      frames: input.sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) =>
+          mark.name === "right_wrist" ? { ...mark, x: mark.x - 0.1 } : mark,
+        ),
+      })),
+    };
+    input.paddle = [{ timestampMs: 1040, center: { x: 0.8, y: 0.55 }, confidence: 0.9 }];
+    const contaminated = {
+      ...input,
+      paddle: [
+        ...input.paddle,
+        {
+          timestampMs: input.contactMs + (side === "before" ? -1 : 1),
+          center: { x: 0.5, y: 0.55 },
+          confidence: 0.9,
+        },
+      ],
+    };
+    expect(classifyStroke(input).label).toBe("FOREHAND");
+    expect(classifyStroke(input).contactPointSource).toBe("paddle");
+    expectIsolated(input, contaminated);
   });
 });

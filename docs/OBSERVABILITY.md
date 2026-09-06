@@ -67,10 +67,23 @@ tokens or exceptions. A bad status (including 429), malformed response,
 redirect or timeout fails the workflow. Local failure-path tests:
 `node --test scripts/tests/monitor-production.test.mjs`.
 
-**Deployment boundary:** production API v35 is still the baseline98 deployment;
-the newer local API-only hardening migrations and matching Edge code must not be
-deployed independently. This monitoring change applies no migrations and deploys
-nothing. Default monitoring works with the existing public endpoints, but reports
+**Deployment boundary:** production API v35 is still the baseline98 deployment.
+The production migration ledger was checked on September 6, 2026 and already
+contains `20260905190106_api_only_database_access`; its identifier and contents
+must remain unchanged. The upstream audit migrations follow a different history,
+including older pending entries. A plain `supabase db push` can therefore refuse
+the reconciled history. Before any separately approved rollout, inspect
+`supabase migration list` and `supabase db push --dry-run --include-all` against
+the intended project. Apply only the reviewed missing migrations with
+`supabase db push --include-all`, coordinated with the matching Edge deployment;
+do not rename an applied migration or mark missing SQL as applied.
+
+The forward integration migrations preserve late-permit/webhook behavior and
+restore the permit predicate grant after either upgrade order. The RLS runner
+checks fresh databases, the recorded production history, and the upstream audit
+history before running the complete security matrix on each. This monitoring
+change itself applies no production migrations and deploys nothing. Default
+monitoring works with the existing public endpoints, but reports
 **database_readiness: UNVERIFIED**, not passed. A green public run must never be
 interpreted as proof of database, billing, authenticated sessions, or camera health.
 

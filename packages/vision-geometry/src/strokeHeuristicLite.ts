@@ -161,7 +161,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-9 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -377,7 +377,6 @@ export function classifyStroke(input: {
 }): HeuristicStrokePrediction {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
-  const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
   if (
     !Number.isFinite(input.window.startMs) ||
     !Number.isFinite(input.window.endMs) ||
@@ -385,6 +384,9 @@ export function classifyStroke(input: {
   ) {
     return unknown("stroke_window_invalid", evidence, limitingFactors);
   }
+  const inStrokeWindow = (sample: { timestampMs: number }) =>
+    sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs;
+  const frames = (input.legacyFrames ?? toLegacyPoseFrames(input.sequence)).filter(inStrokeWindow);
   let contactMs: number;
   let referenceIsEventPeak = false;
   if (input.contactMs !== null) {
@@ -400,14 +402,7 @@ export function classifyStroke(input: {
   if (!(contactMs >= input.window.startMs && contactMs <= input.window.endMs)) {
     return unknown("reference_outside_stroke_window", evidence, limitingFactors);
   }
-  const frame = nearestFrame(
-    frames.filter(
-      (candidate) =>
-        candidate.timestampMs >= input.window.startMs &&
-        candidate.timestampMs <= input.window.endMs,
-    ),
-    contactMs,
-  );
+  const frame = nearestFrame(frames, contactMs);
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
@@ -525,17 +520,16 @@ export function classifyStroke(input: {
   // walking-arm pace inside the event window, or a repeatedly-measured
   // dominant wrist that barely moved around the reference. Absent
   // measurements never fire them.
+  const paddleSpeeds = input.paddleSpeeds?.filter(inStrokeWindow);
+  const wristSpeeds = input.wristSpeeds?.filter(inStrokeWindow);
   const speeds =
-    input.paddleSpeeds && input.paddleSpeeds.length >= 5
-      ? { series: input.paddleSpeeds, source: "paddle" }
-      : input.wristSpeeds && input.wristSpeeds.length >= 5
-        ? { series: input.wristSpeeds, source: "wrist" }
+    paddleSpeeds && paddleSpeeds.length >= 5
+      ? { series: paddleSpeeds, source: "paddle" }
+      : wristSpeeds && wristSpeeds.length >= 5
+        ? { series: wristSpeeds, source: "wrist" }
         : null;
   if (speeds) {
-    const windowSamples = speeds.series.filter(
-      (sample) =>
-        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
-    );
+    const windowSamples = speeds.series;
     const windowPeak = windowSamples.reduce((best, sample) => Math.max(best, sample.value), 0);
     if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < NON_SWING_SPEED_FLOOR) {
       evidence.push(
@@ -570,7 +564,10 @@ export function classifyStroke(input: {
   let contactPointReliability: "strong" | "degraded" = "degraded";
 
   const paddleNear = input.paddle
-    ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
+    ?.filter(
+      (observation) =>
+        inStrokeWindow(observation) && Math.abs(observation.timestampMs - contactMs) <= 80,
+    )
     .sort((a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs))[0];
   const paddleNearConfidence = paddleNear?.confidence ?? null;
   const paddleNearTrusted =
@@ -945,11 +942,7 @@ export function classifyStroke(input: {
       contactPointReliability,
     };
   }
-  const inWindow = speeds.series.filter(
-    (sample) =>
-      sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
-  );
-  const peak = inWindow.reduce((best, sample) => Math.max(best, sample.value), 0);
+  const peak = speeds.series.reduce((best, sample) => Math.max(best, sample.value), 0);
   const lowContact = contactPoint.y > hipY - 0.35 * torso;
   const intensity = peak < 0.9 ? "slow" : peak >= 1.4 ? "fast" : "medium";
   evidence.push(

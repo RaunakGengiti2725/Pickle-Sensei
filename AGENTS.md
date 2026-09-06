@@ -30,6 +30,14 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 - DB: `supabase db push` (migrations in `supabase/migrations/`, named
   `YYYYMMDDHHMMSS_description.sql`; remote history is tracked — never edit an
   applied migration, add a new one)
+- The September 6 integration reconciles two migration histories. Production
+  already has `20260905190106_api_only_database_access`; do not renumber it.
+  Inspect `supabase migration list` and `supabase db push --dry-run --include-all`
+  before an approved coordinated rollout. Older pending audit migrations require
+  `supabase db push --include-all`, not a plain push. The RLS runner verifies
+  fresh installation and upgrades from both historical states; the forward
+  `20260907120000_preserve_permit_predicate_grant.sql` keeps the pure predicate
+  callable after the API-only migration revokes earlier function grants.
 - API: `supabase functions deploy api --no-verify-jwt`
 - Edge dependencies are pinned EXACTLY: `index.ts` imports
   `npm:@supabase/supabase-js@2.112.4` and the function-local
@@ -1023,15 +1031,16 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   250 ms. Synthetic coverage includes 8/10/15/30/60 fps and both hands.
 - `captureStrokeVideo({ handedness })` passes the player's saved hitting hand
   through `captureWithOptions` to the native trigger and manual-stop pass.
-  Older native binaries retain the no-argument bridge fallback. This is
-  declared context, not detected paddle identity; a brisk movement of the
+  Older native binaries and ambidextrous declarations retain the no-argument
+  bridge fallback. This is declared context, not detected paddle identity; a brisk movement of the
   hitting hand can still be ambiguous. Do not claim perfect stroke accuracy.
 - `isTrackingLimited` is advice, not another trigger gate. Native capture
   replaces "Swing when ready" with lighting/cooling guidance while observed
   pose cadence is insufficient and uses hysteresis before restoring readiness.
   A captured/saving state never regresses on late readiness events. JS scopes
   progress to the active native capture and ignores late/foreign callbacks.
-- Classifier `stroke-heuristic-8` bounds its reference to the isolated swing;
+- Classifier `stroke-heuristic-9` bounds all pose, paddle and speed evidence
+  to the isolated swing, including neighboring raise/facing/wrist features;
   `fusion-2` validates confidence and hierarchy before routing a prediction.
   The mobile bundle is `on-device-fusion-2`; evaluation records read the
   actual result's bundle version. Pose-only AUTO still identifies a side
@@ -1048,6 +1057,8 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   iPhone capture remain checks for the responsible owner.
 - Local full verification needs Node 22 for mobile and Bash 4+ for the
   security scanner; Bash 3.2 remains a separately tested script contract.
+  The video fixtures still use `-vsync`: select a compatible FFmpeg (for
+  example the keg-only `ffmpeg@7` on macOS), not FFmpeg 9, which removed it.
   A Docker-free edge audit can use `PICKLE_AUDIT_MATRIX_PG_URL`, which must
   point to an empty, disposable loopback PostgreSQL database.
 - Pin `PICKLE_CI_SIMULATOR_UDID` (or the Mac workflow's `simulator_udid`
