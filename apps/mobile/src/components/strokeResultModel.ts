@@ -189,6 +189,13 @@ export function limitingFactorCopy(factor: string): LimitingFactorCopy {
         reason: 'a stroke-confidence reading that could not be verified',
         ledger: 'A reliable stroke-confidence reading.',
       };
+    case 'overhead_requires_independent_arm_raise':
+      return {
+        noun: 'a clear overhead arm position',
+        reason: 'insufficient visible arm evidence to confirm an overhead',
+        ledger:
+          'Visible hitting-arm positions to support an overhead identification.',
+      };
     case 'auto_stroke_leaf_hierarchy_invalid':
       return {
         noun: 'a consistent stroke identification',
@@ -226,6 +233,7 @@ function knownLimitingFactor(factor: string): boolean {
       'reference_outside_stroke_window',
       'auto_stroke_confidence_invalid',
       'auto_stroke_leaf_hierarchy_invalid',
+      'overhead_requires_independent_arm_raise',
     ].includes(factor)
   );
 }

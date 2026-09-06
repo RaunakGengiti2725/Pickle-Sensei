@@ -863,6 +863,10 @@ describe('selectInsight priority', () => {
       'auto_stroke_leaf_hierarchy_invalid',
       'a consistent stroke identification',
     ],
+    [
+      'overhead_requires_independent_arm_raise',
+      'a clear overhead arm position',
+    ],
   ])(
     'explains %s without exposing internal classifier tokens',
     (factor, explanation) => {

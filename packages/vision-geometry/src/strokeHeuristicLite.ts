@@ -537,9 +537,8 @@ export function classifyStroke(input: {
       );
       return unknown("no_swing_energy_in_window", evidence, limitingFactors);
     }
-    if (windowSamples.length > 0 && windowSamples.length < MIN_WINDOW_SPEED_SAMPLES) {
-      limitingFactors.push("speed_window_sparsely_sampled_gate_not_applicable");
-    }
+  } else if ((paddleSpeeds?.length ?? 0) > 0 || (wristSpeeds?.length ?? 0) > 0) {
+    limitingFactors.push("speed_window_sparsely_sampled_gate_not_applicable");
   }
   if (
     wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
@@ -692,6 +691,26 @@ export function classifyStroke(input: {
   const windowWristRaised = raise.wristRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
   const windowElbowRaised = raise.elbowRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
   const windowMeasured = raise.wristMeasuredFrames > 0 || raise.elbowMeasuredFrames > 0;
+  const overheadCandidate = pointRaised
+    ? windowWristRaised ||
+      windowElbowRaised ||
+      (!windowMeasured && contactPointReliability === "strong")
+    : windowWristRaised && windowElbowRaised && contactPointReliability === "degraded";
+  if (overheadCandidate) {
+    evidence.push(
+      `hip-independent arm raise: wrist and elbow above the ${wristInfo.side} shoulder in ` +
+        `${raise.armRaisedFrames}/${raise.armMeasuredFrames} measured in-window frames ±${OVERHEAD_WINDOW_MS}ms (requires ${OVERHEAD_MIN_RAISED_FRAMES})`,
+    );
+    if (raise.armRaisedFrames < OVERHEAD_MIN_RAISED_FRAMES) {
+      return unknown(
+        "overhead_requires_independent_arm_raise",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+  }
 
   if (pointRaised) {
     evidence.push(`contact ${aboveShoulder.toFixed(2)} torso-units above shoulders`);
@@ -1232,12 +1251,16 @@ function scanRaiseWindow(
   elbowRaisedFrames: number;
   wristMeasuredFrames80: number;
   medianWristRaise80: number | null;
+  armMeasuredFrames: number;
+  armRaisedFrames: number;
 } {
   let wristMeasuredFrames = 0;
   let wristRaisedFrames = 0;
   let maxWristRaise: number | null = null;
   let elbowMeasuredFrames = 0;
   let elbowRaisedFrames = 0;
+  let armMeasuredFrames = 0;
+  let armRaisedFrames = 0;
   const raises80: number[] = [];
   for (const frame of frames) {
     const delta = Math.abs(frame.timestampMs - contactMs);
@@ -1246,6 +1269,13 @@ function scanRaiseWindow(
       frame.landmarks.find(
         (landmark) => landmark.name === name && landmark.visibility >= minVisibility,
       );
+    const armShoulder = find(`${side}_shoulder`, WRIST_RELIABLE_VISIBILITY);
+    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
+    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
+    if (armShoulder && wrist && elbow) {
+      armMeasuredFrames += 1;
+      if (wrist.y < armShoulder.y && elbow.y < armShoulder.y) armRaisedFrames += 1;
+    }
     const leftShoulder = find("left_shoulder", 0);
     const rightShoulder = find("right_shoulder", 0);
     const leftHip = find("left_hip", 0);
@@ -1255,7 +1285,6 @@ function scanRaiseWindow(
     const torsoExtent = (leftHip.y + rightHip.y) / 2 - shoulderY;
     if (torsoExtent < TORSO_MIN_EXTENT) continue;
     const torso = torsoExtent;
-    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
     if (wrist) {
       const raiseAmount = (shoulderY - wrist.y) / torso;
       wristMeasuredFrames += 1;
@@ -1263,7 +1292,6 @@ function scanRaiseWindow(
       if (maxWristRaise === null || raiseAmount > maxWristRaise) maxWristRaise = raiseAmount;
       if (delta <= OVERHEAD_MEDIAN_WINDOW_MS) raises80.push(raiseAmount);
     }
-    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
     if (elbow) {
       elbowMeasuredFrames += 1;
       if ((shoulderY - elbow.y) / torso >= OVERHEAD_ELBOW_RAISE_TORSO) elbowRaisedFrames += 1;
@@ -1284,6 +1312,8 @@ function scanRaiseWindow(
     elbowRaisedFrames,
     wristMeasuredFrames80: raises80.length,
     medianWristRaise80,
+    armMeasuredFrames,
+    armRaisedFrames,
   };
 }
 

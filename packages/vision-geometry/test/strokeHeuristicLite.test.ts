@@ -319,6 +319,14 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
         const isolated = classifyStroke(input);
         expect(isolated.label).toBe("FOREHAND");
         expect(isolated.limitingFactors).toContain("no_speed_series_for_intensity");
+        expect(isolated.limitingFactors).not.toContain("no_swing_energy_in_window");
+        expect(
+          isolated.limitingFactors.includes("speed_window_sparsely_sampled_gate_not_applicable"),
+        ).toBe(count > 0);
+        expect(isolated.evidence.some((entry) => entry.includes("speed peak"))).toBe(false);
+        if (count === 0) {
+          expect(classifyStroke({ ...input, [source]: null })).toEqual(isolated);
+        }
         const contaminated = classifyStroke({
           ...input,
           [source]: [

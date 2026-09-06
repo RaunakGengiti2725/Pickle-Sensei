@@ -5,6 +5,8 @@ import {
   generateSwingSequence,
   nonDominantHandSwingFixture,
   staticReachFixture,
+  torsoCollapseBoundaryOverheadFixture,
+  torsoHonestShoulderVolleyFixture,
   twoHandedBackhandFixture,
   walkThroughFixture,
   wheelchairDegenerateTorsoFixture,
@@ -196,6 +198,199 @@ describe("classifyStroke lite red-team (adversarial non-strokes)", () => {
       ).toBe(false);
     }
   });
+});
+
+describe("hip-independent in-window overhead corroboration", () => {
+  function overheadInput(handedness: "right" | "left" = "right") {
+    const swing = generateSwingSequence({ contactHeightRatio: 1.2, handed: handedness });
+    return {
+      sequence: swing.sequence,
+      window: swing.window,
+      contactMs: swing.window.peakMs,
+      handedness,
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    };
+  }
+
+  it.each(["wrist", "paddle"] as const)(
+    "F20-F2 abstains on a %s contact even when the in-window torso median is compressed",
+    (source) => {
+      const fixture = torsoCollapseBoundaryOverheadFixture();
+      const reference = fixture.sequence.frames.find(
+        (frame) => frame.timestampMs === fixture.window.peakMs,
+      )!;
+      const wrist = reference.landmarks.find((mark) => mark.name === "right_wrist")!;
+      const overrides = {
+        contactMs: fixture.window.peakMs,
+        paddle:
+          source === "paddle"
+            ? [{ timestampMs: fixture.window.peakMs, center: wrist, confidence: 0.9 }]
+            : null,
+      };
+      const prediction = classifyFixture(fixture, overrides);
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.leaf).toBe("UNKNOWN");
+      expect(prediction.confidence).toBe(0.2);
+      expect(prediction.limitingFactors).toContain("overhead_requires_independent_arm_raise");
+      expect(prediction.limitingFactors).not.toContain(
+        "overhead_decision_flips_under_median_torso_normalization",
+      );
+      const bounded = {
+        ...fixture.sequence,
+        frames: fixture.sequence.frames.filter(
+          (frame) =>
+            frame.timestampMs >= fixture.window.startMs &&
+            frame.timestampMs <= fixture.window.endMs,
+        ),
+      };
+      expect(classifyFixture(fixture, { ...overrides, sequence: bounded })).toEqual(prediction);
+      expect(
+        classifyFixture(fixture, {
+          ...overrides,
+          legacyFrames: toLegacyPoseFrames(fixture.sequence),
+        }),
+      ).toEqual(prediction);
+    },
+  );
+
+  it("preserves the honest-torso F20-F2 shoulder-volley control as FOREHAND", () => {
+    const fixture = torsoHonestShoulderVolleyFixture();
+    const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.leaf).toBeNull();
+    expect(prediction.taxonomyDepth).toBe(2);
+  });
+
+  it.each(["missing", "low_visibility"] as const)(
+    "does not manufacture independent arm corroboration from %s elbows",
+    (measurement) => {
+      const input = overheadInput();
+      const prediction = classifyStroke({
+        ...input,
+        sequence: {
+          ...input.sequence,
+          frames: input.sequence.frames.map((frame) => ({
+            ...frame,
+            landmarks: frame.landmarks
+              .filter((mark) => measurement !== "missing" || mark.name !== "right_elbow")
+              .map((mark) => (mark.name === "right_elbow" ? { ...mark, visibility: 0.49 } : mark)),
+          })),
+        },
+      });
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.limitingFactors).toContain("overhead_requires_independent_arm_raise");
+    },
+  );
+
+  it.each([1, 2])("requires the existing two raised-arm frames (%i measured)", (count) => {
+    const input = overheadInput();
+    const raised = input.sequence.frames.filter((frame) => {
+      if (Math.abs(frame.timestampMs - input.contactMs) > 150) return false;
+      const shoulder = frame.landmarks.find((mark) => mark.name === "right_shoulder")!;
+      const elbow = frame.landmarks.find((mark) => mark.name === "right_elbow")!;
+      const wrist = frame.landmarks.find((mark) => mark.name === "right_wrist")!;
+      return elbow.y < shoulder.y && wrist.y < shoulder.y;
+    });
+    const measured = new Set(raised.slice(0, count).map((frame) => frame.timestampMs));
+    const prediction = classifyStroke({
+      ...input,
+      sequence: {
+        ...input.sequence,
+        frames: input.sequence.frames.map((frame) => ({
+          ...frame,
+          landmarks: frame.landmarks.map((mark) =>
+            mark.name === "right_elbow" && !measured.has(frame.timestampMs)
+              ? { ...mark, visibility: 0.49 }
+              : mark,
+          ),
+        })),
+      },
+    });
+    expect(prediction.label).toBe(count < 2 ? "UNKNOWN" : "OVERHEAD");
+    expect(prediction.limitingFactors.includes("overhead_requires_independent_arm_raise")).toBe(
+      count < 2,
+    );
+  });
+
+  it.each(["right", "left"] as const)(
+    "preserves a measured %s-arm overhead under horizontal mirroring and supported framing scales",
+    (handedness) => {
+      const input = overheadInput(handedness);
+      for (const scale of [0.75, 1, 1.1]) {
+        for (const mirrored of [false, true]) {
+          const prediction = classifyStroke({
+            ...input,
+            sequence: {
+              ...input.sequence,
+              frames: input.sequence.frames.map((frame) => ({
+                ...frame,
+                landmarks: frame.landmarks.map((mark) => ({
+                  ...mark,
+                  x: 0.5 + (mirrored ? -1 : 1) * scale * (mark.x - 0.5),
+                  y: 0.5 + scale * (mark.y - 0.5),
+                })),
+              })),
+            },
+          });
+          expect(prediction.label, JSON.stringify({ scale, mirrored })).toBe("OVERHEAD");
+          expect(prediction.leaf).toBe("OVERHEAD");
+          expect(prediction.taxonomyDepth).toBe(1);
+        }
+      }
+    },
+  );
+
+  it.each(["before", "after"] as const)(
+    "cannot borrow raised arms from %s the isolated F20-F2 window",
+    (side) => {
+      const fixture = torsoCollapseBoundaryOverheadFixture();
+      const contactMs = fixture.window.peakMs;
+      const window = {
+        startMs: contactMs - (side === "before" ? 90 : 210),
+        endMs: contactMs + (side === "before" ? 210 : 90),
+      };
+      const sequence = {
+        ...fixture.sequence,
+        frames: fixture.sequence.frames.filter(
+          (frame) => frame.timestampMs >= window.startMs && frame.timestampMs <= window.endMs,
+        ),
+      };
+      const prediction = classifyFixture(fixture, { sequence, window, contactMs });
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.limitingFactors).toContain("overhead_requires_independent_arm_raise");
+      const contaminated = {
+        ...fixture.sequence,
+        frames: fixture.sequence.frames.map((frame) => {
+          const outside =
+            side === "before"
+              ? frame.timestampMs < window.startMs
+              : frame.timestampMs > window.endMs;
+          if (!outside) return frame;
+          const shoulder = frame.landmarks.find((mark) => mark.name === "right_shoulder")!;
+          return {
+            ...frame,
+            landmarks: frame.landmarks.map((mark) =>
+              mark.name === "right_elbow" ? { ...mark, y: 2 * shoulder.y - mark.y } : mark,
+            ),
+          };
+        }),
+      };
+      expect(classifyFixture(fixture, { window, contactMs })).toEqual(prediction);
+      expect(classifyFixture(fixture, { sequence: contaminated, window, contactMs })).toEqual(
+        prediction,
+      );
+      expect(
+        classifyFixture(fixture, {
+          sequence: contaminated,
+          window,
+          contactMs,
+          legacyFrames: toLegacyPoseFrames(contaminated),
+        }),
+      ).toEqual(prediction);
+    },
+  );
 });
 
 describe("classifyStroke lite red-team coverage guards (real strokes must survive)", () => {

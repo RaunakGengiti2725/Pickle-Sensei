@@ -1040,7 +1040,9 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   A captured/saving state never regresses on late readiness events. JS scopes
   progress to the active native capture and ignores late/foreign callbacks.
 - Classifier `stroke-heuristic-9` bounds all pose, paddle and speed evidence
-  to the isolated swing, including neighboring raise/facing/wrist features;
+  to the isolated swing, including neighboring raise/facing/wrist features.
+  An overhead additionally needs two in-window observations of the wrist and
+  elbow above their own visible shoulder, independent of torso normalization.
   `fusion-2` validates confidence and hierarchy before routing a prediction.
   The mobile bundle is `on-device-fusion-2`; evaluation records read the
   actual result's bundle version. Pose-only AUTO still identifies a side
