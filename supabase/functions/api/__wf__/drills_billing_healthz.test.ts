@@ -9,11 +9,13 @@ import { drillInstructionalMedia } from "../drillMedia.ts";
 import {
   activeSubscriber,
   fakeGoogleIdToken,
+  fakeSupabaseAccessToken,
   loadHarness,
   OTHER_USER_ID,
   RC_URL,
   TEST_USER_ID,
   userRequest,
+  webhookRequest,
 } from "./routesHarness.ts";
 
 const ACCESS_ROW = [{ premium: false, scored_count: 0, reserved_count: 0 }];
@@ -153,7 +155,7 @@ Deno.test(
 );
 
 Deno.test(
-  "REPRO (defect): PUT /v1/me/saved-drills/:slug accepts slugs that are not in the catalog",
+  "PUT /v1/me/saved-drills/:slug refuses noncatalog slugs with 404 and no write",
   async () => {
     const h = await loadHarness();
     h.tables["user_saved_drills"] = [
@@ -167,13 +169,12 @@ Deno.test(
         ip: "198.51.100.5",
       }),
     );
-    assertEquals(res.status, 200);
+    assertEquals(res.status, 404);
     const body = await res.json();
-    assertEquals(body.saved, true);
+    assertEquals(body.error.code, "drill.not_found");
     // The row was actually written.
     const writes = h.callsTo("/rest/v1/user_saved_drills").filter((c) => c.method === "POST");
-    assertEquals(writes.length, 1);
-    assertEquals((writes[0].body as Record<string, unknown>).slug, "not-a-real-drill");
+    assertEquals(writes.length, 0);
   },
 );
 
@@ -319,6 +320,7 @@ Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-
   assertEquals(last!.status, 429);
   assert(Number(last!.headers.get("retry-after")) > 0);
   assertEquals(h.callsTo(RC_URL).length, 10);
+  assertEquals(h.callsTo("/rest/v1/rpc/is_api_session_active").length, 10);
 });
 
 // ── healthz ──────────────────────────────────────────────────────────────────
@@ -377,5 +379,195 @@ Deno.test(
     const bypass = await h.handler(req("10.0.0.2"));
     assertEquals(bypass.status, 429, "same real IP, new spoofed first hop → still exhausted");
     await bypass.text();
+  },
+);
+
+Deno.test(
+  "catalog saves still work and historical orphan bookmarks remain listable and removable",
+  async () => {
+    const h = await loadHarness();
+    const catalog = await drillCatalog();
+    const savedAt = new Date().toISOString();
+    h.tables.user_saved_drills = [{ slug: catalog[0].slug, saved_at: savedAt }];
+    const saved = await h.handler(
+      userRequest("PUT", `/v1/me/saved-drills/${catalog[0].slug}`, { ip: "198.51.100.13" }),
+    );
+    assertEquals(saved.status, 200);
+    assertEquals(await saved.json(), { slug: catalog[0].slug, saved: true, savedAt });
+    h.tables.user_saved_drills = [{ slug: "not-a-real-drill", saved_at: savedAt }];
+    const list = await h.handler(
+      userRequest("GET", "/v1/me/saved-drills", { ip: "198.51.100.13" }),
+    );
+    assertEquals(list.status, 200);
+    assertEquals((await list.json()).items[0].slug, "not-a-real-drill");
+    const removed = await h.handler(
+      userRequest("DELETE", "/v1/me/saved-drills/not-a-real-drill", { ip: "198.51.100.13" }),
+    );
+    assertEquals(removed.status, 204);
+    assertEquals(
+      h.callsTo("/rest/v1/user_saved_drills").filter((call) => call.method === "DELETE").length,
+      1,
+    );
+  },
+);
+
+Deno.test(
+  "webhooks reject more than 16 distinct subscriber subjects before RevenueCat or audit",
+  async () => {
+    const h = await loadHarness();
+    h.subscriber = activeSubscriber();
+    const ids = Array.from(
+      { length: 17 },
+      (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`,
+    );
+    const response = await h.handler(
+      webhookRequest({
+        id: "too-many-subjects",
+        type: "TRANSFER",
+        app_user_id: ids[0],
+        transferred_from: ids.slice(0, 9),
+        transferred_to: ids.slice(8),
+      }),
+    );
+    assertEquals(response.status, 400);
+    await response.text();
+    assertEquals(h.callsTo(RC_URL).length, 0);
+    assertEquals(h.callsTo("/rest/v1/webhook_events").length, 0);
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
+  },
+);
+
+Deno.test(
+  "webhooks accept 16 distinct subjects and deduplicate repeated transfer ids",
+  async () => {
+    const h = await loadHarness();
+    const ids = Array.from(
+      { length: 16 },
+      (_, i) => `bbbbbbbb-bbbb-4bbb-8bbb-${String(i).padStart(12, "0")}`,
+    );
+    const response = await h.handler(
+      webhookRequest({
+        id: "sixteen-subjects",
+        type: "TRANSFER",
+        app_user_id: ids[0],
+        transferred_from: ids,
+        transferred_to: ids,
+      }),
+    );
+    assertEquals(response.status, 200);
+    await response.text();
+    assertEquals(h.callsTo(RC_URL).length, 16);
+    assertEquals(
+      h.callsTo("/rest/v1/webhook_events").filter((call) => call.method === "POST").length,
+      1,
+    );
+  },
+);
+
+Deno.test("webhook JSON has a 512 KiB cap, not the 64 KiB small-route cap", async () => {
+  const h = await loadHarness();
+  const allowed = await h.handler(
+    webhookRequest({ id: "large-but-bounded", pad: "x".repeat(100_000) }),
+  );
+  assertEquals(allowed.status, 200);
+  await allowed.text();
+  h.reset();
+  const denied = await h.handler(
+    webhookRequest({ id: "oversize-webhook", pad: "x".repeat(524_288) }),
+  );
+  assertEquals(denied.status, 413);
+  await denied.text();
+  assertEquals(h.calls.length, 0);
+});
+
+Deno.test(
+  "small JSON writes cap at 64 KiB; shot sync and evaluation trials keep their 5 MB override",
+  async () => {
+    const h = await loadHarness();
+    const pad = "x".repeat(100_000);
+    const small = await h.handler(
+      userRequest("POST", "/v1/analysis-permits", {
+        body: { idempotencyKey: "k", pad },
+        ip: "198.51.100.40",
+      }),
+    );
+    assertEquals(small.status, 413);
+    await small.text();
+    assertEquals(h.callsTo("/rest/v1/rpc/reserve_analysis_permit").length, 0);
+    for (const [path, body, code] of [
+      ["/v1/shots:sync", { shots: [], pad }, "validation.shots_sync"],
+      ["/v1/me/evaluation/trials", { trials: [], pad }, "validation.evaluation_trials"],
+    ] as const) {
+      const response = await h.handler(userRequest("POST", path, { body, ip: "198.51.100.40" }));
+      assertEquals(response.status, 400);
+      assertEquals((await response.json()).error.code, code);
+    }
+  },
+);
+
+Deno.test(
+  "revoked warm sessions cannot serve cached rank/progress or reach billing side effects",
+  async () => {
+    const h = await loadHarness();
+    h.rpcs.access_state = ACCESS_ROW;
+    h.subscriber = activeSubscriber();
+    const token = fakeSupabaseAccessToken("77777777-7777-4777-8777-777777777777");
+    const ip = "198.51.100.50";
+    for (const path of ["/v1/me/access", "/v1/rank", "/v1/progress"]) {
+      const warm = await h.handler(userRequest("GET", path, { token, ip }));
+      assertEquals(warm.status, 200, path);
+      await warm.text();
+    }
+    assertEquals(h.callsTo("/auth/v1/user").length, 1);
+    assertEquals(h.callsTo("/rest/v1/player_technique_rating").length, 1);
+    h.rpcs.is_api_session_active = false;
+    h.calls = [];
+    for (const [method, path] of [
+      ["POST", "/v1/billing/sync"],
+      ["GET", "/v1/rank"],
+      ["GET", "/v1/progress"],
+      ["GET", "/v1/me/access"],
+      ["GET", "/v1/catalog/drills"],
+    ]) {
+      const denied = await h.handler(userRequest(method, path, { token, ip }));
+      assertEquals(denied.status, 401, path);
+      await denied.text();
+    }
+    assertEquals(h.callsTo(RC_URL).length, 0);
+    assertEquals(
+      h.callsTo("/rest/v1/").filter((call) => !call.url.includes("/rpc/is_api_session_active"))
+        .length,
+      0,
+    );
+    assertEquals(h.callsTo("/rest/v1/rpc/is_api_session_active").length, 5);
+    h.rpcs.is_api_session_active = true;
+    const recovered = await h.handler(userRequest("GET", "/v1/me/access", { token, ip }));
+    assertEquals(recovered.status, 200);
+    await recovered.text();
+    assertEquals(h.callsTo("/auth/v1/user").length, 5);
+  },
+);
+
+Deno.test(
+  "session RPC outages block billing with 503 while keeping the verified bearer cache",
+  async () => {
+    const h = await loadHarness();
+    h.rpcs.access_state = ACCESS_ROW;
+    const token = fakeGoogleIdToken("88888888-8888-4888-8888-888888888888");
+    const ip = "198.51.100.51";
+    const warm = await h.handler(userRequest("GET", "/v1/me/access", { token, ip }));
+    assertEquals(warm.status, 200);
+    await warm.text();
+    h.rpcErrors.is_api_session_active = 500;
+    const response = await h.handler(userRequest("POST", "/v1/billing/sync", { token, ip }));
+    assertEquals(response.status, 503);
+    assertEquals((await response.text()).includes("injected rpc failure"), false);
+    assertEquals(h.callsTo(RC_URL).length, 0);
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
+    delete h.rpcErrors.is_api_session_active;
+    const recovered = await h.handler(userRequest("GET", "/v1/me/access", { token, ip }));
+    assertEquals(recovered.status, 200);
+    await recovered.text();
+    assertEquals(h.callsTo("/auth/v1/token").length, 1);
   },
 );

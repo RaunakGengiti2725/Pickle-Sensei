@@ -153,6 +153,9 @@ function scoredShotJson(id: string, permitKey: string) {
 }
 
 const asUser = (uid: string) => `
+  do $$ begin
+    perform set_config('request.headers', jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text, true);
+  end $$;
   set local role authenticated;
   select set_config('request.jwt.claim.sub', '${uid}', true);
   select set_config('request.jwt.claim.role', 'authenticated', true);

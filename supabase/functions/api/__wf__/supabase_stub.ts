@@ -59,7 +59,14 @@ function b64url(value: string): string {
 function accessTokenFor(userId: string, expSeconds: number): string {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = b64url(
-    JSON.stringify({ sub: userId, role: "authenticated", aud: "authenticated", exp: expSeconds }),
+    JSON.stringify({
+      iss: `http://127.0.0.1:${PORT}/auth/v1`,
+      sub: userId,
+      session_id: crypto.randomUUID(),
+      role: "authenticated",
+      aud: "authenticated",
+      exp: expSeconds,
+    }),
   );
   return `${header}.${payload}.stubsig`;
 }
@@ -119,8 +126,18 @@ async function handleRest(request: Request, url: URL): Promise<Response> {
   const path = url.pathname.replace(/^\/rest\/v1/, "");
   bump(`db:${request.method} ${path}`);
   await sleep(DB_LATENCY_MS);
+  const requestKey = "a1".repeat(32);
+  if (path === "/rpc/get_api_request_key") {
+    return request.headers.get("authorization") === "Bearer stub-service-role-key"
+      ? json(200, requestKey)
+      : json(403, { message: "server credentials required" });
+  }
   const uid = bearerUserId(request);
   if (!uid) return json(401, { message: "JWT required" });
+  if (request.headers.get("x-pickle-api-key") !== requestKey) {
+    return json(403, { message: "API request required" });
+  }
+  if (path === "/rpc/is_api_session_active") return json(200, true);
 
   if (path === "/rpc/access_state") {
     return json(200, [{ premium: false, scored_count: 0, reserved_count: 0 }]);
@@ -179,6 +196,17 @@ Deno.serve({ port: PORT, hostname: "127.0.0.1" }, (request) => {
     return json(200, { ok: true });
   }
   if (url.pathname === "/auth/v1/token") return handleAuthToken(request);
+  if (url.pathname === "/auth/v1/user") {
+    bump("auth:/auth/v1/user");
+    const uid = bearerUserId(request);
+    return uid
+      ? json(200, {
+          id: uid,
+          email: `${uid}@example.test`,
+          app_metadata: { provider: "google", providers: ["google"] },
+        })
+      : json(401, { message: "JWT required" });
+  }
   if (url.pathname.startsWith("/rest/v1/")) return handleRest(request, url);
   bump(`unhandled:${url.pathname}`);
   return json(404, { message: "stub: unhandled route" });

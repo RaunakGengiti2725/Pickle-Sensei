@@ -92,6 +92,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Supabase RLS + security regression matrix
         run: ./supabase/tests/run_rls_tests.sh
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Supabase Edge API typecheck and dependency lock
+        run: npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts
+      - name: Supabase Edge API security regressions
+        run: npx --yes deno@2.5.6 test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/
 
   containers:
     if: github.ref == 'refs/heads/main'

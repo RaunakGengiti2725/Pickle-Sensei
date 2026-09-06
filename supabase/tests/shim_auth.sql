@@ -8,8 +8,16 @@ create table if not exists auth.users (
   id uuid primary key,
   email text,
   raw_user_meta_data jsonb default '{}'::jsonb,
-  raw_app_meta_data jsonb default '{}'::jsonb
+  raw_app_meta_data jsonb default '{}'::jsonb,
+  banned_until timestamptz
 );
+
+create table if not exists auth.sessions (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  not_after timestamptz
+);
+create index if not exists auth_sessions_user_id_idx on auth.sessions (user_id);
 
 -- One row per provider identity (the columns the migrations read; hosted
 -- shape as of GoTrue 2.x). provider_id is the provider's stable subject —
@@ -59,6 +67,10 @@ grant usage on schema auth to anon, authenticated, service_role;
 -- their way to least privilege. Mirror that here so a missing revoke fails
 -- the matrix instead of passing vacuously.
 alter default privileges in schema public
-  grant all on tables to anon, authenticated, service_role;
+  grant all on tables to anon, authenticated;
+alter default privileges in schema public
+  grant truncate, references, trigger on tables to service_role;
 alter default privileges in schema public
   grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on functions to anon, authenticated, service_role;

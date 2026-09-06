@@ -133,7 +133,7 @@ Deno.test(
 );
 
 Deno.test(
-  "REPRO (defect): replayed event id is fully re-processed — no id-dedupe short-circuit",
+  "webhook: a persisted event replay is acknowledged without repeated billing work",
   async () => {
     // index.ts comments claim "an already-seen event is acknowledged without
     // another RevenueCat round trip", but the upsert result is never inspected.
@@ -144,11 +144,18 @@ Deno.test(
       type: "RENEWAL",
       app_user_id: TEST_USER_ID,
     };
-    await h.handler(webhookRequest(event));
-    await h.handler(webhookRequest(event));
-    await h.handler(webhookRequest(event));
-    assertEquals(h.callsTo(RC_URL).length, 3);
-    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 3);
+    const first = await h.handler(webhookRequest(event));
+    assertEquals(first.status, 200);
+    await first.json();
+    h.tables.webhook_events = [{ id: event.id }];
+    for (let i = 0; i < 2; i += 1) {
+      const replay = await h.handler(webhookRequest(event));
+      assertEquals(replay.status, 200);
+      assertEquals(await replay.json(), { received: true, duplicate: true });
+    }
+    assertEquals(h.callsTo(RC_URL).length, 1);
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 1);
+    assertEquals(h.callsTo("/rest/v1/webhook_events").filter((c) => c.method === "POST").length, 1);
   },
 );
 

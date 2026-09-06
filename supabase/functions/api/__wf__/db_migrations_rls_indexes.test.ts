@@ -69,7 +69,7 @@ type Migration = { file: string; statements: string[]; raw: string };
 function functionBodies(raw: string, name: string): string[] {
   const bodies: string[] = [];
   const re = new RegExp(
-    `create or replace function public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
+    `create(?: or replace)? function public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
     "gi",
   );
   for (const match of raw.matchAll(re)) bodies.push(match[0].toLowerCase());
@@ -302,6 +302,45 @@ Deno.test(
           `${migration.file} grants client access to public.free_rating_ledger: ${statement}`,
         );
       }
+    }
+  },
+);
+
+Deno.test(
+  "user database RPCs never switch to SECURITY DEFINER and bypass the API gate",
+  async () => {
+    const chain = await loadChain();
+    const invokers = [
+      "access_lock_key",
+      "access_state",
+      "apply_synced_shot",
+      "complete_onboarding",
+      "is_api_session_active",
+      "lifetime_scored_count",
+      "reserve_analysis_permit",
+    ];
+    for (const name of invokers) {
+      let definitions = 0;
+      for (const migration of chain) {
+        for (const body of functionBodies(migration.raw, name)) {
+          definitions += 1;
+          const header = body.slice(0, body.indexOf("$$"));
+          ok(
+            !/security\s+definer/.test(header),
+            `${migration.file}: public.${name} must execute under the user's RLS`,
+          );
+        }
+        for (const statement of migration.statements) {
+          ok(
+            !(
+              statement.startsWith(`alter function public.${name}(`) &&
+              statement.includes("security definer")
+            ),
+            `${migration.file}: public.${name} must not be promoted to SECURITY DEFINER`,
+          );
+        }
+      }
+      ok(definitions > 0, `public.${name} must exist`);
     }
   },
 );

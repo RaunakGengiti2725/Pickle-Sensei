@@ -67,6 +67,11 @@ async function withUserTx(sql: Sql, userId: string, fn: (tx: Sql) => Promise<voi
     await tx.unsafe(
       `insert into auth.users (id, email) values ('${userId}', '${userId}@example.com') on conflict do nothing`,
     );
+    await tx.unsafe(
+      `do $$ begin
+        perform set_config('request.headers', jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text, true);
+      end $$`,
+    );
     await tx.unsafe(`set local role authenticated`);
     await tx.unsafe(`set local request.jwt.claim.sub = '${userId}'`);
     await fn(tx);

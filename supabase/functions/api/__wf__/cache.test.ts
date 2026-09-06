@@ -21,6 +21,27 @@ async function recordAuthFailure(
   return failedRecently;
 }
 
+async function withPipelineResponses(
+  run: (
+    cache: Awaited<ReturnType<typeof loadIsolate>>["cache"],
+    reply: (payload: unknown) => void,
+  ) => Promise<void>,
+): Promise<void> {
+  configureRedis(true);
+  const originalFetch = globalThis.fetch;
+  let payload: unknown;
+  globalThis.fetch = async () => Response.json(payload);
+  try {
+    const { cache } = await loadIsolate();
+    await run(cache, (value) => {
+      payload = value;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    configureRedis(false);
+  }
+}
+
 Deno.test(
   "cacheSet writes L1 and L2; cacheGet on a cold isolate reads L2 and warms L1",
   async () => {
@@ -215,5 +236,143 @@ Deno.test("expired L1 entries are dropped lazily on read", async () => {
     assertEquals(await iso.cache.cacheGet("zero"), null, "ttl<=0 is never stored");
   } finally {
     redis.restore();
+  }
+});
+
+const invalidRedisCounts: unknown[] = [
+  "",
+  " ",
+  false,
+  true,
+  [],
+  [1],
+  {},
+  -1,
+  "-1",
+  1.5,
+  "1.5",
+  "1e3",
+  "0x10",
+  "NaN",
+  "Infinity",
+  Number.MAX_SAFE_INTEGER + 1,
+  String(Number.MAX_SAFE_INTEGER + 1),
+];
+
+Deno.test(
+  "Redis window helpers accept integer wire values, missing keys and EXPIRE NX zero",
+  async () => {
+    await withPipelineResponses(async (cache, reply) => {
+      for (const count of [1, "2", Number.MAX_SAFE_INTEGER, String(Number.MAX_SAFE_INTEGER)]) {
+        for (const expiry of [0, 1, "0", "1"]) {
+          reply([{ result: count }, { result: expiry }]);
+          assertEquals(await cache.redisWindowIncr("rl:valid", 60), Number(count));
+        }
+      }
+      for (const count of [null, 0, "0", 2, "2", Number.MAX_SAFE_INTEGER]) {
+        reply([{ result: count }]);
+        assertEquals(await cache.redisWindowGet("rl:valid"), count === null ? 0 : Number(count));
+      }
+    });
+  },
+);
+
+Deno.test(
+  "redisWindowIncr rejects null, zero and invalid counter values instead of coercing them",
+  async () => {
+    await withPipelineResponses(async (cache, reply) => {
+      for (const count of [null, 0, "0", ...invalidRedisCounts]) {
+        reply([{ result: count }, { result: 1 }]);
+        assertEquals(await cache.redisWindowIncr("rl:invalid", 60), null, JSON.stringify(count));
+      }
+    });
+  },
+);
+
+Deno.test(
+  "redisWindowGet rejects invalid counter values instead of coercing them to a budget",
+  async () => {
+    await withPipelineResponses(async (cache, reply) => {
+      for (const count of invalidRedisCounts) {
+        reply([{ result: count }]);
+        assertEquals(await cache.redisWindowGet("rl:invalid"), null, JSON.stringify(count));
+      }
+    });
+  },
+);
+
+Deno.test(
+  "redisWindowGet distinguishes a missing key from missing, malformed or error results",
+  async () => {
+    await withPipelineResponses(async (cache, reply) => {
+      const invalidResponses = [
+        null,
+        {},
+        "not a pipeline",
+        [],
+        [null],
+        [0],
+        [[]],
+        [{}],
+        [{ error: "ERR counter" }],
+        [{ result: 1, error: "ERR counter" }],
+        [{ result: null, error: "" }],
+        [{ result: "1" }, { result: "extra" }],
+      ];
+      for (const response of invalidResponses) {
+        reply(response);
+        assertEquals(await cache.redisWindowGet("rl:invalid"), null, JSON.stringify(response));
+      }
+      reply([{ result: null }]);
+      assertEquals(await cache.redisWindowGet("rl:missing"), 0);
+    });
+  },
+);
+
+Deno.test(
+  "redisWindowIncr requires complete successful INCR and EXPIRE pipeline results",
+  async () => {
+    await withPipelineResponses(async (cache, reply) => {
+      const invalidResponses = [
+        [{ result: 1 }, { error: "ERR expiry" }],
+        [{ result: 1 }],
+        [],
+        [null, { result: 1 }],
+        [0, { result: 1 }],
+        [{ result: 1 }, null],
+        [{ result: 1 }, []],
+        [{ result: 1 }, {}],
+        [{ result: 1 }, { result: 1 }, { result: 1 }],
+        [{ result: 1, error: "ERR counter" }, { result: 1 }],
+        [{ result: 1, error: "" }, { result: 1 }],
+        [{ error: "ERR counter" }, { result: 1 }],
+        [{}, { result: 1 }],
+      ];
+      for (const response of invalidResponses) {
+        reply(response);
+        assertEquals(await cache.redisWindowIncr("rl:invalid", 60), null, JSON.stringify(response));
+      }
+      for (const expiry of [null, 2, ...invalidRedisCounts]) {
+        reply([{ result: 1 }, { result: expiry }]);
+        assertEquals(await cache.redisWindowIncr("rl:invalid", 60), null, JSON.stringify(expiry));
+      }
+    });
+  },
+);
+
+Deno.test("redisWindowGet reads shared counters without warming or trusting L1", async () => {
+  configureRedis(true);
+  const redis = fakeUpstash();
+  try {
+    const { cache } = await loadIsolate();
+    await cache.cacheSet("rl:shared", "1", 60);
+    redis.store.set("rl:shared", { value: "2", expiresAtMs: Date.now() + 60_000 });
+    assertEquals(await cache.redisWindowGet("rl:shared"), 2);
+    assertEquals(await cache.cacheGet("rl:shared"), "1");
+    redis.store.delete("rl:shared");
+    assertEquals(await cache.redisWindowGet("rl:shared"), 0);
+  } finally {
+    redis.restore();
+    configureRedis(false);
   }
 });

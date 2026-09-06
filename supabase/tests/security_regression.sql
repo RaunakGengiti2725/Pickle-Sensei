@@ -57,6 +57,66 @@ begin
   end if;
 end $$;
 
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+
+do $$
+declare changed integer;
+begin
+  update public.profiles set first_name = 'Direct client tampering'
+    where id = (select auth.uid());
+  get diagnostics changed = row_count;
+  if changed <> 0 then
+    raise exception 'K1: a user token alone must not update even its own profile';
+  end if;
+  if exists (select 1 from public.profiles) then
+    raise exception 'K2: a user token alone must not read application tables';
+  end if;
+  begin
+    insert into public.analysis_permits (user_id, idempotency_key)
+    values ((select auth.uid()), 'direct-client-permit');
+    raise exception 'K3: direct clients must not forge analysis permits';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version, paddle_model_version,
+      stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version
+    ) values (
+      gen_random_uuid(), (select auth.uid()), 'drive', now(), 0, 1000,
+      10, 1, 'scored', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1'
+    );
+    raise exception 'K4: direct clients must not insert scored shots without API validation';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.reserve_analysis_permit('direct-rpc-permit');
+    raise exception 'K5: calling the reservation RPC must not bypass the API gate';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.get_api_request_key();
+    raise exception 'K6: authenticated clients must not read the server request key';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', repeat('0', 64), 'apikey', 'service_role'
+  )::text, true);
+  if exists (select 1 from public.profiles) then
+    raise exception 'K7: a forged server header must not authorize database access';
+  end if;
+end $$;
+reset role;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
 -- ──────────────────── A: owner paths the app depends on ────────────────────
 
 set local role authenticated;
@@ -232,9 +292,13 @@ begin
 end $$;
 
 -- B3: Bob's DELETE against Alice's session must hit zero rows
-delete from public.sessions where id = '00000000-0000-4000-8000-0000000000d1';
 do $$
 begin
+  begin
+    delete from public.sessions where id = '00000000-0000-4000-8000-0000000000d1';
+    raise exception 'B3: deleting sessions must require an administrative cascade';
+  exception when insufficient_privilege then null;
+  end;
   set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
   if not exists (select 1 from public.sessions
                  where id = '00000000-0000-4000-8000-0000000000d1') then
@@ -303,6 +367,44 @@ begin
   if v <> 'access.permit_not_found' then
     raise exception 'B5: foreign permit must be invisible to the RPC (got %)', v;
   end if;
+end $$;
+
+do $$
+begin
+  begin
+    insert into public.shot_phases (
+      shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence
+    ) values (
+      '00000000-0000-4000-8000-0000000000e1', (select auth.uid()),
+      'cross_user_phase', 0, 50, 100, 0.9
+    );
+    raise exception 'K21: phase evidence must not attach to another user''s shot';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.shot_checkpoints (
+      shot_id, user_id, checkpoint_key, confidence, band, direction, severity, applicable
+    ) values (
+      '00000000-0000-4000-8000-0000000000e1', (select auth.uid()),
+      'cross_user_checkpoint', 0.9, 'green', 'ok', 0.1, true
+    );
+    raise exception 'K22: checkpoint evidence must not attach to another user''s shot';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.shots (
+      id, user_id, session_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version, paddle_model_version,
+      stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version
+    ) values (
+      gen_random_uuid(), (select auth.uid()), '00000000-0000-4000-8000-0000000000d1',
+      'drive', now(), 0, 1000, 7, 0.9, 'scored',
+      'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1'
+    );
+    raise exception 'K23: shots must not attach to another user''s session';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 reset role;
@@ -1320,6 +1422,363 @@ begin
         and scored_count = 1) <> 2 then
     raise exception 'J9: every identity of the account must carry the scored count';
   end if;
+end $$;
+
+do $$
+declare t record; f record;
+begin
+  for t in
+    select c.oid, c.relname, c.relrowsecurity, c.relkind, c.reloptions
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm')
+  loop
+    if has_table_privilege('authenticated', t.oid, 'TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'K8: authenticated retains unsafe structural privileges on %', t.relname;
+    end if;
+    if current_setting('server_version_num')::integer >= 170000
+       and has_table_privilege('authenticated', t.oid, 'MAINTAIN') then
+      raise exception 'K8: authenticated retains MAINTAIN on %', t.relname;
+    end if;
+    if has_table_privilege('anon', t.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'K9: anon retains application table privileges on %', t.relname;
+    end if;
+    if t.relkind in ('v', 'm') and has_table_privilege('authenticated', t.oid, 'SELECT')
+       and (t.relkind = 'm' or not coalesce('security_invoker=true' = any(t.reloptions), false)) then
+      raise exception 'K10: readable view % must preserve caller RLS', t.relname;
+    end if;
+    if t.relkind in ('r', 'p') and not t.relrowsecurity then
+      raise exception 'K10: application table % must have RLS enabled', t.relname;
+    end if;
+    if t.relrowsecurity and (
+      has_table_privilege('authenticated', t.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or has_any_column_privilege('authenticated', t.oid, 'INSERT,UPDATE')
+    ) and not exists (
+      select 1 from pg_policy p
+      where p.polrelid = t.oid and p.polname = 'api_requests_only'
+        and not p.polpermissive and p.polcmd = '*'
+    ) then
+      raise exception 'K10: % is missing its restrictive API request policy', t.relname;
+    end if;
+  end loop;
+  for f in
+    select p.oid, p.proname, p.proconfig
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+  loop
+    if has_function_privilege('anon', f.oid, 'EXECUTE') then
+      raise exception 'K11: anon must not execute public.%', f.proname;
+    end if;
+    if not exists (select 1 from unnest(f.proconfig) config where config like 'search_path=%') then
+      raise exception 'K12: public.% must pin its search_path', f.proname;
+    end if;
+  end loop;
+  if has_schema_privilege('authenticated', 'public', 'CREATE')
+     or has_schema_privilege('anon', 'public', 'CREATE') then
+    raise exception 'K13: clients must not create objects in public';
+  end if;
+end $$;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000f';
+set local request.headers = '{}';
+do $$
+declare changed integer;
+begin
+  if public.identity_scored_count() <> 0 then
+    raise exception 'K14: the definer identity reader must not bypass the API gate';
+  end if;
+  update public.analysis_permits set status = 'reserved', outcome = null
+    where user_id = (select auth.uid());
+  get diagnostics changed = row_count;
+  if changed <> 0 then
+    raise exception 'K15: direct clients must not re-arm consumed permits';
+  end if;
+  begin
+    perform secret from api_private.request_key;
+    raise exception 'K16: the backend credential table must not be client-readable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.account_deletion_requests (user_id, challenge, created_at, expires_at)
+    values ((select auth.uid()), gen_random_uuid(), now() - interval '1 hour', now() + interval '1 hour');
+    raise exception 'K17: direct clients must not forge or backdate deletion challenges';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+do $$
+declare r record; relation regclass; actual_updates text[]; expected_updates text[]; functions text[];
+begin
+  for r in select * from (values
+    ('profiles', true, false, false, array['provider','onboarding_state','skill_level','focus_checkpoint','handedness','primary_goal','biggest_problem','first_name','gender']),
+    ('sessions', true, true, false, array['ended_at']),
+    ('shots', true, true, false, array[]::text[]),
+    ('shot_phases', true, true, false, array[]::text[]),
+    ('shot_measurements', true, false, false, array[]::text[]),
+    ('shot_checkpoints', true, true, false, array[]::text[]),
+    ('captures', true, false, false, array[]::text[]),
+    ('analysis_permits', true, true, false, array['status','outcome']),
+    ('consent_records', true, true, false, array[]::text[]),
+    ('evaluation_trials', true, true, false, array[]::text[]),
+    ('analysis_feedback', true, true, false, array[]::text[]),
+    ('user_saved_drills', true, true, true, array[]::text[]),
+    ('player_rank_state', true, false, false, array[]::text[]),
+    ('billing_entitlements', true, false, false, array[]::text[]),
+    ('account_deletion_requests', true, true, false, array['user_id','challenge','created_at','expires_at']),
+    ('account_deletion_feedback', false, true, false, array[]::text[]),
+    ('webhook_events', false, false, false, array[]::text[]),
+    ('account_external_credentials', false, false, false, array[]::text[]),
+    ('free_rating_ledger', false, false, false, array[]::text[]),
+    ('progress_daily', true, false, false, array[]::text[]),
+    ('practice_days', true, false, false, array[]::text[]),
+    ('player_technique_rating', true, false, false, array[]::text[])
+  ) as expected(name, can_select, can_insert, can_delete, updatable)
+  loop
+    relation := format('public.%I', r.name)::regclass;
+    if has_any_column_privilege('authenticated', relation, 'SELECT') <> r.can_select
+       or has_any_column_privilege('authenticated', relation, 'INSERT') <> r.can_insert
+       or has_table_privilege('authenticated', relation, 'DELETE') <> r.can_delete
+       or has_table_privilege('authenticated', relation, 'UPDATE') then
+      raise exception 'K24: table privileges exceed the API contract on % (select %, insert %, update %, delete %)',
+        r.name,
+        has_any_column_privilege('authenticated', relation, 'SELECT'),
+        has_any_column_privilege('authenticated', relation, 'INSERT'),
+        has_table_privilege('authenticated', relation, 'UPDATE'),
+        has_table_privilege('authenticated', relation, 'DELETE');
+    end if;
+    select coalesce(array_agg(a.attname::text order by a.attname), '{}'::text[])
+      into actual_updates
+    from pg_attribute a
+    where a.attrelid = relation and a.attnum > 0 and not a.attisdropped
+      and has_column_privilege('authenticated', relation, a.attnum, 'UPDATE');
+    select coalesce(array_agg(c order by c), '{}'::text[]) into expected_updates
+      from unnest(r.updatable) c;
+    if actual_updates <> expected_updates then
+      raise exception 'K25: UPDATE columns drifted on % (got %)', r.name, actual_updates;
+    end if;
+    if has_any_column_privilege('anon', relation, 'SELECT,INSERT,UPDATE,REFERENCES') then
+      raise exception 'K26: anon must hold no column privileges on %', r.name;
+    end if;
+  end loop;
+  select array_agg(p.proname::text order by p.proname) into functions
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+  if functions <> array[
+    'access_lock_key','access_state','apply_synced_shot','complete_onboarding',
+    'identity_scored_count','is_api_session_active','lifetime_scored_count','reserve_analysis_permit'
+  ] then
+    raise exception 'K27: authenticated RPC allowlist drifted (got %)', functions;
+  end if;
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname in (
+      'access_lock_key','access_state','apply_synced_shot','complete_onboarding',
+      'is_api_session_active','lifetime_scored_count','reserve_analysis_permit'
+    ) and p.prosecdef
+  ) then
+    raise exception 'K28: user RPCs must stay SECURITY INVOKER so RLS cannot be bypassed';
+  end if;
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
+set local role service_role;
+do $$
+begin
+  if length(public.get_api_request_key()) <> 64 then
+    raise exception 'K29: only the service role must be able to provision the API request key';
+  end if;
+end $$;
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000f';
+do $$
+declare p uuid; v text; header text := current_setting('request.headers'); shot_id uuid := gen_random_uuid();
+begin
+  begin
+    update public.analysis_permits set status = 'reserved', outcome = null
+      where user_id = (select auth.uid()) and status = 'finalized';
+    raise exception 'K30: even trusted requests cannot re-arm finalized permits';
+  exception when insufficient_privilege then null;
+  end;
+  select permit_id into p from public.reserve_analysis_permit('api-boundary-probe');
+  if p is null then
+    raise exception 'K31: the authenticated API reservation must still work';
+  end if;
+  perform set_config('request.headers', '{}', true);
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', shot_id, 'analysisPermitId', p, 'resultKind', 'scored'
+  ));
+  if v <> 'access.permit_not_found' then
+    raise exception 'K31: direct sync RPC must not see the real reserved permit (got %)', v;
+  end if;
+  perform set_config('request.headers', header, true);
+  if exists (select 1 from public.shots s where s.id = shot_id)
+     or not exists (select 1 from public.analysis_permits where id = p and status = 'reserved') then
+    raise exception 'K31: rejected direct sync must not mutate shots or permits';
+  end if;
+  update public.analysis_permits set status = 'released', outcome = 'analysis_failed' where id = p;
+  begin
+    update public.analysis_permits set status = 'finalized', outcome = 'scored' where id = p;
+    raise exception 'K32: released permits are terminal too';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-000000000091', 'session-owner@example.com', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000092', 'other-session-owner@example.com', '{"provider":"apple"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000009101', '00000000-0000-4000-8000-000000000091'),
+  ('00000000-0000-4000-8000-000000009102', '00000000-0000-4000-8000-000000000091'),
+  ('00000000-0000-4000-8000-000000009201', '00000000-0000-4000-8000-000000000092');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000091';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000009101"}';
+do $$
+declare claims text := current_setting('request.jwt.claims'); header text := current_setting('request.headers');
+begin
+  if not public.is_api_session_active() then
+    raise exception 'L1: the live owner session must be accepted';
+  end if;
+  perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000009201"}', true);
+  if public.is_api_session_active() then
+    raise exception 'L2: another user''s session must not authenticate the caller';
+  end if;
+  perform set_config('request.jwt.claims', '{}', true);
+  if public.is_api_session_active() then
+    raise exception 'L3: a missing session id must fail closed';
+  end if;
+  perform set_config('request.jwt.claims', '{"session_id":"not-a-uuid"}', true);
+  if public.is_api_session_active() then
+    raise exception 'L4: a malformed session id must fail closed';
+  end if;
+  perform set_config('request.jwt.claims', claims, true);
+  perform set_config('request.headers', '{}', true);
+  begin
+    perform public.is_api_session_active();
+    raise exception 'L5: session checks must require the server request key';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.headers', header, true);
+end $$;
+reset role;
+
+update auth.sessions set not_after = now() - interval '1 second'
+  where id = '00000000-0000-4000-8000-000000009101';
+set local role authenticated;
+do $$
+begin
+  if public.is_api_session_active() then
+    raise exception 'L6: a time-boxed expired session must not remain active';
+  end if;
+  perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000009102"}', true);
+  if not public.is_api_session_active() then
+    raise exception 'L7: expiring one device must not expire another';
+  end if;
+end $$;
+reset role;
+
+update auth.users set banned_until = now() + interval '1 hour'
+  where id = '00000000-0000-4000-8000-000000000091';
+set local role authenticated;
+do $$
+begin
+  if public.is_api_session_active() then
+    raise exception 'L8: a banned user must not retain cached API access';
+  end if;
+end $$;
+reset role;
+update auth.users set banned_until = now() - interval '1 second'
+  where id = '00000000-0000-4000-8000-000000000091';
+update auth.sessions set not_after = null
+  where id = '00000000-0000-4000-8000-000000009101';
+delete from auth.sessions where id = '00000000-0000-4000-8000-000000009102';
+set local role authenticated;
+do $$
+begin
+  if public.is_api_session_active() then
+    raise exception 'L9: a revoked session must fail immediately';
+  end if;
+  perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000009101"}', true);
+  if not public.is_api_session_active() then
+    raise exception 'L10: logout must preserve another device''s live session';
+  end if;
+end $$;
+reset role;
+delete from auth.users where id = '00000000-0000-4000-8000-000000000091';
+set local role authenticated;
+do $$
+begin
+  if public.is_api_session_active() then
+    raise exception 'L11: deleting an account must invalidate every session';
+  end if;
+end $$;
+reset role;
+
+set local role service_role;
+insert into public.billing_entitlements (user_id, premium, product_key, verified_at)
+values ('00000000-0000-4000-8000-000000000092', true, 'verified-product', now())
+on conflict (user_id) do update set premium = excluded.premium,
+  product_key = excluded.product_key, verified_at = excluded.verified_at;
+update public.billing_entitlements set premium = false
+  where user_id = '00000000-0000-4000-8000-000000000092';
+insert into public.account_external_credentials (user_id, revenuecat_deleted_at)
+values ('00000000-0000-4000-8000-000000000092', now())
+on conflict (user_id) do update set revenuecat_deleted_at = excluded.revenuecat_deleted_at;
+update public.account_external_credentials set updated_at = now()
+  where user_id = '00000000-0000-4000-8000-000000000092';
+insert into public.webhook_events (id, event_type, app_user_id, payload)
+values ('service-role-boundary-test', 'TEST', '00000000-0000-4000-8000-000000000092', '{}')
+on conflict (id) do nothing;
+insert into public.webhook_events (id, event_type, app_user_id, payload)
+values ('service-role-boundary-test', 'TEST', '00000000-0000-4000-8000-000000000092', '{}')
+on conflict (id) do nothing;
+do $$
+begin
+  if not exists (select 1 from public.billing_entitlements
+                 where user_id = '00000000-0000-4000-8000-000000000092' and not premium) then
+    raise exception 'M1: verified server billing writes must work without default service grants';
+  end if;
+  if not exists (select 1 from public.account_external_credentials
+                 where user_id = '00000000-0000-4000-8000-000000000092'
+                   and revenuecat_deleted_at is not null) then
+    raise exception 'M2: server external-cleanup checkpoints must be writable and readable';
+  end if;
+  if (select count(*) from public.webhook_events where id = 'service-role-boundary-test') <> 1 then
+    raise exception 'M3: server webhook audit inserts must remain idempotent';
+  end if;
+  begin
+    update public.webhook_events set event_type = 'REWRITTEN' where id = 'service-role-boundary-test';
+    raise exception 'M4: the webhook writer must not rewrite audit history';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+create table public.security_default_privilege_probe (id integer);
+create sequence public.security_default_sequence_probe;
+create function public.security_default_function_probe() returns integer
+  language sql set search_path = '' as $$ select 1 $$;
+
+do $$
+declare r text;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    if has_table_privilege(r, 'public.security_default_privilege_probe',
+      'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'K18: new tables must not inherit % privileges', r;
+    end if;
+    if has_sequence_privilege(r, 'public.security_default_sequence_probe', 'SELECT,UPDATE,USAGE') then
+      raise exception 'K19: new sequences must not inherit % privileges', r;
+    end if;
+    if has_function_privilege(r, 'public.security_default_function_probe()', 'EXECUTE') then
+      raise exception 'K20: new functions must not inherit % execution', r;
+    end if;
+  end loop;
 end $$;
 
 rollback;

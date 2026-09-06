@@ -10,6 +10,7 @@ import {
   API_BASE,
   authedInit,
   bootEdgeFunction,
+  DATABASE_REQUEST_KEY,
   fakeGoogleIdToken,
   recorded,
   resetRest,
@@ -318,6 +319,144 @@ Deno.test({
     const consent = recorded.find((r) => r.path === "consent_records");
     assert(consent);
     assertEquals(consent.headers.get("authorization"), "Bearer fake-session-access-token");
+    assertEquals(consent.headers.get("apikey"), "fake-anon-key");
+    assertEquals(consent.headers.get("x-pickle-api-key"), DATABASE_REQUEST_KEY);
     assertEquals(consent.query.get("user_id"), `eq.${USER_ID}`);
+  },
+});
+
+Deno.test({
+  name: "database request keys are server-owned and never accepted from or returned to clients",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    const res = await fetch(
+      `${API_BASE}/v1/me/consent/status`,
+      authedInit({ headers: { "x-pickle-api-key": "forged-client-key" } }),
+    );
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assert(!body.includes(DATABASE_REQUEST_KEY));
+    assert(![...res.headers.values()].includes(DATABASE_REQUEST_KEY));
+    const consent = recorded.find((r) => r.path === "consent_records");
+    assert(consent);
+    assertEquals(consent.headers.get("x-pickle-api-key"), DATABASE_REQUEST_KEY);
+    assertEquals(consent.headers.get("authorization"), "Bearer fake-session-access-token");
+  },
+});
+
+Deno.test({
+  name: "database key lookup failures fail closed before any user data request",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    const realNow = Date.now;
+    const future = realNow() + 61_000;
+    Date.now = () => future;
+    setRestResponder((req) =>
+      req.path === "rpc/get_api_request_key"
+        ? restJson(503, { message: "private backend failure must not be disclosed" })
+        : null,
+    );
+    try {
+      const res = await fetch(`${API_BASE}/v1/me/consent/status`, authedInit());
+      assertEquals(res.status, 503);
+      const body = await res.text();
+      assert(!body.includes("private backend failure"));
+      assert(!body.includes(DATABASE_REQUEST_KEY));
+      assertEquals(recorded.filter((r) => r.path === "consent_records").length, 0);
+      const lookup = recorded.find((r) => r.path === "rpc/get_api_request_key");
+      assert(lookup);
+      assertEquals(lookup.headers.get("apikey"), "fake-service-role-key");
+      assertEquals(lookup.headers.get("authorization"), "Bearer fake-service-role-key");
+      assertEquals(lookup.headers.get("x-pickle-api-key"), null);
+    } finally {
+      Date.now = realNow;
+      resetRest();
+    }
+  },
+});
+
+Deno.test({
+  name: "onboarding goals never resolve through Object.prototype",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    for (const goal of ["constructor", "toString", "__proto__"]) {
+      resetRest();
+      profileResponder();
+      const response = await fetch(
+        `${API_BASE}/v1/me/onboarding`,
+        authedInit({
+          method: "PUT",
+          body: JSON.stringify({ ...ONBOARDING, goal, biggestProblem: "ok" }),
+        }),
+      );
+      assertEquals(response.status, 200);
+      assertEquals((await response.json()).plan.focusCheckpoint, "contact_position");
+      const patch = recorded.find((r) => r.path === "profiles" && r.method === "PATCH");
+      assert(patch);
+      assertEquals(JSON.parse(patch.body).focus_checkpoint, "contact_position");
+    }
+  },
+});
+
+Deno.test({
+  name: "small JSON routes reject streamed 100 KB bodies, including anonymous refresh",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    for (const path of ["/v1/sessions", "/v1/auth/refresh"]) {
+      const init = {
+        method: "POST",
+        body: streamedJsonBody('{"refreshToken":"r","pad":"', '"}', 100_000),
+      };
+      const response = await fetch(
+        `${API_BASE}${path}`,
+        path.endsWith("refresh") ? init : authedInit(init),
+      );
+      assertEquals(response.status, 413, path);
+      await response.text();
+    }
+    assert(!recorded.some((r) => r.path === "sessions"));
+  },
+});
+
+Deno.test({
+  name: "session liveness is a no-argument gated user RPC and is never cached",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    await bootEdgeFunction();
+    resetRest();
+    const token = fakeGoogleIdToken("liveness-gate");
+    const warm = await fetch(`${API_BASE}/v1/me/consent/status`, authedInit({}, token));
+    assertEquals(warm.status, 200);
+    await warm.text();
+    const live = recorded.find((r) => r.path === "rpc/is_api_session_active");
+    assert(live);
+    assertEquals(live.method, "POST");
+    assertEquals(JSON.parse(live.body), {});
+    assertEquals(live.headers.get("authorization"), "Bearer fake-session-access-token");
+    assertEquals(live.headers.get("apikey"), "fake-anon-key");
+    assertEquals(live.headers.get("x-pickle-api-key"), DATABASE_REQUEST_KEY);
+    resetRest();
+    setRestResponder((r) => (r.path === "rpc/is_api_session_active" ? restJson(200, false) : null));
+    try {
+      const denied = await fetch(`${API_BASE}/v1/me/consent/status`, authedInit({}, token));
+      assertEquals(denied.status, 401);
+      await denied.text();
+      assertEquals(recorded.filter((r) => r.path === "rpc/is_api_session_active").length, 1);
+      assert(!recorded.some((r) => r.path === "consent_records"));
+    } finally {
+      resetRest();
+    }
   },
 });

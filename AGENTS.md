@@ -118,10 +118,12 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `POST /webhooks/revenuecat`
   (secret-gated; entitlements re-verified against RevenueCat, never trusted
   from the event body; audit-logged in `public.webhook_events`).
-- `deno check` on `index.ts` reports pre-existing untyped-supabase-client
-  errors (insert/update infer `never`) — deploy bundling type-strips, and the
-  standalone modules (`cache.ts`, `rateLimit.ts`, `http.ts`, `legal.ts`)
-  check clean.
+- Edge API typecheck: `npx --yes deno@2.5.6 check --node-modules-dir=none
+--frozen --lock=deno.lock supabase/functions/api/index.ts`. The 2026-09-05
+  hardening fixed the old `never` inference errors: use the SDK's
+  `SupabaseClient` type rather than `ReturnType<typeof createClient>`.
+  Keep the SDK import pinned to the version in `deno.lock`. Deno owns that
+  generated lockfile's formatting.
 - Defense in depth (`20260831160000_defense_in_depth.sql`): column-level
   UPDATE grants sized to EXACTLY the writes the edge fn performs (shots have
   NO client update — favorites are device-local, sync is INSERT-only via the
@@ -875,3 +877,63 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   RootNavigator's PaywallRoute and Settings → About.
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
+
+## Supabase production hardening (2026-09-05)
+
+- `20260905190106_api_only_database_access.sql` and the matching Edge Function
+  require a coordinated rollout. Applying the migration blocks the old
+  function's database requests; deploying the function first leaves its new
+  RPCs unavailable. Obtain approval for a maintenance window, or stage the
+  credential/session helpers before deploying and enforcing the policies.
+  Do not deploy either half alone. No mobile update is required.
+- User database requests carry the user's Supabase bearer plus an internal
+  `x-pickle-api-key`. The Edge Function reads that key through the
+  service-role-only `get_api_request_key()` RPC and caches it for 60 seconds.
+  Keep the credential in `api_private.request_key`; never put it in mobile
+  config, user responses, logs, or Redis. Rotation requires an operator to
+  change the private row and allow the Edge cache to expire.
+- Retain the RESTRICTIVE `api_requests_only` policy alongside owner RLS on
+  user-accessible tables. Keep user RPCs SECURITY INVOKER and derived views
+  `security_invoker=true`. A definer conversion can bypass the API gate.
+  The security matrix pins table/column grants and the callable RPC allowlist.
+  Add explicit grants and policies when introducing a new database surface.
+- `is_api_session_active()` checks the JWT session id against `auth.sessions`
+  and checks `not_after` and `auth.users.banned_until`. Run it after the user
+  rate limit and before protected responses or side effects, including cached
+  rank/progress and billing. Do not cache its verdict. Missing server proof
+  raises a database error, which the API reports as retryable 503 rather than
+  signing users out; a valid proof with a revoked session returns false/401.
+- `service_role` bypasses RLS but still needs SQL grants. The live audit found
+  missing grants on billing, webhook audit, and external-account cleanup.
+  Grant SELECT/INSERT/UPDATE on `billing_entitlements` and
+  `account_external_credentials`, and SELECT/INSERT on `webhook_events`.
+  Keep webhook UPDATE/DELETE and client writes to these records revoked.
+- Permits may move from `reserved` to `finalized` or `released`, not back.
+  Shot/session and detail/shot ownership checks apply at the database layer.
+  Captures and measurements have no API writer; keep their client write
+  grants revoked until an approved feature requires them.
+- Auth network failures, upstream 429s, and 5xx responses return retryable 503,
+  not a revoked-session 401. Refresh uses one bounded REST request, avoiding
+  the SDK's internal retry loop. JSON limits: 64 KiB normally, 512 KiB for
+  webhooks, 5 MB for shot batches/evaluation trials; body deadline 30 seconds.
+- Edge tests: `npx --yes deno@2.5.6 test -A --no-check --config
+supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
+  CI's `supabase-security` job runs these, the frozen-lock typecheck above,
+  and `./supabase/tests/run_rls_tests.sh`. The SQL shim tests broad client
+  defaults AND absent service-role DML defaults; both require explicit grants.
+  The local load stub now needs `SUPABASE_SERVICE_ROLE_KEY=stub-service-role-key`
+  on the local Edge process, alongside its fake URL and anon key.
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` were set on
+  2026-09-06. Shared rate limits apply while Redis is reachable; missing
+  configuration or Redis errors fall back to per-isolate counters.
+- Supabase Auth rate-limits `/auth/v1/token` per client IP, and behind the
+  function every user shares one egress IP. When `SB_SECRET_KEY` holds a
+  modern `sb_secret_…` key, `authApiHeaders()` uses it as the `apikey` on
+  every Auth call (id-token exchange, getUser, refresh, logout) and adds
+  `sb-forwarded-for` = the edge-authoritative client IP (`clientIp()`, IP
+  literal only). Auth honours that header only with a secret key AND the
+  Auth dashboard's IP-forwarding opt-in (enabled 2026-09-06). REST calls
+  never use the secret key: they keep the publishable key + the USER's
+  bearer, so RLS is unchanged. Pinned by `__wf__/auth_ip_forwarding.test.ts`
+  (secret mode) and `account_routes.test.ts` (publishable fallback).
+  Live Auth logs confirmed the forwarded client IP on 2026-09-06.

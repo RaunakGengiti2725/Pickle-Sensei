@@ -7,6 +7,7 @@
 
 export const USER_ID = "11111111-1111-4111-8111-111111111111";
 export const API_BASE = "http://127.0.0.1:8000";
+export const DATABASE_REQUEST_KEY = "a1".repeat(32);
 
 export interface RecordedRequest {
   method: string;
@@ -73,6 +74,7 @@ async function fakeSupabase(request: Request): Promise<Response> {
       user: { id: USER_ID, email: "probe@example.com", aud: "authenticated" },
     });
   }
+  if (url.pathname === "/auth/v1/logout") return new Response(null, { status: 204 });
   if (url.pathname.startsWith("/rest/v1/")) {
     const rec: RecordedRequest = {
       method: request.method,
@@ -84,6 +86,12 @@ async function fakeSupabase(request: Request): Promise<Response> {
     recorded.push(rec);
     const custom = await responder(rec);
     if (custom) return custom;
+    if (rec.path === "rpc/is_api_session_active") return restJson(200, true);
+    if (rec.path === "rpc/get_api_request_key") {
+      return rec.headers.get("authorization") === "Bearer fake-service-role-key"
+        ? restJson(200, DATABASE_REQUEST_KEY)
+        : restJson(403, { message: "server credentials required" });
+    }
     return restJson(200, wantsSingleObject(rec) ? {} : []);
   }
   return restJson(404, { message: `fake supabase: unhandled ${url.pathname}` });
@@ -99,6 +107,7 @@ export function bootEdgeFunction(): Promise<void> {
     const fake = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, fakeSupabase);
     Deno.env.set("SUPABASE_URL", `http://127.0.0.1:${fake.addr.port}`);
     Deno.env.set("SUPABASE_ANON_KEY", "fake-anon-key");
+    Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "fake-service-role-key");
     Deno.env.delete("UPSTASH_REDIS_REST_URL");
     Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
     await import("../index.ts");

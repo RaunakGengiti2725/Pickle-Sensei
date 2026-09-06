@@ -176,3 +176,167 @@ Deno.test("webhook: malformed JSON is a 400, not a crash", async () => {
   assertEquals(response.status, 400);
   await response.body?.cancel();
 });
+
+Deno.test(
+  "stalled bodies hit a fixed 30s whole-body deadline and release their reader",
+  async () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    let deadlineTimer: number | undefined;
+    let deadlineCount = 0;
+    let deadlineCleared = false;
+    let cancelled = false;
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+        controller.enqueue(new TextEncoder().encode('{"refreshToken":'));
+      },
+      pull() {
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const request = new Request(`${BASE}/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "x-forwarded-for": "10.9.7.7" },
+      body: stream,
+    });
+    const realAdd = request.signal.addEventListener;
+    const realRemove = request.signal.removeEventListener;
+    let listeners = 0;
+    request.signal.addEventListener = function (...args: Parameters<typeof realAdd>) {
+      if (args[0] === "abort") listeners += 1;
+      return realAdd.apply(this, args);
+    };
+    request.signal.removeEventListener = function (...args: Parameters<typeof realRemove>) {
+      if (args[0] === "abort") listeners -= 1;
+      return realRemove.apply(this, args);
+    };
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number, ...args: unknown[]) => {
+      if (delay === 30_000) {
+        deadlineCount += 1;
+        deadlineTimer = realSetTimeout(callback, 20, ...args);
+        return deadlineTimer;
+      }
+      return realSetTimeout(callback, delay, ...args);
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = (id?: number) => {
+      if (id === deadlineTimer && id !== undefined) deadlineCleared = true;
+      realClearTimeout(id);
+    };
+    let watchdog: number | undefined;
+    const pending = handle(request);
+    try {
+      const response = await Promise.race([
+        pending,
+        new Promise<never>((_, reject) => {
+          watchdog = realSetTimeout(() => reject(new Error("body read never timed out")), 500);
+        }),
+      ]);
+      assertEquals(response.status, 408);
+      await response.text();
+      assertEquals(cancelled, true);
+      assertEquals(stream.locked, false);
+      assertEquals(deadlineCleared, true);
+      assertEquals(deadlineCount, 1);
+      assertEquals(listeners, 0);
+    } finally {
+      realClearTimeout(watchdog);
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      if (!cancelled) controller!.close();
+      await pending;
+    }
+  },
+);
+
+for (const preAborted of [true, false]) {
+  Deno.test(
+    `request abort (${preAborted ? "already aborted" : "during read"}) cancels the body and releases its reader`,
+    async () => {
+      const abort = new AbortController();
+      let cancelled = false;
+      let controller: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({
+        start(value) {
+          controller = value;
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      if (preAborted) abort.abort();
+      const request = new Request(`${BASE}/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "x-forwarded-for": preAborted ? "10.9.8.1" : "10.9.8.2" },
+        body: stream,
+        signal: abort.signal,
+      });
+      const pending = handle(request);
+      let watchdog: number | undefined;
+      const abortTimer = preAborted ? undefined : setTimeout(() => abort.abort(), 20);
+      try {
+        const response = await Promise.race([
+          pending,
+          new Promise<never>((_, reject) => {
+            watchdog = setTimeout(() => reject(new Error("aborted body read did not stop")), 500);
+          }),
+        ]);
+        assertEquals(response.status, 400);
+        await response.text();
+        assertEquals(cancelled, true);
+        assertEquals(stream.locked, false);
+      } finally {
+        clearTimeout(watchdog);
+        clearTimeout(abortTimer);
+        if (!cancelled) controller!.close();
+        await pending;
+      }
+    },
+  );
+}
+
+Deno.test(
+  "non-object JSON is rejected explicitly rather than treated as an empty optional body",
+  async () => {
+    for (const body of ["[]", "null", '"text"', "42", "false"]) {
+      const request = new Request(`${BASE}/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.9.9.1" },
+        body,
+      });
+      const response = await handle(request);
+      assertEquals(response.status, 400);
+      assertStringIncludes((await errorBody(response)).message, "JSON object");
+      assertEquals(request.body!.locked, false);
+    }
+  },
+);
+
+Deno.test(
+  "bounded JSON reads handle many tiny UTF-8 chunks and release the lock on success",
+  async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ pad: "é".repeat(20_000) }));
+    let offset = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset < bytes.byteLength) controller.enqueue(bytes.subarray(offset, ++offset));
+        else controller.close();
+      },
+    });
+    const response = await handle(
+      new Request(`${BASE}/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.9.9.2" },
+        body: stream,
+      }),
+    );
+    assertEquals(response.status, 400);
+    assertStringIncludes((await errorBody(response)).message, "refreshToken");
+    assertEquals(stream.locked, false);
+  },
+);
