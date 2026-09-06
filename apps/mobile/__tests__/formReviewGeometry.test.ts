@@ -147,13 +147,15 @@ describe('heat tints', () => {
     expect(mid).not.toBe('rgb(255,155,66)');
   });
 
-  it('heatRampColor hits the native stops exactly', () => {
+  it('keeps motion intensity on the native chalk-to-volt ramp, separate from fault tint', () => {
     const rounded = (heat: number) =>
       heatRampColor(heat).map(channel => Math.round(channel));
-    expect(rounded(0)).toEqual([26, 166, 138]);
-    expect(rounded(0.35)).toEqual([83, 217, 155]);
-    expect(rounded(0.7)).toEqual([215, 250, 69]);
-    expect(rounded(1)).toEqual([255, 155, 66]);
+    expect(rounded(0)).toEqual([248, 250, 245]);
+    expect(rounded(0.35)).toEqual([236, 250, 183]);
+    expect(rounded(0.7)).toEqual([225, 250, 122]);
+    expect(rounded(1)).toEqual([215, 250, 69]);
+    expect(heatTint(1)).toBe('rgb(255,155,66)');
+    expect(heatTint(0.5)).toBe('rgb(252,203,156)');
   });
 
   it('faultTint: warn at 0 with alpha .18, flame at 1 with alpha .48', () => {

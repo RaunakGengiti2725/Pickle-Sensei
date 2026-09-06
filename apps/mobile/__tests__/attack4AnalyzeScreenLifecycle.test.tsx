@@ -310,22 +310,13 @@ function hasButton(renderer: ReactTestRenderer, label: string): boolean {
     renderer.root.findAll(
       n =>
         typeof n.props.onPress === 'function' &&
-        n.findAll(t => t.type === Text && String(t.props.children) === label)
-          .length > 0,
+        (label === 'Open automatic camera'
+          ? n.props.accessibilityLabel === label
+          : n.findAll(
+              t => t.type === Text && String(t.props.children) === label,
+            ).length > 0),
     ).length > 0
   );
-}
-
-function pressButton(renderer: ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
-  const node = candidates[candidates.length - 1];
-  if (!node) throw new Error(`No button labeled ${label}`);
-  act(() => node.props.onPress());
 }
 
 async function flush() {
@@ -386,7 +377,7 @@ function deferred<T>(mock: jest.Mock): {
 async function startCameraRun(renderer: ReactTestRenderer) {
   pressByLabel(renderer, 'Forehand Drive');
   (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
-  pressButton(renderer, 'Open automatic camera');
+  pressByLabel(renderer, 'Open automatic camera');
   await flush();
   await flush();
   expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
@@ -439,7 +430,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     (captureStrokeVideo as jest.Mock).mockRejectedValue(interruption());
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
 
@@ -479,7 +470,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     (captureStrokeVideo as jest.Mock).mockRejectedValue(nativeFailure);
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
     expect(alertCount(renderer)).toBe(1);
@@ -496,7 +487,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     );
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
     const text = renderedText(renderer);
@@ -514,7 +505,7 @@ describe('S1 — capture rejection whose message merely CONTAINS "cancel"', () =
     );
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
     expect(alertCount(renderer)).toBe(0);
@@ -799,12 +790,12 @@ describe('extra — rapid repeated taps', () => {
     deferred<CapturedClip>(captureStrokeVideo as jest.Mock);
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     // The screen has swapped to the working surface; re-press whatever
     // pressables remain (the close X) must not start a second capture.
     for (let i = 0; i < 25; i += 1) {
       if (hasButton(renderer, 'Open automatic camera')) {
-        pressButton(renderer, 'Open automatic camera');
+        pressByLabel(renderer, 'Open automatic camera');
       }
     }
     await flush();

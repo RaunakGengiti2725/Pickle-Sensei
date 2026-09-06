@@ -6,6 +6,8 @@
  * ad-hoc color decisions.
  */
 
+import { Platform } from 'react-native';
+
 export const color = {
   ink: '#071710',
   inkElevated: '#10271E',
@@ -48,6 +50,10 @@ export const color = {
   overlayDarkSoft: 'rgba(7,17,14,0.82)',
   inkTint: 'rgba(11,23,19,0.09)',
   onDarkTint: 'rgba(255,255,255,0.1)',
+  onDarkTintFaint: 'rgba(255,255,255,0.06)',
+  voltTint: 'rgba(215,250,69,0.12)',
+  mintTint: 'rgba(83,217,155,0.12)',
+  flameTint: 'rgba(255,155,66,0.12)',
 } as const;
 
 export const space = {
@@ -70,34 +76,47 @@ export const radius = {
   pill: 999,
 } as const;
 
-export const font = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-} as const;
+export const font = Platform.select({
+  ios: {
+    regular: 'Manrope-Regular',
+    medium: 'Manrope-Medium',
+    semibold: 'Manrope-SemiBold',
+    bold: 'Manrope-Bold',
+  },
+  default: {
+    regular: 'Manrope_400Regular',
+    medium: 'Manrope_500Medium',
+    semibold: 'Manrope_600SemiBold',
+    bold: 'Manrope_700Bold',
+  },
+});
+
+const weight = Platform.select({
+  ios: { regular: '400', medium: '500', semibold: '600' } as const,
+  default: { regular: 'normal', medium: 'normal', semibold: 'normal' } as const,
+});
 
 export const type = {
   hero: {
     fontFamily: font.semibold,
     fontSize: 48,
     lineHeight: 50,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
     letterSpacing: -2.2,
   },
   display: {
     fontFamily: font.semibold,
     fontSize: 64,
-    lineHeight: 68,
-    fontWeight: 'normal' as const,
+    lineHeight: 66,
+    fontWeight: weight.semibold,
     letterSpacing: -2.5,
     fontVariant: ['tabular-nums'] as const,
   },
   score: {
     fontFamily: font.semibold,
-    fontSize: 44,
-    lineHeight: 48,
-    fontWeight: 'normal' as const,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: weight.semibold,
     letterSpacing: -1.5,
     fontVariant: ['tabular-nums'] as const,
   },
@@ -105,46 +124,46 @@ export const type = {
     fontFamily: font.semibold,
     fontSize: 32,
     lineHeight: 36,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
     letterSpacing: -1,
   },
   h2: {
     fontFamily: font.semibold,
     fontSize: 21,
     lineHeight: 27,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
     letterSpacing: -0.35,
   },
   h3: {
     fontFamily: font.semibold,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
     letterSpacing: -0.15,
   },
   body: {
     fontFamily: font.regular,
     fontSize: 16,
     lineHeight: 23,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.regular,
   },
   bodyBold: {
     fontFamily: font.semibold,
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
   },
   caption: {
     fontFamily: font.medium,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.medium,
   },
   micro: {
     fontFamily: font.semibold,
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: 'normal' as const,
+    fontWeight: weight.semibold,
     letterSpacing: 0.9,
   },
 } as const;

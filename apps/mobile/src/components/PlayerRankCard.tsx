@@ -96,7 +96,6 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
   }
 
   const { summary, source } = resolved;
-  const tierStyle = RANK_TIER_STYLE[summary.tier];
   const techniqueNoun =
     summary.techniqueCount === 1 ? 'technique' : 'techniques';
   const sourceNote =
@@ -109,9 +108,7 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       <View style={styles.headerRow}>
         <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
         <View style={styles.ratingWrap}>
-          <Text style={[styles.rating, { color: tierStyle.accent }]}>
-            {summary.rating.toFixed(2)}
-          </Text>
+          <Text style={styles.rating}>{summary.rating.toFixed(2)}</Text>
           <Text style={[type.caption, styles.ratingScale]}>/ 10</Text>
           <Text style={[type.micro, styles.duprEstimate]}>
             {formatDuprEstimate(summary.rating)}
@@ -135,7 +132,7 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
         <View style={styles.flex}>
           <Text style={[type.h2, { color: color.onDark }]}>
             {summary.tierLabel}{' '}
-            <Text style={{ color: tierStyle.accent }}>
+            <Text style={{ color: color.onDarkMuted }}>
               {summary.divisionLabel}
             </Text>
           </Text>
@@ -196,7 +193,12 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  card: { marginTop: space.md },
+  card: {
+    marginTop: space.md,
+    backgroundColor: color.inkElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -205,8 +207,8 @@ const styles = StyleSheet.create({
   eyebrow: { color: color.volt },
   ratingWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
   rating: {
-    ...type.h2,
-    fontVariant: ['tabular-nums'],
+    ...type.score,
+    color: color.onDark,
   },
   ratingScale: { color: color.onDarkSubtle },
   duprEstimate: { color: color.onDarkFaint },

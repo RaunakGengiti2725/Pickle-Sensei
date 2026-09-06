@@ -3,11 +3,11 @@
  * in its own day column, same-day reads fanned out chronologically, the
  * newest read accented, direct value labels only while they can be read, an
  * honest empty state, and a screen-reader summary that says what the eye
- * sees. The plot height matches the volume bars so Home's toggle never moves
- * the card.
+ * sees. At default text size the plot height matches the volume bars so
+ * Home's toggle never moves the card; enlarged text uses bounded data rows.
  */
 import React from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Polyline } from 'react-native-svg';
 import {
@@ -16,7 +16,7 @@ import {
   ScoreDotPlot,
   yForScore,
 } from '../src/progress/ScoreDotPlot';
-import { color } from '../src/design/tokens';
+import { color, type } from '../src/design/tokens';
 import type {
   ScoredReadPoint,
   ScoreTrendBucket,
@@ -82,13 +82,13 @@ function flat(node: TestRenderer.ReactTestInstance) {
   >;
 }
 
-/** Dots are the absolutely positioned mint/volt discs. */
+/** Dots are the absolutely positioned neutral/volt discs. */
 function dots(renderer: TestRenderer.ReactTestRenderer) {
   return hostViews(renderer).filter(node => {
     const style = flat(node);
     return (
       style['position'] === 'absolute' &&
-      (style['backgroundColor'] === color.mint ||
+      (style['backgroundColor'] === color.onDarkMuted ||
         style['backgroundColor'] === color.volt)
     );
   });
@@ -102,6 +102,12 @@ function summary(renderer: TestRenderer.ReactTestRenderer) {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  jest.spyOn(Dimensions, 'get').mockReturnValue({
+    width: 393,
+    height: 852,
+    scale: 3,
+    fontScale: 1,
+  });
 });
 
 afterEach(() => {
@@ -109,12 +115,16 @@ afterEach(() => {
     jest.runOnlyPendingTimers();
   });
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('yForScore', () => {
   it('maps 10 to the top gridline and 0 to the baseline, linearly between', () => {
     const top = yForScore(10);
     const bottom = yForScore(0);
+    expect(top).toBe(16);
+    expect(bottom).toBe(74);
+    expect(yForScore(5)).toBe(45);
     expect(top).toBeLessThan(bottom);
     expect(bottom).toBeLessThanOrEqual(DOT_PLOT_HEIGHT);
     expect(yForScore(5)).toBeCloseTo((top + bottom) / 2);
@@ -213,6 +223,211 @@ describe('dotPlotGeometry', () => {
 });
 
 describe('ScoreDotPlot', () => {
+  it('keeps the 82pt plot, token-sized labels, neutral history and a crisp latest outline', () => {
+    const renderer = render(
+      <ScoreDotPlot
+        buckets={WEEK}
+        reads={[read('first', '2026-08-28', 10), read('last', '2026-09-03', 0)]}
+        rangeLabel="Seven day"
+      />,
+    );
+    const plot = hostViews(renderer).find(node => node.props.onLayout)!;
+    expect(flat(plot)['height']).toBe(82);
+    expect(DOT_PLOT_HEIGHT).toBe(82);
+    for (const text of renderer.root.findAllByType(Text)) {
+      expect(flat(text)['fontSize']).toBe(type.micro.fontSize);
+      expect(flat(text)['lineHeight']).toBe(type.micro.lineHeight);
+      expect(flat(text)['fontFamily']).toBe(type.micro.fontFamily);
+      expect([color.onDarkMuted, color.volt]).toContain(flat(text)['color']);
+    }
+    expect(dots(renderer).map(node => flat(node)['backgroundColor'])).toEqual([
+      color.onDarkMuted,
+      color.volt,
+    ]);
+    const outlines = hostViews(renderer).filter(
+      node => flat(node)['borderColor'] === color.volt,
+    );
+    expect(outlines).toHaveLength(1);
+    expect(flat(outlines[0]!)['borderWidth']).toBeGreaterThan(0);
+    expect(flat(outlines[0]!)['backgroundColor'] ?? 'transparent').toBe(
+      'transparent',
+    );
+    expect(
+      hostViews(renderer).some(
+        node => flat(node)['backgroundColor'] === 'rgba(215,250,69,0.22)',
+      ),
+    ).toBe(false);
+    expect(
+      hostViews(renderer).filter(
+        node => flat(node)['backgroundColor'] === color.onDarkTintFaint,
+      ),
+    ).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
+
+  it.each([1.01, 1.118, 1.3, 2.64, 3.12])(
+    'at %sx presents every score in flowing uncapped rows instead of fixed-position labels',
+    fontScale => {
+      jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 320,
+        height: 568,
+        scale: 2,
+        fontScale,
+      });
+      const reads = Object.freeze([
+        Object.freeze(read('first', '2026-08-28', 10)),
+        Object.freeze(read('last', '2026-09-03', 0)),
+      ]);
+      const renderer = render(
+        <ScoreDotPlot buckets={WEEK} reads={reads} rangeLabel="Seven day" />,
+      );
+      const root = hostViews(renderer).find(
+        node => node.props.testID === 'score-dot-plot',
+      )!;
+      expect(root.props.accessible).toBe(false);
+      expect(root.props.importantForAccessibility).toBe('no');
+      expect(root.props.accessibilityLabel).toBe(
+        'Seven day technique scores: 2 scored reads across 2 days, latest 0.0 out of 10.',
+      );
+      expect(dots(renderer)).toHaveLength(0);
+      expect(renderer.root.findAllByType(Polyline)).toHaveLength(0);
+      const rows = renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.testID === 'chart-data-row');
+      expect(rows.map(node => node.props.children)).toEqual([
+        '2026-08-28 · Read 1: 10.0 out of 10',
+        '2026-09-03 · Read 2: 0.0 out of 10 · Latest read',
+      ]);
+      expect(texts(renderer)).toContain('Showing reads 1–2 of 2.');
+      expect(texts(renderer).join(' ')).toContain('Aug 28–Sep 3');
+      for (const node of renderer.root.findAllByType(Text)) {
+        expect(node.props.allowFontScaling).not.toBe(false);
+        expect(node.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(node.props.adjustsFontSizeToFit).not.toBe(true);
+        expect(node.props.numberOfLines).toBeUndefined();
+        expect(flat(node)['fontSize']).toBeGreaterThanOrEqual(
+          type.micro.fontSize,
+        );
+        expect(flat(node)['height']).toBeUndefined();
+        expect(flat(node)['maxHeight']).toBeUndefined();
+        expect(flat(node)['position']).not.toBe('absolute');
+      }
+      expect(
+        hostViews(renderer).some(
+          node =>
+            node.props.importantForAccessibility === 'no-hide-descendants',
+        ),
+      ).toBe(false);
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('bounds a dense large-text page while keeping every individual read reachable', () => {
+    jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 393,
+      height: 852,
+      scale: 3,
+      fontScale: 3.12,
+    });
+    const reads = Object.freeze(
+      Array.from({ length: 1001 }, (_, index) =>
+        Object.freeze(read(`read-${index}`, '2026-09-03', (index % 101) / 10)),
+      ),
+    );
+    const renderer = render(
+      <ScoreDotPlot buckets={WEEK} reads={reads} rangeLabel="Seven day" />,
+    );
+    const pageRows = () =>
+      renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.testID === 'chart-data-row');
+    const earlier = () =>
+      renderer.root.findByProps({ testID: 'chart-data-earlier' });
+    const later = () =>
+      renderer.root.findByProps({ testID: 'chart-data-later' });
+    expect(pageRows()).toHaveLength(7);
+    expect(texts(renderer)).toContain('Showing reads 995–1001 of 1001.');
+    expect(later().props.accessibilityState).toEqual({ disabled: true });
+    expect(earlier().props.accessibilityRole).toBe('button');
+    expect(flat(earlier())['minHeight']).toBeGreaterThanOrEqual(44);
+    const shown = new Set<string>();
+    for (let page = 0; page < Math.ceil(reads.length / 7); page += 1) {
+      expect(pageRows().length).toBeLessThanOrEqual(7);
+      for (const row of pageRows()) shown.add(row.props.children as string);
+      if (!earlier().props.accessibilityState.disabled) {
+        act(() => earlier().props.onPress());
+      }
+    }
+    expect(shown.size).toBe(reads.length);
+    reads.forEach((point, index) => {
+      expect(shown).toContain(
+        `${point.day} · Read ${index + 1}: ${point.score.toFixed(1)} out of 10${index === reads.length - 1 ? ' · Latest read' : ''}`,
+      );
+    });
+    expect(earlier().props.accessibilityState).toEqual({ disabled: true });
+    act(() => later().props.onPress());
+    expect(texts(renderer)).toContain('Showing reads 8–14 of 1001.');
+    act(() =>
+      renderer.update(
+        <ScoreDotPlot
+          buckets={WEEK}
+          reads={reads.slice(0, 1)}
+          rangeLabel="Seven day"
+        />,
+      ),
+    );
+    expect(texts(renderer)).toContain('Showing reads 1–1 of 1.');
+    expect(pageRows()).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
+
+  it('reacts to live text-size changes and restores the same compact plot', () => {
+    const reads = Object.freeze([
+      Object.freeze(read('first', '2026-08-28', 10)),
+      Object.freeze(read('last', '2026-09-03', 0)),
+    ]);
+    const renderer = render(
+      <ScoreDotPlot buckets={WEEK} reads={reads} rangeLabel="Seven day" />,
+    );
+    for (const fontScale of [3.12, 1.3, 1]) {
+      const window = { width: 393, height: 852, scale: 3, fontScale };
+      jest.spyOn(Dimensions, 'get').mockReturnValue(window);
+      act(() => Dimensions.set({ window, screen: window }));
+      const rows = renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.testID === 'chart-data-row');
+      expect(rows).toHaveLength(fontScale > 1 ? 2 : 0);
+      expect(dots(renderer)).toHaveLength(fontScale > 1 ? 0 : 2);
+    }
+    const plot = hostViews(renderer).find(node => node.props.onLayout)!;
+    expect(flat(plot)['height']).toBe(82);
+    expect(dots(renderer).map(node => flat(node)['top'])).toEqual([
+      16 - 4.5,
+      74 - 5.5,
+    ]);
+    expect(reads.map(point => point.score)).toEqual([10, 0]);
+    act(() => renderer.unmount());
+  });
+
+  it('keeps an empty enlarged window explicit without inventing scores', () => {
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 3.12 });
+    const renderer = render(
+      <ScoreDotPlot buckets={WEEK} reads={[]} rangeLabel="Seven day" />,
+    );
+    expect(texts(renderer)).toContain('No scored reads in this window yet.');
+    expect(texts(renderer)).toContain('No reads in this window.');
+    expect(texts(renderer).join(' ')).toContain('Aug 28–Sep 3');
+    expect(
+      renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.testID === 'chart-data-row'),
+    ).toHaveLength(0);
+    expect(texts(renderer).join(' ')).not.toContain('0.0');
+    act(() => renderer.unmount());
+  });
+
   it('draws one dot per read, labels each value, and accents the newest', () => {
     const reads = [
       read('a', '2026-08-29', 5.5),
@@ -267,6 +482,7 @@ describe('ScoreDotPlot', () => {
       plot.props.onLayout({ nativeEvent: { layout: { width: 280 } } });
     });
     const [line] = renderer.root.findAllByType(Polyline);
+    expect(line!.props.stroke).toBe(color.onDarkMuted);
     // Coordinates are rounded to 2dp: no float noise in the path data.
     expect(line!.props.points).toBe(
       `20,${yForScore(4)} 260,${Math.round(yForScore(8) * 100) / 100}`,

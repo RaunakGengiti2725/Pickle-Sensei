@@ -282,8 +282,9 @@ const styles = StyleSheet.create({
   title: { flex: 1 },
   saveContainer: { alignSelf: 'center' },
   saveToggle: {
-    minHeight: 34,
-    paddingHorizontal: 10,
+    minHeight: 44,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: color.line,

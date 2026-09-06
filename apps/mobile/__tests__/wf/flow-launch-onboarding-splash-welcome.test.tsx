@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Dimensions, Image, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -72,6 +72,9 @@ import {
   WATCHDOG_MS,
 } from '../../src/screens/SplashScreen';
 import { WelcomeScreen } from '../../src/screens/WelcomeScreen';
+import { BrandMark } from '../../src/design/components';
+import { Icon } from '../../src/design/icons';
+import { color } from '../../src/design/tokens';
 
 type Renderer = TestRenderer.ReactTestRenderer;
 
@@ -308,6 +311,64 @@ describe('flow: launch-onboarding — SplashScreen', () => {
 });
 
 describe('flow: launch-onboarding — WelcomeScreen', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each([
+    { width: 393, height: 852, fontScale: 1, adaptive: false },
+    { width: 320, height: 568, fontScale: 1, adaptive: true },
+    { width: 393, height: 852, fontScale: 3.14, adaptive: true },
+  ])(
+    'retains the approved brand and CourtStory with a real shield at $width pt / $fontScale x',
+    dimensions => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ ...dimensions, scale: 3 });
+      let renderer!: Renderer;
+      act(() => {
+        renderer = TestRenderer.create(
+          <WelcomeScreen onGetStarted={jest.fn()} onSignIn={jest.fn()} />,
+        );
+      });
+      const mark = renderer.root.findByType(BrandMark);
+      expect(mark.props.light).toBe(true);
+      expect(mark.findByType(Image).props.source).toBe(
+        require('../../assets/brand/pickle-mark.png'),
+      );
+      expect(mark.findByType(Image).props.resizeMode).toBe('contain');
+      const story = renderer.root.findByProps({
+        testID: 'welcome-court-story',
+      });
+      const shield = story.findByType(Icon);
+      expect(shield.props).toMatchObject({
+        name: 'shield',
+        size: 16,
+        color: color.onDarkMuted,
+      });
+      expect(
+        renderer.root.findAllByProps({ testID: 'welcome-content-scroll' })
+          .length > 0,
+      ).toBe(dimensions.adaptive);
+      for (const label of [
+        'Start your first read',
+        'I already have an account',
+      ]) {
+        const control = pressables(renderer, label)[0]!;
+        const style =
+          typeof control.props.style === 'function'
+            ? control.props.style({ pressed: false })
+            : control.props.style;
+        expect(StyleSheet.flatten(style).minHeight).toBeGreaterThanOrEqual(44);
+      }
+      expect(
+        renderer.root.findByProps({ testID: 'welcome-free-copy' }).props
+          .children,
+      ).toBe(
+        'Two successful validated ratings free · Unscored attempts don’t count',
+      );
+      act(() => renderer.unmount());
+    },
+  );
+
   it('exposes exactly two wired controls, each a labelled button, and never renders a placeholder', () => {
     const onGetStarted = jest.fn();
     const onSignIn = jest.fn();

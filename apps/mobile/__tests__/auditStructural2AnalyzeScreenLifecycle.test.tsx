@@ -84,7 +84,6 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import {
@@ -186,18 +185,6 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
       typeof n.props.onPress === 'function',
   );
   if (!node) throw new Error(`No pressable with accessibilityLabel ${label}`);
-  act(() => node.props.onPress());
-}
-
-function pressButton(renderer: ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
-  const node = candidates[candidates.length - 1];
-  if (!node) throw new Error(`No button labeled ${label}`);
   act(() => node.props.onPress());
 }
 
@@ -303,7 +290,7 @@ describe('capture failure vs user cancellation', () => {
     const capture = deferred<CapturedClip>(captureStrokeVideo as jest.Mock);
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await capture.reject(
       nativeRejection('camera.cancelled', 'Camera capture was canceled.'),
     );
@@ -315,7 +302,7 @@ describe('capture failure vs user cancellation', () => {
     const capture = deferred<CapturedClip>(captureStrokeVideo as jest.Mock);
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     // Not a user action: the native code is a hard failure. The message is
     // the kind of copy a system interruption produces.
     const message =
@@ -351,7 +338,7 @@ describe('unmount access re-read timing', () => {
     (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await act(async () => {});
     await act(async () => {});
     expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);

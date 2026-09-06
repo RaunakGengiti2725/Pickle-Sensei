@@ -388,7 +388,7 @@ async function completeAttempt(
   mockReadArtifact = async () => sidecarJson;
   const capture = deferredCapture();
   if (options.pressOpen !== false) {
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
   }
   await flush();
   driveNativeCaptureSequence();
@@ -443,7 +443,7 @@ describe('first attempt — tap-declared full flow to a real Result', () => {
     const { clip, sidecarJson } = guidedClip('first-attempt');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
 
     // Camera permission then starting-position guidance, straight from the
@@ -572,7 +572,7 @@ describe('voice and Auto Detect declaration paths', () => {
     const { clip, sidecarJson } = guidedClip('auto-attempt');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     driveNativeCaptureSequence();
     capture.resolve(clip);
@@ -659,7 +659,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('no_person', 0));
     capture.reject(userCancel());
@@ -674,7 +674,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const first = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     first.reject(userCancel());
     await flush();
@@ -688,7 +688,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('ready', 0.9));
     // The working surface header close = user backgrounding/aborting.
@@ -708,7 +708,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await act(async () => renderer.unmount());
     expect(mockCancelSpy).toHaveBeenCalledTimes(1);
@@ -721,7 +721,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(sessionEvent('interrupted'));
     capture.reject(new Error(message));
@@ -757,7 +757,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const denied = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(permissionEvent('requesting'));
     emit(permissionEvent('denied'));
@@ -791,7 +791,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     capture.reject(
       new Error('Not enough storage available to save the capture.'),
@@ -813,7 +813,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const { clip, sidecarJson } = guidedClip('network-loss');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     driveNativeCaptureSequence();
     capture.resolve(clip);
@@ -847,7 +847,7 @@ describe('attempt isolation of live readiness evidence', () => {
     // Attempt 1: the camera saw the athlete (ready, 0.93) but the user
     // cancelled before any clip existed.
     const first = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('ready', 0.93));
     first.reject(userCancel());
@@ -859,7 +859,7 @@ describe('attempt isolation of live readiness evidence', () => {
     const { clip, sidecarJson } = guidedClip('isolated-attempt');
     mockReadArtifact = async () => sidecarJson;
     const second = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     second.resolve(clip);
     await waitFor(

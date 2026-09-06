@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -26,11 +32,7 @@ import {
 } from '../consistency/engine';
 import { AnimatedFlame, FlameIcon } from '../consistency/FlameIcon';
 import { AchievementsShowcase } from '../consistency/AchievementsShowcase';
-import {
-  badgeArtFor,
-  MilestoneBadge,
-  RARITY_PALETTE,
-} from '../consistency/MilestoneBadge';
+import { badgeArtFor, MilestoneBadge } from '../consistency/MilestoneBadge';
 import {
   SHIELD_MAX_HELD,
   streakMilestoneById,
@@ -147,12 +149,7 @@ function monthOf(day: string): { year: number; month: number } {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) - 1 };
 }
 
-const HEAT_TINTS = [
-  'transparent',
-  'rgba(255,155,66,0.14)',
-  'rgba(255,155,66,0.24)',
-  'rgba(255,131,41,0.34)',
-] as const;
+const HEAT_OPACITY = [0, 0.12, 0.24, 0.34] as const;
 
 function DayCell(props: {
   cell: MonthCell;
@@ -162,10 +159,12 @@ function DayCell(props: {
   selected: boolean;
   runsLeft: boolean;
   runsRight: boolean;
+  expanded: boolean;
+  minimumHeight: number;
   onPress: (day: string) => void;
 }) {
   const { cell, log } = props;
-  if (!cell.day) return <View style={styles.dayCell} />;
+  if (!cell.day) return props.expanded ? null : <View style={styles.dayCell} />;
   const counted = Boolean(log);
   const heat = dayHeatLevel(log);
   const label = `${cell.day}${
@@ -182,8 +181,15 @@ function DayCell(props: {
         : ', not trained'
   }`;
   return (
-    <View style={styles.dayCell}>
-      {counted && (props.runsLeft || props.runsRight) ? (
+    <View
+      testID={`streak-day-cell-${cell.day}`}
+      style={
+        props.expanded
+          ? styles.dayCellExpanded
+          : [styles.dayCell, { minHeight: props.minimumHeight }]
+      }
+    >
+      {!props.expanded && counted && (props.runsLeft || props.runsRight) ? (
         <View
           pointerEvents="none"
           style={[
@@ -198,17 +204,28 @@ function DayCell(props: {
         accessibilityState={{ selected: props.selected }}
         disabled={!counted}
         onPress={() => props.onPress(cell.day as string)}
-        containerStyle={styles.dayPressable}
+        containerStyle={props.expanded ? undefined : styles.dayPressable}
         style={[
           styles.dayInner,
-          counted && !log?.shielded
-            ? { backgroundColor: HEAT_TINTS[heat] }
-            : null,
+          props.expanded && styles.dayInnerExpanded,
           log?.shielded ? styles.dayShielded : null,
           props.isToday ? styles.dayToday : null,
           props.selected ? styles.daySelected : null,
         ]}
       >
+        {counted && !log?.shielded && !props.selected ? (
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: color.flame,
+                opacity: HEAT_OPACITY[heat],
+                borderRadius: radius.sm,
+              },
+            ]}
+          />
+        ) : null}
         {log ? (
           log.shielded ? (
             <Icon name="shield" color={color.mint} size={15} />
@@ -226,11 +243,21 @@ function DayCell(props: {
         <Text
           style={[
             styles.dayNumber,
-            props.isFuture && styles.dayNumberFuture,
+            props.expanded && styles.dayNumberExpanded,
+            props.isFuture && !props.expanded && styles.dayNumberFuture,
             props.isToday && styles.dayNumberToday,
+            counted && styles.dayNumberActive,
           ]}
         >
-          {cell.dayOfMonth}
+          {props.expanded
+            ? new Date(`${cell.day}T12:00:00Z`).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })
+            : cell.dayOfMonth}
         </Text>
       </PressableScale>
     </View>
@@ -266,19 +293,11 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
   if (props.snapshot.earned.some(e => e.id === 'streak.100')) return null;
   const daysAway = milestone.days - props.snapshot.currentStreak;
   const art = badgeArtFor('streak.100');
-  const palette = RARITY_PALETTE[milestone.rarity];
   return (
     <View
       accessibilityLabel={`Century Club: ${daysAway} days away. Permanent badge.`}
       style={styles.centuryCard}
     >
-      <LinearGradient
-        colors={[color.surfaceDark, '#152a1f']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
       <MilestoneBadge
         glyph={art.glyph}
         {...(art.value !== undefined ? { value: art.value } : {})}
@@ -287,7 +306,7 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
         size={54}
       />
       <View style={styles.centuryBody}>
-        <Text style={[type.micro, { color: palette.accent }]}>
+        <Text style={[type.micro, { color: color.onDarkMuted }]}>
           {daysAway} {plural(daysAway, 'DAY').toUpperCase()} AWAY
         </Text>
         <Text style={[type.bodyBold, { color: color.onDark, marginTop: 2 }]}>
@@ -303,6 +322,13 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
 }
 
 export function StreakCalendarScreen() {
+  const { fontScale, width } = useWindowDimensions();
+  const gridWidth =
+    width - 2 * space.lg - 2 * space.sm - 2 * StyleSheet.hairlineWidth;
+  const expandedCalendar = fontScale >= 1.8 || gridWidth / 7 < 44;
+  const minimumDayHeight = Math.ceil(
+    19 + type.micro.lineHeight * fontScale + space.sm + space.xs,
+  );
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const snapshot = useConsistencyStore(s => s.snapshot);
@@ -372,6 +398,18 @@ export function StreakCalendarScreen() {
           ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
           : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
 
+  const monthTitle = (
+    <Text
+      style={[
+        type.h3,
+        { color: color.ink },
+        expandedCalendar && styles.monthTitleExpanded,
+      ]}
+    >
+      {MONTH_NAMES[visible.month]} {visible.year}
+    </Text>
+  );
+
   if (!snapshot && loadError) {
     return (
       <SafeAreaView edges={['top']} style={styles.screen}>
@@ -423,16 +461,9 @@ export function StreakCalendarScreen() {
       >
         {/* ---- Streak hero ---------------------------------------------- */}
         <View style={styles.hero} testID="streak-hero">
-          <LinearGradient
-            colors={[color.courtDeep, color.surfaceDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            pointerEvents="none"
-            style={StyleSheet.absoluteFill}
-          />
           <View style={styles.heroTop}>
             <View style={styles.heroFlame}>
-              <AnimatedFlame intensity={intensity} size={54} />
+              <AnimatedFlame intensity={intensity} size={54} dark />
             </View>
             <View style={styles.heroCount}>
               <Text style={styles.heroStreak}>{streak}</Text>
@@ -509,6 +540,7 @@ export function StreakCalendarScreen() {
         {/* ---- Calendar -------------------------------------------------- */}
         <SectionTitle title="Calendar" />
         <Card style={styles.calendarCard}>
+          {expandedCalendar ? monthTitle : null}
           <View style={styles.monthNav}>
             <PressableScale
               accessibilityLabel="Previous month"
@@ -522,9 +554,7 @@ export function StreakCalendarScreen() {
             >
               <Icon name="back" color={color.ink} size={17} />
             </PressableScale>
-            <Text style={[type.h3, { color: color.ink }]}>
-              {MONTH_NAMES[visible.month]} {visible.year}
-            </Text>
+            {expandedCalendar ? null : monthTitle}
             <PressableScale
               accessibilityLabel="Next month"
               disabled={atCurrentMonth}
@@ -538,15 +568,20 @@ export function StreakCalendarScreen() {
               <Icon name="arrow" color={color.ink} size={17} />
             </PressableScale>
           </View>
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((label, index) => (
-              <Text key={index} style={[type.micro, styles.weekdayLabel]}>
-                {label}
-              </Text>
-            ))}
-          </View>
+          {!expandedCalendar ? (
+            <View style={styles.weekdayRow}>
+              {WEEKDAY_LABELS.map((label, index) => (
+                <Text key={index} style={[type.micro, styles.weekdayLabel]}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+          ) : null}
           {weeks.map((week, weekIndex) => (
-            <View key={weekIndex} style={styles.weekRow}>
+            <View
+              key={weekIndex}
+              style={expandedCalendar ? styles.weekList : styles.weekRow}
+            >
               {week.map((cell, cellIndex) => {
                 const log = cell.day ? snapshot?.days[cell.day] : undefined;
                 const counted = Boolean(log);
@@ -557,6 +592,8 @@ export function StreakCalendarScreen() {
                     key={cellIndex}
                     cell={cell}
                     log={log}
+                    expanded={expandedCalendar}
+                    minimumHeight={minimumDayHeight}
                     isToday={cell.day === asOfDay}
                     isFuture={Boolean(cell.day && cell.day > asOfDay)}
                     selected={Boolean(cell.day && cell.day === selectedDay)}
@@ -716,6 +753,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: space.lg,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
     marginTop: space.sm,
   },
@@ -723,17 +762,15 @@ const styles = StyleSheet.create({
   heroFlame: {
     width: 84,
     height: 84,
-    borderRadius: 42,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,155,66,0.12)',
+    backgroundColor: color.flameTint,
   },
   heroCount: { flex: 1 },
   heroStreak: {
     ...type.display,
     color: color.onDark,
-    fontSize: 56,
-    lineHeight: 60,
   },
   heroStreakLabel: { color: color.onDarkMuted, letterSpacing: 2 },
   heroStatus: { color: color.onDarkSubtle, marginTop: space.md },
@@ -779,7 +816,6 @@ const styles = StyleSheet.create({
   heroStatLabel: {
     ...type.micro,
     color: color.onDarkFaint,
-    fontSize: 10,
     letterSpacing: 1,
   },
   shieldRow: { flexDirection: 'row', gap: 5, paddingVertical: 4 },
@@ -791,7 +827,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: color.onDarkTint,
   },
-  shieldSlotFull: { backgroundColor: 'rgba(83,217,155,0.18)' },
+  shieldSlotFull: { backgroundColor: color.mintTint },
   nextReward: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -804,11 +840,16 @@ const styles = StyleSheet.create({
     borderColor: color.lineMutedDark,
   },
   nextRewardText: { color: color.onDarkMuted, flex: 1 },
-  calendarCard: { paddingHorizontal: space.md, paddingVertical: space.md },
+  calendarCard: { paddingHorizontal: space.sm, paddingVertical: space.md },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: space.sm,
+  },
+  monthTitleExpanded: {
+    alignSelf: 'stretch',
+    textAlign: 'center',
     marginBottom: space.sm,
   },
   monthArrow: {
@@ -830,28 +871,38 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   weekRow: { flexDirection: 'row', marginTop: 4 },
+  weekList: { gap: space.xs, marginTop: space.xs },
   dayCell: { flex: 1, aspectRatio: 0.86, position: 'relative' },
+  dayCellExpanded: { alignSelf: 'stretch' },
   runBand: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: '14%',
     height: '58%',
-    backgroundColor: 'rgba(255,155,66,0.1)',
+    backgroundColor: color.flameTint,
   },
   runBandLeft: { left: -2 },
   runBandRight: { right: -2 },
   dayPressable: { flex: 1 },
   dayInner: {
     flex: 1,
-    margin: 1.5,
+    minWidth: 44,
+    minHeight: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
     paddingVertical: 3,
   },
-  dayShielded: { backgroundColor: 'rgba(83,217,155,0.14)' },
+  dayInnerExpanded: {
+    flex: 0,
+    flexDirection: 'row',
+    gap: space.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
+  },
+  dayShielded: { backgroundColor: color.mintTint },
   dayToday: {
     borderWidth: 1.6,
     borderColor: color.court,
@@ -867,13 +918,15 @@ const styles = StyleSheet.create({
   dayNumber: {
     ...type.micro,
     color: color.inkSoft,
-    fontSize: 10,
     fontVariant: ['tabular-nums'],
   },
+  dayNumberExpanded: { ...type.caption, flex: 1, minWidth: 0 },
+  dayNumberActive: { color: color.ink },
   dayNumberFuture: { color: color.line },
   dayNumberToday: { color: color.court },
   legendRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: space.md,
     marginTop: space.md,
@@ -882,7 +935,7 @@ const styles = StyleSheet.create({
     borderTopColor: color.line,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendLabel: { color: color.inkSoft, fontSize: 10, letterSpacing: 0.8 },
+  legendLabel: { color: color.inkSoft, letterSpacing: 0.8 },
   dayDetail: { marginTop: space.md },
   dayChips: { flexDirection: 'row', gap: 7, marginTop: space.sm },
   dayChip: {
@@ -926,9 +979,8 @@ const styles = StyleSheet.create({
   activityLabel: { color: color.ink, textTransform: 'capitalize' },
   activityTime: { color: color.inkSoft, marginTop: 1, letterSpacing: 0.5 },
   activityScore: {
-    ...type.h3,
+    ...type.score,
     color: color.ink,
-    fontVariant: ['tabular-nums'],
   },
   centuryCard: {
     flexDirection: 'row',
@@ -938,6 +990,8 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.lg,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
   },
   centuryBody: { flex: 1, minWidth: 0 },
@@ -945,6 +999,5 @@ const styles = StyleSheet.create({
   footnote: {
     color: color.inkSoft,
     marginTop: space.lg,
-    lineHeight: 17,
   },
 });

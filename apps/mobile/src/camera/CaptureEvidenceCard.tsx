@@ -1,12 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  Line,
-  RadialGradient,
-  Stop,
-} from 'react-native-svg';
+import Svg, { Circle, Line } from 'react-native-svg';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import type {
@@ -65,10 +59,7 @@ function humanize(value: string) {
 }
 
 function movementTone(relative: number): string {
-  if (relative >= 0.72) return color.flame;
-  if (relative >= 0.38) return color.volt;
-  if (relative > 0) return color.mint;
-  return color.lineStrongDark;
+  return relative > 0 ? color.volt : color.lineStrongDark;
 }
 
 function MovementMap({ evidence }: { evidence: CaptureEvidenceV1 }) {
@@ -92,17 +83,7 @@ function MovementMap({ evidence }: { evidence: CaptureEvidenceV1 }) {
       importantForAccessibility="no-hide-descendants"
     >
       <Svg width="100%" height="100%" viewBox="0 0 120 190">
-        <Defs>
-          <RadialGradient id="headShade" cx="50%" cy="35%" r="65%">
-            <Stop
-              offset="0%"
-              stopColor={color.onDarkMuted}
-              stopOpacity="0.42"
-            />
-            <Stop offset="100%" stopColor={color.lineDark} stopOpacity="0.18" />
-          </RadialGradient>
-        </Defs>
-        <Circle cx="60" cy="20" r="10" fill="url(#headShade)" />
+        <Circle cx="60" cy="20" r="10" fill={color.lineStrongDark} />
         <Line
           x1="60"
           y1="30"
@@ -140,9 +121,11 @@ function MovementMap({ evidence }: { evidence: CaptureEvidenceV1 }) {
                 <Circle
                   cx={point.x}
                   cy={point.y}
-                  r={7 + intensity * 5}
-                  fill={tone}
-                  opacity={0.1 + intensity * 0.18}
+                  r={5 + intensity * 3}
+                  fill="none"
+                  stroke={tone}
+                  strokeWidth={1.2}
+                  opacity={0.25 + intensity * 0.3}
                 />
               ) : null}
               <Circle
@@ -158,7 +141,7 @@ function MovementMap({ evidence }: { evidence: CaptureEvidenceV1 }) {
         })}
       </Svg>
       <View style={styles.mapLegend}>
-        <View style={[styles.legendDot, { backgroundColor: color.mint }]} />
+        <View style={[styles.legendDot, { backgroundColor: color.volt }]} />
         <Text style={styles.legendCopy}>RELATIVE MOVEMENT</Text>
       </View>
     </View>
@@ -231,7 +214,7 @@ export function CaptureEvidenceCard({ clip }: { clip: CapturedClip }) {
     >
       <View style={styles.header}>
         <View style={styles.headerTitle}>
-          <Icon name="shield" color={color.mint} size={19} />
+          <Icon name="stroke" color={color.onDarkMuted} size={19} />
           <Text style={[type.micro, styles.eyebrow]}>
             {evidence ? 'MEASURED MOTION' : 'SOURCE VIDEO'}
           </Text>
@@ -364,7 +347,7 @@ const styles = StyleSheet.create({
   card: {
     marginTop: space.xl,
     padding: space.lg,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     backgroundColor: color.surfaceDark,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
@@ -390,7 +373,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: color.mint,
+    backgroundColor: color.onDarkMuted,
   },
   provenanceCopy: { ...type.micro, color: color.onDarkMuted },
   heroRow: { flexDirection: 'row', gap: space.md, marginTop: space.lg },
@@ -399,7 +382,7 @@ const styles = StyleSheet.create({
   mapShell: {
     width: 132,
     height: 208,
-    borderRadius: radius.lg,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     backgroundColor: color.cameraSurface,
     borderWidth: StyleSheet.hairlineWidth,
@@ -421,7 +404,7 @@ const styles = StyleSheet.create({
   legendCopy: { ...type.micro, color: color.onDarkFaint },
   heroFacts: { flex: 1, paddingVertical: space.sm },
   heroFactsCompact: { paddingTop: 0 },
-  movementLabel: { color: color.mint },
+  movementLabel: { color: color.onDarkMuted },
   movementValue: {
     color: color.onDark,
     textTransform: 'capitalize',
@@ -434,7 +417,7 @@ const styles = StyleSheet.create({
     marginVertical: space.md,
   },
   visibilityLabel: { color: color.onDarkMuted },
-  visibilityValue: { color: color.volt, fontSize: 38, lineHeight: 42 },
+  visibilityValue: { color: color.onDark },
   factsRow: {
     flexDirection: 'row',
     alignItems: 'stretch',

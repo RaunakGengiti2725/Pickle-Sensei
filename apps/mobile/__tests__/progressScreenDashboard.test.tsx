@@ -5,7 +5,9 @@
  * calendar and gameplay progression — all verifiable from mocked stores.
  */
 import React from 'react';
+import { StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { color, type as typography } from '../src/design/tokens';
 
 jest.mock('../src/data/db', () => ({
   getDb: jest.fn(() => ({
@@ -495,6 +497,29 @@ describe('ProgressScreen dashboard', () => {
 
     // The 8.2 read strictly beats the pre-window best of 8.1.
     expect(findByTestId(renderer, 'personal-best-card')).not.toBeNull();
+    expect(
+      StyleSheet.flatten(
+        findByTestId(renderer, 'personal-best-card')!.props.style,
+      ),
+    ).toMatchObject({ borderColor: color.lineDark });
+    const scoreLabels = renderer.root
+      .findAllByType(Text)
+      .filter(node => node.props.children === '8.2');
+    expect(
+      scoreLabels.filter(
+        node =>
+          StyleSheet.flatten(node.props.style)?.fontSize ===
+          typography.score.fontSize,
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+    const heroScore = scoreLabels.find(
+      node =>
+        StyleSheet.flatten(node.props.style)?.fontSize ===
+        typography.display.fontSize,
+    )!;
+    expect(StyleSheet.flatten(heroScore.props.style)).toMatchObject(
+      typography.display,
+    );
     expect(text).toContain('NEW PERSONAL BEST');
     expect(text).toMatch(/Beats your previous best\s+8\.1/);
 

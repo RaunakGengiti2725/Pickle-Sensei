@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import LinearGradient from 'react-native-linear-gradient';
 import { SHOT_TYPES } from '@pickle/shared-types';
 import {
   Card,
@@ -539,13 +538,6 @@ export function ProgressScreen() {
               onPress={() => navigation.navigate('StreakCalendar')}
             />
             <View style={styles.practiceHero}>
-              <LinearGradient
-                colors={[color.courtDeep, color.surfaceDark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                pointerEvents="none"
-                style={StyleSheet.absoluteFill}
-              />
               <View style={styles.practiceHeroTop}>
                 <View style={styles.practiceHeroHeading}>
                   <Text style={[type.micro, styles.heroEyebrow]}>
@@ -563,7 +555,7 @@ export function ProgressScreen() {
               {practice.captureCount === 0 ? (
                 <View style={styles.captureZeroStage}>
                   <View style={styles.captureZeroIcon}>
-                    <Icon name="spark" color={color.volt} size={20} />
+                    <Icon name="progress" color={color.volt} size={20} />
                   </View>
                   <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
@@ -845,7 +837,7 @@ export function ProgressScreen() {
             />
             <View style={styles.statRows}>
               <StatDeltaRow
-                icon="spark"
+                icon="camera"
                 label="SCORED REPS"
                 value={String(reps.current)}
                 previous={reps.previous === null ? null : String(reps.previous)}
@@ -1187,7 +1179,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: space.lg,
     paddingBottom: space.lg + 4,
-    backgroundColor: color.surfaceDark,
+    backgroundColor: color.inkElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
     overflow: 'hidden',
@@ -1220,19 +1212,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,155,66,0.14)',
+    backgroundColor: color.flameTint,
   },
   streakValue: {
     ...type.h3,
     color: color.onDark,
-    lineHeight: 19,
     fontVariant: ['tabular-nums'],
   },
   streakLabel: {
     ...type.micro,
-    color: color.onDarkFaint,
-    fontSize: 9,
-    lineHeight: 12,
+    color: color.onDarkMuted,
     letterSpacing: 0.5,
   },
   // The count column must own the shrinkable space (flex: 1 + minWidth: 0):
@@ -1254,8 +1243,6 @@ const styles = StyleSheet.create({
   captureCount: {
     ...type.display,
     color: color.onDark,
-    fontSize: 64,
-    lineHeight: 66,
   },
   captureCountCopy: { flexShrink: 1, minWidth: 0, paddingBottom: 7 },
   captureZeroStage: {
@@ -1275,7 +1262,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(215,250,69,0.12)',
+    backgroundColor: color.voltTint,
   },
   captureZeroCopy: { flex: 1, minWidth: 0 },
   captureZeroDetail: { color: color.onDarkSubtle, marginTop: 3 },
@@ -1322,8 +1309,6 @@ const styles = StyleSheet.create({
   evidenceValue: {
     ...type.score,
     color: color.onDark,
-    fontSize: 34,
-    lineHeight: 39,
     marginTop: 8,
   },
   evidenceTrack: {
@@ -1352,7 +1337,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(83,217,155,0.12)',
+    backgroundColor: color.mintTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1379,7 +1364,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(83,217,155,0.12)',
+    backgroundColor: color.mintTint,
   },
   captureTitle: { color: color.onDark, textTransform: 'capitalize' },
   captureMeta: { color: color.onDarkSubtle, marginTop: 2 },
@@ -1395,8 +1380,6 @@ const styles = StyleSheet.create({
   captureStatusText: {
     ...type.micro,
     color: color.volt,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.45,
   },
   techniqueHero: { marginTop: space.md, minHeight: 174 },
@@ -1436,8 +1419,6 @@ const styles = StyleSheet.create({
   techniqueScore: {
     ...type.display,
     color: color.onDark,
-    fontSize: 72,
-    lineHeight: 74,
   },
   techniqueScale: { color: color.onDarkSubtle, marginLeft: 8 },
   techniqueDupr: { color: color.onDarkFaint, marginLeft: 8 },
@@ -1464,7 +1445,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     borderWidth: 1,
-    borderColor: 'rgba(215,250,69,0.35)',
+    borderColor: color.lineDark,
   },
   pbIcon: {
     width: 44,
@@ -1472,15 +1453,13 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(215,250,69,0.12)',
+    backgroundColor: color.voltTint,
   },
   pbName: { color: color.onDark, marginTop: 2, textTransform: 'capitalize' },
   pbDetail: { color: color.onDarkSubtle, marginTop: 2 },
   pbScore: {
     ...type.score,
     color: color.volt,
-    fontSize: 34,
-    lineHeight: 38,
   },
   signalCard: { gap: space.md },
   signalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
@@ -1513,8 +1492,6 @@ const styles = StyleSheet.create({
   strokeScore: {
     ...type.score,
     color: color.onDark,
-    fontSize: 30,
-    lineHeight: 34,
   },
   chartWrap: { marginTop: space.md, alignItems: 'center', overflow: 'hidden' },
   strokeMeta: {
@@ -1544,7 +1521,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(83,217,155,0.12)',
+    backgroundColor: color.mintTint,
     alignItems: 'center',
     justifyContent: 'center',
   },

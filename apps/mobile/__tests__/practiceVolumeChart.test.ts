@@ -1,6 +1,32 @@
 import { compactPracticeBuckets } from '../src/progress/PracticeVolumeChart';
 
 describe('practice volume chart bucketing', () => {
+  it('leaves shared readonly daily values intact and keeps every grouped endpoint and count', () => {
+    const source = Object.freeze(
+      Array.from({ length: 365 }, (_, index) =>
+        Object.freeze({
+          key: `day-${index}`,
+          label: `Day ${index + 1}`,
+          count: index % 5,
+        }),
+      ),
+    );
+    const compacted = compactPracticeBuckets(source);
+    expect(compacted).toHaveLength(13);
+    compacted.forEach((value, index) => {
+      const group = source.slice(index * 29, (index + 1) * 29);
+      expect(value).toEqual({
+        key: `${group[0]!.key}:${group.at(-1)!.key}`,
+        firstLabel: group[0]!.label,
+        lastLabel: group.at(-1)!.label,
+        count: group.reduce((sum, day) => sum + day.count, 0),
+      });
+    });
+    expect(source.map(value => value.count)).toEqual(
+      Array.from({ length: 365 }, (_, index) => index % 5),
+    );
+  });
+
   it('preserves every real capture while keeping long ranges readable', () => {
     const source = Array.from({ length: 90 }, (_, index) => ({
       key: `2026-06-${String(index + 1).padStart(2, '0')}`,

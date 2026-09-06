@@ -82,7 +82,7 @@ function SettingRow(props: {
   const content = (
     <>
       <View style={styles.rowIcon}>
-        <Icon name={props.icon} size={18} color={color.court} />
+        <Icon name={props.icon} size={18} color={color.inkSoft} />
       </View>
       <Text style={[type.body, { color: color.ink, flex: 1 }]}>
         {props.label}
@@ -296,10 +296,10 @@ export function SettingsScreen() {
           Your player profile, coaching preferences, and privacy controls.
         </Text>
 
-        <Card tone="dark" style={styles.accountCard}>
+        <Card tone="soft" style={styles.accountCard}>
           <View style={styles.accountTop}>
             <View style={styles.avatar}>
-              <Text style={[type.h2, { color: color.onVolt }]}>
+              <Text style={[type.h2, { color: color.ink }]}>
                 {accountName.charAt(0).toUpperCase()}
               </Text>
             </View>
@@ -311,18 +311,16 @@ export function SettingsScreen() {
                     ? 'LOCAL'
                     : 'SYNCED'
               }
-              tone={session === null ? 'neutral' : 'volt'}
+              tone="neutral"
             />
           </View>
           <Text
             numberOfLines={1}
-            style={[type.h2, { color: color.onDark, marginTop: space.lg }]}
+            style={[type.h2, { color: color.ink, marginTop: space.lg }]}
           >
             {accountName}
           </Text>
-          <Text
-            style={[type.caption, { color: color.onDarkFaint, marginTop: 4 }]}
-          >
+          <Text style={[type.caption, { color: color.inkSoft, marginTop: 4 }]}>
             {accountCaption}
           </Text>
         </Card>
@@ -417,20 +415,17 @@ export function SettingsScreen() {
             last
           />
         </Card>
-        <View style={styles.privacyCard}>
+        <View style={styles.privacyCard} testID="settings-privacy-context">
           <View style={styles.privacyHeader}>
             <View style={styles.privacyIcon}>
-              <Icon name="shield" size={22} color={color.volt} />
+              <Icon name="shield" size={22} color={color.inkSoft} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.h3, { color: color.onDark }]}>
+              <Text style={[type.h3, { color: color.ink }]}>
                 Private by default
               </Text>
               <Text
-                style={[
-                  type.caption,
-                  { color: color.onDarkSubtle, marginTop: 3 },
-                ]}
+                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
               >
                 Current capture behavior, reported without assumptions.
               </Text>
@@ -438,18 +433,18 @@ export function SettingsScreen() {
           </View>
           <View style={styles.privacyRows}>
             <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.onDarkSubtle }]}>
+              <Text style={[type.caption, { color: color.inkSoft }]}>
                 Captured clips
               </Text>
-              <Text style={[type.bodyBold, { color: color.onDark }]}>
+              <Text style={[type.bodyBold, { color: color.ink }]}>
                 App-private storage
               </Text>
             </View>
             <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.onDarkSubtle }]}>
+              <Text style={[type.caption, { color: color.inkSoft }]}>
                 Cloud video upload
               </Text>
-              <Text style={[type.bodyBold, { color: color.onDark }]}>
+              <Text style={[type.bodyBold, { color: color.ink }]}>
                 Not configured
               </Text>
             </View>
@@ -584,8 +579,8 @@ const styles = StyleSheet.create({
   avatar: {
     width: 54,
     height: 54,
-    borderRadius: 27,
-    backgroundColor: color.volt,
+    borderRadius: radius.pill,
+    backgroundColor: color.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -601,8 +596,8 @@ const styles = StyleSheet.create({
   rowIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: color.courtSoft,
+    borderRadius: radius.md,
+    backgroundColor: color.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -614,18 +609,18 @@ const styles = StyleSheet.create({
   },
   privacyCard: {
     // The white consent Card above has no bottom margin of its own, so the
-    // dark panel needs explicit top spacing or the two visually fuse.
+    // context panel needs explicit top spacing or the two visually fuse.
     marginTop: space.md,
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceDark,
+    backgroundColor: color.surfaceAlt,
     padding: space.lg,
   },
   privacyHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   privacyIcon: {
     width: 46,
     height: 46,
-    borderRadius: 23,
-    backgroundColor: color.inkElevated,
+    borderRadius: radius.pill,
+    backgroundColor: color.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -633,7 +628,7 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
     paddingTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineDark,
+    borderTopColor: color.line,
   },
   privacyRow: {
     minHeight: 45,

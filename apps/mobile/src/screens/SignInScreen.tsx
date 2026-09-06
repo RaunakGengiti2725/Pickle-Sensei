@@ -187,7 +187,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   providerMarkText: { ...type.caption },
-  letterMark: { fontFamily: font.bold },
+  letterMark: {
+    fontFamily: font.bold,
+    fontWeight: Platform.OS === 'ios' ? '700' : 'normal',
+  },
   appleMark: { fontFamily: 'System', fontSize: 18, lineHeight: 20 },
   busyRow: {
     flexDirection: 'row',
