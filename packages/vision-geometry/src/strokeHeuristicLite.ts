@@ -161,7 +161,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-8 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -378,6 +378,13 @@ export function classifyStroke(input: {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
   const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
+  if (
+    !Number.isFinite(input.window.startMs) ||
+    !Number.isFinite(input.window.endMs) ||
+    input.window.startMs >= input.window.endMs
+  ) {
+    return unknown("stroke_window_invalid", evidence, limitingFactors);
+  }
   let contactMs: number;
   let referenceIsEventPeak = false;
   if (input.contactMs !== null) {
@@ -390,7 +397,17 @@ export function classifyStroke(input: {
     return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
   }
 
-  const frame = nearestFrame(frames, contactMs);
+  if (!(contactMs >= input.window.startMs && contactMs <= input.window.endMs)) {
+    return unknown("reference_outside_stroke_window", evidence, limitingFactors);
+  }
+  const frame = nearestFrame(
+    frames.filter(
+      (candidate) =>
+        candidate.timestampMs >= input.window.startMs &&
+        candidate.timestampMs <= input.window.endMs,
+    ),
+    contactMs,
+  );
   if (!frame) {
     return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
   }
@@ -434,7 +451,7 @@ export function classifyStroke(input: {
     return unknown("torso_extent_collapsed_vs_sequence_median", evidence, limitingFactors);
   }
 
-  const wristInfo = dominantWristInfo(frames, contactMs);
+  const wristInfo = dominantWristInfo(frames, contactMs, frame);
 
   // ── Gate: dominant-wrist attribution must be verifiable (v4) ──────────
   // The dominant wrist is chosen by comparative travel. When the rival
@@ -1035,6 +1052,7 @@ function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs
   let best: (typeof frames)[number] | null = null;
   let bestDelta = Infinity;
   for (const frame of frames) {
+    if (frame.landmarks.length === 0) continue;
     const delta = Math.abs(frame.timestampMs - timestampMs);
     if (delta < bestDelta) {
       bestDelta = delta;
@@ -1051,6 +1069,7 @@ function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs
 function dominantWristInfo(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
+  referenceFrame: (typeof frames)[number],
 ): {
   side: "left" | "right";
   point: { x: number; y: number } | null;
@@ -1078,12 +1097,11 @@ function dominantWristInfo(
     }
   }
   const chosen = travel.right >= travel.left ? "right" : "left";
-  const frame = nearestFrame(frames, contactMs);
-  const mark = frame?.landmarks.find(
+  const mark = referenceFrame.landmarks.find(
     (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
   );
   const rival = chosen === "right" ? "left" : "right";
-  const rivalMark = frame?.landmarks.find(
+  const rivalMark = referenceFrame.landmarks.find(
     (landmark) => landmark.name === `${rival}_wrist` && landmark.visibility >= 0.25,
   );
   return {

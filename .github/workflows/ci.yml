@@ -94,7 +94,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version: v2.5.6
       - name: Supabase edge function tests + module typecheck
         run: scripts/verify-cloud.sh --only edge
         env:

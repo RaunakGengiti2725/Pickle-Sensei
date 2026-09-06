@@ -698,7 +698,9 @@ Deno.test(
             })(),
           );
           await Promise.all(lanes);
-          const syncRows = rows.filter((x) => x.round === r && x.op === "shots.sync");
+          const syncRows = rows
+            .filter((x) => x.round === r && x.op === "shots.sync")
+            .sort((a, b) => a.i - b.i);
           const persisted = new Set<string>(
             h.fake.tables.shots.filter((s) => s.user_id === sub).map((s) => String(s.id)),
           );

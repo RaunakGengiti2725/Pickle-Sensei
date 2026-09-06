@@ -231,6 +231,16 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (url.origin === SUPABASE_URL && url.pathname.startsWith("/rest/v1/")) {
     timeline.push(`rest:${request.method}`);
     const table = url.pathname.slice("/rest/v1/".length);
+    if (table === "rpc/get_api_request_key") {
+      return bearer === "service-role-lifecycle-key"
+        ? json(200, "a1".repeat(32))
+        : json(403, { code: "42501", message: "server credentials required" });
+    }
+    if (request.headers.get("x-pickle-api-key") !== "a1".repeat(32)) {
+      return json(403, { code: "42501", message: "API request required" });
+    }
+    if (table === "rpc/is_api_session_active")
+      return json(200, Boolean(liveSessionForToken(bearer)));
     if (request.method === "GET" && table === "profiles") {
       const id = (url.searchParams.get("id") ?? "").replace(/^eq\./, "");
       return json(200, [

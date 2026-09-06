@@ -240,6 +240,7 @@ stage_scripts() {
 stage_edge() {
   need deno
   (cd supabase/functions/api/__wf__ && deno task test)
+  deno check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts
   (cd supabase/functions/api && deno check cache.ts rateLimit.ts http.ts legal.ts)
 }
 

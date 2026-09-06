@@ -11,8 +11,8 @@ import UIKit
 /// installed behind the native contract.
 @objc(PickleVideoCapture)
 final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate {
-  private enum Operation {
-    case guided
+  private enum Operation: Equatable {
+    case guided(UUID)
     case importing(String)
   }
 
@@ -43,8 +43,30 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     _ resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    beginGuidedCapture(handedness: nil, resolve: resolve, reject: reject)
+  }
+
+  @objc func captureWithOptions(
+    _ options: NSDictionary,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard let value = options["handedness"] as? String,
+          let handedness = TemporalStrokeDetector.Handedness(rawValue: value) else {
+      reject("camera.invalid_options", "Choose your hitting hand before recording.", nil)
+      return
+    }
+    beginGuidedCapture(handedness: handedness, resolve: resolve, reject: reject)
+  }
+
+  private func beginGuidedCapture(
+    handedness: TemporalStrokeDetector.Handedness?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
     DispatchQueue.main.async {
-      guard self.begin(operation: .guided, resolve: resolve, reject: reject) else { return }
+      let operationId = UUID()
+      guard self.begin(operation: .guided(operationId), resolve: resolve, reject: reject) else { return }
       let engine = CameraEngine()
       self.emit([
         "type": "permission",
@@ -55,7 +77,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         do {
           try await engine.requestPermissionAndConfigure()
           await MainActor.run {
-            guard case .guided? = self.operation else {
+            guard self.operation == .guided(operationId) else {
               engine.stop()
               return
             }
@@ -64,10 +86,11 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
               "state": "granted",
               "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
             ])
-            self.presentGuidedCapture(engine: engine)
+            self.presentGuidedCapture(engine: engine, handedness: handedness, operationId: operationId)
           }
         } catch CameraEngine.EngineError.permissionDenied {
           await MainActor.run {
+            guard self.operation == .guided(operationId) else { return }
             self.emit([
               "type": "permission",
               "state": "denied",
@@ -80,6 +103,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
           }
         } catch {
           await MainActor.run {
+            guard self.operation == .guided(operationId) else { return }
             self.finishWithError(
               code: "camera.configuration_failed",
               message: error.localizedDescription,
@@ -664,7 +688,11 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     return true
   }
 
-  private func presentGuidedCapture(engine: CameraEngine) {
+  private func presentGuidedCapture(
+    engine: CameraEngine,
+    handedness: TemporalStrokeDetector.Handedness?,
+    operationId: UUID
+  ) {
     guard let presenter = Self.topViewController() else {
       engine.stop()
       finishWithError(
@@ -674,12 +702,16 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       return
     }
 
-    let controller = GuidedCaptureViewController(engine: engine)
+    let controller = GuidedCaptureViewController(engine: engine, handedness: handedness)
     guidedController = controller
-    controller.onEvent = { [weak self] event in self?.emit(event) }
+    controller.onEvent = { [weak self] event in
+      guard self?.operation == .guided(operationId) else { return }
+      self?.emit(event)
+    }
     controller.onComplete = { [weak self, weak controller] result in
-      guard let self else { return }
+      guard let self, self.operation == .guided(operationId) else { return }
       controller?.dismiss(animated: true) {
+        guard self.operation == .guided(operationId) else { return }
         switch result {
         case .success(let payload): self.finishWithSuccess(payload)
         case .failure(let failure):

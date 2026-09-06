@@ -106,6 +106,8 @@ function gate(): { wait: Promise<void>; open: () => void } {
 }
 
 async function asUser(tx: Tx, userId: string): Promise<void> {
+  await tx.unsafe(`select set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key())::text, true)`);
   await tx.unsafe(`set local role authenticated`);
   await tx.unsafe(`set local request.jwt.claim.sub = '${userId}'`);
 }
@@ -181,7 +183,12 @@ async function shotCount(sql: Sql, userId: string): Promise<number> {
  * holds no UPDATE grant on created_at — ADV-8 proves that). */
 async function backdate(sql: Sql, permitId: string): Promise<void> {
   await sql.unsafe(
-    `update public.analysis_permits set created_at = now() - interval '25 hours' where id = '${permitId}'`,
+    `with stale as (
+       delete from public.analysis_permits where id = '${permitId}' and status = 'reserved'
+       returning id, user_id, idempotency_key, status, outcome
+     )
+     insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+     select id, user_id, idempotency_key, status, outcome, now() - interval '25 hours' from stale`,
   );
 }
 

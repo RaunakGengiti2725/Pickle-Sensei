@@ -333,7 +333,7 @@ export async function simulate(): Promise<Sim> {
       return rowsResponse(request.headers, accepted, "insert");
     }
 
-    return stub(input, init);
+    return stub(request);
   }) as typeof fetch;
 
   return {

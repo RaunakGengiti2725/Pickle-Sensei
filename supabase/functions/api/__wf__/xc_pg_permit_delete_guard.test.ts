@@ -71,6 +71,8 @@ function shotId(): string {
 }
 
 async function asUser(tx: Tx, userId: string): Promise<void> {
+  await tx.unsafe(`select set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key())::text, true)`);
   await tx.unsafe(`set local role authenticated`);
   await tx.unsafe(`set local request.jwt.claim.sub = '${userId}'`);
 }
@@ -449,7 +451,12 @@ Deno.test({
       // the exact pg_cron sweep statement, then the late sync of the swept row
       const swept = await reserve(sql, U1, "r5-swept");
       await sql.unsafe(
-        `update public.analysis_permits set created_at = now() - interval '25 hours' where id = '${swept}'`,
+        `with stale as (
+           delete from public.analysis_permits where id = '${swept}' and status = 'reserved'
+           returning id, user_id, idempotency_key, status, outcome
+         )
+         insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+         select id, user_id, idempotency_key, status, outcome, now() - interval '25 hours' from stale`,
       );
       assertEquals(
         await attempt(

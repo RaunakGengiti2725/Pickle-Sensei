@@ -171,6 +171,30 @@ export function limitingFactorCopy(factor: string): LimitingFactorCopy {
         reason: 'analysis confidence below the scoring threshold',
         ledger: 'Enough analysis confidence to clear the scoring threshold.',
       };
+    case 'stroke_window_invalid':
+      return {
+        noun: 'a complete swing window',
+        reason: 'an incomplete or inconsistent swing window',
+        ledger: 'A complete, internally consistent swing window.',
+      };
+    case 'reference_outside_stroke_window':
+      return {
+        noun: 'a movement reference inside this swing',
+        reason: 'a movement reference outside the captured swing',
+        ledger: 'A movement reference inside the captured swing.',
+      };
+    case 'auto_stroke_confidence_invalid':
+      return {
+        noun: 'a reliable stroke-confidence reading',
+        reason: 'a stroke-confidence reading that could not be verified',
+        ledger: 'A reliable stroke-confidence reading.',
+      };
+    case 'auto_stroke_leaf_hierarchy_invalid':
+      return {
+        noun: 'a consistent stroke identification',
+        reason: 'conflicting stroke labels',
+        ledger: 'A stroke label supported by the captured evidence.',
+      };
     case 'auto_stroke_resolved_at_side_depth_no_leaf_for_scoring':
       return {
         noun: 'the exact stroke inside that family',
@@ -198,6 +222,10 @@ function knownLimitingFactor(factor: string): boolean {
       'court_geometry_unavailable',
       'analysis_confidence_below_threshold',
       'auto_stroke_resolved_at_side_depth_no_leaf_for_scoring',
+      'stroke_window_invalid',
+      'reference_outside_stroke_window',
+      'auto_stroke_confidence_invalid',
+      'auto_stroke_leaf_hierarchy_invalid',
     ].includes(factor)
   );
 }

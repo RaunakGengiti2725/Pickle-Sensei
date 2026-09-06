@@ -480,7 +480,7 @@ async function analyzeReservedCapture(
       analysisId,
       sessionId: request.sessionId ?? null,
       appVersion: request.appVersion,
-      modelBundleVersion: 'on-device-fusion-1',
+      modelBundleVersion: 'on-device-fusion-2',
       nowIso: () => new Date().toISOString(),
       makeId: makeUuid,
       captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,

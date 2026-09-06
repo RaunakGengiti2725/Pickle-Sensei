@@ -82,6 +82,13 @@ public struct StrokeEvent: Sendable {
     self.confidence = confidence
     self.recognition = recognition
   }
+
+  public func isContainedInRecording(firstFrameMs: Int?, lastFrameMs: Int?) -> Bool {
+    guard let firstFrameMs, let lastFrameMs,
+          firstFrameMs >= 0, startMs >= firstFrameMs,
+          endMs > startMs, endMs <= lastFrameMs else { return false }
+    return peakMotionMs.map { $0 >= startMs && $0 <= endMs } ?? true
+  }
 }
 
 public enum StrokeRecognitionStatus: String, Sendable {

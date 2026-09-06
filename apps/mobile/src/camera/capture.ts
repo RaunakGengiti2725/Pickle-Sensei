@@ -1,5 +1,6 @@
 import {
   PICKLEBALL_TECHNIQUES,
+  type Handedness,
   type PickleballTechniqueSlug,
 } from '@pickle/shared-types';
 import {
@@ -436,6 +437,9 @@ export type CameraEvent =
 
 interface NativeVideoCapture {
   capture(): Promise<unknown>;
+  captureWithOptions?(options: {
+    handedness: 'left' | 'right';
+  }): Promise<unknown>;
   importVideo(): Promise<unknown>;
   readTextFile?(uri: string): Promise<string>;
   setCompletionStrategy?(strategy: string): Promise<string>;
@@ -570,13 +574,21 @@ export function videoImportAvailable(): boolean {
   );
 }
 
-export async function captureStrokeVideo(): Promise<CapturedClip> {
+export async function captureStrokeVideo(
+  options: { handedness?: Handedness } = {},
+): Promise<CapturedClip> {
   if (!native?.capture) {
     throw new Error(
       'Real guided camera capture is not available on this device.',
     );
   }
-  return assertCapturedClip(await native.capture(), 'automatic_pose_trigger');
+  const handedness = options.handedness;
+  const payload =
+    (handedness === 'left' || handedness === 'right') &&
+    native.captureWithOptions
+      ? await native.captureWithOptions({ handedness })
+      : await native.capture();
+  return assertCapturedClip(payload, 'automatic_pose_trigger');
 }
 
 export async function importStrokeVideo(): Promise<CapturedClip> {

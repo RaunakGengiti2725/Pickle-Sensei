@@ -45,7 +45,21 @@ async function redisPipeline(
       return null;
     }
     const parsed = (await response.json().catch(() => null)) as unknown;
-    return Array.isArray(parsed) ? (parsed as RedisPipelineResult) : null;
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== commands.length ||
+      parsed.some(
+        (entry) =>
+          entry === null ||
+          typeof entry !== "object" ||
+          Array.isArray(entry) ||
+          !Object.hasOwn(entry, "result") ||
+          Object.hasOwn(entry, "error"),
+      )
+    ) {
+      return [];
+    }
+    return parsed as RedisPipelineResult;
   } catch {
     return null;
   }
@@ -368,6 +382,14 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   await redisPipeline(commands);
 }
 
+function redisCounterValue(raw: unknown): number | null {
+  if (typeof raw !== "number" && (typeof raw !== "string" || !/^\d+$/.test(raw))) {
+    return null;
+  }
+  const count = Number(raw);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
+}
+
 /** Increment a fixed-window counter, creating it with the window's TTL.
  * Returns the post-increment count, or null when Redis is unavailable (the
  * rate limiter then falls back to its in-memory window). */
@@ -376,8 +398,9 @@ export async function redisWindowIncr(key: string, windowSeconds: number): Promi
     ["INCR", key],
     ["EXPIRE", key, windowSeconds, "NX"],
   ]);
-  const count = Number(results?.[0]?.result);
-  return Number.isFinite(count) ? count : null;
+  const count = redisCounterValue(results?.[0]?.result);
+  const expiry = redisCounterValue(results?.[1]?.result);
+  return count !== null && count > 0 && (expiry === 0 || expiry === 1) ? count : null;
 }
 
 /** Read a fixed-window counter WITHOUT touching L1: rate-limit buckets are
@@ -387,9 +410,7 @@ export async function redisWindowGet(key: string): Promise<number | null> {
   const results = await redisPipeline([["GET", key]]);
   if (!results) return null;
   const raw = results[0]?.result;
-  if (raw === null || raw === undefined) return 0;
-  const count = Number(raw);
-  return Number.isFinite(count) ? count : null;
+  return raw === null ? 0 : redisCounterValue(raw);
 }
 
 export async function sha256Hex(input: string): Promise<string> {

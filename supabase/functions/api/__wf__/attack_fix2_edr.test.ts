@@ -29,7 +29,7 @@ async function withFetchIntercept<T>(
     const request = new Request(input, init);
     const owned = await intercept(request.clone());
     if (owned) return owned;
-    return inner(input, init);
+    return inner(request);
   }) as FetchFn;
   try {
     return await run();

@@ -271,8 +271,18 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 
   if (url.origin === SUPABASE_URL && url.pathname.startsWith("/rest/v1/")) {
     upstreamCalls.push(`rest:${request.method}:${url.pathname.slice("/rest/v1/".length)}`);
-    postgrestBearers.push(bearer);
     const table = url.pathname.slice("/rest/v1/".length);
+    if (table === "rpc/get_api_request_key") {
+      return bearer === "service-role-adjudication-key"
+        ? json(200, "a1".repeat(32))
+        : json(403, { code: "42501", message: "server credentials required" });
+    }
+    postgrestBearers.push(bearer);
+    if (request.headers.get("x-pickle-api-key") !== "a1".repeat(32)) {
+      return json(403, { code: "42501", message: "API request required" });
+    }
+    if (table === "rpc/is_api_session_active")
+      return json(200, Boolean(liveSessionForToken(bearer)));
     if (request.method === "GET" && table === "profiles") {
       const id = (url.searchParams.get("id") ?? "").replace(/^eq\./, "");
       return json(200, [
@@ -630,7 +640,17 @@ Deno.test(
     });
     upstreamCalls.length = 0;
     const response = await call("GET", PROBE_ROUTE, { token: forgedBearer, ip });
-    assertEquals(response.status, 200, "[defect] forged cache row authenticates");
+    assertEquals(response.status, 401, "the live session check refuses the forged cache row");
+    assertEquals(
+      upstreamCalls.filter((c) => c === "rest:POST:rpc/is_api_session_active").length,
+      1,
+      "the uncached session proof is required even for an L2 auth hit",
+    );
+    assertEquals(
+      upstreamCalls.filter((c) => c.startsWith("rest:GET:")).length,
+      0,
+      "no protected data is read for the forged row",
+    );
     assertEquals(
       upstreamCalls.filter((c) => c === "auth:getUser").length,
       0,

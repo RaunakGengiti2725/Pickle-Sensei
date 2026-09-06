@@ -63,7 +63,7 @@ import {
  * never mutated.
  */
 
-export const FUSION_ENGINE_VERSION = "fusion-1";
+export const FUSION_ENGINE_VERSION = "fusion-2";
 export const STROKE_TAXONOMY_VERSION = "pickleball-taxonomy-v2";
 export const PREDICTION_CONFIDENCE_THRESHOLD = 0.8;
 

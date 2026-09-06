@@ -380,7 +380,9 @@ export async function loadSessionHarness(
       const scope = parsed.searchParams.get("scope") ?? "global";
       const targets =
         scope === "local"
-          ? [session]
+          ? [...state.sessions.values()].filter(
+              (s) => state.sessionIdOf(s.accessToken) === state.sessionIdOf(session.accessToken),
+            )
           : [...state.sessions.values()].filter((s) => s.userId === session.userId);
       for (const target of targets) {
         target.revoked = true;
@@ -393,8 +395,30 @@ export async function loadSessionHarness(
 
     if (url.startsWith(`${SUPABASE_URL}/rest/v1/`)) {
       const table = parsed.pathname.slice("/rest/v1/".length);
+      const bearer = (headers["authorization"] ?? "").replace(/^Bearer\s+/i, "");
+      if (table === "rpc/get_api_request_key") {
+        return bearer === "service-role-test-key"
+          ? jsonResponse(200, "a1".repeat(32))
+          : authError(403, "server credentials required");
+      }
+      if (bearer !== "service-role-test-key" && headers["x-pickle-api-key"] !== "a1".repeat(32)) {
+        return authError(403, "API request required");
+      }
       if (table.startsWith("rpc/")) {
         const fn = table.slice("rpc/".length);
+        if (fn === "is_api_session_active") {
+          const payload = jwtPayload(bearer);
+          return jsonResponse(
+            200,
+            [...state.sessions.values()].some(
+              (session) =>
+                !session.revoked &&
+                session.userId === payload?.sub &&
+                state.users.has(session.userId) &&
+                state.sessionIdOf(session.accessToken) === payload?.session_id,
+            ),
+          );
+        }
         return jsonResponse(200, state.rpcs[fn] ?? {});
       }
       if (request.method === "GET") {

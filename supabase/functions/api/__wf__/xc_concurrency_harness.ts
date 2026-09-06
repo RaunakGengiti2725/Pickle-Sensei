@@ -692,8 +692,33 @@ export class FakeSupabase {
       const target = url.pathname.slice("/rest/v1/".length);
       const who = this.principal(request.headers);
       await this.latency();
+      if (target === "rpc/get_api_request_key") {
+        this.count("rpc.get_api_request_key");
+        return who.role === "service"
+          ? jsonResponse(200, "a1".repeat(32))
+          : jsonResponse(403, { code: "42501", message: "server credentials required" });
+      }
+      if (who.role === "user" && request.headers.get("x-pickle-api-key") !== "a1".repeat(32)) {
+        return jsonResponse(403, { code: "42501", message: "API request required" });
+      }
       if (target.startsWith("rpc/")) {
         const fn = target.slice(4);
+        if (fn === "is_api_session_active") {
+          this.count("rpc.is_api_session_active");
+          const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
+          const sid = this.accessIndex.get(token);
+          const session = sid ? this.sessions.get(sid) : undefined;
+          return jsonResponse(
+            200,
+            Boolean(
+              who.role === "user" &&
+              session &&
+              !session.revoked &&
+              session.userId === who.userId &&
+              this.users.has(session.userId),
+            ),
+          );
+        }
         if (fn === "access_state") {
           this.count("rpc.access_state");
           if (!who.userId) {

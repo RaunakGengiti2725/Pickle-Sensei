@@ -852,6 +852,27 @@ describe('selectInsight priority', () => {
     expect(insight.sentence).toContain('Nothing was invented');
   });
 
+  it.each([
+    ['stroke_window_invalid', 'a complete swing window'],
+    [
+      'reference_outside_stroke_window',
+      'a movement reference inside this swing',
+    ],
+    ['auto_stroke_confidence_invalid', 'a reliable stroke-confidence reading'],
+    [
+      'auto_stroke_leaf_hierarchy_invalid',
+      'a consistent stroke identification',
+    ],
+  ])(
+    'explains %s without exposing internal classifier tokens',
+    (factor, explanation) => {
+      const insight = selectInsight({ limitingFactors: [factor] });
+      expect(insight.basis).toBe('abstention');
+      expect(insight.sentence).toContain(explanation);
+      expect(insight.sentence).not.toContain(factor);
+    },
+  );
+
   it('known machine tokens read as grammatical sentences, never raw tokens', () => {
     const checkpoint = selectInsight({
       limitingFactors: ['checkpoint_unobserved:face_wrist_stability'],

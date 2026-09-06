@@ -431,6 +431,98 @@ afterEach(() => {
 
 // ─── SCENARIO: first attempt, tap-declared, full literal flow ───────────────
 
+describe('capture feedback stays on the first completed swing', () => {
+  it('ignores camera feedback when no capture is active', async () => {
+    const renderer = await renderScreen();
+    emit(readinessEvent('ready', 0.93));
+    emit(strokeDetectedEvent(0.86));
+    emit(processingEvent());
+    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE');
+    expect(textOf(renderer)).not.toContain('Saving the private clip');
+    act(() => renderer.unmount());
+  });
+
+  it('never asks for another swing after the first one is captured', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('single-swing-feedback');
+    mockReadArtifact = async () => sidecarJson;
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    emit(readinessEvent('ready', 0.93));
+    emit(strokeDetectedEvent(0.86));
+    emit(readinessEvent('no_person', 0));
+    expect(textOf(renderer)).toContain('Motion captured');
+    expect(textOf(renderer)).not.toContain('Step fully into frame');
+    emit(processingEvent());
+    emit(readinessEvent('hold_still', 0.88));
+    emit(strokeDetectedEvent(0.9));
+    expect(textOf(renderer)).toContain('Saving the private clip');
+    capture.resolve(clip);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'one Result navigation',
+    );
+    expect(persistedRecordInserts()).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
+
+  it('rejects another native capture’s callbacks without changing the current capture', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('capture-identity');
+    mockReadArtifact = async () => sidecarJson;
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    emit({ ...sessionEvent('configured'), captureId: 'native-current' });
+    emit({ ...strokeDetectedEvent(0.9), captureId: 'native-previous' });
+    expect(textOf(renderer)).toContain('Opening camera');
+    emit({ ...readinessEvent('ready', 0.93), captureId: 'native-current' });
+    emit({ ...strokeDetectedEvent(0.86), captureId: 'native-current' });
+    emit({ ...processingEvent(), captureId: 'native-previous' });
+    expect(textOf(renderer)).toContain('Motion captured');
+    emit({ ...processingEvent(), captureId: 'native-current' });
+    expect(textOf(renderer)).toContain('Saving the private clip');
+    capture.resolve(clip);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'current capture Result',
+    );
+    act(() => renderer.unmount());
+  });
+
+  it('ignores late native feedback once analysis starts', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('single-swing-analysis');
+    let finishRead!: (value: string) => void;
+    mockReadArtifact = () =>
+      new Promise<string>(resolve => {
+        finishRead = resolve;
+      });
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    driveNativeCaptureSequence();
+    capture.resolve(clip);
+    await waitFor(
+      () => typeof finishRead === 'function',
+      'analysis reading the saved swing',
+    );
+    emit(readinessEvent('no_person', 0));
+    emit(processingEvent());
+    expect(textOf(renderer)).toContain('Measuring your swing');
+    act(() => finishRead(sidecarJson));
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'one Result navigation',
+    );
+    act(() => renderer.unmount());
+  });
+});
+
 describe('first attempt — tap-declared full flow to a real Result', () => {
   it('launch → tap declare → permission → guidance → lock → Ready → stroke → auto trigger → clip → analysis → Result with real scored content', async () => {
     const renderer = await renderScreen();

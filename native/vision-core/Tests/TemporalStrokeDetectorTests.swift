@@ -45,8 +45,8 @@ final class TemporalStrokeDetectorTests: XCTestCase {
 
   // MARK: - Version & tunables
 
-  func testModelVersionIsHeuristic4() {
-    XCTAssertEqual(TemporalStrokeDetector().modelVersion, "temporal-stroke-heuristic-4")
+  func testModelVersionIsHeuristic5() {
+    XCTAssertEqual(TemporalStrokeDetector().modelVersion, "temporal-stroke-heuristic-5")
   }
 
   func testConfigDefaultsArePinned() {
@@ -61,6 +61,10 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(config.minQuietBeforeMs, 350)
     XCTAssertEqual(config.maxOnsetToTriggerMs, 1_200)
     XCTAssertEqual(config.minWristPathBodyHeights, 0.3)
+    XCTAssertNil(config.handedness)
+    XCTAssertEqual(TemporalStrokeDetector.Handedness(rawValue: "left"), .left)
+    XCTAssertEqual(TemporalStrokeDetector.Handedness(rawValue: "right"), .right)
+    XCTAssertNil(TemporalStrokeDetector.Handedness(rawValue: "unknown"))
     XCTAssertEqual(TemporalStrokeDetector.settledWindowMs, 160)
     XCTAssertEqual(TemporalStrokeDetector.maximumSampleGapMs, 250)
     XCTAssertEqual(TemporalStrokeDetector.minimumLandmarkVisibility, 0.35)
@@ -79,6 +83,7 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(legacy.minQuietBeforeMs, 350)
     XCTAssertEqual(legacy.maxOnsetToTriggerMs, 1_200)
     XCTAssertEqual(legacy.minWristPathBodyHeights, 0.3)
+    XCTAssertNil(legacy.handedness)
   }
 
   func testManualStopConfigIsPinned() {
@@ -93,6 +98,7 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(config.minQuietBeforeMs, 250)
     XCTAssertEqual(config.maxOnsetToTriggerMs, 1_500)
     XCTAssertEqual(config.minWristPathBodyHeights, 0.25)
+    XCTAssertNil(config.handedness)
   }
 
   // MARK: - Distance invariance & window semantics
@@ -164,11 +170,11 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(events.first?.event.endMs, 960)
   }
 
-  func testOtherWristMayCloseTheStrokeWhenTheSwingingWristIsHidden() {
+  func testOtherWristCannotCloseTheStrokeWhenTheSwingingWristIsHidden() {
     // The right wrist drives through its first settled sample (720, 0.4 bh/s)
-    // and then disappears; the still left wrist supplies the remaining settled
-    // samples, so the window closes at 840 exactly as if the right wrist had
-    // stayed visible. Path (0.406 bh) had already cleared the gate.
+    // and then disappears; the still left wrist cannot prove it has settled.
+    // The window waits for the same right wrist's fresh observed settled run
+    // [880, 1040]. Path (0.406 bh) had already cleared the gate.
     let path = ready(then: Array(driveDeltas.prefix(8)))
     var frames = poses(bodySpan: 0.45, path: path)
     let hiddenFrom = frames.count
@@ -180,11 +186,16 @@ final class TemporalStrokeDetectorTests: XCTestCase {
         removing: ["right_wrist"]
       ))
     }
-    let events = run(TemporalStrokeDetector(), frames)
+    let detector = TemporalStrokeDetector()
+    XCTAssertTrue(run(detector, frames).isEmpty, "a still off hand cannot finish the hidden wrist's stroke")
+    let observedAgain = stride(from: 880, through: 1_040, by: cadenceMs).map {
+      fullBodyPose(at: $0, bodySpan: 0.45, wristOffset: path.last!)
+    }
+    let events = run(detector, observedAgain)
     XCTAssertEqual(events.count, 1)
-    XCTAssertEqual(events.first?.tMs, 840)
+    XCTAssertEqual(events.first?.tMs, 1_040)
     XCTAssertEqual(events.first?.event.startMs, 400)
-    XCTAssertEqual(events.first?.event.endMs, 840)
+    XCTAssertEqual(events.first?.event.endMs, 1_040)
     XCTAssertEqual(events.first?.event.peakMotionMs, 480)
   }
 
@@ -679,6 +690,805 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(event?.startMs, 1_360)
     XCTAssertEqual(event?.peakMotionMs, 1_440)
     XCTAssertEqual(event?.confidence ?? 0, 0.95, accuracy: 1e-9)
+  }
+
+  func testMovingOffHandDoesNotEraseSwingingHandQuietOnset() {
+    for swingOnLeft in [false, true] {
+      for offHandDelta in [0.028, 0.1] {
+        let path = ready(then: driveDeltas)
+        let frames = path.enumerated().map { index, offset in
+          let phase = index % 20
+          let offHand = offHandDelta * Double(phase <= 10 ? phase : 20 - phase)
+          return fullBodyPose(
+            at: index * cadenceMs,
+            bodySpan: 0.4,
+            wristOffset: swingOnLeft ? offHand : offset,
+            leftWristOffset: swingOnLeft ? offset : offHand
+          )
+        }
+        let events = run(TemporalStrokeDetector(), frames)
+        XCTAssertEqual(events.count, 1, "left=\(swingOnLeft), off-hand delta=\(offHandDelta)")
+        XCTAssertEqual(events.first?.event.startMs, 400)
+        XCTAssertEqual(events.first?.event.endMs, 840)
+        XCTAssertEqual(events.first?.event.peakMotionMs, 480)
+      }
+    }
+  }
+
+  func testMovingOffHandDoesNotDelayFirstSwingCompletion() {
+    for swingOnLeft in [false, true] {
+      let path = hold(ready(then: driveDeltas), for: 70)
+      let frames = path.enumerated().map { index, offset in
+        let phase = max(0, index - readyFrames + 1) % 20
+        let offHand = 0.028 * Double(phase <= 10 ? phase : 20 - phase)
+        return fullBodyPose(
+          at: index * cadenceMs,
+          bodySpan: 0.4,
+          wristOffset: swingOnLeft ? offHand : offset,
+          leftWristOffset: swingOnLeft ? offset : offHand
+        )
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.map(\.tMs), [840])
+      XCTAssertEqual(events.first?.event.startMs, 400)
+      XCTAssertEqual(events.first?.event.endMs, 840)
+    }
+  }
+
+  func testDroppedFlickKeepsSubsequentObservedQuietForFirstFullSwing() {
+    let flick = [0.056, 0.056, 0.008] + Array(repeating: 0.0, count: 9)
+    let path = move(ready(then: flick), by: driveDeltas)
+    let events = run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: path))
+    XCTAssertEqual(events.map(\.tMs), [1_320])
+    XCTAssertEqual(events.first?.event.startMs, 880)
+    XCTAssertEqual(events.first?.event.endMs, 1_320)
+    XCTAssertEqual(events.first?.event.peakMotionMs, 960)
+  }
+
+  func testOffHandPathCannotTurnAShortFlickIntoASwing() {
+    let path = hold(ready(then: [0.056, 0.056, 0.008]), for: 30)
+    let frames = path.enumerated().map { index, offset in
+      let phase = min(index, 21) % 20
+      let offHand = 0.028 * Double(phase <= 10 ? phase : 20 - phase)
+      return fullBodyPose(
+        at: index * cadenceMs, bodySpan: 0.4,
+        wristOffset: offset, leftWristOffset: offHand
+      )
+    }
+    XCTAssertTrue(run(TemporalStrokeDetector(), frames).isEmpty)
+  }
+
+  func testSparseStillSamplesDoNotCreateQuietOnset() {
+    let sparseReady = [0, 200, 400].map { fullBodyPose(at: $0, bodySpan: 0.4) }
+    let swing = poses(bodySpan: 0.4, path: ready(then: driveDeltas)).dropFirst(readyFrames)
+    XCTAssertTrue(run(TemporalStrokeDetector(), sparseReady + swing).isEmpty)
+  }
+
+  func testSparseStillSampleDoesNotSupplyEntireSettledTail() {
+    let path = ready(then: Array(driveDeltas.prefix(7)))
+    var frames = poses(bodySpan: 0.4, path: path)
+    for timestamp in stride(from: 880, through: 1_040, by: cadenceMs) {
+      frames.append(fullBodyPose(at: timestamp, bodySpan: 0.4, wristOffset: path.last!))
+    }
+    let events = run(TemporalStrokeDetector(), frames)
+    XCTAssertEqual(events.map(\.tMs), [1_040])
+    XCTAssertEqual(events.first?.event.startMs, 400)
+    XCTAssertEqual(events.first?.event.endMs, 1_040)
+  }
+
+  func testInterruptedQuietRunsDoNotJoinAcrossUntrustedPoses() {
+    for dropout in SyntheticDropout.allCases {
+      var frames = poses(bodySpan: 0.4, path: ready(then: driveDeltas))
+      frames[4] = missingEvidence(in: frames[4], dropout: dropout)
+      XCTAssertTrue(run(TemporalStrokeDetector(), frames).isEmpty, "\(dropout)")
+    }
+  }
+
+  func testInterruptedSettledTailRequiresFreshObservedStillness() {
+    for dropout in SyntheticDropout.allCases {
+      let path = ready(then: Array(driveDeltas.prefix(8)))
+      var frames = poses(bodySpan: 0.4, path: path)
+      for timestamp in stride(from: 760, through: 1_040, by: cadenceMs) {
+        let frame = fullBodyPose(at: timestamp, bodySpan: 0.4, wristOffset: path.last!)
+        frames.append(timestamp < 880 ? missingEvidence(in: frame, dropout: dropout) : frame)
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.map(\.tMs), [1_040], "\(dropout)")
+      XCTAssertEqual(events.first?.event.startMs, 400)
+      XCTAssertEqual(events.first?.event.endMs, 1_040)
+    }
+  }
+
+  func testHiddenMovingWristCannotBeSettledByTheOtherHand() {
+    for swingOnLeft in [false, true] {
+      let path = ready(then: Array(driveDeltas.prefix(7)))
+      var frames = path.enumerated().map { index, offset in
+        fullBodyPose(
+          at: index * cadenceMs, bodySpan: 0.4,
+          wristOffset: swingOnLeft ? 0 : offset,
+          leftWristOffset: swingOnLeft ? offset : 0
+        )
+      }
+      for timestamp in stride(from: 720, through: 1_080, by: cadenceMs) {
+        frames.append(fullBodyPose(
+          at: timestamp, bodySpan: 0.4,
+          wristOffset: swingOnLeft ? 0 : path.last!,
+          leftWristOffset: swingOnLeft ? path.last! : 0,
+          removing: timestamp < 920 ? [swingOnLeft ? "left_wrist" : "right_wrist"] : []
+        ))
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.map(\.tMs), [1_080])
+      XCTAssertEqual(events.first?.event.startMs, 400)
+      XCTAssertEqual(events.first?.event.endMs, 1_080)
+    }
+  }
+
+  func testLongSampleGapRestartsTheSettledEvidence() {
+    let path = ready(then: Array(driveDeltas.prefix(9)))
+    var frames = poses(bodySpan: 0.4, path: path)
+    for timestamp in stride(from: 1_040, through: 1_200, by: cadenceMs) {
+      frames.append(fullBodyPose(at: timestamp, bodySpan: 0.4, wristOffset: path.last!))
+    }
+    let events = run(TemporalStrokeDetector(), frames)
+    XCTAssertEqual(events.map(\.tMs), [1_200])
+    XCTAssertEqual(events.first?.event.startMs, 400)
+    XCTAssertEqual(events.first?.event.endMs, 1_200)
+  }
+
+  func testDroppedTossPreservesTheOtherHandsObservedBackswingOnset() {
+    for swingOnLeft in [false, true] {
+      let path = ready(then: Array(repeating: -0.028, count: 12) + driveDeltas)
+      let frames = path.enumerated().map { index, offset in
+        let toss = index < readyFrames ? 0.0 : 0.06
+        return fullBodyPose(
+          at: index * cadenceMs, bodySpan: 0.4,
+          wristOffset: swingOnLeft ? toss : offset,
+          leftWristOffset: swingOnLeft ? offset : toss
+        )
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.map(\.tMs), [1_320])
+      XCTAssertEqual(events.first?.event.startMs, 400)
+      XCTAssertEqual(events.first?.event.peakMotionMs, 960)
+    }
+  }
+
+  func testSimultaneousTriggersKeepTheEarliestQualifiedBackswing() {
+    for swingOnLeft in [false, true] {
+      let path = ready(then: Array(repeating: -0.028, count: 4) + driveDeltas)
+      let frames = path.enumerated().map { index, offset in
+        let toss = 0.1 * Double(min(2, max(0, index - readyFrames - 3)))
+        return fullBodyPose(
+          at: index * cadenceMs, bodySpan: 0.4,
+          wristOffset: swingOnLeft ? toss : offset,
+          leftWristOffset: swingOnLeft ? offset : toss
+        )
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.map(\.tMs), [1_000])
+      XCTAssertEqual(events.first?.event.startMs, 400)
+      for emitted in events { assertObservedMotionEvent(emitted, in: frames) }
+    }
+  }
+
+  func testSyntheticFirstSwingAfterWalkingAcrossCadencesHandsScalesAndJitter() {
+    for fps in [10, 15, 30, 60] {
+      for bodySpan in [0.32, 0.4, 0.55] {
+        for swingOnLeft in [false, true] {
+          for jitter in [0.0, 0.004] {
+            let frames = syntheticFrames(
+              fps: fps, bodySpan: bodySpan, swingOnLeft: swingOnLeft,
+              jitter: jitter, durationMs: 3_200
+            ) { time in
+              let walking = time < 1 ? 0.6 / (2 * Double.pi) * sin(2 * Double.pi * time) : 0
+              return (
+                walking + self.syntheticSwingOffset(time - 1.6),
+                self.syntheticFidgetOffset(time),
+                0.4 * min(time, 1)
+              )
+            }
+            let events = run(TemporalStrokeDetector(), frames)
+            let context = "fps=\(fps), span=\(bodySpan), left=\(swingOnLeft), jitter=\(jitter)"
+            XCTAssertEqual(events.count, 1, context)
+            guard let emitted = events.first else { continue }
+            XCTAssertEqual(emitted.event.startMs, 1_600, context)
+            XCTAssertGreaterThanOrEqual(emitted.tMs, 2_360, context)
+            XCTAssertLessThanOrEqual(emitted.tMs, 2_400, context)
+            assertObservedMotionEvent(emitted, in: frames)
+          }
+        }
+      }
+    }
+  }
+
+  func testSyntheticServeTossHandsOffToSwingAcrossCadences() {
+    for fps in [15, 30, 60] {
+      for bodySpan in [0.35, 0.55] {
+        for swingOnLeft in [false, true] {
+          let frames = syntheticFrames(
+            fps: fps, bodySpan: bodySpan, swingOnLeft: swingOnLeft,
+            jitter: 0.004, durationMs: 2_400
+          ) { time in
+            let toss = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.7, 0.18)])
+            let offHand = toss + self.syntheticFidgetOffset(max(0, time - 0.7), speed: 0.65)
+            return (self.syntheticSwingOffset(time - 0.6), offHand, 0)
+          }
+          let events = run(TemporalStrokeDetector(), frames)
+          XCTAssertEqual(events.count, 1, "fps=\(fps), span=\(bodySpan), left=\(swingOnLeft)")
+          guard let emitted = events.first else { continue }
+          XCTAssertEqual(emitted.event.startMs, 600)
+          XCTAssertGreaterThanOrEqual(emitted.tMs, 1_360)
+          XCTAssertLessThanOrEqual(emitted.tMs, 1_400)
+          assertObservedMotionEvent(emitted, in: frames)
+        }
+      }
+    }
+  }
+
+  func testSyntheticLongTossPauseStillCapturesFirstPaddleMotion() {
+    for fps in [15, 30, 60] {
+      for swingOnLeft in [false, true] {
+        let frames = syntheticFrames(fps: fps, swingOnLeft: swingOnLeft) { time in
+          let toss = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.66, 0.09)])
+          return (self.syntheticSwingOffset(time - 1), toss, 0)
+        }
+        let events = run(TemporalStrokeDetector(), frames)
+        XCTAssertEqual(events.count, 1, "fps=\(fps), left=\(swingOnLeft)")
+        guard let emitted = events.first else { continue }
+        XCTAssertEqual(emitted.event.startMs, 1_000)
+        XCTAssertGreaterThanOrEqual(emitted.tMs, 1_760)
+        XCTAssertLessThanOrEqual(emitted.tMs, 1_800)
+        assertObservedMotionEvent(emitted, in: frames)
+      }
+    }
+  }
+
+  func testSyntheticBriefOcclusionRetainsFirstCandidateButWaitsForObservedTail() {
+    for fps in [15, 30, 60] {
+      for swingOnLeft in [false, true] {
+        for dropout in SyntheticDropout.allCases {
+          for duringTail in [false, true] {
+            let clean = syntheticFrames(fps: fps, swingOnLeft: swingOnLeft, jitter: 0.004) { time in
+              (self.syntheticSwingOffset(time - 0.6), 0, 0)
+            }
+            let gap = duringTail ? 1_240...1_320 : 880...960
+            let frames = clean.map { frame in
+              gap.contains(frame.timestampMs) ? missingEvidence(in: frame, dropout: dropout) : frame
+            }
+            let events = run(TemporalStrokeDetector(), frames)
+            let context = "fps=\(fps), left=\(swingOnLeft), dropout=\(dropout), tail=\(duringTail)"
+            XCTAssertEqual(events.count, 1, context)
+            guard let emitted = events.first else { continue }
+            XCTAssertEqual(emitted.event.startMs, 600, context)
+            if duringTail {
+              let resumedAt = frames.first { $0.timestampMs > gap.upperBound }!.timestampMs
+              XCTAssertGreaterThanOrEqual(emitted.tMs, resumedAt + 160, context)
+              XCTAssertLessThanOrEqual(emitted.tMs, resumedAt + 160 + Int(ceil(1_000 / Double(fps))), context)
+            } else {
+              XCTAssertGreaterThanOrEqual(emitted.tMs, 1_360, context)
+              XCTAssertLessThanOrEqual(emitted.tMs, 1_400, context)
+            }
+            assertObservedMotionEvent(emitted, in: frames)
+          }
+        }
+      }
+    }
+  }
+
+  func testSyntheticWalkingReachingFidgetingFlicksAndCameraBumpsRemainNegative() {
+    for fps in [10, 15, 30, 60] {
+      for bodySpan in [0.35, 0.55] {
+        for swingOnLeft in [false, true] {
+          for motion in SyntheticNonStroke.allCases {
+            let frames = syntheticFrames(
+              fps: fps, bodySpan: bodySpan, swingOnLeft: swingOnLeft,
+              jitter: 0.004, durationMs: 3_400
+            ) { time in
+              switch motion {
+              case .walking:
+                let elapsed = max(0, time - 0.6)
+                let arm = 0.6 * 0.8 / (2 * Double.pi) * sin(2 * Double.pi * elapsed / 0.8)
+                return (arm, -arm, self.syntheticFidgetOffset(elapsed, speed: 0.8, period: 1.6))
+              case .reaching:
+                let reach = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (1.3, 0.45), (1.8, 0.45), (2.5, 0)])
+                return (reach, 0, 0.02 * sin(time))
+              case .fidgeting:
+                let fidget = 0.7 * 0.8 / (2 * Double.pi) * sin(2 * Double.pi * time / 0.8)
+                return (fidget + self.syntheticSwingOffset(time - 2), 0, 0)
+              case .flick:
+                let flick = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.65, 0.06), (0.7, 0.12)])
+                return (flick, self.syntheticFidgetOffset(time), 0)
+              case .cameraBump:
+                return (0, 0, time >= 0.6 && time < 1.2 ? 0.5 : 0)
+              }
+            }
+            XCTAssertTrue(
+              run(TemporalStrokeDetector(), frames).isEmpty,
+              "fps=\(fps), span=\(bodySpan), left=\(swingOnLeft), motion=\(motion)"
+            )
+          }
+        }
+      }
+    }
+  }
+
+  func testSyntheticLiveDetectionEmitsFirstWindowBeforeLaterStrongerMotion() {
+    for fps in [15, 30, 60] {
+      for swingOnLeft in [false, true] {
+        let frames = syntheticFrames(fps: fps, swingOnLeft: swingOnLeft, durationMs: 4_000) { time in
+          let first = 0.7 * self.syntheticSwingOffset(time - 0.6)
+          let second = 1.2 * self.syntheticSwingOffset(time - 2.6)
+          return (first + second, self.syntheticFidgetOffset(time), 0)
+        }
+        let events = run(TemporalStrokeDetector(), frames)
+        XCTAssertEqual(events.map { $0.event.startMs }, [600, 2_600])
+        guard let first = events.first, let last = events.last else { continue }
+        XCTAssertLessThan(first.event.confidence, last.event.confidence)
+        XCTAssertGreaterThanOrEqual(first.tMs, 1_360)
+        XCTAssertLessThanOrEqual(first.tMs, 1_400)
+        XCTAssertGreaterThanOrEqual(last.tMs, 3_360)
+        XCTAssertLessThanOrEqual(last.tMs, 3_400)
+        for emitted in events { assertObservedMotionEvent(emitted, in: frames) }
+      }
+    }
+  }
+
+  func testDuplicateAndOlderFramesCannotRewriteAnObservedWindow() {
+    let clean = poses(bodySpan: 0.4, path: ready(then: driveDeltas))
+    var frames: [PoseFrame] = []
+    for frame in clean {
+      frames.append(frame)
+      frames.append(fullBodyPose(at: frame.timestampMs, bodySpan: 0.4, wristOffset: 1))
+      frames.append(fullBodyPose(at: frame.timestampMs - 20, bodySpan: 0.4, wristOffset: -1))
+    }
+    let events = run(TemporalStrokeDetector(), frames)
+    XCTAssertEqual(events.map(\.tMs), [840])
+    XCTAssertEqual(events.first?.event.startMs, 400)
+    XCTAssertEqual(events.first?.event.peakMotionMs, 480)
+  }
+
+  // MARK: - Independent adversarial review (synthetic, not field accuracy)
+
+  func testIndependentBriskOffHandReachDoesNotPreemptFirstIntendedSwing() {
+    // A 0.36 bh off-hand reach in 240 ms (1.5 bh/s), then a hold: e.g. handing
+    // over a ball, not swinging the paddle. The intended paddle motion does
+    // not begin until 1400. Unlike the existing slow-reaching negative, this
+    // plausible reach crosses the speed AND path gates from an observed rest.
+    for swingOnLeft in [false, true] {
+      let frames = syntheticFrames(fps: 25, swingOnLeft: swingOnLeft, durationMs: 2_800) { time in
+        let reach = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.84, 0.36)])
+        return (self.syntheticSwingOffset(time - 1.4), reach, 0)
+      }
+      let control = syntheticFrames(fps: 25, swingOnLeft: swingOnLeft, durationMs: 2_800) { time in
+        (self.syntheticSwingOffset(time - 1.4), 0, 0)
+      }
+      let config = TemporalStrokeDetector.Config(handedness: swingOnLeft ? .left : .right)
+      XCTAssertEqual(run(TemporalStrokeDetector(config: config), control).first?.event.startMs, 1_400)
+      let events = run(TemporalStrokeDetector(config: config), frames)
+      XCTAssertEqual(events.count, 1)
+      XCTAssertEqual(
+        events.first?.event.startMs, 1_400,
+        "left=\(swingOnLeft): an unrelated reach must not win first capture; emitted \(events.map { ($0.event.startMs, $0.event.endMs) })"
+      )
+    }
+  }
+
+  func testIndependentHiddenWristResumingMotionCannotBorrowOtherHandsSettledTail() {
+    // Only ONE slow interval of the swinging wrist is observed at 720.
+    // It then resumes moving at 2 bh/s for 160 ms, but is hidden for the first
+    // 120 ms. A still off hand cannot prove that the swinging wrist settled.
+    // The fully observed control cannot close until the real tail at 1040.
+    let path = hold(ready(then: Array(driveDeltas.prefix(8)) + Array(repeating: 0.08, count: 4)), for: 4)
+    for swingOnLeft in [false, true] {
+      let clean = path.enumerated().map { index, offset in
+        fullBodyPose(
+          at: index * cadenceMs, bodySpan: 0.4,
+          wristOffset: swingOnLeft ? 0 : offset,
+          leftWristOffset: swingOnLeft ? offset : 0
+        )
+      }
+      XCTAssertEqual(run(TemporalStrokeDetector(), clean).map(\.tMs), [1_040])
+      let hidden = clean.map { frame in
+        PoseFrame(
+          timestampMs: frame.timestampMs,
+          landmarks: frame.landmarks.filter {
+            !(760...840).contains(frame.timestampMs)
+              || $0.name != (swingOnLeft ? "left_wrist" : "right_wrist")
+          },
+          confidence: frame.confidence
+        )
+      }
+      XCTAssertEqual(
+        run(TemporalStrokeDetector(), hidden).map(\.tMs), [1_040],
+        "left=\(swingOnLeft): missing swinging-wrist motion is not a settled tail"
+      )
+    }
+  }
+
+  func testIndependentFullyObservedTenFpsSwingIsNotSilentlyLost() {
+    // Identical physical path and high-confidence full-body observations.
+    // 80 ms is the exact inclusive 12.5 fps boundary; 100 ms is 10 fps, NOT
+    // a missing landmark or the 200 ms sparse observations of the negatives.
+    for intervalMs in [40, 80, 100] {
+      let frames = stride(from: 0, through: 2_400, by: intervalMs).map { timestamp in
+        fullBodyPose(
+          at: timestamp, bodySpan: 0.4,
+          wristOffset: syntheticSwingOffset(Double(timestamp) / 1_000 - 0.6)
+        )
+      }
+      let events = run(TemporalStrokeDetector(), frames)
+      XCTAssertEqual(events.count, 1, "fully observed cadence \(intervalMs) ms must not silently lose the only swing")
+      XCTAssertNotNil(
+        TemporalStrokeDetector.strongestEvent(in: frames),
+        "manual stop cannot rescue the same \(intervalMs) ms stream if its stillness also uses the hard cap"
+      )
+    }
+  }
+
+  func testIndependentTenFpsReadyRunQualifiesBeforeDenseSwingSamples() {
+    // Isolate the onset gate: seven consecutive valid, still poses at 10 fps
+    // span 600 ms, followed by the unchanged 25 fps drive and settled tail.
+    let still = stride(from: 0, through: 600, by: 100).map { fullBodyPose(at: $0, bodySpan: 0.4) }
+    let swing = poses(bodySpan: 0.4, path: [0] + cumulative(driveDeltas), startMs: 600).dropFirst()
+    let events = run(TemporalStrokeDetector(), still + swing)
+    XCTAssertEqual(events.map(\.tMs), [1_040], "valid low-cadence stillness must not be discarded as absent evidence")
+  }
+
+  func testIndependentTenFpsTailDoesNotWaitForDenseSamplingToReturn() {
+    // Isolate the settle gate: the quiet onset and moving path are unchanged
+    // 25 fps observations through 680. Five genuinely observed still poses
+    // at 10 fps then cover 500 ms. A dense tail is appended ONLY as a control
+    // showing that the candidate was alive, not too short or under the path gate.
+    let path = ready(then: Array(driveDeltas.prefix(7)))
+    let moving = poses(bodySpan: 0.4, path: path)
+    let tail = stride(from: 780, through: 1_180, by: 100).map {
+      fullBodyPose(at: $0, bodySpan: 0.4, wristOffset: path.last!)
+    }
+    let recovery = stride(from: 1_220, through: 1_340, by: cadenceMs).map {
+      fullBodyPose(at: $0, bodySpan: 0.4, wristOffset: path.last!)
+    }
+    let recovered = run(TemporalStrokeDetector(), moving + tail + recovery)
+    XCTAssertEqual(recovered.count, 1, "the candidate and its observed path are sufficient")
+    XCTAssertEqual(
+      run(TemporalStrokeDetector(), moving + tail).count, 1,
+      "500 ms of fully observed 10 fps stillness must finish without waiting for the 25 fps control tail; recovered at \(recovered.map(\.tMs))"
+    )
+  }
+
+  func testIndependentLateBackfillCannotRepairUnobservedQuietOrSettledRuns() {
+    // Backfilled observations arrive after t=400 and must not retroactively
+    // turn the sparse 0,200,400 ready poses into an observed continuous run.
+    let sparseReady = [0, 200, 400].map { fullBodyPose(at: $0, bodySpan: 0.4) }
+    let lateReady = [40, 80, 120, 160, 240, 280, 320, 360].map { fullBodyPose(at: $0, bodySpan: 0.4) }
+    let swing = poses(bodySpan: 0.4, path: ready(then: driveDeltas)).dropFirst(readyFrames)
+    XCTAssertTrue(run(TemporalStrokeDetector(), sparseReady + lateReady + swing).isEmpty)
+
+    // Likewise, a 200 ms hole after a real moving candidate cannot be filled
+    // by late still poses. Only the fresh observed run [880,1040] may close it.
+    let detector = TemporalStrokeDetector()
+    let path = ready(then: Array(driveDeltas.prefix(7)))
+    XCTAssertTrue(run(detector, poses(bodySpan: 0.4, path: path)).isEmpty)
+    for timestamp in [880, 720, 760, 800, 840, 920, 960, 1_000] {
+      XCTAssertNil(detector.ingest(
+        pose: fullBodyPose(at: timestamp, bodySpan: 0.4, wristOffset: path.last!), paddle: nil
+      ), "late still samples cannot close the candidate at \(timestamp)")
+    }
+    let event = detector.ingest(
+      pose: fullBodyPose(at: 1_040, bodySpan: 0.4, wristOffset: path.last!), paddle: nil
+    )
+    XCTAssertEqual(event?.startMs, 400)
+    XCTAssertEqual(event?.endMs, 1_040)
+  }
+
+  func testStillnessSupportsEightFpsButNotSlowerSparseObservations() {
+    for intervalMs in [125, 126, 200, 400] {
+      let frames = stride(from: 0, through: 3_000, by: intervalMs).map { timestamp in
+        fullBodyPose(
+          at: timestamp, bodySpan: 0.4,
+          wristOffset: syntheticSwingOffset(Double(timestamp) / 1_000 - 0.75)
+        )
+      }
+      let detector = TemporalStrokeDetector()
+      let events = run(detector, frames)
+      if intervalMs == 125 {
+        XCTAssertEqual(events.count, 1)
+        XCTAssertFalse(detector.isTrackingLimited)
+        XCTAssertNotNil(TemporalStrokeDetector.strongestEvent(in: frames))
+        for event in events { assertObservedMotionEvent(event, in: frames) }
+      } else {
+        XCTAssertTrue(events.isEmpty, "unsupported interval \(intervalMs) ms")
+        XCTAssertTrue(detector.isTrackingLimited, "unsupported interval \(intervalMs) ms")
+        XCTAssertNil(TemporalStrokeDetector.strongestEvent(in: frames))
+      }
+    }
+  }
+
+  func testQuietOnsetRequiresAtLeastTwoObservedIntervals() {
+    for intervalCount in [1, 2] {
+      let endOfReadyMs = intervalCount * 100
+      let still = stride(from: 0, through: endOfReadyMs, by: 100).map {
+        fullBodyPose(at: $0, bodySpan: 0.4)
+      }
+      let swing = poses(
+        bodySpan: 0.4, path: [0] + cumulative(driveDeltas), startMs: endOfReadyMs
+      ).dropFirst()
+      let detector = TemporalStrokeDetector(config: .init(minQuietBeforeMs: 80))
+      let events = run(detector, still + swing)
+      XCTAssertEqual(events.map(\.tMs), intervalCount == 2 ? [640] : [])
+    }
+  }
+
+  func testTrackingLimitedReportsSlowCadenceEvenWithoutUsableSamples() {
+    let dropouts: [SyntheticDropout?] = [nil, .lowConfidence, .wrists, .hips, .wristVisibility]
+    for intervalMs in [126, 200, 400, 1_000] {
+      for dropout in dropouts {
+        let detector = TemporalStrokeDetector()
+        XCTAssertFalse(detector.isTrackingLimited)
+        for index in 0...8 {
+          let pose = fullBodyPose(at: index * intervalMs, bodySpan: 0.4)
+          let frame = dropout.map { missingEvidence(in: pose, dropout: $0) } ?? pose
+          XCTAssertNil(detector.ingest(pose: frame, paddle: nil))
+          if index >= 3 {
+            XCTAssertTrue(detector.isTrackingLimited, "interval=\(intervalMs), dropout=\(String(describing: dropout))")
+          }
+        }
+      }
+    }
+  }
+
+  func testTrackingLimitedReportsRepeatedUnsupportedIntervalsBetweenFastFrames() {
+    let detector = TemporalStrokeDetector()
+    var timestamp = 0
+    XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+    for index in 1...40 {
+      timestamp += index.isMultiple(of: 2) ? 150 : 100
+      XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+      if index >= 6 { XCTAssertTrue(detector.isTrackingLimited) }
+    }
+  }
+
+  func testTrackingLimitedRecoversWithHysteresisIgnoresLateFramesAndResets() {
+    for intervalMs in [17, 40, 100, 125] {
+      let detector = TemporalStrokeDetector()
+      for timestamp in [0, 200, 400, 600] {
+        XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+      }
+      XCTAssertTrue(detector.isTrackingLimited)
+      for timestamp in stride(from: 0, through: 600, by: cadenceMs) {
+        XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+        XCTAssertTrue(detector.isTrackingLimited, "late frames cannot repair cadence")
+      }
+      let recoveryIntervals = max(8, Int(ceil(750.0 / Double(intervalMs))))
+      for index in 1...recoveryIntervals {
+        let frame = fullBodyPose(at: 600 + index * intervalMs, bodySpan: 0.4)
+        XCTAssertNil(detector.ingest(pose: frame, paddle: nil))
+        XCTAssertEqual(detector.isTrackingLimited, index < recoveryIntervals, "interval=\(intervalMs), index=\(index)")
+      }
+      let recoveredAt = 600 + recoveryIntervals * intervalMs
+      for index in 1...3 {
+        let frame = fullBodyPose(at: recoveredAt + index * 200, bodySpan: 0.4)
+        XCTAssertNil(detector.ingest(pose: frame, paddle: nil))
+        XCTAssertEqual(detector.isTrackingLimited, index == 3, "one cadence outlier must not toggle the advice")
+      }
+      detector.reset()
+      XCTAssertFalse(detector.isTrackingLimited)
+      for timestamp in [0, 200, 400] {
+        XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+        XCTAssertFalse(detector.isTrackingLimited, "reset must clear old cadence evidence")
+      }
+    }
+  }
+
+  func testTrackingLimitedIsAdviceAndDoesNotGateAnObservedSwing() {
+    let detector = TemporalStrokeDetector()
+    for timestamp in [0, 200, 400, 600] {
+      XCTAssertNil(detector.ingest(pose: fullBodyPose(at: timestamp, bodySpan: 0.4), paddle: nil))
+    }
+    XCTAssertTrue(detector.isTrackingLimited)
+    let observations: [(timestamp: Int, offset: Double)] = [
+      (725, 0), (850, 0), (975, 0), (1_100, 0.2), (1_225, 0.4), (1_350, 0.4), (1_475, 0.4),
+    ]
+    let frames = observations.map { fullBodyPose(at: $0.timestamp, bodySpan: 0.4, wristOffset: $0.offset) }
+    let events = run(detector, frames)
+    XCTAssertEqual(events.map(\.tMs), [1_475])
+    XCTAssertEqual(events.first?.event.startMs, 975)
+    XCTAssertTrue(detector.isTrackingLimited, "the event completes before the advisory recovery window")
+  }
+
+  func testDeclaredHandednessDoesNotFallBackWhenSelectedWristIsMissingOrHidden() {
+    for handedness in [TemporalStrokeDetector.Handedness.left, .right] {
+      let selectedWrist = "\(handedness.rawValue)_wrist"
+      let offHandSwing = syntheticFrames(fps: 25, swingOnLeft: handedness == .left) { time in
+        (0, self.syntheticSwingOffset(time - 0.6), 0)
+      }
+      for lowVisibility in [false, true] {
+        let frames = offHandSwing.map { frame in
+          PoseFrame(
+            timestampMs: frame.timestampMs,
+            landmarks: frame.landmarks.compactMap { point in
+              guard point.name == selectedWrist else { return point }
+              guard lowVisibility else { return nil }
+              return PoseLandmark(name: point.name, x: point.x, y: point.y, visibility: 0.2)
+            },
+            confidence: frame.confidence
+          )
+        }
+        XCTAssertEqual(run(TemporalStrokeDetector(), frames).count, 1)
+        let detector = TemporalStrokeDetector(config: .init(handedness: handedness))
+        XCTAssertTrue(run(detector, frames).isEmpty)
+        XCTAssertNil(TemporalStrokeDetector.strongestEvent(in: frames, handedness: handedness))
+        let observedAgain = syntheticFrames(fps: 25, swingOnLeft: handedness == .left) { time in
+          (self.syntheticSwingOffset(time - 0.6), 0, 0)
+        }.map { PoseFrame(timestampMs: $0.timestampMs + 3_000, landmarks: $0.landmarks, confidence: $0.confidence) }
+        let recovered = run(detector, observedAgain)
+        XCTAssertEqual(recovered.count, 1)
+        XCTAssertEqual(recovered.first?.event.startMs, 3_600)
+      }
+    }
+  }
+
+  func testDeclaredHandednessAndNilBothSupportTwoHandedSwings() {
+    for fps in [10, 15, 30, 60] {
+      for handedness in [TemporalStrokeDetector.Handedness.left, .right] {
+        let frames = syntheticFrames(fps: fps, swingOnLeft: handedness == .left, jitter: 0.004) { time in
+          let swing = self.syntheticSwingOffset(time - 0.6)
+          return (swing, -swing, 0.1 * time)
+        }
+        let selections: [TemporalStrokeDetector.Handedness?] = [nil, handedness]
+        for selection in selections {
+          let detector = TemporalStrokeDetector(config: .init(handedness: selection))
+          let events = run(detector, frames)
+          XCTAssertEqual(events.count, 1, "fps=\(fps), hand=\(String(describing: selection))")
+          XCTAssertEqual(events.first?.event.startMs, 600)
+          XCTAssertFalse(detector.isTrackingLimited)
+          for event in events { assertObservedMotionEvent(event, in: frames) }
+        }
+      }
+    }
+  }
+
+  func testNilHandednessRetainsMotionOnlyBehaviorIncludingAmbiguousReaches() {
+    for swingOnLeft in [false, true] {
+      let frames = syntheticFrames(fps: 25, swingOnLeft: swingOnLeft) { time in
+        (self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.84, 0.36)]), 0, 0)
+      }
+      let defaultEvents = run(TemporalStrokeDetector(), frames)
+      let nilEvents = run(TemporalStrokeDetector(config: .init(handedness: nil)), frames)
+      XCTAssertEqual(defaultEvents.map(\.tMs), [1_000])
+      XCTAssertEqual(nilEvents.map(\.tMs), defaultEvents.map(\.tMs))
+      XCTAssertEqual(nilEvents.first?.event.startMs, 600)
+      XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames, handedness: nil)?.startMs, 600)
+    }
+  }
+
+  func testStrongestEventSharesDeclaredHandednessAndPreservesCustomConfig() {
+    for handedness in [TemporalStrokeDetector.Handedness.left, .right] {
+      let path = hold(move(stillPath(36), by: softDinkDeltas), for: 20)
+      let frames = path.enumerated().map { index, offset in
+        let timestamp = index * cadenceMs
+        let reach = syntheticOffset(Double(timestamp) / 1_000, knots: [(0, 0), (0.6, 0), (0.84, 0.36)])
+        return fullBodyPose(
+          at: timestamp, bodySpan: 0.4,
+          wristOffset: handedness == .right ? offset : reach,
+          leftWristOffset: handedness == .left ? offset : reach
+        )
+      }
+      XCTAssertTrue(run(TemporalStrokeDetector(config: .init(handedness: handedness)), frames).isEmpty)
+      XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames)?.startMs, 600)
+      let event = TemporalStrokeDetector.strongestEvent(in: frames, handedness: handedness)
+      XCTAssertEqual(event?.startMs, 1_400)
+      XCTAssertEqual(event?.endMs, 1_880)
+      var config = TemporalStrokeDetector.manualStopConfig
+      config.handedness = handedness
+      XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames, config: config)?.startMs, 1_400)
+      config.handedness = handedness == .left ? .right : .left
+      XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames, config: config)?.startMs, 600)
+      XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames, config: config, handedness: handedness)?.startMs, 1_400)
+    }
+  }
+
+  private enum SyntheticNonStroke: CaseIterable {
+    case walking, reaching, fidgeting, flick, cameraBump
+  }
+
+  private func syntheticFrames(
+    fps: Int,
+    bodySpan: Double = 0.4,
+    swingOnLeft: Bool = false,
+    jitter: Double = 0,
+    durationMs: Int = 2_400,
+    motion: (Double) -> (swing: Double, offHand: Double, body: Double)
+  ) -> [PoseFrame] {
+    (0...(durationMs * fps / 1_000)).map { index in
+      let timestamp = Int((Double(index) * 1_000 / Double(fps)).rounded())
+      let time = Double(timestamp) / 1_000
+      let offsets = motion(time)
+      let pose = fullBodyPose(
+        at: timestamp, bodySpan: bodySpan,
+        wristOffset: swingOnLeft ? offsets.offHand : offsets.swing,
+        leftWristOffset: swingOnLeft ? offsets.swing : offsets.offHand,
+        bodyOffsetX: offsets.body
+      )
+      return PoseFrame(
+        timestampMs: timestamp,
+        landmarks: pose.landmarks.enumerated().map { pointIndex, point in
+          let phase = Double(pointIndex) * 0.9
+          return PoseLandmark(
+            name: point.name,
+            x: point.x + jitter * bodySpan * sin(2 * Double.pi * 2.3 * time + phase),
+            y: point.y + jitter * bodySpan * cos(2 * Double.pi * 1.7 * time + phase),
+            visibility: point.visibility
+          )
+        },
+        confidence: pose.confidence
+      )
+    }
+  }
+
+  private func syntheticSwingOffset(_ time: Double) -> Double {
+    syntheticOffset(time, knots: [
+      (0, 0), (0.2, -0.14), (0.3, -0.02), (0.4, 0.2),
+      (0.5, 0.38), (0.6, 0.47), (0.7, 0.49),
+    ])
+  }
+
+  private func syntheticFidgetOffset(_ time: Double, speed: Double = 0.7, period: Double = 0.8) -> Double {
+    let phase = time.truncatingRemainder(dividingBy: period)
+    return speed * min(phase, period - phase)
+  }
+
+  private func syntheticOffset(_ time: Double, knots: [(time: Double, offset: Double)]) -> Double {
+    guard let first = knots.first, let last = knots.last else { return 0 }
+    if time <= first.time { return first.offset }
+    for (start, end) in zip(knots, knots.dropFirst()) where time <= end.time {
+      return start.offset + (end.offset - start.offset) * (time - start.time) / (end.time - start.time)
+    }
+    return last.offset
+  }
+
+  private func assertObservedMotionEvent(
+    _ emitted: (tMs: Int, event: StrokeEvent),
+    in frames: [PoseFrame],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    guard let peak = emitted.event.peakMotionMs else {
+      return XCTFail("motion peak must come from an observed sample", file: file, line: line)
+    }
+    let observed = Set(frames.filter { frame in
+      frame.confidence >= 0.5
+        && frame.landmarks.contains { $0.name.hasSuffix("_wrist") && $0.visibility >= 0.35 }
+        && frame.landmarks.contains { $0.name.hasSuffix("_hip") && $0.visibility >= 0.35 }
+    }.map(\.timestampMs))
+    XCTAssertTrue(observed.contains(emitted.event.startMs), file: file, line: line)
+    XCTAssertTrue(observed.contains(peak), file: file, line: line)
+    XCTAssertTrue(observed.contains(emitted.event.endMs), file: file, line: line)
+    XCTAssertEqual(emitted.event.endMs, emitted.tMs, file: file, line: line)
+    XCTAssertLessThan(emitted.event.startMs, peak, file: file, line: line)
+    XCTAssertLessThan(peak, emitted.event.endMs, file: file, line: line)
+    XCTAssertEqual(emitted.event.recognition.status, .unknown, file: file, line: line)
+    XCTAssertEqual(emitted.event.recognition.reason, "validated_classifier_unavailable", file: file, line: line)
+    XCTAssertNil(emitted.event.recognition.shotType, file: file, line: line)
+  }
+
+  private enum SyntheticDropout: CaseIterable {
+    case lowConfidence, wrists, hips, wristVisibility
+  }
+
+  private func missingEvidence(in frame: PoseFrame, dropout: SyntheticDropout) -> PoseFrame {
+    PoseFrame(
+      timestampMs: frame.timestampMs,
+      landmarks: frame.landmarks.compactMap { point in
+        if dropout == .wrists && point.name.hasSuffix("_wrist") { return nil }
+        if dropout == .hips && point.name.hasSuffix("_hip") { return nil }
+        if dropout == .wristVisibility && point.name.hasSuffix("_wrist") {
+          return PoseLandmark(name: point.name, x: point.x, y: point.y, visibility: 0.2)
+        }
+        return point
+      },
+      confidence: dropout == .lowConfidence ? 0.4 : frame.confidence
+    )
   }
 
   // MARK: - Path helpers (cumulative right-wrist offsets, body-heights)

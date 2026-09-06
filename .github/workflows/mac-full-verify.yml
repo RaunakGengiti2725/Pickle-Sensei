@@ -35,6 +35,10 @@ on:
         description: "Run tsc + jest for apps/mobile on the Mac (Linux CI already gates them)"
         type: boolean
         default: false
+      simulator_udid:
+        description: "Optional disposable iPhone simulator UUID; preserves every other simulator"
+        type: string
+        default: ""
   push:
     branches: [main, "ci/mac-**"]
 
@@ -75,6 +79,7 @@ jobs:
     timeout-minutes: 150
     env:
       MAC_ARTIFACTS: macos-ci-artifacts
+      PICKLE_CI_SIMULATOR_UDID: ${{ inputs.simulator_udid }}
     steps:
       - uses: actions/checkout@v4
 

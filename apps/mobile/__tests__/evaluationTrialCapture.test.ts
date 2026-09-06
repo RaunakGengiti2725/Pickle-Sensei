@@ -180,6 +180,28 @@ describe('buildEvaluationTrial', () => {
     expect(trial!.consent.scope).toBe('evaluation_telemetry');
   });
 
+  it('reports the actual analysis bundle rather than relabeling a newer run', () => {
+    const input = buildInput({
+      ...scored,
+      record: {
+        ...record,
+        result: {
+          ...shotResult,
+          versionVector: {
+            ...shotResult.versionVector,
+            modelBundleVersion: 'on-device-fusion-2',
+          },
+        },
+      },
+    });
+    expect(buildEvaluationTrial(input)?.modelBundleVersion).toBe(
+      'on-device-fusion-2',
+    );
+    expect(buildEvaluationTrial(buildInput(scored))?.modelBundleVersion).toBe(
+      'on-device-fusion-1',
+    );
+  });
+
   it('records honest abstention claims for quality_blocked and unavailable outcomes', () => {
     const blocked = buildEvaluationTrial(
       buildInput({

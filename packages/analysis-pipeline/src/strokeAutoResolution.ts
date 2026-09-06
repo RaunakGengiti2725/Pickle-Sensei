@@ -178,10 +178,19 @@ export function resolvePredictedProfile(
   if (prediction.label === "UNKNOWN" || prediction.leaf === "UNKNOWN") {
     return { kind: "abstain", reason: "auto_stroke_prediction_unknown" };
   }
+  if (!Number.isFinite(prediction.confidence) || prediction.confidence > 1) {
+    return { kind: "abstain", reason: "auto_stroke_confidence_invalid" };
+  }
   if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) {
     return { kind: "abstain", reason: "auto_stroke_confidence_below_floor" };
   }
   if (prediction.leaf !== null) {
+    if (
+      prediction.label !== prediction.leaf ||
+      prediction.taxonomyDepth !== (prediction.leaf === "OVERHEAD" ? 1 : 3)
+    ) {
+      return { kind: "abstain", reason: "auto_stroke_leaf_hierarchy_invalid" };
+    }
     const technique = SELECTABLE_TECHNIQUES_V1.find((entry) => entry.canonical === prediction.leaf);
     if (!technique || technique.legacySlug === null) {
       // A leaf the registry does not support cannot become a route.
@@ -279,8 +288,7 @@ export function detectHierarchicalDisagreement(
   declared: ShotTypeSlug,
   prediction: HierarchicalStrokePrediction,
 ): StrokeDisagreement | null {
-  if (prediction.label === "UNKNOWN" || prediction.leaf === "UNKNOWN") return null;
-  if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) return null;
+  if (resolvePredictedProfile(prediction).kind === "abstain") return null;
   const declaredSet = canonicalsForSlug(declared);
   if (declaredSet.length === 0) return null;
 

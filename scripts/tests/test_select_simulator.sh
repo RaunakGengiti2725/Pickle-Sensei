@@ -23,6 +23,7 @@
 #   scripts/tests/test_select_simulator.sh
 # Exit 0 = all assertions hold; 1 = regression; 2 = setup failure.
 set -euo pipefail
+unset PICKLE_CI_SIMULATOR_UDID
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO_ROOT/tools/macos-ci/select-simulator.sh"
@@ -282,6 +283,30 @@ if [ "$RC" = 2 ] && grep -q 'unknown argument' "$WORK/err"; then
   pass "unknown argument exits 2"
 else
   flunk "unknown argument must exit 2"
+fi
+
+write_devices "\"$RT18\": [$(dev 'Dedicated capture QA' OWN-QA Shutdown true 'iPhone 16 Pro'), $(dev 'PickleSensei-CI' KEEP-OTHER-CI Shutdown)],
+  \"$RT26\": [$(dev 'iPhone 17 Pro Max' PERSONAL Booted)]"
+PICKLE_CI_SIMULATOR_UDID=OWN-QA run_script --boot
+if [ "$RC" = 0 ] && [ "$OUT" = "OWN-QA" ] && simctl_called '^simctl boot OWN-QA$' \
+  && ! simctl_called '^simctl delete ' && ! simctl_called '^simctl create '; then
+  pass "explicit simulator pin boots only the chosen iPhone and preserves all other devices"
+else
+  flunk "explicit pin must not select or clean up another simulator"
+fi
+PICKLE_CI_SIMULATOR_UDID=MISSING run_script --boot
+if [ "$RC" != 0 ] && [ -z "$OUT" ] && ! simctl_called '^simctl boot ' \
+  && ! simctl_called '^simctl delete ' && ! simctl_called '^simctl create '; then
+  pass "an unavailable explicit simulator fails without falling back"
+else
+  flunk "an unavailable pin must not touch another device"
+fi
+write_devices "\"$RT26\": [$(dev 'iPad Pro' NOT-IPHONE Shutdown)]"
+PICKLE_CI_SIMULATOR_UDID=NOT-IPHONE run_script
+if [ "$RC" != 0 ] && [ -z "$OUT" ] && ! simctl_called '^simctl create '; then
+  pass "a pinned non-iPhone is refused without creating a fallback"
+else
+  flunk "a non-iPhone pin must fail closed"
 fi
 
 if [ "$fail" = 0 ]; then

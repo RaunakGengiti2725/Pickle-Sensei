@@ -32,7 +32,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 pick() {
   xcrun simctl list devices available -j >"$TMP/devices-available.json"
-  python3 - "$TMP/devices-available.json" <<'PY'
+  python3 - "$TMP/devices-available.json" "${PICKLE_CI_SIMULATOR_UDID:-}" <<'PY'
 import json, sys
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -56,6 +56,11 @@ for runtime, devices in data.items():
             dev["name"],
             dev["udid"],
         ))
+requested = sys.argv[2]
+if requested:
+    candidates = [candidate for candidate in candidates if candidate[-1].lower() == requested.lower()]
+    if not candidates:
+        raise SystemExit("Requested simulator is not an available iPhone; refusing to select another device.")
 candidates.sort(reverse=True)
 if candidates:
     v, _, _, model, name, udid = candidates[0]
@@ -111,10 +116,12 @@ fi
 
 # Remove every other CI-created device so repeated runs never accumulate them.
 xcrun simctl list devices -j >"$TMP/devices-all.json"
-python3 - "$TMP/devices-all.json" "$UDID" "$CI_DEVICE_NAME" <<'PY' >"$TMP/stale.txt"
+python3 - "$TMP/devices-all.json" "$UDID" "$CI_DEVICE_NAME" "${PICKLE_CI_SIMULATOR_UDID:-}" <<'PY' >"$TMP/stale.txt"
 import json, sys
 
-path, keep, name = sys.argv[1:4]
+path, keep, name, pinned = sys.argv[1:5]
+if pinned:
+    sys.exit(0)
 with open(path, encoding="utf-8") as fh:
     for devs in json.load(fh)["devices"].values():
         for d in devs:

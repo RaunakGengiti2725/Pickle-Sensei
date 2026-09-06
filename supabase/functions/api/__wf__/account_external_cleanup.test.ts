@@ -4,6 +4,7 @@ import {
   RC_URL,
   TEST_USER_ID,
   fakeAppleIdToken,
+  fakeGoogleIdToken,
   loadHarness,
   userRequest,
 } from "./routesHarness.ts";
@@ -23,7 +24,7 @@ async function withFetchIntercept<T>(
     const request = new Request(input, init);
     const owned = await intercept(request.clone());
     if (owned) return owned;
-    return inner(input, init);
+    return inner(request);
   }) as FetchFn;
   try {
     return await run();
@@ -396,3 +397,58 @@ for (const [index, [label, failure]] of transientAppleFailures.entries()) {
     },
   );
 }
+
+Deno.test(
+  "delete-confirm revokes a stored Apple token even when the current session is Google",
+  async () => {
+    h.reset();
+    const challenge = "55555555-5555-4555-8555-555555555555";
+    h.tables.account_deletion_requests = [
+      {
+        challenge,
+        created_at: new Date(Date.now() - 10_000).toISOString(),
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ];
+    h.tables.account_external_credentials = [
+      {
+        apple_refresh_token_encrypted: await encryptAppleRefreshToken(
+          "linked-apple-refresh-to-revoke",
+          TEST_USER_ID,
+          h.appleTokenEncryptionKey,
+        ),
+        apple_revoked_at: null,
+        revenuecat_deleted_at: null,
+      },
+    ];
+    const response = await h.handler(
+      userRequest("POST", "/v1/me/delete-confirm", {
+        token: fakeGoogleIdToken(),
+        body: { challenge },
+      }),
+    );
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), { deleted: true, appleAuthorizationRevocation: "revoked" });
+    const appleIndex = h.calls.findIndex((call) =>
+      call.url.includes("appleid.apple.com/auth/revoke"),
+    );
+    const revenueCatIndex = h.calls.findIndex(
+      (call) => call.url.startsWith(RC_URL) && call.method === "DELETE",
+    );
+    const supabaseIndex = h.calls.findIndex(
+      (call) => call.url.includes("/auth/v1/admin/users/") && call.method === "DELETE",
+    );
+    assert(appleIndex >= 0);
+    assert(revenueCatIndex > appleIndex);
+    assert(supabaseIndex > revenueCatIndex);
+    assertStringIncludes(String(h.calls[appleIndex].body), "token=linked-apple-refresh-to-revoke");
+    assert(
+      h.calls.some(
+        (call) =>
+          call.url.includes("/rest/v1/account_external_credentials") &&
+          call.method === "PATCH" &&
+          Boolean((call.body as Record<string, unknown>).apple_revoked_at),
+      ),
+    );
+  },
+);

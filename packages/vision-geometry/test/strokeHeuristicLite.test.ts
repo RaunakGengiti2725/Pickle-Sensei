@@ -170,6 +170,169 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain("ambidextrous_declared_side_unresolvable");
   });
+
+  it.each(["contact", "event_peak"] as const)(
+    "rejects a %s reference outside the isolated stroke window",
+    (reference) => {
+      const prediction = classifyStroke({
+        sequence,
+        window: { startMs: window.peakMs + 300, endMs: window.endMs },
+        contactMs: reference === "contact" ? window.peakMs : null,
+        eventPeakMs: window.peakMs,
+        handedness: "right",
+        paddle: null,
+        paddleSpeeds: null,
+        wristSpeeds: null,
+      });
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.limitingFactors).toContain("reference_outside_stroke_window");
+    },
+  );
+
+  it.each([
+    { startMs: Number.NaN, endMs: window.endMs },
+    { startMs: window.startMs, endMs: Number.POSITIVE_INFINITY },
+    { startMs: window.endMs, endMs: window.startMs },
+    { startMs: window.peakMs, endMs: window.peakMs },
+  ])("rejects an invalid stroke window: %j", (invalidWindow) => {
+    const prediction = classifyStroke({
+      sequence,
+      window: invalidWindow,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("stroke_window_invalid");
+  });
+
+  it("uses an in-window reference pose instead of a closer pose from an adjacent event", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) => ({
+          ...frame,
+          landmarks: frame.landmarks.map((mark) =>
+            frame.timestampMs === window.peakMs && mark.name === "right_wrist"
+              ? { ...mark, x: 0.3 }
+              : mark,
+          ),
+        })),
+      },
+      window: { startMs: window.peakMs + 1, endMs: window.endMs },
+      contactMs: window.peakMs + 1,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.leaf).toBeNull();
+  });
+
+  it("does not borrow a reference pose when no pose was measured in the stroke window", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.filter((frame) => frame.timestampMs <= window.peakMs),
+      },
+      window: { startMs: window.peakMs + 1, endMs: window.endMs },
+      contactMs: window.peakMs + 1,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("no_pose_frame_near_contact");
+  });
+
+  it("treats an empty dropped pose frame like an absent frame, without fabricating its landmarks", () => {
+    const input = {
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right" as const,
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    };
+    const absent = classifyStroke({
+      ...input,
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.filter((frame) => frame.timestampMs !== window.peakMs),
+      },
+    });
+    const empty = classifyStroke({
+      ...input,
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) =>
+          frame.timestampMs === window.peakMs ? { ...frame, landmarks: [] } : frame,
+        ),
+      },
+    });
+    expect(absent.label).toBe("FOREHAND");
+    expect(empty).toEqual(absent);
+  });
+
+  it("still abstains when a dropped-pose gap exceeds the existing reference tolerance", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) =>
+          Math.abs(frame.timestampMs - window.peakMs) <= 80 ? { ...frame, landmarks: [] } : frame,
+        ),
+      },
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("no_pose_frame_near_contact");
+  });
+
+  it.each(["right", "left"] as const)(
+    "preserves a %s-handed forehand under horizontal mirroring and supported framing scales",
+    (handedness) => {
+      const swing = generateSwingSequence({ handed: handedness });
+      for (const scale of [0.75, 1, 1.1]) {
+        for (const mirrored of [false, true]) {
+          const prediction = classifyStroke({
+            sequence: {
+              ...swing.sequence,
+              frames: swing.sequence.frames.map((frame) => ({
+                ...frame,
+                landmarks: frame.landmarks.map((mark) => ({
+                  ...mark,
+                  x: 0.5 + (mirrored ? -1 : 1) * scale * (mark.x - 0.5),
+                  y: 0.5 + scale * (mark.y - 0.5),
+                })),
+              })),
+            },
+            window: swing.window,
+            contactMs: null,
+            eventPeakMs: swing.window.peakMs,
+            handedness,
+            paddle: null,
+            paddleSpeeds: null,
+            wristSpeeds: null,
+          });
+          expect(prediction.label, JSON.stringify({ scale, mirrored })).toBe("FOREHAND");
+          expect(prediction.leaf).toBeNull();
+          expect(prediction.taxonomyDepth).toBe(2);
+          expect(prediction.confidence).toBeLessThanOrEqual(0.6);
+        }
+      }
+    },
+  );
 });
 
 describe("gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)", () => {
