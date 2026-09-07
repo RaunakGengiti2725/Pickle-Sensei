@@ -53,6 +53,10 @@ import subprocess
 import sys
 
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(REPO, "tools", "paddle-lab"))
+
+import frame_clock  # noqa: E402  (stdlib-only; the absolute CFR clock shared with detect_paddle)
+
 OUT_DIR = os.path.join(REPO, "datasets", "mining", "wave-g-g03")
 
 HELD_OUT = {"wm-dink-01", "afn-vic-rally1"}
@@ -485,14 +489,25 @@ def dedupe_and_rank(candidates):
 
 
 def extract_crops(candidates, no_crops):
-    """Extract crops for cases with a committed clip.mp4 (held-out never included)."""
+    """Extract crops for cases with a committed clip.mp4 (held-out never included).
+
+    Candidate tMs values come from detector / label artifacts on the absolute
+    CFR clock (start_time + k/fps), so the frame to render is
+    k = round((tMs - start_time) * fps / 1000) and the seek targets frame k's
+    own pts (frame_clock) — not `-ss tMs/1000`, which on a clip with a nonzero
+    container start_time (afn-sasebo-rally1: 33.367 ms) lands one frame late.
+    frameIndexHint records k. ffmpeg failures raise instead of silently
+    leaving cropPath null.
+    """
     packs = []
     clip_map = {}
+    clip_meta = {}
     for clip in sorted(glob.glob(os.path.join(REPO, "datasets", "paddle-bench", "bundles", "*", "clip.mp4"))):
         bundle = clip.split(os.sep)[-2]
         if bundle in HELD_OUT:
             continue
         clip_map[bundle] = clip
+        clip_meta[bundle] = frame_clock.probe_stream(clip)
     for c in candidates:
         cid = c["caseId"]
         entry = {
@@ -502,19 +517,27 @@ def extract_crops(candidates, no_crops):
             "frameIndexHint": None,
             "cropPath": None,
         }
+        if cid in clip_map:
+            meta = clip_meta[cid]
+            frame_index = frame_clock.frame_index_for_t_ms(float(c["tMs"]), meta.fps, meta.start_time_ms)
+            entry["frameIndexHint"] = frame_index
         if cid in clip_map and not no_crops:
             out_png = os.path.join(OUT_DIR, "frame-packs", cid, f"{c['candidateId']}.png")
             os.makedirs(os.path.dirname(out_png), exist_ok=True)
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
-                "-ss", f"{c['tMs'] / 1000.0:.3f}",
+                "-ss", f"{frame_clock.seek_sec_for_frame_index(frame_index, meta.fps):.3f}",
                 "-i", clip_map[cid],
                 "-frames:v", "1",
                 out_png,
             ]
             r = subprocess.run(cmd, capture_output=True)
-            if r.returncode == 0 and os.path.exists(out_png):
-                entry["cropPath"] = os.path.relpath(out_png, REPO)
+            if r.returncode != 0 or not os.path.exists(out_png):
+                raise RuntimeError(
+                    f"ffmpeg failed to render frame {frame_index} (tMs {c['tMs']}) of {cid} for "
+                    f"{c['candidateId']} (exit {r.returncode}): {r.stderr.decode('utf-8', 'replace').strip()[-400:]}"
+                )
+            entry["cropPath"] = os.path.relpath(out_png, REPO)
         packs.append(entry)
     return packs
 

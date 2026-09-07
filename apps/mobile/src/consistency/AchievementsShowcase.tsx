@@ -1,33 +1,27 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
-import { PressableScale, useReducedMotion } from '../design/components';
+import { PressableScale } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
-import { specialistTitle, type ConsistencySnapshot } from './engine';
+import {
+  formatDayKey,
+  specialistTitle,
+  type ConsistencySnapshot,
+} from './engine';
 import {
   RARITY_LABEL,
   STREAK_MILESTONES,
   VOLUME_ACHIEVEMENTS,
   type AchievementRarity,
 } from './milestones';
-import { badgeArtFor, MilestoneBadge, RARITY_PALETTE } from './MilestoneBadge';
+import { badgeArtFor, MilestoneBadge } from './MilestoneBadge';
 import { plural } from '../util/plural';
 
 /**
- * The trophy rail. Earned badges shine in their rarity colors; locked ones
+ * The achievement rail. Earned badges use the house accent; locked ones
  * stay visible as charcoal silhouettes with honest progress copy ("13 days
- * away") — seeing the exact shape of Century Club is the advertisement, and
- * a slow shimmer on the NEXT reachable milestone keeps it wanted without a
- * single popup. Tap any badge for its story.
+ * away"). The next reachable milestone has a quiet outline, while the
+ * selected badge has a flat contextual surface. Tap any badge for its
+ * story and rarity label.
  */
 
 interface ShowcaseEntry {
@@ -39,7 +33,7 @@ interface ShowcaseEntry {
   earned: boolean;
   earnedOnDay: string | null;
   progressLabel: string | null;
-  /** The next milestone the current run reaches — wears the shimmer. */
+  /** The next milestone the current run reaches — marked by an outline. */
   isNext: boolean;
 }
 
@@ -93,46 +87,9 @@ function buildEntries(snapshot: ConsistencySnapshot): ShowcaseEntry[] {
   return entries;
 }
 
-/** Slow diagonal gloss sweep — the "look at me" on the next milestone. */
-function Shimmer(props: { active: boolean }) {
-  const reduced = useReducedMotion();
-  const progress = useSharedValue(0);
-  const run = props.active && !reduced;
-
-  useEffect(() => {
-    if (!run) {
-      progress.value = 0;
-      return;
-    }
-    progress.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
-        withDelay(2200, withTiming(0, { duration: 0 })),
-      ),
-      -1,
-    );
-    return () => cancelAnimation(progress);
-  }, [progress, run]);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: progress.value <= 0 || progress.value >= 1 ? 0 : 0.5,
-    transform: [
-      { translateX: -60 + progress.value * 150 },
-      { rotate: '18deg' },
-    ],
-  }));
-
-  if (!run) return null;
-  return <Animated.View pointerEvents="none" style={[styles.shimmer, style]} />;
-}
-
+/** A short earned-date label keeps the rail focused on training history. */
 function formatEarnedDay(day: string): string {
-  const parsed = new Date(`${day}T12:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return day;
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDayKey(day, { month: 'short', day: 'numeric' });
 }
 
 export function AchievementsShowcase(props: {
@@ -176,7 +133,16 @@ export function AchievementsShowcase(props: {
               }
               style={[
                 styles.badgeCell,
-                selectedId === entry.id && styles.badgeCellSelected,
+                entry.isNext && !entry.earned
+                  ? props.dark
+                    ? styles.badgeCellNextDark
+                    : styles.badgeCellNext
+                  : null,
+                selectedId === entry.id
+                  ? props.dark
+                    ? styles.badgeCellSelectedDark
+                    : styles.badgeCellSelected
+                  : null,
               ]}
             >
               <View style={styles.badgeArt}>
@@ -187,10 +153,9 @@ export function AchievementsShowcase(props: {
                   earned={entry.earned}
                   size={64}
                 />
-                <Shimmer active={entry.isNext && !entry.earned} />
               </View>
               <Text
-                numberOfLines={1}
+                numberOfLines={2}
                 style={[
                   type.micro,
                   styles.badgeTitle,
@@ -200,7 +165,7 @@ export function AchievementsShowcase(props: {
                 {entry.title}
               </Text>
               <Text
-                numberOfLines={1}
+                numberOfLines={2}
                 style={[type.micro, styles.badgeMeta, { color: fgSoft }]}
               >
                 {entry.earned
@@ -223,13 +188,17 @@ export function AchievementsShowcase(props: {
             <View
               style={[
                 styles.rarityPill,
-                { backgroundColor: RARITY_PALETTE[selected.rarity].tint },
+                {
+                  backgroundColor: props.dark
+                    ? color.voltTint
+                    : color.courtSoft,
+                },
               ]}
             >
               <Text
                 style={[
                   type.micro,
-                  { color: RARITY_PALETTE[selected.rarity].accent },
+                  { color: props.dark ? color.volt : color.courtDeep },
                 ]}
               >
                 {RARITY_LABEL[selected.rarity].toUpperCase()}
@@ -254,32 +223,42 @@ export function AchievementsShowcase(props: {
 const styles = StyleSheet.create({
   rail: { gap: space.sm + 2, paddingVertical: 2, paddingRight: space.md },
   badgeCell: {
-    width: 92,
+    width: 112,
     alignItems: 'center',
     paddingVertical: space.sm,
     paddingHorizontal: 4,
     borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
   },
-  badgeCellSelected: { backgroundColor: color.inkTint },
-  badgeArt: { borderRadius: radius.sm, overflow: 'hidden' },
-  badgeTitle: { marginTop: 7, letterSpacing: 0.4 },
-  badgeMeta: { marginTop: 2, fontSize: 10, letterSpacing: 0.3 },
-  shimmer: {
-    position: 'absolute',
-    top: -12,
-    bottom: -12,
-    width: 26,
-    backgroundColor: 'rgba(255,255,255,0.6)',
+  badgeCellNext: { borderColor: color.line },
+  badgeCellNextDark: { borderColor: color.lineMutedDark },
+  badgeCellSelected: {
+    backgroundColor: color.inkTint,
+    borderColor: color.courtDeep,
   },
+  badgeCellSelectedDark: {
+    backgroundColor: color.onDarkTintFaint,
+    borderColor: color.volt,
+  },
+  badgeArt: { borderRadius: radius.sm },
+  badgeTitle: { marginTop: 7, letterSpacing: 0.4, textAlign: 'center' },
+  badgeMeta: { marginTop: 2, letterSpacing: 0.3, textAlign: 'center' },
   detail: {
     marginTop: space.sm,
     padding: space.md,
     borderRadius: radius.md,
     backgroundColor: color.surfaceAlt,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
   },
-  detailDark: { backgroundColor: color.onDarkTint },
+  detailDark: {
+    backgroundColor: color.inkElevated,
+    borderColor: color.lineDark,
+  },
   detailHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: space.sm,

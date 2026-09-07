@@ -153,6 +153,21 @@ export function dayFromOrdinal(ordinal: number): string {
   return new Date(ordinal * DAY_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * Renders a YYYY-MM-DD day key as THAT calendar date in the device locale.
+ * The key is anchored at noon UTC and formatted in UTC, so the label can
+ * never drift to a neighbouring day in the device zone (a UTC+13 device
+ * would otherwise read 12:00Z as 01:00 of the next morning).
+ */
+export function formatDayKey(
+  day: string,
+  options: Omit<Intl.DateTimeFormatOptions, 'timeZone'>,
+): string {
+  const parsed = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return day;
+  return parsed.toLocaleDateString(undefined, { ...options, timeZone: 'UTC' });
+}
+
 interface MutableDay {
   day: string;
   strokeCount: number;

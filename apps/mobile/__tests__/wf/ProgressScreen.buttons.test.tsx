@@ -1,13 +1,13 @@
 /**
- * Button ledger for ProgressScreen: every pressable the screen renders is
- * pressed here and its real observable effect asserted — section/range tabs
+ * Button ledger for ProgressScreen at default text size: every pressable
+ * is pressed here and its real observable effect asserted — section/range tabs
  * (state + selected a11y state + copy re-anchoring), both ConsistencyCard
  * instances (StreakCalendar route), the error-state retry (reload, loading
  * guard, repeated failure), and the AchievementsShowcase badge toggles the
  * technique tab hosts. A final sweep asserts no unlisted pressable exists.
  */
 import React from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Dimensions, Pressable, StyleSheet } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/data/db', () => ({
@@ -228,6 +228,12 @@ const CONSISTENCY_SNAPSHOT_LABEL =
 describe('ProgressScreen button ledger', () => {
   beforeEach(() => {
     setActiveDataOwner(OWNER);
+    jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1,
+    });
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockRefreshConsistency.mockClear();
@@ -248,6 +254,7 @@ describe('ProgressScreen button ledger', () => {
     });
     jest.useRealTimers();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    jest.restoreAllMocks();
   });
 
   it('section tabs switch the dashboard and expose tab semantics', async () => {

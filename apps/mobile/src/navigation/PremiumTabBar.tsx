@@ -3,15 +3,16 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import type { HostInstance } from 'react-native';
 import type { NavigationProp } from '@react-navigation/native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
   Easing,
   interpolate,
@@ -53,6 +54,7 @@ function CoachActionRow(props: {
   action: CoachAction;
   index: number;
   progress: SharedValue<number>;
+  reducedMotion: boolean;
 }) {
   const animatedStyle = useAnimatedStyle(() => {
     const entry = 0.16 + props.index * 0.09;
@@ -82,7 +84,10 @@ function CoachActionRow(props: {
         onPress={props.action.onPress}
         style={({ pressed }) => [
           styles.actionRow,
-          pressed && styles.actionRowPressed,
+          pressed &&
+            (props.reducedMotion
+              ? styles.actionRowPressedReduced
+              : styles.actionRowPressed),
         ]}
       >
         <View
@@ -94,7 +99,7 @@ function CoachActionRow(props: {
           <Text style={[type.bodyBold, styles.actionTitle]}>
             {props.action.title}
           </Text>
-          <Text numberOfLines={1} style={[type.caption, styles.actionDetail]}>
+          <Text style={[type.caption, styles.actionDetail]}>
             {props.action.detail}
           </Text>
         </View>
@@ -104,7 +109,7 @@ function CoachActionRow(props: {
   );
 }
 
-function GradientActionButton(props: {
+function CoachActionButton(props: {
   progress: SharedValue<number>;
   onPress: () => void;
   open: boolean;
@@ -139,21 +144,16 @@ function GradientActionButton(props: {
       accessibilityLargeContentTitle="Coach"
       onPress={props.onPress}
       style={({ pressed }) => [
-        styles.gradientButtonPressable,
+        styles.actionButtonPressable,
         props.overlay && styles.overlayActionButton,
         props.bottom !== undefined && { bottom: props.bottom },
         pressed && { opacity: 0.9 },
       ]}
     >
-      <Animated.View style={[styles.gradientButtonRing, animatedStyle]}>
-        <LinearGradient
-          colors={[color.volt, color.mint]}
-          start={{ x: 0.08, y: 0.05 }}
-          end={{ x: 0.95, y: 1 }}
-          style={styles.gradientButton}
-        >
+      <Animated.View style={[styles.actionButtonRing, animatedStyle]}>
+        <View style={styles.actionButton}>
           <Icon name="plus" color={color.ink} size={30} strokeWidth={2.25} />
-        </LinearGradient>
+        </View>
       </Animated.View>
     </Pressable>
   );
@@ -165,6 +165,12 @@ export function PremiumTabBar(props: BottomTabBarProps) {
   const largeContentViewer =
     Platform.OS === 'ios' && parseInt(Platform.Version, 10) >= 13;
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const actionsBottom = insets.bottom + BAR_HEIGHT + space.xl;
+  const actionsMaxHeight = Math.max(
+    0,
+    windowHeight - insets.top - space.md - actionsBottom,
+  );
   const reducedMotion = useReducedMotion();
   // Walkthrough anchors: the spotlight tour measures these live views.
   const coachFabTarget = useWalkthroughTarget('coach-fab');
@@ -181,11 +187,15 @@ export function PremiumTabBar(props: BottomTabBarProps) {
   }));
 
   useEffect(() => {
-    progress.value = withTiming(menuOpen ? 1 : 0, {
-      duration: motionDuration,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [menuOpen, motionDuration, progress]);
+    progress.value = reducedMotion
+      ? menuOpen
+        ? 1
+        : 0
+      : withTiming(menuOpen ? 1 : 0, {
+          duration: motionDuration,
+          easing: Easing.out(Easing.cubic),
+        });
+  }, [menuOpen, motionDuration, progress, reducedMotion]);
 
   useEffect(
     () => () => {
@@ -262,14 +272,14 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       title: 'Import Video',
       detail: 'Choose a real clip from this phone',
       icon: 'upload',
-      accent: color.flame,
+      accent: color.surfaceAlt,
       onPress: () => runAction(() => openRatingFlow('library')),
     },
     {
       title: 'Drill Library',
       detail: 'Guided drills you can search',
       icon: 'library',
-      accent: color.courtSoft,
+      accent: color.surfaceAlt,
       onPress: () => runAction(() => rootNavigation?.navigate('DrillLibrary')),
     },
   ];
@@ -289,7 +299,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             if (name === 'Add') {
               return (
                 <View key={route.key} style={styles.centerSlot}>
-                  <GradientActionButton
+                  <CoachActionButton
                     innerRef={coachFabTarget}
                     largeContentViewer={largeContentViewer}
                     progress={progress}
@@ -308,7 +318,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             }
 
             const isFocused = props.state.index === index;
-            const tint = isFocused ? color.court : color.inkSoft;
+            const tint = isFocused ? color.ink : color.inkSoft;
             const onPress = () => {
               const event = props.navigation.emit({
                 type: 'tabPress',
@@ -399,21 +409,33 @@ export function PremiumTabBar(props: BottomTabBarProps) {
           </Animated.View>
           <View
             pointerEvents="box-none"
+            testID="coach-actions-panel"
             style={[
               styles.actions,
-              { bottom: insets.bottom + BAR_HEIGHT + space.xl },
+              { bottom: actionsBottom, maxHeight: actionsMaxHeight },
             ]}
           >
-            {actions.map((action, index) => (
-              <CoachActionRow
-                action={action}
-                index={index}
-                key={action.title}
-                progress={progress}
-              />
-            ))}
+            <ScrollView
+              testID="coach-actions-scroll"
+              style={styles.actionsScroll}
+              contentContainerStyle={styles.actionsContent}
+              contentInsetAdjustmentBehavior="never"
+              keyboardShouldPersistTaps="handled"
+              bounces={false}
+              removeClippedSubviews={false}
+            >
+              {actions.map((action, index) => (
+                <CoachActionRow
+                  action={action}
+                  index={index}
+                  key={action.title}
+                  progress={progress}
+                  reducedMotion={reducedMotion}
+                />
+              ))}
+            </ScrollView>
           </View>
-          <GradientActionButton
+          <CoachActionButton
             bottom={insets.bottom + 26}
             largeContentViewer={largeContentViewer}
             overlay
@@ -460,12 +482,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabIconActive: { backgroundColor: color.courtSoft },
-  tabLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: 0.1,
-  },
+  tabIconActive: { backgroundColor: color.surfaceAlt },
+  tabLabel: { letterSpacing: 0.1 },
   tabLabelActive: { letterSpacing: 0 },
   centerSlot: {
     flex: 1,
@@ -474,33 +492,31 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 7,
   },
-  gradientButtonPressable: {
+  actionButtonPressable: {
     position: 'absolute',
     top: -ACTION_RISE,
     width: ACTION_SIZE,
     height: ACTION_SIZE,
     borderRadius: ACTION_SIZE / 2,
   },
-  gradientButtonRing: {
+  actionButtonRing: {
     width: ACTION_SIZE,
     height: ACTION_SIZE,
     padding: 5,
     borderRadius: ACTION_SIZE / 2,
     backgroundColor: color.tabBar,
-    ...shadow.floating,
   },
-  gradientButton: {
+  actionButton: {
     flex: 1,
     borderRadius: ACTION_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderColor: 'rgba(7,23,16,0.08)',
+    backgroundColor: color.volt,
+    borderColor: color.inkTint,
     borderWidth: StyleSheet.hairlineWidth,
   },
   centerLabel: {
-    color: color.courtDeep,
-    fontSize: 11,
-    lineHeight: 14,
+    color: color.ink,
     letterSpacing: 0.65,
   },
   modal: { flex: 1 },
@@ -517,9 +533,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    gap: 10,
     paddingHorizontal: space.lg,
   },
+  actionsScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
+    width: '100%',
+    maxWidth: 380,
+  },
+  actionsContent: { gap: 10, alignItems: 'center' },
   actionRowWrap: { width: '100%', maxWidth: 380 },
   actionRow: {
     minHeight: 68,
@@ -535,6 +558,7 @@ const styles = StyleSheet.create({
     ...shadow.floating,
   },
   actionRowPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  actionRowPressedReduced: { opacity: 0.9 },
   actionIcon: {
     width: 46,
     height: 46,
@@ -542,7 +566,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionCopy: { flex: 1 },
+  actionCopy: { flex: 1, minWidth: 0 },
   actionTitle: { color: color.ink },
   actionDetail: { color: color.inkSoft, marginTop: 1 },
   overlayActionButton: {

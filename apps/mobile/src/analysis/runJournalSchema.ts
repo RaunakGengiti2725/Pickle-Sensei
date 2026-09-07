@@ -190,8 +190,9 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
       SELECT 1 FROM analysis_logical_operations p
       JOIN local_analysis_record r ON r.owner_key = p.owner_key AND r.id = p.analysis_id AND r.capture_id = p.capture_id
       JOIN local_shot s ON s.owner_key = r.owner_key AND s.id = r.id AND s.source = 'real' AND s.result_kind = 'scored'
-      JOIN outbox o ON o.owner_key = r.owner_key AND o.kind = 'shot.sync' AND json_extract(o.payload, '$.id') = r.id
-        AND json_extract(o.payload, '$.analysisPermitId') = NEW.permit_id
+      JOIN outbox o ON o.owner_key = r.owner_key AND o.kind = 'shot.sync'
+        AND CASE WHEN json_valid(o.payload) THEN json_extract(o.payload, '$.id') = r.id
+          AND json_extract(o.payload, '$.analysisPermitId') = NEW.permit_id ELSE 0 END
       WHERE p.owner_key = NEW.owner_key AND p.analysis_id = NEW.analysis_id AND p.current_attempt_id = NEW.operation_id
         AND p.final_record_id IS NULL)
     BEGIN SELECT RAISE(ABORT, 'An attempt commits with its actual product and outbox'); END`,
@@ -202,7 +203,8 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
         (operation_id = NEW.operation_id OR (api_origin = NEW.api_origin AND reservation_key = NEW.reservation_key)))
       OR EXISTS (SELECT 1 FROM local_analysis_record WHERE owner_key = NEW.owner_key AND capture_id = NEW.capture_id)
       OR EXISTS (SELECT 1 FROM local_shot WHERE owner_key = NEW.owner_key AND id = NEW.analysis_id)
-      OR EXISTS (SELECT 1 FROM outbox WHERE owner_key = NEW.owner_key AND kind = 'shot.sync' AND json_extract(payload, '$.id') = NEW.analysis_id)
+      OR EXISTS (SELECT 1 FROM outbox WHERE owner_key = NEW.owner_key AND kind = 'shot.sync'
+        AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') = NEW.analysis_id ELSE 1 END)
       OR EXISTS (SELECT 1 FROM sync_receipt WHERE owner_key = NEW.owner_key AND kind = 'shot.sync' AND entity_id = NEW.analysis_id)
       OR NOT EXISTS (
         SELECT 1 FROM analysis_logical_operations p WHERE p.owner_key = NEW.owner_key AND p.analysis_id = NEW.analysis_id

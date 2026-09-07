@@ -23,6 +23,10 @@ jest.mock('../../src/data/repository', () => ({
   setKv: (...args: unknown[]) => mockSetKv(...args),
 }));
 jest.mock('../../src/data/db', () => ({ getDb: () => ({}) }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+  initialWindowMetrics: { insets: { top: 59, bottom: 34, left: 0, right: 0 } },
+}));
 
 import {
   FirstRunWalkthrough,

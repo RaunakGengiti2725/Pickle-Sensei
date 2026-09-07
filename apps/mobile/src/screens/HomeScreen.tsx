@@ -5,10 +5,10 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -97,6 +97,7 @@ export function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const rankBannerTarget = useWalkthroughTarget('rank-banner');
+  const largeText = useWindowDimensions().fontScale >= 1.5;
   const profile = useAppStore(s => s.profile);
   const ownerKey = useAppStore(s => s.ownerKey);
   const activeOwner = getActiveDataOwner();
@@ -284,7 +285,10 @@ export function HomeScreen() {
           />
         }
       >
-        <View style={styles.topBar} testID="home-top-bar">
+        <View
+          style={[styles.topBar, largeText && styles.topBarStacked]}
+          testID="home-top-bar"
+        >
           <BrandMark />
           <View style={styles.topBadges} testID="home-top-badges">
             <Pill
@@ -305,7 +309,7 @@ export function HomeScreen() {
               onPress={() => navigation.navigate('StreakCalendar')}
               hitSlop={6}
               containerStyle={styles.streakBadgeSlot}
-              style={styles.streakBadge}
+              style={[styles.streakBadge, largeText && styles.streakBadgeLarge]}
               testID="home-streak-badge"
             >
               <FlameIcon
@@ -349,13 +353,6 @@ export function HomeScreen() {
             style={[styles.modeCardShell, styles.modeCardPrimary]}
             onPress={() => navigation.navigate('Analyze', { source: 'camera' })}
           >
-            <LinearGradient
-              colors={[color.courtDeep, color.surfaceDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              pointerEvents="none"
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.modeCardInner}>
               <View style={styles.modeCardTop}>
                 <View style={[styles.modeIconChip, styles.modeIconChipDark]}>
@@ -400,13 +397,6 @@ export function HomeScreen() {
         </View>
 
         <View style={styles.practiceCard}>
-          <LinearGradient
-            colors={[color.courtDeep, color.surfaceDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            pointerEvents="none"
-            style={StyleSheet.absoluteFill}
-          />
           <View style={styles.practiceCardTop}>
             <View style={{ flex: 1 }}>
               <Text style={[type.micro, { color: color.volt }]}>THIS WEEK</Text>
@@ -448,7 +438,7 @@ export function HomeScreen() {
           {weekReads === 0 ? (
             <View style={styles.practiceZeroStage}>
               <View style={styles.practiceZeroIcon}>
-                <Icon name="spark" color={color.volt} size={20} />
+                <Icon name="progress" color={color.volt} size={20} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[type.h3, styles.practiceZeroTitle]}>
@@ -608,7 +598,7 @@ export function HomeScreen() {
                 Your first read starts here
               </Text>
               <Text
-                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
+                style={[type.caption, { color: color.graphite, marginTop: 3 }]}
               >
                 Set the phone once. Pickle Sensei guides the rest.
               </Text>
@@ -724,6 +714,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space.sm,
   },
+  topBarStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.sm,
+  },
   topBadges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -747,6 +742,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
+  streakBadgeLarge: {
+    height: 'auto',
+    minHeight: 44,
+    paddingVertical: space.xs,
+  },
   streakValue: {
     color: color.ink,
     fontVariant: ['tabular-nums'],
@@ -759,6 +759,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: space.lg,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
   },
   practiceZeroStage: {
@@ -778,7 +780,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(215,250,69,0.12)',
+    backgroundColor: color.voltTint,
   },
   practiceZeroTitle: { color: color.onDark },
   practiceZeroCopy: { color: color.onDarkSubtle, marginTop: 2 },
@@ -819,8 +821,6 @@ const styles = StyleSheet.create({
   practiceCount: {
     ...type.display,
     color: color.onDark,
-    fontSize: 64,
-    lineHeight: 66,
   },
   practiceCountLabel: { color: color.onDark, paddingBottom: 7 },
   practiceFooter: {
@@ -865,15 +865,13 @@ const styles = StyleSheet.create({
     backgroundColor: color.courtSoft,
   },
   techniqueSummaryTitle: { color: color.ink, textTransform: 'capitalize' },
-  techniqueSummaryCopy: { color: color.inkSoft, marginTop: 3 },
+  techniqueSummaryCopy: { color: color.graphite, marginTop: 3 },
   techniqueSummaryScoreWrap: { alignItems: 'flex-end' },
   techniqueSummaryScore: {
     ...type.score,
     color: color.ink,
-    fontSize: 30,
-    lineHeight: 34,
   },
-  techniqueSummaryDupr: { color: color.inkSoft, marginTop: 2 },
+  techniqueSummaryDupr: { color: color.graphite, marginTop: 2 },
   scoreCard: { padding: space.lg, minHeight: 358 },
   scoreCardTop: {
     flexDirection: 'row',
@@ -910,6 +908,8 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.lg,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
@@ -943,6 +943,8 @@ const styles = StyleSheet.create({
     minHeight: 76,
     borderRadius: radius.md,
     backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     paddingHorizontal: space.md,
     marginBottom: 9,
     flexDirection: 'row',
@@ -952,8 +954,6 @@ const styles = StyleSheet.create({
   recentDate: { width: 38 },
   recentScore: {
     color: color.ink,
-    fontSize: 25,
-    lineHeight: 29,
     marginLeft: 2,
   },
 });

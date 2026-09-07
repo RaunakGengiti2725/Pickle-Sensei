@@ -1,8 +1,93 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import type { PracticeHistoryChartBucket } from './practiceHistory';
+
+const DATA_ROWS_PER_PAGE = 7;
+
+export function ChartDataRows<T>(props: {
+  items: readonly T[];
+  summary: string;
+  scope: string;
+  unit: 'reads' | 'periods';
+  rowForItem: (
+    item: T,
+    index: number,
+  ) => { key: string; label: string; latest: boolean };
+}) {
+  const [pageFromLatest, setPageFromLatest] = useState(0);
+  const lastPage = Math.max(
+    0,
+    Math.ceil(props.items.length / DATA_ROWS_PER_PAGE) - 1,
+  );
+  const page = Math.min(pageFromLatest, lastPage);
+  const end = props.items.length - page * DATA_ROWS_PER_PAGE;
+  const start = Math.max(0, end - DATA_ROWS_PER_PAGE);
+
+  return (
+    <View style={styles.dataRows}>
+      <Text style={styles.dataText}>{props.summary}</Text>
+      <Text style={styles.dataText}>{props.scope}</Text>
+      <Text accessibilityLiveRegion="polite" style={styles.dataText}>
+        {props.items.length === 0
+          ? `No ${props.unit} in this window.`
+          : `Showing ${props.unit} ${start + 1}–${end} of ${props.items.length}.`}
+      </Text>
+      {props.items.slice(start, end).map((item, offset) => {
+        const row = props.rowForItem(item, start + offset);
+        return (
+          <Text
+            key={row.key}
+            accessible
+            style={[styles.dataRow, row.latest && styles.dataRowLatest]}
+            testID="chart-data-row"
+          >
+            {row.label}
+          </Text>
+        );
+      })}
+      {lastPage > 0 ? (
+        <View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Earlier ${props.unit}`}
+            accessibilityState={{ disabled: page === lastPage }}
+            disabled={page === lastPage}
+            onPress={() => setPageFromLatest(page + 1)}
+            style={styles.dataPageButton}
+            testID="chart-data-earlier"
+          >
+            <Text
+              style={[styles.dataText, page < lastPage && styles.dataPageLink]}
+            >{`Earlier ${props.unit}`}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Later ${props.unit}`}
+            accessibilityState={{ disabled: page === 0 }}
+            disabled={page === 0}
+            onPress={() => setPageFromLatest(page - 1)}
+            style={styles.dataPageButton}
+            testID="chart-data-later"
+          >
+            <Text
+              style={[styles.dataText, page > 0 && styles.dataPageLink]}
+            >{`Later ${props.unit}`}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 interface CompactBucket {
   key: string;
@@ -43,6 +128,7 @@ export function PracticeVolumeChart(props: {
   testID?: string;
 }) {
   const reducedMotion = useReducedMotion();
+  const largeText = useWindowDimensions().fontScale > 1;
   const reveal = useRef(new Animated.Value(1)).current;
   const compacted = useMemo(
     () => compactPracticeBuckets(props.buckets),
@@ -53,7 +139,7 @@ export function PracticeVolumeChart(props: {
   const total = compacted.reduce((sum, bucket) => sum + bucket.count, 0);
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion || largeText) {
       reveal.setValue(1);
       return;
     }
@@ -64,27 +150,59 @@ export function PracticeVolumeChart(props: {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [reducedMotion, reveal, signature]);
+  }, [largeText, reducedMotion, reveal, signature]);
 
   const firstLabel = compacted[0]?.firstLabel ?? '';
   const lastLabel = compacted.at(-1)?.lastLabel ?? '';
   const middleLabel = compacted[Math.floor(compacted.length / 2)]?.firstLabel;
-  // WHOOP-style value labels only fit short windows; long ranges keep the
-  // silhouette readable instead (MOBBIN: WHOOP strain/calories bars).
+  // Compact labels fit short windows at default text size; enlarged text
+  // uses bounded, flowing rows with the same totals as the chart bars.
   const showValues = compacted.length <= 7;
   const barCeiling = showValues ? 50 : 65;
+  const summary =
+    props.accessibilityLabel ??
+    `${props.rangeLabel} capture volume: ${total} verified ${
+      total === 1 ? 'capture' : 'captures'
+    } across ${props.activeDays} active ${
+      props.activeDays === 1 ? 'day' : 'days'
+    }.`;
+
+  if (largeText) {
+    return (
+      <View
+        accessible={false}
+        accessibilityLabel={summary}
+        importantForAccessibility="no"
+        style={styles.root}
+        testID={props.testID}
+      >
+        <ChartDataRows
+          key={`${compacted[0]?.key}:${compacted.at(-1)?.key}`}
+          items={compacted}
+          summary={summary}
+          scope="Counts by chart period, oldest to newest. Grouped dates use the same totals as the chart bars."
+          unit="periods"
+          rowForItem={(bucket, index) => {
+            const latest = index === compacted.length - 1;
+            const label =
+              bucket.firstLabel === bucket.lastLabel
+                ? bucket.firstLabel
+                : `${bucket.firstLabel}–${bucket.lastLabel}`;
+            return {
+              key: bucket.key,
+              label: `${label}: ${bucket.count}${latest ? ' · Latest period' : ''}`,
+              latest,
+            };
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View
       accessible
-      accessibilityLabel={
-        props.accessibilityLabel ??
-        `${props.rangeLabel} capture volume: ${total} verified ${
-          total === 1 ? 'capture' : 'captures'
-        } across ${props.activeDays} active ${
-          props.activeDays === 1 ? 'day' : 'days'
-        }.`
-      }
+      accessibilityLabel={summary}
       style={styles.root}
       testID={props.testID}
     >
@@ -134,6 +252,23 @@ export function PracticeVolumeChart(props: {
 }
 
 const styles = StyleSheet.create({
+  dataRows: { gap: space.sm },
+  dataText: { ...type.caption, color: color.onDarkMuted },
+  dataRow: {
+    ...type.caption,
+    color: color.onDarkMuted,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.lineMutedDark,
+  },
+  dataRowLatest: { color: color.volt },
+  dataPageLink: { textDecorationLine: 'underline' },
+  dataPageButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: space.sm,
+  },
   root: { marginTop: space.lg },
   plot: {
     height: 82,
@@ -157,13 +292,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: color.onDarkTintFaint,
   },
   barValue: {
     ...type.micro,
     color: color.onDarkMuted,
-    fontSize: 10,
-    lineHeight: 13,
     letterSpacing: 0.2,
     marginBottom: 3,
     fontVariant: ['tabular-nums'],
@@ -173,7 +306,7 @@ const styles = StyleSheet.create({
     width: '100%',
     minWidth: 3,
     borderRadius: 5,
-    backgroundColor: color.mint,
+    backgroundColor: color.onDarkMuted,
   },
   barLatest: { backgroundColor: color.volt },
   barEmpty: { backgroundColor: color.lineMutedDark },
@@ -185,9 +318,7 @@ const styles = StyleSheet.create({
   axisLabel: {
     ...type.micro,
     flex: 1,
-    color: color.onDarkFaint,
-    fontSize: 10,
-    lineHeight: 13,
+    color: color.onDarkMuted,
     letterSpacing: 0.2,
   },
   axisLabelStart: { textAlign: 'left' },

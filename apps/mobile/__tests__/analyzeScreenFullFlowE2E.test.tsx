@@ -406,6 +406,13 @@ function processingEvent(): CameraEvent {
   return { ...eventBase(), type: 'processing', state: 'preparing_clip' };
 }
 
+/** A user cancel as the native bridge rejects it: typed by `code`. */
+function userCancel(): Error {
+  return Object.assign(new Error('Camera capture was canceled.'), {
+    code: 'camera.cancelled',
+  });
+}
+
 function deferredCapture() {
   let resolveFn!: (clip: CapturedClip) => void;
   let rejectFn!: (error: Error) => void;
@@ -465,7 +472,7 @@ async function completeAttempt(
   mockReadArtifact = async () => sidecarJson;
   const capture = deferredCapture();
   if (options.pressOpen !== false) {
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
   }
   await flush();
   driveNativeCaptureSequence();
@@ -551,6 +558,98 @@ afterEach(async () => {
 
 // ─── SCENARIO: first attempt, tap-declared, full literal flow ───────────────
 
+describe('capture feedback stays on the first completed swing', () => {
+  it('ignores camera feedback when no capture is active', async () => {
+    const renderer = await renderScreen();
+    emit(readinessEvent('ready', 0.93));
+    emit(strokeDetectedEvent(0.86));
+    emit(processingEvent());
+    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE');
+    expect(textOf(renderer)).not.toContain('Saving the private clip');
+    act(() => renderer.unmount());
+  });
+
+  it('never asks for another swing after the first one is captured', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('single-swing-feedback');
+    mockReadArtifact = async () => sidecarJson;
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    emit(readinessEvent('ready', 0.93));
+    emit(strokeDetectedEvent(0.86));
+    emit(readinessEvent('no_person', 0));
+    expect(textOf(renderer)).toContain('Motion captured');
+    expect(textOf(renderer)).not.toContain('Step fully into frame');
+    emit(processingEvent());
+    emit(readinessEvent('hold_still', 0.88));
+    emit(strokeDetectedEvent(0.9));
+    expect(textOf(renderer)).toContain('Saving the private clip');
+    capture.resolve(clip);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'one Result navigation',
+    );
+    expect(persistedRecordInserts()).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
+
+  it('rejects another native capture’s callbacks without changing the current capture', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('capture-identity');
+    mockReadArtifact = async () => sidecarJson;
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    emit({ ...sessionEvent('configured'), captureId: 'native-current' });
+    emit({ ...strokeDetectedEvent(0.9), captureId: 'native-previous' });
+    expect(textOf(renderer)).toContain('Opening camera');
+    emit({ ...readinessEvent('ready', 0.93), captureId: 'native-current' });
+    emit({ ...strokeDetectedEvent(0.86), captureId: 'native-current' });
+    emit({ ...processingEvent(), captureId: 'native-previous' });
+    expect(textOf(renderer)).toContain('Motion captured');
+    emit({ ...processingEvent(), captureId: 'native-current' });
+    expect(textOf(renderer)).toContain('Saving the private clip');
+    capture.resolve(clip);
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'current capture Result',
+    );
+    act(() => renderer.unmount());
+  });
+
+  it('ignores late native feedback once analysis starts', async () => {
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('single-swing-analysis');
+    let finishRead!: (value: string) => void;
+    mockReadArtifact = () =>
+      new Promise<string>(resolve => {
+        finishRead = resolve;
+      });
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    driveNativeCaptureSequence();
+    capture.resolve(clip);
+    await waitFor(
+      () => typeof finishRead === 'function',
+      'analysis reading the saved swing',
+    );
+    emit(readinessEvent('no_person', 0));
+    emit(processingEvent());
+    expect(textOf(renderer)).toContain('Measuring your swing');
+    act(() => finishRead(sidecarJson));
+    await waitFor(
+      () => mockNavigation.replace.mock.calls.length === 1,
+      'one Result navigation',
+    );
+    act(() => renderer.unmount());
+  });
+});
+
 describe('first attempt — tap-declared full flow to a real Result', () => {
   it('launch → tap declare → permission → guidance → lock → Ready → stroke → auto trigger → clip → analysis → Result with real scored content', async () => {
     const renderer = await renderScreen();
@@ -563,7 +662,7 @@ describe('first attempt — tap-declared full flow to a real Result', () => {
     const { clip, sidecarJson } = guidedClip('first-attempt');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
 
     // Camera permission then starting-position guidance, straight from the
@@ -692,7 +791,7 @@ describe('voice and Auto Detect declaration paths', () => {
     const { clip, sidecarJson } = guidedClip('auto-attempt');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     driveNativeCaptureSequence();
     capture.resolve(clip);
@@ -782,10 +881,10 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('no_person', 0));
-    capture.reject(new Error('Capture cancelled by user.'));
+    capture.reject(userCancel());
     await flush();
     expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE'); // back to ready
     expect(activeDb.calls).toHaveLength(0);
@@ -797,9 +896,9 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const first = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
-    first.reject(new Error('Capture cancelled by user.'));
+    first.reject(userCancel());
     await flush();
     const analysisId = await completeAttempt(renderer, 'post-cancel');
     expect(analysisId).toBeTruthy();
@@ -811,7 +910,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('ready', 0.9));
     // The working surface header close = user backgrounding/aborting.
@@ -908,7 +1007,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await act(async () => renderer.unmount());
     expect(mockCancelSpy).toHaveBeenCalledTimes(1);
@@ -921,7 +1020,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(sessionEvent('interrupted'));
     capture.reject(new Error(message));
@@ -957,7 +1056,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const denied = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(permissionEvent('requesting'));
     emit(permissionEvent('denied'));
@@ -991,7 +1090,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     capture.reject(
       new Error('Not enough storage available to save the capture.'),
@@ -1013,7 +1112,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     const { clip, sidecarJson } = guidedClip('network-loss');
     mockReadArtifact = async () => sidecarJson;
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     driveNativeCaptureSequence();
     capture.resolve(clip);
@@ -1048,10 +1147,10 @@ describe('attempt isolation of live readiness evidence', () => {
     // Attempt 1: the camera saw the athlete (ready, 0.93) but the user
     // cancelled before any clip existed.
     const first = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     emit(readinessEvent('ready', 0.93));
-    first.reject(new Error('Capture cancelled by user.'));
+    first.reject(userCancel());
     await flush();
 
     // Attempt 2: the native layer produces a clip WITHOUT any readiness
@@ -1060,7 +1159,7 @@ describe('attempt isolation of live readiness evidence', () => {
     const { clip, sidecarJson } = guidedClip('isolated-attempt');
     mockReadArtifact = async () => sidecarJson;
     const second = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     second.resolve(clip);
     await waitFor(

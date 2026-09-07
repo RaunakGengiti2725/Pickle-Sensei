@@ -1,0 +1,745 @@
+{
+  "description": "Auth/session contract mutants. Each `find` must occur exactly once in `file`; the runner swaps it for `replace`, runs the plane's existing suites, and restores the original bytes. Nothing here is ever committed to the source tree.",
+  "mutants": [
+    {
+      "id": "SK-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "REFRESH_LEAD_MS",
+      "category": "refresh-timing",
+      "description": "Rotate exactly AT bearer expiry instead of 60s ahead (window where every request 401s).",
+      "find": "const REFRESH_LEAD_MS = 60_000;",
+      "replace": "const REFRESH_LEAD_MS = 0;"
+    },
+    {
+      "id": "SK-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "REFRESH_LEAD_MS",
+      "category": "refresh-timing",
+      "description": "Rotate 60s AFTER bearer expiry (sign flip).",
+      "find": "const REFRESH_LEAD_MS = 60_000;",
+      "replace": "const REFRESH_LEAD_MS = -60_000;"
+    },
+    {
+      "id": "SK-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "FOREGROUND_LEAD_MS",
+      "category": "refresh-timing",
+      "description": "Foreground re-check only refreshes a bearer that is already expired, not one with < 5 min left.",
+      "find": "const FOREGROUND_LEAD_MS = 5 * 60_000;",
+      "replace": "const FOREGROUND_LEAD_MS = 0;"
+    },
+    {
+      "id": "SK-04",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "AppState listener",
+      "category": "refresh-timing",
+      "description": "No foreground re-check at all (a bearer that expired while suspended is never refreshed until the timer, which did not fire).",
+      "find": "    if (nextState !== 'active' || !live()) return;\n",
+      "replace": "    return;\n    if (nextState !== 'active' || !live()) return;\n"
+    },
+    {
+      "id": "SK-05",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() catch",
+      "category": "revocation",
+      "description": "A refused refresh token (401/403) is retried forever instead of ending the session.",
+      "find": "      if (error instanceof SessionRefreshError && !error.retryable) {",
+      "replace": "      if (false) {"
+    },
+    {
+      "id": "SK-06",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() catch",
+      "category": "revocation",
+      "description": "Retryable/non-retryable flipped: a transient failure signs the user out, a refusal keeps retrying.",
+      "find": "      if (error instanceof SessionRefreshError && !error.retryable) {",
+      "replace": "      if (error instanceof SessionRefreshError && error.retryable) {"
+    },
+    {
+      "id": "SK-07",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "startSessionKeeper tail",
+      "category": "refresh-timing",
+      "description": "A keeper started without a bearer (persisted session at launch) never refreshes.",
+      "find": "  if (bearerExpiresAtMs === null) {\n    void refresh();\n  } else {\n    scheduleAheadOfExpiry();\n  }\n",
+      "replace": "  if (bearerExpiresAtMs !== null) {\n    scheduleAheadOfExpiry();\n  }\n"
+    },
+    {
+      "id": "SK-08",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() success",
+      "category": "rotation",
+      "description": "The keeper keeps using the SPENT refresh token after a rotation (second rotation is refused by the server).",
+      "find": "      refreshToken = tokens.refreshToken;\n",
+      "replace": ""
+    },
+    {
+      "id": "SK-09",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() success",
+      "category": "backoff",
+      "description": "Backoff counter never resets after a success (retry delays keep growing across the session).",
+      "find": "      failedAttempts = 0;\n",
+      "replace": ""
+    },
+    {
+      "id": "SK-10",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() generation guard",
+      "category": "stale-result",
+      "description": "An in-flight refresh that lands after stopSessionKeeper() (sign-out) still calls onRotated with the new tokens.",
+      "find": "      if (!live()) return;\n      refreshToken = tokens.refreshToken;",
+      "replace": "      refreshToken = tokens.refreshToken;"
+    },
+    {
+      "id": "SK-11",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "schedule(retryDelayMs)",
+      "category": "backoff",
+      "description": "No exponential backoff: every transient failure retries after the 1s floor.",
+      "find": "      schedule(retryDelayMs(failedAttempts));",
+      "replace": "      schedule(0);"
+    },
+    {
+      "id": "SK-12",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "stopSessionKeeper",
+      "category": "stale-result",
+      "description": "stopSessionKeeper() does not bump the generation: a stopped keeper's in-flight refresh still adopts tokens / signs out.",
+      "find": "  generation += 1;\n  if (timer) clearTimeout(timer);",
+      "replace": "  if (timer) clearTimeout(timer);"
+    },
+    {
+      "id": "SK-13",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() inflight guard",
+      "category": "concurrency",
+      "description": "Concurrent refreshes allowed (a route 401 during a scheduled rotation spends the refresh token twice).",
+      "find": "    if (!live() || inflight) return;",
+      "replace": "    if (!live()) return;"
+    },
+    {
+      "id": "SK-14",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionKeeper.ts",
+      "symbol": "refresh() success",
+      "category": "refresh-timing",
+      "description": "After a rotation nothing is scheduled: the bearer expires for good after the first rotation.",
+      "find": "      if (live()) scheduleAheadOfExpiry();\n",
+      "replace": ""
+    },
+    {
+      "id": "SL-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession status map",
+      "category": "revocation",
+      "description": "A 403 from /v1/auth/refresh is treated as transient (retry forever) instead of a refusal.",
+      "find": "  if (response.status === 401 || response.status === 403) {",
+      "replace": "  if (response.status === 401) {"
+    },
+    {
+      "id": "SL-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession status map",
+      "category": "revocation",
+      "description": "Any non-2xx from /v1/auth/refresh (including 5xx) is a refusal: server trouble signs the user out.",
+      "find": "  if (response.status === 401 || response.status === 403) {",
+      "replace": "  if (!response.ok) {"
+    },
+    {
+      "id": "SL-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession network catch",
+      "category": "revocation",
+      "description": "A network failure/timeout during refresh is a refusal: going offline signs the user out.",
+      "find": "  } catch {\n    throw new SessionRefreshError(\n      'The session could not be refreshed right now.',\n      true,\n    );\n  }\n  if (response.status",
+      "replace": "  } catch {\n    throw new SessionRefreshError(\n      'The session could not be refreshed right now.',\n      false,\n    );\n  }\n  if (response.status"
+    },
+    {
+      "id": "SL-04",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "revokeApiSession headers",
+      "category": "revocation",
+      "description": "Logout is sent without the bearer (server cannot know which session to revoke).",
+      "find": "          Authorization: `Bearer ${session.bearerToken}`,\n",
+      "replace": ""
+    },
+    {
+      "id": "SL-05",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "revokeApiSession",
+      "category": "revocation",
+      "description": "Server-side revoke skipped entirely on sign-out.",
+      "find": "  try {\n    await post(\n      fetchFn,\n      `${session.apiBaseUrl}/v1/auth/logout`,",
+      "replace": "  try {\n    if (session) return;\n    await post(\n      fetchFn,\n      `${session.apiBaseUrl}/v1/auth/logout`,"
+    },
+    {
+      "id": "SL-06",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession result",
+      "category": "refresh-timing",
+      "description": "expiresAt (unix seconds) is passed through as milliseconds: the keeper believes the bearer expired in 1970 and rotates on every tick.",
+      "find": "    bearerExpiresAtMs: tokens.expiresAt * 1000,",
+      "replace": "    bearerExpiresAtMs: tokens.expiresAt,"
+    },
+    {
+      "id": "SL-07",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionLifecycle.ts",
+      "symbol": "refreshApiSession body",
+      "category": "wire-contract",
+      "description": "Refresh sends the token under the wrong body key (server answers 400 → transient forever).",
+      "find": "        body: JSON.stringify({ refreshToken: input.refreshToken }),",
+      "replace": "        body: JSON.stringify({ token: input.refreshToken }),"
+    },
+    {
+      "id": "AS-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/apiSession.ts",
+      "symbol": "bearerTokenFor",
+      "category": "bearer-binding",
+      "description": "bearerTokenFor ignores the account binding: a client configured for account A gets account B's bearer.",
+      "find": "  return session && session.canonicalAppUserId === canonicalAppUserId\n    ? session.bearerToken\n    : null;",
+      "replace": "  return session ? session.bearerToken : null;"
+    },
+    {
+      "id": "AS-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/apiSession.ts",
+      "symbol": "reportApiUnauthorized",
+      "category": "stale-401",
+      "description": "A late 401 for an already-rotated bearer is reported against the CURRENT session.",
+      "find": "  if (!session || session.bearerToken !== bearerToken) return;",
+      "replace": "  if (!session) return;"
+    },
+    {
+      "id": "AS-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/apiSession.ts",
+      "symbol": "clearApiSession",
+      "category": "sign-out",
+      "description": "clearApiSession is a no-op: the bearer survives sign-out in memory.",
+      "find": "export function clearApiSession(): void {\n  useApiSessionStore.setState({ session: null });",
+      "replace": "export function clearApiSession(): void {\n  if (useApiSessionStore) return;\n  useApiSessionStore.setState({ session: null });"
+    },
+    {
+      "id": "SV-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession accessible",
+      "category": "keychain",
+      "description": "Keychain item written as ACCESSIBLE.ALWAYS (leaves the device via backups / Keychain sync) instead of AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY.",
+      "find": "        accessible: keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,",
+      "replace": "        accessible: keychain.ACCESSIBLE.ALWAYS,"
+    },
+    {
+      "id": "SV-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession",
+      "category": "keychain",
+      "description": "Record version is not checked: a future/foreign record shape is trusted.",
+      "find": "      record['version'] !== 1 ||\n",
+      "replace": ""
+    },
+    {
+      "id": "SV-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession",
+      "category": "keychain",
+      "description": "An empty refreshToken is accepted as a valid persisted session.",
+      "find": "      typeof refreshToken !== 'string' ||\n      !refreshToken\n",
+      "replace": "      typeof refreshToken !== 'string'\n"
+    },
+    {
+      "id": "SV-04",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "loadPersistedSession",
+      "category": "keychain",
+      "description": "A malformed Keychain record is left in place instead of being discarded.",
+      "find": "    if (!session) await clearPersistedSession();\n",
+      "replace": ""
+    },
+    {
+      "id": "SV-05",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "clearPersistedSession",
+      "category": "sign-out",
+      "description": "clearPersistedSession never touches the Keychain: sign-out leaves the refresh token on the device.",
+      "find": "    await keychain.resetGenericPassword({ service: SESSION_VAULT_SERVICE });\n",
+      "replace": ""
+    },
+    {
+      "id": "SV-06",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "parsePersistedSession",
+      "category": "keychain",
+      "description": "Provider is not validated: a record with provider 'guest' (or anything) restores as a synced session.",
+      "find": "      (provider !== 'apple' && provider !== 'google') ||\n",
+      "replace": ""
+    },
+    {
+      "id": "SV-07",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "savePersistedSession",
+      "category": "keychain",
+      "description": "savePersistedSession reports success without writing anything.",
+      "find": "    const result = await keychain.setGenericPassword(",
+      "replace": "    const result = true;\n    const _skipped = () => keychain.setGenericPassword("
+    },
+    {
+      "id": "SV-08",
+      "plane": "mobile",
+      "file": "apps/mobile/src/account/sessionVault.ts",
+      "symbol": "loadPersistedSession",
+      "category": "keychain",
+      "description": "Load reads a different Keychain service than save writes: nothing is ever restored.",
+      "find": "    const stored = await keychain.getGenericPassword({\n      service: SESSION_VAULT_SERVICE,\n    });",
+      "replace": "    const stored = await keychain.getGenericPassword({\n      service: SESSION_VAULT_SERVICE + '.v2',\n    });"
+    },
+    {
+      "id": "AU-01",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "dropRevokedSession",
+      "category": "revocation",
+      "description": "A revoked session keeps its Keychain record (next launch re-tries the dead refresh token).",
+      "find": "  useAuthStore.setState({ session: null, error: null, busy: false });\n  await clearPersistedSession();\n",
+      "replace": "  useAuthStore.setState({ session: null, error: null, busy: false });\n"
+    },
+    {
+      "id": "AU-02",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "signOut",
+      "category": "sign-out",
+      "description": "Explicit sign-out keeps the Keychain record: the next launch restores the account the user signed out of.",
+      "find": "    // launch must not restore an account the user just signed out of.\n    await clearPersistedSession();\n",
+      "replace": "    // launch must not restore an account the user just signed out of.\n"
+    },
+    {
+      "id": "AU-03",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "signOut",
+      "category": "revocation",
+      "description": "Sign-out skips the server-side revoke (the refresh token stays valid server-side).",
+      "find": "    if (apiSession?.refreshToken) await revokeApiSession(apiSession);\n",
+      "replace": ""
+    },
+    {
+      "id": "AU-04",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "signOut",
+      "category": "sign-out",
+      "description": "Sign-out does not clear the in-memory runtime (keeper keeps rotating, bearer stays resolvable).",
+      "find": "    const apiSession = getApiSession();\n    clearSyncedRuntime();\n",
+      "replace": "    const apiSession = getApiSession();\n"
+    },
+    {
+      "id": "AU-05",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "handleApiUnauthorized",
+      "category": "401-handling",
+      "description": "A 401 on the current bearer is ignored (token kept, no refresh) — every later request keeps failing.",
+      "find": "  if (expired.refreshToken) {\n    refreshSessionNow();\n    return;\n  }",
+      "replace": "  if (expired.refreshToken) {\n    return;\n  }"
+    },
+    {
+      "id": "AU-06",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "handleApiUnauthorized",
+      "category": "401-handling",
+      "description": "A 401 on the current bearer signs the user out immediately instead of refreshing.",
+      "find": "  if (expired.refreshToken) {\n    refreshSessionNow();\n    return;\n  }",
+      "replace": "  if (expired.refreshToken) {\n    void dropRevokedSession();\n    return;\n  }"
+    },
+    {
+      "id": "AU-07",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "hydrate",
+      "category": "launch",
+      "description": "Only an ONLINE restore stays signed in: an offline / 5xx launch falls through to the signed-out path.",
+      "find": "        if (outcome !== 'revoked') {",
+      "replace": "        if (outcome === 'online') {"
+    },
+    {
+      "id": "AU-08",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "persistSession",
+      "category": "keychain",
+      "description": "The ACCESS token is written to the Keychain in the refreshToken slot.",
+      "find": "    refreshToken: apiSession.refreshToken,\n    email: session.email,",
+      "replace": "    refreshToken: apiSession.bearerToken,\n    email: session.email,"
+    },
+    {
+      "id": "AU-09",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "adoptRotatedTokens",
+      "category": "rotation",
+      "description": "A rotated refresh token is not re-persisted: the next launch presents the spent one and is signed out.",
+      "find": "  void persistSession(session, next);\n",
+      "replace": ""
+    },
+    {
+      "id": "AU-10",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "adoptRotatedTokens",
+      "category": "rotation",
+      "description": "An in-place rotation does not update the live ApiSession: clients keep using the old bearer.",
+      "find": "  if (getApiSession()?.canonicalAppUserId === canonicalAppUserId) {\n    establishApiSession(next);\n  } else {",
+      "replace": "  if (getApiSession()?.canonicalAppUserId === canonicalAppUserId) {\n    void next;\n  } else {"
+    },
+    {
+      "id": "AU-11",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "installApiSession (billing)",
+      "category": "bearer-binding",
+      "description": "The billing client captures the bearer at construction instead of resolving it per request.",
+      "find": "      get apiToken() {\n        return bearerTokenFor(canonicalAppUserId);\n      },",
+      "replace": "      apiToken: apiSession.bearerToken,"
+    },
+    {
+      "id": "AU-12",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "installApiSession (training)",
+      "category": "bearer-binding",
+      "description": "The training client captures the bearer at construction instead of resolving it per request.",
+      "find": "      get token() {\n        return bearerTokenFor(canonicalAppUserId);\n      },",
+      "replace": "      token: apiSession.bearerToken,"
+    },
+    {
+      "id": "AU-13",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "establishSyncedAccount",
+      "category": "rotation",
+      "description": "No keeper after an interactive sign-in: the bearer is never rotated and a 401 cannot refresh.",
+      "find": "  await persistSession(session, result.apiSession);\n  keepSessionAlive(session, result.apiSession);\n",
+      "replace": "  await persistSession(session, result.apiSession);\n"
+    },
+    {
+      "id": "AU-14",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "establishSyncedAccount",
+      "category": "keychain",
+      "description": "An interactive sign-in is never persisted (closing the app signs out).",
+      "find": "  await persistSession(session, result.apiSession);\n  keepSessionAlive(session, result.apiSession);\n",
+      "replace": "  keepSessionAlive(session, result.apiSession);\n"
+    },
+    {
+      "id": "AU-15",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "dropRevokedSession",
+      "category": "revocation",
+      "description": "A revoked session keeps the UI signed in (store session not cleared).",
+      "find": "  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);\n  useAuthStore.setState({ session: null, error: null, busy: false });\n  await clearPersistedSession();",
+      "replace": "  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);\n  await clearPersistedSession();"
+    },
+    {
+      "id": "AU-16",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "handleApiUnauthorized",
+      "category": "401-handling",
+      "description": "A 401 for ANOTHER account's session triggers a refresh of the current one.",
+      "find": "    current.localOnly ||\n    current.canonicalAppUserId !== expired.canonicalAppUserId\n",
+      "replace": "    current.localOnly\n"
+    },
+    {
+      "id": "AU-17",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "dropRevokedSession",
+      "category": "revocation",
+      "description": "A revoked session leaves the data owner pointing at the dead account.",
+      "find": "  clearSyncedRuntime();\n  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);\n  useAuthStore.setState({ session: null, error: null, busy: false });\n",
+      "replace": "  clearSyncedRuntime();\n  useAuthStore.setState({ session: null, error: null, busy: false });\n"
+    },
+    {
+      "id": "AU-18",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "restorePersistedSession",
+      "category": "launch",
+      "description": "A restored session does not scope the data owner (local data stays signed-out-scoped).",
+      "find": "  setActiveDataOwner(canonicalDataOwner(persisted.canonicalAppUserId));\n  // Signed in from the record alone",
+      "replace": "  // Signed in from the record alone"
+    },
+    {
+      "id": "AU-19",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "completeAccountDeletion",
+      "category": "keychain",
+      "description": "Account deletion keeps the Keychain record (next launch refreshes a deleted account).",
+      "find": "    // fail — to refresh a deleted account.\n    await clearPersistedSession();\n",
+      "replace": "    // fail — to refresh a deleted account.\n"
+    },
+    {
+      "id": "AU-20",
+      "plane": "mobile",
+      "file": "apps/mobile/src/auth/authStore.ts",
+      "symbol": "dropRevokedSession",
+      "category": "revocation",
+      "description": "A revoked session leaves the legacy Google silent-restore flag armed.",
+      "find": "  await clearPersistedSession();\n  await persistLocalGuest(false);\n  await persistLastProvider(null);\n}",
+      "replace": "  await clearPersistedSession();\n  await persistLocalGuest(false);\n}"
+    },
+    {
+      "id": "ED-01",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() bearerExpired",
+      "category": "authenticate",
+      "description": "An expired bearer is not refused up front (falls through to cache / Supabase).",
+      "find": "  if (bearerExpired(payload)) {\n    return errorJson(\n      401,\n      provider ? \"The identity token has expired.\" : \"The session token has expired.\",\n    );\n  }",
+      "replace": "  if (false) {\n    return errorJson(\n      401,\n      provider ? \"The identity token has expired.\" : \"The session token has expired.\",\n    );\n  }"
+    },
+    {
+      "id": "ED-02",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "readAuthCache",
+      "category": "auth-cache",
+      "description": "The auth cache serves entries past their expiresAtMs.",
+      "find": "      cached.expiresAtMs > Date.now() + 5_000\n",
+      "replace": "      true\n"
+    },
+    {
+      "id": "ED-03",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() provider branch",
+      "category": "auth-cache",
+      "description": "Verified provider-token sessions are never cached (Supabase Auth consulted on every request).",
+      "find": "    await writeAuthCache(\n      cacheKey,\n      {\n        userId: signIn.data.user.id,",
+      "replace": "    if (false) await writeAuthCache(\n      cacheKey,\n      {\n        userId: signIn.data.user.id,"
+    },
+    {
+      "id": "ED-04",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "writeAuthCache",
+      "category": "auth-cache",
+      "description": "Cache lifetime is no longer bounded by the bearer's own exp (a token that expires in 30s stays verified for 10 min).",
+      "find": "  const expiresAtMs = Math.min(\n    bearerExpMs > 0 ? bearerExpMs : Number.MAX_SAFE_INTEGER,",
+      "replace": "  const expiresAtMs = Math.min(\n    Number.MAX_SAFE_INTEGER,"
+    },
+    {
+      "id": "ED-05",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "AUTH_CACHE_MAX_TTL_SECONDS",
+      "category": "auth-cache",
+      "description": "Verified-auth cache cap raised from 10 minutes to 24 hours.",
+      "find": "const AUTH_CACHE_MAX_TTL_SECONDS = 600;",
+      "replace": "const AUTH_CACHE_MAX_TTL_SECONDS = 86_400;"
+    },
+    {
+      "id": "ED-06",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "logoutRoute",
+      "category": "auth-cache",
+      "description": "Logout does not evict the bearer from the auth cache nor fence its session: a logged-out bearer keeps authenticating at this edge for up to 10 min.",
+      "find": "  await fenceRevokedSession(token);\n  return noContent();",
+      "replace": "  return noContent();"
+    },
+    {
+      "id": "ED-07",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "logoutRoute",
+      "category": "revocation",
+      "description": "Logout never calls Supabase: the device's refresh token stays valid server-side.",
+      "find": "    response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {\n      method: \"POST\",\n      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },\n    });",
+      "replace": "    response = new Response(null, { status: 204 });"
+    },
+    {
+      "id": "ED-08",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "logoutRoute",
+      "category": "revocation",
+      "description": "Logout uses scope=global: signing out one device signs out every device.",
+      "find": "/auth/v1/logout?scope=local`, {",
+      "replace": "/auth/v1/logout?scope=global`, {"
+    },
+    {
+      "id": "ED-09",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "refreshSessionRoute",
+      "category": "refresh-route",
+      "description": "Every refresh failure (including a refused/rotated-away token, GoTrue 400) is reported as 503: the app never signs out a revoked session.",
+      "find": "  if (rotated.kind === \"refused\") {\n    return errorJson(401, \"The session could not be refreshed. Sign in again.\");\n  }",
+      "replace": "  if (rotated.kind === \"refused\") {\n    return serviceUnavailable(\"Session refresh\", rotated.detail, AUTH_RETRY_AFTER_SECONDS);\n  }"
+    },
+    {
+      "id": "ED-10",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "refreshSessionRoute",
+      "category": "refresh-route",
+      "description": "A GoTrue outage (5xx) during refresh is reported as 401: the app signs every user out during an outage.",
+      "find": "  if (rotated.kind === \"unavailable\") {\n    return serviceUnavailable(\"Session refresh\", rotated.detail, rotated.retryAfterSeconds);\n  }",
+      "replace": "  if (rotated.kind === \"unavailable\") {\n    return errorJson(401, \"The session could not be refreshed. Sign in again.\");\n  }"
+    },
+    {
+      "id": "ED-11",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() session branch",
+      "category": "authenticate",
+      "description": "AUTH BYPASS: a Supabase-issued access token is trusted from its unverified JWT payload instead of auth.getUser().",
+      "find": "  const verified = await verifyAccessToken(token);\n  if (verified.kind === \"unavailable\") {",
+      "replace": "  const verified: AuthVerdict<AuthUserLike> = {\n    kind: \"ok\",\n    value: {\n      id: String(payload?.sub ?? \"\"),\n      email: null,\n      app_metadata: { provider: \"google\", providers: [\"google\"] },\n    } as unknown as AuthUserLike,\n  };\n  if (verified.kind === \"unavailable\") {"
+    },
+    {
+      "id": "ED-12",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() session branch",
+      "category": "authenticate",
+      "description": "A verified session whose user has no Google/Apple identity (e.g. email/password, anonymous) is accepted.",
+      "find": "  if (!sessionProvider) {\n    return errorJson(401, \"The session does not belong to a Google or Apple account.\");\n  }",
+      "replace": "  if (false) {\n    return errorJson(401, \"The session does not belong to a Google or Apple account.\");\n  }"
+    },
+    {
+      "id": "ED-13",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "bootstrapAccount response",
+      "category": "bootstrap",
+      "description": "Bootstrap omits `session`: the app has nothing to persist and falls back to the legacy provider-token run (signed out on relaunch).",
+      "find": "    onboardingState: profile.onboarding_state === \"complete\" ? \"complete\" : \"pending\",\n    session: sessionView(session),\n",
+      "replace": "    onboardingState: profile.onboarding_state === \"complete\" ? \"complete\" : \"pending\",\n"
+    },
+    {
+      "id": "ED-14",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "sessionView",
+      "category": "bootstrap",
+      "description": "The session's expiresAt is reported as 0 (the app believes the bearer is already expired and rotates on every tick).",
+      "find": "    expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),",
+      "replace": "    expiresAt: 0,"
+    },
+    {
+      "id": "ED-15",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "handleRequest authenticate 401",
+      "category": "rate-limit",
+      "description": "A 401 from authenticate() no longer counts toward the per-IP auth-failure budget.",
+      "find": "  const authed = await authenticate(request);\n  if (authed instanceof Response) {\n    if (authed.status === 401) await recordAuthFailure();\n",
+      "replace": "  const authed = await authenticate(request);\n  if (authed instanceof Response) {\n"
+    },
+    {
+      "id": "ED-16",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "handleRequest refresh 401",
+      "category": "rate-limit",
+      "description": "A refused refresh token no longer counts toward the per-IP auth-failure budget (refresh-token guessing is only bounded by the refresh budget).",
+      "find": "    if (refreshed.status === 401) await recordAuthFailure();\n",
+      "replace": ""
+    },
+    {
+      "id": "ED-17",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "handleRequest refresh rate limit",
+      "category": "rate-limit",
+      "description": "The per-IP refresh budget is not enforced.",
+      "find": "    if (!rl.allowed) return rateLimitResponse(rl);\n    const refreshed = await refreshSessionRoute(request);",
+      "replace": "    void rl;\n    const refreshed = await refreshSessionRoute(request);"
+    },
+    {
+      "id": "ED-18",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() provider branch",
+      "category": "authenticate",
+      "description": "A provider-token verification failure is not turned into 401 (null user dereferenced → 500 instead of a clean refusal).",
+      "find": "    if (signIn.error || !signIn.data.user || !signIn.data.session) {\n      return errorJson(401, \"The identity token could not be verified.\");\n    }\n    await writeAuthCache(",
+      "replace": "    if (false) {\n      return errorJson(401, \"The identity token could not be verified.\");\n    }\n    await writeAuthCache("
+    },
+    {
+      "id": "ED-19",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() issuer check",
+      "category": "authenticate",
+      "description": "A bearer from an unknown issuer is not refused up front (it is sent to Supabase getUser instead).",
+      "find": "  if (!provider && !supabaseIssued) {\n    return errorJson(401, \"Bearer token is not a session token or a Google/Apple ID token.\");\n  }",
+      "replace": "  if (false) {\n    return errorJson(401, \"Bearer token is not a session token or a Google/Apple ID token.\");\n  }"
+    },
+    {
+      "id": "ED-20",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "confirmAccountDeletion cacheDel",
+      "category": "auth-cache",
+      "description": "Account deletion does not evict the deleting bearer's verified-auth cache entry.",
+      "find": "  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));\n  await fenceRevokedSession(bearerOf(request));\n  console.warn(`[api] account deleted: ${authed.id}`);",
+      "replace": "  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));\n  console.warn(`[api] account deleted: ${authed.id}`);"
+    },
+    {
+      "id": "ED-21",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticate() session branch writeAuthCache",
+      "category": "auth-cache",
+      "description": "A verified session token is cached under the provider-token shape with the bearer's exp ignored (cache entry outlives the token).",
+      "find": "    payload?.exp,\n    payload?.exp,\n  );",
+      "replace": "    undefined,\n    undefined,\n  );"
+    },
+    {
+      "id": "ED-22",
+      "plane": "edge",
+      "file": "supabase/functions/api/index.ts",
+      "symbol": "authenticateProviderToken bearerExpired",
+      "category": "bootstrap",
+      "description": "Bootstrap accepts an already-expired provider ID token (sent to Supabase anyway).",
+      "find": "  if (bearerExpired(payload)) {\n    return errorJson(401, \"The identity token has expired.\");\n  }",
+      "replace": "  if (false) {\n    return errorJson(401, \"The identity token has expired.\");\n  }"
+    }
+  ]
+}

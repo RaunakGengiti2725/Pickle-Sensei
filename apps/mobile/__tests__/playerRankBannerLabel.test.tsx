@@ -1,5 +1,7 @@
 import React from 'react';
 import { Dimensions, StyleSheet, Text } from 'react-native';
+import { FlameIcon } from '../src/consistency/FlameIcon';
+import { color } from '../src/design/tokens';
 import TestRenderer, { act } from 'react-test-renderer';
 import { type } from '../src/design/tokens';
 
@@ -233,6 +235,16 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
 });
 
 describe('PlayerRankBanner streak block', () => {
+  it('uses the dark zero-state flame and readable streak metadata', async () => {
+    const renderer = await renderBanner(0);
+    expect(renderer.root.findByType(FlameIcon).props.dark).toBe(true);
+    const label = renderer.root
+      .findAllByType(Text)
+      .find(node => node.props.children === 'DAY STREAK')!;
+    expect(StyleSheet.flatten(label.props.style).color).toBe(color.onDarkMuted);
+    act(() => renderer.unmount());
+  });
+
   it('labels a single training day in the singular', async () => {
     const renderer = await renderBanner(1, () => {});
     const streak = nodeByTestId(renderer, 'player-rank-banner-streak');
@@ -259,6 +271,25 @@ describe('PlayerRankBanner streak block', () => {
 });
 
 describe('PlayerRankBanner in-place expansion', () => {
+  it('gives the tier its own uncapped line at normal text instead of competing with the rating', async () => {
+    const dimensions = jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 1 });
+    const renderer = await renderBanner(7);
+    try {
+      const tier = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === 'Unranked')!;
+      expect(tier.props.numberOfLines).toBeUndefined();
+      expect(StyleSheet.flatten(tier.parent!.props.style).flexDirection).toBe(
+        'column',
+      );
+    } finally {
+      act(() => renderer.unmount());
+      dimensions.mockRestore();
+    }
+  });
+
   it('expands on tap — presenting the tier ladder without navigating', async () => {
     const renderer = await renderBanner(0);
     const toggle = nodeByTestId(renderer, 'player-rank-banner-toggle');
@@ -314,6 +345,10 @@ describe('PlayerRankBanner in-place expansion', () => {
     }
     expect(copy).toContain('YOU');
     expect(copy).toContain('Current form');
+    const range = renderer.root
+      .findAllByType(Text)
+      .find(node => node.props.children === '3.5 – 4.99')!;
+    expect(StyleSheet.flatten(range.props.style).color).toBe(color.onDarkMuted);
     act(() => renderer.unmount());
   });
 });

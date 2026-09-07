@@ -21,7 +21,6 @@ import {
   Button,
   Card,
   EmptyState,
-  ErrorState,
   LoadingState,
   Pill,
   PressableScale,
@@ -60,6 +59,10 @@ export const PENDING_SECTION_PILL = 'NOT SCORED';
 export const PENDING_SECTION_NOTE =
   'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
+/** Reads-tab copy when the local repository could not be read. */
+export const READS_LOAD_ERROR_TITLE = 'Your reads couldn’t be opened.';
+export const READS_LOAD_ERROR_BODY =
+  'Your saved reads and clips couldn’t be read from this device right now. Try again to reload them.';
 
 /**
  * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
@@ -147,6 +150,24 @@ export function LibraryScreen() {
     state => state.clearMutationError,
   );
 
+  // Only the newest read may touch state: a superseded read that settles
+  // late (after a refocus, a retry, or blur) is dropped, whichever way it
+  // settled. A failed repository read is an error, never an empty library:
+  // the first-run empty state renders only from a successful, empty result.
+  const retryReads = useCallback(() => {
+    if (
+      !loadedOwner ||
+      loadedOwner.ticket !== loadTicket.current ||
+      !isDataOwnerContextCurrent(ownerEpoch) ||
+      navigation.isFocused?.() === false
+    )
+      return;
+    loadTicket.current = null;
+    setLoadError(null);
+    setShots(null);
+    setLoadRevision(revision => revision + 1);
+  }, [loadedOwner, navigation, ownerEpoch]);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -174,9 +195,7 @@ export function LibraryScreen() {
           setLoadError(null);
         } catch {
           if (!isCurrent()) return;
-          setLoadError(
-            'Your saved reads and clips could not be opened. Try again to load your library.',
-          );
+          setLoadError(READS_LOAD_ERROR_BODY);
         } finally {
           if (isCurrent()) {
             setLoadedOwner({
@@ -272,7 +291,7 @@ export function LibraryScreen() {
               <Text
                 style={[
                   type.bodyBold,
-                  { color: selected ? color.onDark : color.inkSoft },
+                  { color: selected ? color.onDark : color.graphite },
                 ]}
               >
                 {label}
@@ -502,6 +521,40 @@ export function LibraryScreen() {
     );
   }
 
+  if (loadError && ownsLoadedData) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScrollView
+          contentContainerStyle={styles.readsContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {header}
+          <View accessibilityLiveRegion="assertive" accessibilityRole="alert">
+            <Card tone="soft" style={styles.messageCard}>
+              <View style={[styles.messageIcon, styles.messageIconBad]}>
+                <Icon name="close" size={22} color={color.bad} />
+              </View>
+              <Text style={[type.h2, styles.messageTitle]}>
+                {READS_LOAD_ERROR_TITLE}
+              </Text>
+              <Text style={[type.body, styles.messageBody]}>
+                {READS_LOAD_ERROR_BODY}
+              </Text>
+              <View style={styles.retryWrap}>
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={retryReads}
+                />
+              </View>
+            </Card>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
@@ -511,19 +564,7 @@ export function LibraryScreen() {
           showsVerticalScrollIndicator={false}
         >
           {header}
-          {loadError && ownsLoadedData ? (
-            <ErrorState
-              title="Your library couldn’t load"
-              detail={loadError}
-              onRetry={() => {
-                setLoadError(null);
-                setShots(null);
-                setLoadRevision(revision => revision + 1);
-              }}
-            />
-          ) : (
-            <LoadingState label="Opening your library…" />
-          )}
+          <LoadingState label="Opening your library…" />
         </ScrollView>
       ) : (
         <FlatList
@@ -633,10 +674,12 @@ export function LibraryScreen() {
                       </Text>
                     </View>
                   ) : null}
-                  <View style={styles.filterRow}>
-                    <Pill label="ALL STROKES" tone="dark" />
-                    <Pill label="NEWEST FIRST" />
-                  </View>
+                  <Text
+                    style={styles.readOrderCaption}
+                    testID="library-read-order"
+                  >
+                    ALL STROKES · NEWEST FIRST
+                  </Text>
                 </View>
               ) : null}
             </>
@@ -691,7 +734,7 @@ export function LibraryScreen() {
               {item.resultKind === 'low_confidence' ? (
                 <View style={styles.notRead}>
                   <Icon name="camera" size={17} color={color.warn} />
-                  <Text style={[type.micro, { color: color.warn }]}>
+                  <Text style={[type.micro, { color: color.ink }]}>
                     NOT READ
                   </Text>
                 </View>
@@ -740,15 +783,16 @@ const styles = StyleSheet.create({
   },
   emptyContent: { flexGrow: 1 },
   readHeader: { marginBottom: space.lg },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.sm,
+  readOrderCaption: {
+    ...type.caption,
+    color: color.inkSoft,
     marginTop: space.lg,
   },
   pendingGroup: {
     borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     marginTop: space.lg,
     padding: space.md,
   },
@@ -780,7 +824,7 @@ const styles = StyleSheet.create({
   // ('Forehand Drive · auto capture').
   pendingTitle: { color: color.ink },
   pendingMeta: { color: color.inkSoft, marginTop: 2 },
-  pendingDate: { color: color.inkSoft, opacity: 0.72, marginTop: 1 },
+  pendingDate: { color: color.inkSoft, marginTop: 1 },
   pendingNote: {
     color: color.inkSoft,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -791,6 +835,8 @@ const styles = StyleSheet.create({
     minHeight: 104,
     borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     paddingHorizontal: space.md,
     marginBottom: 10,
     flexDirection: 'row',
@@ -811,12 +857,14 @@ const styles = StyleSheet.create({
   },
   strokeName: { color: color.ink, textTransform: 'capitalize' },
   readMeta: { color: color.inkSoft, marginTop: 3 },
-  score: { ...type.score, color: color.ink, fontSize: 30, lineHeight: 34 },
+  score: { ...type.score, color: color.ink },
   notRead: { alignItems: 'center', gap: 4 },
   planSummary: {
     minHeight: 226,
     borderRadius: radius.xl,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     padding: space.lg,
     marginBottom: space.lg,
   },
@@ -883,6 +931,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  messageIconBad: { backgroundColor: color.badSoft },
   messageTitle: { color: color.ink, marginTop: space.lg },
   messageBody: { color: color.inkSoft, marginTop: space.sm },
   retryWrap: { marginTop: space.lg },

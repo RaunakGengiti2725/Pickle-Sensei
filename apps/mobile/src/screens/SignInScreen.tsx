@@ -139,11 +139,17 @@ export function SignInScreen(props: {
       ]}
     >
       <ScreenHeader onBack={handleBack} />
+      {/* Everything under the header scrolls when it overflows (small
+          phones, large Dynamic Type, a long provider error) so the
+          providers and the trust note never stack over each other. */}
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        alwaysBounceVertical={false}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.body}>
+        <View style={styles.body} testID="sign-in-body">
           <BrandMark />
           <Text style={[type.hero, styles.title]}>
             {returning ? 'Sign in again.' : 'Your ratings,\ntied to you.'}
@@ -244,6 +250,7 @@ export function SignInScreen(props: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
+  scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   body: {
     flexGrow: 1,
@@ -295,7 +302,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   providerMarkText: { ...type.caption },
-  letterMark: { fontFamily: font.bold },
+  letterMark: {
+    fontFamily: font.bold,
+    fontWeight: Platform.OS === 'ios' ? '700' : 'normal',
+  },
   appleMark: { fontFamily: 'System', fontSize: 18, lineHeight: 20 },
   busyRow: {
     flexDirection: 'row',

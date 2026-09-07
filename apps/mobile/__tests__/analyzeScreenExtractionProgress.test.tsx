@@ -85,7 +85,6 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import { TargetSelector } from '../src/camera/TargetSelector';
@@ -256,18 +255,6 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
       typeof n.props.onPress === 'function',
   );
   if (!node) throw new Error(`No pressable with accessibilityLabel ${label}`);
-  act(() => node.props.onPress());
-}
-
-function pressButton(renderer: ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
-  const node = candidates[candidates.length - 1];
-  if (!node) throw new Error(`No button labeled ${label}`);
   act(() => node.props.onPress());
 }
 
@@ -509,7 +496,7 @@ describe('guided-capture analysis progress', () => {
 
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await act(async () => {});
 
     // The analyzing surface keeps its exact caption, now with the honest

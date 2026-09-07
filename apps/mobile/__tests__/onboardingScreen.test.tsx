@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TextInput } from 'react-native';
+import { Image, StyleSheet, Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -56,7 +56,11 @@ jest.mock('../src/notifications/notificationStore', () => {
   };
 });
 
-import { OnboardingScreen } from '../src/screens/OnboardingScreen';
+import {
+  OnboardingScreen,
+  ONBOARDING_MASCOT_MOMENTS,
+} from '../src/screens/OnboardingScreen';
+import { color, type } from '../src/design/tokens';
 import { BrandDialog, type BrandDialogAction } from '../src/design/components';
 
 /**
@@ -140,6 +144,106 @@ describe('OnboardingScreen', () => {
     mockCompleteNotificationOnboarding.mockClear();
     mockCompleteNotificationOnboarding.mockResolvedValue(true);
     mockSignOut.mockClear();
+  });
+
+  it('keeps all eight captions as plain context, progress and 44pt actions without illustrations', () => {
+    const renderer = renderScreen();
+    const steps = [
+      ['name', null],
+      ['gender', 'Female'],
+      ['level', '3.5'],
+      ['handedness', 'Right-handed'],
+      ['goal', 'Third-shot drops'],
+      ['problem', 'Control'],
+      ['reveal', null],
+      ['notifications', null],
+    ] as const;
+
+    for (const [index, [step, choice]] of steps.entries()) {
+      const context = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === `onboarding-context-${step}`)!;
+      expect(context.props.children).toBe(
+        ONBOARDING_MASCOT_MOMENTS[step].caption,
+      );
+      const contextStyle = StyleSheet.flatten(context.props.style);
+      expect(contextStyle).toMatchObject({
+        fontSize: type.caption.fontSize,
+        color: color.inkSoft,
+      });
+      expect(contextStyle.backgroundColor).toBeUndefined();
+      expect(contextStyle.borderWidth).toBeUndefined();
+      expect(renderer.root.findAllByType(Image)).toHaveLength(0);
+      expect(
+        renderer.root.findByProps({ accessibilityRole: 'progressbar' }).props
+          .accessibilityValue,
+      ).toEqual({ min: 1, max: 8, now: index + 1 });
+
+      const back = findPressable(
+        renderer,
+        index === 0 ? 'Leave setup' : 'Back',
+      );
+      expect(StyleSheet.flatten(back.props.style)).toMatchObject({
+        width: 44,
+        height: 44,
+      });
+      const action = findPressable(
+        renderer,
+        step === 'notifications' ? 'Turn on reminders' : 'Continue',
+      );
+      expect(
+        StyleSheet.flatten(action.props.style).minHeight,
+      ).toBeGreaterThanOrEqual(44);
+      if (step === 'name') {
+        act(() =>
+          renderer.root.findByType(TextInput).props.onChangeText('Dana'),
+        );
+      }
+      if (choice) {
+        const option = findPressable(renderer, choice);
+        expect(
+          StyleSheet.flatten(option.props.style).minHeight,
+        ).toBeGreaterThanOrEqual(44);
+        press(renderer, choice);
+      }
+      if (step !== 'notifications') press(renderer, 'Continue');
+    }
+    expect(
+      StyleSheet.flatten(findPressable(renderer, 'Not now').props.style)
+        .minHeight,
+    ).toBeGreaterThanOrEqual(44);
+    expect(mockCompleteNotificationOnboarding).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('reserves reveal emphasis for the focus instead of supporting badges and access copy', () => {
+    const renderer = renderScreen();
+    walkToReveal(renderer);
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({ testID: 'onboarding-focus' }).props.style,
+      ).backgroundColor,
+    ).toBe(color.surfaceDark);
+    for (const number of [1, 2, 3]) {
+      expect(
+        StyleSheet.flatten(
+          renderer.root.findByProps({
+            testID: `onboarding-plan-step-${number}`,
+          }).props.style,
+        ).backgroundColor,
+      ).toBe(color.surfaceAlt);
+    }
+    const access = renderer.root.findByProps({
+      testID: 'onboarding-access-context',
+    });
+    expect(StyleSheet.flatten(access.props.style)).toMatchObject({
+      backgroundColor: color.surfaceElevated,
+      borderColor: color.line,
+    });
+    expect(allText(renderer)).toContain('Two ratings are on us.');
+    expect(allText(renderer)).toContain('Unscored attempts do not count.');
+    expect(allText(renderer)).toContain('Paddle Set');
+    act(() => renderer.unmount());
   });
 
   it('explains that the required name can be a preferred name or nickname, not a legal name', () => {

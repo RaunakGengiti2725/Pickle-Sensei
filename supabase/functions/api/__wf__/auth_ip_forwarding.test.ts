@@ -8,7 +8,7 @@ import {
   userRequest,
 } from "./routesHarness.ts";
 
-const SECRET_KEY = "sb_secret_test_forwarding_key_0123456789";
+const SECRET_KEY = `sb_secret_${crypto.randomUUID()}`;
 Deno.env.set("SB_SECRET_KEY", SECRET_KEY);
 
 const h = await loadHarness();

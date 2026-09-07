@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { detectOverlap, type Fingerprint, FINGERPRINT_ALGO } from "../src/engine/fingerprint.js";
 import { rightsForLicense, trainingEligible } from "../src/engine/rights.js";
-import { deterministicSplit, auditSplits, type SplitsFile } from "../src/engine/splits.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  assignSplit,
+  auditSplits,
+  deterministicSplit,
+  loadSplits,
+  type SplitsFile,
+} from "../src/engine/splits.js";
 import {
   replayAcquisition,
   resampleTo30fps,
@@ -12,7 +21,12 @@ import {
   LEGACY_VARIANT,
   type ReplayFrame,
 } from "../src/engine/taReplay.js";
-import { eventId, recordingIdForHash, commonsSourceId } from "../src/engine/corpus.js";
+import {
+  eventId,
+  recordingIdForHash,
+  commonsSourceId,
+  type RecordingRecord,
+} from "../src/engine/corpus.js";
 
 // ── rights ────────────────────────────────────────────────────────────────
 
@@ -95,56 +109,67 @@ describe("detectOverlap", () => {
 
 // ── splits ───────────────────────────────────────────────────────────────
 
+function emptySplits(pinned: SplitsFile["pinned"] = {}): SplitsFile {
+  return {
+    schemaVersion: 1,
+    policyVersion: "splits-v1",
+    proportions: { dev: 0.5, val: 0.2, locked_test: 0.15, shadow: 0.15 },
+    pinned,
+    assigned: {},
+  };
+}
+
+const probe = {
+  durationMs: 1000,
+  fps: 30,
+  width: 1,
+  height: 1,
+  videoCodec: "h264",
+  container: "mp4",
+  bytes: 1,
+};
+
+function recordingIn(
+  recordingId: string,
+  sessionKey: string,
+  derivedFrom: RecordingRecord["derivedFrom"] = [],
+): RecordingRecord {
+  return {
+    schemaVersion: 1,
+    recordingId,
+    sourceId: "s",
+    path: recordingId,
+    sha256: recordingId,
+    probe,
+    sessionKey,
+    registeredAtIso: "now",
+    derivedFrom,
+  };
+}
+
+/** A session whose salted hash lands in a non-shadow bucket (found by scanning). */
+function nonShadowSessionKey(): string {
+  for (let index = 0; index < 1000; index += 1) {
+    const key = `sess-${index}`;
+    if (deterministicSplit(key) !== "shadow") return key;
+  }
+  throw new Error("no non-shadow session key found");
+}
+
 describe("splits", () => {
   it("deterministic assignment is stable", () => {
     expect(deterministicSplit("session-a")).toBe(deterministicSplit("session-a"));
   });
   it("lineage crossing sessions is flagged as leakage", () => {
-    const splits: SplitsFile = {
-      schemaVersion: 1,
-      policyVersion: "splits-v1",
-      proportions: { dev: 0.5, val: 0.2, locked_test: 0.15, shadow: 0.15 },
-      pinned: {},
-      assigned: {
-        "sess-a": { split: "dev", method: "deterministic", assignedAtIso: "now" },
-        "sess-b": { split: "shadow", method: "deterministic", assignedAtIso: "now" },
-      },
-    };
-    const probe = {
-      durationMs: 1000,
-      fps: 30,
-      width: 1,
-      height: 1,
-      videoCodec: "h264",
-      container: "mp4",
-      bytes: 1,
-    };
+    const splits = emptySplits();
+    splits.assigned["sess-a"] = { split: "dev", method: "deterministic", assignedAtIso: "now" };
+    splits.assigned["sess-b"] = { split: "shadow", method: "deterministic", assignedAtIso: "now" };
     const findings = auditSplits(
       [
-        {
-          schemaVersion: 1,
-          recordingId: "rec-a",
-          sourceId: "s",
-          path: "a",
-          sha256: "a",
-          probe,
-          sessionKey: "sess-a",
-          registeredAtIso: "now",
-          derivedFrom: [],
-        },
-        {
-          schemaVersion: 1,
-          recordingId: "rec-b",
-          sourceId: "s",
-          path: "b",
-          sha256: "b",
-          probe,
-          sessionKey: "sess-b",
-          registeredAtIso: "now",
-          derivedFrom: [
-            { parentRecordingId: "rec-a", relation: "time_crop", detail: "", evidence: "declared" },
-          ],
-        },
+        recordingIn("rec-a", "sess-a"),
+        recordingIn("rec-b", "sess-b", [
+          { parentRecordingId: "rec-a", relation: "time_crop", detail: "", evidence: "declared" },
+        ]),
       ],
       splits,
     );
@@ -153,6 +178,91 @@ describe("splits", () => {
         (finding) => finding.severity === "problem" && finding.message.includes("LEAKAGE"),
       ),
     ).toBe(true);
+  });
+  it("a derived recording whose parent is not in the corpus is a problem, not silence", () => {
+    const splits = emptySplits();
+    splits.assigned["sess-a"] = { split: "dev", method: "deterministic", assignedAtIso: "now" };
+    const findings = auditSplits(
+      [
+        recordingIn("rec-child", "sess-a", [
+          {
+            parentRecordingId: "rec-missing",
+            relation: "time_crop",
+            detail: "",
+            evidence: "declared",
+          },
+        ]),
+      ],
+      splits,
+    );
+    const dangling = findings.filter(
+      (finding) => finding.message.includes("rec-child") && finding.message.includes("rec-missing"),
+    );
+    expect(dangling).toHaveLength(1);
+    expect(dangling[0]!.severity).toBe("problem");
+  });
+  it("a derived recording whose parent shares its session is clean", () => {
+    const splits = emptySplits();
+    splits.assigned["sess-a"] = { split: "dev", method: "deterministic", assignedAtIso: "now" };
+    const findings = auditSplits(
+      [
+        recordingIn("rec-a", "sess-a"),
+        recordingIn("rec-b", "sess-a", [
+          { parentRecordingId: "rec-a", relation: "time_crop", detail: "", evidence: "declared" },
+        ]),
+      ],
+      splits,
+    );
+    expect(findings).toEqual([]);
+  });
+});
+
+describe("split pins never loosen a session into shadow", () => {
+  it("assignSplit honours pins that tighten (dev / val / locked_test)", () => {
+    for (const split of ["dev", "val", "locked_test"] as const) {
+      const key = nonShadowSessionKey();
+      const splits = emptySplits({ [key]: { split, reason: "inspected" } });
+      expect(assignSplit(splits, key)).toBe(split);
+      expect(splits.assigned[key]).toMatchObject({ split, method: "pinned" });
+    }
+  });
+  it("assignSplit rejects a pin to shadow and records nothing", () => {
+    const key = nonShadowSessionKey();
+    const splits = emptySplits({ [key]: { split: "shadow", reason: "inspected in run 12" } });
+    expect(() => assignSplit(splits, key)).toThrow(/shadow/);
+    expect(splits.assigned[key]).toBeUndefined();
+  });
+  it("loadSplits refuses a splits file that pins a session to shadow", () => {
+    const dir = mkdtempSync(join(tmpdir(), "splits-pin-"));
+    try {
+      const path = join(dir, "splits.json");
+      writeFileSync(
+        path,
+        JSON.stringify(emptySplits({ "sess-seen": { split: "shadow", reason: "seen" } })),
+      );
+      expect(() => loadSplits(path)).toThrow(/sess-seen.*shadow/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it("loadSplits accepts a splits file whose pins only tighten", () => {
+    const dir = mkdtempSync(join(tmpdir(), "splits-pin-"));
+    try {
+      const path = join(dir, "splits.json");
+      const file = emptySplits({ "sess-seen": { split: "locked_test", reason: "held out" } });
+      writeFileSync(path, JSON.stringify(file));
+      expect(loadSplits(path)).toEqual(file);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it("auditSplits reports a shadow pin and a pinned shadow assignment as problems", () => {
+    const splits = emptySplits({ "sess-a": { split: "shadow", reason: "seen" } });
+    splits.assigned["sess-a"] = { split: "shadow", method: "pinned", assignedAtIso: "now" };
+    const findings = auditSplits([recordingIn("rec-a", "sess-a")], splits);
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+    expect(findings.every((finding) => finding.severity === "problem")).toBe(true);
+    expect(findings.some((finding) => finding.message.includes("shadow"))).toBe(true);
   });
 });
 

@@ -1,6 +1,16 @@
 // HTTP hardening helpers: security headers, HTML escaping, user-text
 // sanitization, client-IP extraction, and constant-time secret comparison.
 
+/** Browser-facing hardening shared by every response (OWASP REST Security
+ * Cheat Sheet): no script/resource loading, no framing, and HTTPS pinned
+ * for two years. Native clients ignore these; they only matter when a
+ * response is opened in a browser. */
+export const BROWSER_HARDENING_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+  "X-Frame-Options": "DENY",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+};
+
 /** Headers attached to every JSON API response. The API serves per-user
  * state, so responses are never cacheable by intermediaries. */
 export const JSON_SECURITY_HEADERS: Record<string, string> = {
@@ -8,6 +18,7 @@ export const JSON_SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
+  ...BROWSER_HARDENING_HEADERS,
 };
 
 /** Public support and legal documents. Plain text on purpose: the
@@ -22,6 +33,7 @@ export function legalTextResponse(text: string, status = 200): Response {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "Cache-Control": "public, max-age=3600",
+      ...BROWSER_HARDENING_HEADERS,
     },
   });
 }
@@ -197,4 +209,163 @@ export function constantTimeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < bufA.length; i += 1) diff |= bufA[i] ^ bufB[i];
   return diff === 0;
+}
+
+/** Request-id contract: honour a well-formed client `x-request-id`
+ * (opaque token, ≤ 64 chars of [A-Za-z0-9._-]) so a failure can be traced
+ * from the client through the function logs; otherwise mint one. Never
+ * echoes arbitrary client input. */
+export const REQUEST_ID_HEADER = "x-request-id";
+const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
+export function resolveRequestId(request: Request): string {
+  const incoming = request.headers.get(REQUEST_ID_HEADER)?.trim() ?? "";
+  return REQUEST_ID_RE.test(incoming) &&
+    !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(incoming) &&
+    incoming !== request.headers.get("Authorization")?.replace(/^Bearer /i, "")
+    ? incoming
+    : crypto.randomUUID();
+}
+
+/** Route template for logs: UUIDs and long digit runs collapse to `:id` so
+ * lines never carry a user, shot, or session identifier. */
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DIGITS_SEGMENT = /^\d{4,}$/;
+const ROUTE_WORDS = new Set([
+  "",
+  "functions",
+  "api",
+  "v1",
+  "healthz",
+  "privacy",
+  "terms",
+  "support",
+  "webhooks",
+  "revenuecat",
+  "account",
+  "bootstrap",
+  "auth",
+  "refresh",
+  "logout",
+  "me",
+  "onboarding",
+  "access",
+  "billing",
+  "sync",
+  "analysis-permits",
+  "finalize",
+  "shots",
+  "shots:sync",
+  "sessions",
+  "end",
+  "analyses",
+  "feedback",
+  "consent",
+  "status",
+  "grant",
+  "withdraw",
+  "evaluation",
+  "trials",
+  "progress",
+  "rank",
+  "catalog",
+  "drills",
+  "saved-drills",
+  "delete-request",
+  "delete-confirm",
+  "delete-status",
+]);
+export function routeTemplate(pathname: string): string {
+  return pathname
+    .split("/")
+    .slice(0, 32)
+    .map((segment) =>
+      UUID_SEGMENT.test(segment) || DIGITS_SEGMENT.test(segment) || !ROUTE_WORDS.has(segment)
+        ? ":id"
+        : segment,
+    )
+    .join("/");
+}
+
+export interface AccessLogEntry {
+  evt: "api_request";
+  requestId: string;
+  method: string;
+  route: string;
+  status: number;
+  durationMs: number;
+  code?: string;
+}
+
+/** One machine-readable line per request (stdout → Supabase function logs).
+ * Categorical only: no user id, bearer, body, query string, or IP. */
+export function accessLogEntry(
+  request: Request,
+  response: Response,
+  requestId: string,
+  startedAt: number,
+  code?: string,
+): AccessLogEntry {
+  const entry: AccessLogEntry = {
+    evt: "api_request",
+    requestId,
+    method: request.method,
+    route: routeTemplate(new URL(request.url).pathname),
+    status: response.status,
+    durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+  };
+  if (code) entry.code = code;
+  return entry;
+}
+
+type AccessLogSink = (line: string) => void;
+// Supabase Function logs capture console.* only (not raw stdout); this is the
+// single structured, categorical line per request — not debug output.
+// eslint-disable-next-line no-console
+const printAccessLog: AccessLogSink = (line) => console.log(line);
+let accessLogSink: AccessLogSink = printAccessLog;
+
+export function emitAccessLog(entry: AccessLogEntry): void {
+  accessLogSink(JSON.stringify(entry));
+}
+
+/** Tests/diagnostics: capture access lines instead of printing them. Returns
+ * the restore function. */
+export function captureAccessLog(sink: AccessLogSink): () => void {
+  accessLogSink = sink;
+  return () => {
+    accessLogSink = printAccessLog;
+  };
+}
+
+/** Copy of `response` carrying the request id header (Response headers may be
+ * immutable; a fresh Response with the same body/status/headers is not). */
+export function withRequestId(response: Response, requestId: string): Response {
+  const out = new Response(response.body, response);
+  out.headers.set(REQUEST_ID_HEADER, requestId);
+  return out;
+}
+
+/** Egress guard: every response leaving the function carries
+ * BROWSER_HARDENING_HEADERS, including 204s and 429s built outside the JSON
+ * helpers. Headers a route already set are left untouched. */
+export function withBrowserHardening(response: Response): Response {
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+    if (!out.headers.has(name)) out.headers.set(name, value);
+  }
+  return out;
+}
+
+/** Extract `error.code` from an error body clone without consuming the
+ * response the client receives. Returns undefined for non-JSON / no code. */
+export async function errorCodeOf(response: Response): Promise<string | undefined> {
+  if (response.status < 400) return undefined;
+  if (!(response.headers.get("content-type") ?? "").includes("application/json")) return undefined;
+  try {
+    const body = await response.clone().json();
+    const code = body?.error?.code;
+    return typeof code === "string" ? code : undefined;
+  } catch {
+    return undefined;
+  }
 }

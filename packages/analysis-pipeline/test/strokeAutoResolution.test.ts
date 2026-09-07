@@ -925,6 +925,56 @@ describe("resolution helpers (registry-terminated, conservative gate)", () => {
     ).toMatchObject({ kind: "abstain", reason: "auto_stroke_leaf_not_in_registry" });
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1.01])(
+    "rejects invalid confidence %s instead of using it as a commitment or disagreement",
+    (confidence) => {
+      const prediction = { ...base, label: "BACKHAND", confidence };
+      expect(resolvePredictedProfile(prediction)).toEqual({
+        kind: "abstain",
+        reason: "auto_stroke_confidence_invalid",
+      });
+      expect(detectHierarchicalDisagreement("forehand_drive", prediction)).toBeNull();
+    },
+  );
+
+  it.each([
+    { label: "FOREHAND", leaf: "FOREHAND_DRIVE", taxonomyDepth: 2 as const },
+    { label: "BACKHAND_DRIVE", leaf: "FOREHAND_DRIVE", taxonomyDepth: 3 as const },
+    { label: "FOREHAND_DRIVE", leaf: "FOREHAND_DRIVE", taxonomyDepth: 1 as const },
+    { label: "OVERHEAD", leaf: "OVERHEAD", taxonomyDepth: 2 as const },
+  ])("rejects an inconsistent leaf hierarchy: %j", (hierarchy) => {
+    const prediction = { ...base, ...hierarchy };
+    expect(resolvePredictedProfile(prediction)).toEqual({
+      kind: "abstain",
+      reason: "auto_stroke_leaf_hierarchy_invalid",
+    });
+    expect(detectHierarchicalDisagreement("dink", prediction)).toBeNull();
+  });
+
+  it("a family prediction carrying a representative leaf cannot score as that leaf", async () => {
+    const result = await analyzeCapture(
+      providers({
+        autoStrokeClassifier: autoClassifier({
+          label: "FOREHAND",
+          leaf: "FOREHAND_DRIVE",
+          taxonomyDepth: 2,
+        }),
+      }),
+      captureInput({ declared: null, predicted: null }),
+      options(),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.strokeIntent.resolutionBasis).toBe("abstained");
+    expect(result.value.strokeIntent.resolvedProfileId).toBeNull();
+    expect(result.value.strokeIntent.declaredStroke).toBeNull();
+    expect(result.value.strokeIntent.predictedStroke?.label).toBe("FOREHAND");
+    expect(result.value.result).toBeNull();
+    expect(result.value.uncertainty.limitingFactors).toContain(
+      "auto_stroke_leaf_hierarchy_invalid",
+    );
+  });
+
   it("resolveSlugProfileId: unambiguous slugs resolve, shared slugs need the canonical", () => {
     expect(resolveSlugProfileId("forehand_drive", null).profileId).toBe("FOREHAND_DRIVE");
     expect(resolveSlugProfileId("third_shot_drop", null).profileId).toBe("DROP");

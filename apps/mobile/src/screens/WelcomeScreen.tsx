@@ -1,74 +1,94 @@
 import React from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { BrandMark, Button, Pill, PressableScale } from '../design/components';
+import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 
-function CourtStory() {
+/**
+ * Illustration card. Its copy is laid out in flow so the card is never
+ * shorter than its own text at any Dynamic Type size; the court drawing
+ * floats behind it, and when the column has room the card grows and the
+ * caption row settles at its bottom edge.
+ */
+function CourtStory(props: { adaptive: boolean }) {
   return (
-    <View style={styles.courtStory}>
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 340 300"
-        style={StyleSheet.absoluteFill}
-      >
-        <Path
-          d="M35 42h270v216H35z"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-          fill="none"
-        />
-        <Line
-          x1="170"
-          y1="42"
-          x2="170"
-          y2="258"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Line
-          x1="35"
-          y1="120"
-          x2="305"
-          y2="120"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Line
-          x1="35"
-          y1="180"
-          x2="305"
-          y2="180"
-          stroke={color.lineDark}
-          strokeWidth="1.5"
-        />
-        <Path
-          d="M84 221c35-72 80-87 147-109"
-          stroke={color.volt}
-          strokeWidth="2.5"
-          fill="none"
-          strokeDasharray="4 7"
-          strokeLinecap="round"
-        />
-        <Circle cx="84" cy="221" r="8" fill={color.volt} />
-        <Circle cx="231" cy="112" r="5" fill={color.onDark} />
-      </Svg>
-      <View style={styles.readout}>
-        <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
-        <Text style={[type.h1, styles.readoutTitle]}>
-          Automatic{`\n`}capture.
-        </Text>
-        <Text
-          style={[type.caption, { color: color.onDarkMuted, marginTop: 5 }]}
+    <View style={styles.courtStory} testID="welcome-court-story">
+      {!props.adaptive ? (
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 340 300"
+          style={styles.courtDrawing}
+          pointerEvents="none"
         >
-          No shot picker. No timer.
-        </Text>
-      </View>
-      <View style={styles.livePill}>
-        <View style={styles.privateIcon} />
-        <Text style={[type.micro, { color: color.onDark }]}>ON-DEVICE</Text>
+          <Path
+            d="M35 42h270v216H35z"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Line
+            x1="170"
+            y1="42"
+            x2="170"
+            y2="258"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Line
+            x1="35"
+            y1="120"
+            x2="305"
+            y2="120"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Line
+            x1="35"
+            y1="180"
+            x2="305"
+            y2="180"
+            stroke={color.lineDark}
+            strokeWidth="1.5"
+          />
+          <Path
+            d="M84 239C116 212 164 182 231 176"
+            stroke={color.volt}
+            strokeWidth="2.5"
+            fill="none"
+            strokeDasharray="4 7"
+            strokeLinecap="round"
+          />
+          <Circle cx="84" cy="239" r="8" fill={color.volt} />
+          <Circle cx="231" cy="176" r="5" fill={color.onDark} />
+        </Svg>
+      ) : null}
+      <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
+      <Text style={[type.h1, styles.readoutTitle]}>
+        Automatic{`\n`}capture.
+      </Text>
+      <View style={styles.readoutSpacer} />
+      <View
+        style={[styles.readoutRow, props.adaptive && styles.readoutRowAdaptive]}
+      >
+        <Text style={styles.readoutCaption}>No shot picker. No timer.</Text>
+        <View style={styles.livePill}>
+          <Icon name="shield" size={16} color={color.onDarkMuted} />
+          <Text
+            style={[type.micro, { color: color.onDark }, styles.flexibleText]}
+          >
+            ON-DEVICE
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -81,16 +101,50 @@ export function WelcomeScreen(props: {
    * questionnaire after signing in. */
   onSignIn?: () => void;
 }) {
+  const { height, fontScale } = useWindowDimensions();
+  const adaptive = height < 760 || fontScale > 1.2;
+  const freeCopy = (
+    <Text style={styles.privacy} testID="welcome-free-copy">
+      Two successful validated ratings free · Unscored attempts don’t count
+    </Text>
+  );
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
+      {/* The body scrolls only when it genuinely overflows (small phones,
+          large Dynamic Type); the footer below stays pinned so the primary
+          action is reachable without scrolling. */}
       <ScrollView
-        contentContainerStyle={styles.content}
+        style={styles.body}
+        contentContainerStyle={[
+          styles.bodyContent,
+          adaptive && styles.bodyContentAdaptive,
+        ]}
+        alwaysBounceVertical={false}
         showsVerticalScrollIndicator={false}
+        testID={adaptive ? 'welcome-content-scroll' : undefined}
       >
-        <View style={styles.topBar}>
-          <BrandMark light />
-          <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+        <View style={[styles.topBar, adaptive && styles.topBarAdaptive]}>
+          {adaptive ? (
+            <View style={styles.adaptiveBrand}>
+              <BrandMark light compact />
+              <Text accessible={false} style={[type.h3, styles.brandName]}>
+                Pickle Sensei
+              </Text>
+            </View>
+          ) : (
+            <BrandMark light />
+          )}
+          {adaptive ? (
+            <View style={styles.privacyBadge}>
+              <Text style={[type.micro, { color: color.onDark }]}>
+                PRIVATE BY DEFAULT
+              </Text>
+            </View>
+          ) : (
+            <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+          )}
         </View>
 
         <View style={styles.heroCopy}>
@@ -103,47 +157,94 @@ export function WelcomeScreen(props: {
           </Text>
         </View>
 
-        <CourtStory />
+        <CourtStory adaptive={adaptive} />
+        {adaptive ? (
+          <View style={styles.freeCopyContent}>{freeCopy}</View>
+        ) : null}
+      </ScrollView>
 
-        <View style={styles.footer}>
+      <View style={styles.footer} testID="welcome-actions">
+        {adaptive ? (
+          <PressableScale
+            accessibilityLabel="Start your first read"
+            onPress={props.onGetStarted}
+            style={styles.primaryAdaptive}
+          >
+            <Text style={[type.bodyBold, styles.primaryLabel]}>
+              Start your first read
+            </Text>
+            <Icon name="arrow" size={18} color={color.onVolt} />
+          </PressableScale>
+        ) : (
           <Button
             label="Start your first read"
             variant="volt"
             onPress={props.onGetStarted}
           />
-          {props.onSignIn ? (
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="I already have an account"
-              accessibilityHint="Sign in to an existing account"
-              onPress={props.onSignIn}
-              style={styles.signInLink}
+        )}
+        {props.onSignIn ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="I already have an account"
+            accessibilityHint="Sign in to an existing account"
+            onPress={props.onSignIn}
+            style={styles.signInLink}
+          >
+            <Text
+              style={[
+                type.bodyBold,
+                { color: color.onDarkMuted },
+                styles.centeredText,
+              ]}
             >
-              <Text
-                style={[
-                  type.bodyBold,
-                  { color: color.onDarkMuted, textAlign: 'center' },
-                ]}
-              >
-                I already have an account
-              </Text>
-            </PressableScale>
-          ) : null}
-          <Text style={styles.privacy}>
-            Two successful validated ratings free · Unscored attempts don’t
-            count
-          </Text>
-        </View>
-      </ScrollView>
+              I already have an account
+            </Text>
+          </PressableScale>
+        ) : null}
+        {!adaptive ? freeCopy : null}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
+  body: { flex: 1, minHeight: 0 },
   // Fill a roomy screen as before, but let content grow and scroll on short
   // phones or at accessibility text sizes instead of pushing CTAs offscreen.
-  content: { flexGrow: 1 },
+  bodyContent: { flexGrow: 1 },
+  bodyContentAdaptive: { paddingBottom: space.lg },
+  topBarAdaptive: { flexWrap: 'wrap', gap: space.sm },
+  adaptiveBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  brandName: { color: color.onDark, flexShrink: 1, minWidth: 0 },
+  privacyBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
+    backgroundColor: color.inkElevated,
+  },
+  flexibleText: { flexShrink: 1 },
+  centeredText: { textAlign: 'center' },
+  primaryAdaptive: {
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: color.volt,
+  },
+  primaryLabel: { color: color.onVolt, flex: 1, textAlign: 'center' },
+  freeCopyContent: { paddingHorizontal: space.lg },
   topBar: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
@@ -165,17 +266,32 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     marginHorizontal: space.lg,
     marginTop: space.lg,
-    minHeight: 270,
+    paddingTop: 28,
+    paddingLeft: 28,
+    paddingRight: 20,
+    paddingBottom: 20,
     borderRadius: radius.xl,
     backgroundColor: color.inkElevated,
     overflow: 'hidden',
   },
-  readout: { flexGrow: 1, padding: 28 },
+  courtDrawing: { position: 'absolute', top: 0, left: 0 },
   readoutTitle: { color: color.onDark, marginTop: space.sm },
+  readoutSpacer: { flexGrow: 1 },
+  readoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    marginTop: 5,
+  },
+  readoutRowAdaptive: { flexDirection: 'column', alignItems: 'flex-start' },
+  readoutCaption: {
+    ...type.caption,
+    color: color.onDarkMuted,
+    flexShrink: 1,
+  },
   livePill: {
-    alignSelf: 'flex-end',
-    marginRight: 20,
-    marginBottom: 20,
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
@@ -184,15 +300,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: color.overlayDarkSoft,
   },
-  privateIcon: {
-    width: 8,
-    height: 8,
-    borderRadius: 3,
-    borderWidth: 2,
-    borderColor: color.volt,
-    transform: [{ rotate: '45deg' }],
-  },
   footer: {
+    flexShrink: 0,
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.sm,

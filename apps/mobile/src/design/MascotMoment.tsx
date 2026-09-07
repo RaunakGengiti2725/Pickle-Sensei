@@ -8,6 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Icon, type IconName } from './icons';
 import { color, radius, space, type } from './tokens';
 
 /**
@@ -36,26 +37,17 @@ export const MASCOT_SOURCES = {
 export type MascotPose = keyof typeof MASCOT_SOURCES;
 export type MascotTone = 'volt' | 'court' | 'warn' | 'danger';
 
-const TONES: Record<
-  MascotTone,
-  { accent: string; soft: string; label: string }
-> = {
-  volt: { accent: color.volt, soft: color.voltSoft, label: color.courtDeep },
-  court: { accent: color.court, soft: color.courtSoft, label: color.courtDeep },
-  warn: { accent: color.warn, soft: color.warnSoft, label: color.warn },
-  danger: { accent: color.bad, soft: color.badSoft, label: color.bad },
-};
-
 interface MascotSharedProps {
   pose: MascotPose;
   dark?: boolean;
   tone?: MascotTone;
+  illustrated?: boolean;
   accessibilityLabel?: string;
   testID?: string;
   style?: StyleProp<ViewStyle>;
 }
 
-/** A compact editorial banner for onboarding and contextual guidance. */
+/** A text-first editorial note; approved artwork requires explicit placement. */
 export function MascotMoment(
   props: MascotSharedProps & {
     eyebrow: string;
@@ -63,27 +55,23 @@ export function MascotMoment(
     compact?: boolean;
   },
 ) {
-  const tone = TONES[props.tone ?? 'volt'];
-  const imageSize = props.compact
-    ? styles.momentImageCompact
-    : styles.momentImage;
-
+  const illustrated = props.illustrated === true;
   return (
     <View
-      accessible={Boolean(props.accessibilityLabel)}
-      accessibilityRole={props.accessibilityLabel ? 'image' : undefined}
-      accessibilityLabel={props.accessibilityLabel}
+      accessible={illustrated && Boolean(props.accessibilityLabel)}
+      accessibilityRole={illustrated ? 'image' : undefined}
+      accessibilityLabel={illustrated ? props.accessibilityLabel : undefined}
       testID={props.testID}
       style={[
         styles.moment,
         props.compact && styles.momentCompact,
-        props.dark ? styles.momentDark : styles.momentLight,
+        { borderColor: props.dark ? color.lineDark : color.line },
         props.style,
       ]}
     >
       <View style={styles.momentCopy}>
         <Text
-          style={[type.micro, { color: props.dark ? tone.accent : tone.label }]}
+          style={[type.micro, { color: props.dark ? color.onDark : color.ink }]}
         >
           {props.eyebrow}
         </Text>
@@ -91,37 +79,45 @@ export function MascotMoment(
           style={[
             type.caption,
             styles.momentCaption,
-            { color: props.dark ? color.onDark : color.ink },
+            { color: props.dark ? color.onDarkMuted : color.inkSoft },
           ]}
         >
           {props.caption}
         </Text>
       </View>
-      <View
-        style={[
-          styles.momentArt,
-          props.compact && styles.momentArtCompact,
-          { backgroundColor: props.dark ? color.onDarkTint : tone.soft },
-        ]}
-      >
-        <View style={[styles.accentBall, { backgroundColor: tone.accent }]} />
+      {illustrated ? (
         <Image
           accessible={false}
           resizeMode="contain"
           source={MASCOT_SOURCES[props.pose]}
           style={[
-            imageSize,
+            styles.momentImage,
+            props.compact && styles.momentImageCompact,
             { tintColor: props.dark ? color.onDark : color.graphite },
           ]}
         />
-      </View>
+      ) : null}
     </View>
   );
 }
 
-/** A centered mascot vignette for loading, outcome, and recovery states. */
-export function MascotStage(props: MascotSharedProps & { compact?: boolean }) {
-  const tone = TONES[props.tone ?? 'volt'];
+/** A compact state mark, with approved illustration available only by opt-in. */
+export function MascotStage(
+  props: MascotSharedProps & { compact?: boolean; icon?: IconName },
+) {
+  const illustrated = props.illustrated === true;
+  const accent =
+    props.tone === 'danger'
+      ? props.dark
+        ? color.flame
+        : color.bad
+      : props.tone === 'warn'
+        ? props.dark
+          ? color.volt
+          : color.warn
+        : props.dark
+          ? color.volt
+          : color.court;
   return (
     <View
       accessible={Boolean(props.accessibilityLabel)}
@@ -131,107 +127,53 @@ export function MascotStage(props: MascotSharedProps & { compact?: boolean }) {
       style={[
         styles.stage,
         props.compact && styles.stageCompact,
-        {
-          backgroundColor: props.dark ? color.inkElevated : tone.soft,
-          borderColor: props.dark ? color.lineDark : tone.accent,
-        },
+        illustrated && styles.stageIllustrated,
+        { backgroundColor: props.dark ? color.inkElevated : color.surfaceAlt },
         props.style,
       ]}
     >
-      <View style={[styles.stageBall, { backgroundColor: tone.accent }]} />
-      <View
-        style={[
-          styles.stageRing,
-          { borderColor: props.dark ? color.lineStrongDark : tone.accent },
-        ]}
-      />
-      <Image
-        accessible={false}
-        resizeMode="contain"
-        source={MASCOT_SOURCES[props.pose]}
-        style={[
-          styles.stageImage,
-          props.compact && styles.stageImageCompact,
-          { tintColor: props.dark ? color.onDark : color.graphite },
-        ]}
-      />
+      {illustrated ? (
+        <Image
+          accessible={false}
+          resizeMode="contain"
+          source={MASCOT_SOURCES[props.pose]}
+          style={[
+            styles.stageImage,
+            { tintColor: props.dark ? color.onDark : color.graphite },
+          ]}
+        />
+      ) : (
+        <Icon
+          name={props.icon ?? (props.tone === 'danger' ? 'close' : 'stroke')}
+          size={props.compact ? 28 : 36}
+          color={accent}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   moment: {
-    minHeight: 132,
     flexDirection: 'row',
-    alignItems: 'stretch',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  momentCompact: { minHeight: 104 },
-  momentLight: {
-    backgroundColor: color.surfaceElevated,
-    borderColor: color.line,
-  },
-  momentDark: {
-    backgroundColor: color.inkElevated,
-    borderColor: color.lineDark,
-  },
-  momentCopy: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingVertical: space.md,
+    gap: space.md,
   },
+  momentCompact: { paddingVertical: space.sm },
+  momentCopy: { flex: 1, minWidth: 0 },
   momentCaption: { marginTop: space.xs },
-  momentArt: {
-    width: 142,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  momentArtCompact: { width: 112 },
-  momentImage: { width: 142, height: 124 },
-  momentImageCompact: { width: 112, height: 98 },
-  accentBall: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    top: -16,
-    right: -14,
-    opacity: 0.9,
-  },
+  momentImage: { width: 96, height: 104 },
+  momentImageCompact: { width: 72, height: 80 },
   stage: {
-    width: 194,
-    height: 154,
+    width: 64,
+    height: 64,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
+    justifyContent: 'center',
+    borderRadius: radius.md,
   },
-  stageCompact: { width: 148, height: 116, borderRadius: radius.lg },
-  stageBall: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    top: -18,
-    right: -14,
-    opacity: 0.92,
-  },
-  stageRing: {
-    position: 'absolute',
-    width: 116,
-    height: 116,
-    borderRadius: 58,
-    borderWidth: 1,
-    left: -36,
-    bottom: -44,
-    opacity: 0.38,
-  },
-  stageImage: { width: 176, height: 144 },
-  stageImageCompact: { width: 132, height: 108 },
+  stageCompact: { width: 48, height: 48, borderRadius: radius.sm },
+  stageIllustrated: { width: 132, height: 108 },
+  stageImage: { width: 120, height: 104 },
 });

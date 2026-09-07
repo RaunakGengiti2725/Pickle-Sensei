@@ -149,7 +149,7 @@ def main() -> None:
                 print(f"{case['id']} stride={stride} roi={roi_name}: "
                       f"recall {cell['recallVsAllLabels']} · {cell['invocations']} inv · "
                       f"{cell['msPerFrame']}ms/f · {cell['inferenceSec']}s", flush=True)
-    Path(args.out).write_text(json.dumps({"grid": grid}, indent=2))
+    Path(args.out).write_text(json.dumps({"grid": grid}, indent=2, allow_nan=False))
     print(f"written: {args.out}")
 
 

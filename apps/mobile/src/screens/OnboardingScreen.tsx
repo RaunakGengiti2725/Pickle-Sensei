@@ -12,11 +12,7 @@ import {
 import type { Handedness } from '@pickle/shared-types';
 import { BrandDialog, Button, PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
-import {
-  MascotMoment,
-  type MascotPose,
-  type MascotTone,
-} from '../design/MascotMoment';
+import type { MascotPose, MascotTone } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import { focusForGoal, useAppStore, type Gender } from '../state/appStore';
@@ -45,8 +41,8 @@ const STEPS = [
 ] as const;
 type Step = (typeof STEPS)[number];
 
-/** One distinct supplied pose per step; the copy explains why that moment is
- * relevant instead of using the mascot as decorative confetti. */
+/** Supplied step context remains available as plain text; pose metadata is
+ * retained without rendering illustrated panels in the questionnaire. */
 export const ONBOARDING_MASCOT_MOMENTS: Record<
   Step,
   {
@@ -388,7 +384,7 @@ export function OnboardingScreen(props: {
   const goal = answers['goal'] ?? 'all-around';
   const focus = focusForGoal(goal);
   const focusCopy = FOCUS_COPY[focus] ?? FOCUS_COPY['contact_position']!;
-  const mascotMoment = ONBOARDING_MASCOT_MOMENTS[step];
+  const stepContext = ONBOARDING_MASCOT_MOMENTS[step].caption;
   const answeredProfile = {
     firstName: firstName || undefined,
     gender: answers['gender'] as Gender | undefined,
@@ -533,29 +529,29 @@ export function OnboardingScreen(props: {
                   }}
                   style={styles.nameInput}
                 />
-                <MascotMoment
-                  compact
-                  pose={mascotMoment.pose}
-                  tone={mascotMoment.tone}
-                  eyebrow={mascotMoment.eyebrow}
-                  caption={mascotMoment.caption}
-                  accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
-                  testID="onboarding-mascot-name"
-                  style={styles.nameMascot}
-                />
+                <Text
+                  testID="onboarding-context-name"
+                  style={[
+                    type.caption,
+                    styles.stepContext,
+                    styles.contextAfter,
+                  ]}
+                >
+                  {stepContext}
+                </Text>
               </>
             ) : (
               <>
-                <MascotMoment
-                  compact
-                  pose={mascotMoment.pose}
-                  tone={mascotMoment.tone}
-                  eyebrow={mascotMoment.eyebrow}
-                  caption={mascotMoment.caption}
-                  accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
-                  testID={`onboarding-mascot-${step}`}
-                  style={styles.mascotMoment}
-                />
+                <Text
+                  testID={`onboarding-context-${step}`}
+                  style={[
+                    type.caption,
+                    styles.stepContext,
+                    styles.contextBefore,
+                  ]}
+                >
+                  {stepContext}
+                </Text>
                 {QUESTIONS[step].choices.map(choice => (
                   <ChoiceCard
                     key={choice.value}
@@ -598,23 +594,22 @@ export function OnboardingScreen(props: {
               </Text>
             ) : null}
 
-            <MascotMoment
-              pose={mascotMoment.pose}
-              tone={mascotMoment.tone}
-              eyebrow={mascotMoment.eyebrow}
-              caption={mascotMoment.caption}
-              accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
-              testID="onboarding-mascot-reveal"
-              style={styles.revealMascot}
-            />
+            <Text
+              testID="onboarding-context-reveal"
+              style={[type.caption, styles.stepContext, styles.contextAfter]}
+            >
+              {stepContext}
+            </Text>
 
-            <View style={styles.focusCard}>
+            <View style={styles.focusCard} testID="onboarding-focus">
               <View style={styles.focusTop}>
                 <Text style={[type.micro, { color: color.volt }]}>
                   FIRST FOCUS
                 </Text>
                 <View style={styles.focusNumber}>
-                  <Text style={[type.micro, { color: color.onVolt }]}>01</Text>
+                  <Text style={[type.micro, { color: color.onDarkMuted }]}>
+                    01
+                  </Text>
                 </View>
               </View>
               <Text
@@ -648,8 +643,11 @@ export function OnboardingScreen(props: {
                 ],
               ].map(([n, line]) => (
                 <View key={n} style={styles.stepRow}>
-                  <View style={styles.stepBadge}>
-                    <Text style={[type.micro, { color: color.onVolt }]}>
+                  <View
+                    style={styles.stepBadge}
+                    testID={`onboarding-plan-step-${n}`}
+                  >
+                    <Text style={[type.micro, { color: color.inkSoft }]}>
                       {n}
                     </Text>
                   </View>
@@ -660,9 +658,9 @@ export function OnboardingScreen(props: {
               ))}
             </View>
 
-            <View style={styles.accessCard}>
+            <View style={styles.accessCard} testID="onboarding-access-context">
               <View style={styles.accessIcon}>
-                <Icon name="crown" size={20} color={color.onVolt} />
+                <Icon name="crown" size={20} color={color.inkSoft} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[type.h3, { color: color.ink }]}>
@@ -699,15 +697,12 @@ export function OnboardingScreen(props: {
               Get a useful nudge when it can help—never a stream of noise.
             </Text>
 
-            <MascotMoment
-              pose={mascotMoment.pose}
-              tone={mascotMoment.tone}
-              eyebrow={mascotMoment.eyebrow}
-              caption={mascotMoment.caption}
-              accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
-              testID="onboarding-mascot-notifications"
-              style={styles.notificationMascot}
-            />
+            <Text
+              testID="onboarding-context-notifications"
+              style={[type.caption, styles.stepContext, styles.contextAfter]}
+            >
+              {stepContext}
+            </Text>
 
             <View style={styles.notificationPreview}>
               <View style={styles.notificationPreviewHeader}>
@@ -849,9 +844,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   headerButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
     backgroundColor: color.inkElevated,
     alignItems: 'center',
     justifyContent: 'center',
@@ -879,9 +874,9 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginBottom: space.lg,
   },
-  mascotMoment: { marginBottom: space.lg },
-  nameMascot: { marginTop: space.lg },
-  revealMascot: { marginTop: space.lg },
+  stepContext: { color: color.inkSoft, maxWidth: 340 },
+  contextBefore: { marginBottom: space.lg },
+  contextAfter: { marginTop: space.lg },
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -937,8 +932,6 @@ const styles = StyleSheet.create({
   focusNumber: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: color.volt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -946,8 +939,8 @@ const styles = StyleSheet.create({
   stepBadge: {
     width: 26,
     height: 26,
-    borderRadius: 13,
-    backgroundColor: color.volt,
+    borderRadius: radius.pill,
+    backgroundColor: color.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
@@ -959,21 +952,21 @@ const styles = StyleSheet.create({
     padding: space.md,
     marginTop: space.xl,
     borderRadius: radius.lg,
-    backgroundColor: color.voltSoft,
-    borderColor: color.volt,
+    backgroundColor: color.surfaceElevated,
+    borderColor: color.line,
     borderWidth: StyleSheet.hairlineWidth,
   },
   accessIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.volt,
+    backgroundColor: color.surfaceAlt,
   },
   accessCopy: { color: color.inkSoft, marginTop: 4 },
   accessPrice: {
-    color: color.courtDeep,
+    color: color.inkSoft,
     marginTop: space.sm,
     letterSpacing: 0.45,
   },
@@ -982,7 +975,6 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     maxWidth: 340,
   },
-  notificationMascot: { marginTop: space.lg },
   notificationPreview: {
     marginTop: space.lg,
     padding: space.lg,

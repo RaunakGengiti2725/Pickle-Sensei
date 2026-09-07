@@ -1,0 +1,159 @@
+{
+  "run": "run-1788500670",
+  "verdict": "NOT_PRODUCTION_READY",
+  "verdict_reason": "All executable gates on the integrated tree pass on both planes (Linux full tier 15/15; M4 exact-SHA ok), but 12 independently confirmed P1 findings remain OPEN (closure workflow candidates exist but none met the accept criteria before the session ended), so the no-unresolved-P1 gate is not satisfied.",
+  "integrated_sha": "590e90c196367ba1ae7ccba911350e46869721a0",
+  "branch": "devin/1788500670-production-readiness",
+  "generated_utc": "2026-09-05T06:00:00Z",
+  "categories": {
+    "BUILD": {
+      "status": "PASS",
+      "evidence": "verify-cloud full ok (deps/typecheck/admin build); mac-full-verify ios-app stage passed (unsigned Release xcodebuild + simulator launch)"
+    },
+    "TEST": {
+      "status": "PASS",
+      "evidence": "verify-cloud full: test, mobile (jest), ml, edge, scripts stages passed; native XCTest 63/63 macOS + 63/63 iOS Simulator (GH run 33940249594)"
+    },
+    "AUTH": {
+      "status": "DEGRADED",
+      "evidence": "edge auth routes + durable-session suites + RLS matrix pass; P1 EACR-1 (GoTrue transient -> 401 on /v1/auth/refresh) and MAS-1 (bearer-expiry trust) only partially closed on branch (0dfc6a1a, 4f3c5426, 3bd08da5); closure retest not completed"
+    },
+    "DATABASE": {
+      "status": "PASS",
+      "evidence": "db + rls stages passed; DB-01 identity ledger, DB-02 permit-gated shots INSERT, settled-permit tombstones (ca5c5b25) integrated; owner-role permit findings ADV-18/19/20 adjudicated P3 follow-up (evidence/adjudicate-permit-r9.json)"
+    },
+    "STORAGE": {
+      "status": "PASS",
+      "evidence": "SMW-01 media-worker deletion starvation fixed and RESOLVED by closure triage; rls stage covers storage policies"
+    },
+    "VIDEO": {
+      "status": "PASS",
+      "evidence": "M4 real Apple Vision extraction 1286/1461 frames with pose, 29590 ball trajectories, release build alive 25 s, 0 crash reports (run 33940249594)"
+    },
+    "CV": {
+      "status": "DEGRADED",
+      "evidence": "bench:compare vs baseline: 0 regressed / 104 unchanged / 96 informational; XC-ADJ-VIS-1 pose-quality gate integrated (92eb9541); P1 XC-CV-1 closure retest not completed; P1 ADJ-VG-01 (side flip from visibility-0 torso) OPEN"
+    },
+    "LIVE_COURT": {
+      "status": "UNVERIFIED",
+      "evidence": "Linux stress lenses executed (stress-mobile-analysis-capture-live.json); on-device real-time behaviour not exercised beyond simulator launch; no device recording"
+    },
+    "VOICE": {
+      "status": "UNVERIFIED",
+      "evidence": "unit-level coverage only; no device audio-route testing performed"
+    },
+    "MACOS": {
+      "status": "PASS",
+      "evidence": "exact-SHA 590e90c1 mac-full-verify ok: environment/swift-native/ios-app (GH run 33940249594, evidence/mac-590e90c1). Native r11 hardening e0369e84 (branch devin/fix11-native) also Apple-verified on its exact tree (GH run 33943338843, ok:true) but not integrated."
+    },
+    "SECURITY": {
+      "status": "DEGRADED",
+      "evidence": "security stage (gitleaks) passes; XC-SEC-1/4/5/6 integrated; P1 SSD-1/SSD-2 (allowlist scope, unpinned gitleaks binary trust) OPEN"
+    },
+    "PERFORMANCE": {
+      "status": "DEGRADED",
+      "evidence": "bench runner 0 regressions; P1 ADJ-AP-001 (SessionEventEngine O(N^2) per live session) OPEN"
+    },
+    "ACCESSIBILITY": {
+      "status": "DEGRADED",
+      "evidence": "XC-UAI-04/05 integrated; XC-UAI-05 remainder classified EXTERNAL (device-only VoiceOver)"
+    },
+    "RELIABILITY": {
+      "status": "DEGRADED",
+      "evidence": "P1 A2 (practice-set session row uncommitted on unmount) partially closed (3bd08da5); MSA-P1-1/MSA-P1-2 OPEN"
+    },
+    "CI": {
+      "status": "PASS",
+      "evidence": "XC-RS-01/02 RESOLVED; ci.yml stages == verify-cloud --tier pr; mac workflow runs on ci/mac-** push"
+    },
+    "RELEASE": {
+      "status": "PASS",
+      "evidence": "release stage passed (pnpm release:check); unsigned Release simulator build passed on M4; no submission performed"
+    }
+  },
+  "p1_open": [
+    {
+      "id": "edge-auth-cache-ratelimit::EACR-1",
+      "state": "PARTIAL",
+      "note": "503-vs-401 gateway integrated (0dfc6a1a); refresh-route budget charge retest incomplete"
+    },
+    {
+      "id": "mobile-analyze-capture::A2",
+      "state": "PARTIAL",
+      "note": "3bd08da5; closure candidate v2 rejected (review request_changes, adversary break)"
+    },
+    {
+      "id": "mobile-auth-session::MAS-1",
+      "state": "PARTIAL",
+      "note": "3bd08da5 30 s floor; candidate devin/close-mobile-auth-session-MAS-1-r2 approved, no adversary break, impl self-verify missing"
+    },
+    {
+      "id": "mobile-billing-paywall::MBP-1",
+      "state": "OPEN",
+      "note": "candidate devin/close-mobile-billing-paywall-MBP-1-r2 approved, no adversary break, impl self-verify missing"
+    },
+    {
+      "id": "mobile-settings-account::MSA-P1-1",
+      "state": "OPEN",
+      "note": "candidates v1/v2 rejected (adversary breaks)"
+    },
+    {
+      "id": "mobile-settings-account::MSA-P1-2",
+      "state": "OPEN",
+      "note": "v1 @ 0bdad85d rejected; r2 never created (VM unreachable)"
+    },
+    {
+      "id": "pkg-analysis-pipeline::ADJ-AP-001",
+      "state": "OPEN",
+      "note": "see closure workflow log"
+    },
+    {
+      "id": "pkg-swing-lab::ADJ-01",
+      "state": "FIXED_ON_BRANCH",
+      "note": "ecdf83a4 + ccd73c7c (SL-01); closure retest not completed"
+    },
+    {
+      "id": "pkg-swing-lab::ADJ-02",
+      "state": "OPEN",
+      "note": "candidate r2 approved, adversary P3 follow-ups only, impl self-verify missing"
+    },
+    {
+      "id": "pkg-vision-geometry::ADJ-VG-01",
+      "state": "OPEN",
+      "note": "candidates v1/v2 rejected (3 blocking adversary breaks)"
+    },
+    {
+      "id": "security-secrets-deps::SSD-1+SSD-2",
+      "state": "OPEN",
+      "note": "candidates v1/v2 approved, no adversary break, impl self-verify missing"
+    },
+    {
+      "id": "services-api-legacy-admin-web::ADJ-01..05",
+      "state": "OPEN",
+      "note": "legacy Fastify API (not called by the mobile app); candidates rejected or unverified"
+    },
+    {
+      "id": "xc-cv::XC-CV-1",
+      "state": "PARTIAL",
+      "note": "92eb9541 pose-quality gate on phone scoring path; closure v1 approved, no break, impl self-verify missing; v2 never created"
+    }
+  ],
+  "p2_p3_followups": [
+    "native: A11-CAP-HIDDEN-STEP (P2) and A11-CAP-ANCHOR (P3) \u2014 PoseReadinessEvaluator 256-sample cap can evict samples inside the window at >568 fps (unreachable at Apple Vision 24\u2013120 fps); A11-TELEPORT-STROKE (P3, pre-existing) single-frame wrist teleport emits a stroke event",
+    "native: raw timestamp subtraction in PoseMotionTrail / TemporalStrokeDetector / CaptureEvidenceAccumulator / SessionMotionStream traps only for Int.min-scale timestamps (capture emits non-negative CMTime ms)",
+    "permits: owner-role PK rename / DELETE-INSERT race / TRUNCATE bypass tombstones (evidence/adjudicate-permit-r9.json)"
+  ],
+  "external": [
+    "xc-ux-a11y-i18n::XC-UAI-05 remainder (device VoiceOver)",
+    "App Store review, Apple approval, human ground-truth labels for missing stroke families (docs/EVALUATION.md \u00a74)"
+  ],
+  "unintegrated_branches": {
+    "devin/fix11-native@e0369e84": "native vision-core hardening; Linux shadow 91/91; reviewer ACCEPT_WITH_NITS (session 09e1dc15); adversary P2/P3 only (session 4f795da1); Apple run 33943338843 PASSED on exact tree (mac-full-verify-12 summary ok:true, 3/3 stages, crash_reports=0); NOT integrated \u2014 merged tree needs full cloud + bench + exact-SHA Mac rerun",
+    "devin/fix9-mds-sqlite": "mobile-data-sync round-9 fixer (session 91ba825d) \u2014 not completed"
+  },
+  "workflows": {
+    "audit": "pickle-sensei-production-readiness (map -> 3-pass -> adjudicate -> fix)",
+    "stress": "wfr-2af59c55c8b74c689cb74bcad89ef9e9 \u2014 131 units, 445 stress agents, 52 adjudicators (artifacts/.../stress)",
+    "closure": "wfr-6e12da73f92c46d483fe2515b0f02d38 \u2014 38 P0/P1 triaged on f702f0f8: 16 RESOLVED, 20 OPEN, 2 EXTERNAL; fix loop killed before acceptance"
+  }
+}

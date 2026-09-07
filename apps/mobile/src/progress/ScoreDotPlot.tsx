@@ -5,12 +5,14 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { plural } from '../util/plural';
+import { ChartDataRows } from './PracticeVolumeChart';
 import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
 
 /**
@@ -22,8 +24,9 @@ import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
  * read them. Days with no read stay empty — an honest gap, never a
  * carried-forward point.
  *
- * The plot is the same height as `PracticeVolumeChart` on purpose: Home
- * toggles between the two and the card must not jump.
+ * At default text size the plot matches `PracticeVolumeChart` so Home's
+ * toggle never moves the card. Enlarged text uses bounded, flowing rows
+ * with every individual score reachable, rather than fixed-position labels.
  */
 
 /** Matches PracticeVolumeChart's plot so the Home toggle never shifts layout. */
@@ -32,8 +35,8 @@ const BAND_TOP = 16;
 const BAND_BOTTOM = 8;
 const DOT_RADIUS = 4.5;
 const LATEST_RADIUS = 5.5;
-const HALO_SPREAD = 4;
-const LABEL_HEIGHT = 13;
+const OUTLINE_SPREAD = 2;
+const LABEL_HEIGHT = type.micro.lineHeight;
 const LABEL_GAP = 3;
 const LABEL_WIDTH = 36;
 /** Beyond this many reads the labels would collide; the dots stay. */
@@ -141,18 +144,19 @@ export function ScoreDotPlot(props: {
   rangeLabel: string;
 }) {
   const reducedMotion = useReducedMotion();
+  const largeText = useWindowDimensions().fontScale > 1;
   const reveal = useRef(new Animated.Value(1)).current;
   const [plotWidth, setPlotWidth] = useState(0);
   const points = useMemo(
-    () => dotPlotGeometry(props.buckets, props.reads),
-    [props.buckets, props.reads],
+    () => (largeText ? [] : dotPlotGeometry(props.buckets, props.reads)),
+    [largeText, props.buckets, props.reads],
   );
   const signature = points.map(point => `${point.id}:${point.score}`).join('|');
   const staggered = Math.min(Math.max(points.length - 1, 0), 7);
   const duration = REVEAL_MS + staggered * STAGGER_MS;
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion || largeText) {
       reveal.setValue(1);
       return;
     }
@@ -163,7 +167,7 @@ export function ScoreDotPlot(props: {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [duration, reducedMotion, reveal, signature]);
+  }, [duration, largeText, reducedMotion, reveal, signature]);
 
   const readCount = props.reads.length;
   const dayCount = new Set(props.reads.map(read => read.day)).size;
@@ -191,19 +195,45 @@ export function ScoreDotPlot(props: {
     if (width > 0 && width !== plotWidth) setPlotWidth(width);
   };
 
+  const summary =
+    readCount === 0
+      ? 'No scored reads in this window yet.'
+      : `${props.rangeLabel} technique scores: ${readCount} scored ${plural(
+          readCount,
+          'read',
+        )} across ${dayCount} ${plural(dayCount, 'day')}, latest ${
+          latest?.score.toFixed(1) ?? ''
+        } out of 10.`;
+
+  if (largeText) {
+    return (
+      <View
+        accessible={false}
+        accessibilityLabel={summary}
+        importantForAccessibility="no"
+        style={styles.root}
+        testID="score-dot-plot"
+      >
+        <ChartDataRows
+          key={`${props.buckets[0]?.key}:${props.buckets.at(-1)?.key}`}
+          items={props.reads}
+          summary={summary}
+          scope={`Individual scored reads, oldest to newest. ${props.rangeLabel}${firstLabel ? `: ${firstLabel}–${lastLabel}` : ''}.`}
+          unit="reads"
+          rowForItem={(read, index) => ({
+            key: read.id,
+            label: `${read.day} · Read ${index + 1}: ${read.score.toFixed(1)} out of 10${read.id === latest?.id ? ' · Latest read' : ''}`,
+            latest: read.id === latest?.id,
+          })}
+        />
+      </View>
+    );
+  }
+
   return (
     <View
       accessible
-      accessibilityLabel={
-        readCount === 0
-          ? 'No scored reads in this window yet.'
-          : `${props.rangeLabel} technique scores: ${readCount} scored ${plural(
-              readCount,
-              'read',
-            )} across ${dayCount} ${plural(dayCount, 'day')}, latest ${
-              latest?.score.toFixed(1) ?? ''
-            } out of 10.`
-      }
+      accessibilityLabel={summary}
       style={styles.root}
       testID="score-dot-plot"
     >
@@ -231,8 +261,14 @@ export function ScoreDotPlot(props: {
           pointerEvents="none"
           style={[styles.gridline, { top: yForScore(5) }]}
         />
-        <Text style={[styles.scaleLabel, { top: yForScore(10) - 14 }]}>10</Text>
-        <Text style={[styles.scaleLabel, { top: yForScore(5) - 14 }]}>5</Text>
+        <Text
+          style={[styles.scaleLabel, { top: yForScore(10) - LABEL_HEIGHT }]}
+        >
+          10
+        </Text>
+        <Text style={[styles.scaleLabel, { top: yForScore(5) - LABEL_HEIGHT }]}>
+          5
+        </Text>
         {linePoints ? (
           <Animated.View
             pointerEvents="none"
@@ -242,8 +278,8 @@ export function ScoreDotPlot(props: {
               <Polyline
                 points={linePoints}
                 fill="none"
-                stroke={color.mint}
-                strokeOpacity={0.45}
+                stroke={color.onDarkMuted}
+                strokeOpacity={0.65}
                 strokeWidth={1.5}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -278,7 +314,7 @@ export function ScoreDotPlot(props: {
               {point.isLatest ? (
                 <Animated.View
                   pointerEvents="none"
-                  style={[styles.halo, disc(radius + HALO_SPREAD)]}
+                  style={[styles.latestOutline, disc(radius + OUTLINE_SPREAD)]}
                 />
               ) : null}
               <Animated.View
@@ -352,7 +388,7 @@ const styles = StyleSheet.create({
   todayColumn: {
     marginHorizontal: 2,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: color.onDarkTintFaint,
   },
   gridline: {
     position: 'absolute',
@@ -365,22 +401,21 @@ const styles = StyleSheet.create({
     ...type.micro,
     position: 'absolute',
     right: 0,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.2,
-    color: color.onDarkFaint,
+    color: color.onDarkMuted,
     fontVariant: ['tabular-nums'],
   },
   dot: {
     position: 'absolute',
-    backgroundColor: color.mint,
+    backgroundColor: color.onDarkMuted,
   },
   dotLatest: { backgroundColor: color.volt },
-  // The newest read sits in a translucent volt halo drawn as its own disc
-  // underneath (a translucent border would just blend into the core).
-  halo: {
+  // The newest read has a crisp outline as a second, non-color status cue,
+  // without a translucent fill or decorative halo.
+  latestOutline: {
     position: 'absolute',
-    backgroundColor: 'rgba(215,250,69,0.22)',
+    borderWidth: 1,
+    borderColor: color.volt,
   },
   valueWrap: {
     position: 'absolute',
@@ -391,8 +426,6 @@ const styles = StyleSheet.create({
   value: {
     ...type.micro,
     color: color.onDarkMuted,
-    fontSize: 10,
-    lineHeight: LABEL_HEIGHT,
     letterSpacing: 0.2,
     fontVariant: ['tabular-nums'],
   },
@@ -405,9 +438,7 @@ const styles = StyleSheet.create({
   axisLabel: {
     ...type.micro,
     flex: 1,
-    color: color.onDarkFaint,
-    fontSize: 10,
-    lineHeight: 13,
+    color: color.onDarkMuted,
     letterSpacing: 0.2,
   },
   axisLabelStart: { textAlign: 'left' },

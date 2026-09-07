@@ -326,14 +326,16 @@ describe('Library flow · Reads tab', () => {
     mockListShots.mockRejectedValueOnce(new Error('sqlite closed'));
     const renderer = await renderLibrary();
     expect(allText(renderer)).not.toContain('Opening your library…');
-    expect(allText(renderer)).toContain('Your library couldn’t load');
+    expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
     expect(allText(renderer)).not.toContain(
       'Your measured reads, in one place.',
     );
     expect(findByLabel(renderer, 'Analyze your first stroke')).toHaveLength(0);
+    const retry = oneByLabel(renderer, 'Try again');
+    expect(retry.props.accessibilityRole).toBe('button');
     await pressByLabel(renderer, 'Try again');
     expect(mockListShots).toHaveBeenCalledTimes(2);
-    expect(allText(renderer)).not.toContain('Your library couldn’t load');
+    expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
     expect(allText(renderer)).toContain('Your measured reads, in one place.');
     act(() => renderer.unmount());
   });

@@ -224,7 +224,7 @@ def main() -> None:
             )
         report["cases"].append(entry)
         print(json.dumps({k: entry[k] for k in ("case", "roiNorm", "wallClockSavedSec")}))
-    Path(args.out).write_text(json.dumps(report, indent=2))
+    Path(args.out).write_text(json.dumps(report, indent=2, allow_nan=False))
     print(f"-> {args.out}")
 
 

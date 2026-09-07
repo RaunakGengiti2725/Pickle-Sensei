@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, StyleSheet, Text } from 'react-native';
+import { FlatList, Linking, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalShotRow, PendingCapture } from '../../src/data/repository';
 import {
@@ -77,6 +77,7 @@ import {
   setActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
 } from '../../src/data/accountScope';
+import { color, type } from '../../src/design/tokens';
 
 /**
  * Button ledger for LibraryScreen: every pressable the screen renders (in
@@ -494,7 +495,7 @@ describe('LibraryScreen · reads tab', () => {
         );
       }
       const renderer = await renderLibrary();
-      expect(allText(renderer)).toContain('Your library couldn’t load');
+      expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
       expect(allText(renderer)).not.toContain(
         'Your measured reads, in one place.',
       );
@@ -514,7 +515,7 @@ describe('LibraryScreen · reads tab', () => {
       expect(allText(renderer)).toContain('Opening your library…');
       expect(findByLabel(renderer, 'Try again')).toBeNull();
       await act(async () => retry.resolve([shotScored]));
-      expect(allText(renderer)).not.toContain('Your library couldn’t load');
+      expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
       expect(
         findByLabel(renderer, 'Open forehand drive result'),
       ).not.toBeNull();
@@ -544,6 +545,48 @@ describe('LibraryScreen · reads tab', () => {
     await act(async () => oldReads.resolve([shotScored]));
     expect(renderer.toJSON()).toBeNull();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('shows scope and ordering as a plain caption while keeping the actual reads and scores', async () => {
+    const renderer = await renderLibrary();
+    try {
+      const caption = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === 'library-read-order')!;
+      expect(caption.props.children).toBe('ALL STROKES · NEWEST FIRST');
+      expect(caption.props.onPress).toBeUndefined();
+      expect(caption.props.accessibilityRole).toBeUndefined();
+      expect(StyleSheet.flatten(caption.props.style)).toMatchObject({
+        ...type.caption,
+        color: color.inkSoft,
+      });
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.label === 'ALL STROKES' ||
+            node.props.label === 'NEWEST FIRST',
+        ),
+      ).toHaveLength(0);
+      expect(renderer.root.findByType(FlatList).props.data).toEqual([
+        shotScored,
+        shotNotRead,
+      ]);
+      const score = renderer.root
+        .findAllByType(Text)
+        .find(
+          node => node.props.children === shotScored.overallScore!.toFixed(1),
+        )!;
+      expect(StyleSheet.flatten(score.props.style)).toMatchObject({
+        ...type.score,
+        color: color.ink,
+      });
+      await pressByLabel(renderer, 'Open forehand drive result');
+      expect(mockNavigate).toHaveBeenCalledWith('Result', {
+        analysisId: shotScored.id,
+      });
+    } finally {
+      act(() => renderer.unmount());
+    }
   });
 
   it('shows a loading state until the local repository answers', async () => {

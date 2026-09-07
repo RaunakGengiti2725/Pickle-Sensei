@@ -73,6 +73,97 @@ final class PoseReadinessEvaluatorTests: XCTestCase {
     XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 750, xOffset: 0.06)).state, .ready)
   }
 
+  /// A still body at 30 fps (`CameraEngine` stamps `Int((seconds * 1000).rounded())`,
+  /// so 33/34 ms steps) must be ready on every frame once 450 ms of stillness
+  /// have been observed — no frame lands exactly on `t - 450` at this cadence.
+  func testStillBodyAt30FpsIsReadyOnEveryFrameAfterTheWindow() {
+    let evaluator = PoseReadinessEvaluator()
+    var notReady: [Int] = []
+    var eligible = 0
+    for index in 0 ..< 150 {
+      let t = Int((Double(index) / 30.0 * 1_000).rounded())
+      let snapshot = evaluator.ingest(pose: pose(timestampMs: t))
+      guard t >= 450 else {
+        XCTAssertEqual(snapshot.state, .holdStill, "t=\(t)")
+        continue
+      }
+      eligible += 1
+      if !snapshot.isReady { notReady.append(t) }
+    }
+    XCTAssertEqual(eligible, 136)
+    XCTAssertEqual(notReady, [], "30 fps still body not ready at \(notReady)")
+  }
+
+  /// 60 fps with the ~30 % of frames the capture path skips while Vision is
+  /// in flight (seeded, replayable). Readiness is measured from the first
+  /// OBSERVED frame: the evaluator cannot vouch for stillness before it.
+  func testStillBodyAt60FpsWithDroppedFramesIsReadyOnEveryFrameAfterTheWindow() {
+    let evaluator = PoseReadinessEvaluator()
+    var rng = SplitMix64(seed: 1_683_590_610)
+    var firstObservedMs: Int?
+    var notReady: [Int] = []
+    var eligible = 0
+    for index in 0 ..< 600 {
+      if rng.next() % 10 < 3 { continue }
+      let t = Int((Double(index) / 60.0 * 1_000).rounded())
+      let snapshot = evaluator.ingest(pose: pose(timestampMs: t))
+      let first = firstObservedMs ?? t
+      firstObservedMs = first
+      guard t - first >= 450 else {
+        XCTAssertEqual(snapshot.state, .holdStill, "t=\(t)")
+        continue
+      }
+      eligible += 1
+      if !snapshot.isReady { notReady.append(t) }
+    }
+    XCTAssertEqual(firstObservedMs, 50)
+    XCTAssertGreaterThan(eligible, 300)
+    XCTAssertEqual(notReady, [], "60 fps with drops not ready at \(notReady)")
+  }
+
+  /// The window anchor is the newest sample at or before `t - 450`, never an
+  /// older one: a body that stepped 460 ms ago and has been still since is
+  /// ready, but 440 ms of stillness after a step is not.
+  func testWindowAnchorIsTheNewestSampleOutsideTheWindow() {
+    let evaluator = PoseReadinessEvaluator()
+    _ = evaluator.ingest(pose: pose(timestampMs: 0))
+    _ = evaluator.ingest(pose: pose(timestampMs: 200))
+    _ = evaluator.ingest(pose: pose(timestampMs: 400, xOffset: 0.2))
+    _ = evaluator.ingest(pose: pose(timestampMs: 600, xOffset: 0.2))
+    let early = evaluator.ingest(pose: pose(timestampMs: 840, xOffset: 0.2))
+    XCTAssertEqual(early.state, .holdStill)
+    XCTAssertEqual(early.stableForMs, 0)
+    let ready = evaluator.ingest(pose: pose(timestampMs: 860, xOffset: 0.2))
+    XCTAssertEqual(ready.state, .ready)
+    XCTAssertEqual(ready.stableForMs, 460)
+  }
+
+  func testDuplicateLandmarkNamesKeepTheMoreVisibleSampleWithoutTrapping() {
+    let evaluator = PoseReadinessEvaluator()
+    let base = pose(timestampMs: 0)
+    let duplicated = PoseFrame(
+      timestampMs: 0,
+      landmarks: base.landmarks + [PoseLandmark(name: "left_ankle", x: 0.44, y: 0.99, visibility: 0.5)],
+      confidence: base.confidence
+    )
+    let snapshot = evaluator.ingest(pose: duplicated)
+    // The lower-visibility duplicate at y=0.99 would breach the frame margin.
+    XCTAssertEqual(snapshot.state, .holdStill)
+    XCTAssertEqual(snapshot.missingJoints, [])
+  }
+
+  private struct SplitMix64 {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+      state &+= 0x9E37_79B9_7F4A_7C15
+      var z = state
+      z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+      z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+      return z ^ (z >> 31)
+    }
+  }
+
   private func pose(
     timestampMs: Int,
     xOffset: Double = 0,

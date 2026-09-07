@@ -2,6 +2,7 @@ import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle'
 import React from 'react';
 import { Modal } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 /**
@@ -127,6 +128,16 @@ function raiseStreak() {
   const celebration = { ...thirtyDayClub };
   identifyCeremony(celebration, GUEST_DATA_OWNER);
   useConsistencyStore.setState({ celebration });
+}
+
+function withSafeArea(children: React.ReactNode) {
+  return (
+    <SafeAreaInsetsContext.Provider
+      value={{ top: 44, bottom: 34, left: 0, right: 0 }}
+    >
+      {children}
+    </SafeAreaInsetsContext.Provider>
+  );
 }
 
 function registerAllTargets() {
@@ -415,7 +426,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<RankUpCelebration />);
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
     await act(async () => pressLabel(renderer, 'Dismiss rank celebration'));
@@ -428,7 +439,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<RankUpCelebration />);
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     await act(async () => requestClose(renderer, 'rank-up-celebration'));
     expect(useRankCelebrationStore.getState().current).toBeNull();
@@ -439,7 +450,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<RankUpCelebration />);
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     const button = hostPressable(renderer, 'rank-up-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -457,7 +468,7 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<RankUpCelebration />);
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     expect(() => unmount(renderer)).not.toThrow();
     useRankCelebrationStore.getState().dismiss();
@@ -470,7 +481,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<StreakCelebration />);
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(1);
     await act(async () =>
@@ -485,7 +496,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<StreakCelebration />);
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     await act(async () => requestClose(renderer, 'streak-celebration'));
     expect(useConsistencyStore.getState().celebration).toBeNull();
@@ -496,7 +507,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<StreakCelebration />);
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     const button = hostPressable(renderer, 'streak-celebration-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -521,7 +532,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<FirstRunWalkthrough />);
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     expect(hostByTestId(renderer, 'walkthrough-advance').length).toBe(1);
@@ -534,7 +545,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<FirstRunWalkthrough />);
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     const skip = hostPressable(renderer, 'walkthrough-skip');
@@ -555,7 +566,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<FirstRunWalkthrough />);
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     for (let i = 0; i < WALKTHROUGH_STEPS.length; i++) {
@@ -578,7 +589,7 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = createRenderer(<FirstRunWalkthrough />);
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     expect(() => unmount(renderer)).not.toThrow();
     await flush();
@@ -599,11 +610,13 @@ describe('all three global overlays raised together (App.tsx mount order)', () =
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = createRenderer(
-        <CeremonyHost>
-          <RankUpCelebration />
-          <StreakCelebration />
-          <FirstRunWalkthrough />
-        </CeremonyHost>,
+        withSafeArea(
+          <CeremonyHost>
+            <RankUpCelebration />
+            <StreakCelebration />
+            <FirstRunWalkthrough />
+          </CeremonyHost>,
+        ),
       );
     });
     await flush();

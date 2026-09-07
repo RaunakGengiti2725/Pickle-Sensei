@@ -2,6 +2,7 @@ import '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 jest.mock('../../src/data/db', () => ({
@@ -74,7 +75,13 @@ describe('backdrop dismiss targets announce as buttons', () => {
     });
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
-      renderer = TestRenderer.create(<StreakCelebration />);
+      renderer = TestRenderer.create(
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 59, bottom: 34, left: 0, right: 0 }}
+        >
+          <StreakCelebration />
+        </SafeAreaInsetsContext.Provider>,
+      );
     });
     expect(
       backdrop(renderer, 'Dismiss milestone celebration').props
@@ -105,7 +112,13 @@ describe('backdrop dismiss targets announce as buttons', () => {
     });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<RankUpCelebration />);
+      renderer = TestRenderer.create(
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 59, bottom: 34, left: 0, right: 0 }}
+        >
+          <RankUpCelebration />
+        </SafeAreaInsetsContext.Provider>,
+      );
     });
     expect(
       backdrop(renderer, 'Dismiss rank celebration').props.accessibilityRole,
@@ -129,7 +142,13 @@ describe('backdrop dismiss targets announce as buttons', () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      renderer = TestRenderer.create(
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 44, bottom: 34, left: 0, right: 0 }}
+        >
+          <FirstRunWalkthrough />
+        </SafeAreaInsetsContext.Provider>,
+      );
     });
     const dismiss = backdrop(renderer, 'Dismiss walkthrough');
     expect(dismiss.props.accessibilityRole).toBe('button');

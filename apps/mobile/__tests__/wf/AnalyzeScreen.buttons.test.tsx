@@ -52,14 +52,10 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
   useRoute: () => ({ params: mockRouteParams }),
 }));
-jest.mock('react-native-safe-area-context', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  return {
-    SafeAreaView: (props: { children?: React.ReactNode }) =>
-      React.createElement(View, null, props.children),
-  };
-});
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  initialWindowMetrics: { insets: { top: 0, bottom: 0, left: 0, right: 0 } },
+}));
 jest.mock('react-native-svg', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -85,13 +81,23 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Modal, Text, TextInput } from 'react-native';
+import {
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+} from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import TestRenderer, {
   act,
   type ReactTestInstance,
   type ReactTestRenderer,
 } from 'react-test-renderer';
-import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
+import { ANALYZE_STEPS, AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
+import { Button, PressableScale } from '../../src/design/components';
+import { Icon } from '../../src/design/icons';
 import { TargetSelector } from '../../src/camera/TargetSelector';
 import {
   assertCapturedClip,
@@ -301,13 +307,19 @@ function buttonState(
   return node.props.accessibilityState ?? {};
 }
 
+let safeAreaInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+
 async function renderScreen(
   source: 'camera' | 'library',
 ): Promise<ReactTestRenderer> {
   mockRouteParams = { source };
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = TestRenderer.create(<AnalyzeScreen />);
+    renderer = TestRenderer.create(
+      <SafeAreaInsetsContext.Provider value={safeAreaInsets}>
+        <AnalyzeScreen />
+      </SafeAreaInsetsContext.Provider>,
+    );
   });
   if (source === 'library') {
     // Library imports auto-launch after a short arming delay (160ms).
@@ -346,16 +358,118 @@ describe('AnalyzeScreen button ledger', () => {
     jest.useFakeTimers();
     jest.clearAllMocks();
     mockRouteParams = {};
+    safeAreaInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
   });
 
   afterEach(() => {
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   // ─── READY phase (camera source) ────────────────────────────────────────
 
   describe('ready phase', () => {
+    it.each([
+      { width: 375, height: 667, top: 20, bottom: 0 },
+      { width: 393, height: 852, top: 59, bottom: 34 },
+    ])(
+      'keeps only the short camera CTA pinned and scrolls the full record hint at $width × $height / 3.571x',
+      async dimensions => {
+        jest.spyOn(Dimensions, 'get').mockReturnValue({
+          width: dimensions.width,
+          height: dimensions.height,
+          scale: 3,
+          fontScale: 3.571,
+        });
+        safeAreaInsets = {
+          top: dimensions.top,
+          bottom: dimensions.bottom,
+          left: 0,
+          right: 0,
+        };
+        const renderer = await renderScreen('camera');
+        const scroll = renderer.root.findByType(ScrollView);
+        const footer = renderer.root.findByProps({
+          testID: 'analyze-camera-actions',
+        });
+        expect(scroll.props.testID).toBe('analyze-setup-content');
+        expect(scroll.props.scrollEnabled).not.toBe(false);
+        expect(
+          footer.findAllByType(Text).map(text => text.props.children),
+        ).toEqual(['Open camera']);
+        const hint = scroll
+          .findAllByType(Text)
+          .filter(
+            text =>
+              text.props.children === 'Camera opens first. You control record.',
+          );
+        expect(hint).toHaveLength(1);
+        const button = footer.findByType(Button);
+        expect(button.findAllByType(Icon)).toHaveLength(0);
+        expect(button.findByType(PressableScale).props.accessibilityLabel).toBe(
+          'Open automatic camera',
+        );
+        expect(scroll.findAllByType(Button)).not.toContain(button);
+        for (const text of [hint[0]!, button.findByType(Text)]) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.adjustsFontSizeToFit).not.toBe(true);
+          expect(text.props.allowFontScaling).not.toBe(false);
+          expect(StyleSheet.flatten(text.props.style).fontSize).toBeGreaterThan(
+            0,
+          );
+        }
+        for (const step of ANALYZE_STEPS) {
+          expect(rendered(renderer)).toContain(step.title);
+          expect(rendered(renderer)).toContain(step.detail);
+        }
+        expect(capture).not.toHaveBeenCalled();
+        expect(analyze).not.toHaveBeenCalled();
+        await unmount(renderer);
+      },
+    );
+
+    it.each([0.82, 1, 1.3])(
+      'keeps the original footer copy, label and icons at %sx',
+      async fontScale => {
+        jest
+          .spyOn(Dimensions, 'get')
+          .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+        safeAreaInsets = { top: 20, bottom: 0, left: 0, right: 0 };
+        const renderer = await renderScreen('camera');
+        const footer = renderer.root.findByProps({
+          testID: 'analyze-camera-actions',
+        });
+        expect(
+          footer.findAllByType(Text).map(text => text.props.children),
+        ).toEqual([
+          'Camera opens first. You control record.',
+          'Open automatic camera',
+        ]);
+        expect(
+          footer
+            .findByType(Button)
+            .findAllByType(Icon)
+            .map(icon => icon.props.name),
+        ).toEqual(['camera', 'arrow']);
+        expect(
+          renderer.root
+            .findByType(ScrollView)
+            .findAllByType(Text)
+            .some(
+              text =>
+                text.props.children ===
+                'Camera opens first. You control record.',
+            ),
+        ).toBe(false);
+        await unmount(renderer);
+      },
+    );
+
     it('header Close goes back', async () => {
       const renderer = await renderScreen('camera');
       await press(renderer, 'Close');
@@ -364,39 +478,46 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('technique radio → declares; Open automatic camera runs capture + analysis with the declaration', async () => {
-      capture.mockResolvedValue(guidedClip);
-      analyze.mockResolvedValue(scoredOutcome('analysis-1'));
-      const renderer = await renderScreen('camera');
+    it.each([1, 3.571])(
+      'technique radio → declares; Open automatic camera runs capture + analysis with the declaration at %sx',
+      async fontScale => {
+        jest
+          .spyOn(Dimensions, 'get')
+          .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+        safeAreaInsets = { top: 20, bottom: 0, left: 0, right: 0 };
+        capture.mockResolvedValue(guidedClip);
+        analyze.mockResolvedValue(scoredOutcome('analysis-1'));
+        const renderer = await renderScreen('camera');
 
-      expect(buttonState(renderer, 'Forehand Drive').selected).toBe(false);
-      await press(renderer, 'Forehand Drive');
-      expect(buttonState(renderer, 'Forehand Drive').selected).toBe(true);
+        expect(buttonState(renderer, 'Forehand Drive').selected).toBe(false);
+        await press(renderer, 'Forehand Drive');
+        expect(buttonState(renderer, 'Forehand Drive').selected).toBe(true);
 
-      await pressButton(renderer, 'Open automatic camera');
+        await press(renderer, 'Open automatic camera');
 
-      expect(capture).toHaveBeenCalledTimes(1);
-      expect(savePendingCapture).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(String),
-        'unrecognized',
-        guidedClip,
-        'forehand_drive',
-      );
-      expect(analyze).toHaveBeenCalledTimes(1);
-      expect(analyze.mock.calls[0]![0]).toEqual(
-        expect.objectContaining({
-          declaredStroke: 'forehand_drive',
-          declaredCanonical: 'FOREHAND_DRIVE',
-          clip: guidedClip,
-        }),
-      );
-      expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
-        analysisId: 'analysis-1',
-      });
-      expect(reportScoredAnalysisForReview).toHaveBeenCalledTimes(1);
-      await unmount(renderer);
-    });
+        expect(capture).toHaveBeenCalledTimes(1);
+        expect(savePendingCapture).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.any(String),
+          'unrecognized',
+          guidedClip,
+          'forehand_drive',
+        );
+        expect(analyze).toHaveBeenCalledTimes(1);
+        expect(analyze.mock.calls[0]![0]).toEqual(
+          expect.objectContaining({
+            declaredStroke: 'forehand_drive',
+            declaredCanonical: 'FOREHAND_DRIVE',
+            clip: guidedClip,
+          }),
+        );
+        expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+          analysisId: 'analysis-1',
+        });
+        expect(reportScoredAnalysisForReview).toHaveBeenCalledTimes(1);
+        await unmount(renderer);
+      },
+    );
 
     it('Auto detect radio → capture auto-scores without a declaration', async () => {
       capture.mockResolvedValue(guidedClip);
@@ -463,37 +584,48 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('Open automatic camera: double tap launches the camera exactly once', async () => {
-      let resolveCapture!: (clip: CapturedClip) => void;
-      capture.mockImplementation(
-        () =>
-          new Promise<CapturedClip>(resolve => {
-            resolveCapture = resolve;
-          }),
-      );
-      const renderer = await renderScreen('camera');
-      const node = findByLabel(renderer, 'Open automatic camera');
-      if (!node) throw new Error('missing Open automatic camera');
-      await act(async () => {
-        node.props.onPress();
-        node.props.onPress();
-        node.props.onPress();
-      });
-      expect(capture).toHaveBeenCalledTimes(1);
-      expect(rendered(renderer)).toContain('Opening camera…');
-      // Working phase: the launch button is gone; header Close is the exit.
-      expect(hasLabel(renderer, 'Open automatic camera')).toBe(false);
-      await press(renderer, 'Close');
-      expect(cancelCameraOperation).toHaveBeenCalledTimes(1);
-      expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-      await act(async () => {
-        resolveCapture(guidedClip);
-      });
-      await unmount(renderer);
-    });
+    it.each([1, 3.571])(
+      'Open automatic camera: double tap launches the camera exactly once at %sx',
+      async fontScale => {
+        jest
+          .spyOn(Dimensions, 'get')
+          .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+        safeAreaInsets = { top: 20, bottom: 0, left: 0, right: 0 };
+        let resolveCapture!: (clip: CapturedClip) => void;
+        capture.mockImplementation(
+          () =>
+            new Promise<CapturedClip>(resolve => {
+              resolveCapture = resolve;
+            }),
+        );
+        const renderer = await renderScreen('camera');
+        const node = findByLabel(renderer, 'Open automatic camera');
+        if (!node) throw new Error('missing Open automatic camera');
+        await act(async () => {
+          node.props.onPress();
+          node.props.onPress();
+          node.props.onPress();
+        });
+        expect(capture).toHaveBeenCalledTimes(1);
+        expect(rendered(renderer)).toContain('Opening camera…');
+        // Working phase: the launch button is gone; header Close is the exit.
+        expect(hasLabel(renderer, 'Open automatic camera')).toBe(false);
+        await press(renderer, 'Close');
+        expect(cancelCameraOperation).toHaveBeenCalledTimes(1);
+        expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          resolveCapture(guidedClip);
+        });
+        await unmount(renderer);
+      },
+    );
 
     it('Open automatic camera: user cancel returns to ready, no error surface', async () => {
-      capture.mockRejectedValue(new Error('User cancelled the camera.'));
+      capture.mockRejectedValue(
+        Object.assign(new Error('Camera capture was canceled.'), {
+          code: 'camera.cancelled',
+        }),
+      );
       const renderer = await renderScreen('camera');
       await pressButton(renderer, 'Open automatic camera');
       expect(rendered(renderer)).not.toContain('Nothing was rated.');
@@ -926,7 +1058,9 @@ describe('AnalyzeScreen button ledger', () => {
       expect(mockNavigation.goBack).not.toHaveBeenCalled();
       await unmount(renderer);
       importVideo.mockRejectedValueOnce(
-        new Error('User cancelled the video picker.'),
+        Object.assign(new Error('Video import was canceled.'), {
+          code: 'camera.cancelled',
+        }),
       );
       const reopened = await renderScreen('library');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);

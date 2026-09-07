@@ -35,7 +35,7 @@ import {
   GOOGLE_WEB_CLIENT_ID,
 } from '../config/authConfig';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
-import { getDb } from '../data/db';
+import { getDb, type LocalDb } from '../data/db';
 import { getKv, purgeOwnerData, setKv } from '../data/repository';
 import {
   DataOwnerChangedError,
@@ -111,6 +111,21 @@ export interface AuthError {
   message: string;
 }
 
+/**
+ * The on-device SQLite store could not be opened, migrated or read during
+ * hydrate(). Local data (shots, kv) is unreachable for this launch; the
+ * credential itself is unaffected — it lives in the Keychain. Restoring it
+ * still requires a readable suppression/replacement gate; an unknown gate is
+ * held for retry, never interpreted as a sign-out or an absent marker.
+ */
+export interface LocalDataError {
+  code: 'local_data.unavailable';
+  message: string;
+}
+
+export const LOCAL_DATA_UNAVAILABLE_MESSAGE =
+  'Your saved data on this phone could not be opened. Your stored sign-in has not been removed; restart the app to try again.';
+
 /** Outcome of the on-device cleanup that follows a server-confirmed
  * deletion. `failed` means the account is gone server-side but some of its
  * rows are still on this phone — the surface that started the deletion must
@@ -143,6 +158,8 @@ interface AuthState {
   restoreState: AuthRestoreState;
   acknowledgeReturningSession: () => Promise<void>;
   retrySessionPersistence: () => Promise<void>;
+  /** SQLite failed during the most recent hydrate(); null when local data opened. */
+  localDataError: LocalDataError | null;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
   hydrate: () => Promise<void>;
@@ -767,6 +784,13 @@ function adoptRotatedTokens(
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
 
+function localDataUnavailable(): LocalDataError {
+  return {
+    code: 'local_data.unavailable',
+    message: LOCAL_DATA_UNAVAILABLE_MESSAGE,
+  };
+}
+
 function keepSessionAlive(
   session: AuthSession,
   apiSession: Pick<
@@ -1078,18 +1102,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   busy: false,
   error: null,
+  localDataError: null,
   deletionCleanup: null,
   restoreState: { status: 'restoring' },
 
   hydrate: async () => {
     if (get().busy) return;
     const revision = ++authRevision;
-    clearSyncedRuntime();
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    const previous = get();
     set({
       hydrated: false,
-      session: null,
       error: null,
+      localDataError: null,
       restoreState: { status: 'restoring' },
     });
     try {
@@ -1099,6 +1123,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (revision !== authRevision) return;
       const suppression = pendingSuppression;
       if (suppression) {
+        clearSyncedRuntime();
+        setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+        set({ session: null });
         await clearSignedOutVault(
           suppression.deletedOwner,
           suppression.record,
@@ -1122,7 +1149,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         return;
       }
-      const db = getDb();
+      // Read the durable credential first, without consulting a provider SDK.
+      // SQLite data failures do not revoke it. The restore marker is a separate
+      // safety gate: unreadable is not absent, and cannot resurrect a suppressed
+      // or replaced credential. Leave an already-live session intact on failure.
+      const persisted = await waitForStorage(readPersistedSession()).catch(
+        () => ({ status: 'unavailable' as const }),
+      );
+      if (revision !== authRevision) return;
+      const db: LocalDb = getDb();
       let restoreRecord = parseSessionRestoreRecord(
         await waitForStorage(getKv(db, SESSION_RESTORE_KV_KEY)),
       );
@@ -1130,47 +1165,66 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       persistenceGeneration = Math.max(
         persistenceGeneration,
         restoreRecord?.generation ?? 0,
+        persisted.status === 'available'
+          ? (persisted.session.generation ?? 0)
+          : 0,
       );
-      // Earlier builds wrote provider subjects to SQLite. Blank that legacy
-      // value during migration instead of hydrating it into a trusted session.
-      const legacy = await waitForStorage(getKv(db, LEGACY_SESSION_KV_KEY));
-      if (revision !== authRevision) return;
-      if (legacy) {
-        if (!restoreRecord) {
-          const hint: SessionRestoreRecord = {
-            version: 1,
-            ...returningSessionState('legacy_credentials_missing', null),
-          };
-          const saved = await waitForStorage(
-            serializeRestorePersistence(async () => {
-              if (revision !== authRevision) return false;
-              return persistRestoreRecord(hint);
-            }),
+      clearSyncedRuntime();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      set({ session: null });
+      let legacy: string | null = null;
+      let raw: string | null = null;
+      try {
+        // Earlier builds wrote provider subjects to SQLite. Blank that legacy
+        // value during migration instead of hydrating it into a trusted session.
+        legacy = await waitForStorage(getKv(db, LEGACY_SESSION_KV_KEY));
+        if (revision !== authRevision) return;
+        if (legacy) {
+          if (!restoreRecord) {
+            const hint: SessionRestoreRecord = {
+              version: 1,
+              ...returningSessionState('legacy_credentials_missing', null),
+            };
+            const saved = await waitForStorage(
+              serializeRestorePersistence(async () => {
+                if (revision !== authRevision) return false;
+                return persistRestoreRecord(hint);
+              }),
+            );
+            if (revision !== authRevision) return;
+            if (!saved)
+              throw new Error('The returning sign-in hint could not be saved.');
+            restoreRecord = hint;
+          }
+          const scrubbed = await waitForStorage(
+            serializeRestorePersistence(scrubLegacyIdentity),
           );
           if (revision !== authRevision) return;
-          if (!saved)
-            throw new Error('The returning sign-in hint could not be saved.');
-          restoreRecord = hint;
+          if (!scrubbed)
+            set({
+              localDataError: localDataUnavailable(),
+              error: storageError(
+                'This device could not remove old sign-in details. Try again.',
+              ),
+            });
         }
-        const scrubbed = await waitForStorage(
-          serializeRestorePersistence(scrubLegacyIdentity),
+      } catch {
+        if (revision !== authRevision) return;
+        set({ localDataError: localDataUnavailable() });
+      }
+      try {
+        const localMode = await waitForStorage(
+          db.execute('SELECT value FROM kv WHERE key = ?', [LOCAL_MODE_KV_KEY]),
         );
         if (revision !== authRevision) return;
-        if (!scrubbed)
-          set({
-            error: storageError(
-              'This device could not remove old sign-in details. Try again.',
-            ),
-          });
+        raw =
+          typeof localMode.rows[0]?.['value'] === 'string'
+            ? localMode.rows[0]['value']
+            : null;
+      } catch {
+        if (revision !== authRevision) return;
+        set({ localDataError: localDataUnavailable() });
       }
-      const localMode = await waitForStorage(
-        db.execute('SELECT value FROM kv WHERE key = ?', [LOCAL_MODE_KV_KEY]),
-      );
-      if (revision !== authRevision) return;
-      const raw =
-        typeof localMode.rows[0]?.['value'] === 'string'
-          ? localMode.rows[0]['value']
-          : null;
       if (raw === LOCAL_GUEST_VALUE && !restoreRecord) {
         setActiveDataOwner(GUEST_DATA_OWNER);
         set({
@@ -1181,18 +1235,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      // The durable session: whoever signed in on this device last stays
-      // signed in across relaunches, backgrounding and reboots, for any
-      // provider, until they sign out or the server refuses the refresh
-      // token. No provider SDK is consulted for this.
-      const persisted = await waitForStorage(readPersistedSession());
-      if (revision !== authRevision) return;
-      if (persisted.status === 'available') {
-        persistenceGeneration = Math.max(
-          persistenceGeneration,
-          persisted.session.generation ?? 0,
-        );
-      }
       if (
         persisted.status === 'available' &&
         permitsPersistedSession(restoreRecord, persisted.session.generation)
@@ -1277,9 +1319,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // worth attempting when the web client id needed for a
       // backend-verifiable token is configured. A success bootstraps a new
       // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await waitForStorage(
-        getKv(db, LAST_PROVIDER_KV_KEY),
-      );
+      let lastProvider: string | null = null;
+      try {
+        lastProvider = await waitForStorage(getKv(db, LAST_PROVIDER_KV_KEY));
+      } catch {
+        if (revision !== authRevision) return;
+        set({ localDataError: localDataUnavailable() });
+      }
       if (revision !== authRevision) return;
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
@@ -1353,19 +1399,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         session: null,
         hydrated: true,
-        restoreState: { status: 'signed_out', reason: 'new_install' },
+        restoreState: get().localDataError
+          ? { status: 'unavailable', reason: 'local_storage_unavailable' }
+          : { status: 'signed_out', reason: 'new_install' },
       });
     } catch {
       if (revision !== authRevision) return;
-      clearSyncedRuntime();
-      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      const session = get().session;
       set({
-        session: null,
         hydrated: true,
-        restoreState: {
-          status: 'unavailable',
-          reason: 'local_storage_unavailable',
-        },
+        localDataError: localDataUnavailable(),
+        restoreState: session
+          ? session.localOnly
+            ? { status: 'guest' }
+            : previous.session === session &&
+                previous.restoreState.status === 'restored'
+              ? previous.restoreState
+              : { status: 'restored', connectivity: 'offline' }
+          : { status: 'unavailable', reason: 'local_storage_unavailable' },
         error: storageError(
           'This device could not read or save sign-in state. Try again.',
         ),

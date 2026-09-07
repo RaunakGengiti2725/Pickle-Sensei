@@ -23,6 +23,12 @@ export interface FakeUpstash {
   failStatus: number | null;
   /** When true, every pipeline call hangs until the caller's AbortSignal fires. */
   hang: boolean;
+  /** When set, the pipeline answers every command it returns a string for with
+   * that per-command `{ error }` instead of executing it (Upstash reports
+   * e.g. `ERR max requests limit exceeded` this way, HTTP 200). */
+  commandError: ((cmd: Cmd) => string | null) | null;
+  /** When set, the pipeline reply carries only this many results (short reply). */
+  truncateRepliesTo: number | null;
   calls: number;
   restore(): void;
 }
@@ -63,7 +69,9 @@ function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; 
       const entry = live(store, args[0]);
       if (!entry) return { result: -2 };
       if (entry.expiresAtMs === null) return { result: -1 };
-      return { result: Math.max(1, Math.ceil((entry.expiresAtMs - Date.now()) / 1_000)) };
+      return {
+        result: Math.max(1, Math.ceil((entry.expiresAtMs - Date.now()) / 1_000)),
+      };
     }
     case "SET": {
       const [key, value, ex, seconds] = args;
@@ -83,14 +91,19 @@ function runCommand(store: FakeUpstash["store"], cmd: Cmd): { result?: unknown; 
     case "INCR": {
       const entry = live(store, args[0]);
       const next = (entry ? Number(entry.value) : 0) + 1;
-      store.set(args[0], { value: String(next), expiresAtMs: entry?.expiresAtMs ?? null });
+      store.set(args[0], {
+        value: String(next),
+        expiresAtMs: entry?.expiresAtMs ?? null,
+      });
       return { result: next };
     }
     case "EXPIRE": {
       const [key, seconds, flag] = args;
       const entry = live(store, key);
       if (!entry) return { result: 0 };
-      if (flag && flag.toUpperCase() === "NX" && entry.expiresAtMs !== null) return { result: 0 };
+      if (flag && flag.toUpperCase() === "NX" && entry.expiresAtMs !== null) {
+        return { result: 0 };
+      }
       entry.expiresAtMs = Date.now() + Number(seconds) * 1_000;
       return { result: 1 };
     }
@@ -106,6 +119,8 @@ export function fakeUpstash(): FakeUpstash {
     commands: [],
     failStatus: null,
     hang: false,
+    commandError: null,
+    truncateRepliesTo: null,
     calls: 0,
     restore() {
       globalThis.fetch = original;
@@ -120,7 +135,9 @@ export function fakeUpstash(): FakeUpstash {
         const signal = init?.signal;
         if (!signal) return;
         if (signal.aborted) reject(signal.reason);
-        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
       });
     }
     if (fake.failStatus !== null) {
@@ -130,9 +147,12 @@ export function fakeUpstash(): FakeUpstash {
     const results: PipelineResult = [];
     for (const cmd of commands) {
       fake.commands.push(cmd);
-      results.push(runCommand(fake.store, cmd));
+      const injected = fake.commandError?.(cmd) ?? null;
+      results.push(injected !== null ? { error: injected } : runCommand(fake.store, cmd));
     }
-    return new Response(JSON.stringify(results), {
+    const reply =
+      fake.truncateRepliesTo === null ? results : results.slice(0, fake.truncateRepliesTo);
+    return new Response(JSON.stringify(reply), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

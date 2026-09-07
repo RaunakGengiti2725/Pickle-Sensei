@@ -200,6 +200,7 @@ export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<Job
 }
 
 export const DELETION_TASK_MAX_ATTEMPTS = 5;
+export const DELETION_TASK_WINDOW = 20;
 
 /** Deletion workflow executor (directive §58) — resumable, auditable. */
 export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
@@ -208,18 +209,23 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
   // are retried up to the attempt cap so a transient storage/DB error cannot
   // permanently stall the account-deletion workflow; past the cap they stay
   // visibly 'failed'.
+  // Round-robin: never-attempted rows first, then least recently attempted, so
+  // held-back rows cannot fill the window every cycle and starve newer
+  // deletions (every eligible row is tried once per ceil(n / WINDOW) cycles).
   const { rows } = await deps.pool.query(
     `SELECT id, user_id, kind FROM deletion_task
      WHERE status IN ('queued','processing')
         OR (status = 'failed' AND attempts < $1)
-     ORDER BY created_at LIMIT 20`,
-    [DELETION_TASK_MAX_ATTEMPTS],
+     ORDER BY last_attempt_at NULLS FIRST, created_at LIMIT $2`,
+    [DELETION_TASK_MAX_ATTEMPTS, DELETION_TASK_WINDOW],
   );
   let processed = 0;
   for (const task of rows as Array<{ id: string; user_id: string; kind: string }>) {
-    await deps.pool.query("UPDATE deletion_task SET status = 'processing' WHERE id = $1", [
-      task.id,
-    ]);
+    await deps.pool.query(
+      "UPDATE deletion_task SET status = 'processing', last_attempt_at = clock_timestamp() WHERE id = $1",
+      [task.id],
+    );
+    let note: Record<string, string> | null = null;
     try {
       switch (task.kind) {
         case "media_purge": {
@@ -258,12 +264,11 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
           );
           break;
         case "idp_revoke":
-          // Requires identity-provider admin credentials; keep queued visibly.
-          await deps.pool.query(
-            "UPDATE deletion_task SET status = 'queued', detail = '{\"blocked\":\"idp credentials not configured\"}' WHERE id = $1",
-            [task.id],
-          );
-          continue;
+          // This worker holds no identity-provider admin credentials: the
+          // step is terminal with the reason recorded in `detail`, never an
+          // open row that outlives the account.
+          note = { skipped: "idp credentials not configured" };
+          break;
         case "final_hard_delete": {
           // Only when every other task for this user is done.
           // Other final_hard_delete rows for the same user are the same
@@ -271,7 +276,7 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
           // they counted, each copy would wait on the others and the deletion
           // would stall forever.
           const pending = await deps.pool.query(
-            "SELECT count(*)::int AS n FROM deletion_task WHERE user_id = $1 AND status NOT IN ('done') AND id <> $2 AND kind NOT IN ('idp_revoke','final_hard_delete')",
+            "SELECT count(*)::int AS n FROM deletion_task WHERE user_id = $1 AND status NOT IN ('done') AND id <> $2 AND kind <> 'final_hard_delete'",
             [task.user_id, task.id],
           );
           if ((pending.rows[0]?.n ?? 1) > 0) {
@@ -289,8 +294,8 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
           throw new Error(`unknown deletion task kind ${task.kind}`);
       }
       await deps.pool.query(
-        "UPDATE deletion_task SET status = 'done', processed_at = now() WHERE id = $1",
-        [task.id],
+        "UPDATE deletion_task SET status = 'done', processed_at = now(), detail = COALESCE($2::jsonb, detail) WHERE id = $1",
+        [task.id, note ? JSON.stringify(note) : null],
       );
       processed++;
     } catch (error) {

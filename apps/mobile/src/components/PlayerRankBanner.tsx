@@ -6,13 +6,10 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import {
@@ -40,8 +37,8 @@ import { plural } from '../util/plural';
 /**
  * Home-page rank banner: the player's tier emblem, rating, and training
  * streak in one glanceable strip. Tapping the banner no longer leaves the
- * page — the emblem GLOWS in the tier's color and the banner unfolds in
- * place: the full tier ladder, the player's division, every contributing
+ * page — the banner unfolds in place with a brief transition, showing
+ * the full tier ladder, the player's division, every contributing
  * technique, and how the form-weighted rating works. Tap again to fold it
  * away. The streak block is its own press target (→ the Consistency page).
  *
@@ -82,7 +79,7 @@ export function PlayerRankBanner(props: {
   const foldAwayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useReducedMotion();
   const { width, fontScale } = useWindowDimensions();
-  const stacked = width / fontScale < 360;
+  const stacked = fontScale >= 1.5 || width / fontScale < 360;
 
   useEffect(
     () => () => {
@@ -128,10 +125,8 @@ export function PlayerRankBanner(props: {
     ? RANK_TIER_STYLE[summary.tier].accent
     : color.onDarkSubtle;
 
-  // ---- Tap choreography: glow pulse, then unfold. -------------------------
-  const glow = useSharedValue(0);
+  // ---- Tap choreography: brief unfold, with no ongoing motion. ------------
   const unfold = useSharedValue(0);
-  const emblemPop = useSharedValue(0);
 
   const toggle = () => {
     const opening = !expanded;
@@ -147,19 +142,10 @@ export function PlayerRankBanner(props: {
       return;
     }
     if (opening) {
-      glow.value = 0;
-      glow.value = withSequence(
-        withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }),
-        withTiming(0, { duration: 620, easing: Easing.out(Easing.cubic) }),
-      );
-      emblemPop.value = withSequence(
-        withTiming(1, { duration: 170, easing: Easing.out(Easing.quad) }),
-        withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) }),
-      );
-      unfold.value = withDelay(
-        140,
-        withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) }),
-      );
+      unfold.value = withTiming(1, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
     } else {
       unfold.value = withTiming(0, {
         duration: FOLD_AWAY_MS,
@@ -172,10 +158,6 @@ export function PlayerRankBanner(props: {
     }
   };
 
-  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.5 }));
-  const emblemStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + emblemPop.value * 0.12 }],
-  }));
   const unfoldStyle = useAnimatedStyle(() => ({
     opacity: unfold.value,
     transform: [{ translateY: (1 - unfold.value) * -8 }],
@@ -207,17 +189,6 @@ export function PlayerRankBanner(props: {
 
   return (
     <View style={styles.banner} testID="player-rank-banner">
-      <LinearGradient
-        colors={[color.courtDeep, color.surfaceDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.glow, { backgroundColor: accent }, glowStyle]}
-      />
       <View
         style={[styles.row, stacked && styles.rowStacked]}
         testID="player-rank-banner-row"
@@ -235,9 +206,9 @@ export function PlayerRankBanner(props: {
           style={[styles.mainPress, stacked && styles.mainPressStacked]}
           testID="player-rank-banner-toggle"
         >
-          <Animated.View style={[emblemStyle, stacked && styles.emblemStacked]}>
+          <View style={stacked && styles.emblemStacked}>
             <RankIcon tier={summary?.tier ?? null} size={46} />
-          </Animated.View>
+          </View>
           <View
             style={[styles.body, stacked && styles.bodyStacked]}
             testID="player-rank-banner-body"
@@ -254,10 +225,11 @@ export function PlayerRankBanner(props: {
               </Text>
               {summary ? (
                 <Text
-                  style={[type.bodyBold, styles.rating, { color: accent }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.5}
+                  style={[
+                    type.bodyBold,
+                    styles.rating,
+                    { color: color.onDark },
+                  ]}
                   accessibilityLabel={`Rating ${summary.rating.toFixed(2)} out of 10`}
                   testID="player-rank-banner-rating"
                 >
@@ -288,7 +260,7 @@ export function PlayerRankBanner(props: {
           testID="player-rank-banner-streak"
         >
           <View style={styles.streakTop}>
-            <AnimatedFlame intensity={intensity} size={18} />
+            <AnimatedFlame intensity={intensity} size={18} dark />
             <Text style={styles.streakCount}>{props.streakDays}</Text>
           </View>
           <Text
@@ -411,10 +383,11 @@ const styles = StyleSheet.create({
   banner: {
     marginTop: space.md,
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceDark,
+    backgroundColor: color.inkElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
   },
-  glow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -458,15 +431,19 @@ const styles = StyleSheet.create({
   bodyStacked: { flex: 0, width: '100%' },
   eyebrow: { color: color.volt },
   tierRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'baseline',
-    gap: 8,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.xxs,
     marginTop: 2,
   },
   tierRowStacked: { flexDirection: 'column', alignItems: 'stretch' },
   tierLabel: { color: color.onDark, flexShrink: 1, maxWidth: '100%' },
-  rating: { flexShrink: 0, maxWidth: '100%', fontVariant: ['tabular-nums'] },
+  rating: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+    fontVariant: ['tabular-nums'],
+  },
   ratingScale: { color: color.onDarkSubtle },
   detail: { color: color.onDarkSubtle, marginTop: 2 },
   streakBlock: {
@@ -496,8 +473,7 @@ const styles = StyleSheet.create({
   },
   streakLabel: {
     ...type.micro,
-    color: color.onDarkFaint,
-    fontSize: 9,
+    color: color.onDarkMuted,
     letterSpacing: 0.5,
     marginTop: 1,
     textAlign: 'center',
@@ -540,7 +516,7 @@ const styles = StyleSheet.create({
   tierListLabelActive: { color: color.onDark },
   tierListLabelStacked: { flex: 0 },
   tierListRange: {
-    color: color.onDarkFaint,
+    color: color.onDarkMuted,
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.4,
     maxWidth: '100%',

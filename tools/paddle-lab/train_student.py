@@ -31,6 +31,7 @@ from student_lib import (
     HEATMAP_SIZE,
     TEACHER_SCORE_FLOOR,
     StudentPaddleNet,
+    clip_labels_are_legacy,
     extract_frames,
     letterbox,
     load_examples,
@@ -65,7 +66,11 @@ def build_tensors(repo: Path, examples: list[dict]) -> tuple[torch.Tensor, torch
         by_clip.setdefault(e["media"]["bundleClip"], []).append(e)
     xs, ys = [], []
     for clip, clip_examples in sorted(by_clip.items()):
-        frames = extract_frames(repo / clip, [e["tMs"] for e in clip_examples])
+        frames = extract_frames(
+            repo / clip,
+            [e["tMs"] for e in clip_examples],
+            legacy_clock=clip_labels_are_legacy(clip_examples),
+        )
         for e in clip_examples:
             img = frames.get(e["tMs"])
             if img is None:
@@ -162,7 +167,7 @@ def main() -> None:
         "honestFraming": "TINY-DATA groundwork: 2 clips / 2 sessions; not a promotion candidate; no accuracy claim beyond student_bench.py numbers",
     }
     with open(out_dir / "training-report.json", "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, allow_nan=False)
         f.write("\n")
     print(f"params {n_params}, wall {wall:.1f}s -> {out_dir}")
 

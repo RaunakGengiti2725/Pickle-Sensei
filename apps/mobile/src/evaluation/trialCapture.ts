@@ -146,14 +146,16 @@ export function buildEvaluationTrial(
         : null,
     envelopeOverall:
       outcome.kind === 'quality_blocked'
-        ? outcome.envelope.overall
+        ? (outcome.envelope?.overall ?? null)
         : isRecorded
           ? (outcome.record.captureEnvelope?.overall ?? null)
           : null,
     latencyMs: input.latencyMs,
     appVersion: input.appVersion,
     engineVersion: isRecorded ? outcome.record.engineVersion : null,
-    modelBundleVersion: isRecorded ? 'on-device-fusion-1' : null,
+    modelBundleVersion: isRecorded
+      ? (outcome.record.result?.versionVector.modelBundleVersion ?? null)
+      : null,
     declaredStroke: input.declaredStroke,
     claims: claimsFor(outcome),
     limitingFactors: isRecorded

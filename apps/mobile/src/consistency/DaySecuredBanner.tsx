@@ -2,17 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../design/components';
-import { color, radius, shadow, space, type } from '../design/tokens';
+import { color, radius, space, type } from '../design/tokens';
 import { flameIntensityForStreak } from './engine';
 import { AnimatedFlame } from './FlameIcon';
 import { useConsistencyStore } from './store';
@@ -20,7 +20,7 @@ import { plural } from '../util/plural';
 
 /**
  * "Day 18 secured 🔥" — the immediate payoff after the first meaningful
- * training of the day. Springs up from the bottom of the result screen,
+ * training of the day. Slides up from the bottom of the result screen,
  * holds just long enough to read, and slides away on its own. Shows at most
  * once per day (the store's durable marker), and only for the day it names.
  */
@@ -36,7 +36,7 @@ export function DaySecuredBanner() {
   const [done, setDone] = useState(false);
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
-  const entry = useSharedValue(0);
+  const entry = useSharedValue(reduced ? 1 : 0);
 
   useEffect(() => {
     if (done || moment || !pending) return;
@@ -52,7 +52,7 @@ export function DaySecuredBanner() {
       return () => clearTimeout(timeout);
     }
     entry.value = withSequence(
-      withSpring(1, { damping: 14, stiffness: 160, mass: 0.8 }),
+      withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }),
       withDelay(
         HOLD_MS,
         withTiming(
@@ -64,11 +64,12 @@ export function DaySecuredBanner() {
         ),
       ),
     );
+    return () => cancelAnimation(entry);
   }, [entry, moment, reduced]);
 
   const entryStyle = useAnimatedStyle(() => ({
     opacity: entry.value,
-    transform: [{ translateY: (1 - entry.value) * 64 }],
+    transform: [{ translateY: (1 - entry.value) * 12 }],
   }));
 
   if (!moment || done) return null;
@@ -93,6 +94,7 @@ export function DaySecuredBanner() {
         <AnimatedFlame
           intensity={flameIntensityForStreak(moment.streak)}
           size={26}
+          dark
         />
       </View>
       <View style={styles.body}>
@@ -109,7 +111,8 @@ export function DaySecuredBanner() {
 
 const styles = StyleSheet.create({
   banner: {
-    ...shadow.floating,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineMutedDark,
     position: 'absolute',
     left: space.lg,
     right: space.lg,
@@ -124,10 +127,10 @@ const styles = StyleSheet.create({
   flameWrap: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,155,66,0.14)',
+    backgroundColor: color.flameTint,
   },
   body: { flex: 1, minWidth: 0 },
   title: { color: color.onDark },

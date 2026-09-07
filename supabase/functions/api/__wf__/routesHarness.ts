@@ -265,7 +265,19 @@ export class AccountDeletionStub {
       return { outcome: "intent_recorded" };
     }
     if (name === "checkpoint_account_deletion_operation") {
-      if (args.p_checkpoint === "apple") {
+      if (args.p_checkpoint === "apple_unrevocable") {
+        const external = this.external(ownerId);
+        if (
+          args.p_apple_outcome !== "manual_action_required" ||
+          operation.appleOutcome !== null ||
+          !external?.apple_refresh_token_encrypted ||
+          external.apple_revoked_at
+        )
+          throw new Error("invalid unrevocable Apple checkpoint");
+        external.apple_refresh_token_encrypted = null;
+        external.apple_token_captured_at = null;
+        operation.appleOutcome = "manual_action_required";
+      } else if (args.p_checkpoint === "apple") {
         const external = this.external(ownerId);
         const expected =
           operation.appleOutcome ??
@@ -342,6 +354,265 @@ const billingPayloadKey = (value: unknown): string | undefined =>
       : item,
   );
 
+export function billingRpcResponse(
+  state: Pick<Harness, "tables" | "billingOrder" | "billingMissingUsers">,
+  name: string,
+  args: Record<string, unknown>,
+): Response | null {
+  if (
+    ![
+      "claim_billing_webhook_delivery",
+      "release_billing_webhook_delivery",
+      "begin_billing_verification",
+      "persist_billing_verdict",
+      "complete_billing_webhook",
+    ].includes(name)
+  )
+    return null;
+  const reply = (value: unknown) => Response.json(value);
+  const failure = (message: string, code = "22023") =>
+    Response.json({ code, message }, { status: 400 });
+  const rows = (table: string) => (state.tables[table] ??= []) as Record<string, unknown>[];
+  const claims = rows("billing_webhook_claims");
+  const events = rows("webhook_events");
+  const tickets = rows("billing_verification_tickets");
+  const entitlements = rows("billing_entitlements");
+  const now = Date.now();
+  const uuid = (value: unknown): value is string =>
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  const ids = (value: unknown) =>
+    Array.isArray(value) ? value.filter(uuid).map((id) => id.toLowerCase()) : [];
+  const payload = isRecord(args.p_payload) ? args.p_payload : {};
+  const event = isRecord(payload.event) ? payload.event : {};
+  const subjects = [
+    ...new Set([
+      ...(uuid(event.app_user_id)
+        ? [event.app_user_id.toLowerCase()]
+        : ids(event.aliases).slice(0, 1)),
+      ...ids(event.transferred_from),
+      ...ids(event.transferred_to),
+    ]),
+  ];
+  let claim = claims.find((row) => row.event_id === args.p_event_id);
+  let seen = events.find((row) => row.id === args.p_event_id);
+  const liveLease = (token: unknown) =>
+    claim && uuid(token) && claim.lease_token === token && Number(claim.lease_expires_at_ms) > now;
+  if (
+    name === "claim_billing_webhook_delivery" ||
+    name === "complete_billing_webhook" ||
+    (name === "begin_billing_verification" && args.p_event_id != null)
+  ) {
+    if (
+      typeof args.p_event_id !== "string" ||
+      !isRecord(payload.event) ||
+      subjects.length > 16 ||
+      (typeof event.id === "string" && event.id !== args.p_event_id) ||
+      (claim && billingPayloadKey(claim.payload) !== billingPayloadKey(payload)) ||
+      (seen &&
+        (billingPayloadKey(seen.payload) !== billingPayloadKey(payload) ||
+          seen.provider !== "revenuecat"))
+    )
+      return failure("conflicting webhook binding");
+    if (!claim) {
+      claim = { event_id: args.p_event_id, payload };
+      claims.push(claim);
+    }
+    if (seen?.processed_at != null) {
+      return reply(
+        name === "complete_billing_webhook"
+          ? { received: true, duplicate: true }
+          : { outcome: "duplicate", event_id: args.p_event_id },
+      );
+    }
+  }
+  if (name === "claim_billing_webhook_delivery") {
+    if (
+      Number(claim!.lease_expires_at_ms) > now ||
+      (seen && !claim!.lease_token && Date.parse(String(seen.claimed_at)) > now - 300_000)
+    )
+      return reply({ outcome: "in_progress", event_id: args.p_event_id });
+    if (args.p_waiting === true) return reply({ outcome: "released", event_id: args.p_event_id });
+    const token = crypto.randomUUID();
+    if (!seen) {
+      seen = {
+        id: args.p_event_id,
+        provider: "revenuecat",
+        event_type: typeof event.type === "string" ? event.type : "unknown",
+        app_user_id: subjects[0] ?? null,
+        payload,
+        received_at: new Date(now).toISOString(),
+        processed_at: null,
+      };
+      events.push(seen);
+    }
+    seen.claimed_at = new Date(now).toISOString();
+    claim!.lease_token = token;
+    claim!.lease_expires_at_ms = now + 300_000;
+    return reply({ outcome: "claimed", event_id: args.p_event_id, lease_token: token });
+  }
+  if (name === "release_billing_webhook_delivery") {
+    if (
+      !claim ||
+      !uuid(args.p_lease_token) ||
+      claim.lease_token !== args.p_lease_token ||
+      billingPayloadKey(claim.payload) !== billingPayloadKey(payload)
+    ) {
+      return reply({ outcome: "stale_lease" });
+    }
+    if (seen && seen.processed_at === null) seen.claimed_at = new Date(now - 300_000).toISOString();
+    claim.lease_token = null;
+    claim.lease_expires_at_ms = null;
+    return reply({ outcome: "released" });
+  }
+  if (name === "begin_billing_verification") {
+    const userIds = args.p_user_ids;
+    if (
+      !Array.isArray(userIds) ||
+      !userIds.every(uuid) ||
+      new Set(userIds).size !== userIds.length ||
+      userIds.length > 16
+    )
+      return failure("invalid verification subjects");
+    if (args.p_event_id != null) {
+      if (!liveLease(args.p_lease_token)) return failure("stale webhook lease", "55000");
+      if (billingPayloadKey([...userIds].sort()) !== billingPayloadKey([...subjects].sort())) {
+        return failure("webhook subject mismatch");
+      }
+    } else if (userIds.length !== 1 || args.p_payload != null || args.p_lease_token != null) {
+      return failure("invalid sync binding");
+    }
+    const order = ++state.billingOrder;
+    return reply(
+      [...userIds].sort().map((userId) => {
+        if (state.billingMissingUsers.includes(userId))
+          return { outcome: "user_missing", user_id: userId };
+        const ticket = {
+          id: crypto.randomUUID(),
+          user_id: userId,
+          verification_order: order,
+          issued_at: new Date(now).toISOString(),
+          event_id: args.p_event_id ?? null,
+          payload: args.p_payload ?? null,
+          webhook_lease_token: args.p_lease_token ?? null,
+          verdict: null,
+        };
+        tickets.push(ticket);
+        return { outcome: "issued", user_id: userId, ticket_id: ticket.id };
+      }),
+    );
+  }
+  if (name === "persist_billing_verdict") {
+    const userId = String(args.p_user_id);
+    if (state.billingMissingUsers.includes(userId))
+      return reply({ outcome: "user_missing", user_id: userId });
+    const ticket = tickets.find((row) => row.id === args.p_ticket_id && row.user_id === userId);
+    const verdict = args.p_verdict;
+    if (
+      !ticket ||
+      !isRecord(verdict) ||
+      Object.keys(verdict).some(
+        (key) =>
+          !["premium", "productKey", "expiresAt", "activeEntitlements", "verifiedAt"].includes(key),
+      ) ||
+      typeof verdict.premium !== "boolean" ||
+      !(verdict.productKey === null || typeof verdict.productKey === "string") ||
+      !(
+        verdict.expiresAt === null ||
+        (typeof verdict.expiresAt === "string" && Number.isFinite(Date.parse(verdict.expiresAt)))
+      ) ||
+      !Array.isArray(verdict.activeEntitlements) ||
+      !verdict.activeEntitlements.every(
+        (value) => value === "pickle_sensei_pro" || value === "premium",
+      ) ||
+      verdict.premium !== verdict.activeEntitlements.length > 0 ||
+      (!verdict.premium && (verdict.productKey !== null || verdict.expiresAt !== null)) ||
+      (Object.hasOwn(verdict, "verifiedAt") &&
+        (typeof verdict.verifiedAt !== "string" ||
+          !Number.isFinite(Date.parse(verdict.verifiedAt)))) ||
+      (ticket.verdict !== null && billingPayloadKey(ticket.verdict) !== billingPayloadKey(verdict))
+    ) {
+      return failure("invalid or conflicting verification ticket");
+    }
+    if (ticket.event_id !== null) {
+      claim = claims.find((row) => row.event_id === ticket.event_id);
+      if (!liveLease(ticket.webhook_lease_token)) return failure("stale webhook lease", "55000");
+    }
+    ticket.verdict = verdict;
+    const reportedAt =
+      typeof verdict.verifiedAt === "string" ? Date.parse(verdict.verifiedAt) : now;
+    const issuedAt = Date.parse(String(ticket.issued_at));
+    ticket.verified_at ??= new Date(
+      reportedAt < issuedAt - 86_400_000 || reportedAt > issuedAt + 300_000 ? issuedAt : reportedAt,
+    ).toISOString();
+    const index = entitlements.findIndex((row) => row.user_id === userId);
+    const existing = entitlements[index];
+    const applied =
+      !existing || Number(existing.verification_order ?? 0) < Number(ticket.verification_order);
+    if (applied) {
+      const row = {
+        user_id: userId,
+        premium: verdict.premium,
+        product_key: verdict.productKey,
+        expires_at: verdict.expiresAt,
+        active_entitlements: verdict.activeEntitlements,
+        verified_at:
+          existing &&
+          Date.parse(String(existing.verified_at)) > Date.parse(String(ticket.verified_at))
+            ? existing.verified_at
+            : ticket.verified_at,
+        verification_order: ticket.verification_order,
+      };
+      if (index < 0) entitlements.push(row);
+      else entitlements[index] = row;
+    }
+    const row = entitlements.find((row) => row.user_id === userId)!;
+    const premium =
+      row.premium === true && (row.expires_at === null || Date.parse(String(row.expires_at)) > now);
+    return reply({
+      outcome: "persisted",
+      user_id: userId,
+      applied,
+      billing: {
+        premium,
+        productKey: premium ? row.product_key : null,
+        expiresAt: premium ? row.expires_at : null,
+        activeEntitlements: premium ? row.active_entitlements : [],
+        verifiedAt: row.verified_at,
+      },
+    });
+  }
+  if (!liveLease(args.p_lease_token)) return failure("stale webhook lease", "55000");
+  const proofs = args.p_tickets;
+  if (!isRecord(proofs) || Object.keys(proofs).some((key) => !subjects.includes(key))) {
+    return failure("invalid completion binding");
+  }
+  for (const userId of subjects) {
+    if (state.billingMissingUsers.includes(userId)) continue;
+    const ticket = tickets.find((row) => row.id === proofs[userId] && row.user_id === userId);
+    const row = entitlements.find((row) => row.user_id === userId);
+    if (
+      !ticket?.verdict ||
+      ticket.event_id !== args.p_event_id ||
+      ticket.webhook_lease_token !== args.p_lease_token ||
+      billingPayloadKey(ticket.payload) !== billingPayloadKey(payload) ||
+      !row ||
+      Number(row.verification_order) < Number(ticket.verification_order)
+    ) {
+      return failure("incomplete webhook verification", "55000");
+    }
+  }
+  if (!seen) return failure("webhook reservation missing", "55000");
+  seen.processed_at = new Date(now).toISOString();
+  claim!.lease_token = null;
+  claim!.lease_expires_at_ms = null;
+  return reply({
+    received: true,
+    verified:
+      subjects.length > 0 && subjects.every((id) => !state.billingMissingUsers.includes(id)),
+  });
+}
+
 const b64url = (value: string): string =>
   btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -371,14 +642,17 @@ export function fakeAppleIdToken(sub = TEST_USER_ID): string {
   return `${header}.${payload}.sig`;
 }
 
-export function fakeSupabaseAccessToken(sub = TEST_USER_ID): string {
+export function fakeSupabaseAccessToken(
+  sub = TEST_USER_ID,
+  sessionId = crypto.randomUUID(),
+): string {
   return `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(
     JSON.stringify({
       iss: `${SUPABASE_URL}/auth/v1`,
       sub,
       aud: "authenticated",
       role: "authenticated",
-      session_id: "66666666-6666-4666-8666-666666666666",
+      session_id: sessionId,
       exp: Math.floor(Date.now() / 1000) + 3600,
     }),
   )}.sig`;
@@ -607,6 +881,8 @@ export async function loadHarness(): Promise<Harness> {
         }
         if (
           [
+            "claim_billing_webhook_delivery",
+            "release_billing_webhook_delivery",
             "begin_billing_verification",
             "persist_billing_verdict",
             "complete_billing_webhook",
@@ -618,169 +894,7 @@ export async function loadHarness(): Promise<Harness> {
           ) {
             return jsonResponse(403, { code: "42501", message: "server credentials required" });
           }
-          const args = isRecord(body) ? body : {};
-          if (
-            (fn === "begin_billing_verification" && args.p_event_id !== null) ||
-            fn === "complete_billing_webhook"
-          ) {
-            const claims = (state.tables.billing_webhook_claims ??= []) as Record<
-              string,
-              unknown
-            >[];
-            const events = (state.tables.webhook_events ??= []) as Record<string, unknown>[];
-            const claimed = claims.find((row) => row.event_id === args.p_event_id);
-            const seen = events.find((row) => row.id === args.p_event_id);
-            if (
-              (claimed &&
-                billingPayloadKey(claimed.payload) !== billingPayloadKey(args.p_payload)) ||
-              (seen && billingPayloadKey(seen.payload) !== billingPayloadKey(args.p_payload))
-            ) {
-              return jsonResponse(400, { code: "22023", message: "conflicting webhook claim" });
-            }
-            if (!claimed) claims.push({ event_id: args.p_event_id, payload: args.p_payload });
-            if (seen) {
-              return jsonResponse(
-                200,
-                fn === "begin_billing_verification"
-                  ? { outcome: "duplicate", event_id: args.p_event_id }
-                  : { received: true, duplicate: true },
-              );
-            }
-          }
-          const tickets = (state.tables.billing_verification_tickets ??= []) as Record<
-            string,
-            unknown
-          >[];
-          const rows = (state.tables.billing_entitlements ??= []) as Record<string, unknown>[];
-          if (fn === "begin_billing_verification") {
-            const order = ++state.billingOrder;
-            return jsonResponse(
-              200,
-              (args.p_user_ids as string[]).map((userId) => {
-                if (state.billingMissingUsers.includes(userId)) {
-                  return { outcome: "user_missing", user_id: userId };
-                }
-                const ticket = {
-                  id: crypto.randomUUID(),
-                  user_id: userId,
-                  verification_order: order,
-                  event_id: args.p_event_id,
-                  payload: args.p_payload,
-                  verdict: null,
-                };
-                tickets.push(ticket);
-                return { outcome: "issued", user_id: userId, ticket_id: ticket.id };
-              }),
-            );
-          }
-          if (fn === "persist_billing_verdict") {
-            const userId = String(args.p_user_id);
-            if (state.billingMissingUsers.includes(userId)) {
-              return jsonResponse(200, { outcome: "user_missing", user_id: userId });
-            }
-            const ticket = tickets.find(
-              (row) => row.id === args.p_ticket_id && row.user_id === userId,
-            );
-            if (
-              !ticket ||
-              !isRecord(args.p_verdict) ||
-              (ticket.verdict !== null &&
-                billingPayloadKey(ticket.verdict) !== billingPayloadKey(args.p_verdict))
-            ) {
-              return jsonResponse(400, {
-                code: "22023",
-                message: "invalid or conflicting verification ticket",
-              });
-            }
-            const verdict = args.p_verdict;
-            ticket.verdict = verdict;
-            ticket.verified_at ??= new Date().toISOString();
-            const index = rows.findIndex((row) => row.user_id === userId);
-            const applied =
-              index < 0 ||
-              Number(rows[index].verification_order ?? 0) < Number(ticket.verification_order);
-            if (applied) {
-              const row = {
-                user_id: userId,
-                premium: verdict.premium,
-                product_key: verdict.productKey,
-                expires_at: verdict.expiresAt,
-                active_entitlements: verdict.activeEntitlements,
-                verified_at: ticket.verified_at,
-                verification_order: ticket.verification_order,
-              };
-              if (index < 0) rows.push(row);
-              else rows[index] = row;
-            }
-            const row = rows.find((row) => row.user_id === userId)!;
-            const premium =
-              row.premium === true &&
-              (row.expires_at === null || Date.parse(String(row.expires_at)) > Date.now());
-            return jsonResponse(200, {
-              outcome: "persisted",
-              user_id: userId,
-              applied,
-              billing: {
-                premium,
-                productKey: premium ? row.product_key : null,
-                expiresAt: premium ? row.expires_at : null,
-                activeEntitlements: premium ? row.active_entitlements : [],
-                verifiedAt: row.verified_at,
-              },
-            });
-          }
-          const payload = args.p_payload as { event: Record<string, unknown> };
-          const event = payload.event;
-          const events = (state.tables.webhook_events ??= []) as Record<string, unknown>[];
-          const uuid = (value: unknown): value is string =>
-            typeof value === "string" &&
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-              value,
-            );
-          const ids = (value: unknown) =>
-            Array.isArray(value) ? value.filter(uuid).map((id) => id.toLowerCase()) : [];
-          const subjects = [
-            ...new Set([
-              ...(uuid(event.app_user_id)
-                ? [event.app_user_id.toLowerCase()]
-                : ids(event.aliases).slice(0, 1)),
-              ...ids(event.transferred_from),
-              ...ids(event.transferred_to),
-            ]),
-          ];
-          const proofs = args.p_tickets as Record<string, string>;
-          for (const userId of subjects) {
-            if (state.billingMissingUsers.includes(userId)) continue;
-            const ticket = tickets.find(
-              (row) => row.id === proofs[userId] && row.user_id === userId,
-            );
-            const row = rows.find((row) => row.user_id === userId);
-            if (
-              !ticket?.verdict ||
-              ticket.event_id !== args.p_event_id ||
-              billingPayloadKey(ticket.payload) !== billingPayloadKey(payload) ||
-              !row ||
-              Number(row.verification_order) < Number(ticket.verification_order)
-            ) {
-              return jsonResponse(400, {
-                code: "55000",
-                message: "incomplete webhook verification",
-              });
-            }
-          }
-          events.push({
-            id: args.p_event_id,
-            provider: "revenuecat",
-            event_type: typeof event.type === "string" ? event.type : "unknown",
-            app_user_id: subjects[0] ?? null,
-            payload,
-          });
-          return jsonResponse(200, {
-            received: true,
-            verified:
-              subjects.length > 0 &&
-              subjects.every((id) => !state.billingMissingUsers.includes(id)),
-          });
+          return billingRpcResponse(state, fn, isRecord(body) ? body : {})!;
         }
         return jsonResponse(404, {
           code: "PGRST202",
@@ -896,6 +1010,7 @@ export function userRequest(
 export async function captureConsole<T>(run: () => Promise<T>): Promise<{
   result: T;
   logs: Array<{ level: string; args: unknown[] }>;
+  accessLogs: string[];
   output: string;
 }> {
   const target = console;
@@ -909,9 +1024,15 @@ export async function captureConsole<T>(run: () => Promise<T>): Promise<{
   }
   try {
     const result = await run();
+    const isAccessLog = (entry: { level: string; args: unknown[] }) =>
+      entry.level === "log" &&
+      entry.args.length === 1 &&
+      typeof entry.args[0] === "string" &&
+      entry.args[0].startsWith('{"evt":"api_request",');
     return {
       result,
-      logs,
+      logs: logs.filter((entry) => !isAccessLog(entry)),
+      accessLogs: logs.filter(isAccessLog).map((entry) => String(entry.args[0])),
       output: Deno.inspect(logs, { depth: Infinity, strAbbreviateSize: Infinity }),
     };
   } finally {

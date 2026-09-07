@@ -170,6 +170,305 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain("ambidextrous_declared_side_unresolvable");
   });
+
+  it.each(["contact", "event_peak"] as const)(
+    "rejects a %s reference outside the isolated stroke window",
+    (reference) => {
+      const prediction = classifyStroke({
+        sequence,
+        window: { startMs: window.peakMs + 300, endMs: window.endMs },
+        contactMs: reference === "contact" ? window.peakMs : null,
+        eventPeakMs: window.peakMs,
+        handedness: "right",
+        paddle: null,
+        paddleSpeeds: null,
+        wristSpeeds: null,
+      });
+      expect(prediction.label).toBe("UNKNOWN");
+      expect(prediction.limitingFactors).toContain("reference_outside_stroke_window");
+    },
+  );
+
+  it.each([
+    { startMs: Number.NaN, endMs: window.endMs },
+    { startMs: window.startMs, endMs: Number.POSITIVE_INFINITY },
+    { startMs: window.endMs, endMs: window.startMs },
+    { startMs: window.peakMs, endMs: window.peakMs },
+  ])("rejects an invalid stroke window: %j", (invalidWindow) => {
+    const prediction = classifyStroke({
+      sequence,
+      window: invalidWindow,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("stroke_window_invalid");
+  });
+
+  it("uses an in-window reference pose instead of a closer pose from an adjacent event", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) => ({
+          ...frame,
+          landmarks: frame.landmarks.map((mark) =>
+            frame.timestampMs === window.peakMs && mark.name === "right_wrist"
+              ? { ...mark, x: 0.3 }
+              : mark,
+          ),
+        })),
+      },
+      window: { startMs: window.peakMs + 1, endMs: window.endMs },
+      contactMs: window.peakMs + 1,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.leaf).toBeNull();
+  });
+
+  it("does not borrow a reference pose when no pose was measured in the stroke window", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.filter((frame) => frame.timestampMs <= window.peakMs),
+      },
+      window: { startMs: window.peakMs + 1, endMs: window.endMs },
+      contactMs: window.peakMs + 1,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("no_pose_frame_near_contact");
+  });
+
+  it("treats an empty dropped pose frame like an absent frame, without fabricating its landmarks", () => {
+    const input = {
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right" as const,
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    };
+    const absent = classifyStroke({
+      ...input,
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.filter((frame) => frame.timestampMs !== window.peakMs),
+      },
+    });
+    const empty = classifyStroke({
+      ...input,
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) =>
+          frame.timestampMs === window.peakMs ? { ...frame, landmarks: [] } : frame,
+        ),
+      },
+    });
+    expect(absent.label).toBe("FOREHAND");
+    expect(empty).toEqual(absent);
+  });
+
+  it("still abstains when a dropped-pose gap exceeds the existing reference tolerance", () => {
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: sequence.frames.map((frame) =>
+          Math.abs(frame.timestampMs - window.peakMs) <= 80 ? { ...frame, landmarks: [] } : frame,
+        ),
+      },
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain("no_pose_frame_near_contact");
+  });
+
+  it.each(["paddleSpeeds", "wristSpeeds"] as const)(
+    "does not fill missing or partial %s evidence with adjacent samples",
+    (source) => {
+      for (const count of [0, 1, 2, 3, 4]) {
+        const input = {
+          sequence,
+          window: windowArg,
+          contactMs: window.peakMs,
+          handedness: "right" as const,
+          paddle: null,
+          paddleSpeeds: null,
+          wristSpeeds: null,
+          [source]: Array.from({ length: count }, (_, index) => ({
+            timestampMs: window.peakMs - 40 + index * 20,
+            value: 0.1,
+          })),
+        };
+        const isolated = classifyStroke(input);
+        expect(isolated.label).toBe("FOREHAND");
+        expect(isolated.limitingFactors).toContain("no_speed_series_for_intensity");
+        expect(isolated.limitingFactors).not.toContain("no_swing_energy_in_window");
+        expect(
+          isolated.limitingFactors.includes("speed_window_sparsely_sampled_gate_not_applicable"),
+        ).toBe(count > 0);
+        expect(isolated.evidence.some((entry) => entry.includes("speed peak"))).toBe(false);
+        if (count === 0) {
+          expect(classifyStroke({ ...input, [source]: null })).toEqual(isolated);
+        }
+        const contaminated = classifyStroke({
+          ...input,
+          [source]: [
+            ...(input[source] ?? []),
+            ...Array.from({ length: 5 }, (_, index) => ({
+              timestampMs: window.startMs - 1 - index * 20,
+              value: 2,
+            })),
+            ...Array.from({ length: 5 }, (_, index) => ({
+              timestampMs: window.endMs + 1 + index * 20,
+              value: 2,
+            })),
+          ],
+        });
+        expect(contaminated, `in-window samples: ${count}`).toEqual(isolated);
+      }
+    },
+  );
+
+  it.each([0, 2, 4])(
+    "cannot use adjacent paddle speeds to displace measured wrist non-motion (%i local paddle samples)",
+    (count) => {
+      const input = {
+        sequence,
+        window: windowArg,
+        contactMs: window.peakMs,
+        handedness: "right" as const,
+        paddle: null,
+        paddleSpeeds: Array.from({ length: count }, (_, index) => ({
+          timestampMs: window.peakMs - 40 + index * 20,
+          value: 1.8,
+        })),
+        wristSpeeds: Array.from({ length: 5 }, (_, index) => ({
+          timestampMs: window.peakMs - 40 + index * 20,
+          value: 0.1,
+        })),
+      };
+      const isolated = classifyStroke(input);
+      expect(isolated.label).toBe("UNKNOWN");
+      expect(isolated.limitingFactors).toContain("no_swing_energy_in_window");
+      expect(
+        classifyStroke({
+          ...input,
+          paddleSpeeds: [
+            ...input.paddleSpeeds,
+            ...Array.from({ length: 5 }, (_, index) => ({
+              timestampMs: window.endMs + 1 + index * 20,
+              value: 2,
+            })),
+          ],
+        }),
+      ).toEqual(isolated);
+    },
+  );
+
+  it.each([0.24, 0.25])("keeps the measured speed gate at its existing floor (%s u/s)", (value) => {
+    const prediction = classifyStroke({
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: Array.from({ length: 5 }, (_, index) => ({
+        timestampMs: window.startMs + ((window.endMs - window.startMs) * index) / 4,
+        value,
+      })),
+    });
+    expect(prediction.label).toBe(value < 0.25 ? "UNKNOWN" : "FOREHAND");
+    expect(prediction.limitingFactors.includes("no_swing_energy_in_window")).toBe(value < 0.25);
+  });
+
+  it.each([-81, -80, 80, 81])("keeps the measured pose tolerance at 80ms (%s)", (delta) => {
+    const reference = sequence.frames.find((frame) => frame.timestampMs === window.peakMs)!;
+    const prediction = classifyStroke({
+      sequence: {
+        ...sequence,
+        frames: [{ ...reference, timestampMs: window.peakMs + delta }],
+      },
+      window: { startMs: window.peakMs - 100, endMs: window.peakMs + 100 },
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe(Math.abs(delta) <= 80 ? "FOREHAND" : "UNKNOWN");
+    expect(prediction.limitingFactors.includes("no_pose_frame_near_contact")).toBe(
+      Math.abs(delta) > 80,
+    );
+  });
+
+  it.each([-81, -80, 80, 81])("keeps the measured paddle tolerance at 80ms (%s)", (delta) => {
+    const reference = sequence.frames.find((frame) => frame.timestampMs === window.peakMs)!;
+    const wrist = reference.landmarks.find((mark) => mark.name === "right_wrist")!;
+    const prediction = classifyStroke({
+      sequence,
+      window: windowArg,
+      contactMs: window.peakMs,
+      handedness: "right",
+      paddle: [{ timestampMs: window.peakMs + delta, center: wrist, confidence: 0.9 }],
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.contactPointSource).toBe(Math.abs(delta) <= 80 ? "paddle" : "wrist");
+  });
+
+  it.each(["right", "left"] as const)(
+    "preserves a %s-handed forehand under horizontal mirroring and supported framing scales",
+    (handedness) => {
+      const swing = generateSwingSequence({ handed: handedness });
+      for (const scale of [0.75, 1, 1.1]) {
+        for (const mirrored of [false, true]) {
+          const prediction = classifyStroke({
+            sequence: {
+              ...swing.sequence,
+              frames: swing.sequence.frames.map((frame) => ({
+                ...frame,
+                landmarks: frame.landmarks.map((mark) => ({
+                  ...mark,
+                  x: 0.5 + (mirrored ? -1 : 1) * scale * (mark.x - 0.5),
+                  y: 0.5 + scale * (mark.y - 0.5),
+                })),
+              })),
+            },
+            window: swing.window,
+            contactMs: null,
+            eventPeakMs: swing.window.peakMs,
+            handedness,
+            paddle: null,
+            paddleSpeeds: null,
+            wristSpeeds: null,
+          });
+          expect(prediction.label, JSON.stringify({ scale, mirrored })).toBe("FOREHAND");
+          expect(prediction.leaf).toBeNull();
+          expect(prediction.taxonomyDepth).toBe(2);
+          expect(prediction.confidence).toBeLessThanOrEqual(0.6);
+        }
+      }
+    },
+  );
 });
 
 describe("gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)", () => {

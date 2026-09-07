@@ -1045,6 +1045,479 @@ Deno.test(
   },
 );
 
+const AUTH_SECRET = "credential-must-never-appear-in-auth-logs";
+type AuthFailure = number | "network" | "no-status";
+
+function authFailure(kind: AuthFailure): Response {
+  if (kind === "network") throw new TypeError(`connection failed: ${AUTH_SECRET}`);
+  if (kind === "no-status") return new Response(`not JSON: ${AUTH_SECRET}`, { status: 401 });
+  if (kind === 0) return Response.error();
+  return jsonResponse(kind, { error_code: "injected_auth_failure", msg: AUTH_SECRET });
+}
+
+for (const flow of ["bootstrap", "provider fallback", "getUser"] as const) {
+  for (const failure of [
+    400,
+    401,
+    403,
+    429,
+    500,
+    503,
+    520,
+    530,
+    599,
+    0,
+    "network",
+    "no-status",
+  ] as const) {
+    Deno.test(
+      `${flow}: Auth ${failure} is ${typeof failure === "number" && [400, 401, 403].includes(failure) ? "a rejection" : "retryable"} without credential logs`,
+      async () => {
+        resetState();
+        state.authResponse = () => authFailure(failure);
+        const token =
+          flow === "getUser"
+            ? sessionToken(crypto.randomUUID())
+            : providerToken(crypto.randomUUID());
+        const logs: string[] = [];
+        const realError = console.error;
+        console.error = (...args: unknown[]) => {
+          logs.push(args.map(String).join(" "));
+        };
+        try {
+          const response = await call(
+            flow === "bootstrap" ? "POST" : "GET",
+            flow === "bootstrap" ? "/v1/account/bootstrap" : "/v1/me/access",
+            token,
+            undefined,
+            flow === "bootstrap" ? "203.0.113.101" : "203.0.113.102",
+          );
+          const expected =
+            typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503;
+          assertEquals(response.status, expected);
+          assertEquals((await response.text()).includes(AUTH_SECRET), false);
+          assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+          assertEquals(logs.join(" ").includes(token), false);
+          assertEquals(state.authRequests.length, 1);
+          assertEquals(state.databaseRequests.length, 0);
+        } finally {
+          console.error = realError;
+        }
+      },
+    );
+  }
+}
+
+Deno.test("Auth fetch uses a 10-second signal and refuses redirects", async () => {
+  resetState();
+  state.authResponse = () => authFailure(401);
+  const realTimeout = AbortSignal.timeout;
+  const timeouts: number[] = [];
+  AbortSignal.timeout = (ms: number) => {
+    timeouts.push(ms);
+    return realTimeout.call(AbortSignal, ms);
+  };
+  try {
+    const response = await call(
+      "POST",
+      "/v1/account/bootstrap",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      "203.0.113.103",
+    );
+    assertEquals(response.status, 401);
+    await response.text();
+    assertEquals(state.authRequests[0].redirect, "error");
+    assertEquals(timeouts, [10_000]);
+  } finally {
+    AbortSignal.timeout = realTimeout;
+  }
+});
+
+Deno.test("Auth 5xx bodies are cancelled without waiting for an error payload", async () => {
+  resetState();
+  let cancelled = false;
+  const upstream = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(AUTH_SECRET));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }),
+    { status: 503 },
+  );
+  state.authResponse = () => upstream;
+  try {
+    const response = await call(
+      "POST",
+      "/v1/account/bootstrap",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      "203.0.113.104",
+    );
+    assertEquals(response.status, 503);
+    await response.text();
+    assertEquals(cancelled, true);
+    assertEquals(upstream.bodyUsed, true);
+  } finally {
+    await upstream.body?.cancel().catch(() => undefined);
+  }
+});
+
+Deno.test(
+  "refresh rotates through GoTrue once and returns the durable session contract",
+  async () => {
+    resetState();
+    const response = await refresh({ refreshToken: "  old-refresh-token  " });
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(Object.keys(body), ["session"]);
+    assertEquals(Object.keys(body.session).sort(), ["accessToken", "expiresAt", "refreshToken"]);
+    assertEquals(body.session.accessToken, "sb-access-rotated");
+    assertEquals(body.session.refreshToken, "sb-refresh-rotated");
+    assertEquals(body.session.expiresAt > Date.now() / 1000, true);
+    assertEquals(state.refreshCalls, 1);
+    assertEquals(state.lastRefreshToken, "old-refresh-token");
+    assertEquals(state.authRequests[0].headers.get("apikey"), "anon-key");
+    assertEquals(state.sessionChecks, 0);
+  },
+);
+
+Deno.test(
+  "refresh accepts a 4096-character token and derives expiry from expires_in when needed",
+  async () => {
+    resetState();
+    const session = rotatedSession();
+    delete session.expires_at;
+    state.authResponse = () => jsonResponse(200, session);
+    const before = Math.floor(Date.now() / 1000);
+    const response = await refresh({ refreshToken: "r".repeat(4096) });
+    assertEquals(response.status, 200);
+    const expires = (await response.json()).session.expiresAt;
+    assertEquals(expires >= before + 3600 && expires <= Math.floor(Date.now() / 1000) + 3600, true);
+    assertEquals(state.authRequests.length, 1);
+  },
+);
+
+Deno.test(
+  "refresh rejects missing, empty, non-string and overlong tokens before Auth",
+  async () => {
+    resetState();
+    for (const body of [
+      {},
+      { refreshToken: null },
+      { refreshToken: 7 },
+      { refreshToken: "" },
+      { refreshToken: "  " },
+      { refreshToken: "r".repeat(4097) },
+    ]) {
+      const response = await refresh(body);
+      assertEquals(response.status, 400);
+      assertEquals((await response.json()).error.code, "validation.refresh");
+    }
+    assertEquals(state.authRequests.length, 0);
+  },
+);
+
+for (const failure of [
+  400,
+  401,
+  403,
+  429,
+  500,
+  503,
+  520,
+  530,
+  599,
+  0,
+  "network",
+  "no-status",
+] as const) {
+  Deno.test(
+    `refresh: Auth ${failure} makes one attempt and returns ${typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503}`,
+    async () => {
+      resetState();
+      state.authResponse = () => {
+        if (state.authRequests.length > 1) return authFailure(401);
+        if (failure === "no-status") throw { name: "AuthUnknownError", message: AUTH_SECRET };
+        return authFailure(failure);
+      };
+      const logs: string[] = [];
+      const realError = console.error;
+      console.error = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      try {
+        const response = await refresh({ refreshToken: "old-refresh-token" }, "203.0.113.111");
+        assertEquals(
+          response.status,
+          typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503,
+        );
+        assertEquals((await response.text()).includes(AUTH_SECRET), false);
+        assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+        assertEquals(state.authRequests.length, 1);
+        assertEquals(state.sessionChecks, 0);
+      } finally {
+        console.error = realError;
+      }
+    },
+  );
+}
+
+Deno.test(
+  "refresh refuses malformed successful sessions instead of fabricating usable expiry",
+  async () => {
+    resetState();
+    const valid = rotatedSession();
+    for (const session of [
+      { ...valid, expires_at: Number.MAX_SAFE_INTEGER },
+      { ...valid, expires_at: "later" },
+      { ...valid, expires_at: 0 },
+      { ...valid, expires_at: Math.floor(Date.now() / 1000) - 1 },
+      { ...valid, expires_in: -1 },
+      { ...valid, expires_at: undefined, expires_in: undefined },
+      { ...valid, expires_at: undefined, expires_in: 1e308 },
+      { ...valid, access_token: "   " },
+      { ...valid, refresh_token: "" },
+      { ...valid, refresh_token: "r".repeat(4097) },
+      null,
+      [],
+    ]) {
+      state.authResponse = () => jsonResponse(200, session);
+      const malformed = await refresh({ refreshToken: "r" }, "203.0.113.112");
+      assertEquals(malformed.status, 503);
+      assertEquals((await malformed.text()).includes("sb-refresh-rotated"), false);
+    }
+  },
+);
+
+Deno.test("refresh rejects 100 KB JSON bodies before any Auth call", async () => {
+  resetState();
+  const response = await refresh({ refreshToken: "r", pad: "x".repeat(100_000) }, "203.0.113.113");
+  assertEquals(response.status, 413);
+  await response.text();
+  assertEquals(state.authRequests.length, 0);
+});
+
+Deno.test(
+  "logout revokes only the current device, bypasses liveness and evicts its warm bearer",
+  async () => {
+    resetState();
+    const userId = crypto.randomUUID();
+    const token = sessionToken(userId);
+    const otherDevice = sessionToken(userId);
+    const warm = await call("GET", "/v1/me/access", token);
+    assertEquals(warm.status, 200);
+    await warm.text();
+    const before = state.sessionChecks;
+    state.sessionActive = false;
+    const response = await call("POST", "/v1/auth/logout", token);
+    assertEquals(response.status, 204);
+    assertEquals(await response.text(), "");
+    assertEquals(state.logoutCalls, [{ scope: "local", authorization: `Bearer ${token}` }]);
+    assertEquals(state.sessionChecks, before);
+    state.sessionActive = true;
+    const revoked = await call("GET", "/v1/me/access", token);
+    assertEquals(revoked.status, 401);
+    await revoked.text();
+    assertEquals(state.sessionChecks, before);
+    const after = await call("GET", "/v1/me/access", otherDevice);
+    assertEquals(after.status, 200);
+    await after.text();
+    assertEquals(
+      state.authRequests.filter((r) => new URL(r.url).pathname === "/auth/v1/user").length,
+      2,
+    );
+  },
+);
+
+for (const status of [200, 204, 401, 403, 404, 429, 500, 503, 520, 530, 0, "network"] as const) {
+  Deno.test(
+    `logout: Auth ${status} is consumed and returns ${typeof status === "number" && [200, 204, 401, 403, 404].includes(status) ? 204 : 503}`,
+    async () => {
+      resetState();
+      const token = sessionToken(crypto.randomUUID());
+      let upstream: Response | undefined;
+      state.authResponse = (request) => {
+        if (new URL(request.url).pathname !== "/auth/v1/logout") return realFetch(request);
+        upstream = status === 204 ? new Response(null, { status: 204 }) : authFailure(status);
+        return upstream;
+      };
+      const logs: string[] = [];
+      const realError = console.error;
+      console.error = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      try {
+        const response = await call("POST", "/v1/auth/logout", token, undefined, "203.0.113.114");
+        assertEquals(
+          response.status,
+          typeof status === "number" && [200, 204, 401, 403, 404].includes(status) ? 204 : 503,
+        );
+        assertEquals((await response.text()).includes(AUTH_SECRET), false);
+        assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+        assertEquals(state.sessionChecks, 0);
+        if (upstream?.body) assertEquals(upstream.bodyUsed, true);
+        const logout = state.authRequests.find(
+          (r) => new URL(r.url).pathname === "/auth/v1/logout",
+        )!;
+        assertEquals(new URL(logout.url).searchParams.get("scope"), "local");
+        assertEquals(logout.headers.get("authorization"), `Bearer ${token}`);
+        assertEquals(logout.headers.get("apikey"), "anon-key");
+      } finally {
+        console.error = realError;
+        await upstream?.body?.cancel().catch(() => undefined);
+      }
+    },
+  );
+}
+
+Deno.test(
+  "delete-request rejects malformed and non-object JSON without minting a challenge",
+  async () => {
+    for (const raw of ["{not json", "[]", "null", '"survey"']) {
+      resetState();
+      const response = await rawCall("/v1/me/delete-request", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${providerToken(crypto.randomUUID())}` },
+        body: raw,
+      });
+      assertEquals(response.status, 400, raw);
+      await response.text();
+      assertEquals(state.lastUpsert, null);
+      assertEquals(
+        state.databaseRequests.some((r) => r.url.includes("account_deletion_requests")),
+        false,
+      );
+    }
+  },
+);
+
+Deno.test(
+  "delete-request stream failures are 400, release the reader and never write",
+  async () => {
+    resetState();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"survey":'));
+      },
+      pull(controller) {
+        controller.error(new Error("client stream failed"));
+      },
+    });
+    const response = await rawCall("/v1/me/delete-request", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${providerToken(crypto.randomUUID())}` },
+      body: stream,
+    });
+    assertEquals(response.status, 400);
+    await response.text();
+    assertEquals(state.lastUpsert, null);
+    assertEquals(stream.locked, false);
+  },
+);
+
+Deno.test(
+  "bootstrap validates optional JSON for Google too before any profile access",
+  async () => {
+    for (const [raw, status] of [
+      ["{not json", 400],
+      ["[]", 400],
+      [JSON.stringify({ pad: "x".repeat(100_000) }), 413],
+    ] as const) {
+      resetState();
+      const userId = crypto.randomUUID();
+      state.profileRows = [profileRow(userId)];
+      const response = await rawCall(
+        "/v1/account/bootstrap",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${providerToken(userId)}` },
+          body: raw,
+        },
+        "203.0.113.121",
+      );
+      assertEquals(response.status, status);
+      await response.text();
+      assertEquals(state.databaseRequests.length, 0);
+    }
+  },
+);
+
+Deno.test("bootstrap has a 30/min per-IP budget before any provider exchange", async () => {
+  resetState();
+  const realNow = Date.now;
+  const frozen = realNow();
+  Date.now = () => frozen;
+  try {
+    const userId = crypto.randomUUID();
+    const token = providerToken(userId);
+    state.profileRows = [profileRow(userId)];
+    for (let i = 0; i < 30; i += 1) {
+      const response = await call(
+        "POST",
+        "/v1/account/bootstrap",
+        token,
+        undefined,
+        "203.0.113.120",
+      );
+      assertEquals(response.status, 200, `bootstrap ${i + 1}`);
+      await response.text();
+    }
+    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.120");
+    assertEquals(blocked.status, 429);
+    assertEquals(Number(blocked.headers.get("Retry-After")) >= 1, true);
+    await blocked.text();
+    assertEquals(state.tokenCalls, 30);
+    assertEquals(state.sessionChecks, 0);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+Deno.test(
+  "a warm auth cache cannot bypass revocation; false evicts it and RPC outages stay retryable",
+  async () => {
+    resetState();
+    const token = sessionToken(crypto.randomUUID());
+    const warm = await call("GET", "/v1/me/access", token);
+    assertEquals(warm.status, 200);
+    await warm.text();
+    assertEquals(state.authRequests.length, 1);
+    state.sessionActive = false;
+    const denied = await call("GET", "/v1/me/access", token);
+    assertEquals(denied.status, 401);
+    await denied.text();
+    assertEquals(state.authRequests.length, 1);
+    assertEquals(state.accessStateCalls, 1);
+    state.sessionActive = true;
+    const restored = await call("GET", "/v1/me/access", token);
+    assertEquals(restored.status, 200);
+    await restored.text();
+    assertEquals(state.authRequests.length, 2);
+    for (const verdict of [null, "true", [], {}]) {
+      state.sessionActive = verdict;
+      const invalid = await call("GET", "/v1/me/access", token);
+      assertEquals(invalid.status, 503);
+      await invalid.text();
+      assertEquals(state.accessStateCalls, 2);
+    }
+    state.sessionActive = true;
+    state.sessionActiveStatus = 500;
+    const outage = await call("GET", "/v1/me/access", token);
+    assertEquals(outage.status, 503);
+    assertEquals((await outage.text()).includes("injected session check failure"), false);
+    state.sessionActiveStatus = 200;
+    const recovered = await call("GET", "/v1/me/access", token);
+    assertEquals(recovered.status, 200);
+    await recovered.text();
+    assertEquals(state.authRequests.length, 2);
+    assertEquals(state.sessionChecks, 9);
+  },
+);
+
 Deno.test({
   name: "teardown fake supabase",
   fn: async () => {

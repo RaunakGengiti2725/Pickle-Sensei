@@ -65,7 +65,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
     const entry = registry.resolve({ task: "stroke_classification", platform: "ios" });
     expect(entry?.id).toBe("stroke.heuristic-hierarchical");
-    expect(entry?.version).toBe("stroke-heuristic-7");
+    expect(entry?.version).toBe("stroke-heuristic-9");
     expect(entry?.runtime).toBe("deterministic");
     // The notes must keep the honesty ceiling explicit: no L3 without bounce.
     expect(entry?.notes).toContain("L3 needs bounce observation");
@@ -137,12 +137,14 @@ describe("ModelRegistry", () => {
       ["contact_estimation", "server", "contact-evidence-4.4"],
       ["phase_segmentation", "ios", "phase-geometry-2"],
       ["biomechanics_extraction", "ios", "features-geometry-2"],
-      ["stroke_classification", "ios", "stroke-heuristic-7"],
+      ["stroke_classification", "ios", "stroke-heuristic-9"],
       ["stroke_auto_resolution", "ios", "fusion-2"],
+      ["stroke_trigger", "ios", "temporal-stroke-heuristic-5"],
+      ["stroke_trigger", "android", "temporal-stroke-heuristic-4"],
       ["capture_completion", "ios", "capture-completion-params-v1"],
     ];
     for (const [task, platform, version] of expected) {
-      const entry = registry.resolve({ task, platform: platform as "ios" | "server" });
+      const entry = registry.resolve({ task, platform: platform as "ios" | "android" | "server" });
       expect(entry, `no production entry for ${task}`).not.toBeNull();
       expect(entry!.version).toBe(version);
     }
@@ -227,8 +229,8 @@ describe("ModelRegistry", () => {
     ).toThrow(/own rollback predecessor/);
     // The default manifest's only rollback edge points at a registered entry.
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
-    const v7 = registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-7");
-    expect(v7?.rollbackPredecessor).toBe("stroke.heuristic-hierarchical@stroke-heuristic-5");
+    const current = registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-9");
+    expect(current?.rollbackPredecessor).toBe("stroke.heuristic-hierarchical@stroke-heuristic-5");
     expect(
       registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-5")?.deploymentStatus,
     ).toBe("deprecated");

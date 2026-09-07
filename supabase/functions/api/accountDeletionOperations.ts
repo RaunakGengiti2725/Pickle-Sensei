@@ -1,4 +1,5 @@
 import { JSON_SECURITY_HEADERS } from "./http.ts";
+import { isPermanentExternalAccountError } from "./externalAccounts.ts";
 
 export const ACCOUNT_DELETION_POLICY_DRAFT = Object.freeze({
   confirmationMinimumAgeSeconds: 3,
@@ -473,6 +474,9 @@ function completionResult(
   };
 }
 
+/** Complete provider-side erasure before removing the Supabase identity. A
+ * successful external step is checkpointed in the service-role-only row so a
+ * later provider/database failure can be retried safely. */
 async function runClaimedDeletion(
   rpc: DeletionOperationRpc,
   dependencies: AccountDeletionWorkerDependencies,
@@ -526,12 +530,30 @@ async function runClaimedDeletion(
   try {
     if (!lease.appleCompleted) {
       await checkpoint("lease_check");
-      const appleOutcome = lease.appleAction === "revoke" ? "revoked" : lease.appleAction;
+      let appleOutcome: AppleDeletionOutcome =
+        lease.appleAction === "revoke" ? "revoked" : lease.appleAction;
+      let appleCheckpoint = "apple";
       if (lease.appleAction === "revoke") {
         failureCode = "apple_cleanup_unavailable";
-        await dependencies.revokeAppleCredential(lease.appleRefreshTokenEncrypted!, ownerId);
+        try {
+          await dependencies.revokeAppleCredential(lease.appleRefreshTokenEncrypted!, ownerId);
+        } catch (error) {
+          // Transport failures, Apple 5xx/429, missing secrets and Apple
+          // refusing OUR client secret are retried by the client (fail closed:
+          // nothing downstream runs). A credential that can never be revoked —
+          // ciphertext under a rotated key, a token Apple refuses with
+          // invalid_grant — must not leave the account undeletable:
+          // Apple requires deletion to be fulfilled, so it is dropped and the
+          // user is directed to Apple's manual authorization controls.
+          if (!isPermanentExternalAccountError(error)) throw error;
+          appleOutcome = "manual_action_required";
+          appleCheckpoint = "apple_unrevocable";
+        }
       }
-      await checkpoint("apple", appleOutcome);
+      // Checkpoint before RevenueCat so a later failure retries without a
+      // second revoke attempt. The capture pair (token + captured_at) is
+      // cleared together — the table constrains them to be null together.
+      await checkpoint(appleCheckpoint, appleOutcome);
     }
     if (!lease.revenueCatCompleted) {
       await checkpoint("lease_check");

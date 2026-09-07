@@ -7,6 +7,12 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 
 ## Verify
 
+- Canonical entry points (CI runs exactly these — see `docs/devin/OPERATING_SYSTEM.md`):
+  `scripts/verify-cloud.sh --tier pr` (Linux gates, per-stage logs +
+  `summary.json` under `artifacts/verify-cloud/`), `scripts/mac-full-verify.sh`
+  (Apple gates; from Linux `--remote` pushes HEAD to a `ci/mac-*` branch that
+  runs on the self-hosted M4 runner), `scripts/verify-all.sh` (both). Skills
+  in `.agents/skills/` describe when to run which. Review rules: `REVIEW.md`.
 - Mobile: `cd apps/mobile && npx tsc --noEmit && npx jest --silent`
 - Workspace: `pnpm -r typecheck` and `pnpm --filter @pickle/shared-types test`
 - CI's `verify` job = `pnpm format:check` + `pnpm lint` + `pnpm typecheck` +
@@ -24,7 +30,26 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 - DB: `supabase db push` (migrations in `supabase/migrations/`, named
   `YYYYMMDDHHMMSS_description.sql`; remote history is tracked — never edit an
   applied migration, add a new one)
+- The September 6 integration reconciles two migration histories. Production
+  already has `20260905190106_api_only_database_access`; do not renumber it.
+  Inspect `supabase migration list` and `supabase db push --dry-run --include-all`
+  before an approved coordinated rollout. Older pending audit migrations require
+  `supabase db push --include-all`, not a plain push. The RLS runner verifies
+  fresh installation and upgrades from both historical states; the forward
+  `20260907120000_preserve_permit_predicate_grant.sql` keeps the pure predicate
+  callable after the API-only migration revokes earlier function grants.
 - API: `supabase functions deploy api --no-verify-jwt`
+- Edge dependencies are pinned EXACTLY: `index.ts` imports
+  `npm:@supabase/supabase-js@2.112.4` and the function-local
+  `supabase/functions/api/deno.json` + `deno.lock` fix the resolution the
+  deploy bundles (a bare `@2` would resolve the latest 2.x, unreviewed, on
+  every deploy). Static pin: `__wf__/db_migrations_rls_indexes.test.ts`
+  ("edge deps"). To bump: change the version in the `index.ts` import, then
+  `cd supabase/functions/api && rm deno.lock && deno install --entrypoint
+index.ts` (regenerates `deno.lock`), update the `SUPABASE_JS_PIN` constant
+  in that test, run `(cd supabase/functions/api/__wf__ && deno task test)`
+  and `deno check cache.ts rateLimit.ts http.ts legal.ts`, and commit the
+  import, the lockfile and the test together.
 - Secrets: `supabase secrets set REVENUECAT_SECRET_API_KEY=…` (billing sync falls
   back to `REVENUECAT_PUBLIC_SDK_KEY`, currently set to the Test Store key),
   `REVENUECAT_WEBHOOK_AUTH=…` (shared secret the RevenueCat webhook must send
@@ -63,7 +88,10 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   Google alike, no provider SDK): the user is signed in from the record, the
   refresh token is exchanged (launch waits ≤ 8s, then proceeds signed-in with
   local data while the refresh continues), and `sessionKeeper.ts` rotates
-  the bearer 60s before expiry, retries transient failures with backoff, and
+  the bearer 60s before expiry (never sooner than 30s after the previous
+  rotation — a short-lived or clock-skewed `expiresAt` must not become a
+  once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts`),
+  retries transient failures with backoff, and
   re-checks on every foreground (timers don't fire while suspended). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
   legacy Google silent-restore flag is only a fallback for devices that
@@ -109,6 +137,19 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   a different subject (e.g. Apple then Google) is a different identity.
   `access_state().scored_count` is therefore identity-lifetime (the exit
   survey's `scored_count` stamp inherits that meaning).
+  `20260905000100_late_linked_identity_ledger.sql`: an identity linked AFTER
+  ratings were spent inherits the account's lifetime count at link time
+  (AFTER INSERT trigger on auth.identities, definer, greatest-only, plus a
+  one-shot backfill) — live: J10/J11.
+- Table-layer permit gate (`20260905000000_scored_shot_write_gate.sql`): the
+  RPC is the intended write path, but `authenticated` also holds INSERT on
+  `public.shots`, so a BEFORE INSERT trigger refuses any client-written
+  `result_kind='scored'` row without a LIVE reserved permit and re-checks the
+  lifetime allowance under the same `access_lock_key(uid)` (premium bypasses
+  the allowance, never the permit). `shots_low_confidence_unscored` (NOT
+  VALID) makes `low_confidence ⇒ overall_score is null` a table invariant,
+  mirroring the edge parser. Both trigger functions are revoked from clients.
+  Owner/service writes (no JWT `sub`) are untouched. Live: section L.
 - 5xx bodies are generic (detail only in function logs). Free-text inputs are
   sanitized (`http.ts sanitizeUserText`). pg_cron sweeps stale permits,
   expired deletion requests, old webhook events.
@@ -180,6 +221,20 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   still preferred — the fallback only covers subscriber reads.
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
+- Entitlement row semantics (2026-09-06): the row keeps the NEWEST
+  `verified_at` (`billing_entitlements_keep_newest_verdict`, a stale verdict
+  is dropped and the edge fn re-reads the stored row). `verified_at` is
+  RevenueCat's `request_date_ms` only when it lies within
+  `REVENUECAT_CLOCK_MAX_AHEAD_MS` (5 min) ahead / `REVENUECAT_CLOCK_MAX_BEHIND_MS`
+  (24 h) behind the isolate clock read BEFORE the RC round trip; otherwise
+  (and when absent/NaN/≤0/out of range) that pre-request clock is used — a
+  far-future provider clock must never become a key that outranks every later
+  real verdict. Anything the edge fn answers about a stored row goes through
+  `effectivePremium()` — premium AND (expires_at IS NULL OR expires_at >
+  now()), the same predicate `access_state()` and every other DB decision
+  point apply — so a stored `premium=true` past its `expires_at` is NOT
+  premium.
+  Pinned by `__wf__/fix6_billing.test.ts` + `attack_fix5_billing.test.ts`.
 - Free-rating ledger freshness (2026-09-02): `accessStore.canonicalAccess`
   is a server snapshot, and `GET /v1/me/access` derives `used` from SYNCED
   scored shots and `reserved` from live permits — so it goes stale the
@@ -188,7 +243,9 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `refreshAccess()` on every visit for synced (non-`localOnly`) sessions
   (skipped while a load is in flight; the old value stays on screen until
   the new one lands), and AnalyzeScreen re-reads it in its UNMOUNT cleanup
-  once a run called `runCaptureAnalysis` — never while mounted, because
+  once a run called `runCaptureAnalysis` — chained onto that run's promise
+  so the read sees the permit consumed/released, never the intermediate
+  reserved state — and never while mounted, because
   `useRatingRouteGate` replaces a mounted screen whose `canStartRating`
   flips false and would tear down the "last free analysis" prompt. The
   Settings membership row words "N free ratings left" from
@@ -424,7 +481,9 @@ region is set, which nothing does now); (3) DETECTION IS NEVER GATED ON
 FRAMING — a field recording showed a swing going undetected because the
 athlete stood a step too far ("Move a little closer") and the trigger only
 armed on readiness `ready`. Now `considerTrigger` feeds the detector every
-trackable frame once `triggerWarmupMs` (1 s) of the file exists;
+trackable recorded frame. A completed event must fit inside the current
+recording's atomic URL/timestamp snapshot; no fixed warm-up discards an early
+complete swing;
 `PoseReadinessEvaluator` only decides the status copy ("A little closer, then
 swing", …) and the BODY TRACKED state (`armed`, presentation + telemetry
 only, dropped after `armedLossFramesToDisarm` consecutive no-person/partial
@@ -883,7 +942,10 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
 
-## Canonical 3D Analysis migration (product direction, 2026-09-05)
+## Archived 3D Analysis direction (future v2, 2026-09-05)
+
+This section records the parked v2 direction only. The later 2D production
+and v1 integration decisions below control this checkout.
 
 The new 3D Analysis system is the intended REPLACEMENT for primary 2D
 exoskeleton/heatmap analysis, not a permanent optional viewer or second mode.
@@ -923,6 +985,24 @@ VERIFIED / MEASURED / PARTIAL / BLOCKED distinctions. No runtime cutover,
 production deployment or legacy deletion is authorized merely by updating
 the plan. Preserve account, consent, entitlement and scoring-history safeguards.
 
+## V1 UI and analysis boundary (owner decision, 2026-09-06)
+
+- V1 remains on the existing 2D analysis and replay path. Future 3D work is
+  parked on `codex/3d-analysis-v2`; do not merge its estimator, native bridge,
+  storage, routes or experimental viewer into v1, including Debug entry points.
+- UI refinements preserve current main's auth, permit, scoring, persistence,
+  consent and billing safeguards. Do not replace these with older branch code
+  while resolving visual-change conflicts.
+- Preserve the approved marks and original splash media. Use existing ink,
+  chalk, court and volt tokens, flat surfaces, and meaningful motion only.
+  Contextual guidance is text-first; decorative glows and particles stay out.
+- iOS typography uses bundled Manrope PostScript names and explicit weights;
+  Android retains its asset-name families. Essential text scales and wraps.
+  Native price wrapping switches to wider cards, never a smaller font.
+- Verify safe areas, full prices, rank text, recovery controls and effective
+  touch targets on small phones with maximum Dynamic Type. Renderer tests are
+  not native layout proof; keep synthetic fixtures offline and labelled.
+
 ## Supabase production hardening (2026-09-05)
 
 - `20260905190106_api_only_database_access.sql` and the matching Edge Function
@@ -949,13 +1029,16 @@ the plan. Preserve account, consent, entitlement and scoring-history safeguards.
   raises a database error, which the API reports as retryable 503 rather than
   signing users out; a valid proof with a revoked session returns false/401.
 - `service_role` bypasses RLS but still needs SQL grants. Historical fixes
-  added missing direct-write grants, but later ordered-billing and deletion
-  migrations deliberately replace those writes with narrowly granted RPCs.
-  Use the helpers appropriate to the applied migration boundary; never
-  restore obsolete billing, webhook-audit or credential DML grants to make
-  old callers or fixtures pass. Keep all client writes to these records
-  revoked and coordinate caller/migration deployment.
-- Permits may move from `reserved` to `finalized` or `released`, not back.
+  added missing direct-write grants, but ordered-billing and deletion
+  migrations replace those writes with narrowly granted RPCs. Reconcile the
+  reservation-era grants in `20260907110000_api_audit_integration.sql` through
+  the forward readiness migration before rollout. Use the helpers appropriate
+  to the applied migration boundary; never restore obsolete billing,
+  webhook-audit or credential DML grants to make old callers or fixtures pass.
+  Keep all client writes revoked and completed audit history immutable.
+- Permits never reopen from a terminal state. The integrated late-sync RPC may
+  settle an expired reservation through its vouch-aware path; the integration
+  migration preserves that without allowing permit metadata to be rewritten.
   Shot/session and detail/shot ownership checks apply at the database layer.
   Captures and measurements have no API writer; keep their client write
   grants revoked until an approved feature requires them.
@@ -965,8 +1048,9 @@ the plan. Preserve account, consent, entitlement and scoring-history safeguards.
   webhooks, 5 MB for shot batches/evaluation trials; body deadline 30 seconds.
 - Edge tests: `npx --yes deno@2.5.6 test -A --no-check --config
 supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
-  CI's `supabase-security` job runs these, the frozen-lock typecheck above,
-  and `./supabase/tests/run_rls_tests.sh`. The SQL shim tests broad client
+  CI's `edge` job runs these, the frozen-lock entrypoint typecheck and offline
+  cryptographic vectors through `scripts/verify-cloud.sh`; `supabase-security`
+  runs the RLS matrix and repository security scan. The SQL shim tests broad client
   defaults AND absent service-role DML defaults; both require explicit grants.
   The local load stub now needs `SUPABASE_SERVICE_ROLE_KEY=stub-service-role-key`
   on the local Edge process, alongside its fake URL and anon key.
@@ -1133,3 +1217,53 @@ scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
   rewritten or silently upgraded. The geometry/pipeline regression suites
   cover these contracts; native media timing and scientific approval remain
   separate requirements.
+
+## First-swing capture and monitoring (2026-09-06)
+
+- The iOS trigger is `temporal-stroke-heuristic-5`. Each wrist has its own
+  quiet onset; only qualified motion contributes to the event, and the
+  selected wrist must supply its own observed settled tail. A hidden wrist
+  cannot borrow the other hand's stillness. Stillness uses bounded adjacent
+  intervals (at most 125 ms) and sample counts; velocity still caps gaps at
+  250 ms. Synthetic coverage includes 8/10/15/30/60 fps and both hands.
+- `captureStrokeVideo({ handedness })` passes the player's saved hitting hand
+  through `captureWithOptions` to the native trigger and manual-stop pass.
+  Older native binaries and ambidextrous declarations retain the no-argument
+  bridge fallback. This is declared context, not detected paddle identity; a brisk movement of the
+  hitting hand can still be ambiguous. Do not claim perfect stroke accuracy.
+- `isTrackingLimited` is advice, not another trigger gate. Native capture
+  replaces "Swing when ready" with lighting/cooling guidance while observed
+  pose cadence is insufficient and uses hysteresis before restoring readiness.
+  A captured/saving state never regresses on late readiness events. JS scopes
+  progress to the active native capture and ignores late/foreign callbacks.
+- Classifier `stroke-heuristic-9` bounds all pose, paddle and speed evidence
+  to the isolated swing, including neighboring raise/facing/wrist features.
+  An overhead additionally needs two in-window observations of the wrist and
+  elbow above their own visible shoulder, independent of torso normalization.
+  `fusion-2` validates confidence and hierarchy before routing a prediction.
+  The mobile bundle is `on-device-fusion-2`; evaluation records read the
+  actual result's bundle version. Pose-only AUTO still identifies a side
+  family or overhead, not an unobserved drive/volley/bounce distinction.
+  The existing dev real-pose benchmark did not improve its aggregate labels;
+  synthetic regression passes are not field-validation evidence.
+- `Production Monitor` runs bounded public probes every 15 minutes on main.
+  The monitor-only slice added no mobile SDK; the later Sentry foundation
+  remains disabled pending the approvals described above. Apple's opt-in
+  crash reports require verified dSYM symbolication and the owner procedure
+  in `docs/OBSERVABILITY.md`. Database readiness is explicitly unverified until
+  the coordinated backend rollout is approved, deployed, and the repository
+  variable `PRODUCTION_MONITOR_READINESS` is enabled. Never enable it against
+  the old static health response. Workflow notification delivery and physical
+  iPhone capture remain checks for the responsible owner.
+- Local full verification needs Node 22 for mobile and Bash 4+ for the
+  security scanner; Bash 3.2 remains a separately tested script contract.
+  Timestamp fixtures updated by the readiness work use `-fps_mode passthrough`.
+  Check any remaining legacy `-vsync` callers against the installed FFmpeg;
+  FFmpeg 9 removed that option. Never weaken timestamp assertions.
+  A Docker-free edge audit can use `PICKLE_AUDIT_MATRIX_PG_URL`, which must
+  point to an empty, disposable loopback PostgreSQL database.
+- Pin `PICKLE_CI_SIMULATOR_UDID` (or the Mac workflow's `simulator_udid`
+  input) to a dedicated disposable iPhone for native verification. A pin
+  disables other-device cleanup and fails instead of falling back when the
+  chosen device is unavailable. The launch check reinstalls its selected app;
+  never point it at a simulator whose app data should be kept.

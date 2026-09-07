@@ -3,6 +3,7 @@ dist/
 coverage/
 *.log
 __pycache__/
+.pytest_cache/
 *.pyc
 .env
 .env.local
@@ -11,8 +12,9 @@ __pycache__/
 *.tsbuildinfo
 .turbo/
 ios/Pods/
+apps/mobile/ios/*.xcodeproj/project.xcworkspace/
 android/.gradle/
-native/vision-core/.build/
+native/vision-core/.build*/
 datasets/paddle-bench/videos/
 datasets/paddle-bench/runs/
 # corpus media + extraction artifacts are content-addressed and re-derivable
@@ -53,3 +55,6 @@ datasets/release/
 tools/mac-bench/results/scratch-*/
 # supabase CLI local state (project ref, versions)
 supabase/.temp/
+
+# canonical verification evidence (scripts/verify-*.sh) — regenerated every run
+artifacts/

@@ -1,4 +1,6 @@
 {
+  "nodeModulesDir": "none",
+  "lock": true,
   "imports": {
     "canonicalize": "npm:canonicalize@4.0.0",
     "jose": "npm:jose@6.2.10"

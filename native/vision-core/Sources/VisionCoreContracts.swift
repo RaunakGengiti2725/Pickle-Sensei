@@ -26,10 +26,14 @@ public struct PoseFrame: Sendable {
   public let landmarks: [PoseLandmark]
   public let confidence: Double
 
+  /// Landmarks with a non-finite coordinate or visibility are dropped and a
+  /// non-finite confidence reads as 0: every consumer differentiates,
+  /// divides and smooths these values, and one NaN/∞ would otherwise poison
+  /// its state for the rest of the session.
   public init(timestampMs: Int, landmarks: [PoseLandmark], confidence: Double) {
     self.timestampMs = timestampMs
-    self.landmarks = landmarks
-    self.confidence = confidence
+    self.landmarks = landmarks.filter { $0.x.isFinite && $0.y.isFinite && $0.visibility.isFinite }
+    self.confidence = confidence.isFinite ? confidence : 0
   }
 }
 
@@ -77,6 +81,13 @@ public struct StrokeEvent: Sendable {
     self.peakMotionMs = peakMotionMs
     self.confidence = confidence
     self.recognition = recognition
+  }
+
+  public func isContainedInRecording(firstFrameMs: Int?, lastFrameMs: Int?) -> Bool {
+    guard let firstFrameMs, let lastFrameMs,
+          firstFrameMs >= 0, startMs >= firstFrameMs,
+          endMs > startMs, endMs <= lastFrameMs else { return false }
+    return peakMotionMs.map { $0 >= startMs && $0 <= endMs } ?? true
   }
 }
 

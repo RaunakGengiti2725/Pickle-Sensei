@@ -11,7 +11,7 @@ import UIKit
 /// installed behind the native contract.
 @objc(PickleVideoCapture)
 final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate {
-  private enum Operation {
+  private enum Operation: Equatable {
     case guided(String)
     case importing(String)
     case extracting(String)
@@ -58,6 +58,27 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     _ resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    beginGuidedCapture(handedness: nil, resolve: resolve, reject: reject)
+  }
+
+  @objc func captureWithOptions(
+    _ options: NSDictionary,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard let value = options["handedness"] as? String,
+          let handedness = TemporalStrokeDetector.Handedness(rawValue: value) else {
+      reject("camera.invalid_options", "Choose your hitting hand before recording.", nil)
+      return
+    }
+    beginGuidedCapture(handedness: handedness, resolve: resolve, reject: reject)
+  }
+
+  private func beginGuidedCapture(
+    handedness: TemporalStrokeDetector.Handedness?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
     DispatchQueue.main.async {
       let guidedOperation = ClipMediaOperation()
       let guidedId = guidedOperation.id
@@ -82,7 +103,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
               "state": "granted",
               "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
             ])
-            self.presentGuidedCapture(engine: engine, guidedId: guidedId)
+            self.presentGuidedCapture(engine: engine, handedness: handedness, guidedId: guidedId)
           }
         } catch CameraEngine.EngineError.permissionDenied {
           await MainActor.run {
@@ -871,7 +892,11 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     return true
   }
 
-  private func presentGuidedCapture(engine: CameraEngine, guidedId: String) {
+  private func presentGuidedCapture(
+    engine: CameraEngine,
+    handedness: TemporalStrokeDetector.Handedness?,
+    guidedId: String
+  ) {
     guard let presenter = Self.topViewController() else {
       engine.stop()
       finishWithError(
@@ -887,7 +912,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       finishWithError(code: "camera.cancelled", message: "Camera capture was canceled.")
       return
     }
-    let controller = GuidedCaptureViewController(engine: engine, operation: guidedOperation)
+    let controller = GuidedCaptureViewController(engine: engine, operation: guidedOperation, handedness: handedness)
     guidedController = controller
     controller.onEvent = { [weak self] event in
       let send = {

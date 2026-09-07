@@ -10,6 +10,7 @@ import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle'
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 jest.mock('react-native-linear-gradient', () => {
@@ -105,7 +106,13 @@ function unmount(renderer: TestRenderer.ReactTestRenderer) {
 function render(element: React.ReactElement) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(element);
+    renderer = TestRenderer.create(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 59, bottom: 34, left: 0, right: 0 }}
+      >
+        {element}
+      </SafeAreaInsetsContext.Provider>,
+    );
     mounted.add(renderer);
   });
   return renderer;

@@ -1,5 +1,12 @@
 import React from 'react';
-import { Text, TextInput } from 'react-native';
+import {
+  Animated,
+  Image,
+  LayoutAnimation,
+  StyleSheet,
+  Text,
+  TextInput,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -69,7 +76,19 @@ jest.mock('../src/account/deletion', () => {
   };
 });
 
-import { ManageAccountScreen } from '../src/screens/ManageAccountScreen';
+let mockReducedMotion = false;
+jest.mock('../src/design/components', () => {
+  const actual = jest.requireActual<typeof import('../src/design/components')>(
+    '../src/design/components',
+  );
+  return { ...actual, useReducedMotion: () => mockReducedMotion };
+});
+
+import {
+  ManageAccountScreen,
+  DELETION_MASCOT_MOMENTS,
+} from '../src/screens/ManageAccountScreen';
+import { color, type } from '../src/design/tokens';
 import { Button, PressableScale } from '../src/design/components';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
 import {
@@ -159,6 +178,7 @@ async function armDeletion(renderer: TestRenderer.ReactTestRenderer) {
 
 describe('ManageAccountScreen', () => {
   beforeEach(() => {
+    mockReducedMotion = false;
     mockGoBack.mockClear();
     mockShowBrandNotice.mockClear();
     mockRequestAccountDeletion.mockReset();
@@ -309,6 +329,91 @@ describe('ManageAccountScreen', () => {
     expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
     expect(allText(renderer)).toContain('Your account is still reconnecting.');
     expect(allText(renderer)).not.toContain('Sign in to a synced account');
+    act(() => renderer.unmount());
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('keeps the three survey and review captions as plain text with reachable 44pt controls', async () => {
+    const renderer = renderScreen();
+    const expectContext = (phase: keyof typeof DELETION_MASCOT_MOMENTS) => {
+      const context = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === `deletion-context-${phase}`)!;
+      expect(context.props.children).toBe(
+        DELETION_MASCOT_MOMENTS[phase].caption,
+      );
+      const style = StyleSheet.flatten(context.props.style);
+      expect(style).toMatchObject({
+        fontSize: type.caption.fontSize,
+        color: color.inkSoft,
+      });
+      expect(style.backgroundColor).toBeUndefined();
+      expect(renderer.root.findAllByType(Image)).toHaveLength(0);
+      for (const row of radios(renderer)) {
+        expect(
+          StyleSheet.flatten(row.props.style).minHeight,
+        ).toBeGreaterThanOrEqual(44);
+      }
+    };
+    const expectHeaderTarget = (label: string) => {
+      const control = pressable(renderer, label)[0]!;
+      expect(StyleSheet.flatten(control.props.style)).toMatchObject({
+        width: 44,
+        height: 44,
+      });
+    };
+    await act(async () =>
+      pressable(renderer, 'Delete account')[0]!.props.onPress(),
+    );
+    expectContext('why');
+    expectHeaderTarget('Close and keep my account');
+    expect(
+      StyleSheet.flatten(pressable(renderer, 'Skip the survey')[0]!.props.style)
+        .minHeight,
+    ).toBeGreaterThanOrEqual(44);
+    await act(async () => radios(renderer)[0]!.props.onPress());
+    await act(async () => sheetButton(renderer, 'Next').props.onPress());
+    expectContext('kept');
+    expectHeaderTarget('Back to the previous question');
+    expectHeaderTarget('Close and keep my account');
+    await act(async () =>
+      pressable(renderer, 'Skip this question')[0]!.props.onPress(),
+    );
+    expectContext('review');
+    expectHeaderTarget('Close account deletion confirmation');
+    expect(allText(renderer)).toContain(
+      "Free ratings you've already used stay used",
+    );
+    expect(allText(renderer)).toContain(
+      'does not cancel a subscription or issue a',
+    );
+    expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('skips custom entrance and page animations under reduced motion without skipping survey choices', async () => {
+    mockReducedMotion = true;
+    const renderer = renderScreen();
+    const timing = jest.spyOn(Animated, 'timing');
+    const layout = jest.spyOn(LayoutAnimation, 'configureNext');
+    await act(async () =>
+      pressable(renderer, 'Delete account')[0]!.props.onPress(),
+    );
+    await act(async () => radios(renderer)[0]!.props.onPress());
+    await act(async () => sheetButton(renderer, 'Next').props.onPress());
+    expect(allText(renderer)).toContain('QUESTION 2 OF 2');
+    await act(async () =>
+      pressable(renderer, 'Back to the previous question')[0]!.props.onPress(),
+    );
+    expect(radios(renderer)[0]!.props.accessibilityState.selected).toBe(true);
+    await act(async () =>
+      pressable(renderer, 'Skip the survey')[0]!.props.onPress(),
+    );
+    expect(allText(renderer)).toContain('Delete your account?');
+    expect(timing).not.toHaveBeenCalled();
+    expect(layout).not.toHaveBeenCalled();
+    expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 

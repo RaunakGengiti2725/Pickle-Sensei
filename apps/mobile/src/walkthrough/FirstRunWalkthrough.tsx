@@ -1,6 +1,5 @@
 import React, {
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -18,12 +17,10 @@ import {
   type HostInstance,
   type LayoutChangeEvent,
 } from 'react-native';
-import {
-  SafeAreaInsetsContext,
-  type EdgeInsets,
-} from 'react-native-safe-area-context';
+import type { EdgeInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { Button, LoadingState } from '../design/components';
+import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import {
   hasWalkthroughTarget,
@@ -106,7 +103,6 @@ const ARROW_LANE = 92;
 const SCREEN_MARGIN = space.lg;
 const CALLOUT_CHROME_HEIGHT = space.lg + space.md * 2 + 2;
 const MIN_TOUCH_TARGET = 44;
-const NO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(value, maximum));
@@ -312,6 +308,7 @@ function StepSpotlight(props: {
   isLast: boolean;
 }) {
   const { step, rect, frame, viewport } = props;
+  const largeText = useWindowDimensions().fontScale > 1.3;
   const [bodyHeight, setBodyHeight] = useState<number | null>(null);
   const [controlsHeight, setControlsHeight] = useState<number | null>(null);
   const hole = holeForTarget(rect, step.shape);
@@ -374,7 +371,7 @@ function StepSpotlight(props: {
   );
   const controls = (
     <View
-      style={styles.controls}
+      style={[styles.controls, largeText && styles.controlsStacked]}
       testID="walkthrough-controls"
       onLayout={({ nativeEvent: { layout: measured } }) => {
         if (
@@ -397,7 +394,13 @@ function StepSpotlight(props: {
           />
         ))}
       </View>
-      <View style={styles.controlButtons} testID="walkthrough-control-buttons">
+      <View
+        style={[
+          styles.controlButtons,
+          largeText && styles.controlButtonsStacked,
+        ]}
+        testID="walkthrough-control-buttons"
+      >
         {props.isLast ? null : (
           <Pressable
             accessibilityRole="button"
@@ -494,6 +497,8 @@ function StepSpotlight(props: {
             contentContainerStyle={styles.calloutContent}
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustContentInsets={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={false}
             showsVerticalScrollIndicator
             indicatorStyle="white"
             bounces={false}
@@ -508,6 +513,8 @@ function StepSpotlight(props: {
               style={[styles.copy, { maxHeight: layout.bodyMaxHeight }]}
               contentInsetAdjustmentBehavior="never"
               automaticallyAdjustContentInsets={false}
+              keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={false}
               showsVerticalScrollIndicator
               indicatorStyle="white"
               bounces={false}
@@ -523,23 +530,41 @@ function StepSpotlight(props: {
   );
 }
 
-/** A target only counts when it is actually in the viewport — a scrolled-away
- * banner still measures, but pointing at coordinates above the screen leaves
- * the user staring at a bare scrim. Center on screen ⇒ at least half of the
- * target is visible, which is enough to spotlight honestly. */
+/** A target only counts when a meaningful part is actually in the viewport.
+ * Enlarged banners may extend beyond the screen; anchor their visible part
+ * instead of requiring an off-screen center. Smaller targets still need at
+ * least half visible, while fully scrolled-away targets remain excluded. */
+function visibleTargetRect(
+  rect: TargetRect,
+  windowWidth: number,
+  windowHeight: number,
+): TargetRect | null {
+  if (
+    ![rect.x, rect.y, rect.width, rect.height, windowWidth, windowHeight].every(
+      Number.isFinite,
+    ) ||
+    rect.width <= 0 ||
+    rect.height <= 0 ||
+    windowWidth <= 0 ||
+    windowHeight <= 0
+  )
+    return null;
+  const x = Math.max(0, rect.x);
+  const y = Math.max(0, rect.y);
+  const width = Math.min(windowWidth, rect.x + rect.width) - x;
+  const height = Math.min(windowHeight, rect.y + rect.height) - y;
+  return width >= Math.min(44, rect.width / 2) &&
+    height >= Math.min(44, rect.height / 2)
+    ? { x, y, width, height }
+    : null;
+}
+
 export function rectVisibleInWindow(
   rect: TargetRect,
   windowWidth: number,
   windowHeight: number,
 ): boolean {
-  const centerX = rect.x + rect.width / 2;
-  const centerY = rect.y + rect.height / 2;
-  return (
-    centerX >= 0 &&
-    centerX <= windowWidth &&
-    centerY >= 0 &&
-    centerY <= windowHeight
-  );
+  return visibleTargetRect(rect, windowWidth, windowHeight) !== null;
 }
 
 function WalkthroughStage({ dismiss }: { dismiss: () => void }) {
@@ -549,7 +574,7 @@ function WalkthroughStage({ dismiss }: { dismiss: () => void }) {
     fontScale,
     scale,
   } = useWindowDimensions();
-  const insets = useContext(SafeAreaInsetsContext) ?? NO_INSETS;
+  const insets = useReliableSafeAreaInsets();
   const environment = useMemo(
     () => ({
       windowWidth,
@@ -694,19 +719,17 @@ function WalkthroughStage({ dismiss }: { dismiss: () => void }) {
         if (!hasWalkthroughTarget(step.targetKey)) break;
         const measured = await measureWalkthroughTarget(step.targetKey);
         if (cancelled) return;
-        const local = measured
-          ? {
-              ...measured,
-              x: measured.x - frame.x,
-              y: measured.y - frame.y,
-            }
+        const visible = measured
+          ? visibleTargetRect(measured, windowWidth, windowHeight)
           : null;
-        if (
-          measured &&
-          local &&
-          rectVisibleInWindow(measured, windowWidth, windowHeight) &&
-          rectVisibleInWindow(local, frame.width, frame.height)
-        ) {
+        const local = visible
+          ? visibleTargetRect(
+              { ...visible, x: visible.x - frame.x, y: visible.y - frame.y },
+              frame.width,
+              frame.height,
+            )
+          : null;
+        if (local) {
           setMeasurement({ key: layoutKey, rect: local });
           return;
         }
@@ -792,6 +815,8 @@ function WalkthroughStage({ dismiss }: { dismiss: () => void }) {
             contentContainerStyle={styles.measuringContent}
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustContentInsets={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={false}
             showsVerticalScrollIndicator
             indicatorStyle="white"
             bounces={false}
@@ -861,6 +886,11 @@ const styles = StyleSheet.create({
     gap: space.md,
     marginTop: space.md,
   },
+  controlsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.md,
+  },
   dots: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   dot: {
     width: 6,
@@ -878,6 +908,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: space.md,
   },
+  controlButtonsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    maxWidth: '100%',
+    minWidth: 0,
+  },
   skip: {
     paddingVertical: space.sm,
     minWidth: MIN_TOUCH_TARGET,
@@ -885,5 +921,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  skipText: { color: color.onDarkMuted },
+  skipText: { color: color.onDarkMuted, textAlign: 'center' },
 });

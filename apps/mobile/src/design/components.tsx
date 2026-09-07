@@ -19,13 +19,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
-import Svg, {
-  Circle,
-  Defs,
-  LinearGradient,
-  Polyline,
-  Stop,
-} from 'react-native-svg';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 import Reanimated, {
   Easing as ReanimatedEasing,
   useAnimatedProps,
@@ -34,7 +28,7 @@ import Reanimated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { bandColor, color, radius, shadow, space, type } from './tokens';
+import { bandColor, color, radius, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
 
 const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
@@ -415,6 +409,7 @@ export function ScreenHeader(props: {
 
 export function Button(props: {
   label: string;
+  largeTextLabel?: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'volt' | 'dark';
   disabled?: boolean;
@@ -422,6 +417,8 @@ export function Button(props: {
   icon?: IconName;
   compact?: boolean;
 }) {
+  const largeText = useWindowDimensions().fontScale > 1.3;
+  const largeTextLabel = largeText ? props.largeTextLabel : undefined;
   const variant = props.variant ?? 'primary';
   const palette = {
     primary: { bg: color.court, fg: color.onDark, border: color.court },
@@ -445,22 +442,34 @@ export function Button(props: {
       style={[
         styles.button,
         props.compact && styles.buttonCompact,
+        largeText && styles.buttonLargeText,
         {
           backgroundColor: palette.bg,
           borderColor: palette.border,
         },
       ]}
     >
-      <View style={styles.buttonContent}>
-        {props.icon ? (
+      <View
+        style={[
+          styles.buttonContent,
+          largeText && styles.buttonContentLargeText,
+        ]}
+      >
+        {props.icon && largeTextLabel === undefined ? (
           <Icon name={props.icon} size={18} color={palette.fg} />
         ) : null}
         <Text
-          style={[type.bodyBold, styles.buttonLabel, { color: palette.fg }]}
+          style={[
+            type.bodyBold,
+            styles.buttonLabel,
+            { color: palette.fg },
+            largeText && styles.buttonLabelLargeText,
+          ]}
         >
-          {props.label}
+          {largeTextLabel ?? props.label}
         </Text>
-        {variant === 'primary' || variant === 'volt' || variant === 'dark' ? (
+        {largeTextLabel === undefined &&
+        (variant === 'primary' || variant === 'volt' || variant === 'dark') ? (
           <Icon name="arrow" size={18} color={palette.fg} />
         ) : null}
       </View>
@@ -613,7 +622,7 @@ export function SectionTitle(props: {
   );
 }
 
-const SCORE_RING_SWEEP_MS = 900;
+const SCORE_RING_SWEEP_MS = 240;
 
 /** 0–10 technique score ring; color and label are never color-only. The arc
  * sweeps in and the number counts up once on mount (the score-reveal moment);
@@ -690,12 +699,6 @@ export function ScoreRing(props: {
       }}
     >
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Defs>
-          <LinearGradient id="scoreGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={color.volt} />
-            <Stop offset="1" stopColor={accent} />
-          </LinearGradient>
-        </Defs>
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -708,7 +711,7 @@ export function ScoreRing(props: {
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="url(#scoreGradient)"
+          stroke={accent}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -801,7 +804,15 @@ export function CheckpointRow(props: {
         <Text style={[type.bodyBold, { color: color.ink, flex: 1 }]}>
           {props.name}
         </Text>
-        <Text style={[type.h3, { color: bar, fontVariant: ['tabular-nums'] }]}>
+        <Text
+          style={[
+            type.h3,
+            {
+              color: props.band === 'yellow' ? color.ink : bar,
+              fontVariant: ['tabular-nums'],
+            },
+          ]}
+        >
           {props.score === null ? '—' : Math.round(props.score)}
         </Text>
       </View>
@@ -861,7 +872,7 @@ export function TrendChart(props: {
           `${i * step},${height - (Math.min(p, max) / max) * (height - 8) - 4}`,
       )
       .join(' ');
-    return { pts, area: `0,${height} ${pts} ${width},${height}` };
+    return { pts };
   }, [height, max, props.points, width]);
 
   if (!geometry) {
@@ -880,13 +891,6 @@ export function TrendChart(props: {
       height={height}
       accessibilityLabel="Technique score trend"
     >
-      <Defs>
-        <LinearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={line} stopOpacity="0.2" />
-          <Stop offset="1" stopColor={line} stopOpacity="0" />
-        </LinearGradient>
-      </Defs>
-      <Polyline points={geometry.area} fill="url(#trendFill)" stroke="none" />
       <Polyline
         points={geometry.pts}
         fill="none"
@@ -909,7 +913,7 @@ export function EmptyState(props: {
     <View style={styles.stateWrap}>
       <View style={[styles.emptyGlyph, props.dark && styles.emptyGlyphDark]}>
         <Icon
-          name="spark"
+          name="court"
           color={props.dark ? color.volt : color.court}
           size={24}
         />
@@ -955,6 +959,17 @@ export function ErrorState(props: {
   retryLabel?: string;
   dark?: boolean;
 }) {
+  const { fontScale, height } = useWindowDimensions();
+  const adaptive = fontScale > 1.2 || height < 760;
+  const retry = props.onRetry ? (
+    <View style={adaptive ? styles.stateRetryPinned : styles.stateRetry}>
+      <Button
+        label={props.retryLabel ?? 'Try again'}
+        onPress={props.onRetry}
+        variant="secondary"
+      />
+    </View>
+  ) : null;
   return (
     <SafeAreaView
       style={[
@@ -962,49 +977,49 @@ export function ErrorState(props: {
         { backgroundColor: props.dark ? color.surfaceDark : color.surface },
       ]}
     >
-      <View
-        accessibilityLiveRegion="assertive"
-        accessibilityRole="alert"
-        style={styles.stateWrap}
+      <ScrollView
+        style={styles.stateScroll}
+        contentContainerStyle={styles.stateScrollContent}
+        scrollEnabled={adaptive}
+        showsVerticalScrollIndicator={adaptive}
       >
-        <View style={[styles.emptyGlyph, { backgroundColor: color.badSoft }]}>
-          <Icon name="close" color={color.bad} size={22} />
-        </View>
-        <Text
-          style={[
-            type.h2,
-            {
-              color: props.dark ? color.onDark : color.ink,
-              textAlign: 'center',
-              marginTop: space.md,
-            },
-          ]}
+        <View
+          accessibilityLiveRegion="assertive"
+          accessibilityRole="alert"
+          style={styles.stateMessage}
         >
-          {props.title}
-        </Text>
-        <Text
-          style={[
-            type.body,
-            {
-              color: props.dark ? color.onDarkSubtle : color.inkSoft,
-              textAlign: 'center',
-              marginTop: space.sm,
-              maxWidth: 310,
-            },
-          ]}
-        >
-          {props.detail}
-        </Text>
-        {props.onRetry ? (
-          <View style={{ marginTop: space.lg, alignSelf: 'stretch' }}>
-            <Button
-              label={props.retryLabel ?? 'Try again'}
-              onPress={props.onRetry}
-              variant="secondary"
-            />
+          <View style={[styles.emptyGlyph, { backgroundColor: color.badSoft }]}>
+            <Icon name="close" color={color.bad} size={22} />
           </View>
-        ) : null}
-      </View>
+          <Text
+            style={[
+              type.h2,
+              {
+                color: props.dark ? color.onDark : color.ink,
+                textAlign: 'center',
+                marginTop: space.md,
+              },
+            ]}
+          >
+            {props.title}
+          </Text>
+          <Text
+            style={[
+              type.body,
+              {
+                color: props.dark ? color.onDarkSubtle : color.inkSoft,
+                textAlign: 'center',
+                marginTop: space.sm,
+                maxWidth: 310,
+              },
+            ]}
+          >
+            {props.detail}
+          </Text>
+        </View>
+        {!adaptive ? retry : null}
+      </ScrollView>
+      {adaptive ? retry : null}
     </SafeAreaView>
   );
 }
@@ -1061,7 +1076,7 @@ export function Pill(props: {
   const palette = {
     neutral: { bg: color.surfaceAlt, fg: color.inkSoft },
     good: { bg: color.goodSoft, fg: color.good },
-    warn: { bg: color.warnSoft, fg: color.warn },
+    warn: { bg: color.warnSoft, fg: color.ink },
     bad: { bg: color.badSoft, fg: color.bad },
     volt: { bg: color.volt, fg: color.onVolt },
     dark: { bg: color.inkElevated, fg: color.onDark },
@@ -1173,6 +1188,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   buttonCompact: { minHeight: 46 },
+  buttonLargeText: { borderRadius: radius.lg },
   buttonContent: {
     minHeight: 54,
     paddingHorizontal: space.lg,
@@ -1183,6 +1199,11 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   buttonLabel: { flexShrink: 1, minWidth: 0, textAlign: 'center' },
+  buttonContentLargeText: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  buttonLabelLargeText: { flexShrink: 1, textAlign: 'center' },
   dialogRoot: {
     flex: 1,
     justifyContent: 'center',
@@ -1196,7 +1217,8 @@ const styles = StyleSheet.create({
     padding: space.lg,
     borderRadius: radius.xl,
     backgroundColor: color.surface,
-    ...shadow.floating,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
   },
   dialogTopRow: {
     minHeight: 44,
@@ -1229,12 +1251,13 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: color.surfaceElevated,
     borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
     padding: space.lg,
-    ...shadow.soft,
   },
-  cardDark: { backgroundColor: color.inkElevated, shadowOpacity: 0 },
-  cardCourt: { backgroundColor: color.courtDeep, shadowOpacity: 0 },
-  cardSoft: { backgroundColor: color.surfaceAlt, shadowOpacity: 0 },
+  cardDark: { backgroundColor: color.inkElevated, borderColor: color.lineDark },
+  cardCourt: { backgroundColor: color.courtDeep, borderColor: color.courtDeep },
+  cardSoft: { backgroundColor: color.surfaceAlt },
   sectionTitle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1257,6 +1280,20 @@ const styles = StyleSheet.create({
   },
   metricFill: { height: 4, borderRadius: 2 },
   revealFill: { transformOrigin: 'left' },
+  stateScroll: { flex: 1 },
+  stateScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.xl,
+  },
+  stateMessage: { width: '100%', alignItems: 'center' },
+  stateRetry: { marginTop: space.lg, alignSelf: 'stretch' },
+  stateRetryPinned: {
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
+    flexShrink: 0,
+  },
   stateWrap: {
     alignItems: 'center',
     justifyContent: 'center',

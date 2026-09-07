@@ -65,11 +65,33 @@ const initialSnapshot = buildConsistencySnapshot(
 let mockSnapshot: ReturnType<typeof buildConsistencySnapshot> | null =
   initialSnapshot;
 let mockLoadError: string | null = null;
+// A one-day run on 2026-09-04 keyed by the engine in UTC. Whatever zone the
+// test process runs in, the screen must label that key as September 4.
+const mockSeptemberSnapshot = buildConsistencySnapshot(
+  [
+    {
+      kind: 'stroke',
+      atIso: '2026-09-04T10:00:00.000Z',
+      shotType: 'dink',
+      overallScore: 7.1,
+      resultKind: 'scored',
+    },
+  ],
+  { asOfIso: '2026-09-04T18:00:00.000Z', timeZone: 'UTC' },
+);
 const mockRefresh = jest.fn(async () => undefined);
+const mockStore = {
+  get snapshot() {
+    return mockSnapshot;
+  },
+  set snapshot(value: ReturnType<typeof buildConsistencySnapshot> | null) {
+    mockSnapshot = value;
+  },
+};
 jest.mock('../src/consistency/store', () => ({
   useConsistencyStore: (selector: (state: unknown) => unknown) =>
     selector({
-      snapshot: mockSnapshot,
+      snapshot: mockStore.snapshot,
       loadError: mockLoadError,
       refresh: mockRefresh,
     }),
@@ -317,6 +339,34 @@ describe('StreakCalendarScreen', () => {
     // Scored average for the day: one 7.4 analysis → 7.4.
     expect(copy).toContain('AVG 7.4');
     act(() => renderer.unmount());
+  });
+
+  it('titles the selected day with the engine day key in every device zone', () => {
+    mockStore.snapshot = mockSeptemberSnapshot;
+    try {
+      expect(mockSeptemberSnapshot.asOfDay).toBe('2026-09-04');
+      const renderer = renderScreen();
+      // Trained today → today's log opens by itself (tapping would toggle it).
+      const dayNode = renderer.root.findAll(
+        node =>
+          typeof node.props.accessibilityLabel === 'string' &&
+          node.props.accessibilityLabel.startsWith('2026-09-04, trained') &&
+          typeof node.props.onPress === 'function',
+      )[0]!;
+      expect(dayNode.props.accessibilityState).toMatchObject({
+        selected: true,
+      });
+      const detail = renderer.root.findAll(
+        node => node.props.testID === 'streak-day-detail',
+      )[0]!;
+      const title = String(detail.findAllByType(Text)[0]!.props.children);
+      expect(title).toContain('September 4');
+      expect(title).not.toContain('September 5');
+      expect(title).not.toContain('September 3');
+      act(() => renderer.unmount());
+    } finally {
+      mockStore.snapshot = mockSnapshot;
+    }
   });
 
   it('never renders a future month and can walk back to history', async () => {

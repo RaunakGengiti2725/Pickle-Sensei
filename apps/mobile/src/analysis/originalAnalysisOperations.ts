@@ -387,10 +387,13 @@ async function hasProduct(
   operation: OriginalAnalysisOperation,
 ): Promise<boolean> {
   const owner = operation.snapshot.ownerKey;
+  // An unreadable owner outbox row cannot prove that no product exists.
+  // Treat it as blocking evidence, never as permission to retry or refund.
   const { rows } = await db.execute(
     `SELECT 1 AS found FROM local_analysis_record WHERE owner_key = ? AND capture_id = ?
     UNION ALL SELECT 1 FROM local_shot WHERE owner_key = ? AND id = ?
-    UNION ALL SELECT 1 FROM outbox WHERE owner_key = ? AND kind = 'shot.sync' AND json_extract(payload, '$.id') = ?
+    UNION ALL SELECT 1 FROM outbox WHERE owner_key = ? AND kind = 'shot.sync'
+      AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') = ? ELSE 1 END
     UNION ALL SELECT 1 FROM sync_receipt WHERE owner_key = ? AND kind = 'shot.sync' AND entity_id = ? LIMIT 1`,
     [
       owner,

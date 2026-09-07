@@ -8,12 +8,17 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { BrandSpinner, PressableScale } from '../design/components';
+import {
+  BrandMark,
+  BrandSpinner,
+  PressableScale,
+  useReducedMotion,
+} from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { Icon, type IconName } from '../design/icons';
-import { color, font, radius, shadow, space, type } from '../design/tokens';
+import { color, radius, space, type } from '../design/tokens';
 import type { BillingPeriod, StorePlan } from '../billing/types';
 import {
   selectHasPremium,
@@ -38,7 +43,7 @@ export interface PaywallScreenProps {
  * practice library, and the rank/progress system. */
 const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
   {
-    icon: 'spark',
+    icon: 'stroke',
     title: 'Unlimited technique analyses',
     body: 'Automatic capture with replay and checkpoint feedback.',
   },
@@ -115,11 +120,13 @@ function selectedPlanSummary(plan: StorePlan): string {
 function PodiumColumn(props: {
   plan: StorePlan;
   selected: boolean;
-  /** The recommended plan: always volt-framed, wider, with a straddling badge. */
+  /** The recommended plan: wider, with a straddling value badge. */
   hero?: boolean;
   heroBadge?: string | null;
   chip?: string | null;
   chipTone?: 'volt' | 'dark';
+  accessibleLayout: boolean;
+  onNeedsWideLayout: () => void;
   onPress: () => void;
 }) {
   const { plan, selected, hero } = props;
@@ -128,7 +135,13 @@ function PodiumColumn(props: {
       ? `${plan.priceString} one-time`
       : `${plan.priceString} per ${periodLabel(plan.period)}`;
   return (
-    <View style={[styles.podiumColumn, hero && styles.podiumColumnHero]}>
+    <View
+      style={[
+        styles.podiumColumn,
+        hero && styles.podiumColumnHero,
+        props.accessibleLayout && styles.podiumColumnAccessible,
+      ]}
+    >
       <PressableScale
         testID={`paywall-plan-${plan.period}`}
         onPress={props.onPress}
@@ -141,11 +154,23 @@ function PodiumColumn(props: {
           { minHeight: PODIUM_HEIGHTS[plan.period] },
           hero && styles.podiumCardHero,
           selected && styles.podiumCardSelected,
+          props.accessibleLayout && styles.podiumCardAccessible,
         ]}
       >
         {hero && props.heroBadge ? (
-          <View pointerEvents="none" style={styles.heroBadge}>
-            <View style={styles.heroBadgePill}>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.heroBadge,
+              props.accessibleLayout && styles.heroBadgeAccessible,
+            ]}
+          >
+            <View
+              style={[
+                styles.heroBadgePill,
+                props.accessibleLayout && styles.badgePillAccessible,
+              ]}
+            >
               <Text style={styles.heroBadgeText}>{props.heroBadge}</Text>
             </View>
           </View>
@@ -159,14 +184,21 @@ function PodiumColumn(props: {
         </View>
         <Text style={styles.podiumTitle}>{PODIUM_TITLES[plan.period]}</Text>
         <Text
-          style={[styles.podiumPrice, hero && styles.podiumPriceHero]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.7}
+          style={styles.podiumPrice}
+          adjustsFontSizeToFit={false}
+          testID={`paywall-plan-${plan.period}-price`}
+          onTextLayout={event => {
+            if (!props.accessibleLayout && event.nativeEvent.lines.length > 1) {
+              props.onNeedsWideLayout();
+            }
+          }}
         >
           {plan.priceString}
         </Text>
-        <Text style={styles.podiumQualifier} numberOfLines={2}>
+        <Text
+          style={styles.podiumQualifier}
+          testID={`paywall-plan-${plan.period}-qualifier`}
+        >
           {podiumQualifier(plan)}
         </Text>
         {props.chip ? (
@@ -191,7 +223,10 @@ function PodiumColumn(props: {
           </View>
         ) : null}
         {plan.freeTrial ? (
-          <Text style={styles.trialText} numberOfLines={1}>
+          <Text
+            style={styles.trialText}
+            testID={`paywall-plan-${plan.period}-trial`}
+          >
             {plan.freeTrial.label}
           </Text>
         ) : null}
@@ -204,7 +239,7 @@ function BenefitRow(props: (typeof BENEFITS)[number]) {
   return (
     <View style={styles.benefitRow}>
       <View style={styles.benefitIcon}>
-        <Icon name={props.icon} color={color.volt} size={18} />
+        <Icon name={props.icon} color={color.onDarkMuted} size={18} />
       </View>
       <View style={styles.benefitCopy}>
         <Text style={styles.benefitTitle}>{props.title}</Text>
@@ -216,6 +251,10 @@ function BenefitRow(props: (typeof BENEFITS)[number]) {
 
 export function PaywallScreen(props: PaywallScreenProps) {
   const insets = useReliableSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
+  const [widePrices, setWidePrices] = useState(false);
+  const accessibleLayout = useWindowDimensions().fontScale > 1.3 || widePrices;
+  const useWidePrices = useCallback(() => setWidePrices(true), []);
   const {
     status,
     operation,
@@ -252,7 +291,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
   // Two-step flow: page 1 sells the value, page 2 (one deliberate tap later)
   // shows store-verified pricing. Entering content slides/fades in 220ms
-  // ease-out (transform+opacity only, native driver).
+  // with the native driver; reduced motion keeps both pages at rest.
   const [page, setPage] = useState<PaywallPage>('value');
   const pageRef = useRef<PaywallPage>('value');
   const pageOpacity = useRef(new Animated.Value(1)).current;
@@ -262,6 +301,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
     (next: PaywallPage) => {
       if (pageRef.current === next) return;
       pageRef.current = next;
+      if (reducedMotion) {
+        pageOpacity.setValue(1);
+        pageShift.setValue(0);
+        setPage(next);
+        return;
+      }
       pageOpacity.setValue(0);
       pageShift.setValue(next === 'pricing' ? 28 : -28);
       Animated.parallel([
@@ -280,8 +325,15 @@ export function PaywallScreen(props: PaywallScreenProps) {
       ]).start();
       setPage(next);
     },
-    [pageOpacity, pageShift],
+    [pageOpacity, pageShift, reducedMotion],
   );
+
+  useEffect(() => {
+    if (reducedMotion) {
+      pageOpacity.setValue(1);
+      pageShift.setValue(0);
+    }
+  }, [pageOpacity, pageShift, reducedMotion]);
 
   useEffect(() => {
     if (operation !== 'idle' || status === 'loading' || premium) return;
@@ -368,10 +420,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
   if (premium) {
     return (
-      <LinearGradient
-        colors={[color.surfaceDark, color.courtDeep]}
-        style={styles.screen}
-      >
+      <View style={styles.screen}>
         <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
           <StatusBar barStyle="light-content" />
           <View
@@ -389,12 +438,9 @@ export function PaywallScreen(props: PaywallScreenProps) {
             </PressableScale>
           </View>
           <View style={styles.activeBody}>
-            <LinearGradient
-              colors={[color.volt, color.mint]}
-              style={styles.crownBadge}
-            >
-              <Icon name="crown" size={28} color={color.onVolt} />
-            </LinearGradient>
+            <View style={styles.crownBadge}>
+              <Icon name="crown" size={28} color={color.onDarkMuted} />
+            </View>
             <Text style={styles.activeEyebrow}>MEMBERSHIP VERIFIED</Text>
             <Text style={styles.activeTitle}>Your full court is open.</Text>
             <Text style={styles.activeSub}>
@@ -411,7 +457,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             </PressableScale>
           </View>
         </View>
-      </LinearGradient>
+      </View>
     );
   }
 
@@ -419,11 +465,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
   const onPricingPage = page === 'pricing';
 
   return (
-    <LinearGradient
-      colors={[color.surfaceDark, color.inkElevated, color.courtDeep]}
-      locations={[0, 0.58, 1]}
-      style={styles.screen}
-    >
+    <View style={styles.screen}>
       <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
         <StatusBar barStyle="light-content" />
         <View
@@ -443,7 +485,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             </PressableScale>
           ) : (
             <View style={styles.wordmarkRow}>
-              <View style={styles.miniMark} />
+              <BrandMark compact light size={24} />
               <Text style={styles.wordmark}>PICKLE SENSEI</Text>
             </View>
           )}
@@ -469,6 +511,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
         </View>
 
         <Animated.View
+          testID="paywall-page-body"
           style={[
             styles.pageBody,
             { opacity: pageOpacity, transform: [{ translateX: pageShift }] },
@@ -477,7 +520,10 @@ export function PaywallScreen(props: PaywallScreenProps) {
           {onPricingPage ? (
             <ScrollView
               style={styles.scroll}
-              contentContainerStyle={styles.content}
+              contentContainerStyle={[
+                styles.content,
+                accessibleLayout && styles.pricingContentAccessible,
+              ]}
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.hero}>
@@ -500,9 +546,17 @@ export function PaywallScreen(props: PaywallScreenProps) {
 
               <View style={styles.plans}>
                 {plans ? (
-                  <View style={styles.podiumRow}>
+                  <View
+                    testID="paywall-plan-options"
+                    style={[
+                      styles.podiumRow,
+                      accessibleLayout && styles.podiumRowAccessible,
+                    ]}
+                  >
                     {plans.monthly ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
+                        onNeedsWideLayout={useWidePrices}
                         plan={plans.monthly}
                         selected={selectedPeriod === 'monthly'}
                         onPress={() => selectPeriod('monthly')}
@@ -510,6 +564,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
                     ) : null}
                     {plans.annual ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
+                        onNeedsWideLayout={useWidePrices}
                         plan={plans.annual}
                         selected={selectedPeriod === 'annual'}
                         hero
@@ -520,6 +576,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
                     ) : null}
                     {plans.lifetime ? (
                       <PodiumColumn
+                        accessibleLayout={accessibleLayout}
+                        onNeedsWideLayout={useWidePrices}
                         plan={plans.lifetime}
                         selected={selectedPeriod === 'lifetime'}
                         chip="PAY ONCE"
@@ -576,8 +634,10 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   accessibilityLiveRegion="assertive"
                   style={styles.errorCard}
                 >
-                  <Icon name="shield" color={color.volt} size={18} />
-                  <Text style={styles.errorText}>{error.message}</Text>
+                  <Icon name="shield" color={color.onDarkMuted} size={18} />
+                  <Text accessibilityRole="alert" style={styles.errorText}>
+                    {error.message}
+                  </Text>
                 </PressableScale>
               ) : null}
 
@@ -634,7 +694,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
               </PressableScale>
 
               <View style={styles.trustRow}>
-                <Icon name="shield" color={color.mint} size={17} />
+                <Icon name="shield" color={color.onDarkMuted} size={17} />
                 <Text style={styles.trustText}>
                   Purchase and renewal are confirmed by your app store. Cancel
                   in your store account settings.
@@ -687,12 +747,9 @@ export function PaywallScreen(props: PaywallScreenProps) {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.hero}>
-                <LinearGradient
-                  colors={[color.volt, color.mint]}
-                  style={styles.crownBadge}
-                >
-                  <Icon name="crown" size={27} color={color.onVolt} />
-                </LinearGradient>
+                <View style={styles.crownBadge}>
+                  <Icon name="crown" size={27} color={color.onDarkMuted} />
+                </View>
                 <Text style={styles.eyebrow}>
                   {recoveryRequired
                     ? 'MEMBERSHIP VERIFICATION'
@@ -750,7 +807,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
               </PressableScale>
 
               <View style={styles.trustRow}>
-                <Icon name="shield" color={color.mint} size={17} />
+                <Icon name="shield" color={color.onDarkMuted} size={17} />
                 <Text style={styles.trustText}>
                   Store-verified pricing on the next step. Purchases are handled
                   by your app store — cancel anytime.
@@ -760,12 +817,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
           )}
         </Animated.View>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1, backgroundColor: color.surfaceDark },
   topBar: {
     minHeight: 64,
     paddingHorizontal: space.lg,
@@ -775,27 +832,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   wordmarkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  miniMark: {
-    width: 20,
-    height: 20,
-    borderRadius: 7,
-    backgroundColor: color.volt,
-    borderWidth: 5,
-    borderColor: color.court,
-  },
   wordmark: {
     ...type.micro,
-    fontFamily: font.bold,
     color: color.onDark,
     letterSpacing: 1.25,
   },
   closeButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.onDarkTint,
+    backgroundColor: color.onDarkTintFaint,
     borderWidth: 1,
     borderColor: color.lineMutedDark,
   },
@@ -829,14 +877,16 @@ const styles = StyleSheet.create({
   crownBadge: {
     width: 58,
     height: 58,
-    borderRadius: 20,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow.floating,
+    backgroundColor: color.inkElevated,
+    borderWidth: 1,
+    borderColor: color.lineDark,
   },
   eyebrow: {
     ...type.micro,
-    color: color.volt,
+    color: color.onDarkMuted,
     marginTop: space.md,
     textAlign: 'center',
   },
@@ -873,12 +923,12 @@ const styles = StyleSheet.create({
   benefitIcon: {
     width: 36,
     height: 36,
-    borderRadius: 13,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(215,250,69,0.1)',
+    backgroundColor: color.onDarkTintFaint,
     borderWidth: 1,
-    borderColor: 'rgba(215,250,69,0.2)',
+    borderColor: color.lineDark,
   },
   benefitCopy: { flex: 1 },
   benefitTitle: { ...type.bodyBold, color: color.onDark },
@@ -890,30 +940,41 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingTop: space.md,
   },
-  podiumColumn: { flex: 1 },
+  podiumColumn: { flex: 1, minWidth: 0 },
   podiumColumnHero: { flex: 1.18, zIndex: 1 },
+  podiumRowAccessible: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.lg,
+  },
+  podiumColumnAccessible: { flex: 0 },
+  pricingContentAccessible: { paddingHorizontal: space.md },
+  podiumCardAccessible: { paddingHorizontal: space.sm },
+  heroBadgeAccessible: {
+    position: 'relative',
+    top: 0,
+    marginBottom: space.sm,
+    alignSelf: 'center',
+    maxWidth: '100%',
+  },
+  badgePillAccessible: { borderRadius: radius.sm, maxWidth: '100%' },
   podiumCard: {
     borderRadius: radius.md,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: color.lineMutedDark,
-    backgroundColor: color.onDarkTint,
+    backgroundColor: color.onDarkTintFaint,
     paddingVertical: space.md,
     paddingHorizontal: space.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   podiumCardHero: {
-    borderColor: 'rgba(215,250,69,0.55)',
-    backgroundColor: 'rgba(215,250,69,0.07)',
+    borderColor: color.lineStrongDark,
+    backgroundColor: color.inkElevated,
   },
   podiumCardSelected: {
     borderColor: color.volt,
-    backgroundColor: 'rgba(215,250,69,0.16)',
-    shadowColor: color.volt,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    elevation: 8,
+    backgroundColor: color.voltTint,
   },
   heroBadge: {
     position: 'absolute',
@@ -924,23 +985,18 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   heroBadgePill: {
-    backgroundColor: color.volt,
-    borderRadius: radius.pill,
+    backgroundColor: color.inkElevated,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: color.lineStrongDark,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    shadowColor: color.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    maxWidth: '100%',
   },
   heroBadgeText: {
-    fontFamily: font.bold,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: 'normal',
-    color: color.onVolt,
-    letterSpacing: 0.8,
+    ...type.micro,
+    color: color.onDark,
+    textAlign: 'center',
   },
   podiumRadio: {
     width: 20,
@@ -958,68 +1014,49 @@ const styles = StyleSheet.create({
   },
   podiumTitle: {
     ...type.caption,
-    fontFamily: font.semibold,
     color: color.onDarkMuted,
     textAlign: 'center',
   },
   podiumPrice: {
-    fontFamily: font.semibold,
-    fontSize: 22,
-    lineHeight: 27,
-    fontWeight: 'normal',
-    letterSpacing: -0.6,
+    ...type.h2,
     fontVariant: ['tabular-nums'],
     color: color.onDark,
     textAlign: 'center',
+    alignSelf: 'stretch',
     marginTop: 2,
   },
-  podiumPriceHero: {
-    fontSize: 28,
-    lineHeight: 33,
-    letterSpacing: -0.8,
-  },
   podiumQualifier: {
-    fontFamily: font.medium,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: 'normal',
+    ...type.caption,
     color: color.onDarkMuted,
     textAlign: 'center',
+    alignSelf: 'stretch',
     marginTop: 3,
   },
   podiumChip: {
-    borderRadius: radius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
     marginTop: space.sm,
+    maxWidth: '100%',
   },
-  podiumChipVolt: { backgroundColor: color.volt },
+  podiumChipVolt: { backgroundColor: color.voltTint },
   podiumChipDark: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: color.onDarkTintFaint,
     borderWidth: 1,
     borderColor: color.lineMutedDark,
   },
-  podiumChipText: {
-    fontFamily: font.bold,
-    fontSize: 9,
-    lineHeight: 11,
-    fontWeight: 'normal',
-    letterSpacing: 0.55,
-  },
-  podiumChipTextVolt: { color: color.onVolt },
+  podiumChipText: { ...type.micro, textAlign: 'center' },
+  podiumChipTextVolt: { color: color.volt },
   podiumChipTextDark: { color: color.onDarkMuted },
   trialText: {
-    fontFamily: font.semibold,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: 'normal',
-    color: color.volt,
+    ...type.caption,
+    color: color.onDark,
     textAlign: 'center',
-    marginTop: 4,
+    alignSelf: 'stretch',
+    marginTop: space.xs,
   },
   selectedSummary: {
     ...type.caption,
-    fontFamily: font.semibold,
     color: color.onDark,
     textAlign: 'center',
   },
@@ -1039,7 +1076,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.lineMutedDark,
-    backgroundColor: color.onDarkTint,
+    backgroundColor: color.onDarkTintFaint,
     padding: space.md,
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1049,39 +1086,52 @@ const styles = StyleSheet.create({
   unavailableTitle: { ...type.bodyBold, color: color.onDark },
   unavailableBody: { ...type.caption, color: color.onDarkMuted, marginTop: 3 },
   errorCard: {
+    minHeight: 44,
     marginTop: space.md,
     padding: space.md,
     borderRadius: radius.sm,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: space.sm,
-    backgroundColor: 'rgba(215,250,69,0.08)',
+    backgroundColor: color.onDarkTintFaint,
     borderWidth: 1,
-    borderColor: 'rgba(215,250,69,0.22)',
+    borderColor: color.lineMutedDark,
   },
   errorText: { ...type.caption, color: color.onDark, flex: 1 },
   primaryButton: {
     minHeight: 58,
     marginTop: space.md,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     backgroundColor: color.volt,
     paddingHorizontal: space.lg,
+    paddingVertical: space.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
   },
-  primaryButtonText: { ...type.bodyBold, color: color.onVolt },
+  primaryButtonText: {
+    ...type.bodyBold,
+    color: color.onVolt,
+    flexShrink: 1,
+    textAlign: 'center',
+  },
   secondaryButton: {
     minHeight: 52,
     marginTop: space.md,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.lineMutedDark,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryButtonText: { ...type.bodyBold, color: color.onDark },
+  secondaryButtonText: {
+    ...type.bodyBold,
+    color: color.onDark,
+    textAlign: 'center',
+  },
   restoreButton: {
     minHeight: 48,
     marginTop: space.sm,
@@ -1138,7 +1188,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeEyebrow: { ...type.micro, color: color.volt, marginTop: space.lg },
+  activeEyebrow: {
+    ...type.micro,
+    color: color.onDarkMuted,
+    marginTop: space.lg,
+    textAlign: 'center',
+  },
   activeTitle: {
     ...type.h1,
     color: color.onDark,

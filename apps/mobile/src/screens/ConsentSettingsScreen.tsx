@@ -83,7 +83,7 @@ export function ConsentSettingsScreen() {
         <Card style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.iconWrap}>
-              <Icon name="spark" size={20} color={color.court} />
+              <Icon name="stroke" size={20} color={color.court} />
             </View>
             <Text style={[type.h3, { color: color.ink, flex: 1 }]}>
               Use my feedback to improve scoring

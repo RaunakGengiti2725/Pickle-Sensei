@@ -371,6 +371,35 @@ describe('iOS native dependency and redistribution resource configuration', () =
   });
 });
 
+describe('V1 analysis boundary', () => {
+  it('excludes future 3D analysis and review entry points from the v1 sources', () => {
+    const violations: string[] = [];
+    let inspected = 0;
+    const forbidden =
+      /\b(?:motion_3d|PickleMotion3D|PickleMotionReviewView|AppleMotion3DReconstructor|Experimental3DComparison|VNDetectHumanBodyPose3DRequest)\b/;
+    const inspect = (directory: string) => {
+      for (const entry of readdirSync(directory)) {
+        const file = join(directory, entry);
+        if (statSync(file).isDirectory()) {
+          inspect(file);
+        } else if (/\.(?:tsx?|swift|[mh])$/.test(entry)) {
+          inspected += 1;
+          if (forbidden.test(readFileSync(file, 'utf8'))) violations.push(file);
+        }
+      }
+    };
+    for (const directory of [
+      join(MOBILE_ROOT, 'src'),
+      join(MOBILE_ROOT, 'ios', 'LocalPods', 'PickleNative', 'Sources'),
+      join(MOBILE_ROOT, '..', '..', 'native', 'vision-core', 'Sources'),
+      join(MOBILE_ROOT, '..', '..', 'packages', 'analysis-pipeline', 'src'),
+    ])
+      inspect(directory);
+    expect(inspected).toBeGreaterThan(0);
+    expect(violations).toEqual([]);
+  });
+});
+
 describe('Info.plist usage descriptions and export compliance', () => {
   const plist = readFileSync(join(IOS_APP, 'Info.plist'), 'utf8');
 

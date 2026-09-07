@@ -1,0 +1,39 @@
+name: Mac Smoke Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mac-test:
+    runs-on: [self-hosted, macOS, ARM64]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Machine info
+        run: |
+          echo "=== macOS ==="
+          sw_vers
+
+          echo "=== Architecture ==="
+          uname -m
+
+          echo "=== Hardware ==="
+          system_profiler SPHardwareDataType
+
+      - name: Xcode
+        run: |
+          echo "=== Xcode path ==="
+          xcode-select -p
+
+          echo "=== Xcode version ==="
+          xcodebuild -version
+
+      - name: Swift
+        run: |
+          swift --version
+
+      - name: Available SDKs
+        run: |
+          xcodebuild -showsdks

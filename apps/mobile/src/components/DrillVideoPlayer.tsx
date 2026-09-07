@@ -177,16 +177,32 @@ const PROVIDER_HOSTS: Record<
  */
 const GATE_ALL_ORIGINS = ['*'];
 
-/** Lower-cased host of an https URL (userinfo and port stripped); null otherwise. */
+/**
+ * Lower-cased host of an https URL, read the way a WHATWG URL parser (WebKit,
+ * Chromium, Node) reads it; null when the URL is not https or the browser
+ * would refuse it. Hand-rolled because React Native's global `URL` is a
+ * regex shim, not a spec parser. For special schemes the authority ends at
+ * the first `/`, `\`, `?` or `#`; userinfo is everything up to the LAST `@`;
+ * the port must be empty or an integer no greater than 65535; and the host
+ * is confined to ASCII letters, digits, `-` and `.` with no empty label —
+ * anything the browser would percent-decode, IDNA-map or reject fails closed.
+ */
 function httpsHost(url: string): string | null {
-  const match = /^https:\/\/([^/?#]*)/i.exec(url);
-  if (!match) return null;
-  const authority = match[1] ?? '';
-  const host = authority
-    .slice(authority.lastIndexOf('@') + 1)
-    .replace(/:\d*$/, '')
-    .toLowerCase();
-  return host.length > 0 ? host : null;
+  if (!/^https:\/\//i.test(url)) return null;
+  const rest = url.slice('https://'.length);
+  const authorityEnd = rest.search(/[/\\?#]/);
+  const authority = authorityEnd === -1 ? rest : rest.slice(0, authorityEnd);
+  const hostPort = authority.slice(authority.lastIndexOf('@') + 1);
+  const colon = hostPort.indexOf(':');
+  const host = (
+    colon === -1 ? hostPort : hostPort.slice(0, colon)
+  ).toLowerCase();
+  const port = colon === -1 ? '' : hostPort.slice(colon + 1);
+  if (!/^\d*$/.test(port) || (port !== '' && Number(port) > 65535)) {
+    return null;
+  }
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(host)) return null;
+  return host;
 }
 
 /** Hosts the top frame may show: the app's shell plus the video's provider. */

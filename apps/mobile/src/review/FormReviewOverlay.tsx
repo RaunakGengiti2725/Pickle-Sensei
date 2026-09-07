@@ -1,13 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  Line,
-  Polygon,
-  RadialGradient,
-  Stop,
-} from 'react-native-svg';
+import Svg, { Circle, Line, Polygon } from 'react-native-svg';
 import { color } from '../design/tokens';
 import {
   REVIEW_JOINTS,
@@ -51,8 +44,8 @@ export const RING_RADIUS_UNITS = 1.2;
 const ARROW_HEAD_PX = 11;
 const ARROW_START_UNITS = 0.45;
 const LABEL_GAP_PX = 14;
-const CONTOUR = 'rgba(0,0,0,0.32)';
-const ARROW_CONTOUR = 'rgba(0,0,0,0.55)';
+const CONTOUR = color.ink;
+const ARROW_CONTOUR = color.ink;
 
 export type JointPoints = Partial<Record<ReviewJoint, Point>>;
 
@@ -249,7 +242,7 @@ export function FormReviewOverlay(props: {
     ? arrowGeometry(props.rect, props.frame, props.script, props.activeStop)
     : null;
 
-  // The arrow breathes so the eye lands on it; reduced motion holds still.
+  // The arrow settles once on arrival; reduced motion holds it still.
   const pulse = useRef(new Animated.Value(1)).current;
   const animate = arrow !== null && props.reducedMotion !== true;
   useEffect(() => {
@@ -257,25 +250,16 @@ export function FormReviewOverlay(props: {
       pulse.setValue(1);
       return;
     }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.62,
-          duration: 640,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 640,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
+    pulse.setValue(0.8);
+    const entrance = Animated.timing(pulse, {
+      toValue: 1,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    entrance.start();
     return () => {
-      loop.stop();
+      entrance.stop();
       pulse.setValue(1);
     };
   }, [animate, pulse]);
@@ -287,14 +271,6 @@ export function FormReviewOverlay(props: {
       testID="form-review-overlay"
     >
       <Svg width="100%" height="100%">
-        <Defs>
-          <RadialGradient id="formReviewHeat" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={color.flame} stopOpacity={0.95} />
-            <Stop offset="0.55" stopColor={color.flame} stopOpacity={0.38} />
-            <Stop offset="1" stopColor={color.flame} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-
         {/* (a) FAULT HEAT — translucent regions on the joints the scored
             checkpoints were measured from; hot limbs read as one region. */}
         {hotBones.map(bone => (
@@ -305,9 +281,9 @@ export function FormReviewOverlay(props: {
             x2={bone.b.x}
             y2={bone.b.y}
             stroke={color.flame}
-            strokeWidth={unit * 1.4}
+            strokeWidth={Math.max(6, unit * 0.65)}
             strokeLinecap="round"
-            opacity={0.12 * bone.heat}
+            opacity={0.12 + 0.12 * bone.heat}
           />
         ))}
         {hotJoints.map(entry => (
@@ -315,9 +291,11 @@ export function FormReviewOverlay(props: {
             key={`heat-${entry.joint}`}
             cx={entry.point.x}
             cy={entry.point.y}
-            r={unit * (1.6 + 1.2 * entry.heat)}
-            fill="url(#formReviewHeat)"
-            opacity={0.42 * entry.heat}
+            r={unit * (0.75 + 0.5 * entry.heat)}
+            fill="none"
+            stroke={color.flame}
+            strokeWidth={1.2 + entry.heat}
+            opacity={0.45 + 0.25 * entry.heat}
           />
         ))}
 

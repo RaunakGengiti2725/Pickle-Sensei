@@ -162,9 +162,9 @@ describe('Home streak badge hit target (wf fix-21)', () => {
 
     // The host's minimum is a lower bound on its laid-out height. A fixed
     // height or maxHeight would defeat intrinsic growth for larger text.
-    expect(style.height).toBeUndefined();
+    expect(style.height).toBe(fontScale > 1.3 ? 'auto' : undefined);
     expect(style.maxHeight).toBeUndefined();
-    expect(style.minHeight).toBe(32);
+    expect(style.minHeight).toBe(fontScale > 1.3 ? 44 : 32);
     expect(typeof hitSlop).toBe('number');
     expect(style.minHeight + hitSlop * 2).toBeGreaterThanOrEqual(
       MIN_TOUCH_TARGET_PT,

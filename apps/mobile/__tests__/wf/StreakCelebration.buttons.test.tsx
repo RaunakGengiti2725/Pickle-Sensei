@@ -1,7 +1,8 @@
 import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
-import { AccessibilityInfo, Text } from 'react-native';
+import { AccessibilityInfo, Modal, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 // The consistency store persists through SQLite; the native module is absent
 // under jest and this ledger only drives the overlay through store state.
@@ -95,7 +96,13 @@ function render(celebration: ConsistencyCelebration | null) {
   useConsistencyStore.setState({ celebration });
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(<StreakCelebration />);
+    renderer = TestRenderer.create(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 59, bottom: 34, left: 0, right: 0 }}
+      >
+        <StreakCelebration />
+      </SafeAreaInsetsContext.Provider>,
+    );
     mounted.add(renderer);
   });
   return renderer;
@@ -168,7 +175,13 @@ describe('StreakCelebration button ledger', () => {
     const backdrop = findBackdrop(renderer);
     expect(backdrop.props.accessibilityRole).toBe('button');
     // Full-screen target: the Pressable fills the absolute backdrop layer.
-    expect(backdrop.props.style).toEqual(expect.objectContaining({ flex: 1 }));
+    expect(StyleSheet.flatten(backdrop.props.style)).toMatchObject({
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
 
     act(() => {
       backdrop.props.onPress();
@@ -209,7 +222,7 @@ describe('StreakCelebration button ledger', () => {
 
   it('"Keep training" is never a dead-end: the CTA layer keeps a hit target', () => {
     const renderer = render(thirtyDayClub);
-    // With reduced motion off the CTA fades in after ~1s, but opacity never
+    // With reduced motion off the content enters briefly, but opacity never
     // gates touches in RN — the button must be pressable from first frame.
     const cta = findContinue(renderer);
     act(() => {
@@ -300,7 +313,7 @@ describe('StreakCelebration button ledger', () => {
     unmount(renderer);
   });
 
-  it('pressables are wired for every celebration shape (grand + confetti, common, volume)', () => {
+  it('pressables are wired for every celebration shape (epic, common, volume)', () => {
     for (const celebration of [thirtyDayClub, firstDay, specialist]) {
       const renderer = render(celebration);
       expect(stageCount(renderer)).toBe(1);

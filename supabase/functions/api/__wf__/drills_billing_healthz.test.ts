@@ -6,6 +6,7 @@
 import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
 import { drillCatalog } from "../drills.ts";
 import { drillInstructionalMedia } from "../drillMedia.ts";
+import { captureAccessLog } from "../http.ts";
 import {
   activeSubscriber,
   captureConsole,
@@ -18,6 +19,7 @@ import {
   userRequest,
   webhookRequest,
 } from "./routesHarness.ts";
+import { simulate } from "./webhookSim.ts";
 
 const ACCESS_ROW = [{ premium: false, scored_count: 0, reserved_count: 0 }];
 const FAILURE_MARKERS = [
@@ -376,6 +378,289 @@ Deno.test("healthz: 200 {ok:true} with no-store/nosniff, no auth, no DB", async 
   assertEquals(h.calls.length, 0);
 });
 
+Deno.test(
+  "monitor bearer is rejected before any Auth exchange, session creation or DB call",
+  async () => {
+    const h = await loadHarness();
+    const response = await h.handler(
+      new Request("http://edge.test/functions/v1/api/v1/me", {
+        headers: {
+          Authorization: "Bearer launch-monitor-deliberately-invalid-not-a-jwt",
+          "x-forwarded-for": "198.51.100.69",
+        },
+      }),
+    );
+    assertEquals(response.status, 401);
+    assertStringIncludes((await response.json()).error.message, "Bearer token is not");
+    assertEquals(h.calls.length, 0);
+  },
+);
+
+Deno.test(
+  "healthz readiness: fresh bounded service-only RPC, coalescing and private failures",
+  async (t) => {
+    const h = await loadHarness();
+    const originalNow = Date.now;
+    const originalTimeout = globalThis.setTimeout;
+    const originalFetch = globalThis.fetch;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lines: string[] = [];
+    const restoreLogs = captureAccessLog((line) => lines.push(line));
+    const key = "a1".repeat(32);
+    let now = originalNow();
+    Date.now = () => now;
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number, ...args: unknown[]) =>
+      originalTimeout(callback, delay === 2_000 ? 20 : delay, ...args)) as typeof setTimeout;
+    const request = (query = "?readiness=1", method = "GET", ip = "198.51.100.70") =>
+      new Request(`http://edge.test/functions/v1/api/healthz${query}`, {
+        method,
+        headers: { "x-forwarded-for": ip, Authorization: "Bearer never-forward-this-input" },
+      });
+    const verdict = async (response: Response, ready: boolean) => {
+      assertEquals(response.status, ready ? 200 : 503);
+      assertEquals(response.headers.get("cache-control"), "no-store");
+      assertEquals(response.headers.get("x-content-type-options"), "nosniff");
+      assertEquals(await response.json(), { ok: ready, readiness: { database: ready } });
+    };
+    const step = (name: string, run: () => Promise<void>) =>
+      t.step(name, async () => {
+        now += 30_001;
+        h.reset();
+        h.rpcs.get_api_request_key = key;
+        try {
+          await run();
+        } finally {
+          globalThis.fetch = originalFetch;
+          Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
+        }
+      });
+    try {
+      await step("GET and HEAD liveness are unchanged and only readiness=1 opts in", async () => {
+        for (const method of ["GET", "HEAD"]) {
+          for (const query of ["", "?readiness=0", "?readiness=true"]) {
+            const response = await h.handler(request(query, method));
+            assertEquals(response.status, 200);
+            assertEquals(await response.json(), { ok: true });
+          }
+        }
+        assertEquals(h.calls.length, 0);
+        await verdict(await h.handler(request()), true);
+        assertEquals(h.calls.length, 1);
+        const rpc = h.calls[0];
+        assertEquals(new URL(rpc.url).pathname, "/rest/v1/rpc/get_api_request_key");
+        assertEquals(new URL(rpc.url).search, "");
+        assertEquals(rpc.method, "GET");
+        assertEquals(rpc.headers.authorization, `Bearer ${serviceRoleKey}`);
+        assertEquals(rpc.headers.apikey, serviceRoleKey);
+        assertEquals(rpc.body, null);
+        await verdict(await h.handler(request("?readiness=1", "HEAD")), true);
+        assertEquals(h.calls.length, 1);
+      });
+      await step("successful and failed verdicts cache for at most 30 seconds", async () => {
+        await verdict(await h.handler(request()), true);
+        h.rpcErrors.get_api_request_key = 500;
+        now += 29_999;
+        await verdict(await h.handler(request()), true);
+        assertEquals(h.calls.length, 1);
+        now += 1;
+        await verdict(await h.handler(request()), false);
+        assertEquals(h.calls.length, 2);
+        delete h.rpcErrors.get_api_request_key;
+        for (let i = 0; i < 10; i += 1) {
+          await verdict(await h.handler(request("?readiness=1", "GET", `198.51.101.${i}`)), false);
+        }
+        assertEquals(h.calls.length, 2);
+        now += 30_000;
+        await verdict(await h.handler(request()), true);
+        assertEquals(h.calls.length, 3);
+      });
+      await step("clock rollback does not extend a cached success", async () => {
+        await verdict(await h.handler(request()), true);
+        h.rpcErrors.get_api_request_key = 503;
+        now -= 1;
+        await verdict(await h.handler(request()), false);
+        assertEquals(h.calls.length, 2);
+      });
+      await step("missing service configuration fails without touching the network", async () => {
+        Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+        await verdict(await h.handler(request()), false);
+        assertEquals(h.calls.length, 0);
+        const live = await h.handler(request(""));
+        assertEquals(live.status, 200);
+        assertEquals(await live.json(), { ok: true });
+      });
+      for (const status of [401, 403, 404, 429, 500, 503]) {
+        await step(
+          `RPC HTTP ${status}, including an undeployed migration, is unavailable`,
+          async () => {
+            h.rpcErrors.get_api_request_key = status;
+            await verdict(await h.handler(request()), false);
+            assertEquals(h.calls.length, 1);
+          },
+        );
+      }
+      for (const value of [null, true, {}, [], "", "wrong-shape", "g".repeat(64)]) {
+        await step(`invalid RPC value ${JSON.stringify(value)} is unavailable`, async () => {
+          h.rpcs.get_api_request_key = value;
+          await verdict(await h.handler(request()), false);
+          assertEquals(h.calls.length, 1);
+        });
+      }
+      await step("concurrent probes share one in-flight read across IPs", async () => {
+        let finish: (response: Response) => void = () => {};
+        const gate = new Promise<Response>((resolve) => (finish = resolve));
+        let count = 0;
+        globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+          count += 1;
+          assertEquals(init?.redirect, "error");
+          assert(init?.signal);
+          return gate;
+        }) as typeof fetch;
+        const pending = Promise.all(
+          Array.from({ length: 20 }, (_, i) =>
+            h.handler(request("?readiness=1", "GET", `198.51.102.${i}`)),
+          ),
+        );
+        try {
+          await new Promise((resolve) => originalTimeout(resolve, 0));
+          assertEquals(count, 1);
+        } finally {
+          finish(
+            new Response(JSON.stringify(key), { headers: { "content-type": "application/json" } }),
+          );
+        }
+        for (const response of await pending) await verdict(response, true);
+        assertEquals(count, 1);
+      });
+      await step(
+        "timeout aborts and a non-cooperative fetch cannot start a probe storm or revive success",
+        async () => {
+          let finish: (response: Response) => void = () => {};
+          const gate = new Promise<Response>((resolve) => (finish = resolve));
+          let count = 0;
+          let signal: AbortSignal | null | undefined;
+          globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+            count += 1;
+            signal = init?.signal;
+            return gate;
+          }) as typeof fetch;
+          try {
+            const responses = await Promise.all(
+              Array.from({ length: 20 }, (_, i) =>
+                h.handler(request("?readiness=1", "GET", `198.51.103.${i}`)),
+              ),
+            );
+            for (const response of responses) await verdict(response, false);
+            assertEquals(signal?.aborted, true);
+            now += 30_001;
+            await verdict(await h.handler(request()), false);
+            assertEquals(count, 1);
+          } finally {
+            finish(
+              new Response(JSON.stringify(key), {
+                headers: { "content-type": "application/json" },
+              }),
+            );
+            await gate;
+            await new Promise((resolve) => originalTimeout(resolve, 0));
+          }
+          globalThis.fetch = originalFetch;
+          h.rpcErrors.get_api_request_key = 500;
+          await verdict(await h.handler(request()), false);
+          assertEquals(h.calls.length, 1);
+        },
+      );
+      await step(
+        "whole-body deadline cancels a stalled response even if cancellation stalls",
+        async () => {
+          let cancelled = false;
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(JSON.stringify(key)));
+            },
+            cancel() {
+              cancelled = true;
+              return new Promise<void>(() => {});
+            },
+          });
+          globalThis.fetch = (() =>
+            Promise.resolve(
+              new Response(body, { headers: { "content-type": "application/json" } }),
+            )) as typeof fetch;
+          await verdict(await h.handler(request()), false);
+          assertEquals(cancelled, true);
+          assertEquals(body.locked, false);
+        },
+      );
+      for (const declared of [true, false]) {
+        await step(`RPC body bound applies with content-length=${declared}`, async () => {
+          let cancelled = false;
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              if (!declared) controller.enqueue(new Uint8Array(129));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          });
+          globalThis.fetch = (() =>
+            Promise.resolve(
+              new Response(body, {
+                headers: {
+                  "content-type": "application/json",
+                  ...(declared ? { "content-length": "129" } : {}),
+                },
+              }),
+            )) as typeof fetch;
+          await verdict(await h.handler(request()), false);
+          assertEquals(cancelled, true);
+          assertEquals(body.locked, false);
+        });
+      }
+      await step("redirects and thrown errors stay private", async () => {
+        globalThis.fetch = (() =>
+          Promise.resolve(
+            new Response(null, {
+              status: 302,
+              headers: { location: "https://example.invalid/never-forward-this-input" },
+            }),
+          )) as typeof fetch;
+        await verdict(await h.handler(request()), false);
+        now += 30_001;
+        globalThis.fetch = (() => {
+          throw new Error(`never-forward-this-input ${key} ${serviceRoleKey}`);
+        }) as typeof fetch;
+        await verdict(await h.handler(request()), false);
+      });
+      await step("readiness and liveness retain the same shared public rate budget", async () => {
+        for (let i = 0; i < 60; i += 1) {
+          const response = await h.handler(
+            request(i % 2 ? "?readiness=1" : "", "GET", "198.51.100.75"),
+          );
+          assertEquals(response.status, 200);
+          await response.text();
+        }
+        const denied = await h.handler(request("?readiness=1", "HEAD", "198.51.100.75"));
+        assertEquals(denied.status, 429);
+        assert(Number(denied.headers.get("retry-after")) > 0);
+        await denied.text();
+        assertEquals(h.calls.length, 1);
+      });
+      assert(lines.length > 0);
+      const logged = lines.join("\n");
+      for (const forbidden of [key, serviceRoleKey, "never-forward-this-input", "readiness=1"]) {
+        assertEquals(logged.includes(forbidden), false);
+      }
+    } finally {
+      Date.now = originalNow;
+      globalThis.setTimeout = originalTimeout;
+      globalThis.fetch = originalFetch;
+      Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
+      restoreLogs();
+    }
+  },
+);
+
 Deno.test("healthz: 60/min per IP, then 429 + Retry-After", async () => {
   const h = await loadHarness();
   let last: Response | null = null;
@@ -471,47 +756,64 @@ Deno.test(
     assertEquals(h.callsTo(RC_URL).length, 0);
     assertEquals(h.callsTo("/rest/v1/webhook_events").length, 0);
     assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 0);
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
   },
 );
 
 Deno.test(
   "webhooks accept 16 distinct subjects and deduplicate repeated transfer ids",
   async () => {
-    const h = await loadHarness();
-    const ids = Array.from(
-      { length: 16 },
-      (_, i) => `bbbbbbbb-bbbb-4bbb-8bbb-${String(i).padStart(12, "0")}`,
-    );
-    const response = await h.handler(
-      webhookRequest({
-        id: "sixteen-subjects",
-        type: "TRANSFER",
-        app_user_id: ids[0],
-        transferred_from: ids,
-        transferred_to: ids,
-      }),
-    );
-    assertEquals(response.status, 200);
-    await response.text();
-    assertEquals(h.callsTo(RC_URL).length, 16);
-    assertEquals(h.callsTo("/rest/v1/rpc/complete_billing_webhook").length, 1);
+    const sim = await simulate();
+    try {
+      const h = sim.h;
+      const ids = Array.from(
+        { length: 16 },
+        (_, i) => `bbbbbbbb-bbbb-4bbb-8bbb-${String(i).padStart(12, "0")}`,
+      );
+      const response = await h.handler(
+        webhookRequest({
+          id: "sixteen-subjects",
+          type: "TRANSFER",
+          app_user_id: ids[0],
+          transferred_from: ids,
+          transferred_to: ids,
+        }),
+      );
+      assertEquals(response.status, 200);
+      await response.text();
+      assertEquals(h.callsTo(RC_URL).length, 16);
+      assertEquals(h.callsTo("/rest/v1/rpc/complete_billing_webhook").length, 1);
+      assertEquals(
+        h.callsTo("/rest/v1/webhook_events").filter((call) => call.method === "POST").length,
+        0,
+      );
+      assert(sim.auditRows.get("sixteen-subjects")?.processed_at);
+    } finally {
+      sim.restore();
+    }
   },
 );
 
 Deno.test("webhook JSON has a 512 KiB cap, not the 64 KiB small-route cap", async () => {
-  const h = await loadHarness();
-  const allowed = await h.handler(
-    webhookRequest({ id: "large-but-bounded", pad: "x".repeat(100_000) }),
-  );
-  assertEquals(allowed.status, 200);
-  await allowed.text();
-  h.reset();
-  const denied = await h.handler(
-    webhookRequest({ id: "oversize-webhook", pad: "x".repeat(524_288) }),
-  );
-  assertEquals(denied.status, 413);
-  await denied.text();
-  assertEquals(h.calls.length, 0);
+  const sim = await simulate();
+  try {
+    const h = sim.h;
+    const allowed = await h.handler(
+      webhookRequest({ id: "large-but-bounded", pad: "x".repeat(100_000) }),
+    );
+    assertEquals(allowed.status, 200);
+    await allowed.text();
+    assert(sim.auditRows.get("large-but-bounded")?.processed_at);
+    h.reset();
+    const denied = await h.handler(
+      webhookRequest({ id: "oversize-webhook", pad: "x".repeat(524_288) }),
+    );
+    assertEquals(denied.status, 413);
+    await denied.text();
+    assertEquals(h.calls.length, 0);
+  } finally {
+    sim.restore();
+  }
 });
 
 Deno.test(
@@ -598,6 +900,7 @@ Deno.test(
     assertEquals((await response.text()).includes("injected rpc failure"), false);
     assertEquals(h.callsTo(RC_URL).length, 0);
     assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 0);
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
     delete h.rpcErrors.is_api_session_active;
     const recovered = await h.handler(userRequest("GET", "/v1/me/access", { token, ip }));
     assertEquals(recovered.status, 200);
@@ -697,7 +1000,10 @@ Deno.test(
           error: { message: "Something went wrong. Please try again." },
         });
         assertEquals(logs.length, 1);
-        assertEquals(logs[0].args[0], "[api] unhandled error:");
+        assertEquals(
+          logs[0].args[0],
+          `[api] unhandled error (${result.headers.get("x-request-id")}):`,
+        );
         assertPrivateFailureAbsent(output);
         assertEquals(logs[0].args[1], {
           name:

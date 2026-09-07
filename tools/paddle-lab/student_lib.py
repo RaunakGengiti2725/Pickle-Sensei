@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+import frame_clock
 
 INPUT_SIZE = 320  # letterboxed square input
 HEATMAP_STRIDE = 8
@@ -32,33 +35,77 @@ def load_examples(release_dir: Path) -> list[dict]:
 
 
 def video_meta(path: Path) -> tuple[int, int, float]:
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height,r_frame_rate",
-            "-of",
-            "csv=p=0",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    w, h, rate = out.split(",")
-    num, den = rate.split("/")
-    return int(w), int(h), float(num) / float(den)
+    meta = frame_clock.probe_stream(str(path))
+    return meta.width, meta.height, meta.fps
 
 
-def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarray]:
-    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs."""
-    w, h, fps = video_meta(video)
+def clip_labels_are_legacy(examples: list[dict]) -> bool:
+    """True when any release example of a clip carries a teacher `clockCaveat`.
+
+    paddle-distill-v0.1 stamps the caveat per teacher artifact (wave-a dets
+    predate the timestamp-alignment fix: tMs = i*1000/fps from the first
+    decoded frame). It is the provenance-first signal for
+    extract_frames(legacy_clock=...); the pre-start heuristic stays as the
+    second trigger for label lists without provenance. A clip whose rows mix
+    caveated and uncaveated artifacts (v0.1: wm-dink-01, 13 + 15 rows) is
+    read on the legacy clock as a whole — the two clocks coincide whenever the
+    stream start_time is 0, which holds for every such clip in v0.1.
+    """
+    return any(
+        e.get("teacher") is not None and bool(e["teacher"].get("clockCaveat"))
+        for e in examples
+    )
+
+
+def extract_frames(
+    video: Path, t_ms_list: list[float], *, legacy_clock: bool = False
+) -> dict[float, np.ndarray]:
+    """Extract absolute-CFR frames (ffmpeg select=eq(n,IDX)) for each tMs.
+
+    tMs values are the detector's absolute clock (start_time + k/fps, as
+    emitted by detect_paddle.frame_iter), so the source index is
+    k = round((tMs - start_time) * fps / 1000) — the same inversion run_crops
+    uses. Pass ALL labels of a clip in one call: the clock is decided per clip
+    (frame_clock.frame_indices_for_labelled_clip), provenance first —
+    `legacy_clock=True` when the release's `clockCaveat` says the clip was
+    stamped on the legacy relative clock (clip_labels_are_legacy) — and
+    heuristic second: any label lying within one frame period before the
+    stream start (paddle-distill-v0.1 afn-sasebo-rally1: tMs=0.0 with
+    start_time 33.367 ms). On the legacy clock the whole clip is mapped
+    relative to its first frame (0.0 -> frame 0, 33.37 -> frame 1) with one
+    LegacyClockWarning per clip; a label earlier than one period before the
+    stream start raises ValueError on either clock. Raises RuntimeError if
+    ffmpeg fails, reports partial/corrupt media, or any requested frame is not
+    decoded (index past the end of the media / truncated file) instead of
+    silently returning a partial mapping.
+    """
+    meta = frame_clock.probe_stream(str(video))
+    w, h, fps, start_time_ms = meta.width, meta.height, meta.fps, meta.start_time_ms
     frames: dict[float, np.ndarray] = {}
-    indices = sorted({round(t * fps / 1000.0) for t in t_ms_list})
+    if not t_ms_list:
+        return frames
+    try:
+        index_for_t, legacy_t_ms = frame_clock.frame_indices_for_labelled_clip(
+            t_ms_list, fps, start_time_ms, legacy_clock=legacy_clock
+        )
+    except ValueError as exc:
+        raise ValueError(f"{exc} (requested from {video})") from None
+    if legacy_clock or legacy_t_ms:
+        reasons = []
+        if legacy_clock:
+            reasons.append("the release clockCaveat marks this clip's teacher stamps as legacy")
+        if legacy_t_ms:
+            reasons.append(
+                f"{len(legacy_t_ms)} label timestamp(s) (tMs {min(legacy_t_ms):.3f}..{max(legacy_t_ms):.3f}) "
+                f"lie within one frame period before the stream start ({start_time_ms:.3f} ms)"
+            )
+        warnings.warn(
+            f"{video}: {' and '.join(reasons)}, so this clip's {len(index_for_t)} label(s) are legacy "
+            "relative-clock stamps: all mapped as round(tMs * fps / 1000) from the first decoded frame",
+            frame_clock.LegacyClockWarning,
+            stacklevel=2,
+        )
+    indices = sorted(set(index_for_t.values()))
     expr = "+".join(f"eq(n\\,{i})" for i in indices)
     proc = subprocess.run(
         [
@@ -71,6 +118,8 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             f"select='{expr}'",
             "-vsync",
             "0",
+            "-frames:v",
+            str(len(indices)),
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -78,17 +127,22 @@ def extract_frames(video: Path, t_ms_list: list[float]) -> dict[float, np.ndarra
             "-",
         ],
         capture_output=True,
-        check=True,
     )
+    stderr_text = proc.stderr.decode("utf-8", "replace").strip()
+    frame_clock.check_decode_health(proc.returncode, stderr_text, str(video))
     raw = np.frombuffer(proc.stdout, dtype=np.uint8)
     frame_bytes = w * h * 3
     n = len(raw) // frame_bytes
+    if n < len(indices):
+        raise RuntimeError(
+            f"ffmpeg decoded {n} of {len(indices)} requested frames from {video}; "
+            f"frames {indices[n:]} are missing (past the end of the media, or truncated file). "
+            f"ffmpeg stderr: {frame_clock.stderr_tail(stderr_text)}"
+        )
     imgs = raw[: n * frame_bytes].reshape(n, h, w, 3)
-    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices[:n])}
+    idx_to_img = {idx: imgs[i] for i, idx in enumerate(indices)}
     for t in t_ms_list:
-        img = idx_to_img.get(round(t * fps / 1000.0))
-        if img is not None:
-            frames[t] = img
+        frames[t] = idx_to_img[index_for_t[t]]
     return frames
 
 

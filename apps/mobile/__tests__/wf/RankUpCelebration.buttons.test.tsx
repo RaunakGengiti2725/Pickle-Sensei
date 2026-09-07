@@ -1,7 +1,20 @@
 import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
-import { AccessibilityInfo } from 'react-native';
+import {
+  AccessibilityInfo,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import {
+  SafeAreaInsetsContext,
+  type EdgeInsets,
+  type Metrics,
+} from 'react-native-safe-area-context';
+import * as Reanimated from 'react-native-reanimated';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 // The celebration store persists through SQLite; the native module is absent
@@ -18,6 +31,14 @@ let mockReducedMotion = false;
 jest.mock('../../src/design/components', () => ({
   ...jest.requireActual('../../src/design/components'),
   useReducedMotion: () => mockReducedMotion,
+}));
+
+let mockInitialWindowMetrics: Metrics | null = null;
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  get initialWindowMetrics() {
+    return mockInitialWindowMetrics;
+  },
 }));
 
 import { RankUpCelebration } from '../../src/components/RankUpCelebration';
@@ -87,8 +108,8 @@ function setPlacement() {
   });
 }
 
-// requestAnimationFrame is driven by hand so the rating count-up is
-// deterministic: frames run only when a test asks for them.
+// requestAnimationFrame is driven by hand to verify ratings stay exact
+// without a number-count animation: frames run only when a test asks.
 const frames = new Map<number, (timestamp: number) => void>();
 let nextFrameId = 1;
 const cancelledFrames: number[] = [];
@@ -100,6 +121,13 @@ function flushFrame(timestamp: number) {
 }
 
 beforeEach(() => {
+  mockInitialWindowMetrics = null;
+  jest.spyOn(Dimensions, 'get').mockReturnValue({
+    width: 375,
+    height: 667,
+    scale: 2,
+    fontScale: 1,
+  });
   mockReducedMotion = false;
   frames.clear();
   cancelledFrames.length = 0;
@@ -136,10 +164,16 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-async function render() {
+async function render(
+  insets: EdgeInsets = { top: 59, bottom: 34, left: 0, right: 0 },
+) {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = TestRenderer.create(<RankUpCelebration />);
+    renderer = TestRenderer.create(
+      <SafeAreaInsetsContext.Provider value={insets}>
+        <RankUpCelebration />
+      </SafeAreaInsetsContext.Provider>,
+    );
     mounted.add(renderer);
   });
   return renderer;
@@ -189,10 +223,111 @@ function rendered(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe('RankUpCelebration button ledger', () => {
+  it.each([
+    { width: 375, height: 667, rawTop: 59, rawBottom: 34 },
+    { width: 393, height: 852, rawTop: 59, rawBottom: 34 },
+    { width: 375, height: 667, rawTop: 0, rawBottom: 0 },
+    { width: 393, height: 852, rawTop: 0, rawBottom: 0 },
+  ])(
+    'applies modal padding at $width pt / 3.571x with raw insets $rawTop/$rawBottom',
+    async ({ width, height, rawTop, rawBottom }) => {
+      jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width,
+        height,
+        scale: width === 375 ? 2 : 3,
+        fontScale: 3.571,
+      });
+      mockReducedMotion = true;
+      mockInitialWindowMetrics =
+        rawTop === 0
+          ? {
+              frame: { x: 0, y: 0, width, height },
+              insets: { top: 59, bottom: 34, left: 0, right: 0 },
+            }
+          : null;
+      setPromotion();
+      const renderer = await render({
+        top: rawTop,
+        bottom: rawBottom,
+        left: 0,
+        right: 0,
+      });
+      try {
+        const root = hostNodes(renderer, 'rank-up-celebration')[0]!;
+        expect(StyleSheet.flatten(root.props.style)).toMatchObject({
+          flex: 1,
+          paddingTop: 59,
+          paddingBottom: 34,
+        });
+        const scroll = renderer.root.findByType(ScrollView);
+        expect(StyleSheet.flatten(scroll.props.style)).toMatchObject({
+          flex: 1,
+          minHeight: 0,
+        });
+        expect(scroll.props.contentInsetAdjustmentBehavior).toBe('never');
+        expect(scroll.props.automaticallyAdjustContentInsets).toBe(false);
+        expect(
+          scroll.findAll(node => node.props.testID === 'rank-up-continue'),
+        ).toHaveLength(0);
+        expect(renderer.root.findByType(StatusBar).props.barStyle).toBe(
+          'light-content',
+        );
+        expect(rendered(renderer)).toContain('Diamond unlocked');
+        expect(rendered(renderer)).toContain('7.62');
+        expect(rendered(renderer)).toContain('DUPR');
+        const dismiss = overlay(renderer).props.onAccessibilityEscape;
+        expect(typeof dismiss).toBe('function');
+        expect(backdrop(renderer).props.onPress).toBe(dismiss);
+        expect(continueButton(renderer).props.onPress).toBe(dismiss);
+        await act(async () => continueButton(renderer).props.onPress());
+        expect(useRankCelebrationStore.getState().current).toBeNull();
+        expect(renderer.root.findAllByType(StatusBar)).toHaveLength(0);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
+
+  it.each([1.8, 3.571])(
+    'keeps a bounded scroll and fixed dismiss action at font scale %s',
+    async fontScale => {
+      jest
+        .spyOn(Dimensions, 'get')
+        .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale });
+      setPromotion();
+      const renderer = await render();
+      try {
+        const scroll = renderer.root.findByType(ScrollView);
+        expect(StyleSheet.flatten(scroll.props.style)).toMatchObject({
+          flex: 1,
+        });
+        expect(
+          scroll.findAll(node => node.props.testID === 'rank-up-continue'),
+        ).toHaveLength(0);
+        expect(rendered(renderer)).toContain('7.62');
+        expect(rendered(renderer)).toContain('Diamond unlocked');
+        for (const text of scroll.findAllByType(Text)) {
+          expect(text.props.numberOfLines).toBeUndefined();
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          expect(text.props.allowFontScaling).not.toBe(false);
+        }
+        backdrop(renderer);
+        expect(overlay(renderer).props.onAccessibilityEscape).toBe(
+          continueButton(renderer).props.onPress,
+        );
+        await act(async () => continueButton(renderer).props.onPress());
+        expect(useRankCelebrationStore.getState().current).toBeNull();
+      } finally {
+        act(() => renderer.unmount());
+      }
+    },
+  );
+
   it('enumerates the press targets and routes duplicate dismissals through the host', async () => {
     setPromotion();
     const renderer = await render();
     expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(1);
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
 
     const pressables = renderer.root.findAll(
       node =>
@@ -243,11 +378,13 @@ describe('RankUpCelebration button ledger', () => {
       setPromotion();
       const renderer = await render();
       const node = backdrop(renderer);
-      const flattened = Object.assign(
-        {},
-        ...[node.props.style].flat(Infinity).filter(Boolean),
-      ) as { flex?: number };
-      expect(flattened.flex).toBe(1);
+      expect(StyleSheet.flatten(node.props.style)).toMatchObject({
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      });
       expect(node.props.disabled).toBeFalsy();
       expect(node.props.accessibilityLabel).toBe('Dismiss rank celebration');
       // WF-ISSUE: Backdrop dismiss Pressable has no accessibilityRole
@@ -386,38 +523,40 @@ describe('RankUpCelebration button ledger', () => {
       unmount(renderer);
     });
 
-    it('counts the rating up to its final value, then stops requesting frames', async () => {
+    it('shows the exact earned rating immediately without requesting count-up frames', async () => {
       setPromotion();
       const renderer = await render();
       const rating = () => hostNodes(renderer, 'rank-up-rating')[0]!;
-      expect(rating().children[0]).toBe('7.10');
+      expect(rating().children[0]).toBe('7.62');
       expect(rating().props.accessibilityLabel).toBe('Rating 7.62 out of 10');
-      expect(frames.size).toBe(1);
+      expect(rendered(renderer)).not.toContain('7.10');
+      expect(frames.size).toBe(0);
 
       act(() => flushFrame(0));
-      act(() => flushFrame(780 + 360));
-      const midway = Number(rating().children[0]);
-      expect(midway).toBeGreaterThan(7.1);
-      expect(midway).toBeLessThan(7.62);
-
-      act(() => flushFrame(780 + 720));
+      act(() => flushFrame(1500));
       expect(rating().children[0]).toBe('7.62');
       expect(frames.size).toBe(0);
       unmount(renderer);
     });
 
-    it('cancels the count-up frame when dismissed mid-animation', async () => {
+    it('cancels the brief entry when dismissed without leaving animation frames', async () => {
+      const cancel = jest.spyOn(Reanimated, 'cancelAnimation');
+      const timing = jest.spyOn(Reanimated, 'withTiming');
       setPromotion();
       const renderer = await render();
+      expect(timing).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ duration: 220 }),
+      );
       act(() => flushFrame(0));
-      expect(frames.size).toBe(1);
-      const [pendingId] = [...frames.keys()];
+      expect(frames.size).toBe(0);
 
       await act(async () => {
         continueButton(renderer).props.onPress();
       });
 
-      expect(cancelledFrames).toContain(pendingId);
+      expect(cancel).toHaveBeenCalled();
+      expect(cancelledFrames).toHaveLength(0);
       expect(frames.size).toBe(0);
       unmount(renderer);
     });
@@ -446,7 +585,7 @@ describe('RankUpCelebration button ledger', () => {
         },
       });
       const renderer = await render();
-      expect(rendered(renderer)).toContain('0.00');
+      expect(rendered(renderer)).toContain('7.62');
       expect(rendered(renderer)).toContain('Top tier');
       await act(async () => {
         backdrop(renderer).props.onPress();
