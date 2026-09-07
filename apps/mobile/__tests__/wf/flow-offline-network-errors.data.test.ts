@@ -14,6 +14,7 @@ jest.mock('../../src/account/apiSession', () => {
   let session: unknown = null;
   return {
     getApiSession: () => session,
+    subscribeToApiSession: () => () => {},
     reportApiUnauthorized: jest.fn(),
     __setSession: (next: unknown) => {
       session = next;
@@ -481,6 +482,7 @@ const session = {
 
 describe('consent store: no silent toggle failure', () => {
   beforeEach(() => {
+    setActiveDataOwner(session.canonicalAppUserId);
     setSession(session);
     useConsentStore.setState({
       availability: 'loading',
@@ -490,7 +492,10 @@ describe('consent store: no silent toggle failure', () => {
       error: null,
     });
   });
-  afterEach(() => setSession(null));
+  afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    setSession(null);
+  });
 
   it('offline hydrate → unavailable with visible copy, consent stays off', async () => {
     await useConsentStore.getState().hydrate(offlineFetch);
@@ -556,6 +561,7 @@ describe('consent store: no silent toggle failure', () => {
   });
 
   it('signed out → toggling is a no-op that never touches the network', async () => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     setSession(null);
     const fetchFn = jest.fn();
     await useConsentStore.getState().hydrate(fetchFn);

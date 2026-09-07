@@ -1,7 +1,7 @@
 /**
  * Two-step account deletion: the client for /v1/me/delete-request +
- * /v1/me/delete-confirm (step-2 must present step-1's challenge; failures
- * always say NOTHING was deleted unless the server confirmed), and the
+ * /v1/me/delete-confirm (step-2 must present step-1's challenge; an unknown
+ * final outcome must never claim that nothing was deleted), and the
  * post-confirmation local purge that removes every owner-scoped row.
  */
 import type { ApiSession } from '../src/account/apiSession';
@@ -168,9 +168,16 @@ describe('account deletion client', () => {
     const down = jest.fn(async () => {
       throw new Error('network down');
     });
-    await expect(
-      confirmAccountDeletion(session, 'challenge', down),
-    ).rejects.toBeInstanceOf(AccountDeletionError);
+    const confirmation = confirmAccountDeletion(session, 'challenge', down);
+    await expect(confirmation).rejects.toBeInstanceOf(AccountDeletionError);
+    await expect(confirmation).rejects.toMatchObject({
+      code: 'deletion.unknown',
+      retryable: true,
+      message: expect.stringContaining('may have completed'),
+    });
+    await expect(confirmation).rejects.toMatchObject({
+      message: expect.not.stringContaining('Nothing was deleted'),
+    });
   });
 });
 
@@ -196,6 +203,7 @@ describe('post-deletion local purge', () => {
       'local_session',
       'local_capture',
       'local_analysis_record',
+      'analysis_run_journal',
       'outbox',
       'sync_receipt',
     ]) {
@@ -214,6 +222,7 @@ describe('post-deletion local purge', () => {
       `notifications:${owner}`,
       `consistency:${owner}`,
       `practice.set:${owner}`,
+      `billing.pending-fulfilment:${owner}`,
     ]);
     // Every owner-scoped delete is bound to the deleted owner.
     for (const call of calls.slice(1, -1)) {

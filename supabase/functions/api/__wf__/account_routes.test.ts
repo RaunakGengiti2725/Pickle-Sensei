@@ -12,6 +12,8 @@
 //     supabase/functions/api/__wf__/
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { deletionChallengeHash } from "../accountDeletionOperations.ts";
+import { AccountDeletionStub } from "./routesHarness.ts";
 
 // ─── Fake Supabase ──────────────────────────────────────────────────────────
 
@@ -32,11 +34,13 @@ interface FakeState {
   databaseRequests: Request[];
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
-  /** Last upsert payload PostgREST received for account_deletion_requests. */
+  /** Last service-only deletion admission RPC payload. */
   lastUpsert: Record<string, unknown> | null;
   /** Queue of statuses for DELETE /auth/v1/admin/users/:id. */
   adminDeleteStatuses: number[];
   adminDeleteCalls: number;
+  adminDeleteGate: Promise<void> | null;
+  onAdminDelete: (() => void) | null;
   revenueCatDeleteCalls: number;
   profileRows: Array<Record<string, unknown>>;
 }
@@ -59,9 +63,18 @@ const state: FakeState = {
   lastUpsert: null,
   adminDeleteStatuses: [],
   adminDeleteCalls: 0,
+  adminDeleteGate: null,
+  onAdminDelete: null,
   revenueCatDeleteCalls: 0,
   profileRows: [],
 };
+
+const externalCredentials: unknown[] = [];
+const deletions = new AccountDeletionStub(() => ({
+  account_deletion_requests: state.deletionRows,
+  account_external_credentials: externalCredentials,
+  profiles: state.profileRows,
+}));
 
 function resetState(): void {
   state.tokenStatus = 200;
@@ -81,8 +94,12 @@ function resetState(): void {
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
   state.adminDeleteCalls = 0;
+  state.adminDeleteGate = null;
+  state.onAdminDelete = null;
   state.revenueCatDeleteCalls = 0;
   state.profileRows = [];
+  deletions.reset();
+  externalCredentials.length = 0;
 }
 
 const jsonResponse = (status: number, body: unknown): Response =>
@@ -178,6 +195,8 @@ async function fakeSupabase(request: Request): Promise<Response> {
   if (path === "/auth/v1/user") {
     const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (deletions.missingOwners.has(payload.sub))
+      return jsonResponse(404, { code: "user_not_found" });
     return jsonResponse(200, {
       id: payload.sub,
       email: "u@example.com",
@@ -199,13 +218,15 @@ async function fakeSupabase(request: Request): Promise<Response> {
 
   if (request.method === "DELETE" && path.startsWith("/auth/v1/admin/users/")) {
     state.adminDeleteCalls += 1;
+    state.onAdminDelete?.();
+    if (state.adminDeleteGate) await state.adminDeleteGate;
     const status = state.adminDeleteStatuses.shift() ?? 200;
-    if (status === 200) return jsonResponse(200, {});
-    return jsonResponse(status, {
-      code: status,
-      error_code: "user_not_found",
-      msg: "User not found",
-    });
+    if (status === 200) {
+      deletions.observeAuthDeletion(decodeURIComponent(path.slice("/auth/v1/admin/users/".length)));
+      state.sessionActive = false;
+      return jsonResponse(200, {});
+    }
+    return jsonResponse(status, { code: status === 404 ? "user_not_found" : "unexpected_failure" });
   }
 
   if (path === "/rest/v1/rpc/get_api_request_key") {
@@ -224,19 +245,25 @@ async function fakeSupabase(request: Request): Promise<Response> {
         });
   }
 
-  if (path === "/rest/v1/account_deletion_requests") {
-    if (request.method === "POST") {
-      state.lastUpsert = (await request.json()) as Record<string, unknown>;
-      return new Response(null, { status: 201 });
-    }
-    if (request.method === "GET") return jsonResponse(200, state.deletionRows);
+  if (
+    path.startsWith("/rest/v1/rpc/") &&
+    (path.includes("account_deletion") || path.endsWith("store_account_apple_credential"))
+  ) {
+    if (request.headers.get("authorization") !== "Bearer service-role-key")
+      return jsonResponse(403, { code: "42501" });
+    const name = path.slice("/rest/v1/rpc/".length);
+    const args = await request.json();
+    if (name === "begin_account_deletion_operation") state.lastUpsert = args;
+    return jsonResponse(200, await deletions.rpc(name, args));
   }
 
+  if (path === "/rest/v1/account_deletion_requests" && request.method === "GET") {
+    return jsonResponse(200, state.deletionRows);
+  }
   if (path === "/rest/v1/account_external_credentials") {
-    if (request.method === "GET") return jsonResponse(200, []);
-    if (request.method === "POST" || request.method === "PATCH") {
-      return new Response(null, { status: 201 });
-    }
+    return request.method === "GET"
+      ? jsonResponse(200, externalCredentials)
+      : jsonResponse(403, { code: "42501", message: "fenced credential helpers required" });
   }
 
   if (path === "/rest/v1/profiles" && request.method === "GET") {
@@ -253,10 +280,13 @@ async function fakeSupabase(request: Request): Promise<Response> {
 
 // ─── Boot the Edge Function in-process ───────────────────────────────────────
 
-const fake = Deno.serve({ port: 0, onListen: () => undefined }, fakeSupabase);
+const fake = Deno.serve(
+  { port: 0, hostname: "127.0.0.1", onListen: () => undefined },
+  fakeSupabase,
+);
 const fakeUrl = `http://127.0.0.1:${fake.addr.port}`;
 
-Deno.env.set("SUPABASE_URL", fakeUrl);
+Deno.env.set("SUPABASE_URL", `${fakeUrl}/`);
 Deno.env.set("SUPABASE_ANON_KEY", "anon-key");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
 Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
@@ -335,11 +365,22 @@ const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).to
 
 Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const ownerId = crypto.randomUUID();
+  const token = providerToken(ownerId);
   const res = await call("POST", "/v1/me/delete-request", token);
   assertEquals(res.status, 200);
-  const body = (await res.json()) as { challenge: string; expiresAt: string };
-  assertEquals(body.challenge, state.lastUpsert?.challenge);
+  const body = (await res.json()) as {
+    challenge: string;
+    expiresAt: string;
+    operationId: string;
+    statusCapability: string;
+  };
+  assertEquals(
+    state.lastUpsert?.p_challenge_hash,
+    await deletionChallengeHash(ownerId, body.challenge),
+  );
+  assertEquals(body.operationId, state.lastUpsert?.p_operation_id);
+  assertEquals(body.statusCapability.length, 43);
   const ttlMs = Date.parse(body.expiresAt) - Date.now();
   assertEquals(ttlMs > 14 * 60_000 && ttlMs <= 15 * 60_000, true);
 });
@@ -419,10 +460,10 @@ Deno.test(
   },
 );
 
-// ─── REPRO: delete-confirm is not idempotent under duplicate requests ────────
+// ─── W08: duplicate confirms share one leased operation ─────────────────────
 
 Deno.test(
-  "two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone",
+  "two concurrent legacy delete-confirms share a single Auth delete and a receipt",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -430,23 +471,40 @@ Deno.test(
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
     ];
-    // The first admin deleteUser succeeds; the duplicate finds the user gone.
-    state.adminDeleteStatuses = [200, 404];
-
-    const [a, b] = await Promise.all([
-      call("POST", "/v1/me/delete-confirm", token, { challenge }),
-      call("POST", "/v1/me/delete-confirm", token, { challenge }),
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      state.onAdminDelete = resolve;
+    });
+    state.adminDeleteGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = call("POST", "/v1/me/delete-confirm", token, { challenge });
+    await Promise.race([
+      entered,
+      first.then(() => {
+        throw new Error("confirm returned before Auth gate");
+      }),
     ]);
-    const statuses = [a.status, b.status].sort();
-    assertEquals(statuses, [200, 200]);
-    assertEquals(((await a.json()) as { deleted: boolean }).deleted, true);
-    assertEquals(((await b.json()) as { deleted: boolean }).deleted, true);
-    assertEquals(state.adminDeleteCalls, 2);
+    try {
+      const duplicate = await call("POST", "/v1/me/delete-confirm", token, { challenge });
+      assertEquals(duplicate.status, 202);
+      assertEquals((await duplicate.json()).state, "in_progress");
+      assertEquals(state.adminDeleteCalls, 1);
+    } finally {
+      release();
+    }
+    const response = await first;
+    assertEquals(response.status, 200);
+    const completed = await response.json();
+    assertEquals(completed.deleted, true);
+    assertEquals(typeof completed.completionReceipt.completedAt, "string");
+    assertEquals(state.adminDeleteCalls, 1);
+    assertEquals(state.revenueCatDeleteCalls, 1);
   },
 );
 
 Deno.test(
-  "replaying delete-confirm after deleteUser succeeded remains a successful deletion",
+  "an intended Auth user_not_found without a durable trigger receipt remains unverified",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -454,13 +512,12 @@ Deno.test(
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
     ];
-    // Simulates the client retrying after a lost response while the pending row
-    // is still visible (deleteUser committed but the cascade/replica is behind
-    // or the two requests interleave). GoTrue answers 404 user_not_found.
+    // Auth absence alone cannot certify that this operation performed cleanup
+    // or observed a committed Auth cascade; the trigger receipt is mandatory.
     state.adminDeleteStatuses = [404];
     const res = await call("POST", "/v1/me/delete-confirm", token, { challenge });
-    assertEquals(res.status, 200);
-    assertEquals(((await res.json()) as { deleted: boolean }).deleted, true);
+    assertEquals(res.status, 503);
+    assertEquals((await res.json()).deleted, undefined);
   },
 );
 
@@ -471,7 +528,7 @@ Deno.test(
   async () => {
     resetState();
     const userId = crypto.randomUUID();
-    const token = providerToken(userId);
+    const token = sessionToken(userId);
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -480,26 +537,28 @@ Deno.test(
 
     const deleted = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(deleted.status, 200);
-    assertEquals(state.tokenCalls, 1);
+    assertEquals((await deleted.json()).deleted, true);
+    assertEquals(
+      state.authRequests.filter((request) => new URL(request.url).pathname === "/auth/v1/user")
+        .length,
+      1,
+    );
 
-    // Post-deletion: the profile and deletion rows are gone (cascade).
     state.deletionRows = [];
     state.profileRows = [];
-
-    // The cached session for the deleted user id must not be reused: the next
-    // request with the same bearer goes back to Supabase Auth.
     const access = await call("GET", "/v1/me/access", token);
-    assertEquals(state.tokenCalls, 2);
-    assertEquals(access.status, 200);
-
-    // Every further request keeps being verified from a fresh cache entry, so
-    // a stale identity can never outlive the account.
-    const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
-    assertEquals(again.status, 403);
     assertEquals(
-      ((await again.json()) as { error: { code: string } }).error.code,
-      "account.deletion_challenge_invalid",
+      state.authRequests.filter((request) => new URL(request.url).pathname === "/auth/v1/user")
+        .length,
+      2,
     );
+    assertEquals(access.status, 401);
+    await access.text();
+    const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
+    assertEquals(again.status, 401);
+    await again.text();
+    assertEquals(state.adminDeleteCalls, 1);
+    assertEquals(state.tokenCalls, 0);
   },
 );
 
@@ -622,6 +681,22 @@ Deno.test("Auth 5xx bodies are cancelled without waiting for an error payload", 
   } finally {
     await upstream.body?.cancel().catch(() => undefined);
   }
+});
+
+Deno.test("trailing-slash Supabase configuration preserves direct refresh and logout", async () => {
+  resetState();
+  assertEquals(Deno.env.get("SUPABASE_URL"), `${fakeUrl}/`);
+  const refreshed = await refresh({ refreshToken: "fixture-refresh-token" });
+  assertEquals(refreshed.status, 200);
+  await refreshed.text();
+  const loggedOut = await call("POST", "/v1/auth/logout", sessionToken(crypto.randomUUID()));
+  assertEquals(loggedOut.status, 204);
+  await loggedOut.text();
+  assertEquals(state.refreshCalls, 1);
+  assertEquals(state.logoutCalls.length, 1);
+  assert(
+    state.authRequests.every((request) => new URL(request.url).pathname.startsWith("/auth/v1/")),
+  );
 });
 
 Deno.test(

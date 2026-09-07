@@ -14,6 +14,7 @@ import {
   StyleProp,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from 'react-native';
@@ -336,31 +337,54 @@ export function BrandMark(props: {
 
 export function ScreenHeader(props: {
   title?: string;
+  /** Let longer titles grow vertically; other headers keep their current layout. */
+  wrapTitle?: boolean;
   eyebrow?: string;
   onBack?: () => void;
   onClose?: () => void;
   right?: React.ReactNode;
   dark?: boolean;
 }) {
+  const { fontScale } = useWindowDimensions();
+  const expanded = !!props.wrapTitle && !!props.title && fontScale >= 2;
   const fg = props.dark ? color.onDark : color.ink;
   const action = props.onBack ?? props.onClose;
   const icon: IconName = props.onBack ? 'back' : 'close';
+  const leading = (
+    <View style={styles.headerSide}>
+      {action ? (
+        <PressableScale
+          onPress={action}
+          accessibilityLabel={props.onBack ? 'Back' : 'Close'}
+          hitSlop={8}
+          containerStyle={styles.headerActionContainer}
+          style={[styles.iconButton, props.dark && styles.iconButtonDark]}
+        >
+          <Icon name={icon} size={20} color={fg} />
+        </PressableScale>
+      ) : null}
+    </View>
+  );
+  const trailing = (
+    <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>
+      {props.right}
+    </View>
+  );
   return (
-    <View style={styles.screenHeader}>
-      <View style={styles.headerSide}>
-        {action ? (
-          <PressableScale
-            onPress={action}
-            accessibilityLabel={props.onBack ? 'Back' : 'Close'}
-            hitSlop={8}
-            containerStyle={styles.headerActionContainer}
-            style={[styles.iconButton, props.dark && styles.iconButtonDark]}
-          >
-            <Icon name={icon} size={20} color={fg} />
-          </PressableScale>
-        ) : null}
-      </View>
-      <View style={styles.headerCenter}>
+    <View style={[styles.screenHeader, expanded && styles.headerExpanded]}>
+      {expanded ? (
+        action || props.right ? (
+          <View style={styles.headerControls}>
+            {leading}
+            {trailing}
+          </View>
+        ) : null
+      ) : (
+        leading
+      )}
+      <View
+        style={[styles.headerCenter, expanded && styles.headerCenterExpanded]}
+      >
         {props.eyebrow ? (
           <Text
             style={[
@@ -372,14 +396,19 @@ export function ScreenHeader(props: {
           </Text>
         ) : null}
         {props.title ? (
-          <Text numberOfLines={1} style={[type.h3, { color: fg }]}>
+          <Text
+            numberOfLines={props.wrapTitle ? undefined : 1}
+            style={[
+              type.h3,
+              { color: fg },
+              props.wrapTitle && styles.headerTitleWrapped,
+            ]}
+          >
             {props.title}
           </Text>
         ) : null}
       </View>
-      <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>
-        {props.right}
-      </View>
+      {!expanded && trailing}
     </View>
   );
 }
@@ -426,7 +455,9 @@ export function Button(props: {
         {props.icon ? (
           <Icon name={props.icon} size={18} color={palette.fg} />
         ) : null}
-        <Text style={[type.bodyBold, { color: palette.fg }]}>
+        <Text
+          style={[type.bodyBold, styles.buttonLabel, { color: palette.fg }]}
+        >
           {props.label}
         </Text>
         {variant === 'primary' || variant === 'volt' || variant === 'dark' ? (
@@ -1024,6 +1055,7 @@ export function LoadingState(props: { label: string; dark?: boolean }) {
 export function Pill(props: {
   label: string;
   tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'volt' | 'dark';
+  multiline?: boolean;
 }) {
   const tone = props.tone ?? 'neutral';
   const palette = {
@@ -1036,7 +1068,10 @@ export function Pill(props: {
   }[tone];
   return (
     <View style={[styles.pill, { backgroundColor: palette.bg }]}>
-      <Text numberOfLines={1} style={[type.micro, { color: palette.fg }]}>
+      <Text
+        numberOfLines={props.multiline ? undefined : 1}
+        style={[type.micro, { color: palette.fg }]}
+      >
         {props.label}
       </Text>
     </View>
@@ -1087,8 +1122,15 @@ const styles = StyleSheet.create({
   pageContent: { flexGrow: 1 },
   pressableContainer: { alignSelf: 'stretch' },
   pressableBase: { justifyContent: 'center' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  wordmark: { ...type.h3 },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  wordmark: { ...type.h3, flexShrink: 1, minWidth: 0 },
   screenHeader: {
     minHeight: 52,
     paddingHorizontal: space.lg,
@@ -1097,6 +1139,18 @@ const styles = StyleSheet.create({
   },
   headerSide: { width: 44, justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerExpanded: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.sm,
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerCenterExpanded: { flex: 0, width: '100%', minWidth: 0 },
+  headerTitleWrapped: { alignSelf: 'stretch', textAlign: 'center' },
   headerActionContainer: { width: 44, alignSelf: 'center' },
   iconButton: {
     width: 44,
@@ -1122,11 +1176,13 @@ const styles = StyleSheet.create({
   buttonContent: {
     minHeight: 54,
     paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
   },
+  buttonLabel: { flexShrink: 1, minWidth: 0, textAlign: 'center' },
   dialogRoot: {
     flex: 1,
     justifyContent: 'center',

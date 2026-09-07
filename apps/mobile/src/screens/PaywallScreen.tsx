@@ -15,7 +15,11 @@ import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { Icon, type IconName } from '../design/icons';
 import { color, font, radius, shadow, space, type } from '../design/tokens';
 import type { BillingPeriod, StorePlan } from '../billing/types';
-import { selectHasPremium, useAccessStore } from '../state/accessStore';
+import {
+  selectHasPremium,
+  selectNeedsFulfilmentRecovery,
+  useAccessStore,
+} from '../state/accessStore';
 import {
   freeRatingAllowanceCopy,
   RATING_CONSUMPTION_RULE,
@@ -35,8 +39,8 @@ export interface PaywallScreenProps {
 const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
   {
     icon: 'spark',
-    title: 'Unlimited validated ratings',
-    body: 'Automatic capture, evidence-backed checkpoints, and no invented score.',
+    title: 'Unlimited technique analyses',
+    body: 'Automatic capture with replay and checkpoint feedback.',
   },
   {
     icon: 'court',
@@ -46,12 +50,12 @@ const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
   {
     icon: 'progress',
     title: 'Rank and progress from real scores',
-    body: 'Bronze-to-Diamond player rank and trend lines built only from server-accepted analyses.',
+    body: 'Player rank and trends built from your saved analysis results.',
   },
   {
     icon: 'bookmark',
-    title: 'Reviewed practice, kept together',
-    body: 'Published drills and rights-cleared coaching videos can be saved with the plan that prescribed them.',
+    title: 'Practice, kept together',
+    body: 'Save available drills and coaching videos with your practice plan.',
   },
 ];
 
@@ -89,7 +93,7 @@ const PODIUM_HEIGHTS: Record<BillingPeriod, number> = {
 };
 
 function podiumQualifier(plan: StorePlan): string {
-  if (plan.period === 'lifetime') return 'one-time · yours forever';
+  if (plan.period === 'lifetime') return 'one-time · no recurring fee';
   if (plan.period === 'annual') {
     return plan.pricePerMonthString
       ? `${plan.pricePerMonthString}/mo · billed yearly`
@@ -218,14 +222,33 @@ export function PaywallScreen(props: PaywallScreenProps) {
     plans,
     selectedPeriod,
     canonicalAccess,
-    error,
+    fulfilmentStatus,
+    reconciliation,
+    error: accessError,
     initialize,
     selectPeriod,
     purchaseSelected,
     restorePurchases,
+    retryPendingFulfilment,
+    reconcileBilling,
     clearError,
   } = useAccessStore();
   const premium = useAccessStore(selectHasPremium);
+  const pendingRecovery = useAccessStore(selectNeedsFulfilmentRecovery);
+  const recoveryRequired =
+    pendingRecovery ||
+    reconciliation.status === 'unavailable' ||
+    reconciliation.status === 'checking';
+  const error = accessError ?? reconciliation.error;
+  const mounted = useRef(true);
+  const pricingRequested = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Two-step flow: page 1 sells the value, page 2 (one deliberate tap later)
   // shows store-verified pricing. Entering content slides/fades in 220ms
@@ -261,8 +284,15 @@ export function PaywallScreen(props: PaywallScreenProps) {
   );
 
   useEffect(() => {
-    if (status === 'idle') void initialize();
-  }, [initialize, status]);
+    if (operation !== 'idle' || status === 'loading' || premium) return;
+    if (
+      status === 'idle' ||
+      (status === 'ready' && !plans && !pricingRequested.current)
+    ) {
+      pricingRequested.current = true;
+      void initialize();
+    }
+  }, [initialize, operation, plans, premium, status]);
 
   // Hardware back on the pricing page returns to the value page instead of
   // dismissing the paywall (predictable step-back navigation).
@@ -284,7 +314,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
       : selectedPeriod === 'lifetime'
         ? plans?.lifetime
         : plans?.monthly;
-  const busy = operation !== 'idle';
+  const busy = operation !== 'idle' || status === 'loading';
   const annualSavings = savingsLabel(
     plans?.annual ?? null,
     plans?.monthly ?? null,
@@ -294,23 +324,46 @@ export function PaywallScreen(props: PaywallScreenProps) {
     annual: '/yr',
     lifetime: ' once',
   };
-  const purchaseLabel = selectedPlan?.freeTrial
-    ? 'Start free trial'
-    : selectedPlan
-      ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
-      : 'Store pricing unavailable';
-  const canPurchase = Boolean(selectedPlan && canonicalAccess);
+  const purchaseLabel = recoveryRequired
+    ? 'Membership verification pending'
+    : selectedPlan?.freeTrial
+      ? 'Start free trial'
+      : selectedPlan
+        ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
+        : 'Store pricing unavailable';
+  const canPurchase = Boolean(
+    selectedPlan &&
+    canonicalAccess &&
+    fulfilmentStatus === 'clear' &&
+    !recoveryRequired,
+  );
   const showRetry =
-    status !== 'loading' && (!plans || canonicalAccess === null);
+    status !== 'loading' &&
+    (recoveryRequired || !plans || canonicalAccess === null);
 
   const purchase = async () => {
     const verified = await purchaseSelected();
-    if (verified) props.onPurchased?.();
+    if (verified && mounted.current) props.onPurchased?.();
   };
 
   const restore = async () => {
     const verified = await restorePurchases();
-    if (verified) props.onPurchased?.();
+    if (verified && mounted.current) props.onPurchased?.();
+  };
+
+  const retry = async () => {
+    if (selectNeedsFulfilmentRecovery(useAccessStore.getState())) {
+      const verified = await retryPendingFulfilment();
+      if (verified && mounted.current) props.onPurchased?.();
+    } else if (
+      useAccessStore.getState().reconciliation.status === 'unavailable' ||
+      useAccessStore.getState().reconciliation.status === 'checking'
+    ) {
+      const verified = await reconcileBilling({ force: true });
+      if (verified && mounted.current) props.onPurchased?.();
+    } else {
+      await initialize();
+    }
   };
 
   if (premium) {
@@ -428,11 +481,20 @@ export function PaywallScreen(props: PaywallScreenProps) {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.hero}>
-                <Text style={styles.eyebrow}>STORE-VERIFIED PRICING</Text>
-                <Text style={styles.title}>Choose your plan.</Text>
+                <Text style={styles.eyebrow}>
+                  {recoveryRequired
+                    ? 'MEMBERSHIP VERIFICATION'
+                    : 'STORE-VERIFIED PRICING'}
+                </Text>
+                <Text style={styles.title}>
+                  {recoveryRequired
+                    ? 'Verify your membership.'
+                    : 'Choose your plan.'}
+                </Text>
                 <Text style={styles.subtitle}>
-                  {allowanceCopy} Every price below comes from your app store —
-                  never an estimate.
+                  {recoveryRequired
+                    ? 'Verification is pending, not another purchase. Retry with our server without opening the app store.'
+                    : `${allowanceCopy} Every price below comes from your app store — never an estimate.`}
                 </Text>
               </View>
 
@@ -522,8 +584,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
               {showRetry ? (
                 <PressableScale
                   testID="paywall-retry"
-                  onPress={() => void initialize()}
-                  accessibilityLabel="Retry loading membership"
+                  onPress={() => void retry()}
+                  accessibilityLabel={
+                    recoveryRequired
+                      ? 'Retry membership verification'
+                      : 'Retry loading membership'
+                  }
                   disabled={busy}
                   style={styles.secondaryButton}
                 >
@@ -554,7 +620,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 testID="paywall-restore"
                 onPress={() => void restore()}
                 accessibilityLabel="Restore purchases"
-                disabled={busy}
+                disabled={busy || recoveryRequired}
                 style={styles.restoreButton}
               >
                 {operation === 'restoring' ? (
@@ -627,29 +693,58 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 >
                   <Icon name="crown" size={27} color={color.onVolt} />
                 </LinearGradient>
-                <Text style={styles.eyebrow}>PLAY PAST THE FIRST TWO</Text>
-                <Text style={styles.title}>A coach for every stroke.</Text>
+                <Text style={styles.eyebrow}>
+                  {recoveryRequired
+                    ? 'MEMBERSHIP VERIFICATION'
+                    : 'PLAY PAST THE FIRST TWO'}
+                </Text>
+                <Text style={styles.title}>
+                  {recoveryRequired
+                    ? 'Verify your membership.'
+                    : 'A coach for every stroke.'}
+                </Text>
                 <Text style={styles.subtitle}>
-                  {allowanceCopy} Membership keeps scoring, practice, and
-                  progress moving together.
+                  {recoveryRequired
+                    ? 'Verification is pending, not another purchase. Retry with our server without opening the app store.'
+                    : `${allowanceCopy} Membership keeps scoring, practice, and progress moving together.`}
                 </Text>
                 <Text style={styles.ratingRule}>{RATING_CONSUMPTION_RULE}</Text>
               </View>
 
-              <View style={styles.benefits}>
-                {BENEFITS.map(benefit => (
-                  <BenefitRow key={benefit.title} {...benefit} />
-                ))}
-              </View>
+              {recoveryRequired ? (
+                <PressableScale
+                  testID="paywall-retry"
+                  onPress={() => void retry()}
+                  accessibilityLabel="Retry membership verification"
+                  disabled={busy}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Retry verification
+                  </Text>
+                </PressableScale>
+              ) : (
+                <View style={styles.benefits}>
+                  {BENEFITS.map(benefit => (
+                    <BenefitRow key={benefit.title} {...benefit} />
+                  ))}
+                </View>
+              )}
 
               <PressableScale
                 testID="paywall-see-plans"
                 onPress={() => transitionTo('pricing')}
-                accessibilityLabel="See membership plans"
+                accessibilityLabel={
+                  recoveryRequired
+                    ? 'View membership details'
+                    : 'See membership plans'
+                }
                 style={styles.primaryButton}
               >
                 <Text style={styles.primaryButtonText}>
-                  See membership plans
+                  {recoveryRequired
+                    ? 'View membership details'
+                    : 'See membership plans'}
                 </Text>
                 <Icon name="arrow" color={color.onVolt} size={20} />
               </PressableScale>

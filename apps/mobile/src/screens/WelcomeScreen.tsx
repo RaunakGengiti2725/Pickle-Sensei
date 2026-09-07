@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { BrandMark, Button, Pill, PressableScale } from '../design/components';
@@ -8,7 +8,12 @@ import { color, radius, space, type } from '../design/tokens';
 function CourtStory() {
   return (
     <View style={styles.courtStory}>
-      <Svg width="100%" height="100%" viewBox="0 0 340 300">
+      <Svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 340 300"
+        style={StyleSheet.absoluteFill}
+      >
         <Path
           d="M35 42h270v216H35z"
           stroke={color.lineDark}
@@ -79,56 +84,72 @@ export function WelcomeScreen(props: {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.topBar}>
-        <BrandMark light />
-        <Pill label="PRIVATE BY DEFAULT" tone="dark" />
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <BrandMark light />
+          <Pill label="PRIVATE BY DEFAULT" tone="dark" />
+        </View>
 
-      <View style={styles.heroCopy}>
-        <Text style={[type.hero, { color: color.onDark }]}>
-          See the stroke.{`\n`}Know the fix.
-        </Text>
-        <Text style={styles.tagline}>
-          A private technique coach that guides each capture and turns validated
-          reads into one clear next step.
-        </Text>
-      </View>
+        <View style={styles.heroCopy}>
+          <Text style={[type.hero, { color: color.onDark }]}>
+            See the stroke.{`\n`}Know the fix.
+          </Text>
+          <Text style={styles.tagline}>
+            A private technique coach that guides each capture and turns
+            validated reads into one clear next step.
+          </Text>
+        </View>
 
-      <CourtStory />
+        <CourtStory />
 
-      <View style={styles.footer}>
-        <Button
-          label="Start your first read"
-          variant="volt"
-          onPress={props.onGetStarted}
-        />
-        {props.onSignIn ? (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="I already have an account"
-            accessibilityHint="Sign in to an existing account"
-            onPress={props.onSignIn}
-            style={styles.signInLink}
-          >
-            <Text style={[type.bodyBold, { color: color.onDarkMuted }]}>
-              I already have an account
-            </Text>
-          </PressableScale>
-        ) : null}
-        <Text style={styles.privacy}>
-          Two successful validated ratings free · Unscored attempts don’t count
-        </Text>
-      </View>
+        <View style={styles.footer}>
+          <Button
+            label="Start your first read"
+            variant="volt"
+            onPress={props.onGetStarted}
+          />
+          {props.onSignIn ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="I already have an account"
+              accessibilityHint="Sign in to an existing account"
+              onPress={props.onSignIn}
+              style={styles.signInLink}
+            >
+              <Text
+                style={[
+                  type.bodyBold,
+                  { color: color.onDarkMuted, textAlign: 'center' },
+                ]}
+              >
+                I already have an account
+              </Text>
+            </PressableScale>
+          ) : null}
+          <Text style={styles.privacy}>
+            Two successful validated ratings free · Unscored attempts don’t
+            count
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
+  // Fill a roomy screen as before, but let content grow and scroll on short
+  // phones or at accessibility text sizes instead of pushing CTAs offscreen.
+  content: { flexGrow: 1 },
   topBar: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -140,7 +161,8 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   courtStory: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     marginHorizontal: space.lg,
     marginTop: space.lg,
     minHeight: 270,
@@ -148,12 +170,12 @@ const styles = StyleSheet.create({
     backgroundColor: color.inkElevated,
     overflow: 'hidden',
   },
-  readout: { position: 'absolute', top: 28, left: 28 },
+  readout: { flexGrow: 1, padding: 28 },
   readoutTitle: { color: color.onDark, marginTop: space.sm },
   livePill: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
+    alignSelf: 'flex-end',
+    marginRight: 20,
+    marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,

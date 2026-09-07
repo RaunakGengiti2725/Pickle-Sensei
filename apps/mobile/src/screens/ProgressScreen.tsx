@@ -24,6 +24,12 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
 import {
+  captureDataOwnerContext,
+  getActiveDataOwner,
+  isDataOwnerContextCurrent,
+  SIGNED_OUT_DATA_OWNER,
+} from '../data/accountScope';
+import {
   listCaptureHistory,
   listRealAnalysisFacts,
   type CaptureHistoryEntry,
@@ -224,6 +230,12 @@ export function ProgressScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const profile = useAppStore(state => state.profile);
+  const ownerKey = useAppStore(state => state.ownerKey);
+  const activeOwner = getActiveDataOwner();
+  const ownerGeneration =
+    activeOwner === SIGNED_OUT_DATA_OWNER
+      ? null
+      : captureDataOwnerContext().generation;
   const consistency = useConsistencyStore(state => state.snapshot);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
   const timeZone = useMemo(deviceTimeZone, []);
@@ -235,44 +247,75 @@ export function ProgressScreen() {
   const [canonical, setCanonical] = useState<CanonicalProgress | null>(null);
   const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
   const [loaded, setLoaded] = useState(false);
+  const [loadedOwner, setLoadedOwner] = useState<{
+    ownerKey: string;
+    generation: number | null;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadRevision, setLoadRevision] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const owner = getActiveDataOwner();
+      const context =
+        owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+      const isCurrent = () =>
+        active &&
+        getActiveDataOwner() === owner &&
+        (context === null || isDataOwnerContextCurrent(context));
       void (async () => {
         try {
           const db = getDb();
-          const apiSession = getApiSession();
-          const [localFacts, localCaptures, accountProgress] =
-            await Promise.all([
-              listRealAnalysisFacts(db, null),
-              listCaptureHistory(db, null),
-              apiSession
-                ? fetchCanonicalProgress(apiSession).catch(() => null)
-                : Promise.resolve(null),
-            ]);
-          if (!active) return;
+          const [localFacts, localCaptures] = await Promise.all([
+            listRealAnalysisFacts(db, null),
+            listCaptureHistory(db, null),
+          ]);
+          if (!isCurrent()) return;
           setFacts(localFacts);
           setCaptures(localCaptures);
-          setCanonical(accountProgress);
+          setCanonical(null);
           setAsOfIso(new Date().toISOString());
           setLoadError(null);
+          // Local technique/practice is usable even while the network is
+          // unavailable. A later canonical response may enrich this focus
+          // only; it cannot publish after blur, retry, or an owner change.
+          const apiSession = getApiSession();
+          if (apiSession?.canonicalAppUserId === owner) {
+            void fetchCanonicalProgress(apiSession)
+              .then(accountProgress => {
+                if (isCurrent()) setCanonical(accountProgress);
+              })
+              .catch(() => {
+                if (isCurrent()) setCanonical(null);
+              });
+          }
         } catch {
-          if (!active) return;
+          if (!isCurrent()) return;
           setLoadError(
             'Your saved camera history could not be opened. No empty values were substituted.',
           );
         } finally {
-          if (active) setLoaded(true);
+          if (isCurrent()) {
+            setLoadedOwner({
+              ownerKey: owner,
+              generation: context?.generation ?? null,
+            });
+            setLoaded(true);
+          }
         }
       })();
       void refreshConsistency();
       return () => {
         active = false;
       };
-    }, [loadRevision, refreshConsistency]),
+    }, [
+      activeOwner,
+      loadRevision,
+      ownerGeneration,
+      ownerKey,
+      refreshConsistency,
+    ]),
   );
 
   const practice = useMemo(
@@ -435,7 +478,13 @@ export function ProgressScreen() {
       ? bestScore.current - bestScore.previous
       : null;
 
-  if (!loaded) return <LoadingState dark label="Loading measured progress…" />;
+  if (
+    !loaded ||
+    loadedOwner?.ownerKey !== activeOwner ||
+    loadedOwner.generation !== ownerGeneration
+  ) {
+    return <LoadingState dark label="Loading measured progress…" />;
+  }
 
   if (loadError) {
     return (

@@ -68,14 +68,17 @@ describe("geometry providers through the full analysis pipeline", () => {
       "accelerate",
       "contact",
       "follow_through",
-      "recover",
     ]);
+    expect(analysis.measurements.some((entry) => entry.metricKey === "recovery_time_ms")).toBe(
+      false,
+    );
+    expect(analysis.checkpoints.find((entry) => entry.key === "recovery")?.score).toBeNull();
     expect(analysis.priorityFix).not.toBeNull();
     expect(analysis.versionVector).toMatchObject({
       modelBundleVersion: GEOMETRY_BUNDLE_VERSION,
       poseModelVersion: "apple-vision-bodypose-1",
       strokeDetectorVersion: "temporal-stroke-heuristic-2",
-      phaseModelVersion: "phase-geometry-1",
+      phaseModelVersion: "phase-geometry-2",
       scoringModelVersion: "sm-v1",
       shotConfigVersion: "forehand_drive@1",
     });

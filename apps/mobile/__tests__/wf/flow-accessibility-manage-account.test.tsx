@@ -63,6 +63,8 @@ jest.mock('../../src/account/deletion', () => {
 
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { establishApiSession } from '../../src/account/apiSession';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   AccountDeletionError,
@@ -77,6 +79,13 @@ const syncedSession: AuthSession = {
   localOnly: false,
   displayName: 'Sam Rivera',
   email: 'sam@example.com',
+};
+
+const apiSession = {
+  apiBaseUrl: 'https://api.example.test',
+  bearerToken: 'test-access-token',
+  canonicalAppUserId: syncedSession.canonicalAppUserId!,
+  provider: 'apple' as const,
 };
 
 function renderScreen() {
@@ -159,6 +168,8 @@ describe('Manage account → delete account — accessibility workflow', () => {
     mockGoBack.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
+    setActiveDataOwner(apiSession.canonicalAppUserId);
+    establishApiSession(apiSession);
     act(() => {
       useAuthStore.setState({
         hydrated: true,
@@ -329,7 +340,7 @@ describe('Manage account → delete account — accessibility workflow', () => {
     await act(async () => {
       press(byLabelPrefix(renderer, 'Continue to delete'));
     });
-    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, {
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, {
       reason: 'privacy',
       wanted: 'accuracy',
       details: null,
@@ -343,7 +354,7 @@ describe('Manage account → delete account — accessibility workflow', () => {
     await act(async () => {
       press(byLabelPrefix(renderer, 'Continue to delete'));
     });
-    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, null);
     act(() => renderer.unmount());
   });
 
@@ -490,16 +501,18 @@ describe('Manage account → delete account — accessibility workflow', () => {
       await act(async () => {
         press(confirm);
       });
-      expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(null, 'c-2');
-      expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
+      expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
+        apiSession,
+        'c-2',
       );
+      expect(allText(renderer)).toContain('The request may have completed.');
+      expect(allText(renderer)).not.toContain('Nothing was deleted');
       expect(
         useAuthStore.getState().completeAccountDeletion,
       ).not.toHaveBeenCalled();
 
       // Retry path: the armed button is immediately usable again.
-      confirm = byLabelPrefix(renderer, 'Permanently delete');
+      confirm = byLabelPrefix(renderer, 'Retry deletion');
       expect(confirm.props.accessibilityState?.disabled).toBe(false);
       await act(async () => {
         press(confirm);

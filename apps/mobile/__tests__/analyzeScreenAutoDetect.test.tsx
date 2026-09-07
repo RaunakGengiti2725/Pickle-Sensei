@@ -2,23 +2,109 @@
 // not exist under jest. The pure gating/presentation logic under test never
 // touches it, so the db module is replaced wholesale.
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
+jest.mock('../src/data/repository', () => ({
+  ...jest.requireActual('../src/data/repository'),
+  savePendingCapture: jest.fn(async () => {}),
+  setDeclaredStroke: jest.fn(async () => {}),
+  setCaptureTargetSeed: jest.fn(async () => {}),
+}));
+jest.mock('../src/analysis/runCaptureAnalysis', () => ({
+  ...jest.requireActual('../src/analysis/runCaptureAnalysis'),
+  runCaptureAnalysis: jest.fn(),
+  prepareOriginalCaptureAnalysis: jest.fn(),
+  runOriginalCaptureAnalysis: jest.fn(),
+}));
+jest.mock('../src/analysis/originalAnalysisOperations', () => {
+  const actual = jest.requireActual(
+    '../src/analysis/originalAnalysisOperations',
+  );
+  return {
+    ...actual,
+    originalAnalysisOperations: {
+      ...actual.originalAnalysisOperations,
+      read: jest.fn(),
+    },
+  };
+});
+jest.mock('../src/analysis/practiceSet', () => ({
+  planPracticeSet: jest.fn(async () => null),
+}));
+jest.mock('../src/data/syncRuntime', () => ({ triggerOutboxSync: jest.fn() }));
+jest.mock('../src/review/appStoreReview', () => ({
+  reportScoredAnalysisForReview: jest.fn(),
+}));
+jest.mock('../src/camera/capture', () => ({
+  ...jest.requireActual('../src/camera/capture'),
+  captureStrokeVideo: jest.fn(),
+  importStrokeVideo: jest.fn(),
+  extractImportedPoseSequence: jest.fn(),
+  subscribeToCameraEvents: jest.fn(() => () => {}),
+  cancelCameraOperation: jest.fn(),
+}));
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: jest.requireActual('react-native').View,
+}));
+const mockNavigation = {
+  replace: jest.fn(),
+  navigate: jest.fn(),
+  goBack: jest.fn(),
+  popToTop: jest.fn(),
+};
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => mockNavigation,
+  useRoute: () => ({ params: { source: 'camera' } }),
+}));
 
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
+  AnalysisInputSelectionSnapshot,
   CaptureAnalysisRecord,
   StrokeIntentEnvelope,
 } from '@pickle/analysis-pipeline';
 import type { TechniqueIntent } from '@pickle/shared-types';
 import {
+  AnalyzeScreen,
   canAutoScoreWithoutDeclaration,
   strokeIntentPresentation,
 } from '../src/screens/AnalyzeScreen';
 import {
+  prepareOriginalCaptureAnalysis,
+  runCaptureAnalysis,
+  runOriginalCaptureAnalysis,
+} from '../src/analysis/runCaptureAnalysis';
+import {
+  originalAnalysisOperations,
+  type OriginalAnalysisOperation,
+} from '../src/analysis/originalAnalysisOperations';
+import { getDb } from '../src/data/db';
+import {
+  savePendingCapture,
+  setCaptureTargetSeed,
+  setDeclaredStroke,
+} from '../src/data/repository';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  captureDataOwnerContext,
+  SIGNED_OUT_DATA_OWNER,
+  setActiveDataOwner,
+} from '../src/data/accountScope';
+import { Button, ScreenHeader } from '../src/design/components';
+import { reportScoredAnalysisForReview } from '../src/review/appStoreReview';
+import { triggerOutboxSync } from '../src/data/syncRuntime';
+import {
   autoDetectIntent,
   TechniqueIntentPicker,
 } from '../src/flow/TechniqueIntentPicker';
-import { assertCapturedClip } from '../src/camera/capture';
+import {
+  assertCapturedClip,
+  captureStrokeVideo,
+  importStrokeVideo,
+  extractImportedPoseSequence,
+} from '../src/camera/capture';
 
 /**
  * W4 — AUTO DETECT admission + honest outcome surface.
@@ -239,6 +325,325 @@ describe('TechniqueIntentPicker AUTO chip', () => {
       legacySlug: 'forehand_drive',
       confidence: 1,
     });
+  });
+});
+
+function screenInputSelection(
+  captureId: string,
+): AnalysisInputSelectionSnapshot {
+  return {
+    version: 'capture-analysis-input-v1',
+    ownerKey: '22222222-2222-4222-8222-222222222222',
+    ownerGeneration: captureDataOwnerContext().generation,
+    apiOrigin: 'https://api.test',
+    captureId,
+    observationHash: 'a'.repeat(64),
+    definitionHash: 'b'.repeat(64),
+    modelPolicyHash: 'c'.repeat(64),
+    capture: {
+      captureMode: 'automatic_pose_trigger',
+      capturedAtIso: baseClip.capturedAtIso,
+      durationMs: baseClip.durationMs,
+      width: baseClip.width,
+      height: baseClip.height,
+      fps: baseClip.fps,
+      poseFrameCount: 6,
+      poseModelVersion: 'apple-vision-bodypose-1',
+      poseUri: 'file:///private/var/mobile/clip.pose.json',
+      payloadHash: 'd'.repeat(64),
+    },
+    trigger: { ...trigger, peakMotionMs: trigger.peakMotionMs },
+    declaredStroke: null,
+    declaredCanonical: null,
+    handedness: 'left',
+    cameraView: 'rear_oblique',
+    focusCheckpoint: 'swing_length',
+    target: { userSelection: null, guidedStartTap: null, acquiredAnchor: null },
+  };
+}
+
+describe('W03 same-capture confirmation screen', () => {
+  beforeEach(() => {
+    setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+    establishApiSession({
+      canonicalAppUserId: '22222222-2222-4222-8222-222222222222',
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token',
+      provider: 'apple',
+    });
+  });
+  afterEach(() => {
+    clearApiSession();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    jest.clearAllMocks();
+  });
+
+  it('mounts a loaded pending confirmation with the same capture and no native operation', async () => {
+    setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+    (getDb as jest.Mock).mockReturnValue({
+      execute: jest.fn(async () => ({ rows: [] })),
+    });
+    const captureId = '44444444-4444-4444-8444-444444444444';
+    const stored = {
+      ...record(
+        {
+          declaredStroke: null,
+          predictedStroke: null,
+          resolutionBasis: 'abstained',
+          resolvedProfileId: null,
+          resolvedProfileVersion: null,
+          disagreement: null,
+        },
+        null,
+      ),
+      id: '33333333-3333-4333-8333-333333333333',
+      captureId,
+      kind: 'needs_technique_confirmation' as const,
+      confirmationReason: 'unresolved_technique' as const,
+      result: null,
+      captureEnvelope: null,
+      observationHash: 'a'.repeat(64),
+      inputSelection: screenInputSelection(captureId),
+    };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <AnalyzeScreen
+            savedTechniqueConfirmation={{
+              captureId,
+              clip: guidedWithPose,
+              record: stored,
+              ownerContext: captureDataOwnerContext(),
+              apiOrigin: 'https://api.test',
+              targetSeed: null,
+            }}
+          />,
+        );
+      });
+      expect(renderer.root.findByType(ScreenHeader).props.title).toBe(
+        'Confirm technique',
+      );
+      expect(renderer.root.findAllByType(TechniqueIntentPicker)).toHaveLength(
+        1,
+      );
+      expect(
+        renderer.root
+          .findAllByType(Button)
+          .find(button => button.props.label === 'Confirm technique')?.props
+          .disabled,
+      ).toBe(true);
+      expect(captureStrokeVideo).not.toHaveBeenCalled();
+      expect(importStrokeVideo).not.toHaveBeenCalled();
+      expect(runCaptureAnalysis).not.toHaveBeenCalled();
+      await act(async () => {
+        renderer.root
+          .findByType(TechniqueIntentPicker)
+          .props.onChange(tapIntent);
+      });
+      const staleConfirm = renderer.root
+        .findAllByType(Button)
+        .find(button => button.props.label === 'Confirm technique')!.props
+        .onPress;
+      await act(async () => {
+        renderer.root.findByType(ScreenHeader).props.onClose();
+        staleConfirm();
+      });
+      expect(setDeclaredStroke).not.toHaveBeenCalled();
+      expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    } finally {
+      if (renderer) await act(async () => renderer.unmount());
+    }
+  });
+
+  it('uses the existing picker and one explicit confirmation, not another camera/import or an invented declaration', async () => {
+    setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+    (getDb as jest.Mock).mockReturnValue({
+      execute: jest.fn(async () => ({ rows: [] })),
+    });
+    (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedWithPose);
+    const analysisId = '33333333-3333-4333-8333-333333333333';
+    const pending = {
+      ...record(
+        {
+          declaredStroke: null,
+          predictedStroke: {
+            taxonomyVersion: 'pickleball-stroke-taxonomy-v3',
+            classifierVersion: 'heuristic-test',
+            label: 'FOREHAND',
+            leaf: null,
+            taxonomyDepth: 2,
+            confidence: 0.9,
+            evidence: ['measured side'],
+            limitingFactors: [],
+          },
+          resolutionBasis: 'predicted_family',
+          resolvedProfileId: 'SHARED_FOREHAND_SWING',
+          resolvedProfileVersion: 'technique-profile-v1',
+          disagreement: null,
+        },
+        null,
+      ),
+      id: analysisId,
+      kind: 'needs_technique_confirmation',
+      confirmationReason: 'family_only',
+    };
+    let finishConfirmation!: (value: unknown) => void;
+    let prepared!: OriginalAnalysisOperation;
+    // This presentation test stops at the runners' typed boundaries. The
+    // full-flow suite exercises the real original store/attempt transitions.
+    jest
+      .mocked(prepareOriginalCaptureAnalysis)
+      .mockImplementationOnce(async (input, execution, operationId) => {
+        prepared = {
+          operationId: operationId!,
+          analysisId,
+          settingsHash: 'b'.repeat(64),
+          modelPolicyHash: null,
+          observation: null,
+          executionHash: null,
+          currentAttemptId: null,
+          finalRecordId: analysisId,
+          winningAttemptId: null,
+          completionKind: 'needs_technique_confirmation',
+          snapshot: {
+            version: 'original-analysis-v1',
+            ...execution.scope,
+            captureId: input.captureId,
+            clip: input.clip,
+            declaredStroke: input.declaredStroke,
+            declaredCanonical: input.declaredCanonical ?? null,
+            handedness: input.handedness,
+            cameraView: input.cameraView,
+            focusCheckpoint: input.focusCheckpoint ?? null,
+            targetSeed: input.targetSeed ?? null,
+            sessionId: input.sessionId ?? null,
+            practiceSet: input.practiceSet ?? null,
+            appVersion: input.appVersion,
+            modelPolicy: null,
+            captureEnvelope: input.captureEnvelope ?? null,
+          },
+        };
+        jest
+          .mocked(originalAnalysisOperations.read)
+          .mockResolvedValue(prepared);
+        return prepared;
+      });
+    (runOriginalCaptureAnalysis as jest.Mock).mockImplementationOnce(
+      async () => ({
+        kind: 'needs_technique_confirmation',
+        analysisId,
+        record: {
+          ...pending,
+          captureId: prepared.snapshot.captureId,
+          observationHash: 'a'.repeat(64),
+          captureEnvelope: null,
+          inputSelection: screenInputSelection(prepared.snapshot.captureId),
+        },
+      }),
+    );
+    (runCaptureAnalysis as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishConfirmation = resolve;
+        }),
+    );
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(<AnalyzeScreen />);
+      });
+      await act(async () => {
+        renderer.root
+          .findByType(TechniqueIntentPicker)
+          .props.onChange(autoDetectIntent());
+      });
+      const staleStart = renderer.root
+        .findAllByType(Button)
+        .find(button => button.props.label === 'Open automatic camera')!.props
+        .onPress;
+      await act(async () => staleStart());
+      expect(prepareOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
+      expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
+      expect(runCaptureAnalysis).not.toHaveBeenCalled();
+      expect(setDeclaredStroke).not.toHaveBeenCalled();
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(triggerOutboxSync).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+      expect(renderer.root.findAllByType(TechniqueIntentPicker)).toHaveLength(
+        1,
+      );
+      expect(JSON.stringify(renderer.toJSON())).toContain('same saved capture');
+      expect(
+        renderer.root
+          .findAllByType(Button)
+          .find(button => button.props.label === 'Confirm technique')?.props
+          .disabled,
+      ).toBe(true);
+      const intent: TechniqueIntent = {
+        version: 'technique-intent-v1',
+        source: 'tap',
+        canonical: 'BACKHAND_DINK',
+        legacySlug: 'dink',
+        confidence: 1,
+      };
+      await act(async () => {
+        renderer.root.findByType(TechniqueIntentPicker).props.onChange(intent);
+      });
+      expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
+      expect(runCaptureAnalysis).not.toHaveBeenCalled();
+      await act(async () => {
+        const confirm = renderer.root
+          .findAllByType(Button)
+          .find(button => button.props.label === 'Confirm technique')!;
+        confirm.props.onPress();
+        confirm.props.onPress();
+      });
+      expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+      expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
+      await act(async () => staleStart());
+      expect(captureStrokeVideo).toHaveBeenCalledTimes(1);
+      const original = jest.mocked(prepareOriginalCaptureAnalysis).mock
+        .calls[0]![0];
+      const confirmed = jest.mocked(runCaptureAnalysis).mock.calls[0]![0];
+      expect(confirmed).toMatchObject({
+        captureId: original.captureId,
+        clip: original.clip,
+        declaredStroke: 'dink',
+        declaredCanonical: 'BACKHAND_DINK',
+        ownerContext: original.ownerContext,
+        handedness: 'left',
+        cameraView: 'rear_oblique',
+        focusCheckpoint: 'swing_length',
+        signal: expect.any(AbortSignal),
+        techniqueConfirmation: {
+          analysisId,
+          intent,
+          confirmedAtIso: expect.any(String),
+        },
+      });
+      expect(captureStrokeVideo).toHaveBeenCalledTimes(1);
+      expect(importStrokeVideo).not.toHaveBeenCalled();
+      expect(extractImportedPoseSequence).not.toHaveBeenCalled();
+      expect(savePendingCapture).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        renderer.root.findByType(ScreenHeader).props.onClose();
+        finishConfirmation({
+          kind: 'scored',
+          analysisId: 'confirmed-analysis',
+          record: {},
+          freeLimitReached: false,
+        });
+      });
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+      expect(triggerOutboxSync).not.toHaveBeenCalled();
+      expect(confirmed.signal?.aborted).toBe(true);
+      expect(setDeclaredStroke).not.toHaveBeenCalled();
+      expect(setCaptureTargetSeed).not.toHaveBeenCalled();
+    } finally {
+      if (renderer) await act(async () => renderer.unmount());
+    }
   });
 });
 

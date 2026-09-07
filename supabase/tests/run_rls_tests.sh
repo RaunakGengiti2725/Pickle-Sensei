@@ -7,7 +7,8 @@
 # via initdb/pg_ctl when Docker is unavailable (macOS dev boxes). Either way:
 # install the minimal Supabase shim (auth schema + roles + hosted-like default
 # privileges), apply every migration in order, then run
-# security_regression.sql. Exits non-zero on ANY boundary regression.
+# security_regression.sql and account_deletion_operations.sql. Exits non-zero
+# on ANY boundary regression.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -35,6 +36,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
       psql -U postgres -v ON_ERROR_STOP=1 -q -f "$f"
     done
     psql -U postgres -v ON_ERROR_STOP=1 -f /tests/security_regression.sql
+    psql -U postgres -v ON_ERROR_STOP=1 -f /tests/account_deletion_operations.sql
   '
   exit 0
 fi
@@ -63,3 +65,4 @@ for f in migrations/*.sql; do
   run_psql -v ON_ERROR_STOP=1 -q -f "$f"
 done
 run_psql -v ON_ERROR_STOP=1 -f tests/security_regression.sql
+run_psql -v ON_ERROR_STOP=1 -f tests/account_deletion_operations.sql

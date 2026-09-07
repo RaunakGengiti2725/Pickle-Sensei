@@ -1,4 +1,5 @@
 import type { Profile } from '../src/state/profile';
+import type { LocalDb } from '../src/data/db';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -15,22 +16,47 @@ import {
  */
 
 const mockKvTable = new Map<string, string>();
+let mockReadGate: { key: string; promise: Promise<void> } | null = null;
+let mockFailWriteKey: string | null = null;
+let mockAfterWrite: ((key: string) => void) | null = null;
+let mockTransactionCount = 0;
 
 jest.mock('../src/data/db', () => ({
-  getDb: () => ({
-    async execute(sql: string, params: unknown[] = []) {
-      if (sql.startsWith('SELECT value FROM kv')) {
-        const value = mockKvTable.get(String(params[0]));
-        return { rows: value === undefined ? [] : [{ value }] };
-      }
-      if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
-        mockKvTable.set(String(params[0]), String(params[1]));
+  getDb: () => {
+    const db: LocalDb = {
+      async execute(sql: string, params: unknown[] = []) {
+        if (sql.startsWith('SELECT value FROM kv')) {
+          if (mockReadGate && mockReadGate.key === params[0]) {
+            const gate = mockReadGate;
+            mockReadGate = null;
+            await gate.promise;
+          }
+          const value = mockKvTable.get(String(params[0]));
+          return { rows: value === undefined ? [] : [{ value }] };
+        }
+        if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+          if (mockFailWriteKey === params[0]) throw new Error('disk full');
+          mockKvTable.set(String(params[0]), String(params[1]));
+          mockAfterWrite?.(String(params[0]));
+          return { rows: [] };
+        }
         return { rows: [] };
-      }
-      return { rows: [] };
-    },
-    close() {},
-  }),
+      },
+      async transaction(operation) {
+        mockTransactionCount += 1;
+        const snapshot = new Map(mockKvTable);
+        try {
+          return await operation(db);
+        } catch (error) {
+          mockKvTable.clear();
+          for (const [key, value] of snapshot) mockKvTable.set(key, value);
+          throw error;
+        }
+      },
+      close() {},
+    };
+    return db;
+  },
 }));
 
 let mockApiSession: {
@@ -40,9 +66,38 @@ let mockApiSession: {
   provider: 'apple';
 } | null = null;
 
+const mockApiListeners = new Set<(session: typeof mockApiSession) => void>();
 jest.mock('../src/account/apiSession', () => ({
   getApiSession: () => mockApiSession,
+  subscribeToApiSession: (
+    listener: (session: typeof mockApiSession) => void,
+  ) => {
+    mockApiListeners.add(listener);
+    return () => mockApiListeners.delete(listener);
+  },
 }));
+
+function installLiveSession(owner = CANONICAL_OWNER) {
+  mockApiSession = {
+    apiBaseUrl: 'https://api.example.test',
+    bearerToken: 'live-token',
+    canonicalAppUserId: owner,
+    provider: 'apple',
+  };
+  for (const listener of mockApiListeners) listener(mockApiSession);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+async function flushHydration() {
+  for (let turn = 0; turn < 80; turn += 1) await Promise.resolve();
+}
 
 const mockFetchCanonical = jest.fn<Promise<Profile | null>, [unknown]>(
   async () => null,
@@ -93,6 +148,10 @@ function stashAnswers(profile: Profile = answers) {
 
 beforeEach(() => {
   mockKvTable.clear();
+  mockReadGate = null;
+  mockFailWriteKey = null;
+  mockAfterWrite = null;
+  mockTransactionCount = 0;
   mockApiSession = null;
   mockFetchCanonical.mockClear();
   mockFetchCanonical.mockResolvedValue(null);
@@ -289,5 +348,189 @@ describe('hydrate with a pre-auth stash', () => {
     const state = useAppStore.getState();
     expect(state.profile).toBeNull();
     expect(mockKvTable.get(profileKeyFor(GUEST_DATA_OWNER))).toBeUndefined();
+  });
+
+  it('waits for the restored canonical session instead of adopting a pending profile locally', async () => {
+    stashAnswers();
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState()).toMatchObject({
+      hydrated: true,
+      awaitingApiSession: true,
+      profile: null,
+      hydrateError: null,
+    });
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+    expect(pendingRaw()).not.toBeNull();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+  });
+
+  it('keeps the cached profile readable offline and waits to adopt new answers through the server', async () => {
+    const cached = { ...answers, firstName: 'Cached' };
+    mockKvTable.set(profileKeyFor(CANONICAL_OWNER), JSON.stringify(cached));
+    stashAnswers();
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState().profile).toEqual(cached);
+    expect(useAppStore.getState().awaitingApiSession).toBe(true);
+    expect(pendingRaw()).not.toBeNull();
+
+    const gate = deferred<void>();
+    mockReadGate = {
+      key: PENDING_ONBOARDING_PROFILE_KV_KEY,
+      promise: gate.promise,
+    };
+    const retry = useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(cached);
+    expect(useAppStore.getState().hydrated).toBe(true);
+    gate.resolve();
+    await retry;
+    expect(useAppStore.getState().profile).toEqual(cached);
+  });
+
+  it('automatically resumes pending adoption when the initial live API session arrives, not on rotations', async () => {
+    stashAnswers();
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().hydrate();
+    const canonical = { ...answers, focusCheckpoint: 'preparation' as const };
+    mockSaveCanonical.mockResolvedValue(canonical);
+
+    installLiveSession();
+    await flushHydration();
+
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().profile).toEqual(canonical);
+    expect(useAppStore.getState().awaitingApiSession).toBe(false);
+    expect(pendingRaw()).toBeNull();
+    useAppStore.getState().setLastShotType('backhand_drive');
+    installLiveSession();
+    await flushHydration();
+    expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().lastShotType).toBe('backhand_drive');
+  });
+
+  it('loads a missing canonical profile when the initial bearer arrives during local hydration', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    const gate = deferred<void>();
+    mockReadGate = {
+      key: PENDING_ONBOARDING_PROFILE_KV_KEY,
+      promise: gate.promise,
+    };
+    mockFetchCanonical.mockResolvedValue(answers);
+    const offlineHydration = useAppStore.getState().hydrate();
+
+    installLiveSession();
+    await flushHydration();
+    gate.resolve();
+    await offlineHydration;
+    await flushHydration();
+
+    expect(mockFetchCanonical).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState()).toMatchObject({
+      hydrated: true,
+      awaitingApiSession: false,
+      profile: answers,
+    });
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(answers);
+  });
+
+  it('coalesces same-owner hydration while the canonical profile fetch is in flight', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    installLiveSession();
+    const remote = deferred<Profile | null>();
+    mockFetchCanonical.mockReturnValue(remote.promise);
+    const first = useAppStore.getState().hydrate();
+    const second = useAppStore.getState().hydrate();
+    await flushHydration();
+    const calls = mockFetchCanonical.mock.calls.length;
+    remote.resolve(answers);
+    await Promise.all([first, second]);
+
+    expect(calls).toBe(1);
+    expect(useAppStore.getState().profile).toEqual(answers);
+  });
+
+  it('rejects a profile fetched by an earlier A generation after A signs out and back in', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    installLiveSession();
+    const oldRemote = deferred<Profile | null>();
+    mockFetchCanonical.mockReturnValueOnce(oldRemote.promise);
+    const oldHydration = useAppStore.getState().hydrate();
+    await flushHydration();
+
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    setActiveDataOwner(CANONICAL_OWNER);
+    const currentProfile = { ...answers, firstName: 'New session' };
+    mockFetchCanonical.mockResolvedValue(currentProfile);
+    await useAppStore.getState().hydrate();
+    oldRemote.resolve(answers);
+    await oldHydration;
+
+    expect(useAppStore.getState().profile).toEqual(currentProfile);
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(currentProfile);
+  });
+
+  it('does not consume a newer stash or persist an adoption from an earlier owner generation', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    installLiveSession();
+    stashAnswers();
+    const oldSave = deferred<Profile>();
+    mockSaveCanonical.mockReturnValueOnce(oldSave.promise);
+    const oldHydration = useAppStore.getState().hydrate();
+    await flushHydration();
+
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    setActiveDataOwner(CANONICAL_OWNER);
+    const newAnswers = { ...answers, firstName: 'New intent' };
+    stashAnswers(newAnswers);
+    oldSave.resolve(answers);
+    await oldHydration;
+
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+    expect(JSON.parse(pendingRaw()!).profile).toEqual(newAnswers);
+  });
+
+  it.each(['pending_write_failure', 'owner_generation_change'])(
+    'rolls back profile adoption and stash consumption together on %s',
+    async failure => {
+      setActiveDataOwner(CANONICAL_OWNER);
+      installLiveSession();
+      const cached = { ...answers, firstName: 'Cached' };
+      mockKvTable.set(profileKeyFor(CANONICAL_OWNER), JSON.stringify(cached));
+      stashAnswers();
+      if (failure === 'pending_write_failure') {
+        mockFailWriteKey = PENDING_ONBOARDING_PROFILE_KV_KEY;
+      } else {
+        mockAfterWrite = key => {
+          if (key !== profileKeyFor(CANONICAL_OWNER)) return;
+          setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+          setActiveDataOwner(CANONICAL_OWNER);
+        };
+      }
+
+      await useAppStore.getState().hydrate();
+
+      expect(mockTransactionCount).toBe(1);
+      expect(
+        JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+      ).toEqual(cached);
+      expect(JSON.parse(pendingRaw()!).profile).toEqual(answers);
+    },
+  );
+
+  it('never saves account onboarding locally while its live API session is missing', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    await useAppStore.getState().completeOnboarding(answers);
+
+    expect(mockKvTable.has(profileKeyFor(CANONICAL_OWNER))).toBe(false);
+    expect(useAppStore.getState().onboardingBusy).toBe(false);
+    expect(useAppStore.getState().onboardingError).toEqual(expect.any(String));
   });
 });

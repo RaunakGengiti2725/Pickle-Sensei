@@ -44,9 +44,11 @@ import React from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
+  View,
   type ViewStyle,
 } from 'react-native';
 import TestRenderer, {
@@ -63,6 +65,7 @@ import {
   PressableScale,
   ScreenHeader,
 } from '../../src/design/components';
+import { type } from '../../src/design/tokens';
 
 function render(element: React.ReactElement): ReactTestRenderer {
   let renderer!: ReactTestRenderer;
@@ -286,6 +289,108 @@ describe('PressableScale -> props.onPress', () => {
 });
 
 describe('ScreenHeader back/close -> props.onBack / props.onClose', () => {
+  it('wraps a title only when opted in, retaining its typography and back target', () => {
+    const onBack = jest.fn();
+    const renderer = render(
+      <ScreenHeader title="Consistency" onBack={onBack} />,
+    );
+    let title = renderer.root.findByType(Text);
+    expect(title.props.numberOfLines).toBe(1);
+    expect(title.props.allowFontScaling).not.toBe(false);
+    expect(StyleSheet.flatten(title.props.style)).toMatchObject(type.h3);
+
+    act(() => {
+      renderer.update(
+        <ScreenHeader title="Consistency" onBack={onBack} wrapTitle />,
+      );
+    });
+    title = renderer.root.findByType(Text);
+    expect(title.props.numberOfLines).toBeUndefined();
+    expect(title.props.allowFontScaling).not.toBe(false);
+    expect(title.props.maxFontSizeMultiplier).toBeUndefined();
+    expect(StyleSheet.flatten(title.props.style)).toMatchObject({
+      ...type.h3,
+      alignSelf: 'stretch',
+      textAlign: 'center',
+    });
+    const back = onlyPressable(renderer);
+    expect(flat(back)).toMatchObject({ width: 44, height: 44 });
+    click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
+  it.each([1, 1.353, 2, 3.571])(
+    'uses the whole title row at accessibility scale %s without shrinking text',
+    fontScale => {
+      const originalWindow = Dimensions.get('window');
+      const originalScreen = Dimensions.get('screen');
+      let renderer: ReactTestRenderer | undefined;
+      const onBack = jest.fn();
+      try {
+        act(() =>
+          Dimensions.set({
+            window: { ...originalWindow, width: 375, height: 667, fontScale },
+            screen: { ...originalScreen, fontScale },
+          }),
+        );
+        renderer = render(
+          <ScreenHeader title="Consistency" onBack={onBack} wrapTitle />,
+        );
+        const root = renderer.root.findByType(ScreenHeader)
+          .children[0] as ReactTestInstance;
+        const title = renderer.root.findByType(Text);
+        let heading = title.parent;
+        while (heading && heading.type !== View) heading = heading.parent;
+        expect(heading).not.toBeNull();
+        if (fontScale >= 2) {
+          expect(StyleSheet.flatten(root.props.style)).toMatchObject({
+            flexDirection: 'column',
+            alignItems: 'stretch',
+          });
+          expect(StyleSheet.flatten(heading!.props.style)).toMatchObject({
+            flex: 0,
+            width: '100%',
+            minWidth: 0,
+          });
+        } else {
+          expect(StyleSheet.flatten(root.props.style)).toMatchObject({
+            flexDirection: 'row',
+          });
+          expect(StyleSheet.flatten(heading!.props.style)).toMatchObject({
+            flex: 1,
+          });
+        }
+        expect(StyleSheet.flatten(title.props.style)).toMatchObject(type.h3);
+        expect(title.props.numberOfLines).toBeUndefined();
+        expect(title.props.allowFontScaling).not.toBe(false);
+        expect(title.props.maxFontSizeMultiplier).toBeUndefined();
+        const back = onlyPressable(renderer);
+        expect(flat(back)).toMatchObject({ width: 44, height: 44 });
+        click(back);
+        expect(onBack).toHaveBeenCalledTimes(1);
+        act(() =>
+          renderer!.update(
+            <ScreenHeader title="Consistency" onBack={onBack} />,
+          ),
+        );
+        expect(
+          StyleSheet.flatten(
+            (
+              renderer.root.findByType(ScreenHeader)
+                .children[0] as ReactTestInstance
+            ).props.style,
+          ).flexDirection,
+        ).toBe('row');
+      } finally {
+        act(() => {
+          renderer?.unmount();
+          Dimensions.set({ window: originalWindow, screen: originalScreen });
+        });
+      }
+    },
+  );
+
   it('renders no action button when neither handler is given', () => {
     const renderer = render(<ScreenHeader title="Plain" />);
     expect(pressableHosts(renderer)).toHaveLength(0);

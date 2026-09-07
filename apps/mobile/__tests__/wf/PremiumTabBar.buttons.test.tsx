@@ -69,10 +69,21 @@ jest.mock('../../src/auth/authStore', () => ({
 }));
 
 import React from 'react';
-import { Modal, Pressable } from 'react-native';
+import {
+  Dimensions,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { PremiumTabBar } from '../../src/navigation/PremiumTabBar';
+import { type } from '../../src/design/tokens';
+
+const initialWindow = Dimensions.get('window');
+const initialScreen = Dimensions.get('screen');
 
 const mockRootNavigate = jest.fn();
 const mockTabNavigate = jest.fn();
@@ -173,7 +184,111 @@ describe('PremiumTabBar button ledger', () => {
   });
 
   afterEach(() => {
+    act(() => {
+      Dimensions.set({ window: initialWindow, screen: initialScreen });
+    });
     jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  describe('fixed navigation labels and large-content accessibility', () => {
+    // Layout/prop contracts only: native glyphs and viewer gestures need iOS QA.
+    it.each([
+      { os: 'ios', version: '13.0', fontScale: 3.571, viewer: true },
+      { os: 'ios', version: '26.0', fontScale: 1, viewer: true },
+      { os: 'ios', version: '26.0', fontScale: 3.571, viewer: true },
+      { os: 'ios', version: '12.5', fontScale: 3.571, viewer: false },
+      { os: 'android', version: '35', fontScale: 3.571, viewer: false },
+    ] as const)(
+      '$os $version at fontScale $fontScale keeps full labels and platform-selected traits',
+      ({ os, version, fontScale, viewer }) => {
+        jest.replaceProperty(Platform, 'OS', os);
+        jest.spyOn(Platform, 'Version', 'get').mockReturnValue(version);
+        const size = { width: 375, height: 667, scale: 2, fontScale };
+        Dimensions.set({ window: size, screen: size });
+        const renderer = renderBar({ index: 3 });
+        const labels = ['Home', 'Library', 'Progress', 'Settings'];
+        for (const label of labels) {
+          const tab = findByLabel(renderer, label)[0]!;
+          const host = tab.findAll(
+            node =>
+              typeof node.type === 'string' &&
+              typeof node.props.onClick === 'function',
+          )[0]!;
+          expect(host.props.accessibilityRole).toBe(
+            os === 'ios' ? 'button' : 'tab',
+          );
+          expect(host.props.accessibilityState.selected).toBe(
+            label === 'Progress',
+          );
+          expect(host.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+          expect(host.props.accessibilityLargeContentTitle).toBe(label);
+          const text = tab.findByType(Text);
+          expect(text.props.children).toBe(label);
+          expect(text.props.allowFontScaling).toBe(!viewer);
+          expect(text.props.numberOfLines).toBe(1);
+          expect(StyleSheet.flatten(text.props.style)).toMatchObject({
+            fontFamily: type.micro.fontFamily,
+            fontSize: type.micro.fontSize,
+            lineHeight: type.micro.lineHeight,
+          });
+          const target = StyleSheet.flatten(host.props.style);
+          expect(target.minWidth).toBeGreaterThanOrEqual(44);
+          expect(target.minHeight).toBeGreaterThanOrEqual(44);
+        }
+        const coachLabel = renderer.root
+          .findAllByType(Text)
+          .find(node => node.props.children === 'COACH')!;
+        expect(coachLabel.props.allowFontScaling).toBe(!viewer);
+        expect(coachLabel.props.numberOfLines).toBe(1);
+        const coach = findByLabel(renderer, 'Open coach actions')[0]!;
+        expect(coach.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+        expect(coach.props.accessibilityLargeContentTitle).toBe('Coach');
+        expect(coach.props.accessibilityRole).toBe('button');
+        expect(coach.props.accessibilityState).toEqual({ expanded: false });
+        const target = StyleSheet.flatten(
+          coach.props.style({ pressed: false }),
+        );
+        expect(target.width).toBeGreaterThanOrEqual(44);
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        act(() => renderer.unmount());
+      },
+    );
+
+    it('limits the scaling exception to fixed labels and preserves both Coach controls', async () => {
+      jest.replaceProperty(Platform, 'OS', 'ios');
+      jest.spyOn(Platform, 'Version', 'get').mockReturnValue('26.0');
+      const size = { width: 375, height: 667, scale: 2, fontScale: 3.571 };
+      Dimensions.set({ window: size, screen: size });
+      const renderer = renderBar();
+      await openMenu(renderer);
+      const texts = renderer.root.findAllByType(Text);
+      expect(
+        texts
+          .filter(node => node.props.allowFontScaling === false)
+          .map(node => node.props.children),
+      ).toEqual(['Home', 'Library', 'COACH', 'Progress', 'Settings']);
+      for (const title of ['Auto Analyze', 'Import Video', 'Drill Library']) {
+        const row = findByLabel(renderer, title)[0]!;
+        for (const text of row.findAllByType(Text)) {
+          expect(text.props.allowFontScaling).not.toBe(false);
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+        }
+      }
+      const fabs = findByLabel(renderer, 'Close coach actions').filter(
+        node => node.props.accessibilityState?.expanded === true,
+      );
+      expect(fabs).toHaveLength(2);
+      for (const fab of fabs) {
+        expect(fab.props.accessibilityShowsLargeContentViewer).toBe(true);
+        expect(fab.props.accessibilityLargeContentTitle).toBe('Coach');
+      }
+      await press(renderer, 'Close coach actions', 2);
+      await flushCloseAnimation();
+      expect(modal(renderer).props.visible).toBe(false);
+      expect(mockTabNavigate).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    });
   });
 
   describe('enumeration', () => {
@@ -186,7 +301,9 @@ describe('PremiumTabBar button ledger', () => {
         expect(typeof node.props.accessibilityLabel).toBe('string');
         expect(node.props.accessibilityRole).toBeDefined();
       }
-      const tabs = bar.filter(n => n.props.accessibilityRole === 'tab');
+      const tabs = bar.filter(
+        n => n.props.accessibilityState?.selected !== undefined,
+      );
       expect(tabs.map(n => n.props.accessibilityLabel)).toEqual([
         'Home',
         'Library',
@@ -215,7 +332,11 @@ describe('PremiumTabBar button ledger', () => {
         expect(typeof node.props.onPress).toBe('function');
         expect(typeof node.props.accessibilityLabel).toBe('string');
       }
-      const rows = all.filter(n => n.props.accessibilityRole === 'button');
+      const rows = all.filter(
+        n =>
+          n.props.accessibilityRole === 'button' &&
+          n.props.accessibilityState?.selected === undefined,
+      );
       expect(rows.map(n => n.props.accessibilityLabel)).toEqual([
         'Close coach actions',
         'Close coach actions',
@@ -239,7 +360,9 @@ describe('PremiumTabBar button ledger', () => {
         expect(fab.props.accessibilityState).toEqual({ expanded: true });
       }
       // Tab hit targets clear 44pt.
-      for (const tab of all.filter(n => n.props.accessibilityRole === 'tab')) {
+      for (const tab of all.filter(
+        n => n.props.accessibilityState?.selected !== undefined,
+      )) {
         const style = tab.props.style({ pressed: false });
         const flat = Object.assign({}, ...style.filter(Boolean));
         expect(flat.minHeight).toBeGreaterThanOrEqual(44);
@@ -287,7 +410,7 @@ describe('PremiumTabBar button ledger', () => {
     it('marks only the focused route as selected', () => {
       const renderer = renderBar({ index: 3 });
       const selected = pressables(renderer)
-        .filter(n => n.props.accessibilityRole === 'tab')
+        .filter(n => n.props.accessibilityState?.selected !== undefined)
         .filter(n => n.props.accessibilityState?.selected === true)
         .map(n => n.props.accessibilityLabel);
       expect(selected).toEqual(['Progress']);

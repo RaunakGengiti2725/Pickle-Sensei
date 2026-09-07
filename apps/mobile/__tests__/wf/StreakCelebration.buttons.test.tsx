@@ -1,5 +1,6 @@
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
-import { AccessibilityInfo, Modal, Text } from 'react-native';
+import { AccessibilityInfo, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 // The consistency store persists through SQLite; the native module is absent
@@ -21,7 +22,7 @@ import type { ConsistencyCelebration } from '../../src/consistency/store';
  *
  *   1. backdrop Pressable ("Dismiss milestone celebration") -> dismissCelebration
  *   2. Button "Keep training" (streak-celebration-continue) -> dismissCelebration
- *   3. Modal onRequestClose (Android back / iOS swipe) -> dismissCelebration
+ *   3. Hardware back / accessibility escape -> dismissCelebration
  *
  * There are no async handlers: `dismissCelebration` is a synchronous store
  * write, so there is no failure path, no pending state and no double-tap
@@ -74,10 +75,18 @@ beforeEach(() => {
     .mockImplementation(() => {});
 });
 
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
+}
+
 afterEach(() => {
+  for (const renderer of mounted) unmount(renderer);
   announce.mockRestore();
   act(() => {
-    useConsistencyStore.setState({ celebration: null });
+    useConsistencyStore.setState({ celebration: null, queuedCelebrations: [] });
   });
   jest.useRealTimers();
 });
@@ -87,6 +96,7 @@ function render(celebration: ConsistencyCelebration | null) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
     renderer = TestRenderer.create(<StreakCelebration />);
+    mounted.add(renderer);
   });
   return renderer;
 }
@@ -143,24 +153,20 @@ function stageCount(renderer: TestRenderer.ReactTestRenderer): number {
 describe('StreakCelebration button ledger', () => {
   it('mounts no pressables while there is no pending milestone', () => {
     const renderer = render(null);
-    const modal = renderer.root.findByType(Modal);
-    expect(modal.props.visible).toBe(false);
+    expect(renderer.toJSON()).toBeNull();
     expect(stageCount(renderer)).toBe(0);
     expect(
       renderer.root.findAll(node => typeof node.props.onPress === 'function'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('backdrop tap ends the ceremony through dismissCelebration', () => {
     const renderer = render(thirtyDayClub);
-    expect(renderer.root.findByType(Modal).props.visible).toBe(true);
     expect(stageCount(renderer)).toBe(1);
 
     const backdrop = findBackdrop(renderer);
-    expect(backdrop.props.onPress).toBe(
-      useConsistencyStore.getState().dismissCelebration,
-    );
+    expect(backdrop.props.accessibilityRole).toBe('button');
     // Full-screen target: the Pressable fills the absolute backdrop layer.
     expect(backdrop.props.style).toEqual(expect.objectContaining({ flex: 1 }));
 
@@ -168,9 +174,9 @@ describe('StreakCelebration button ledger', () => {
       backdrop.props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(renderer.toJSON()).toBeNull();
     expect(stageCount(renderer)).toBe(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('backdrop exposes a descriptive label and a button role', () => {
@@ -179,7 +185,7 @@ describe('StreakCelebration button ledger', () => {
     expect(backdrop.props.accessibilityLabel).toBe(BACKDROP_LABEL);
     // WF-ISSUE: Backdrop dismiss Pressable has no accessibilityRole
     // expect(backdrop.props.accessibilityRole).toBe('button');
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('"Keep training" ends the ceremony through dismissCelebration', () => {
@@ -196,9 +202,9 @@ describe('StreakCelebration button ledger', () => {
       cta.props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(renderer.toJSON()).toBeNull();
     expect(stageCount(renderer)).toBe(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('"Keep training" is never a dead-end: the CTA layer keeps a hit target', () => {
@@ -210,21 +216,32 @@ describe('StreakCelebration button ledger', () => {
       cta.props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
-  it('Modal onRequestClose (hardware back) ends the ceremony', () => {
+  it('hardware back ends the ceremony and unregisters its handler', () => {
     const renderer = render(thirtyDayClub);
-    const modal = renderer.root.findByType(Modal);
-    expect(modal.props.onRequestClose).toBe(
-      useConsistencyStore.getState().dismissCelebration,
-    );
     act(() => {
-      modal.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
-    act(() => renderer.unmount());
+    expect(renderer.toJSON()).toBeNull();
+    expect(dispatchHardwareBack()).toBe(false);
+    unmount(renderer);
+  });
+
+  it('accessibility escape ends the ceremony without a native dismissal callback', () => {
+    const renderer = render(thirtyDayClub);
+    const overlay = renderer.root.findAll(
+      node =>
+        typeof node.type === 'string' &&
+        node.props.testID === 'ceremony-overlay',
+    )[0]!;
+    expect(overlay.props.accessibilityViewIsModal).toBe(true);
+    act(() => overlay.props.onAccessibilityEscape());
+    expect(useConsistencyStore.getState().celebration).toBeNull();
+    expect(renderer.toJSON()).toBeNull();
+    unmount(renderer);
   });
 
   it('a second tap after dismissal is a harmless no-op', () => {
@@ -244,7 +261,7 @@ describe('StreakCelebration button ledger', () => {
     expect(after.daySecured).toBe(before.daySecured);
     expect(after.hydrated).toBe(before.hydrated);
     expect(after.ownerKey).toBe(before.ownerKey);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('dismissing does not resurrect the milestone on the next state write', () => {
@@ -259,7 +276,7 @@ describe('StreakCelebration button ledger', () => {
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
     expect(stageCount(renderer)).toBe(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('a new milestone after dismissal remounts both pressables', () => {
@@ -280,7 +297,7 @@ describe('StreakCelebration button ledger', () => {
       findContinue(renderer).props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('pressables are wired for every celebration shape (grand + confetti, common, volume)', () => {
@@ -304,7 +321,7 @@ describe('StreakCelebration button ledger', () => {
         findContinue(renderer).props.onPress();
       });
       expect(useConsistencyStore.getState().celebration).toBeNull();
-      act(() => renderer.unmount());
+      unmount(renderer);
     }
   });
 
@@ -314,7 +331,7 @@ describe('StreakCelebration button ledger', () => {
     expect(announce).toHaveBeenCalledWith(
       'Milestone unlocked: Day One. 1 day of training. Reward: Starter badge.',
     );
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('stays pressable after all entrance timers have elapsed', () => {
@@ -327,6 +344,6 @@ describe('StreakCelebration button ledger', () => {
       findContinue(renderer).props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });

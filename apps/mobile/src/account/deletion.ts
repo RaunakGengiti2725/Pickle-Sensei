@@ -1,4 +1,5 @@
 import type { ApiSession } from './apiSession';
+import type { DataOwnerContext } from '../data/accountScope';
 
 /**
  * Client for the backend's two-step account deletion
@@ -74,6 +75,7 @@ export class AccountDeletionError extends Error {
       | 'deletion.not_configured'
       | 'deletion.session_expired'
       | 'deletion.rejected'
+      | 'deletion.unknown'
       | 'deletion.unavailable',
     message: string,
     readonly retryable: boolean,
@@ -82,6 +84,13 @@ export class AccountDeletionError extends Error {
     this.name = 'AccountDeletionError';
   }
 }
+
+export interface AccountDeletionContext extends DataOwnerContext {
+  readonly provider: 'apple' | 'google';
+}
+
+export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
+  'We could not confirm whether your account was deleted. The request may have completed. Check your connection and retry, or contact support if you still cannot confirm.';
 
 export interface AccountDeletionChallenge {
   challenge: string;
@@ -103,63 +112,89 @@ async function post(
   path: string,
   body?: unknown,
 ): Promise<Record<string, unknown>> {
-  let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    response = await fetchFn(`${session.apiBaseUrl}${path}`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.bearerToken}`,
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  } catch {
-    throw new AccountDeletionError(
-      'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+  const confirming = path === '/v1/me/delete-confirm';
+  const unavailable = () =>
+    new AccountDeletionError(
+      confirming ? 'deletion.unknown' : 'deletion.unavailable',
+      confirming
+        ? ACCOUNT_DELETION_UNKNOWN_MESSAGE
+        : 'Account deletion is temporarily offline. Nothing was deleted — please try again.',
       true,
     );
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(unavailable());
+    }, 15_000);
+  });
+  const request = (async () => {
+    let response: Response;
+    try {
+      response = await fetchFn(`${session.apiBaseUrl}${path}`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.bearerToken}`,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      throw unavailable();
+    }
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON error bodies fall through to the status checks below.
+    }
+    if (response.status === 401) {
+      throw new AccountDeletionError(
+        'deletion.session_expired',
+        confirming
+          ? 'Your sign-in has expired. This response does not confirm whether your account was deleted. Sign in again before retrying.'
+          : 'Your sign-in has expired. Sign in again, then delete your account.',
+        false,
+      );
+    }
+    if (!response.ok) {
+      if (confirming && (response.status === 408 || response.status >= 500)) {
+        throw unavailable();
+      }
+      const error =
+        isRecord(payload) && isRecord(payload['error'])
+          ? payload['error']
+          : null;
+      const message =
+        error && typeof error['message'] === 'string'
+          ? error['message']
+          : confirming
+            ? 'The server did not confirm the deletion.'
+            : 'The deletion request could not be completed. Nothing was deleted.';
+      throw new AccountDeletionError(
+        'deletion.rejected',
+        message,
+        response.status === 429 || response.status >= 500,
+      );
+    }
+    if (!isRecord(payload)) {
+      if (confirming) throw unavailable();
+      throw new AccountDeletionError(
+        'deletion.rejected',
+        'The server returned an invalid deletion response.',
+        false,
+      );
+    }
+    return payload;
+  })();
+  try {
+    return await Promise.race([request, deadline]);
   } finally {
     clearTimeout(timeout);
   }
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    // Non-JSON error bodies fall through to the status checks below.
-  }
-  if (response.status === 401) {
-    throw new AccountDeletionError(
-      'deletion.session_expired',
-      'Your sign-in has expired. Sign in again, then delete your account.',
-      false,
-    );
-  }
-  if (!response.ok) {
-    const error =
-      isRecord(payload) && isRecord(payload['error']) ? payload['error'] : null;
-    const message =
-      error && typeof error['message'] === 'string'
-        ? error['message']
-        : 'The deletion request could not be completed. Nothing was deleted.';
-    throw new AccountDeletionError(
-      'deletion.rejected',
-      message,
-      response.status === 429 || response.status >= 500,
-    );
-  }
-  if (!isRecord(payload)) {
-    throw new AccountDeletionError(
-      'deletion.rejected',
-      'The server returned an invalid deletion response.',
-      false,
-    );
-  }
-  return payload;
 }
 
 /** Step 1 — mint the deletion challenge. Destroys nothing by itself. A
@@ -212,9 +247,9 @@ export async function confirmAccountDeletion(
   });
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
-      'deletion.rejected',
-      'The server did not confirm the deletion.',
-      false,
+      'deletion.unknown',
+      `The server did not confirm the deletion. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`,
+      true,
     );
   }
   const appleAuthorizationRevocation = payload['appleAuthorizationRevocation'];

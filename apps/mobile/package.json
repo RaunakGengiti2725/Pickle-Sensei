@@ -8,7 +8,9 @@
     "check:distribution": "node scripts/check-ios-distribution.mjs",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "test:diagnostics": "jest src/diagnostics/__tests__ --runInBand",
+    "typecheck:diagnostics": "tsc --noEmit -p src/diagnostics/tsconfig.json"
   },
   "dependencies": {
     "@op-engineering/op-sqlite": "^18.1.4",
@@ -17,6 +19,7 @@
     "@react-navigation/bottom-tabs": "^7.18.18",
     "@react-navigation/native": "^7.3.18",
     "@react-navigation/native-stack": "^7.18.10",
+    "@sentry/react-native": "8.24.0",
     "@tanstack/react-query": "^5.102.6",
     "react": "19.2.3",
     "react-native": "0.87.1",
@@ -54,7 +57,12 @@
     "react-test-renderer": "19.2.3",
     "typescript": "^6.0.3"
   },
+  "overrides": {
+    "xcode@3.0.1": {
+      "uuid": "11.1.1"
+    }
+  },
   "engines": {
-    "node": ">= 22.11.0"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

@@ -14,14 +14,10 @@
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */; };
-		96AAA20C3043BB590092A50D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20B3043BB590092A50D /* Auth */; };
-		96AAA20E3043BB590092A50D /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20D3043BB590092A50D /* Functions */; };
-		96AAA2103043BB590092A50D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20F3043BB590092A50D /* PostgREST */; };
-		96AAA2123043BB590092A50D /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2113043BB590092A50D /* Realtime */; };
-		96AAA2143043BB590092A50D /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2133043BB590092A50D /* Storage */; };
-		96AAA2163043BB590092A50D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2153043BB590092A50D /* Supabase */; };
 		977255527D3C40FF8D2FA736 /* Manrope_400Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */; };
 		9E6182F5C0175ABA960681B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		A4F2868DBE2143F58D578CE1 = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF1; };
+		A4F2868DBE2143F58D578CE2 = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF2; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +33,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = PickleSensei/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		958665834C0B4766A4597419 /* Manrope_500Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_500Medium.ttf; path = ../assets/fonts/Manrope_500Medium.ttf; sourceTree = "<group>"; };
 		A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_400Regular.ttf; path = ../assets/fonts/Manrope_400Regular.ttf; sourceTree = "<group>"; };
+		A4F2868DBE2143F58D578CF1 = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = ThirdPartyNotices.txt; path = ../assets/legal/ThirdPartyNotices.txt; sourceTree = "<group>"; };
+		A4F2868DBE2143F58D578CF2 = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; name = SentryPrivacy.bundle; path = ../assets/legal/SentryPrivacy.bundle; sourceTree = "<group>"; };
 		B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_700Bold.ttf; path = ../assets/fonts/Manrope_700Bold.ttf; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -46,12 +44,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				96AAA2163043BB590092A50D /* Supabase in Frameworks */,
-				96AAA2143043BB590092A50D /* Storage in Frameworks */,
-				96AAA2103043BB590092A50D /* PostgREST in Frameworks */,
-				96AAA20E3043BB590092A50D /* Functions in Frameworks */,
-				96AAA20C3043BB590092A50D /* Auth in Frameworks */,
-				96AAA2123043BB590092A50D /* Realtime in Frameworks */,
 				0C80B921A6F3F58F76C31292 /* libPods-PickleSensei.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -87,6 +79,8 @@
 				7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */,
 				958665834C0B4766A4597419 /* Manrope_500Medium.ttf */,
 				B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */,
+				A4F2868DBE2143F58D578CF1,
+				A4F2868DBE2143F58D578CF2,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -144,6 +138,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				D105A0617100000000000010 /* Sentry symbols (upload blocked) */,
 			);
 			buildRules = (
 			);
@@ -182,7 +177,6 @@
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
-				96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -205,6 +199,8 @@
 				8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */,
 				133042A2D91A434388156271 /* Manrope_500Medium.ttf in Resources */,
 				3F0F20C41A4640CE9691634F /* Manrope_700Bold.ttf in Resources */,
+				A4F2868DBE2143F58D578CE1,
+				A4F2868DBE2143F58D578CE2,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,7 +221,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
+			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$PROJECT_DIR/../src/diagnostics/bundle-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
+			showEnvVarsInLog = 0;
 		};
 		00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -264,6 +261,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D105A0617100000000000010 /* Sentry symbols (upload blocked) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Sentry symbols (upload blocked)";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nexport SENTRY_DISABLE_AUTO_UPLOAD=true\nexport SENTRY_DISABLE_XCODE_DEBUG_UPLOAD=true\nprintf '%s\\n' 'Sentry native symbol upload blocked pending project/privacy approval; archive dSYMs remain local.'\n";
 			showEnvVarsInLog = 0;
 		};
 		E235C05ADACE081382539298 /* [CP] Copy Pods Resources */ = {
@@ -539,47 +552,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/supabase/supabase-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.5.1;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		96AAA20B3043BB590092A50D /* Auth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Auth;
-		};
-		96AAA20D3043BB590092A50D /* Functions */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Functions;
-		};
-		96AAA20F3043BB590092A50D /* PostgREST */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = PostgREST;
-		};
-		96AAA2113043BB590092A50D /* Realtime */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Realtime;
-		};
-		96AAA2133043BB590092A50D /* Storage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Storage;
-		};
-		96AAA2153043BB590092A50D /* Supabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Supabase;
-		};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;

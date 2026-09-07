@@ -135,6 +135,37 @@ Deno.test("webhook: wrong shared secret is rejected", async () => {
   await response.body?.cancel();
 });
 
+Deno.test("a large advisory content length does not preallocate the declared body", async () => {
+  const request = new Request(`${BASE}/webhooks/revenuecat`, {
+    method: "POST",
+    headers: {
+      Authorization: "webhook-secret-for-tests",
+      "content-length": "524288",
+      "x-forwarded-for": "10.9.5.6",
+    },
+    body: "{}",
+  });
+  const Original = globalThis.Uint8Array;
+  const allocations: number[] = [];
+  globalThis.Uint8Array = new Proxy(Original, {
+    construct(target, args, newTarget) {
+      if (typeof args[0] === "number") allocations.push(args[0]);
+      return Reflect.construct(target, args, newTarget);
+    },
+  });
+  try {
+    const response = await handle(request);
+    assertEquals(response.status, 400);
+    await response.body?.cancel();
+    assertEquals(
+      allocations.filter((size) => size > 8192),
+      [],
+    );
+  } finally {
+    globalThis.Uint8Array = Original;
+  }
+});
+
 Deno.test("webhook: a chunked body past the cap is cut off with 413, not buffered", async () => {
   const chunk = new Uint8Array(64 * 1024).fill(0x20);
   let sent = 0;

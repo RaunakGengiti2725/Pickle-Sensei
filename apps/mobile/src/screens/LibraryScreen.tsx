@@ -1,4 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   FlatList,
   Linking,
@@ -16,6 +21,7 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   LoadingState,
   Pill,
   PressableScale,
@@ -23,6 +29,14 @@ import {
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
+import {
+  captureDataOwnerContext,
+  getActiveDataOwner,
+  getDataOwnerSnapshot,
+  subscribeToDataOwner,
+  isDataOwnerContextCurrent,
+  SIGNED_OUT_DATA_OWNER,
+} from '../data/accountScope';
 import {
   listPendingCaptures,
   listShots,
@@ -36,6 +50,7 @@ import type { InstructionalMedia } from '../training/types';
 import { useAuthStore } from '../auth/authStore';
 import { plural } from '../util/plural';
 import { showBrandNotice } from '../design/BrandNotice';
+import { forDataOwner } from '../data/transactions';
 
 type LibraryTab = 'reads' | 'saved';
 
@@ -43,7 +58,7 @@ type LibraryTab = 'reads' | 'saved';
 export const PENDING_SECTION_LABEL = 'SAVED CLIPS · NOT ANALYZED';
 export const PENDING_SECTION_PILL = 'NOT SCORED';
 export const PENDING_SECTION_NOTE =
-  'Saved clips aren’t scored from the library. Record a new stroke to get a score.';
+  'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
 
 /**
@@ -97,9 +112,26 @@ export function LibraryScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
+  const ownerKey = useAuthStore(state => state.session?.canonicalAppUserId);
+  const ownerEpoch = useSyncExternalStore(
+    subscribeToDataOwner,
+    getDataOwnerSnapshot,
+    getDataOwnerSnapshot,
+  );
+  const activeOwner = ownerEpoch.ownerKey;
+  const ownerGeneration =
+    activeOwner === SIGNED_OUT_DATA_OWNER ? null : ownerEpoch.generation;
+  const loadTicket = useRef<symbol | null>(null);
   const [tab, setTab] = useState<LibraryTab>('reads');
   const [shots, setShots] = useState<LocalShotRow[] | null>(null);
   const [captures, setCaptures] = useState<PendingCapture[]>([]);
+  const [loadedOwner, setLoadedOwner] = useState<{
+    ownerKey: string;
+    generation: number | null;
+    ticket: symbol;
+  } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadRevision, setLoadRevision] = useState(0);
   const savedStatus = useTrainingStore(state => state.savedStatus);
   const planStatus = useTrainingStore(state => state.planStatus);
   const savedDrills = useTrainingStore(state => state.savedDrills);
@@ -117,19 +149,59 @@ export function LibraryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const db = getDb();
-      void Promise.all([listShots(db, 100), listPendingCaptures(db, 100)])
-        .then(([realShots, pending]) => {
+      let active = true;
+      const ticket = Symbol();
+      loadTicket.current = ticket;
+      const owner = getActiveDataOwner();
+      const context =
+        owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+      const isCurrent = () =>
+        active &&
+        loadTicket.current === ticket &&
+        getActiveDataOwner() === owner &&
+        (context === null || isDataOwnerContextCurrent(context));
+      void (async () => {
+        try {
+          const rawDb = getDb();
+          const db = context ? forDataOwner(rawDb, context) : rawDb;
+          const [realShots, pending] = await Promise.all([
+            listShots(db, 100),
+            listPendingCaptures(db, 100),
+          ]);
+          if (!isCurrent()) return;
           setShots(realShots);
           setCaptures(pending);
-        })
-        .catch(() => {
-          setShots([]);
-          setCaptures([]);
-        });
+          setLoadError(null);
+        } catch {
+          if (!isCurrent()) return;
+          setLoadError(
+            'Your saved reads and clips could not be opened. Try again to load your library.',
+          );
+        } finally {
+          if (isCurrent()) {
+            setLoadedOwner({
+              ownerKey: owner,
+              generation: context?.generation ?? null,
+              ticket,
+            });
+          }
+        }
+      })();
       void loadSavedDrills();
       void loadCurrentPlan();
-    }, [loadCurrentPlan, loadSavedDrills]),
+      return () => {
+        active = false;
+        if (loadTicket.current === ticket) loadTicket.current = null;
+      };
+    }, [
+      activeOwner,
+      loadCurrentPlan,
+      loadRevision,
+      loadSavedDrills,
+      localOnly,
+      ownerGeneration,
+      ownerKey,
+    ]),
   );
 
   const openMedia = useCallback(async (media: InstructionalMedia) => {
@@ -150,6 +222,10 @@ export function LibraryScreen() {
     }
   }, []);
 
+  const ownsLoadedData =
+    loadedOwner?.ownerKey === activeOwner &&
+    loadedOwner.generation === ownerGeneration &&
+    loadedOwner.ticket === loadTicket.current;
   const reads = shots ?? [];
   const completedPlanItems =
     currentPlan?.items.filter(item => item.drill && item.completion).length ??
@@ -429,8 +505,26 @@ export function LibraryScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
-      {shots === null ? (
-        <LoadingState label="Opening your library…" />
+      {shots === null || loadError || !ownsLoadedData ? (
+        <ScrollView
+          contentContainerStyle={[styles.readsContent, styles.emptyContent]}
+          showsVerticalScrollIndicator={false}
+        >
+          {header}
+          {loadError && ownsLoadedData ? (
+            <ErrorState
+              title="Your library couldn’t load"
+              detail={loadError}
+              onRetry={() => {
+                setLoadError(null);
+                setShots(null);
+                setLoadRevision(revision => revision + 1);
+              }}
+            />
+          ) : (
+            <LoadingState label="Opening your library…" />
+          )}
+        </ScrollView>
       ) : (
         <FlatList
           data={reads}
@@ -460,7 +554,7 @@ export function LibraryScreen() {
                         </Text>
                         <Pill label={PENDING_SECTION_PILL} tone="neutral" />
                       </View>
-                      {captures.slice(0, 3).map(capture => (
+                      {captures.map(capture => (
                         <View key={capture.id} style={styles.pendingRow}>
                           <View style={styles.pendingIcon}>
                             <Icon
@@ -495,6 +589,42 @@ export function LibraryScreen() {
                                 capture.capturedAtIso,
                               ).toLocaleDateString()}
                             </Text>
+                            {capture.techniqueConfirmation ||
+                            capture.hasOriginalOperation === true ? (
+                              <Button
+                                testID={
+                                  capture.techniqueConfirmation
+                                    ? `open-saved-confirmation-${capture.id}`
+                                    : `open-saved-original-${capture.id}`
+                                }
+                                label={
+                                  !capture.techniqueConfirmation
+                                    ? 'Review saved analysis'
+                                    : capture.techniqueConfirmation === 'ready'
+                                      ? 'Confirm technique'
+                                      : capture.techniqueConfirmation ===
+                                          'release_pending'
+                                        ? 'Recover confirmation'
+                                        : 'Review saved capture'
+                                }
+                                variant="secondary"
+                                onPress={() => {
+                                  if (
+                                    !loadedOwner ||
+                                    loadedOwner.ticket !== loadTicket.current ||
+                                    !isDataOwnerContextCurrent(ownerEpoch) ||
+                                    navigation.isFocused?.() === false
+                                  )
+                                    return;
+                                  navigation.navigate('Analyze', {
+                                    captureId: capture.id,
+                                    ...(capture.techniqueConfirmation
+                                      ? {}
+                                      : { mode: 'original' as const }),
+                                  });
+                                }}
+                              />
+                            ) : null}
                           </View>
                         </View>
                       ))}

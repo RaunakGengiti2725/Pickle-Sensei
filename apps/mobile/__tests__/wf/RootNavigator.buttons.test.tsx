@@ -132,6 +132,10 @@ jest.mock('../../src/notifications/service', () => ({
     mockSubscribeToNotificationPresses(...args),
 }));
 
+// Saved Analyze routing now reads through getDb; this ledger exercises the
+// new-capture gate only. Saved loading has its own real-SQLite route suite.
+jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
+
 // Screens that RootNavigator only registers (never renders itself) are
 // stubbed so their native/data imports stay out of this suite.
 jest.mock('../../src/screens/HomeScreen', () => ({
@@ -180,7 +184,14 @@ jest.mock('../../src/screens/AnalyzeScreen', () => {
 });
 
 import React from 'react';
-import { Linking, Text } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -197,6 +208,18 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import {
+  createPendingFulfilmentStorage,
+  type PendingFulfilmentStorage,
+} from '../../src/billing/pendingFulfilment';
+import {
+  getActiveDataOwner,
+  setActiveDataOwner,
+} from '../../src/data/accountScope';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
 import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
 import type {
   MainTabParams,
@@ -204,6 +227,10 @@ import type {
 } from '../../src/navigation/params';
 import { PremiumTabBar } from '../../src/navigation/PremiumTabBar';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
+
+// The renderer exposes the component inside React.memo, not its wrapper.
+const PressableInner = (Pressable as unknown as { type: React.ComponentType })
+  .type;
 
 type Renderer = TestRenderer.ReactTestRenderer;
 type RouteName = keyof RootStackParams;
@@ -370,12 +397,25 @@ function fakeNavigation() {
   };
 }
 
+const renderedTrees = new Set<Renderer>();
+
 function render(element: React.ReactElement): Renderer {
   let renderer!: Renderer;
   act(() => {
     renderer = TestRenderer.create(element);
+    renderedTrees.add(renderer);
   });
   return renderer;
+}
+
+function unmountRenderedTrees() {
+  // A failed assertion skips the test's explicit unmount. In particular,
+  // abandoned paywalls otherwise observe the next test's idle store and call
+  // its mocked initialize(), contaminating AnalyzeRoute's zero/one-call pins.
+  act(() => {
+    for (const renderer of [...renderedTrees].reverse()) renderer.unmount();
+    renderedTrees.clear();
+  });
 }
 
 async function flushAsync() {
@@ -474,6 +514,7 @@ describe('RootNavigator button ledger', () => {
   });
 
   afterEach(() => {
+    unmountRenderedTrees();
     openURL.mockRestore();
     jest.useRealTimers();
   });
@@ -530,7 +571,20 @@ describe('RootNavigator button ledger', () => {
     });
   });
 
-  describe('MainTabs tabBar -> PremiumTabBar', () => {
+  describe.each([
+    { os: 'ios', version: '26.0', role: 'button', viewer: true },
+    { os: 'ios', version: '12.5', role: 'button', viewer: false },
+    { os: 'android', version: '35', role: 'tab', viewer: false },
+  ] as const)('MainTabs on $os $version', fixture => {
+    const { os, version, role, viewer } = fixture;
+    beforeEach(() => {
+      jest.replaceProperty(Platform, 'OS', os);
+      jest.spyOn(Platform, 'Version', 'get').mockReturnValue(version);
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     function tabBarProps(index = 0) {
       const emit = jest.fn(() => ({ defaultPrevented: false }));
       const navigate = jest.fn();
@@ -575,6 +629,16 @@ describe('RootNavigator button ledger', () => {
       return {
         bar,
         ...harness,
+        setFocusedIndex: (focusedIndex: number) => {
+          act(() => {
+            bar.update(
+              tabBar({
+                ...harness.props,
+                state: { ...harness.props.state, index: focusedIndex },
+              }),
+            );
+          });
+        },
         unmount: () => {
           act(() => bar.unmount());
           act(() => tabs.unmount());
@@ -583,51 +647,210 @@ describe('RootNavigator button ledger', () => {
       };
     }
 
-    it('Home / Library / Progress / Settings tabs emit tabPress and navigate', async () => {
-      const { bar, emit, navigate, unmount } = renderTabBar(0);
+    it('Home / Library / Progress / Settings preserve platform accessibility, emit tabPress and navigate', async () => {
+      const { bar, emit, navigate, rootNavigate, setFocusedIndex, unmount } =
+        renderTabBar(0);
+      const controls = bar.root.findAllByType(PressableInner);
+      expect(controls.map(control => control.props.accessibilityLabel)).toEqual(
+        ['Home', 'Library', 'Open coach actions', 'Progress', 'Settings'],
+      );
+      const tabs = controls.filter(
+        control => control.props.accessibilityState?.selected !== undefined,
+      );
+      expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual([
+        'Home',
+        'Library',
+        'Progress',
+        'Settings',
+      ]);
+      for (const tab of tabs) {
+        const label = tab.props.accessibilityLabel;
+        expect(tab.props.accessibilityRole).toBe(role);
+        expect(tab.props.accessibilityState).toEqual({
+          selected: label === 'Home',
+        });
+        expect(tab.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+        expect(tab.props.accessibilityLargeContentTitle).toBe(label);
+        const text = tab.findByType(Text);
+        expect(text.props.children).toBe(label);
+        expect(text.props.allowFontScaling).toBe(!viewer);
+        expect(text.props.numberOfLines).toBe(1);
+        const target = StyleSheet.flatten(tab.props.style({ pressed: false }));
+        expect(target.minHeight).toBeGreaterThanOrEqual(44);
+        expect(target.minWidth).toBeGreaterThanOrEqual(44);
+      }
       for (const [label, route] of [
         ['Library', 'Library'],
         ['Progress', 'Performance'],
         ['Settings', 'Settings'],
       ] as const) {
-        const tab = findPressable(bar, { label });
-        expect(tab.props.accessibilityRole).toBe('tab');
         await press(bar, { label });
-        expect(emit).toHaveBeenCalledWith({
+        expect(emit).toHaveBeenLastCalledWith({
           type: 'tabPress',
           target: `${route}-1`,
           canPreventDefault: true,
         });
         expect(navigate).toHaveBeenLastCalledWith(route, undefined);
       }
+      expect(navigate).toHaveBeenCalledTimes(3);
       // The focused tab re-emits tabPress but never re-navigates.
       navigate.mockClear();
       await press(bar, { label: 'Home' });
+      expect(emit).toHaveBeenLastCalledWith({
+        type: 'tabPress',
+        target: 'Home-1',
+        canPreventDefault: true,
+      });
+      expect(emit).toHaveBeenCalledTimes(4);
       expect(navigate).not.toHaveBeenCalled();
+
+      // The inert navigator does not update itself after navigate(). Feed the
+      // real tabBar the new navigation state and verify its selected traits.
+      setFocusedIndex(3);
+      expect(
+        bar.root
+          .findAllByType(PressableInner)
+          .filter(
+            control => control.props.accessibilityState?.selected !== undefined,
+          )
+          .map(tab => ({
+            label: tab.props.accessibilityLabel,
+            state: tab.props.accessibilityState,
+          })),
+      ).toEqual([
+        { label: 'Home', state: { selected: false } },
+        { label: 'Library', state: { selected: false } },
+        { label: 'Progress', state: { selected: true } },
+        { label: 'Settings', state: { selected: false } },
+      ]);
+      await press(bar, { label: 'Progress' });
+      expect(emit).toHaveBeenLastCalledWith({
+        type: 'tabPress',
+        target: 'Performance-1',
+        canPreventDefault: true,
+      });
+      expect(navigate).not.toHaveBeenCalled();
+      await press(bar, { label: 'Home' });
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith('Home', undefined);
+      expect(emit).toHaveBeenCalledTimes(6);
+      expect(rootNavigate).not.toHaveBeenCalled();
       unmount();
     });
 
-    it('the Coach FAB opens the action menu and its rows reach root routes', async () => {
-      const { bar, rootNavigate, unmount } = renderTabBar(0);
+    it('honors preventDefault without changing selection or navigating', async () => {
+      const { bar, emit, navigate, rootNavigate, unmount } = renderTabBar(0);
+      emit.mockReturnValueOnce({ defaultPrevented: true });
+      await press(bar, { label: 'Library' });
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith({
+        type: 'tabPress',
+        target: 'Library-1',
+        canPreventDefault: true,
+      });
+      expect(
+        findPressable(bar, { label: 'Home' }).props.accessibilityState,
+      ).toEqual({ selected: true });
+      expect(
+        findPressable(bar, { label: 'Library' }).props.accessibilityState,
+      ).toEqual({ selected: false });
+      expect(navigate).not.toHaveBeenCalled();
+      expect(rootNavigate).not.toHaveBeenCalled();
+      unmount();
+    });
+
+    it('long-press emits the route event without activating a tab', () => {
+      const { bar, emit, navigate, rootNavigate, unmount } = renderTabBar(0);
+      act(() => findPressable(bar, { label: 'Progress' }).props.onLongPress());
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith({
+        type: 'tabLongPress',
+        target: 'Performance-1',
+      });
+      expect(navigate).not.toHaveBeenCalled();
+      expect(rootNavigate).not.toHaveBeenCalled();
+      unmount();
+    });
+
+    it('the Coach FAB opens the accessible action menu and its rows reach root routes', async () => {
+      const { bar, navigate, rootNavigate, unmount } = renderTabBar(0);
       const fab = findPressable(bar, { label: 'Open coach actions' });
       expect(fab.props.accessibilityRole).toBe('button');
+      expect(fab.props.accessibilityState).toEqual({ expanded: false });
+      expect(fab.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+      expect(fab.props.accessibilityLargeContentTitle).toBe('Coach');
+      expect(bar.root.findByType(Modal).props.visible).toBe(false);
       await press(bar, { label: 'Open coach actions' });
+      expect(bar.root.findByType(Modal).props.visible).toBe(true);
+      const fabs = bar.root
+        .findAllByType(PressableInner)
+        .filter(control => control.props.accessibilityState?.expanded === true);
+      expect(fabs).toHaveLength(2);
+      for (const control of fabs) {
+        expect(control.props.accessibilityRole).toBe('button');
+        expect(control.props.accessibilityLabel).toBe('Close coach actions');
+        expect(control.props.accessibilityState).toEqual({ expanded: true });
+        expect(control.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+        expect(control.props.accessibilityLargeContentTitle).toBe('Coach');
+        const target = StyleSheet.flatten(
+          control.props.style({ pressed: false }),
+        );
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expect(target.width).toBeGreaterThanOrEqual(44);
+      }
+      for (const [label, hint] of [
+        ['Auto Analyze', 'Auto capture · validated scores only'],
+        ['Import Video', 'Choose a real clip from this phone'],
+        ['Drill Library', 'Guided drills you can search'],
+      ] as const) {
+        const action = findPressable(bar, { label });
+        expect(action.props.accessibilityRole).toBe('button');
+        expect(action.props.accessibilityHint).toBe(hint);
+      }
       expect(allText(bar)).toContain('Drill Library');
       await press(bar, { label: 'Drill Library' });
+      expect(rootNavigate).not.toHaveBeenCalled();
       await act(async () => {
         jest.advanceTimersByTime(400);
       });
+      expect(rootNavigate).toHaveBeenCalledTimes(1);
       expect(rootNavigate).toHaveBeenCalledWith('DrillLibrary');
+      expect(navigate).not.toHaveBeenCalled();
+      expect(bar.root.findByType(Modal).props.visible).toBe(false);
+      expect(
+        findPressable(bar, { label: 'Open coach actions' }).props
+          .accessibilityState,
+      ).toEqual({ expanded: false });
       unmount();
     });
   });
 
   describe('PaywallRoute', () => {
+    let pendingStorage: PendingFulfilmentStorage;
+    let previousOwner: string;
+    beforeEach(() => {
+      previousOwner = getActiveDataOwner();
+      setActiveDataOwner(syncedSession.canonicalAppUserId!);
+      const { db } = createSqliteTestDb();
+      pendingStorage = createPendingFulfilmentStorage(() => db);
+    });
+    afterEach(() => {
+      // Unmount even after a failed purchase assertion, before resetting the
+      // store or closing the pending-fulfilment database it still observes.
+      unmountRenderedTrees();
+      clearAccessStoreConfiguration();
+      closeSqliteTestDatabases();
+      setActiveDataOwner(previousOwner);
+    });
+
     async function renderPaywall(
       navigation: ReturnType<typeof fakeNavigation>,
       deps = billingDependencies(),
     ) {
-      configureAccessStore(deps);
+      configureAccessStore(deps, {
+        owner: syncedSession.canonicalAppUserId!,
+        pendingFulfilmentStorage: pendingStorage,
+      });
       const root = render(<RootNavigator />);
       const paywall = renderRoute(root, 'Paywall', navigation, {
         source: 'rating',
@@ -796,6 +1019,34 @@ describe('RootNavigator button ledger', () => {
         },
       };
     }
+
+    it('discarded paywall renderers cannot initialize a later local-only route', () => {
+      useAccessStore.setState({
+        status: 'ready',
+        canonicalAccess: freeAccess,
+        plans,
+      });
+      const root = render(<RootNavigator />);
+      renderRoute(root, 'Paywall', fakeNavigation());
+      renderRoute(root, 'Paywall', fakeNavigation());
+      // Model the two failed purchase tests whose explicit unmounts were
+      // skipped. The same cleanup used by afterEach must detach BOTH readers
+      // before the next fixture resets the store and replaces its methods.
+      unmountRenderedTrees();
+      const initialize = jest.fn(async () => undefined);
+      act(() => {
+        clearAccessStoreConfiguration();
+        useAccessStore.setState({ initialize });
+        useAuthStore.setState({ session: guestSession });
+      });
+
+      const navigation = fakeNavigation();
+      const { unmount } = renderAnalyze(navigation);
+      expect(initialize).not.toHaveBeenCalled();
+      expect(navigation.replace).toHaveBeenCalledWith('ConnectAccount');
+      expect(navigation.replace).toHaveBeenCalledTimes(1);
+      unmount();
+    });
 
     it('local-only session -> replace(ConnectAccount) before anything loads', () => {
       useAuthStore.setState({ session: guestSession });

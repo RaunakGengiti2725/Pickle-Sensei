@@ -6,8 +6,9 @@
  * tap toggles the ladder in place while its streak block is the only
  * navigation target (AGENTS.md invariant).
  */
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
-import { Modal, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
@@ -38,16 +39,12 @@ jest.mock('../../src/data/repository', () => ({
   },
 }));
 
-const mockOwner = { current: 'owner-1' };
-jest.mock('../../src/data/accountScope', () => {
-  const actual = jest.requireActual<
-    typeof import('../../src/data/accountScope')
-  >('../../src/data/accountScope');
-  return {
-    ...actual,
-    getActiveDataOwner: () => mockOwner.current,
-  };
-});
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+
+const owner = '11111111-1111-4111-8111-111111111111';
 
 import { RankUpCelebration } from '../../src/components/RankUpCelebration';
 import { PlayerRankBanner } from '../../src/components/PlayerRankBanner';
@@ -98,10 +95,18 @@ const weekOne: ConsistencyCelebration = {
   streakAtCelebration: 7,
 };
 
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
+}
+
 function render(element: React.ReactElement) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
     renderer = TestRenderer.create(element);
+    mounted.add(renderer);
   });
   return renderer;
 }
@@ -171,12 +176,19 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     .replace(/\s+/g, ' ');
 }
 
+beforeEach(() => setActiveDataOwner(owner));
+
 afterEach(() => {
-  useRankCelebrationStore.setState({ current: null });
-  useConsistencyStore.setState({ celebration: null });
+  for (const renderer of mounted) unmount(renderer);
+  useRankCelebrationStore.setState({
+    current: null,
+    pending: null,
+    queued: [],
+  });
+  useConsistencyStore.setState({ celebration: null, queuedCelebrations: [] });
   mockKv.clear();
   mockDbAvailable = false;
-  mockOwner.current = 'owner-1';
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
 describe('flow: RankUpCelebration dismissal', () => {
@@ -194,7 +206,7 @@ describe('flow: RankUpCelebration dismissal', () => {
     show();
     const renderer = render(<RankUpCelebration />);
     expect(hosts(renderer, 'rank-up-celebration')).toHaveLength(1);
-    expect(renderer.root.findAllByType(Modal)[0]!.props.visible).toBe(true);
+    expect(hosts(renderer, 'ceremony-overlay')).toHaveLength(1);
     const host = hosts(renderer, 'rank-up-continue')[0]!;
     expect(host.props.accessibilityRole).toBe('button');
     expect(host.props.accessibilityLabel).toBe('Continue');
@@ -206,8 +218,8 @@ describe('flow: RankUpCelebration dismissal', () => {
     });
     expect(useRankCelebrationStore.getState().current).toBeNull();
     expect(hosts(renderer, 'rank-up-celebration')).toHaveLength(0);
-    expect(renderer.root.findAllByType(Modal)[0]!.props.visible).toBe(false);
-    act(() => renderer.unmount());
+    expect(hosts(renderer, 'ceremony-overlay')).toHaveLength(0);
+    unmount(renderer);
   });
 
   it('the backdrop and the hardware back both dismiss', async () => {
@@ -218,16 +230,15 @@ describe('flow: RankUpCelebration dismissal', () => {
       backdrop.props.onPress();
     });
     expect(useRankCelebrationStore.getState().current).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     show();
     renderer = render(<RankUpCelebration />);
-    const modal = renderer.root.findAllByType(Modal)[0]!;
     await act(async () => {
-      modal.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
     expect(useRankCelebrationStore.getState().current).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('shows the ceremony only for a real upward transition and records it durably first', async () => {
@@ -239,7 +250,7 @@ describe('flow: RankUpCelebration dismissal', () => {
       fromTier: null,
       toTier: 'platinum',
     });
-    expect(mockKv.get(rankCelebrationKeyForOwner('owner-1'))).toContain(
+    expect(mockKv.get(rankCelebrationKeyForOwner(owner))).toContain(
       '"platinum"',
     );
     // Storage was written BEFORE the overlay rose, so a repeat report of the
@@ -271,7 +282,7 @@ describe('flow: RankUpCelebration dismissal', () => {
     expect(useRankCelebrationStore.getState().current).toBeNull();
 
     mockDbAvailable = true;
-    mockOwner.current = 'signed-out';
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     await useRankCelebrationStore.getState().maybeCelebrate(diamond);
     expect(useRankCelebrationStore.getState().current).toBeNull();
     expect(mockKv.size).toBe(0);
@@ -297,7 +308,7 @@ describe('flow: StreakCelebration dismissal', () => {
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
     expect(hosts(renderer, 'streak-celebration')).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('the backdrop and the hardware back both dismiss', async () => {
@@ -310,15 +321,15 @@ describe('flow: StreakCelebration dismissal', () => {
       ).props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     useConsistencyStore.setState({ celebration: weekOne });
     renderer = render(<StreakCelebration />);
     await act(async () => {
-      renderer.root.findAllByType(Modal)[0]!.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('a failed history load leaves the snapshot untouched and resolves', async () => {
@@ -347,6 +358,7 @@ describe('flow: PlayerRankBanner targets', () => {
           {...(onPressStreak ? { onPressStreak } : {})}
         />,
       );
+      mounted.add(renderer);
     });
     return renderer;
   }
@@ -392,7 +404,7 @@ describe('flow: PlayerRankBanner targets', () => {
       ).toBe(expected);
     }
     expect(onPressStreak).not.toHaveBeenCalled();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('the streak block is its own target with at-risk copy in the label', async () => {
@@ -408,13 +420,13 @@ describe('flow: PlayerRankBanner targets', () => {
     });
     expect(onPressStreak).toHaveBeenCalledTimes(1);
     expect(allText(renderer)).not.toContain('Bronze → Silver → Gold');
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('without a streak handler the block is disabled, not a silent no-op', async () => {
     const renderer = await renderBanner();
     const host = hosts(renderer, 'player-rank-banner-streak')[0]!;
     expect(host.props.accessibilityState).toMatchObject({ disabled: true });
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });

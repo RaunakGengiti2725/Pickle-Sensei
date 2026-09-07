@@ -69,6 +69,7 @@ jest.mock('../../src/account/deletion', () => {
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
   useApiSessionStore,
   type ApiSession,
@@ -223,7 +224,11 @@ function onQuestionTwo(renderer: Renderer): boolean {
 
 /** The final confirmation page ("Delete your account?") is showing. */
 function sheetOpen(renderer: Renderer): boolean {
-  return allText(renderer).includes('Delete your account?');
+  const text = allText(renderer);
+  return (
+    text.includes('Delete your account?') ||
+    text.includes('Deletion status unknown')
+  );
 }
 
 /** Any page of the dialog is showing. */
@@ -297,6 +302,7 @@ describe('ManageAccountScreen button ledger', () => {
     mockGoBack.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
+    setActiveDataOwner(CANONICAL_ID);
     useApiSessionStore.setState({ session: apiSession });
     useAuthStore.setState({
       hydrated: true,
@@ -800,22 +806,16 @@ describe('ManageAccountScreen button ledger', () => {
       );
     });
 
-    it('missing ApiSession -> the deletion module rejection is surfaced, not swallowed', async () => {
+    it('missing ApiSession -> a restored owner gets reconnecting copy, not another sign-in prompt', async () => {
       renderer = renderScreen();
       useApiSessionStore.setState({ session: null });
-      mockRequestAccountDeletion.mockRejectedValue(
-        new AccountDeletionError(
-          'deletion.not_configured',
-          'Sign in to a synced account before deleting it.',
-          false,
-        ),
-      );
       await openSheet(renderer);
       await pressAsync(sheetButton(renderer, 'Continue to delete'));
-      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+      expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
       expect(allText(renderer)).toContain(
-        'Sign in to a synced account before deleting it.',
+        'Your account is still reconnecting.',
       );
+      expect(allText(renderer)).not.toContain('Sign in to a synced account');
     });
   });
 
@@ -955,10 +955,10 @@ describe('ManageAccountScreen button ledger', () => {
         jest.advanceTimersByTime(5_000);
       });
       await pressAsync(sheetButton(renderer, 'Permanently delete'));
-      expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
-      );
-      expect(sheetButton(renderer, 'Permanently delete').props.disabled).toBe(
+      expect(allText(renderer)).toContain('Deletion status unknown');
+      expect(allText(renderer)).toContain('The request may have completed.');
+      expect(allText(renderer)).not.toContain('Nothing was deleted');
+      expect(sheetButton(renderer, 'Retry deletion').props.disabled).toBe(
         false,
       );
     });

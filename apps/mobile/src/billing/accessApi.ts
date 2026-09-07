@@ -18,6 +18,8 @@ export interface CanonicalAccessApiConfig {
   fetchFn?: BillingFetch;
 }
 
+export const BILLING_REQUEST_TIMEOUT_MS = 10_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -127,8 +129,8 @@ function configuredValues(config: CanonicalAccessApiConfig): {
   if (!token) {
     throw new BillingError(
       'billing.backend_unconfigured',
-      'Sign in before checking membership access.',
-      false,
+      'Membership verification is waiting for your account connection. Please try again.',
+      true,
       'missing_api_token',
     );
   }
@@ -157,38 +159,63 @@ export function createCanonicalAccessClient(
 ): CanonicalAccessClient {
   const request = async (path: string, method: 'GET' | 'POST') => {
     const values = configuredValues(config);
-    let response: Response;
-    try {
-      response = await values.fetchFn(`${values.baseUrl}${path}`, {
+    const controller = new AbortController();
+    let timedOut = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        reject(
+          new BillingError(
+            'billing.backend_unavailable',
+            'Membership verification took too long. Please try again.',
+            true,
+          ),
+        );
+        controller.abort();
+      }, BILLING_REQUEST_TIMEOUT_MS);
+    });
+    const fetchAndRead = async () => {
+      const response = await values.fetchFn(`${values.baseUrl}${path}`, {
         method,
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${values.token}`,
         },
+        signal: controller.signal,
       });
-    } catch {
+      if (timedOut) return undefined;
+      if (response.status === 401) {
+        reportApiUnauthorized(values.token);
+        throw new BillingError(
+          'billing.backend_unavailable',
+          'Your account connection needs to refresh. Please try verification again.',
+          true,
+        );
+      }
+      if (!response.ok) {
+        throw new BillingError(
+          'billing.backend_unavailable',
+          'Membership verification is temporarily unavailable.',
+          response.status >= 500 ||
+            response.status === 408 ||
+            response.status === 429,
+        );
+      }
+      return responseBody(response);
+    };
+    try {
+      return await Promise.race([fetchAndRead(), deadline]);
+    } catch (cause) {
+      if (cause instanceof BillingError) throw cause;
       throw new BillingError(
         'billing.backend_unavailable',
         'Membership verification is temporarily unavailable.',
         true,
       );
+    } finally {
+      clearTimeout(timeout);
     }
-    if (response.status === 401) {
-      reportApiUnauthorized(values.token);
-      throw new BillingError(
-        'billing.backend_unavailable',
-        'Your sign-in has expired. Sign in again to check membership access.',
-        false,
-      );
-    }
-    if (!response.ok) {
-      throw new BillingError(
-        'billing.backend_unavailable',
-        'Membership verification is temporarily unavailable.',
-        response.status >= 500 || response.status === 429,
-      );
-    }
-    return responseBody(response);
   };
 
   return {

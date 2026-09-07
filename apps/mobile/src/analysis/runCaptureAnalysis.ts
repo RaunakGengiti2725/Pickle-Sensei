@@ -2,20 +2,44 @@ import { Platform } from 'react-native';
 import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  FUSION_ENGINE_VERSION,
+  STROKE_TAXONOMY_VERSION,
+  isDeclaredTechniqueIntent,
+  isAnalysisInputSelectionSnapshot,
+  isConfirmationTimestamp,
+  type AnalysisInputSelectionSnapshot,
   type CaptureAnalysisRecord,
+  type FusionProviders,
+  type NeedsTechniqueConfirmationRecord,
+  type TechniqueConfirmationEvidence,
+  type TechniqueConfirmationInput,
+  type VerifiedTechniqueConfirmationRecord,
 } from '@pickle/analysis-pipeline';
 import {
   parsePoseSequence,
   sha256Hex,
   unavailable,
 } from '@pickle/swing-domain';
-import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
+import {
+  extractImportedPoseSequence,
+  readCaptureArtifact,
+  verifyCapturedClipCurrentBytes,
+  type CapturedClip,
+} from '../camera/capture';
 import type { LocalDb } from '../data/db';
+import {
+  assertDataOwnerContext,
+  captureDataOwnerContext,
+  DataOwnerChangedError,
+  isDataOwnerContextCurrent,
+  type DataOwnerContext,
+} from '../data/accountScope';
 import {
   markCaptureAnalyzed,
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
+  updateCaptureClipPayload,
 } from '../data/repository';
 import { createFusionProviders } from '../vision/providers';
 import {
@@ -29,6 +53,42 @@ import {
   type EvaluationTelemetryContext,
 } from '../evaluation/trialCapture';
 import { stabilitySlo } from './stabilityTelemetry';
+import { forDataOwner, withTransaction } from '../data/transactions';
+import { commitPracticeSet, type PracticeSetPlan } from './practiceSet';
+import { bearerTokenFor, getApiSession } from '../account/apiSession';
+import {
+  runJournal,
+  analysisAttemptJournal,
+  recoverAnalysisJournals,
+  RunJournalError,
+  type RunJournalEntry,
+  type RunJournalIdentity,
+  type RunJournalReleaseOutcome,
+  type RunJournalScope,
+} from './runJournal';
+import {
+  confirmationCaptureHash,
+  confirmationContinuationOperationId,
+  confirmationInputsMatch,
+  confirmationRecordHash,
+  sameConfirmationJournalIdentity,
+  isSavedCaptureId,
+  loadSavedTechniqueConfirmation,
+} from './savedTechniqueConfirmation';
+import {
+  OriginalAnalysisExecution,
+  OriginalAnalysisHeldError,
+  originalAnalysisOperations,
+  type AnalysisTechnicalFailure,
+  type OriginalAnalysisOperation,
+} from './originalAnalysisOperations';
+import {
+  assertOriginalClip,
+  captureExecutionDefinitionHash,
+  originalCanonicalJson,
+  type OriginalModelPolicy,
+  type OriginalModelDescriptor,
+} from './originalAnalysisSnapshot';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -46,6 +106,7 @@ import { stabilitySlo } from './stabilityTelemetry';
 export type CaptureAnalysisOutcome =
   | {
       kind: 'scored';
+      replayed?: true;
       analysisId: string;
       record: CaptureAnalysisRecord;
       /**
@@ -58,6 +119,7 @@ export type CaptureAnalysisOutcome =
     }
   | {
       kind: 'low_confidence';
+      replayed?: true;
       analysisId: string;
       record: CaptureAnalysisRecord;
       guidance: string | null;
@@ -66,7 +128,11 @@ export type CaptureAnalysisOutcome =
       kind: 'unavailable';
       reason: string;
       /** HTTP 402 `access.paywall_required`: not retryable without an upgrade. */
-      cause?: 'paywall_required';
+      cause?:
+        | 'paywall_required'
+        | 'account_changed'
+        | 'cancelled'
+        | 'recovery_pending';
     }
   | {
       /**
@@ -79,8 +145,20 @@ export type CaptureAnalysisOutcome =
       envelope: EnvelopeVerdict;
     };
 
+export type RunCaptureAnalysisOutcome =
+  | CaptureAnalysisOutcome
+  | {
+      kind: 'needs_technique_confirmation';
+      replayed?: true;
+      analysisId: string;
+      record: NeedsTechniqueConfirmationRecord;
+    };
+
 export interface RunCaptureAnalysisRequest {
   db: LocalDb;
+  ownerContext?: DataOwnerContext;
+  operationId?: string;
+  signal?: AbortSignal;
   captureId: string;
   clip: CapturedClip;
   /**
@@ -96,11 +174,13 @@ export interface RunCaptureAnalysisRequest {
    * profile; validated against the registry downstream — never a new route.
    */
   declaredCanonical?: string | null;
+  techniqueConfirmation?: TechniqueConfirmationInput;
   handedness: 'right' | 'left' | 'ambidextrous';
   cameraView: 'side' | 'rear_oblique';
   apiConfig: ApiConfigState;
   appVersion: string;
   sessionId?: string | null;
+  practiceSet?: PracticeSetPlan | null;
   focusCheckpoint?: string;
   /**
    * Product-assisted target selection ("tap yourself"). Normalized image
@@ -130,12 +210,49 @@ export interface RunCaptureAnalysisRequest {
 
 export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
-): Promise<CaptureAnalysisOutcome> {
+): Promise<RunCaptureAnalysisOutcome> {
   const startedAt = Date.now();
   stabilitySlo.record({ kind: 'analysis_started' });
-  let outcome: CaptureAnalysisOutcome;
+  let outcome: RunCaptureAnalysisOutcome;
+  let ownerContext: DataOwnerContext;
   try {
-    outcome = await runCaptureAnalysisCore(request);
+    const owner = request.ownerContext ?? captureDataOwnerContext();
+    ownerContext = Object.freeze({
+      ownerKey: owner.ownerKey,
+      generation: owner.generation,
+    });
+    const clip = JSON.parse(JSON.stringify(request.clip)) as CapturedClip;
+    outcome = await runCaptureAnalysisCore({
+      ...request,
+      clip,
+      ownerContext,
+      targetSeed: request.targetSeed
+        ? {
+            point: { ...request.targetSeed.point },
+            selectedAtIso: request.targetSeed.selectedAtIso,
+          }
+        : request.targetSeed,
+      techniqueConfirmation: request.techniqueConfirmation
+        ? {
+            analysisId: request.techniqueConfirmation.analysisId,
+            intent: { ...request.techniqueConfirmation.intent },
+            confirmedAtIso: request.techniqueConfirmation.confirmedAtIso,
+          }
+        : undefined,
+      practiceSet: request.practiceSet
+        ? { ...request.practiceSet }
+        : request.practiceSet,
+      captureEnvelope: request.captureEnvelope
+        ? {
+            ...request.captureEnvelope,
+            dimensions: request.captureEnvelope.dimensions.map(dimension => ({
+              ...dimension,
+            })),
+            notMeasured: [...request.captureEnvelope.notMeasured],
+          }
+        : request.captureEnvelope,
+      apiConfig: { baseUrl: request.apiConfig.baseUrl, token: null },
+    });
   } catch (error) {
     stabilitySlo.record({ kind: 'analysis_failed', failureKind: 'exception' });
     throw error;
@@ -151,9 +268,16 @@ export async function runCaptureAnalysis(
     stabilitySlo.record({ kind: 'analysis_completed' });
   }
   const telemetry = request.evaluationTelemetry ?? null;
-  if (telemetry && telemetry.consentActive) {
+  if (
+    telemetry &&
+    telemetry.consentActive &&
+    outcome.kind !== 'needs_technique_confirmation' &&
+    !('replayed' in outcome && outcome.replayed) &&
+    isDataOwnerContextCurrent(ownerContext) &&
+    !request.signal?.aborted
+  ) {
     try {
-      await recordEvaluationTrial(request.db, {
+      await recordEvaluationTrial(forDataOwner(request.db, ownerContext), {
         outcome,
         captureId: request.captureId,
         capturedAtIso: request.clip.capturedAtIso,
@@ -167,6 +291,17 @@ export async function runCaptureAnalysis(
       // must never surface as an analysis failure to the user.
     }
   }
+  if (!isDataOwnerContextCurrent(ownerContext)) return accountChangedOutcome();
+  if (
+    request.signal?.aborted &&
+    (outcome.kind === 'scored' ||
+      outcome.kind === 'low_confidence' ||
+      outcome.kind === 'needs_technique_confirmation')
+  ) {
+    return outcome.kind === 'scored'
+      ? recoveryPendingOutcome()
+      : cancelledOutcome();
+  }
   return outcome;
 }
 
@@ -176,10 +311,828 @@ function isPaywallRequired(error: ApiError): boolean {
   return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
 }
 
+function accountChangedOutcome(): CaptureAnalysisOutcome {
+  return {
+    kind: 'unavailable',
+    cause: 'account_changed',
+    reason: 'The account changed before this analysis finished.',
+  };
+}
+
+class AnalysisRunCancelledError extends Error {}
+
+function cancelledOutcome(): CaptureAnalysisOutcome {
+  return {
+    kind: 'unavailable',
+    cause: 'cancelled',
+    reason: 'This analysis was cancelled. Your capture is still saved.',
+  };
+}
+
+function recoveryPendingOutcome(): Extract<
+  CaptureAnalysisOutcome,
+  { kind: 'unavailable' }
+> {
+  return {
+    kind: 'unavailable',
+    cause: 'recovery_pending',
+    reason:
+      'This saved analysis is awaiting recovery. Its existing operation will be reconciled without starting another rating.',
+  };
+}
+
+function assertExecution(
+  request: RunCaptureAnalysisRequest,
+  owner: DataOwnerContext,
+): void {
+  assertDataOwnerContext(owner);
+  if (request.signal?.aborted) throw new AnalysisRunCancelledError();
+  if (request.techniqueConfirmation) {
+    const session = getApiSession();
+    const expected = runJournal.scope({
+      ownerKey: owner.ownerKey,
+      apiOrigin: request.apiConfig.baseUrl,
+    });
+    const current = session
+      ? runJournal.scope({
+          ownerKey: session.canonicalAppUserId,
+          apiOrigin: session.apiBaseUrl,
+        })
+      : null;
+    if (
+      current?.ownerKey !== expected.ownerKey ||
+      current.apiOrigin !== expected.apiOrigin
+    ) {
+      throw new TechniqueConfirmationHeldError(
+        'Reconnect the original account and rating service to confirm this saved capture.',
+      );
+    }
+  }
+}
+
+const MODEL_BUNDLE_VERSION = 'on-device-fusion-1';
+
+function analysisModelPolicy(providers: FusionProviders): OriginalModelPolicy {
+  const descriptor = (
+    provider: Pick<FusionProviders['scorer'], 'descriptor'> | null | undefined,
+  ): OriginalModelDescriptor | null => {
+    const value = provider?.descriptor;
+    return value
+      ? [
+          value.providerId,
+          value.modelVersion,
+          value.runtime,
+          value.executionTarget,
+          value.artifactHash,
+          value.inputSchemaVersion,
+          value.outputSchemaVersion,
+        ]
+      : null;
+  };
+  return [
+    FUSION_ENGINE_VERSION,
+    STROKE_TAXONOMY_VERSION,
+    MODEL_BUNDLE_VERSION,
+    [providers.phase.modelVersion, providers.phase.source],
+    descriptor(providers.biomechanics),
+    descriptor(providers.scorer),
+    descriptor(providers.faultDetector),
+    descriptor(providers.uncertainty),
+    descriptor(providers.coach),
+    descriptor(providers.classifier),
+    descriptor(providers.autoStrokeClassifier),
+    providers.shadowScorers.map(provider => descriptor(provider)!),
+  ];
+}
+
+function analysisModelPolicyHash(providers: FusionProviders): string {
+  // Keep the exact legacy hash/ordering so saved confirmations still replay.
+  return sha256Hex(JSON.stringify(analysisModelPolicy(providers)));
+}
+
+function analysisDefinitionHash(
+  request: RunCaptureAnalysisRequest,
+  providers: FusionProviders,
+  observationHash: string,
+): string {
+  return captureExecutionDefinitionHash(
+    request,
+    analysisModelPolicyHash(providers),
+    observationHash,
+  );
+}
+
+function defaultOperationId(
+  scope: RunJournalScope,
+  captureId: string,
+  requestHash: string,
+): string {
+  const hash = sha256Hex(
+    JSON.stringify([scope.ownerKey, captureId.toLowerCase(), requestHash]),
+  );
+  const variant = ((Number.parseInt(hash.slice(16, 17), 16) & 3) | 8).toString(
+    16,
+  );
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-${variant}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function inputSelectionSnapshot(
+  request: RunCaptureAnalysisRequest,
+  owner: DataOwnerContext,
+  scope: RunJournalScope,
+  providers: FusionProviders,
+  requestHash: string,
+): AnalysisInputSelectionSnapshot | null {
+  const clip = request.clip;
+  const pose = clip.poseSequence;
+  if (
+    !pose ||
+    (clip.captureMode === 'automatic_pose_trigger' &&
+      request.targetSeed != null)
+  )
+    return null;
+  const snapshot: AnalysisInputSelectionSnapshot = {
+    version: 'capture-analysis-input-v1',
+    ownerKey: scope.ownerKey,
+    ownerGeneration: owner.generation,
+    apiOrigin: scope.apiOrigin,
+    captureId: request.captureId,
+    observationHash: pose.sha256,
+    definitionHash: requestHash,
+    modelPolicyHash: analysisModelPolicyHash(providers),
+    capture: {
+      captureMode: clip.captureMode,
+      capturedAtIso: clip.capturedAtIso,
+      durationMs: clip.durationMs,
+      width: clip.width,
+      height: clip.height,
+      fps: clip.fps,
+      poseFrameCount: pose.frameCount,
+      poseModelVersion: pose.poseModelVersion,
+      poseUri: pose.uri,
+      payloadHash: confirmationCaptureHash(clip),
+    },
+    trigger:
+      clip.captureMode === 'automatic_pose_trigger'
+        ? {
+            startMs: clip.trigger.startMs,
+            endMs: clip.trigger.endMs,
+            peakMotionMs: clip.trigger.peakMotionMs ?? null,
+            confidence: clip.trigger.confidence,
+            modelVersion: clip.trigger.modelVersion,
+          }
+        : {
+            startMs: 0,
+            endMs: clip.durationMs,
+            peakMotionMs: null,
+            confidence: 1,
+            modelVersion: 'imported-full-clip-1',
+          },
+    declaredStroke: request.declaredStroke,
+    declaredCanonical: request.declaredCanonical ?? null,
+    handedness: request.handedness,
+    cameraView: request.cameraView,
+    focusCheckpoint: request.focusCheckpoint ?? null,
+    target: {
+      userSelection: request.targetSeed
+        ? {
+            ...request.targetSeed,
+            point: { ...request.targetSeed.point },
+            source: 'import_tap',
+          }
+        : null,
+      guidedStartTap:
+        clip.captureMode === 'automatic_pose_trigger' && clip.targetLock
+          ? {
+              point: { ...clip.targetLock.tapPoint },
+              selectedAtIso: null,
+              source: 'guided_start_region',
+            }
+          : null,
+      acquiredAnchor:
+        clip.captureMode === 'automatic_pose_trigger' && clip.targetSeed
+          ? {
+              point: { x: clip.targetSeed.x, y: clip.targetSeed.y },
+              source: clip.targetSeed.source,
+            }
+          : null,
+    },
+  };
+  return isAnalysisInputSelectionSnapshot(snapshot) ? snapshot : null;
+}
+
+function permitPort(scope: RunJournalScope) {
+  return {
+    ...scope,
+    ...createAnalysisPermitClient({
+      baseUrl: scope.apiOrigin,
+      get token() {
+        const session = getApiSession();
+        if (!session) return null;
+        try {
+          const current = runJournal.scope({
+            ownerKey: session.canonicalAppUserId,
+            apiOrigin: session.apiBaseUrl,
+          });
+          return current.ownerKey === scope.ownerKey &&
+            current.apiOrigin === scope.apiOrigin
+            ? bearerTokenFor(session.canonicalAppUserId)
+            : null;
+        } catch {
+          return null;
+        }
+      },
+    }),
+  };
+}
+
+/** Call immediately after saving capture/selection and planning its practice set,
+ * BEFORE native extraction. No permit, model inference or profile lookup occurs.
+ * UI adoption is explicit; legacy requests are never silently upgraded. */
+export async function prepareOriginalCaptureAnalysis(
+  request: RunCaptureAnalysisRequest,
+  execution: OriginalAnalysisExecution,
+  operationId = makeUuid(),
+): Promise<OriginalAnalysisOperation> {
+  execution.assertCurrent();
+  assertExecution(request, execution.ownerContext);
+  if (
+    request.ownerContext &&
+    (request.ownerContext.ownerKey !== execution.ownerContext.ownerKey ||
+      request.ownerContext.generation !== execution.ownerContext.generation)
+  )
+    throw new OriginalAnalysisHeldError('stale_execution');
+  if (request.techniqueConfirmation)
+    throw new OriginalAnalysisHeldError('use_saved_technique_confirmation');
+  const scope = runJournal.scope({
+    ownerKey: execution.scope.ownerKey,
+    apiOrigin: request.apiConfig.baseUrl,
+  });
+  if (scope.apiOrigin !== execution.scope.apiOrigin)
+    throw new OriginalAnalysisHeldError('origin_mismatch');
+  const fusion = createFusionProviders(request.declaredStroke);
+  return originalAnalysisOperations.prepare(
+    request.db,
+    execution,
+    {
+      version: 'original-analysis-v1',
+      ...execution.scope,
+      captureId: request.captureId,
+      clip: request.clip,
+      declaredStroke: request.declaredStroke,
+      declaredCanonical: request.declaredCanonical ?? null,
+      handedness: request.handedness,
+      cameraView: request.cameraView,
+      focusCheckpoint: request.focusCheckpoint ?? null,
+      targetSeed: request.targetSeed ?? null,
+      sessionId: request.sessionId ?? null,
+      practiceSet: request.practiceSet ?? null,
+      appVersion: request.appVersion,
+      modelPolicy:
+        fusion.kind === 'real' ? analysisModelPolicy(fusion.providers) : null,
+      captureEnvelope: request.captureEnvelope ?? null,
+    },
+    operationId,
+  );
+}
+
+export interface RunOriginalCaptureAnalysisRequest {
+  db: LocalDb;
+  execution: OriginalAnalysisExecution;
+  /** Logical id returned by preparation, not a released permit/attempt key. */
+  operationId: string;
+  predecessorAttemptId?: string;
+}
+interface PreparedOriginalAttempt {
+  operation: OriginalAnalysisOperation;
+  run: RunJournalEntry;
+  execution: OriginalAnalysisExecution;
+  releaseAdmissionGuard: () => void;
+}
+async function originalCompletionOutcome(
+  db: LocalDb,
+  execution: OriginalAnalysisExecution,
+  operationId: string,
+  replayed = true,
+  freeLimitReached = false,
+): Promise<RunCaptureAnalysisOutcome | null> {
+  const completed = await originalAnalysisOperations.loadCompletion(
+    db,
+    execution,
+    operationId,
+  );
+  if (!completed) return null;
+  const { record } = completed;
+  const replay = replayed ? { replayed: true as const } : {};
+  if (record.kind === 'needs_technique_confirmation')
+    return {
+      kind: 'needs_technique_confirmation',
+      analysisId: record.id,
+      record,
+      ...replay,
+    };
+  if (record.result?.resultKind === 'scored')
+    return {
+      kind: 'scored',
+      analysisId: record.id,
+      record,
+      freeLimitReached,
+      ...replay,
+    };
+  return {
+    kind: 'low_confidence',
+    analysisId: record.id,
+    record,
+    guidance: record.result?.guidance ?? null,
+    ...replay,
+  };
+}
+
+/** Explicit reconciliation is separate from retry admission. It can only
+ * finish the current attempt's original hold, never append or infer. */
+export async function reconcileOriginalCaptureAnalysis(
+  request: RunOriginalCaptureAnalysisRequest,
+): Promise<void> {
+  const { db, execution, operationId } = request;
+  const operation = await originalAnalysisOperations.read(
+    db,
+    execution,
+    operationId,
+  );
+  if (!operation?.currentAttemptId || operation.finalRecordId !== null) return;
+  const attempt = await originalAnalysisOperations.readAttempt(
+    db,
+    operation,
+    operation.currentAttemptId,
+  );
+  execution.assertCurrent();
+  await analysisAttemptJournal.recover(
+    db,
+    execution.scope,
+    permitPort(execution.scope),
+    { operationId: attempt.run.operationId, limit: 1 },
+  );
+  execution.assertCurrent();
+}
+
+/** Same saved movie and immutable settings only. No camera, picker, present-day
+ * profile or new practice plan is consulted. A missing byte comparison holds.
+ * Pre-permit extraction may resume a prepared operation; a permit successor
+ * requires the caller's exact predecessor AND the store's acknowledged proof. */
+export async function runOriginalCaptureAnalysis(
+  input: RunOriginalCaptureAnalysisRequest,
+): Promise<RunCaptureAnalysisOutcome> {
+  const { db, execution, operationId, predecessorAttemptId } = { ...input };
+  let finish: (() => void) | undefined;
+  let finishAdmission: (() => void) | undefined;
+  try {
+    execution.assertCurrent();
+    const completed = await originalCompletionOutcome(
+      db,
+      execution,
+      operationId,
+    );
+    if (completed) return completed;
+    let operation = await originalAnalysisOperations.read(
+      db,
+      execution,
+      operationId,
+    );
+    if (!operation) return recoveryPendingOutcome();
+    if (operation.currentAttemptId !== null) {
+      const previous = await originalAnalysisOperations.readAttempt(
+        db,
+        operation,
+        operation.currentAttemptId,
+      );
+      if (
+        predecessorAttemptId !== operation.currentAttemptId ||
+        previous.run.state !== 'released' ||
+        previous.run.releaseOutcome !== 'failed' ||
+        previous.technicalFailure === null ||
+        runJournal
+          .activeOperationIds(execution.scope)
+          .includes(previous.run.operationId)
+      )
+        return recoveryPendingOutcome();
+    } else if (predecessorAttemptId !== undefined)
+      return recoveryPendingOutcome();
+    finish = runJournal.startExecution({ ...execution.scope, operationId });
+    const original = operation.snapshot;
+    const fusion = createFusionProviders(original.declaredStroke);
+    if (
+      fusion.kind !== 'real' ||
+      analysisModelPolicyHash(fusion.providers) !== operation.modelPolicyHash
+    )
+      return recoveryPendingOutcome();
+    const envelope =
+      operation.observation?.captureEnvelope ?? original.captureEnvelope;
+    if (envelope?.overall === 'UNSUPPORTED')
+      return {
+        kind: 'quality_blocked',
+        envelope,
+        reason:
+          'The original measured capture quality is outside the supported envelope. Nothing was rated.',
+      };
+    let clip = await originalAnalysisOperations.readCapture(db, operation);
+    execution.assertCurrent();
+    if (!clip.poseSequence) {
+      if (
+        clip.captureMode !== 'imported_video' ||
+        !original.clip.nativeMediaIdentity
+      )
+        return recoveryPendingOutcome();
+      const verified = await verifyCapturedClipCurrentBytes(
+        clip,
+        execution.ownerContext,
+        { operationId: makeUuid(), signal: execution.signal },
+      );
+      execution.assertCurrent();
+      if (
+        verified.status !== 'verified-current-bytes' ||
+        originalCanonicalJson(verified.comparedExpectation) !==
+          originalCanonicalJson(original.clip.nativeMediaIdentity)
+      )
+        return recoveryPendingOutcome();
+      const before = clip;
+      const extracted = await extractImportedPoseSequence(
+        clip,
+        original.targetSeed?.point ?? null,
+        { operationId: makeUuid(), signal: execution.signal },
+      );
+      execution.assertCurrent();
+      const enriched = assertOriginalClip({
+        ...clip,
+        poseSequence: extracted.poseSequence,
+        ...(extracted.posterUri ? { posterUri: extracted.posterUri } : {}),
+      });
+      await withTransaction(db, async tx => {
+        const current = await originalAnalysisOperations.readCapture(
+          tx,
+          operation!,
+        );
+        if (originalCanonicalJson(current) !== originalCanonicalJson(before))
+          throw new OriginalAnalysisHeldError('capture_changed');
+        await updateCaptureClipPayload(
+          forDataOwner(tx, execution.ownerContext),
+          original.captureId,
+          enriched,
+        );
+        execution.assertCurrent();
+      });
+      clip = enriched;
+    }
+    const sidecar = await readCaptureArtifact(clip.poseSequence!.uri);
+    execution.assertCurrent();
+    operation = await originalAnalysisOperations.sealObservation(
+      db,
+      execution,
+      operationId,
+      { clip, sidecarJson: sidecar, captureEnvelope: envelope },
+    );
+    finishAdmission = analysisAttemptJournal.protectAnalysisAdmission(
+      execution.scope,
+      operation.analysisId,
+    );
+    const admission = await originalAnalysisOperations.admit(
+      db,
+      execution,
+      operationId,
+      {
+        settingsHash: operation.settingsHash,
+        modelPolicyHash: analysisModelPolicyHash(fusion.providers),
+        predecessorAttemptId,
+      },
+    );
+    execution.assertCurrent();
+    if (admission.kind === 'replay')
+      return (
+        (await originalCompletionOutcome(db, execution, operationId)) ??
+        recoveryPendingOutcome()
+      );
+    if (admission.kind !== 'created') return recoveryPendingOutcome();
+    return await runCaptureAnalysisCore(
+      {
+        db,
+        ownerContext: execution.ownerContext,
+        signal: execution.signal,
+        captureId: original.captureId,
+        clip,
+        declaredStroke: original.declaredStroke,
+        declaredCanonical: original.declaredCanonical,
+        handedness: original.handedness,
+        cameraView: original.cameraView,
+        focusCheckpoint: original.focusCheckpoint ?? undefined,
+        targetSeed: original.targetSeed,
+        sessionId: original.sessionId,
+        practiceSet: original.practiceSet,
+        appVersion: original.appVersion,
+        apiConfig: { baseUrl: original.apiOrigin, token: null },
+        captureEnvelope: envelope,
+      },
+      {
+        operation: admission.operation,
+        run: admission.attempt.run,
+        execution,
+        releaseAdmissionGuard: finishAdmission,
+      },
+    );
+  } catch {
+    if (!isDataOwnerContextCurrent(execution.ownerContext))
+      return accountChangedOutcome();
+    if (execution.signal?.aborted) return cancelledOutcome();
+    return recoveryPendingOutcome();
+  } finally {
+    finishAdmission?.();
+    finish?.();
+  }
+}
+
+async function readJournalOutcome(
+  request: RunCaptureAnalysisRequest,
+  owner: DataOwnerContext,
+  run: RunJournalEntry,
+  replayed = true,
+  freeLimitReached = false,
+): Promise<RunCaptureAnalysisOutcome> {
+  assertExecution(request, owner);
+  const loaded = await loadSavedTechniqueConfirmation({
+    db: request.db,
+    ownerContext: owner,
+    captureId: run.captureId,
+    apiOrigin: run.apiOrigin,
+    originalAnalysisId: run.analysisId,
+    requireLatest: false,
+    signal: request.signal,
+    assertCurrent: () => assertExecution(request, owner),
+  });
+  assertExecution(request, owner);
+  if (loaded.kind === 'unavailable') return recoveryPendingOutcome();
+  const journal = loaded.journal;
+  if (!sameConfirmationJournalIdentity(journal, run))
+    return recoveryPendingOutcome();
+  const record =
+    loaded.kind === 'already_completed' ? loaded.record : loaded.saved.record;
+  if (
+    request.techniqueConfirmation &&
+    record.strokeIntent.confirmation?.analysisId !==
+      request.techniqueConfirmation.analysisId
+  )
+    return recoveryPendingOutcome();
+  if (loaded.kind !== 'already_completed') {
+    return {
+      kind: 'needs_technique_confirmation',
+      analysisId: run.analysisId,
+      record: loaded.saved.record,
+      ...(replayed ? { replayed: true as const } : {}),
+    };
+  }
+  if (loaded.resultKind === 'scored') {
+    return {
+      kind: 'scored',
+      analysisId: run.analysisId,
+      record: loaded.record,
+      freeLimitReached,
+      ...(replayed ? { replayed: true as const } : {}),
+    };
+  }
+  return {
+    kind: 'low_confidence',
+    analysisId: run.analysisId,
+    record: loaded.record,
+    guidance: loaded.record.result.guidance,
+    ...(replayed ? { replayed: true as const } : {}),
+  };
+}
+
+class TechniqueConfirmationHeldError extends Error {}
+
+interface TechniqueConfirmationAdmission {
+  evidence: TechniqueConfirmationEvidence;
+  original: VerifiedTechniqueConfirmationRecord;
+  journal: RunJournalEntry;
+}
+
+async function readTechniqueConfirmationEvidence(
+  request: RunCaptureAnalysisRequest,
+  owner: DataOwnerContext,
+  scope: RunJournalScope,
+  observationHash: string,
+  providers: FusionProviders,
+): Promise<TechniqueConfirmationAdmission | undefined> {
+  const confirmation = request.techniqueConfirmation;
+  if (!confirmation) return undefined;
+  if (
+    !isDeclaredTechniqueIntent(confirmation.intent) ||
+    confirmation.intent.legacySlug !== request.declaredStroke ||
+    confirmation.intent.canonical !== request.declaredCanonical ||
+    !isConfirmationTimestamp(confirmation.confirmedAtIso)
+  ) {
+    throw new TechniqueConfirmationHeldError(
+      'Choose an exact technique before confirming this saved capture.',
+    );
+  }
+  const load = () =>
+    loadSavedTechniqueConfirmation({
+      db: request.db,
+      ownerContext: owner,
+      captureId: request.captureId,
+      apiOrigin: scope.apiOrigin,
+      originalAnalysisId: confirmation.analysisId,
+      signal: request.signal,
+      assertCurrent: () => assertExecution(request, owner),
+    });
+  let loaded = await load();
+  assertExecution(request, owner);
+  if (
+    loaded.kind !== 'ready' &&
+    loaded.kind !== 'release_pending' &&
+    loaded.kind !== 'recovery_blocked'
+  ) {
+    throw new TechniqueConfirmationHeldError(
+      'The original confirmation for this saved capture could not be verified. Keep this saved clip; no new rating was started.',
+    );
+  }
+  const original = loaded.saved.record;
+  const selection = original.inputSelection;
+  if (
+    original.observationHash !== observationHash ||
+    !confirmationInputsMatch(selection, request.clip, request.targetSeed) ||
+    confirmationRecordHash({
+      ...original,
+      captureEnvelope: request.captureEnvelope ?? null,
+    }) !== confirmationRecordHash(original) ||
+    selection.handedness !== request.handedness ||
+    selection.cameraView !== request.cameraView ||
+    selection.focusCheckpoint !== (request.focusCheckpoint ?? null) ||
+    selection.modelPolicyHash !== analysisModelPolicyHash(providers) ||
+    selection.definitionHash !==
+      analysisDefinitionHash(
+        {
+          ...request,
+          declaredStroke: selection.declaredStroke,
+          declaredCanonical: selection.declaredCanonical,
+          techniqueConfirmation: original.strokeIntent.confirmation,
+          captureEnvelope: original.captureEnvelope,
+        },
+        providers,
+        observationHash,
+      )
+  ) {
+    throw new TechniqueConfirmationHeldError(
+      'This saved capture or its original analysis settings changed. No new rating was started.',
+    );
+  }
+  const originalRun = loaded.journal;
+  if (originalRun.state === 'release_pending') {
+    const originalScope = runJournal.scope(originalRun);
+    const permits = permitPort(originalScope);
+    const guardedDb: LocalDb = {
+      async execute(sql, params) {
+        assertExecution(request, owner);
+        const result = await request.db.execute(sql, params);
+        assertExecution(request, owner);
+        return result;
+      },
+      close() {
+        throw new Error('A confirmation cannot close its database.');
+      },
+    };
+    await recoverAnalysisJournals(
+      guardedDb,
+      originalScope,
+      {
+        ...originalScope,
+        async reserve() {
+          throw new TechniqueConfirmationHeldError(
+            'The original permit must remain bound.',
+          );
+        },
+        async release(permitId, outcome) {
+          assertExecution(request, owner);
+          if (permitId !== originalRun.permitId || outcome !== 'low_confidence')
+            throw new TechniqueConfirmationHeldError(
+              'The original permit changed.',
+            );
+          await permits.release(permitId, outcome);
+          assertExecution(request, owner);
+        },
+      },
+      { operationId: originalRun.operationId, limit: 1 },
+    ).catch(() => {});
+    assertExecution(request, owner);
+    loaded = await load();
+    assertExecution(request, owner);
+  }
+  if (
+    loaded.kind !== 'ready' ||
+    loaded.journal.state !== 'released' ||
+    !sameConfirmationJournalIdentity(loaded.journal, originalRun) ||
+    confirmationRecordHash(loaded.saved.record) !==
+      confirmationRecordHash(original)
+  ) {
+    throw new TechniqueConfirmationHeldError(
+      'The original rating hold or immutable confirmation is still awaiting verification. Your clip is saved; no second rating has been started.',
+    );
+  }
+  const session = getApiSession();
+  const currentScope = session
+    ? runJournal.scope({
+        ownerKey: session.canonicalAppUserId,
+        apiOrigin: session.apiBaseUrl,
+      })
+    : null;
+  if (
+    currentScope?.ownerKey !== scope.ownerKey ||
+    currentScope.apiOrigin !== scope.apiOrigin
+  ) {
+    throw new TechniqueConfirmationHeldError(
+      'Reconnect the original account and rating service to confirm this saved capture.',
+    );
+  }
+  const originalStrokeIntent = { ...original.strokeIntent };
+  delete originalStrokeIntent.confirmation;
+  return {
+    evidence: {
+      ...confirmation,
+      intent: { ...confirmation.intent },
+      originalStrokeIntent,
+    },
+    original,
+    journal: loaded.journal,
+  };
+}
+
 async function runCaptureAnalysisCore(
   request: RunCaptureAnalysisRequest,
-): Promise<CaptureAnalysisOutcome> {
+  original?: PreparedOriginalAttempt,
+): Promise<RunCaptureAnalysisOutcome> {
   const { clip } = request;
+  const journal = original ? analysisAttemptJournal : runJournal;
+  const ownerContext = request.ownerContext ?? captureDataOwnerContext();
+  const assertCurrent = () => {
+    assertExecution(request, ownerContext);
+    original?.execution.assertCurrent();
+  };
+  if (!isDataOwnerContextCurrent(ownerContext)) return accountChangedOutcome();
+  if (request.signal?.aborted) return cancelledOutcome();
+  original?.execution.assertCurrent();
+  let continuationOperationId: string | undefined;
+  if (request.techniqueConfirmation) {
+    try {
+      assertCurrent();
+      if (
+        !isSavedCaptureId(request.captureId) ||
+        !isSavedCaptureId(request.techniqueConfirmation.analysisId)
+      )
+        return recoveryPendingOutcome();
+      const scope = runJournal.scope({
+        ownerKey: ownerContext.ownerKey,
+        apiOrigin: request.apiConfig.baseUrl,
+      });
+      continuationOperationId = confirmationContinuationOperationId(
+        scope.ownerKey,
+        request.captureId,
+        request.techniqueConfirmation.analysisId,
+      );
+      if (
+        request.operationId !== undefined &&
+        request.operationId !== continuationOperationId
+      )
+        return recoveryPendingOutcome();
+      if (
+        runJournal.activeOperationIds(scope).includes(continuationOperationId)
+      )
+        return recoveryPendingOutcome();
+      const existing = await runJournal.read(request.db, {
+        ...scope,
+        operationId: continuationOperationId,
+      });
+      assertCurrent();
+      if (existing) {
+        if (
+          existing.captureId !== request.captureId ||
+          runJournal.activeOperationIds(scope).includes(continuationOperationId)
+        )
+          return recoveryPendingOutcome();
+        // Completion is authoritative even when a stale screen now chooses
+        // another technique or the original media/model is unavailable. The
+        // stored request hash is validated against its immutable record, not
+        // against a request that will never be executed. Uncertain work holds.
+        if (
+          existing.state !== 'committed' &&
+          existing.releaseOutcome !== 'low_confidence'
+        )
+          return recoveryPendingOutcome();
+        return await readJournalOutcome(request, ownerContext, existing);
+      }
+    } catch {
+      if (!isDataOwnerContextCurrent(ownerContext))
+        return accountChangedOutcome();
+      if (request.signal?.aborted) return cancelledOutcome();
+      return recoveryPendingOutcome();
+    }
+  }
   // ── Capture-envelope gate: UNSUPPORTED input never enters inference ────
   const envelope = request.captureEnvelope ?? null;
   if (envelope && envelope.overall === 'UNSUPPORTED') {
@@ -220,11 +1173,35 @@ async function runCaptureAnalysisCore(
   try {
     sidecarJson = await readCaptureArtifact(poseSequence.uri);
   } catch {
+    if (original) {
+      const outcome =
+        request.signal?.aborted || !isDataOwnerContextCurrent(ownerContext)
+          ? 'cancelled'
+          : 'failed';
+      await originalAnalysisOperations.requestRelease(
+        request.db,
+        original.run,
+        outcome,
+        outcome === 'failed' ? 'inference_technical' : null,
+      );
+      original.releaseAdmissionGuard();
+      await journal.recover(
+        request.db,
+        original.execution.scope,
+        permitPort(original.execution.scope),
+        { operationId: original.run.operationId, limit: 1 },
+      );
+    }
+    if (!isDataOwnerContextCurrent(ownerContext))
+      return accountChangedOutcome();
+    if (request.signal?.aborted) return cancelledOutcome();
     return {
       kind: 'unavailable',
       reason: 'The recorded pose sequence for this capture could not be read.',
     };
   }
+  if (!isDataOwnerContextCurrent(ownerContext)) return accountChangedOutcome();
+  if (request.signal?.aborted) return cancelledOutcome();
   // Integrity: the sidecar must be byte-identical to what capture recorded.
   if (sha256Hex(sidecarJson) !== poseSequence.sha256) {
     return {
@@ -247,140 +1224,472 @@ async function runCaptureAnalysisCore(
     };
   }
 
+  if (
+    parsed.value.frames.length !== poseSequence.frameCount ||
+    parsed.value.producedBy.modelVersion !== poseSequence.poseModelVersion ||
+    parsed.value.video.width !== clip.width ||
+    parsed.value.video.height !== clip.height ||
+    parsed.value.video.fps !== clip.fps
+  ) {
+    return {
+      kind: 'unavailable',
+      reason:
+        'The recorded pose sequence does not match this capture’s saved metadata. It will not be repaired or rated.',
+    };
+  }
+
   const fusion = createFusionProviders(request.declaredStroke);
   if (fusion.kind === 'unavailable') {
     return { kind: 'unavailable', reason: fusion.reason };
   }
 
   // ── Entitlement: reserve before inference (spec: permits) ─────────────
-  const permits = createAnalysisPermitClient(request.apiConfig);
-  let permitId: string;
-  let freeLimitReached = false;
+  const scope = runJournal.scope({
+    ownerKey: ownerContext.ownerKey,
+    apiOrigin: request.apiConfig.baseUrl,
+  });
+  const observationHash = sha256Hex(sidecarJson);
+  if (
+    original &&
+    (analysisModelPolicyHash(fusion.providers) !==
+      original.operation.modelPolicyHash ||
+      observationHash !== original.operation.observation?.observationHash)
+  )
+    return recoveryPendingOutcome();
+  const requestHash =
+    original?.run.requestHash ??
+    analysisDefinitionHash(request, fusion.providers, observationHash);
+  const operationId =
+    original?.run.operationId ??
+    continuationOperationId ??
+    request.operationId ??
+    defaultOperationId(scope, request.captureId, requestHash);
+  const reference = { ...scope, operationId };
+  let finishExecution: () => void;
   try {
-    const reserved = await permits.reserve(makeUuid());
-    permitId = reserved.permit.id;
+    finishExecution = journal.startExecution(reference);
+    original?.releaseAdmissionGuard();
+  } catch (error) {
+    if (error instanceof RunJournalError && error.code === 'execution_active')
+      return recoveryPendingOutcome();
+    throw error;
+  }
+  const permits = permitPort(scope);
+  let run: RunJournalIdentity | null = null;
+  let freeLimitReached = false;
+  let technicalFailure: AnalysisTechnicalFailure | null = null;
+  let phase: 'preflight' | 'inference' | 'commit' = 'preflight';
+  const cleanup = async (outcome: RunJournalReleaseOutcome) => {
+    if (!run) return;
+    if (original)
+      await originalAnalysisOperations.requestRelease(
+        request.db,
+        run,
+        outcome,
+        outcome === 'failed' ? technicalFailure : null,
+      );
+    else await journal.requestRelease(request.db, run, outcome);
+    finishExecution();
+    await journal.recover(request.db, scope, permits, {
+      operationId: run.operationId,
+      limit: 1,
+    });
+  };
+
+  try {
+    const existing = await journal.read(request.db, reference);
+    assertCurrent();
+    if (original) {
+      await originalAnalysisOperations.assertCurrentAttempt(
+        request.db,
+        original.execution,
+        original.operation.operationId,
+        original.run,
+      );
+      if (existing?.state !== 'reserve_pending')
+        return recoveryPendingOutcome();
+    }
+    if (request.techniqueConfirmation && existing) {
+      if (
+        existing.captureId !== request.captureId ||
+        (existing.state !== 'committed' &&
+          existing.releaseOutcome !== 'low_confidence')
+      )
+        return recoveryPendingOutcome();
+      return await readJournalOutcome(request, ownerContext, existing);
+    }
+    let admission: TechniqueConfirmationAdmission | undefined;
+    try {
+      admission = await readTechniqueConfirmationEvidence(
+        request,
+        ownerContext,
+        scope,
+        observationHash,
+        fusion.providers,
+      );
+      assertCurrent();
+    } catch (error) {
+      if (!isDataOwnerContextCurrent(ownerContext))
+        return accountChangedOutcome();
+      if (request.signal?.aborted) return cancelledOutcome();
+      return {
+        ...recoveryPendingOutcome(),
+        reason:
+          error instanceof TechniqueConfirmationHeldError
+            ? error.message
+            : 'This saved confirmation could not be verified. Its existing operation is held without starting another rating.',
+      };
+    }
+    const techniqueConfirmation = admission?.evidence;
+    const inputSelection = inputSelectionSnapshot(
+      request,
+      ownerContext,
+      scope,
+      fusion.providers,
+      requestHash,
+    );
+    if (!inputSelection)
+      return {
+        ...recoveryPendingOutcome(),
+        reason:
+          'The original capture selection could not be recorded faithfully. Your clip remains saved.',
+      };
+    run = original?.run ?? {
+      ...reference,
+      ownerGeneration: existing?.ownerGeneration ?? ownerContext.generation,
+      captureId: request.captureId,
+      analysisId: existing?.analysisId ?? makeUuid(),
+      reservationKey: existing?.reservationKey ?? makeUuid(),
+      requestHash,
+    };
+    const identity = run;
+    const begun = original
+      ? { created: true, run: original.run }
+      : admission
+        ? await withTransaction(request.db, async rawTransaction => {
+            const fresh = await loadSavedTechniqueConfirmation({
+              db: rawTransaction,
+              ownerContext,
+              captureId: request.captureId,
+              apiOrigin: scope.apiOrigin,
+              originalAnalysisId: admission.original.id,
+              signal: request.signal,
+              assertCurrent: () => assertExecution(request, ownerContext),
+            });
+            assertCurrent();
+            if (
+              fresh.kind !== 'ready' ||
+              !sameConfirmationJournalIdentity(
+                fresh.journal,
+                admission.journal,
+              ) ||
+              confirmationRecordHash(fresh.saved.record) !==
+                confirmationRecordHash(admission.original) ||
+              !confirmationInputsMatch(
+                fresh.saved.record.inputSelection,
+                clip,
+                request.targetSeed,
+              )
+            ) {
+              throw new TechniqueConfirmationHeldError(
+                'The saved confirmation changed before continuation.',
+              );
+            }
+            const begun = await runJournal.begin(rawTransaction, identity);
+            // The owner/service can change while SQLite acknowledges INSERT. Do
+            // not commit a continuation that has already lost its admission.
+            assertCurrent();
+            return begun;
+          })
+        : await runJournal.begin(request.db, identity);
+    run = begun.run;
+    assertCurrent();
+    if (!begun.created)
+      return await readJournalOutcome(request, ownerContext, begun.run);
+    let reserved;
+    try {
+      reserved = await permits.reserve(run.reservationKey);
+    } catch (error) {
+      if (original) {
+        technicalFailure =
+          error instanceof TypeError ||
+          (error instanceof ApiError &&
+            (error.status === 408 ||
+              error.status === 429 ||
+              error.status >= 500))
+            ? 'reservation_transport'
+            : null;
+        await originalAnalysisOperations
+          .requestRelease(request.db, run, 'failed', technicalFailure)
+          .catch(() => {});
+      }
+      await journal.reservationFailed(request.db, run, error).catch(() => {});
+      if (!isDataOwnerContextCurrent(ownerContext))
+        return accountChangedOutcome();
+      if (request.signal?.aborted) return cancelledOutcome();
+      if (error instanceof ApiError && isPaywallRequired(error)) {
+        return {
+          kind: 'unavailable',
+          reason: error.message,
+          cause: 'paywall_required',
+        };
+      }
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'The rating service could not be reached. Your capture is saved and can be scored later.';
+      return { kind: 'unavailable', reason: message };
+    }
+    const saved = await journal.reserved(request.db, run, reserved.permit.id);
+    assertCurrent();
+    if (saved?.state !== 'reserved' || saved.permitId === null)
+      return recoveryPendingOutcome();
+    const permitId = saved.permitId;
     freeLimitReached =
       reserved.permit.accessSource === 'free' &&
       reserved.access !== null &&
       !reserved.access.premium &&
       reserved.access.freeRatings.availableToReserve === 0;
-  } catch (error) {
-    if (error instanceof ApiError && isPaywallRequired(error)) {
-      return {
-        kind: 'unavailable',
-        reason: error.message,
-        cause: 'paywall_required',
-      };
+    assertCurrent();
+    // Imported clips carry no measured trigger: the analysis window is
+    // honestly the whole clip, and the provenance says exactly that instead
+    // of impersonating the live temporal-motion detector. Phase segmentation
+    // still finds (or honestly fails to find) the stroke inside that window.
+    const trigger =
+      clip.captureMode === 'automatic_pose_trigger'
+        ? {
+            startMs: clip.trigger.startMs,
+            endMs: clip.trigger.endMs,
+            peakMotionMs: clip.trigger.peakMotionMs ?? null,
+            confidence: clip.trigger.confidence,
+            producedBy: {
+              providerId: 'trigger.temporal-heuristic',
+              modelVersion: clip.trigger.modelVersion,
+              runtime: 'deterministic' as const,
+              executionTarget: 'on_device' as const,
+              artifactHash: null,
+            },
+          }
+        : {
+            startMs: 0,
+            endMs: clip.durationMs,
+            peakMotionMs: null,
+            confidence: 1,
+            producedBy: {
+              providerId: 'trigger.imported-full-clip',
+              modelVersion: 'imported-full-clip-1',
+              runtime: 'deterministic' as const,
+              executionTarget: 'on_device' as const,
+              artifactHash: null,
+            },
+          };
+
+    const analysisId = run.analysisId;
+    phase = 'inference';
+    const result = await analyzeCapture(
+      fusion.providers,
+      {
+        captureId: request.captureId,
+        pose: parsed.value,
+        paddle: unavailable('paddle_detector_not_installed'),
+        ball: unavailable('ball_tracker_not_installed'),
+        trigger,
+        // declared may be null (AUTO DETECT); predicted is filled downstream
+        // by the classifier providers, never here.
+        stroke: { declared: request.declaredStroke, predicted: null },
+        declaredCanonical: request.declaredCanonical ?? null,
+        ...(techniqueConfirmation ? { techniqueConfirmation } : {}),
+        handedness: request.handedness,
+        cameraView: request.cameraView,
+        capturedAtIso: clip.capturedAtIso,
+      },
+      {
+        analysisId,
+        sessionId: request.sessionId ?? null,
+        appVersion: request.appVersion,
+        modelBundleVersion: MODEL_BUNDLE_VERSION,
+        nowIso: () => new Date().toISOString(),
+        makeId: makeUuid,
+        captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
+        ...(request.focusCheckpoint
+          ? { focusCheckpoint: request.focusCheckpoint }
+          : {}),
+      },
+    );
+    assertCurrent();
+    if (
+      original &&
+      analysisModelPolicyHash(fusion.providers) !==
+        original.operation.modelPolicyHash
+    )
+      throw new OriginalAnalysisHeldError('model_policy_changed');
+
+    if (!result.ok) {
+      if (
+        original &&
+        (['retryable', 'timeout', 'network'].includes(result.failure.kind) ||
+          result.failure.code.endsWith('.provider_crash'))
+      )
+        technicalFailure = 'inference_technical';
+      await cleanup('failed').catch(() => {
+        // The permit expires server-side; a lost release is not a lost rating.
+      });
+      assertCurrent();
+      return { kind: 'unavailable', reason: result.failure.message };
     }
-    const message =
-      error instanceof ApiError
-        ? error.message
-        : 'The rating service could not be reached. Your capture is saved and can be scored later.';
-    return { kind: 'unavailable', reason: message };
-  }
+    // Attach the measured envelope so downstream Result can explain
+    // quality-related abstentions (additive; old records simply lack it).
+    const record: CaptureAnalysisRecord = {
+      ...result.value,
+      captureEnvelope: envelope,
+      observationHash,
+      inputSelection,
+    };
 
-  // Imported clips carry no measured trigger: the analysis window is
-  // honestly the whole clip, and the provenance says exactly that instead
-  // of impersonating the live temporal-motion detector. Phase segmentation
-  // still finds (or honestly fails to find) the stroke inside that window.
-  const trigger =
-    clip.captureMode === 'automatic_pose_trigger'
-      ? {
-          startMs: clip.trigger.startMs,
-          endMs: clip.trigger.endMs,
-          peakMotionMs: clip.trigger.peakMotionMs ?? null,
-          confidence: clip.trigger.confidence,
-          producedBy: {
-            providerId: 'trigger.temporal-heuristic',
-            modelVersion: clip.trigger.modelVersion,
-            runtime: 'deterministic' as const,
-            executionTarget: 'on_device' as const,
-            artifactHash: null,
-          },
+    if (
+      record.id !== run.analysisId ||
+      record.captureId !== run.captureId ||
+      (record.result !== null && record.result.id !== run.analysisId)
+    ) {
+      throw new RunJournalError('identity_conflict');
+    }
+    const journalRun = run;
+    // Every run is durably recorded, scored or not — reprocessing history.
+    phase = 'commit';
+    if (original) {
+      await originalAnalysisOperations.commit(
+        request.db,
+        original.execution,
+        original.operation.operationId,
+        journalRun,
+        record,
+      );
+    } else
+      await withTransaction(request.db, async rawTransaction => {
+        const db = forDataOwner(rawTransaction, ownerContext);
+        await saveAnalysisRecord(db, record);
+        assertCurrent();
+        if (record.kind !== 'needs_technique_confirmation') {
+          await markCaptureAnalyzed(db, request.captureId);
+          assertCurrent();
         }
-      : {
-          startMs: 0,
-          endMs: clip.durationMs,
-          peakMotionMs: null,
-          confidence: 1,
-          producedBy: {
-            providerId: 'trigger.imported-full-clip',
-            modelVersion: 'imported-full-clip-1',
-            runtime: 'deterministic' as const,
-            executionTarget: 'on_device' as const,
-            artifactHash: null,
-          },
-        };
+        if (record.result?.resultKind === 'scored') {
+          if (request.practiceSet) {
+            if (request.practiceSet.sessionId !== record.result.sessionId) {
+              throw new Error('The practice set does not match this analysis.');
+            }
+            await commitPracticeSet(db, request.practiceSet);
+            assertCurrent();
+          }
+          // Promote to the product rating; the sync transaction consumes the permit.
+          await saveAnalysis(db, record.result, permitId);
+          assertCurrent();
+          await runJournal.commit(rawTransaction, journalRun, record.result.id);
+        } else {
+          if (record.result) {
+            // Local display only — abstentions are never synced as ratings.
+            await saveLocalOnlyAnalysis(db, record.result);
+            assertCurrent();
+          }
+          await runJournal.requestRelease(
+            rawTransaction,
+            journalRun,
+            'low_confidence',
+          );
+        }
+        assertCurrent();
+      });
+    assertCurrent();
 
-  const analysisId = makeUuid();
-  const result = await analyzeCapture(
-    fusion.providers,
-    {
-      captureId: request.captureId,
-      pose: parsed.value,
-      paddle: unavailable('paddle_detector_not_installed'),
-      ball: unavailable('ball_tracker_not_installed'),
-      trigger,
-      // declared may be null (AUTO DETECT); predicted is filled downstream
-      // by the classifier providers, never here.
-      stroke: { declared: request.declaredStroke, predicted: null },
-      declaredCanonical: request.declaredCanonical ?? null,
-      handedness: request.handedness,
-      cameraView: request.cameraView,
-      capturedAtIso: clip.capturedAtIso,
-    },
-    {
-      analysisId,
-      sessionId: request.sessionId ?? null,
-      appVersion: request.appVersion,
-      modelBundleVersion: 'on-device-fusion-1',
-      nowIso: () => new Date().toISOString(),
-      makeId: makeUuid,
-      captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
-      ...(request.focusCheckpoint
-        ? { focusCheckpoint: request.focusCheckpoint }
-        : {}),
-    },
-  );
+    if (record.result?.resultKind === 'scored') {
+      return { kind: 'scored', analysisId, record, freeLimitReached };
+    }
 
-  if (!result.ok) {
-    await permits.release(permitId, 'failed').catch(() => {
-      // The permit expires server-side; a lost release is not a lost rating.
+    // Permit accounting: EVERY non-scored outcome releases the reservation.
+    // This branch also carries the AUTO DETECT abstained partial records — an
+    // abstained run has result:null and must never burn the user's rating
+    // allowance.
+    await cleanup('low_confidence').catch(() => {
+      // Server-side expiry covers a lost release.
     });
-    return { kind: 'unavailable', reason: result.failure.message };
+    assertCurrent();
+    if (record.kind === 'needs_technique_confirmation') {
+      return { kind: 'needs_technique_confirmation', analysisId, record };
+    }
+    return {
+      kind: 'low_confidence',
+      analysisId,
+      record,
+      guidance: record.result?.guidance ?? null,
+    };
+  } catch (error) {
+    let ownerChanged =
+      error instanceof DataOwnerChangedError ||
+      !isDataOwnerContextCurrent(ownerContext);
+    let cancelled =
+      error instanceof AnalysisRunCancelledError || request.signal?.aborted;
+    if (!run) {
+      if (ownerChanged) return accountChangedOutcome();
+      if (cancelled) return cancelledOutcome();
+      if (error instanceof TechniqueConfirmationHeldError)
+        return { ...recoveryPendingOutcome(), reason: error.message };
+      throw error;
+    }
+    if (original && !ownerChanged && !cancelled) {
+      try {
+        const completed = await originalCompletionOutcome(
+          request.db,
+          original.execution,
+          original.operation.operationId,
+          false,
+          freeLimitReached,
+        );
+        if (completed) return completed;
+      } catch {
+        return recoveryPendingOutcome();
+      }
+    }
+    const durable = await journal.readCommitStatus(request.db, run);
+    ownerChanged ||= !isDataOwnerContextCurrent(ownerContext);
+    cancelled ||= request.signal?.aborted;
+    if (durable.kind === 'committed') {
+      if (ownerChanged) return accountChangedOutcome();
+      if (cancelled) return recoveryPendingOutcome();
+      return await readJournalOutcome(
+        request,
+        ownerContext,
+        durable.run,
+        false,
+        freeLimitReached,
+      ).catch(() => recoveryPendingOutcome());
+    }
+    if (durable.kind === 'not_committed') {
+      if (
+        original &&
+        phase === 'commit' &&
+        !ownerChanged &&
+        !cancelled &&
+        !(error instanceof RunJournalError) &&
+        !(error instanceof OriginalAnalysisHeldError) &&
+        error instanceof Error &&
+        !/constraint|foreign.key|missing|no.row/i.test(error.message)
+      )
+        technicalFailure = 'local_commit';
+      await cleanup(ownerChanged || cancelled ? 'cancelled' : 'failed').catch(
+        () => {},
+      );
+      if (ownerChanged || !isDataOwnerContextCurrent(ownerContext))
+        return accountChangedOutcome();
+      if (cancelled || request.signal?.aborted) return cancelledOutcome();
+      if (error instanceof TechniqueConfirmationHeldError)
+        return { ...recoveryPendingOutcome(), reason: error.message };
+      throw error;
+    }
+    if (ownerChanged) return accountChangedOutcome();
+    if (error instanceof RunJournalError && error.code === 'identity_conflict')
+      throw error;
+    return recoveryPendingOutcome();
+  } finally {
+    finishExecution();
   }
-  // Attach the measured envelope so downstream Result can explain
-  // quality-related abstentions (additive; old records simply lack it).
-  const record: CaptureAnalysisRecord = {
-    ...result.value,
-    captureEnvelope: envelope,
-  };
-
-  // Every run is durably recorded, scored or not — reprocessing history.
-  await saveAnalysisRecord(request.db, record);
-  await markCaptureAnalyzed(request.db, request.captureId);
-
-  if (record.result && record.result.resultKind === 'scored') {
-    // Promote to the product rating; the sync transaction consumes the permit.
-    await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record, freeLimitReached };
-  }
-
-  // Permit accounting: EVERY non-scored outcome releases the reservation.
-  // This branch also carries the AUTO DETECT abstained partial records — an
-  // abstained run has result:null and must never burn the user's rating
-  // allowance.
-  await permits.release(permitId, 'low_confidence').catch(() => {
-    // Server-side expiry covers a lost release.
-  });
-  if (record.result) {
-    // Local display only — abstentions are never synced as ratings.
-    await saveLocalOnlyAnalysis(request.db, record.result);
-  }
-  return {
-    kind: 'low_confidence',
-    analysisId,
-    record,
-    guidance: record.result?.guidance ?? null,
-  };
 }

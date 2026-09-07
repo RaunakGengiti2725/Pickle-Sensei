@@ -260,6 +260,7 @@ afterEach(() => {
 describe('consent toggle → consentStore (typed failure, no optimistic state)', () => {
   beforeEach(() => {
     resetConsentStore();
+    setActiveDataOwner(session.canonicalAppUserId);
     establishApiSession(session);
   });
 
@@ -309,6 +310,7 @@ describe('consent toggle → consentStore (typed failure, no optimistic state)',
     expect(useConsentStore.getState().availability).toBe('loading');
 
     // User signs out (SettingsScreen re-hydrates on session change).
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
     await useConsentStore.getState().hydrate();
     expect(useConsentStore.getState().availability).toBe('signed_out');
@@ -376,6 +378,7 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
       'local_session',
       'local_capture',
       'local_analysis_record',
+      'analysis_run_journal',
       'outbox',
       'sync_receipt',
     ]) {
@@ -383,10 +386,10 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
         expect.stringContaining(`DELETE FROM ${table}`),
       );
     }
-    // profile, rank.celebrated, notifications, consistency, practice.set
-    // (repository.ts OWNER_SCOPED_KV_NAMESPACES).
+    // profile, rank.celebrated, notifications, consistency, practice.set,
+    // billing.pending-fulfilment (repository.ts OWNER_SCOPED_KV_NAMESPACES).
     expect(inTx.filter(sql => sql.startsWith('DELETE FROM kv'))).toHaveLength(
-      5,
+      6,
     );
     expect(log.includes('ROLLBACK')).toBe(false);
     expect(useAuthStore.getState().deletionCleanup).toEqual({
@@ -418,8 +421,17 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
     // alerts on `localPurge === 'failed'`.
     const { db } = fakeDb();
     let attempts = 0;
+    const authKv = new Map<string, string>();
     const failing: LocalDb = {
-      async execute(sql, params) {
+      async execute(sql, params = []) {
+        if (sql.startsWith('SELECT value FROM kv')) {
+          const value = authKv.get(String(params[0]));
+          return { rows: value === undefined ? [] : [{ value }] };
+        }
+        if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+          authKv.set(String(params[0]), String(params[1]));
+          return { rows: [] };
+        }
         if (sql === 'BEGIN IMMEDIATE') {
           attempts += 1;
           throw new Error('database is locked');

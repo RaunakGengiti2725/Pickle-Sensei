@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -24,6 +24,12 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { useAppStore } from '../state/appStore';
 import { getDb } from '../data/db';
+import {
+  captureDataOwnerContext,
+  getActiveDataOwner,
+  isDataOwnerContextCurrent,
+  SIGNED_OUT_DATA_OWNER,
+} from '../data/accountScope';
 import {
   getKv,
   listRealAnalysisFacts,
@@ -92,6 +98,12 @@ export function HomeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const rankBannerTarget = useWalkthroughTarget('rank-banner');
   const profile = useAppStore(s => s.profile);
+  const ownerKey = useAppStore(s => s.ownerKey);
+  const activeOwner = getActiveDataOwner();
+  const ownerGeneration =
+    activeOwner === SIGNED_OUT_DATA_OWNER
+      ? null
+      : captureDataOwnerContext().generation;
   const consistency = useConsistencyStore(s => s.snapshot);
   const refreshConsistency = useConsistencyStore(s => s.refresh);
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
@@ -104,10 +116,26 @@ export function HomeScreen() {
     useState<CanonicalProgress | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadedOwner, setLoadedOwner] = useState<{
+    ownerKey: string;
+    generation: number | null;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const focused = useRef(false);
+  const loadRevision = useRef(0);
   const timeZone = useMemo(deviceTimeZone, []);
 
   const load = useCallback(async () => {
+    if (!focused.current) return;
+    const revision = ++loadRevision.current;
+    const owner = getActiveDataOwner();
+    const context =
+      owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+    const isCurrent = () =>
+      focused.current &&
+      loadRevision.current === revision &&
+      getActiveDataOwner() === owner &&
+      (context === null || isDataOwnerContextCurrent(context));
     try {
       const db = getDb();
       // The week card reads the SAME real analyses the Progress dashboard
@@ -119,6 +147,7 @@ export function HomeScreen() {
         listRealAnalysisFacts(db),
         getKv(db, WEEK_CHART_KV_KEY).catch(() => null),
       ]);
+      if (!isCurrent()) return;
       setRecent(shots.slice(0, 5));
       setAllShots(shots);
       setLatestScored(
@@ -129,32 +158,48 @@ export function HomeScreen() {
       setFacts(analysisFacts);
       setAsOfIso(new Date().toISOString());
       setWeekChart(parseWeekChart(storedChart));
-      const apiSession = getApiSession();
-      if (apiSession) {
-        try {
-          const progress = await fetchCanonicalProgress(apiSession);
-          setCanonicalProgress(progress);
-        } catch {
-          setCanonicalProgress(null);
-        }
-      } else {
-        setCanonicalProgress(null);
-      }
+      setCanonicalProgress(null);
       setLoadError(null);
+      // Canonical totals enrich local history; they never hold the first
+      // paint or refresh spinner hostage to connectivity. Every continuation
+      // belongs to this focus, owner, and latest load (including retries).
+      const apiSession = getApiSession();
+      if (apiSession?.canonicalAppUserId === owner) {
+        void fetchCanonicalProgress(apiSession)
+          .then(progress => {
+            if (isCurrent()) setCanonicalProgress(progress);
+          })
+          .catch(() => {
+            if (isCurrent()) setCanonicalProgress(null);
+          });
+      }
     } catch {
+      if (!isCurrent()) return;
       setLoadError(
         'Your saved reads could not be opened. Try again to load your real court history.',
       );
     } finally {
-      setLoaded(true);
+      if (isCurrent()) {
+        setLoadedOwner({
+          ownerKey: owner,
+          generation: context?.generation ?? null,
+        });
+        setLoaded(true);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
       void load();
       void refreshConsistency();
-    }, [load, refreshConsistency]),
+      return () => {
+        focused.current = false;
+        loadRevision.current += 1;
+      };
+    }, [activeOwner, load, ownerGeneration, ownerKey, refreshConsistency]),
   );
 
   const selectWeekChart = useCallback((next: WeekChart) => {
@@ -200,7 +245,13 @@ export function HomeScreen() {
     ? profile.focusCheckpoint.replace(/_/g, ' ')
     : null;
 
-  if (!loaded) return <LoadingState label="Loading your court…" />;
+  if (
+    !loaded ||
+    loadedOwner?.ownerKey !== activeOwner ||
+    loadedOwner.generation !== ownerGeneration
+  ) {
+    return <LoadingState label="Loading your court…" />;
+  }
 
   if (loadError) {
     return (
@@ -217,7 +268,7 @@ export function HomeScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.screen}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
       <ScrollView
         contentContainerStyle={styles.content}
@@ -228,15 +279,16 @@ export function HomeScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void load().finally(() => setRefreshing(false));
+              void load();
             }}
           />
         }
       >
-        <View style={styles.topBar}>
+        <View style={styles.topBar} testID="home-top-bar">
           <BrandMark />
-          <View style={styles.topBadges}>
+          <View style={styles.topBadges} testID="home-top-badges">
             <Pill
+              multiline
               label={
                 profile?.skillLevel
                   ? `SELF · ${profile.skillLevel}`
@@ -252,6 +304,7 @@ export function HomeScreen() {
               )} training streak. Opens the consistency calendar.`}
               onPress={() => navigation.navigate('StreakCalendar')}
               hitSlop={6}
+              containerStyle={styles.streakBadgeSlot}
               style={styles.streakBadge}
               testID="home-streak-badge"
             >
@@ -666,14 +719,25 @@ const styles = StyleSheet.create({
   },
   topBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
   },
-  topBadges: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  topBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 7,
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  streakBadgeSlot: { maxWidth: '100%', flexShrink: 1, alignSelf: 'center' },
   streakBadge: {
-    height: 32,
+    minHeight: 32,
     minWidth: 48,
     paddingHorizontal: 9,
+    paddingVertical: space.xs,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
@@ -683,7 +747,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  streakValue: { color: color.ink, fontVariant: ['tabular-nums'] },
+  streakValue: {
+    color: color.ink,
+    fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+    minWidth: 0,
+  },
   welcome: { color: color.ink, marginTop: space.xl, marginBottom: space.lg },
   practiceCard: {
     marginTop: space.md,

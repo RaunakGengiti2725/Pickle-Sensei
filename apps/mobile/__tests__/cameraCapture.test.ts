@@ -1,5 +1,32 @@
+jest.mock('react-native', () => {
+  const bridge = {
+    capture: jest.fn(),
+    importVideo: jest.fn(),
+    cancel: jest.fn(),
+    addListener: jest.fn(),
+    removeListeners: jest.fn(),
+  };
+  return {
+    Platform: { OS: 'ios' },
+    NativeModules: { PickleVideoCapture: bridge },
+    NativeEventEmitter: class {
+      addListener() {
+        return { remove: () => {} };
+      }
+    },
+    __simulatedBridge: bridge,
+  };
+});
+
+const { __simulatedBridge: mockBridge } = jest.requireMock('react-native') as {
+  __simulatedBridge: Record<string, jest.Mock | undefined>;
+};
+
 import {
   assertCapturedClip,
+  cancelCameraOperation,
+  captureStrokeVideo,
+  importStrokeVideo,
   CAPTURE_COMPLETION_PARAMS_V1,
   MAX_BALL_SPEED_REPROJECTION_ERROR_PX,
   setCaptureCompletionStrategy,
@@ -71,6 +98,291 @@ const automaticClip = {
   preRollMs: 2000,
   postRollMs: 1500,
 };
+
+function deferredCapture() {
+  let resolve!: (value: unknown) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<unknown>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushCaptureCompletion() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe('guided camera operation lifecycle', () => {
+  beforeEach(() => {
+    mockBridge.capture = jest.fn();
+    mockBridge.importVideo = jest.fn();
+    mockBridge.cancel = jest.fn();
+  });
+
+  it('keeps no-argument capture calls valid and native capture argument-free', async () => {
+    mockBridge.capture!.mockResolvedValue(automaticClip);
+    await expect(captureStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'automatic_pose_trigger',
+      captureEvidence,
+    });
+    expect(mockBridge.capture).toHaveBeenCalledWith();
+  });
+
+  it('preserves optional native-export byte expectation without treating metadata as a byte read', async () => {
+    const nativeMediaIdentity = {
+      schemaVersion: 1,
+      format: 'pickle.native-media-identity.v1',
+      receiptId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      videoFileName: 'clip.mov',
+      origin: 'native_export',
+      algorithm: 'sha256',
+      sha256: 'a'.repeat(64),
+      byteSize: 128,
+    };
+    const receipt = { ...automaticClip, byteSize: 128, nativeMediaIdentity };
+    mockBridge.capture!.mockResolvedValue(receipt);
+    const captured = await captureStrokeVideo();
+    expect(captured.nativeMediaIdentity).toEqual(nativeMediaIdentity);
+    expect(assertCapturedClip(JSON.parse(JSON.stringify(captured)))).toEqual(
+      receipt,
+    );
+    expect(captured).not.toHaveProperty('verifiedCurrentBytes');
+  });
+
+  it('keeps unscoped no-argument cancellation compatible with a guided capture', async () => {
+    const nativeResult = deferredCapture();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const run = captureStrokeVideo();
+    void run.catch(() => {});
+    cancelCameraOperation();
+    nativeResult.resolve(automaticClip);
+    await flushCaptureCompletion();
+    await expect(run).rejects.toMatchObject({
+      code: 'camera.cancelled',
+      message: 'Camera operation was canceled.',
+    });
+    expect(mockBridge.capture).toHaveBeenCalledWith();
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    expect(mockBridge.cancel).toHaveBeenCalledWith();
+  });
+
+  it('does not start or cancel native work for an already-aborted guided attempt', async () => {
+    mockBridge.capture!.mockResolvedValue(automaticClip);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      captureStrokeVideo({ signal: controller.signal }),
+    ).rejects.toMatchObject({
+      code: 'camera.cancelled',
+      message: 'Camera operation was canceled.',
+    });
+    expect(mockBridge.capture).not.toHaveBeenCalled();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+  });
+
+  it.each(['', '../escape', 'x'.repeat(129), 'run\n'])(
+    'rejects invalid guided operation id %s before native work',
+    async operationId => {
+      mockBridge.capture!.mockResolvedValue(automaticClip);
+      await expect(captureStrokeVideo({ operationId })).rejects.toThrow(
+        /operation id/i,
+      );
+      expect(mockBridge.capture).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['success', 'failure'])(
+    'aborts guided capture promptly and ignores late native %s',
+    async settlement => {
+      const nativeResult = deferredCapture();
+      const controller = new AbortController();
+      const published = jest.fn();
+      const rejected = jest.fn();
+      mockBridge.capture!.mockReturnValue(nativeResult.promise);
+      const run = captureStrokeVideo({
+        operationId: 'guided-abort',
+        signal: controller.signal,
+      });
+      void run.then(published, rejected);
+      controller.abort();
+      cancelCameraOperation('guided-abort');
+      await flushCaptureCompletion();
+      const earlyFailure: unknown = rejected.mock.calls[0]?.[0];
+      if (settlement === 'success') nativeResult.resolve(automaticClip);
+      else
+        nativeResult.reject(
+          Object.assign(new Error('Native failure after cancellation'), {
+            code: 'camera.processing_failed',
+          }),
+        );
+      await flushCaptureCompletion();
+      expect(earlyFailure).toMatchObject({
+        code: 'camera.cancelled',
+        message: 'Camera operation was canceled.',
+      });
+      await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+      expect(mockBridge.capture).toHaveBeenCalledWith();
+      expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+      expect(mockBridge.cancel).toHaveBeenCalledWith();
+      expect(published).not.toHaveBeenCalled();
+      expect(rejected).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('retains the guided drain barrier and rejects competing captures and imports', async () => {
+    const nativeResult = deferredCapture();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const run = captureStrokeVideo({ operationId: 'guided-drain' });
+    void run.catch(() => {});
+    try {
+      await expect(captureStrokeVideo()).rejects.toMatchObject({
+        code: 'camera.busy',
+      });
+      await expect(importStrokeVideo()).rejects.toMatchObject({
+        code: 'camera.busy',
+      });
+      cancelCameraOperation('guided-drain');
+      await expect(captureStrokeVideo()).rejects.toMatchObject({
+        code: 'camera.busy',
+      });
+      await expect(importStrokeVideo()).rejects.toMatchObject({
+        code: 'camera.busy',
+      });
+      expect(mockBridge.capture).toHaveBeenCalledTimes(1);
+      expect(mockBridge.importVideo).not.toHaveBeenCalled();
+    } finally {
+      nativeResult.resolve(automaticClip);
+      await flushCaptureCompletion();
+    }
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    mockBridge.capture!.mockResolvedValue(automaticClip);
+    await expect(captureStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'automatic_pose_trigger',
+    });
+  });
+
+  it('ignores a stale id while a later guided operation is active and accepts the current id', async () => {
+    const oldController = new AbortController();
+    mockBridge.capture!.mockResolvedValue(automaticClip);
+    await captureStrokeVideo({
+      operationId: 'guided-old',
+      signal: oldController.signal,
+    });
+    const nativeResult = deferredCapture();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const run = captureStrokeVideo({ operationId: 'guided-current' });
+    void run.catch(() => {});
+    let staleCancelCalls = -1;
+    try {
+      cancelCameraOperation('guided-old');
+      oldController.abort();
+      staleCancelCalls = mockBridge.cancel!.mock.calls.length;
+      cancelCameraOperation('guided-current');
+    } finally {
+      nativeResult.reject(
+        Object.assign(new Error('Native cancelled'), {
+          code: 'camera.cancelled',
+        }),
+      );
+      await flushCaptureCompletion();
+    }
+    await expect(run).rejects.toMatchObject({
+      code: 'camera.cancelled',
+      message: 'Camera operation was canceled.',
+    });
+    expect(staleCancelCalls).toBe(0);
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    expect(mockBridge.cancel).toHaveBeenCalledWith();
+  });
+
+  it.each([
+    'success',
+    'native rejection',
+    'invalid receipt',
+    'synchronous throw',
+  ])(
+    'detaches the guided abort listener on %s without mutating validation or native errors',
+    async settlement => {
+      const controller = new AbortController();
+      const add = jest.spyOn(controller.signal, 'addEventListener');
+      const remove = jest.spyOn(controller.signal, 'removeEventListener');
+      const error = Object.assign(new Error('Camera permission denied'), {
+        code: 'camera.permission_denied',
+      });
+      if (settlement === 'success')
+        mockBridge.capture!.mockResolvedValue(automaticClip);
+      else if (settlement === 'native rejection')
+        mockBridge.capture!.mockRejectedValue(error);
+      else if (settlement === 'invalid receipt')
+        mockBridge.capture!.mockResolvedValue({
+          ...automaticClip,
+          captureEvidence: undefined,
+        });
+      else
+        mockBridge.capture!.mockImplementation(() => {
+          throw error;
+        });
+      const options = {
+        operationId: 'guided-cleanup',
+        signal: controller.signal,
+      };
+      const run = captureStrokeVideo(options);
+      options.signal = new AbortController().signal;
+      if (settlement === 'success')
+        await expect(run).resolves.toMatchObject({
+          captureMode: 'automatic_pose_trigger',
+        });
+      else if (settlement === 'invalid receipt')
+        await expect(run).rejects.toThrow(/invalid or incomplete/i);
+      else await expect(run).rejects.toBe(error);
+      controller.abort();
+      expect(mockBridge.cancel).not.toHaveBeenCalled();
+      expect(add).toHaveBeenCalledWith('abort', expect.any(Function), {
+        once: true,
+      });
+      const listener = add.mock.calls[0]?.[1];
+      expect(remove).toHaveBeenCalledWith('abort', listener);
+      mockBridge.capture!.mockResolvedValue(automaticClip);
+      await expect(captureStrokeVideo()).resolves.toMatchObject({
+        captureMode: 'automatic_pose_trigger',
+      });
+    },
+  );
+
+  it('detaches the guided listener immediately on cancellation, even if native cancel throws', async () => {
+    const nativeResult = deferredCapture();
+    const controller = new AbortController();
+    const add = jest.spyOn(controller.signal, 'addEventListener');
+    const remove = jest.spyOn(controller.signal, 'removeEventListener');
+    const rejected = jest.fn();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    mockBridge.cancel!.mockImplementation(() => {
+      throw new Error('Bridge unavailable');
+    });
+    const run = captureStrokeVideo({
+      operationId: 'guided-throwing-cancel',
+      signal: controller.signal,
+    });
+    void run.catch(rejected);
+    controller.abort();
+    await flushCaptureCompletion();
+    const earlyFailure: unknown = rejected.mock.calls[0]?.[0];
+    const listenerRemoved = remove.mock.calls.some(
+      ([type, listener]) =>
+        type === 'abort' && listener === add.mock.calls[0]?.[1],
+    );
+    nativeResult.resolve(automaticClip);
+    await flushCaptureCompletion();
+    expect(earlyFailure).toMatchObject({ code: 'camera.cancelled' });
+    expect(listenerRemoved).toBe(true);
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('native camera result boundary', () => {
   it('accepts measured pose evidence while preserving unknown recognition', () => {

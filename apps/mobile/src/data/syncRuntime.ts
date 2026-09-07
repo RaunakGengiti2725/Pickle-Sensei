@@ -1,7 +1,12 @@
 import { AppState } from 'react-native';
-import { bearerTokenFor, type ApiSession } from '../account/apiSession';
+import {
+  bearerTokenFor,
+  getApiSession,
+  type ApiSession,
+} from '../account/apiSession';
 import { canonicalDataOwner, getActiveDataOwner } from './accountScope';
-import { createTransport } from './api';
+import { createAnalysisPermitClient, createTransport } from './api';
+import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
 import { getDb } from './db';
 import { drainOutbox } from './sync';
 
@@ -50,14 +55,33 @@ export function configureSyncRuntime(session: ApiSession): void {
   clearSyncRuntime();
   const configuredGeneration = generation;
   const owner = canonicalDataOwner(session.canonicalAppUserId);
+  const scope = runJournal.scope({
+    ownerKey: owner,
+    apiOrigin: session.apiBaseUrl,
+  });
   // The bearer is resolved per request so a rotated access token is used
   // without rebuilding the runtime.
-  const transport = createTransport({
-    baseUrl: session.apiBaseUrl,
+  const apiConfig = {
+    baseUrl: scope.apiOrigin,
     get token() {
-      return bearerTokenFor(session.canonicalAppUserId);
+      const current = getApiSession();
+      if (!current) return null;
+      try {
+        const binding = runJournal.scope({
+          ownerKey: current.canonicalAppUserId,
+          apiOrigin: current.apiBaseUrl,
+        });
+        return binding.ownerKey === scope.ownerKey &&
+          binding.apiOrigin === scope.apiOrigin
+          ? bearerTokenFor(current.canonicalAppUserId)
+          : null;
+      } catch {
+        return null;
+      }
     },
-  });
+  };
+  const transport = createTransport(apiConfig);
+  const permits = { ...scope, ...createAnalysisPermitClient(apiConfig) };
   let consecutiveFailures = 0;
 
   const schedule = () => {
@@ -82,8 +106,20 @@ export function configureSyncRuntime(session: ApiSession): void {
     }
     runningGenerations.add(configuredGeneration);
     try {
-      const result = await drainOutbox(getDb(), transport);
-      consecutiveFailures = result.failed > 0 ? consecutiveFailures + 1 : 0;
+      const db = getDb();
+      const recovered = await recoverAnalysisJournals(db, scope, permits, {
+        excludeOperationIds: runJournal.activeOperationIds(scope),
+      });
+      if (configuredGeneration !== generation || getActiveDataOwner() !== owner)
+        return;
+      const result = await drainOutbox(db, transport);
+      const pendingRecovery =
+        recovered.unknownStorage ||
+        recovered.items.some(
+          item => item.kind === 'pending' || item.kind === 'held',
+        );
+      consecutiveFailures =
+        result.failed > 0 || pendingRecovery ? consecutiveFailures + 1 : 0;
     } catch {
       // Outbox rows remain durable with their attempt history. The foreground
       // event or the backed-off timer retries without inventing a receipt.

@@ -27,8 +27,12 @@ function access(
 
 describe('paywall free-rating copy', () => {
   it('states the successful-score rule without counting attempts', () => {
-    expect(RATING_CONSUMPTION_RULE).toContain('successful validated score');
-    expect(RATING_CONSUMPTION_RULE).toContain('unscored');
+    expect(RATING_CONSUMPTION_RULE).toContain('completed rating');
+    expect(RATING_CONSUMPTION_RULE).toMatch(
+      /unscored attempts are not charged/i,
+    );
+    expect(RATING_CONSUMPTION_RULE).toContain('reserved');
+    expect(RATING_CONSUMPTION_RULE).not.toContain('returns the allowance');
   });
 
   it('reports the canonical remaining allowance', () => {

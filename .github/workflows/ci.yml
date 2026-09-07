@@ -85,6 +85,12 @@ jobs:
       - name: Jest (logic suites)
         working-directory: apps/mobile
         run: npm test
+      - name: Redistribution notice provenance tests
+        working-directory: apps/mobile
+        run: node --test scripts/generate-third-party-notices.test.mjs
+      - name: Check legal and SDK privacy resource sources
+        working-directory: apps/mobile
+        run: node scripts/generate-third-party-notices.mjs --check
 
   supabase-security:
     runs-on: ubuntu-latest
@@ -99,6 +105,8 @@ jobs:
         run: npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts
       - name: Supabase Edge API security regressions
         run: npx --yes deno@2.5.6 test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/
+      - name: Frozen offline grant cryptographic vectors
+        run: npx --yes deno@2.5.6 test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts supabase/functions/api/canonicalDigest.test.ts
 
   containers:
     if: github.ref == 'refs/heads/main'

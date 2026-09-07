@@ -45,6 +45,7 @@ jest.mock('../../src/config/authConfig', () => ({
 import * as Keychain from 'react-native-keychain';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
+  clearApiSession,
   establishApiSession,
   getApiSession,
 } from '../../src/account/apiSession';
@@ -53,6 +54,7 @@ import {
   savePersistedSession,
 } from '../../src/account/sessionVault';
 import {
+  captureDataOwnerContext,
   getActiveDataOwner,
   setActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
@@ -116,6 +118,91 @@ beforeEach(() => {
 });
 
 describe('completeAccountDeletion', () => {
+  it('purges the captured owner after its runtime session has already been cleared', async () => {
+    await arrange('google');
+    const context = Object.freeze({
+      ...captureDataOwnerContext(),
+      provider: 'google' as const,
+    });
+    clearApiSession();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    useAuthStore.setState({ session: null });
+
+    await expect(
+      useAuthStore.getState().completeAccountDeletion(context),
+    ).resolves.toEqual({
+      localPurge: 'complete',
+    });
+
+    expect(mockExecuted).toContainEqual({
+      sql: 'DELETE FROM local_shot WHERE owner_key = ?',
+      params: [OWNER],
+    });
+    expect(__keychainStore.has(SESSION_VAULT_SERVICE)).toBe(false);
+    expect(mockGoogleSignin.revokeAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['22222222-2222-4222-8222-222222222222', OWNER])(
+    'does not clear a newer signed-in runtime or vault (%s) when the old deletion response lands',
+    async nextOwner => {
+      await arrange('google');
+      const context = Object.freeze({
+        ...captureDataOwnerContext(),
+        provider: 'google' as const,
+      });
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      setActiveDataOwner(nextOwner);
+      const nextSession = {
+        ...signedIn('apple'),
+        canonicalAppUserId: nextOwner,
+        subject: nextOwner,
+      };
+      useAuthStore.setState({ session: nextSession });
+      const nextApiSession = {
+        apiBaseUrl: 'https://api.example.test',
+        bearerToken: 'next-access',
+        canonicalAppUserId: nextOwner,
+        provider: 'apple' as const,
+        refreshToken: 'next-refresh',
+      };
+      establishApiSession(nextApiSession);
+      await savePersistedSession({
+        version: 1,
+        provider: 'apple',
+        canonicalAppUserId: nextOwner,
+        refreshToken: 'next-refresh',
+        email: null,
+        displayName: null,
+      });
+      const before = useAuthStore.getState();
+      const vaultBefore = __keychainStore.get(SESSION_VAULT_SERVICE);
+      mockExecuted.length = 0;
+
+      await expect(
+        useAuthStore.getState().completeAccountDeletion(context),
+      ).resolves.toEqual({ localPurge: 'complete' });
+
+      expect(useAuthStore.getState()).toBe(before);
+      expect(getApiSession()).toBe(nextApiSession);
+      expect(getActiveDataOwner()).toBe(nextOwner);
+      expect(__keychainStore.get(SESSION_VAULT_SERVICE)).toEqual(vaultBefore);
+      expect(mockGoogleSignin.revokeAccess).not.toHaveBeenCalled();
+      expect(mockGoogleSignin.signOut).not.toHaveBeenCalled();
+      expect(
+        mockExecuted.filter(call => call.sql.startsWith('INSERT')),
+      ).toEqual([]);
+      for (const call of mockExecuted.filter(call =>
+        call.sql.startsWith('DELETE'),
+      )) {
+        expect(call.params).toEqual([
+          call.sql.includes('FROM kv')
+            ? expect.stringMatching(new RegExp(`:${OWNER}$`))
+            : OWNER,
+        ]);
+      }
+    },
+  );
+
   it('signs the runtime out before touching local data, then purges every owner-scoped row and kv namespace atomically', async () => {
     await arrange('google');
     await useAuthStore.getState().completeAccountDeletion();
@@ -151,6 +238,7 @@ describe('completeAccountDeletion', () => {
       'local_session',
       'local_capture',
       'local_analysis_record',
+      'analysis_run_journal',
       'outbox',
       'sync_receipt',
     ]) {
@@ -159,14 +247,15 @@ describe('completeAccountDeletion', () => {
         params: [OWNER],
       });
     }
-    // repository.ts pins these five namespaces as the owner-scoped kv set
-    // (practice sets joined profile, rank, notifications and consistency).
+    // repository.ts pins the full owner-scoped kv set: practice sets and
+    // pending billing fulfilment join profile, rank, notifications and consistency.
     expect([...OWNER_SCOPED_KV_NAMESPACES]).toEqual([
       'profile',
       'rank.celebrated',
       'notifications',
       'consistency',
       'practice.set',
+      'billing.pending-fulfilment',
     ]);
     const kvDeletes = tx
       .filter(c => c.sql === 'DELETE FROM kv WHERE key = ?')
@@ -177,6 +266,7 @@ describe('completeAccountDeletion', () => {
       `notifications:${OWNER}`,
       `consistency:${OWNER}`,
       `practice.set:${OWNER}`,
+      `billing.pending-fulfilment:${OWNER}`,
     ]);
     expect(mockExecuted.some(c => c.sql === 'ROLLBACK')).toBe(false);
     // One clean pass: the purge is not retried once it committed.

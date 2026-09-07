@@ -322,10 +322,18 @@ describe('Library flow · Reads tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failing local read never strands the spinner: it falls to the empty state', async () => {
-    mockListShots.mockRejectedValue(new Error('sqlite closed'));
+  it('a failing local read ends loading with retry; only a successful empty read shows the empty state', async () => {
+    mockListShots.mockRejectedValueOnce(new Error('sqlite closed'));
     const renderer = await renderLibrary();
     expect(allText(renderer)).not.toContain('Opening your library…');
+    expect(allText(renderer)).toContain('Your library couldn’t load');
+    expect(allText(renderer)).not.toContain(
+      'Your measured reads, in one place.',
+    );
+    expect(findByLabel(renderer, 'Analyze your first stroke')).toHaveLength(0);
+    await pressByLabel(renderer, 'Try again');
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    expect(allText(renderer)).not.toContain('Your library couldn’t load');
     expect(allText(renderer)).toContain('Your measured reads, in one place.');
     act(() => renderer.unmount());
   });
@@ -398,7 +406,7 @@ describe('Library flow · Reads tab', () => {
     // tab is never a dead end. No Result row exists for an unscored clip.
     expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain(
-      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     expect(text).toContain('Your measured reads, in one place.');
     expect(text).toContain('Analyze your first stroke');

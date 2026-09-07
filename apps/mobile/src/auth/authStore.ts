@@ -14,6 +14,7 @@ import {
   type ApiSession,
 } from '../account/apiSession';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
+import type { AccountDeletionContext } from '../account/deletion';
 import {
   refreshSessionNow,
   startSessionKeeper,
@@ -25,7 +26,7 @@ import {
 } from '../account/sessionLifecycle';
 import {
   clearPersistedSession,
-  loadPersistedSession,
+  readPersistedSession,
   savePersistedSession,
   type PersistedSession,
 } from '../account/sessionVault';
@@ -37,22 +38,48 @@ import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { getDb } from '../data/db';
 import { getKv, purgeOwnerData, setKv } from '../data/repository';
 import {
+  DataOwnerChangedError,
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
   canonicalDataOwner,
+  captureDataOwnerContext,
+  getActiveDataOwner,
+  isDataOwnerContextCurrent,
   setActiveDataOwner,
+  type DataOwnerContext,
 } from '../data/accountScope';
 import { clearSyncRuntime, configureSyncRuntime } from '../data/syncRuntime';
 import { createBillingAccessDependencies } from '../billing';
 import {
+  startBillingLifecycle,
+  stopBillingLifecycle,
+} from '../billing/lifecycle';
+import {
   clearAccessStoreConfiguration,
   configureAccessStore,
+  discardPendingFulfilmentForOwner,
 } from '../state/accessStore';
+import {
+  configureConsentStore,
+  resetConsentStore,
+} from '../state/consentStore';
 import { createTrainingApi } from '../training/api';
 import {
   clearTrainingStoreConfiguration,
   configureTrainingStore,
 } from '../training/store';
+import {
+  SESSION_RESTORE_KV_KEY,
+  parseSessionRestoreRecord,
+  permitsPersistedSession,
+  returningSessionState,
+  type AuthRestoreState,
+  type ReturningSessionReason,
+  type SessionRestoreRecord,
+  type SyncedProvider,
+} from './sessionMigration';
+
+export type { AuthRestoreState } from './sessionMigration';
 
 /**
  * A UI-safe account descriptor. For synced accounts `subject` is retained only
@@ -79,7 +106,8 @@ export interface AuthError {
     | 'auth.canceled'
     | 'auth.not_configured'
     | 'auth.failed'
-    | 'auth.session_expired';
+    | 'auth.session_expired'
+    | 'auth.storage_unavailable';
   message: string;
 }
 
@@ -112,6 +140,9 @@ interface AuthState {
   session: AuthSession | null;
   busy: boolean;
   error: AuthError | null;
+  restoreState: AuthRestoreState;
+  acknowledgeReturningSession: () => Promise<void>;
+  retrySessionPersistence: () => Promise<void>;
   /** Result of the most recent completeAccountDeletion(); null until one ran. */
   deletionCleanup: AccountDeletionCleanup | null;
   hydrate: () => Promise<void>;
@@ -122,7 +153,9 @@ interface AuthState {
   /** After the SERVER confirms deletion: purge this account's local data,
    * disconnect the provider SDK, and land signed out. Never call before the
    * backend has acknowledged the deletion. */
-  completeAccountDeletion: () => Promise<void>;
+  completeAccountDeletion: (
+    context?: AccountDeletionContext,
+  ) => Promise<AccountDeletionCleanup | void>;
   clearError: () => void;
 }
 
@@ -171,36 +204,304 @@ function toAuthError(error: unknown): AuthError {
   return { code: 'auth.failed', message: err?.message ?? 'Sign-in failed.' };
 }
 
-async function persistLocalGuest(enabled: boolean): Promise<void> {
+async function persistLocalGuest(enabled: boolean): Promise<boolean> {
   try {
     await setKv(getDb(), LOCAL_MODE_KV_KEY, enabled ? LOCAL_GUEST_VALUE : '');
+    return true;
   } catch {
     // Guest mode remains in memory for this run. Synced identity material is
     // never sent to this fallback and is never persisted here.
+    return false;
   }
 }
 
 /** Best-effort, like persistLocalGuest: clearing writes '' rather than
  * deleting so the same INSERT OR REPLACE path covers both states. */
-async function persistLastProvider(provider: 'google' | null): Promise<void> {
+async function persistLastProvider(
+  provider: 'google' | null,
+): Promise<boolean> {
   try {
     await setKv(
       getDb(),
       LAST_PROVIDER_KV_KEY,
       provider === 'google' ? LAST_PROVIDER_GOOGLE_VALUE : '',
     );
+    return true;
   } catch {
     // Worst case the next launch simply asks for an explicit sign-in. No
     // identity material is at stake — this key only names a provider.
+    return false;
   }
 }
 
+async function persistRestoreRecord(
+  record: SessionRestoreRecord,
+): Promise<boolean> {
+  try {
+    await setKv(getDb(), SESSION_RESTORE_KV_KEY, JSON.stringify(record));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let authRevision = 0;
+let sessionPersistence: Promise<unknown> = Promise.resolve();
+let restorePersistence: Promise<unknown> = Promise.resolve();
+let persistenceGeneration = 0;
+let pendingSuppression: {
+  record: SessionRestoreRecord;
+  deletedOwner: string | undefined;
+  generation: number | null;
+} | null = null;
+const sessionGenerations = new WeakMap<AuthSession, number>();
+const unpreparedSessions = new WeakSet<AuthSession>();
+const sessionPersistenceJobs = new WeakMap<
+  ApiSession,
+  {
+    session: AuthSession;
+    current: () => boolean;
+    wait: Promise<void>;
+  }
+>();
+const deletionGenerations = new WeakMap<
+  AccountDeletionContext,
+  number | null
+>();
+const STORAGE_WAIT_MS = 8_000;
+
+function serializeSessionPersistence<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const next = sessionPersistence.then(operation);
+  sessionPersistence = next.catch(() => {});
+  return next;
+}
+
+function serializeRestorePersistence<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const next = restorePersistence.then(operation);
+  restorePersistence = next.catch(() => {});
+  return next;
+}
+
+function storageError(message: string): AuthError {
+  return { code: 'auth.storage_unavailable', message };
+}
+
+async function waitForStorage<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Device storage is still busy.')),
+          STORAGE_WAIT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function scrubLegacyIdentity(): Promise<boolean> {
+  try {
+    if (await getKv(getDb(), LEGACY_SESSION_KV_KEY)) {
+      await setKv(getDb(), LEGACY_SESSION_KV_KEY, '');
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runtimeIsSignedOut(): boolean {
+  return (
+    getActiveDataOwner() === SIGNED_OUT_DATA_OWNER &&
+    useAuthStore.getState().session === null &&
+    getApiSession() === null
+  );
+}
+
+async function clearSignedOutVault(
+  deletedOwner?: string,
+  record: SessionRestoreRecord = {
+    version: 1,
+    status: 'signed_out',
+    reason: 'user_sign_out',
+  },
+  revision = authRevision,
+  expectedGeneration: number | null = record.generation ?? null,
+): Promise<boolean> {
+  const marker: SessionRestoreRecord =
+    expectedGeneration === null
+      ? record
+      : { ...record, generation: expectedGeneration };
+  const suppression = {
+    record: marker,
+    deletedOwner,
+    generation: expectedGeneration,
+  };
+  pendingSuppression = suppression;
+  let markerDurable = false;
+  let vaultCleared = false;
+  let legacyRestoreDisarmed = false;
+  const state = useAuthStore.getState().restoreState;
+  const current = () =>
+    runtimeIsSignedOut() && useAuthStore.getState().restoreState === state;
+  const warning = storageError(
+    'This device could not save the sign-out. Try signing out again before closing the app.',
+  );
+  const saveMarker = () =>
+    serializeRestorePersistence(async () => {
+      if (deletedOwner) {
+        if (revision !== authRevision || !current()) return false;
+        try {
+          const previous = parseSessionRestoreRecord(
+            await getKv(getDb(), SESSION_RESTORE_KV_KEY),
+          );
+          if (
+            expectedGeneration === null ||
+            (previous?.generation ?? 0) > expectedGeneration
+          )
+            return false;
+        } catch {
+          return false;
+        }
+      }
+      const saved = await persistRestoreRecord(marker);
+      markerDurable = saved;
+      if (saved && pendingSuppression === suppression)
+        pendingSuppression = null;
+      if (saved) await scrubLegacyIdentity();
+      const guestCleared = await persistLocalGuest(false);
+      const providerCleared = await persistLastProvider(null);
+      legacyRestoreDisarmed = guestCleared && providerCleared;
+      return saved;
+    });
+  const saved = deletedOwner ? null : saveMarker();
+  const cleanup = serializeSessionPersistence(async () => {
+    const persisted = await readPersistedSession();
+    if (persisted.status === 'available') {
+      if (
+        (expectedGeneration === null
+          ? persisted.session.generation !== undefined
+          : (persisted.session.generation ?? 0) > expectedGeneration) ||
+        (deletedOwner &&
+          (persisted.session.canonicalAppUserId !== deletedOwner ||
+            (persisted.session.generation ?? 0) !== expectedGeneration))
+      )
+        return false;
+    } else if (persisted.status !== 'empty' && deletedOwner) {
+      return false;
+    }
+    const markerSaved = deletedOwner ? await saveMarker() : false;
+    if (deletedOwner && !markerSaved) return false;
+    vaultCleared = await clearPersistedSession();
+    return vaultCleared || markerSaved;
+  });
+  const protectedSession = () =>
+    markerDurable || (vaultCleared && legacyRestoreDisarmed);
+  const operation = Promise.all([
+    saved ?? Promise.resolve(false),
+    cleanup,
+  ]).then(() => {
+    const protectedResult = protectedSession();
+    if (protectedResult && pendingSuppression === suppression)
+      pendingSuppression = null;
+    if (current()) {
+      if (!protectedResult) useAuthStore.setState({ error: warning });
+      else if (useAuthStore.getState().error === warning)
+        useAuthStore.setState({ error: null });
+    }
+    return protectedResult;
+  });
+  try {
+    return await waitForStorage(operation);
+  } catch {
+    if (!protectedSession() && current())
+      useAuthStore.setState({ error: warning });
+    return protectedSession();
+  }
+}
+
+async function requireReturningSession(
+  reason: ReturningSessionReason,
+  provider: SyncedProvider | null,
+  revision: number,
+  previous: SessionRestoreRecord | null = null,
+): Promise<void> {
+  const restoreState = returningSessionState(reason, provider, previous);
+  const record: SessionRestoreRecord = {
+    version: 1,
+    ...restoreState,
+    ...(previous?.generation === undefined
+      ? {}
+      : {
+          generation:
+            previous.status === 'replacing'
+              ? previous.generation - 1
+              : previous.generation,
+        }),
+  };
+  let saved = false;
+  try {
+    saved = await waitForStorage(
+      serializeRestorePersistence(async () => {
+        if (revision !== authRevision || !runtimeIsSignedOut()) return false;
+        const persisted = await persistRestoreRecord(record);
+        if (persisted) await scrubLegacyIdentity();
+        return persisted;
+      }),
+    );
+  } catch {
+    saved = false;
+  }
+  if (revision !== authRevision || !runtimeIsSignedOut()) return;
+  useAuthStore.setState({
+    session: null,
+    hydrated: true,
+    restoreState,
+    ...(saved
+      ? {}
+      : {
+          error: storageError(
+            'This device could not save the returning sign-in notice. Try again before closing the app.',
+          ),
+        }),
+  });
+}
+
+export function captureAccountDeletionContext(
+  session: AuthSession | null = useAuthStore.getState().session,
+): AccountDeletionContext {
+  const context = captureDataOwnerContext();
+  if (
+    !session ||
+    session.localOnly ||
+    session.provider === 'guest' ||
+    !session.canonicalAppUserId ||
+    useAuthStore.getState().session !== session ||
+    canonicalDataOwner(session.canonicalAppUserId) !== context.ownerKey
+  ) {
+    throw new DataOwnerChangedError();
+  }
+  const deletion = Object.freeze({ ...context, provider: session.provider });
+  deletionGenerations.set(deletion, sessionGenerations.get(session) ?? null);
+  return deletion;
+}
+
 function clearSyncedRuntime(): void {
+  stopBillingLifecycle();
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+  resetConsentStore();
 }
 
 /**
@@ -214,6 +515,7 @@ function installApiSession(apiSession: ApiSession): void {
   const config = getRuntimePublicConfig();
   const canonicalAppUserId = apiSession.canonicalAppUserId;
   setActiveDataOwner(canonicalDataOwner(canonicalAppUserId));
+  configureConsentStore(captureDataOwnerContext());
   establishApiSession(apiSession);
   configureAccessStore(
     createBillingAccessDependencies({
@@ -235,6 +537,7 @@ function installApiSession(apiSession: ApiSession): void {
   );
   configureSyncRuntime(apiSession);
   setApiUnauthorizedListener(handleApiUnauthorized);
+  startBillingLifecycle(canonicalAppUserId);
 }
 
 /** The Keychain record for a synced session — only when the server minted a
@@ -242,16 +545,154 @@ function installApiSession(apiSession: ApiSession): void {
 async function persistSession(
   session: AuthSession,
   apiSession: ApiSession,
+  context: DataOwnerContext = captureDataOwnerContext(),
+  replacingCredential = false,
 ): Promise<void> {
-  if (!apiSession.refreshToken || !session.canonicalAppUserId) return;
-  await savePersistedSession({
-    version: 1,
-    provider: apiSession.provider,
-    canonicalAppUserId: session.canonicalAppUserId,
-    refreshToken: apiSession.refreshToken,
-    email: session.email,
-    displayName: session.displayName,
-  });
+  const { refreshToken, bearerToken } = apiSession;
+  const { canonicalAppUserId } = session;
+  if (!canonicalAppUserId || (!refreshToken && !replacingCredential)) return;
+  let generation = sessionGenerations.get(session);
+  const current = () =>
+    isDataOwnerContextCurrent(context) &&
+    useAuthStore.getState().session === session &&
+    session.canonicalAppUserId === canonicalAppUserId &&
+    getApiSession() === apiSession &&
+    apiSession.canonicalAppUserId === canonicalAppUserId &&
+    apiSession.provider === session.provider &&
+    apiSession.refreshToken === refreshToken &&
+    apiSession.bearerToken === bearerToken &&
+    sessionGenerations.get(session) === generation;
+  if (!current()) return;
+  const pending = sessionPersistenceJobs.get(apiSession);
+  if (pending?.session === session && pending.current()) return pending.wait;
+  const priorError = useAuthStore.getState().error;
+  const warning = storageError(
+    'This device could not save your sign-in. Keep the app open and try again before closing it.',
+  );
+  const settleWarning = (saved: boolean) => {
+    if (!current()) return;
+    const error = useAuthStore.getState().error;
+    if (
+      error !== null &&
+      error !== warning &&
+      (error !== priorError || error.code !== 'auth.storage_unavailable')
+    )
+      return;
+    if (saved) {
+      if (error?.code === 'auth.storage_unavailable')
+        useAuthStore.setState({ error: null });
+    } else if (error !== warning) {
+      useAuthStore.setState({ error: warning });
+    }
+  };
+  const previousSuppression = pendingSuppression;
+  const operation = serializeSessionPersistence(async () => {
+    if (!current()) return false;
+    const replacing = replacingCredential || generation === undefined;
+    let prepared = false;
+    if (replacing || unpreparedSessions.has(session)) {
+      await restorePersistence;
+      if (!current()) return false;
+      const previous = parseSessionRestoreRecord(
+        await getKv(getDb(), SESSION_RESTORE_KV_KEY),
+      );
+      const persisted = await readPersistedSession();
+      if (!current()) return false;
+      if (persisted.status === 'unavailable') return false;
+      if (replacing) {
+        const nextGeneration =
+          Math.max(
+            persistenceGeneration,
+            previous?.generation ?? 0,
+            persisted.status === 'available'
+              ? (persisted.session.generation ?? 0)
+              : 0,
+          ) + 1;
+        if (!Number.isSafeInteger(nextGeneration)) return false;
+        generation = nextGeneration;
+        persistenceGeneration = generation;
+        sessionGenerations.set(session, generation);
+        unpreparedSessions.add(session);
+      }
+      if (generation === undefined) return false;
+      const marker: SessionRestoreRecord = refreshToken
+        ? {
+            version: 1,
+            status: 'replacing',
+            provider: apiSession.provider,
+            generation,
+          }
+        : {
+            version: 1,
+            ...returningSessionState(
+              'legacy_credentials_missing',
+              apiSession.provider,
+            ),
+            generation: generation - 1,
+          };
+      prepared = await serializeRestorePersistence(async () => {
+        if (!current()) return false;
+        const saved = await persistRestoreRecord(marker);
+        if (saved && pendingSuppression === previousSuppression)
+          pendingSuppression = null;
+        if (saved) await scrubLegacyIdentity();
+        return saved;
+      });
+      if (!current()) return false;
+      if (!prepared && !permitsPersistedSession(previous, generation)) {
+        if (replacingCredential) await clearPersistedSession();
+        return false;
+      }
+      unpreparedSessions.delete(session);
+      if (!refreshToken) {
+        const cleared = await clearPersistedSession();
+        return prepared || cleared;
+      }
+    }
+    if (!refreshToken || generation === undefined || !current()) return false;
+    const saved = await savePersistedSession({
+      version: 1,
+      generation,
+      provider: apiSession.provider,
+      canonicalAppUserId,
+      refreshToken,
+      email: session.email,
+      displayName: session.displayName,
+    });
+    if (saved && replacing && pendingSuppression === previousSuppression)
+      pendingSuppression = null;
+    if (!saved && replacingCredential && !prepared)
+      await clearPersistedSession();
+    if (saved && current()) {
+      void serializeRestorePersistence(async () => {
+        if (!current()) return;
+        await persistRestoreRecord({
+          version: 1,
+          status: 'active',
+          provider: apiSession.provider,
+          generation,
+        });
+      });
+    }
+    return saved;
+  })
+    .catch(() => false)
+    .then(saved => {
+      settleWarning(saved);
+      return saved;
+    });
+  const wait = waitForStorage(operation).then(
+    () => {},
+    () => settleWarning(false),
+  );
+  const job = { session, current, wait };
+  sessionPersistenceJobs.set(apiSession, job);
+  const release = () => {
+    if (sessionPersistenceJobs.get(apiSession) === job)
+      sessionPersistenceJobs.delete(apiSession);
+  };
+  void operation.then(release, release);
+  return wait;
 }
 
 /**
@@ -260,13 +701,31 @@ async function persistSession(
  * local is cleared, including the Google silent-restore flag — an explicit
  * sign-in is required to come back.
  */
-async function dropRevokedSession(): Promise<void> {
+async function dropRevokedSession(context: DataOwnerContext): Promise<void> {
+  if (!isDataOwnerContextCurrent(context)) return;
+  const revision = ++authRevision;
+  const session = useAuthStore.getState().session;
+  const provider = session?.provider;
+  const generation = session ? (sessionGenerations.get(session) ?? null) : null;
+  const restoreState = returningSessionState(
+    'revoked',
+    provider === 'apple' || provider === 'google' ? provider : null,
+  );
   clearSyncedRuntime();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-  useAuthStore.setState({ session: null, error: null, busy: false });
-  await clearPersistedSession();
-  await persistLocalGuest(false);
-  await persistLastProvider(null);
+  useAuthStore.setState({
+    session: null,
+    hydrated: true,
+    error: null,
+    busy: false,
+    restoreState,
+  });
+  await clearSignedOutVault(
+    undefined,
+    { version: 1, ...restoreState },
+    revision,
+    generation,
+  );
 }
 
 /**
@@ -277,11 +736,13 @@ async function dropRevokedSession(): Promise<void> {
  */
 function adoptRotatedTokens(
   session: AuthSession,
+  context: DataOwnerContext,
   apiBaseUrl: string,
   tokens: RefreshedTokens,
 ): void {
   const canonicalAppUserId = session.canonicalAppUserId;
   if (
+    !isDataOwnerContextCurrent(context) ||
     !canonicalAppUserId ||
     session.provider === 'guest' ||
     useAuthStore.getState().session?.canonicalAppUserId !== canonicalAppUserId
@@ -301,7 +762,7 @@ function adoptRotatedTokens(
   } else {
     installApiSession(next);
   }
-  void persistSession(session, next);
+  void persistSession(session, next, context);
 }
 
 type RestoreOutcome = 'online' | 'offline' | 'revoked';
@@ -318,29 +779,40 @@ function keepSessionAlive(
     stopSessionKeeper();
     return;
   }
+  const context = captureDataOwnerContext();
   startSessionKeeper({
     apiBaseUrl: apiSession.apiBaseUrl,
     refreshToken: apiSession.refreshToken,
     bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
     onRotated: tokens => {
-      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+      if (!isDataOwnerContextCurrent(context)) return;
+      adoptRotatedTokens(session, context, apiSession.apiBaseUrl, tokens);
+      useAuthStore.setState({
+        restoreState: { status: 'restored', connectivity: 'online' },
+      });
       onOutcome?.('online');
     },
     onRevoked: async () => {
-      await dropRevokedSession();
+      if (!isDataOwnerContextCurrent(context)) return;
+      await dropRevokedSession(context);
       onOutcome?.('revoked');
     },
-    onDeferred: () => onOutcome?.('offline'),
+    onDeferred: () => {
+      if (isDataOwnerContextCurrent(context)) onOutcome?.('offline');
+    },
   });
 }
 
-async function establishSyncedAccount(input: {
-  provider: 'apple' | 'google';
-  identityToken: string | null | undefined;
-  appleAuthorizationCode?: string | null;
-  displayName: string | null;
-  providerEmail: string | null;
-}): Promise<AuthSession> {
+async function establishSyncedAccount(
+  input: {
+    provider: 'apple' | 'google';
+    identityToken: string | null | undefined;
+    appleAuthorizationCode?: string | null;
+    displayName: string | null;
+    providerEmail: string | null;
+  },
+  revision = authRevision,
+): Promise<AuthSession> {
   const config = getRuntimePublicConfig();
   const result = await bootstrapCanonicalAccount({
     apiBaseUrl: config.apiBaseUrl,
@@ -349,8 +821,10 @@ async function establishSyncedAccount(input: {
     appleAuthorizationCode: input.appleAuthorizationCode,
     environment: getAccountBootstrapEnvironment(config),
   });
+  if (revision !== authRevision) throw new DataOwnerChangedError();
+  clearSyncedRuntime();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   installApiSession(result.apiSession);
-  await persistLocalGuest(false);
   const session: AuthSession = {
     provider: input.provider,
     subject: result.account.id,
@@ -359,7 +833,18 @@ async function establishSyncedAccount(input: {
     displayName: input.displayName,
     email: result.account.email ?? input.providerEmail,
   };
-  await persistSession(session, result.apiSession);
+  useAuthStore.setState({ session });
+  await persistSession(
+    session,
+    result.apiSession,
+    captureDataOwnerContext(),
+    true,
+  );
+  if (revision !== authRevision) throw new DataOwnerChangedError();
+  await waitForStorage(
+    serializeRestorePersistence(() => persistLocalGuest(false)),
+  ).catch(() => {});
+  if (revision !== authRevision) throw new DataOwnerChangedError();
   keepSessionAlive(session, result.apiSession);
   return session;
 }
@@ -390,7 +875,13 @@ async function restorePersistedSession(
   persisted: PersistedSession,
 ): Promise<RestoreOutcome> {
   const session = sessionFromPersisted(persisted);
+  sessionGenerations.set(session, persisted.generation ?? 0);
+  persistenceGeneration = Math.max(
+    persistenceGeneration,
+    persisted.generation ?? 0,
+  );
   setActiveDataOwner(canonicalDataOwner(persisted.canonicalAppUserId));
+  configureConsentStore(captureDataOwnerContext());
   // Signed in from the record alone (hydrated flips later, in hydrate()); the
   // keeper's first rotation needs this to be the current account to adopt.
   useAuthStore.setState({ session });
@@ -454,8 +945,10 @@ async function loadGoogleSignin(): Promise<GoogleSigninModule> {
  */
 async function restoreGoogleSessionSilently(
   webClientId: string,
+  revision = authRevision,
 ): Promise<AuthSession | null> {
   const { GoogleSignin } = await loadGoogleSignin();
+  if (revision !== authRevision) throw new DataOwnerChangedError();
   GoogleSignin.configure({
     webClientId,
     ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
@@ -464,10 +957,31 @@ async function restoreGoogleSessionSilently(
     return null;
   }
   const response = await GoogleSignin.signInSilently();
+  if (revision !== authRevision) throw new DataOwnerChangedError();
   if (response.type !== 'success') {
     // 'noSavedCredentialFound' is definitive: the SDK holds no credential to
     // restore, so stop retrying on future launches until the next sign-in.
-    await persistLastProvider(null);
+    await waitForStorage(
+      serializeRestorePersistence(async () => {
+        if (revision !== authRevision) return;
+        const previous = parseSessionRestoreRecord(
+          await getKv(getDb(), SESSION_RESTORE_KV_KEY),
+        );
+        if (revision !== authRevision) return;
+        const saved = await persistRestoreRecord({
+          version: 1,
+          ...returningSessionState(
+            'legacy_credentials_missing',
+            'google',
+            previous,
+          ),
+          ...(previous?.generation === undefined
+            ? {}
+            : { generation: previous.generation }),
+        });
+        if (saved) await persistLastProvider(null);
+      }),
+    ).catch(() => {});
     return null;
   }
   const idToken = response.data.idToken;
@@ -476,13 +990,15 @@ async function restoreGoogleSessionSilently(
     // Treat as transient and keep the flag for the next launch.
     return null;
   }
-  clearSyncedRuntime();
-  return establishSyncedAccount({
-    provider: 'google',
-    identityToken: idToken,
-    displayName: response.data.user.name ?? null,
-    providerEmail: response.data.user.email ?? null,
-  });
+  return establishSyncedAccount(
+    {
+      provider: 'google',
+      identityToken: idToken,
+      displayName: response.data.user.name ?? null,
+      providerEmail: response.data.user.email ?? null,
+    },
+    revision,
+  );
 }
 
 /**
@@ -512,29 +1028,48 @@ function handleApiUnauthorized(expired: ApiSession): void {
     refreshSessionNow();
     return;
   }
+  const revision = ++authRevision;
   clearSyncedRuntime();
   void (async () => {
     if (expired.provider === 'google' && GOOGLE_WEB_CLIENT_ID) {
       try {
-        const session =
-          await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
+        const session = await restoreGoogleSessionSilently(
+          GOOGLE_WEB_CLIENT_ID,
+          revision,
+        );
+        if (revision !== authRevision) return;
         if (session) {
-          useAuthStore.setState({ session, error: null });
+          useAuthStore.setState({
+            session,
+            error: null,
+            restoreState: { status: 'restored', connectivity: 'online' },
+          });
           return;
         }
       } catch {
         // Fall through to the explicit re-sign-in below.
       }
+      if (revision !== authRevision) return;
       clearSyncedRuntime();
     }
+    if (revision !== authRevision) return;
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    const restoreState = returningSessionState(
+      'credentials_missing',
+      expired.provider,
+    );
     useAuthStore.setState({
       session: null,
       busy: false,
+      restoreState,
       error: { code: 'auth.session_expired', message: SESSION_EXPIRED_MESSAGE },
     });
-    await clearPersistedSession();
-    await persistLocalGuest(false);
+    await clearSignedOutVault(
+      undefined,
+      { version: 1, ...restoreState },
+      revision,
+      sessionGenerations.get(current) ?? null,
+    );
   })();
 }
 
@@ -544,20 +1079,105 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   busy: false,
   error: null,
   deletionCleanup: null,
+  restoreState: { status: 'restoring' },
 
   hydrate: async () => {
+    if (get().busy) return;
+    const revision = ++authRevision;
     clearSyncedRuntime();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    set({
+      hydrated: false,
+      session: null,
+      error: null,
+      restoreState: { status: 'restoring' },
+    });
     try {
+      await waitForStorage(
+        Promise.all([sessionPersistence, restorePersistence]),
+      );
+      if (revision !== authRevision) return;
+      const suppression = pendingSuppression;
+      if (suppression) {
+        await clearSignedOutVault(
+          suppression.deletedOwner,
+          suppression.record,
+          revision,
+          suppression.generation,
+        );
+        if (revision !== authRevision) return;
+        const record = suppression.record;
+        set({
+          hydrated: true,
+          session: null,
+          restoreState:
+            record.status === 'signed_out'
+              ? { status: 'signed_out', reason: record.reason }
+              : record.status === 'reauth_required'
+                ? returningSessionState(record.reason, record.provider, record)
+                : {
+                    status: 'unavailable',
+                    reason: 'local_storage_unavailable',
+                  },
+        });
+        return;
+      }
       const db = getDb();
+      let restoreRecord = parseSessionRestoreRecord(
+        await waitForStorage(getKv(db, SESSION_RESTORE_KV_KEY)),
+      );
+      if (revision !== authRevision) return;
+      persistenceGeneration = Math.max(
+        persistenceGeneration,
+        restoreRecord?.generation ?? 0,
+      );
       // Earlier builds wrote provider subjects to SQLite. Blank that legacy
       // value during migration instead of hydrating it into a trusted session.
-      if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
-        await setKv(db, LEGACY_SESSION_KV_KEY, '');
+      const legacy = await waitForStorage(getKv(db, LEGACY_SESSION_KV_KEY));
+      if (revision !== authRevision) return;
+      if (legacy) {
+        if (!restoreRecord) {
+          const hint: SessionRestoreRecord = {
+            version: 1,
+            ...returningSessionState('legacy_credentials_missing', null),
+          };
+          const saved = await waitForStorage(
+            serializeRestorePersistence(async () => {
+              if (revision !== authRevision) return false;
+              return persistRestoreRecord(hint);
+            }),
+          );
+          if (revision !== authRevision) return;
+          if (!saved)
+            throw new Error('The returning sign-in hint could not be saved.');
+          restoreRecord = hint;
+        }
+        const scrubbed = await waitForStorage(
+          serializeRestorePersistence(scrubLegacyIdentity),
+        );
+        if (revision !== authRevision) return;
+        if (!scrubbed)
+          set({
+            error: storageError(
+              'This device could not remove old sign-in details. Try again.',
+            ),
+          });
       }
-      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      if (raw === LOCAL_GUEST_VALUE) {
+      const localMode = await waitForStorage(
+        db.execute('SELECT value FROM kv WHERE key = ?', [LOCAL_MODE_KV_KEY]),
+      );
+      if (revision !== authRevision) return;
+      const raw =
+        typeof localMode.rows[0]?.['value'] === 'string'
+          ? localMode.rows[0]['value']
+          : null;
+      if (raw === LOCAL_GUEST_VALUE && !restoreRecord) {
         setActiveDataOwner(GUEST_DATA_OWNER);
-        set({ session: localGuestSession(), hydrated: true });
+        set({
+          session: localGuestSession(),
+          hydrated: true,
+          restoreState: { status: 'guest' },
+        });
         return;
       }
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
@@ -565,13 +1185,91 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // signed in across relaunches, backgrounding and reboots, for any
       // provider, until they sign out or the server refuses the refresh
       // token. No provider SDK is consulted for this.
-      const persisted = await loadPersistedSession();
-      if (persisted) {
-        const outcome = await restorePersistedSession(persisted);
+      const persisted = await waitForStorage(readPersistedSession());
+      if (revision !== authRevision) return;
+      if (persisted.status === 'available') {
+        persistenceGeneration = Math.max(
+          persistenceGeneration,
+          persisted.session.generation ?? 0,
+        );
+      }
+      if (
+        persisted.status === 'available' &&
+        permitsPersistedSession(restoreRecord, persisted.session.generation)
+      ) {
+        const outcome = await restorePersistedSession(persisted.session);
+        if (revision !== authRevision) return;
         if (outcome !== 'revoked') {
-          set({ hydrated: true });
-          return;
+          set({
+            hydrated: true,
+            restoreState: { status: 'restored', connectivity: outcome },
+          });
         }
+        return;
+      }
+      if (restoreRecord?.status === 'signed_out') {
+        set({
+          hydrated: true,
+          restoreState: { status: 'signed_out', reason: restoreRecord.reason },
+        });
+        await clearSignedOutVault(
+          undefined,
+          restoreRecord,
+          revision,
+          restoreRecord.generation ?? null,
+        );
+        return;
+      }
+      if (
+        restoreRecord?.status === 'reauth_required' &&
+        restoreRecord.reason !== 'legacy_credentials_missing'
+      ) {
+        set({
+          hydrated: true,
+          restoreState: returningSessionState(
+            restoreRecord.reason,
+            restoreRecord.provider,
+            restoreRecord,
+          ),
+        });
+        await clearSignedOutVault(
+          undefined,
+          restoreRecord,
+          revision,
+          restoreRecord.generation ?? null,
+        );
+        return;
+      }
+      if (restoreRecord?.status === 'guest') {
+        setActiveDataOwner(GUEST_DATA_OWNER);
+        set({
+          session: localGuestSession(),
+          hydrated: true,
+          restoreState: { status: 'guest' },
+        });
+        return;
+      }
+      if (persisted.status !== 'empty' && persisted.status !== 'available') {
+        set({
+          hydrated: true,
+          restoreState: {
+            status: 'unavailable',
+            reason: `vault_${persisted.status}`,
+          },
+        });
+        return;
+      }
+      if (
+        restoreRecord?.status === 'active' ||
+        restoreRecord?.status === 'replacing'
+      ) {
+        await requireReturningSession(
+          'credentials_missing',
+          restoreRecord.provider,
+          revision,
+          restoreRecord,
+        );
+        return;
       }
       // Legacy fallback for devices that signed in before sessions were
       // persisted: silent restore is Google-only (see
@@ -579,33 +1277,184 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // worth attempting when the web client id needed for a
       // backend-verifiable token is configured. A success bootstraps a new
       // session, which IS persisted — so this path runs at most once.
-      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+      const lastProvider = await waitForStorage(
+        getKv(db, LAST_PROVIDER_KV_KEY),
+      );
+      if (revision !== authRevision) return;
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
-          const session =
-            await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
+          const session = await restoreGoogleSessionSilently(
+            GOOGLE_WEB_CLIENT_ID,
+            revision,
+          );
+          if (revision !== authRevision) return;
           if (session) {
-            set({ session, hydrated: true });
+            set({
+              session,
+              hydrated: true,
+              restoreState: { status: 'restored', connectivity: 'online' },
+            });
             return;
           }
-        } catch {
+        } catch (error) {
           // Opportunistic restore only: offline bootstrap or SDK failures
           // land signed-out with no surfaced error. The last-provider flag is
           // kept so the next launch retries silently.
+          if (revision !== authRevision) return;
           clearSyncedRuntime();
           setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+          if (error instanceof AccountBootstrapError && !error.retryable) {
+            await requireReturningSession(
+              'legacy_credentials_missing',
+              'google',
+              revision,
+              restoreRecord,
+            );
+            return;
+          }
+          set({
+            session: null,
+            hydrated: true,
+            restoreState: {
+              status: 'unavailable',
+              reason: 'legacy_restore_unavailable',
+            },
+          });
+          return;
         }
       }
-      set({ session: null, hydrated: true });
+      let returning =
+        Boolean(legacy) ||
+        raw === '' ||
+        lastProvider === LAST_PROVIDER_GOOGLE_VALUE ||
+        restoreRecord?.status === 'reauth_required';
+      if (!returning) {
+        const profiles = await waitForStorage(
+          db.execute(
+            "SELECT 1 AS present FROM kv WHERE key GLOB 'profile:????????-????-????-????-????????????' AND value <> '' LIMIT 1",
+          ),
+        );
+        if (revision !== authRevision) return;
+        returning = profiles.rows.length > 0;
+      }
+      if (returning) {
+        await requireReturningSession(
+          'legacy_credentials_missing',
+          lastProvider === LAST_PROVIDER_GOOGLE_VALUE
+            ? 'google'
+            : restoreRecord?.status === 'reauth_required'
+              ? restoreRecord.provider
+              : null,
+          revision,
+          restoreRecord,
+        );
+        return;
+      }
+      set({
+        session: null,
+        hydrated: true,
+        restoreState: { status: 'signed_out', reason: 'new_install' },
+      });
     } catch {
+      if (revision !== authRevision) return;
       clearSyncedRuntime();
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ session: null, hydrated: true });
+      set({
+        session: null,
+        hydrated: true,
+        restoreState: {
+          status: 'unavailable',
+          reason: 'local_storage_unavailable',
+        },
+        error: storageError(
+          'This device could not read or save sign-in state. Try again.',
+        ),
+      });
+    }
+  },
+
+  retrySessionPersistence: async () => {
+    const session = get().session;
+    const apiSession = getApiSession();
+    if (
+      !session ||
+      session.localOnly ||
+      session.provider === 'guest' ||
+      !session.canonicalAppUserId ||
+      !apiSession?.refreshToken?.trim() ||
+      apiSession.canonicalAppUserId !== session.canonicalAppUserId ||
+      apiSession.provider !== session.provider
+    )
+      return;
+    let context: DataOwnerContext;
+    try {
+      context = captureDataOwnerContext();
+      if (context.ownerKey !== canonicalDataOwner(session.canonicalAppUserId))
+        return;
+    } catch {
+      return;
+    }
+    await persistSession(session, apiSession, context);
+  },
+
+  acknowledgeReturningSession: async () => {
+    const current = get().restoreState;
+    if (current.status !== 'reauth_required' || !current.noticePending) return;
+    const ownsNotice = () =>
+      get().restoreState === current && runtimeIsSignedOut();
+    const restoreState = { ...current, noticePending: false };
+    const warning = storageError(
+      'This device could not save your acknowledgement. Try again.',
+    );
+    const suppression = pendingSuppression;
+    const pendingRecord = suppression?.record;
+    const pendingNotice =
+      pendingRecord?.status === 'reauth_required' &&
+      pendingRecord.reason === current.reason &&
+      pendingRecord.provider === current.provider
+        ? pendingRecord
+        : null;
+    const operation = serializeRestorePersistence(async () => {
+      if (!ownsNotice()) return;
+      const previous = parseSessionRestoreRecord(
+        await getKv(getDb(), SESSION_RESTORE_KV_KEY),
+      );
+      if (!ownsNotice()) return;
+      if (previous && previous.status !== 'reauth_required' && !pendingNotice) {
+        set({ error: warning });
+        return;
+      }
+      const saved = await persistRestoreRecord({
+        ...(pendingNotice ?? previous),
+        version: 1,
+        ...restoreState,
+      });
+      if (saved && pendingNotice && pendingSuppression === suppression)
+        pendingSuppression = null;
+      if (!ownsNotice()) return;
+      if (!saved) {
+        set({ error: warning });
+        return;
+      }
+      set({
+        restoreState,
+        ...(get().error?.code === 'auth.storage_unavailable'
+          ? { error: null }
+          : {}),
+      });
+    }).catch(() => {
+      if (ownsNotice()) set({ error: warning });
+    });
+    try {
+      await waitForStorage(operation);
+    } catch {
+      if (ownsNotice()) set({ error: warning });
     }
   },
 
   signInWithApple: async () => {
     if (get().busy) return;
+    const revision = ++authRevision;
     set({ busy: true, error: null });
     const native = (NativeModules as { PickleAuth?: NativePickleAuth })
       .PickleAuth;
@@ -621,30 +1470,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const result = await native.signInWithApple();
+      if (revision !== authRevision) return;
       const name =
         [result.givenName, result.familyName].filter(Boolean).join(' ') || null;
-      clearSyncedRuntime();
-      const session = await establishSyncedAccount({
-        provider: 'apple',
-        identityToken: result.identityToken,
-        appleAuthorizationCode: result.authorizationCode,
-        displayName: name,
-        providerEmail: result.email ?? null,
-      });
+      const session = await establishSyncedAccount(
+        {
+          provider: 'apple',
+          identityToken: result.identityToken,
+          appleAuthorizationCode: result.authorizationCode,
+          displayName: name,
+          providerEmail: result.email ?? null,
+        },
+        revision,
+      );
+      if (revision !== authRevision) return;
       // A stale Google flag (e.g. after a failed silent restore) must never
       // resurrect the previous Google account over this Apple session on the
       // next launch. Apple itself gets no silent-restore flag — its identity
       // tokens are only issued interactively.
-      await persistLastProvider(null);
-      set({ session, busy: false });
+      await waitForStorage(
+        serializeRestorePersistence(async () => {
+          if (revision !== authRevision) return false;
+          return persistLastProvider(null);
+        }),
+      ).catch(() => false);
+      if (revision !== authRevision) return;
+      set({
+        session,
+        busy: false,
+        hydrated: true,
+        restoreState: { status: 'restored', connectivity: 'online' },
+      });
     } catch (error) {
-      clearSyncedRuntime();
+      if (revision !== authRevision) return;
       set({ busy: false, error: toAuthError(error) });
     }
   },
 
   signInWithGoogle: async () => {
     if (get().busy) return;
+    const revision = ++authRevision;
     set({ busy: true, error: null });
     if (
       !GOOGLE_WEB_CLIENT_ID ||
@@ -662,6 +1527,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const { GoogleSignin } = await loadGoogleSignin();
+      if (revision !== authRevision) return;
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
@@ -669,7 +1535,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: false,
       });
+      if (revision !== authRevision) return;
       const response = await GoogleSignin.signIn();
+      if (revision !== authRevision) return;
       if (response.type !== 'success') {
         set({
           busy: false,
@@ -678,79 +1546,215 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       const user = response.data.user;
-      clearSyncedRuntime();
-      const session = await establishSyncedAccount({
-        provider: 'google',
-        identityToken: response.data.idToken,
-        displayName: user.name ?? null,
-        providerEmail: user.email ?? null,
-      });
+      const session = await establishSyncedAccount(
+        {
+          provider: 'google',
+          identityToken: response.data.idToken,
+          displayName: user.name ?? null,
+          providerEmail: user.email ?? null,
+        },
+        revision,
+      );
+      if (revision !== authRevision) return;
       // Only after the canonical account is established: the next launch may
       // now silently restore this Google session (provider name only — the
       // token itself is never persisted).
-      await persistLastProvider('google');
-      set({ session, busy: false });
+      await waitForStorage(
+        serializeRestorePersistence(async () => {
+          if (revision !== authRevision) return false;
+          return persistLastProvider('google');
+        }),
+      ).catch(() => false);
+      if (revision !== authRevision) return;
+      set({
+        session,
+        busy: false,
+        hydrated: true,
+        restoreState: { status: 'restored', connectivity: 'online' },
+      });
     } catch (error) {
-      clearSyncedRuntime();
+      if (revision !== authRevision) return;
       set({ busy: false, error: toAuthError(error) });
     }
   },
 
   continueAsGuest: async () => {
+    ++authRevision;
+    const previous = get().session;
+    const generation = previous ? sessionGenerations.get(previous) : undefined;
     clearSyncedRuntime();
     const session = localGuestSession();
-    await persistLocalGuest(true);
     setActiveDataOwner(GUEST_DATA_OWNER);
-    set({ session, error: null });
+    const context = captureDataOwnerContext();
+    const current = () =>
+      isDataOwnerContextCurrent(context) && get().session === session;
+    const warning = storageError(
+      'This device could not save local mode. Try again before closing the app.',
+    );
+    set({
+      session,
+      hydrated: true,
+      busy: false,
+      error: null,
+      restoreState: { status: 'guest' },
+    });
+    let durable = false;
+    const previousSuppression = pendingSuppression;
+    const operation = serializeRestorePersistence(async () => {
+      if (!current()) return;
+      const saved = await persistRestoreRecord({
+        version: 1,
+        status: 'guest',
+        generation,
+      });
+      durable = saved;
+      if (saved && pendingSuppression === previousSuppression)
+        pendingSuppression = null;
+      await persistLocalGuest(true);
+      if (saved) await scrubLegacyIdentity();
+      if (current()) {
+        if (!saved) set({ error: warning });
+        else if (get().error === warning) set({ error: null });
+      }
+    });
+    try {
+      await waitForStorage(operation);
+    } catch {
+      if (!durable && current()) set({ error: warning });
+    }
   },
 
   signOut: async () => {
-    const provider = get().session?.provider;
+    const revision = ++authRevision;
+    const session = get().session;
+    const provider = session?.provider;
+    const generation = session
+      ? (sessionGenerations.get(session) ?? null)
+      : null;
     const apiSession = getApiSession();
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-    set({ session: null, error: null, busy: false });
+    set({
+      session: null,
+      hydrated: true,
+      error: null,
+      busy: true,
+      restoreState: { status: 'signed_out', reason: 'user_sign_out' },
+    });
     // The persisted session goes first: whatever else fails below, the next
     // launch must not restore an account the user just signed out of.
-    await clearPersistedSession();
-    await persistLocalGuest(false);
+    await clearSignedOutVault(undefined, undefined, revision, generation);
+    if (revision !== authRevision) return;
     // Explicit sign-out always disarms the silent restore on the next launch.
-    await persistLastProvider(null);
     // Kill this device's session server-side too (best effort — offline, the
     // refresh token still dies at its natural rotation/expiry).
-    if (apiSession?.refreshToken) await revokeApiSession(apiSession);
+    const revoked = apiSession?.refreshToken
+      ? revokeApiSession(apiSession)
+      : Promise.resolve();
     if (provider === 'google') {
       try {
         const { GoogleSignin } = await loadGoogleSignin();
+        if (revision !== authRevision || !runtimeIsSignedOut()) return;
         await GoogleSignin.signOut();
       } catch {
         // Local API and billing material is already gone. Provider SDK cleanup
         // can safely be retried on the next interactive sign-in.
       }
     }
+    if (revision === authRevision && runtimeIsSignedOut()) set({ busy: false });
+    await revoked;
   },
 
-  completeAccountDeletion: async () => {
+  completeAccountDeletion: async explicitContext => {
     const session = get().session;
-    const provider = session?.provider;
-    const deletedOwner = session?.canonicalAppUserId
-      ? canonicalDataOwner(session.canonicalAppUserId)
-      : null;
-    clearSyncedRuntime();
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-    set({ session: null, error: null, busy: false, deletionCleanup: null });
+    const context = explicitContext ?? null;
+    const provider = context?.provider ?? session?.provider;
+    const deletedOwner = context
+      ? canonicalDataOwner(context.ownerKey)
+      : session?.canonicalAppUserId
+        ? canonicalDataOwner(session.canonicalAppUserId)
+        : null;
+    const ownsDeletedRuntime = Boolean(
+      deletedOwner &&
+      session?.canonicalAppUserId &&
+      canonicalDataOwner(session.canonicalAppUserId) === deletedOwner &&
+      (!context || isDataOwnerContextCurrent(context)),
+    );
+    let canClearRuntime = Boolean(
+      !explicitContext || (context && isDataOwnerContextCurrent(context)),
+    );
+    if (
+      !canClearRuntime &&
+      context &&
+      runtimeIsSignedOut() &&
+      get().hydrated &&
+      !get().busy
+    ) {
+      const startingRevision = authRevision;
+      const generation = deletionGenerations.get(context) ?? 0;
+      try {
+        const persisted = await waitForStorage(
+          serializeSessionPersistence(readPersistedSession),
+        );
+        const previous = parseSessionRestoreRecord(
+          await waitForStorage(getKv(getDb(), SESSION_RESTORE_KV_KEY)),
+        );
+        canClearRuntime =
+          startingRevision === authRevision &&
+          runtimeIsSignedOut() &&
+          !get().busy &&
+          (previous?.generation ?? 0) <= generation &&
+          (persisted.status === 'empty' ||
+            (persisted.status === 'available' &&
+              persisted.session.canonicalAppUserId === deletedOwner &&
+              (persisted.session.generation ?? 0) === generation));
+      } catch {
+        canClearRuntime = false;
+      }
+    }
+    const revision = canClearRuntime ? ++authRevision : null;
+    const canFinishCleanup = () =>
+      revision !== null && revision === authRevision && runtimeIsSignedOut();
+    if (canClearRuntime) {
+      clearSyncedRuntime();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      set({
+        session: null,
+        hydrated: true,
+        error: null,
+        busy: true,
+        deletionCleanup: null,
+        restoreState: { status: 'signed_out', reason: 'account_deleted' },
+      });
+    }
     // The account (and every server-side session) is already gone; the
     // Keychain record must go with it or the next launch would try — and
     // fail — to refresh a deleted account.
-    await clearPersistedSession();
-    await persistLocalGuest(false);
-    await persistLastProvider(null);
+    let clearedCredentials = false;
+    if (canFinishCleanup()) {
+      clearedCredentials = await clearSignedOutVault(
+        ownsDeletedRuntime ? undefined : (deletedOwner ?? undefined),
+        { version: 1, status: 'signed_out', reason: 'account_deleted' },
+        revision ?? authRevision,
+        ownsDeletedRuntime && session
+          ? (sessionGenerations.get(session) ?? null)
+          : context
+            ? (deletionGenerations.get(context) ?? 0)
+            : null,
+      );
+      if (clearedCredentials && canFinishCleanup()) {
+        set({
+          restoreState: { status: 'signed_out', reason: 'account_deleted' },
+        });
+      }
+    }
     let localPurge: AccountDeletionCleanup['localPurge'] = 'not_needed';
     if (deletedOwner) {
+      discardPendingFulfilmentForOwner(deletedOwner);
       localPurge = 'failed';
       for (let attempt = 0; attempt < LOCAL_PURGE_ATTEMPTS; attempt += 1) {
         try {
-          await purgeOwnerData(getDb(), deletedOwner);
+          await waitForStorage(purgeOwnerData(getDb(), deletedOwner));
           localPurge = 'complete';
           break;
         } catch {
@@ -758,18 +1762,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
     }
-    set({ deletionCleanup: { localPurge } });
-    if (provider === 'google') {
+    if (provider === 'google' && clearedCredentials && canFinishCleanup()) {
       try {
         const { GoogleSignin } = await loadGoogleSignin();
         // Full disconnect: the account no longer exists, so the SDK must not
         // silently restore it on the next launch.
-        await GoogleSignin.revokeAccess();
-        await GoogleSignin.signOut();
+        if (canFinishCleanup()) await GoogleSignin.revokeAccess();
+        if (canFinishCleanup()) await GoogleSignin.signOut();
       } catch {
         // Best effort; the silent-restore flag is already cleared above.
       }
     }
+    const cleanup = { localPurge };
+    if (canFinishCleanup()) set({ deletionCleanup: cleanup, busy: false });
+    return explicitContext ? cleanup : undefined;
   },
 
   clearError: () => set({ error: null }),

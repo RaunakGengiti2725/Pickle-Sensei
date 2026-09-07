@@ -3,7 +3,11 @@ import {
   CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
   evaluateCaptureEnvelope,
 } from '@pickle/capture-envelope';
-import type { CaptureQualitySignalsV1 } from '../src/camera/capture';
+import type {
+  CapturedClip,
+  CaptureEvidenceV1,
+  CaptureQualitySignalsV1,
+} from '../src/camera/capture';
 import {
   attemptCaptureEnvelope,
   captureGuidanceLines,
@@ -86,7 +90,174 @@ describe('liveCaptureEnvelope', () => {
   });
 });
 
+function capturedSwing(
+  overrides: Partial<CaptureEvidenceV1> = {},
+): Extract<CapturedClip, { captureMode: 'automatic_pose_trigger' }> {
+  return {
+    uri: 'file:///private/Captures/stroke.mov',
+    width: 1080,
+    height: 1920,
+    fps: 60,
+    durationMs: 3200,
+    capturedAtIso: '2026-09-06T12:00:00.000Z',
+    captureMode: 'automatic_pose_trigger',
+    recognition: {
+      status: 'unknown',
+      reason: 'validated_classifier_unavailable',
+    },
+    trigger: {
+      startMs: 1000,
+      endMs: 1800,
+      peakMotionMs: 1400,
+      confidence: 0.8,
+      source: 'temporal_pose_motion',
+      modelVersion: 'temporal-stroke-heuristic-4/manual-stop-relaxed-1',
+    },
+    captureEvidence: {
+      schemaVersion: 1,
+      window: 'detected_motion',
+      poseSource: 'apple_vision_body_pose',
+      poseModelVersion: 'apple-vision-bodypose-1',
+      triggerAlgorithmVersion:
+        'temporal-stroke-heuristic-4/manual-stop-relaxed-1',
+      motionUnit: 'normalized_image_units_per_second',
+      analysisInputFrameCount: 24,
+      poseFrameCount: 20,
+      poseMissingFrameCount: 4,
+      trackedDurationMs: 760,
+      meanCanonicalJointVisibility: 0.88,
+      meanJointCoverage: 0.94,
+      minimumJointCoverage: 0.75,
+      fullBodyVisibleFrameCount: 15,
+      jointMotion: [
+        {
+          joint: 'right_wrist',
+          sampleCount: 18,
+          meanNormalizedPerSecond: 0.3,
+          peakNormalizedPerSecond: 0.8,
+        },
+      ],
+      ...overrides,
+    },
+    ballSpeed: {
+      status: 'unavailable',
+      reason: 'calibrated_ball_tracker_unavailable',
+    },
+    preRollMs: 1000,
+    postRollMs: 1400,
+  };
+}
+
 describe('attemptCaptureEnvelope', () => {
+  it('uses the captured swing, not the preview after a manual-stop walk to the phone', () => {
+    const buffer = createAttemptEvidenceBuffer();
+    buffer.beginAttempt();
+    buffer.noteReadiness({ state: 'ready', jointCoverage: 0.94 });
+    buffer.noteReadiness({ state: 'no_person', jointCoverage: 0 });
+    buffer.noteQuality(qualitySignals({ brightnessMeanLuma: 0 }));
+    const verdict = attemptCaptureEnvelope(
+      capturedSwing(),
+      buffer.quality,
+      buffer.readiness,
+    );
+    expect(dimension(verdict, 'player_visibility')).toMatchObject({
+      measured: 0.88,
+      status: 'SUPPORTED',
+    });
+    expect(dimension(verdict, 'brightness').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'motion_blur').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'camera_motion').status).toBe('NOT_MEASURED');
+  });
+
+  it('does not substitute thresholded joint coverage or frame availability for mean joint visibility', () => {
+    const verdict = attemptCaptureEnvelope(
+      capturedSwing({
+        meanCanonicalJointVisibility: 0.28,
+        meanJointCoverage: 0.6,
+        minimumJointCoverage: 0.25,
+        fullBodyVisibleFrameCount: 0,
+      }),
+      null,
+      { state: 'ready', jointCoverage: 1 },
+    );
+    expect(dimension(verdict, 'player_visibility')).toMatchObject({
+      measured: 0.28,
+      status: 'UNSUPPORTED',
+    });
+    expect(verdict.overall).toBe('UNSUPPORTED');
+  });
+
+  it.each([
+    ['wrong schema', { schemaVersion: 2 }],
+    ['wrong window', { window: 'preview' }],
+    ['wrong source', { poseSource: 'fabricated' }],
+    ['wrong units', { motionUnit: 'mph' }],
+    ['missing visibility', { meanCanonicalJointVisibility: undefined }],
+    ['non-finite visibility', { meanCanonicalJointVisibility: Number.NaN }],
+    ['out-of-range visibility', { meanCanonicalJointVisibility: 1.1 }],
+    ['inconsistent frame counts', { poseMissingFrameCount: 0 }],
+    ['no measured poses', { poseFrameCount: 0 }],
+    ['duration outside the swing', { trackedDurationMs: 900 }],
+    ['mismatched detector', { triggerAlgorithmVersion: 'unrelated' }],
+    ['invalid coverage', { minimumJointCoverage: 1 }],
+    ['missing motion evidence', { jointMotion: [] }],
+  ])(
+    'rejects %s instead of rescuing it with the last preview',
+    (_name, evidence) => {
+      const clip = capturedSwing(evidence as Partial<CaptureEvidenceV1>);
+      expect(() =>
+        attemptCaptureEnvelope(clip, qualitySignals(), {
+          state: 'ready',
+          jointCoverage: 1,
+        }),
+      ).toThrow(/invalid or incomplete/i);
+    },
+  );
+
+  it.each([
+    { startMs: -1 },
+    { endMs: 4000 },
+    { endMs: 1000 },
+    { peakMotionMs: 2200 },
+  ])('rejects invalid clip-relative window bounds %s', bounds => {
+    const clip = capturedSwing();
+    clip.trigger = { ...clip.trigger, ...bounds };
+    expect(() => attemptCaptureEnvelope(clip, null, null)).toThrow(
+      /invalid or incomplete/i,
+    );
+  });
+
+  it('does not invent window evidence for a full imported receipt', () => {
+    const clip: CapturedClip = {
+      uri: 'file:///private/Captures/import.mov',
+      width: 1080,
+      height: 1920,
+      fps: 60,
+      durationMs: 3200,
+      capturedAtIso: '2026-09-06T12:00:00.000Z',
+      captureMode: 'imported_video',
+      recognition: { status: 'unknown', reason: 'analysis_not_run' },
+      ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
+    };
+    const verdict = attemptCaptureEnvelope(clip, qualitySignals(), {
+      state: 'ready',
+      jointCoverage: 1,
+    });
+    expect(dimension(verdict, 'player_visibility').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'brightness').status).toBe('NOT_MEASURED');
+  });
+
+  it('preserves the explicit configuration-only legacy preview semantics', () => {
+    const verdict = attemptCaptureEnvelope(
+      { width: 1080, height: 1920, fps: 60, durationMs: 3200 },
+      qualitySignals({ brightnessMeanLuma: 10 }),
+      { state: 'no_person', jointCoverage: 0 },
+    );
+    expect(dimension(verdict, 'player_visibility').measured).toBe(0);
+    expect(dimension(verdict, 'brightness').measured).toBe(10);
+    expect(verdict.overall).toBe('UNSUPPORTED');
+  });
+
   it('takes resolution/fps/duration from the real clip configuration', () => {
     const verdict = attemptCaptureEnvelope(
       { width: 1080, height: 1920, fps: 60, durationMs: 3200 },

@@ -5,11 +5,29 @@ import type {
 } from '../src/billing';
 import {
   clearAccessStoreConfiguration,
-  configureAccessStore,
+  configureAccessStore as configureBillingAccessStore,
   selectCanStartRating,
   selectHasPremium,
   useAccessStore,
 } from '../src/state/accessStore';
+import type {
+  PendingFulfilment,
+  PendingFulfilmentStorage,
+} from '../src/billing/pendingFulfilment';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
+
+const OWNER = '11111111-1111-4111-8111-111111111111';
+let pendingStorage: PendingFulfilmentStorage;
+
+function configureAccessStore(clients: BillingAccessDependencies): void {
+  configureBillingAccessStore(clients, {
+    owner: OWNER,
+    pendingFulfilmentStorage: pendingStorage,
+  });
+}
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
@@ -115,6 +133,24 @@ function dependencies(options?: {
 
 beforeEach(() => {
   clearAccessStoreConfiguration();
+  setActiveDataOwner(OWNER);
+  const records = new Map<string, PendingFulfilment>();
+  pendingStorage = {
+    read: async owner => records.get(owner) ?? null,
+    write: async (record, assertActive) => {
+      assertActive?.();
+      records.set(record.owner, record);
+    },
+    remove: async (record, assertActive) => {
+      assertActive?.();
+      records.delete(record.owner);
+    },
+  };
+});
+
+afterEach(() => {
+  clearAccessStoreConfiguration();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
 describe('accessStore', () => {
@@ -212,6 +248,20 @@ describe('accessStore', () => {
     expect(state.canonicalAccess).toEqual(paidAccess);
   });
 
+  it('does not reopen StoreKit from a queued purchase tap after fulfilment already succeeded', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      true,
+    );
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      false,
+    );
+    expect(clients.store.purchase).toHaveBeenCalledTimes(1);
+    expect(clients.backend.syncBilling).toHaveBeenCalledTimes(1);
+  });
+
   it('clears stale access if a canonical refresh fails', async () => {
     let fail = false;
     configureAccessStore(
@@ -229,6 +279,54 @@ describe('accessStore', () => {
     );
     expect(useAccessStore.getState().canonicalAccess).toBeNull();
     expect(selectCanStartRating(useAccessStore.getState())).toBe(false);
+  });
+
+  it.each(['getAccess', 'loadPlans'] as const)(
+    'ends initialization when %s throws synchronously',
+    async method => {
+      const clients = dependencies();
+      const client = method === 'getAccess' ? clients.backend : clients.store;
+      (
+        client[method as keyof typeof client] as jest.Mock
+      ).mockImplementationOnce(() => {
+        throw new Error('unexpected synchronous failure');
+      });
+      configureAccessStore(clients);
+      await expect(
+        useAccessStore.getState().initialize(),
+      ).resolves.toBeUndefined();
+      expect(useAccessStore.getState().status).toBe('error');
+      expect(useAccessStore.getState().operation).toBe('idle');
+      expect(useAccessStore.getState().error?.retryable).toBe(true);
+    },
+  );
+
+  it('does not start initialization or refresh over an in-flight store operation', async () => {
+    let resolvePurchase!: (value: {
+      premium: boolean;
+      productId: null;
+      expirationDate: null;
+    }) => void;
+    const purchase = new Promise<{
+      premium: boolean;
+      productId: null;
+      expirationDate: null;
+    }>(resolve => {
+      resolvePurchase = resolve;
+    });
+    const clients = dependencies();
+    (clients.store.purchase as jest.Mock).mockReturnValueOnce(purchase);
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+    const purchasing = useAccessStore.getState().purchaseSelected();
+    await useAccessStore.getState().initialize();
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(
+      false,
+    );
+    expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(useAccessStore.getState().operation).toBe('purchasing');
+    resolvePurchase({ premium: true, productId: null, expirationDate: null });
+    await purchasing;
   });
 
   it('cannot repopulate the previous account after sign-out mid-refresh', async () => {

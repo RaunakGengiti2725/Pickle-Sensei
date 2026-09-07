@@ -20,14 +20,7 @@ describe("GeometricPhaseSegmenter", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const keys = result.value.map((span) => span.key);
-    expect(keys).toEqual([
-      "ready",
-      "prepare",
-      "accelerate",
-      "contact",
-      "follow_through",
-      "recover",
-    ]);
+    expect(keys).toEqual(["ready", "prepare", "accelerate", "contact", "follow_through"]);
 
     // Contiguous and ordered.
     for (let index = 1; index < result.value.length; index += 1) {
@@ -82,6 +75,95 @@ describe("GeometricPhaseSegmenter", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.failure.code).toBe("phase.too_few_pose_frames");
+  });
+
+  it("does not claim return-to-ready from trailing clip time", async () => {
+    const swing = generateSwing();
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const result = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.some((phase) => phase.key === "recover")).toBe(false);
+  });
+
+  it.each(["before", "after", "contact"] as const)(
+    "keeps %s boundaries inside actual observations",
+    async (edge) => {
+      const swing = generateSwing();
+      const frames =
+        edge === "before"
+          ? swing.frames.filter((frame) => frame.timestampMs >= 200)
+          : edge === "contact"
+            ? swing.frames.filter((frame) => frame.timestampMs <= swing.window.peakMs)
+            : swing.frames;
+      const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+      const result = await segmenter.segmentPhases(frames, [], {
+        ...stroke(swing.window),
+        endMs: swing.window.endMs + 3000,
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      for (const phase of result.value) {
+        expect(phase.startMs).toBeGreaterThanOrEqual(frames[0]!.timestampMs);
+        expect(phase.endMs).toBeLessThanOrEqual(frames.at(-1)!.timestampMs);
+        expect(phase.endMs).toBeGreaterThan(phase.startMs);
+        expect(phase.representativeMs).toBeGreaterThanOrEqual(phase.startMs);
+        expect(phase.representativeMs).toBeLessThanOrEqual(phase.endMs);
+      }
+    },
+  );
+
+  it("uses the actual per-call video aspect without mutating another analysis", async () => {
+    const swing = generateSwing();
+    const wideFrames = swing.frames.map((frame) => ({
+      ...frame,
+      landmarks: frame.landmarks.map((point) => ({ ...point, x: point.x / 2 })),
+    }));
+    const segmenter = new GeometricPhaseSegmenter({ aspectRatio: 1 });
+    const reference = await segmenter.segmentPhases(swing.frames, [], stroke(swing.window));
+    const incorrectSquare = await segmenter.segmentPhases(wideFrames, [], stroke(swing.window));
+    expect(incorrectSquare).not.toEqual(reference);
+    const [wide, square] = await Promise.all([
+      segmenter.segmentPhases(wideFrames, [], stroke(swing.window), { width: 1280, height: 640 }),
+      segmenter.segmentPhases(swing.frames, [], stroke(swing.window), { width: 640, height: 640 }),
+    ]);
+    expect(wide).toEqual(reference);
+    expect(square).toEqual(reference);
+  });
+
+  it("uses observed sample timestamps for every representative frame", async () => {
+    const swing = generateSwing();
+    const result = await new GeometricPhaseSegmenter({ aspectRatio: 1 }).segmentPhases(
+      swing.frames,
+      [],
+      stroke(swing.window),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const observed = new Set(swing.frames.map((frame) => frame.timestampMs));
+    for (const phase of result.value) expect(observed.has(phase.representativeMs)).toBe(true);
+  });
+
+  it("requires measured video dimensions when no per-clip aspect was configured", async () => {
+    const swing = generateSwing();
+    const segmenter = new GeometricPhaseSegmenter();
+    expect((await segmenter.segmentPhases(swing.frames, [], stroke(swing.window))).ok).toBe(false);
+    for (const video of [
+      { width: 0, height: 640 },
+      { width: -1280, height: -640 },
+      { width: 1280, height: Number.NaN },
+    ]) {
+      expect(
+        (await segmenter.segmentPhases(swing.frames, [], stroke(swing.window), video)).ok,
+      ).toBe(false);
+    }
+    expect(
+      (
+        await segmenter.segmentPhases(swing.frames, [], stroke(swing.window), {
+          width: 640,
+          height: 640,
+        })
+      ).ok,
+    ).toBe(true);
   });
 
   it("is deterministic frame for frame", async () => {

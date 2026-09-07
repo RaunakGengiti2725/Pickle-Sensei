@@ -211,7 +211,12 @@ fontSize/fontFamily near a token. Title roles:
   (`marginTop: space.sm`, `maxWidth: 340`).
 - Sub-page headers: `ScreenHeader` (`type.h3`). Section headers:
   `SectionTitle` (`type.h3`); Progress's dark dashboard uses
-  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere).
+  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere). With
+  `wrapTitle`, `ScreenHeader` gives the title a full-width row below controls
+  at `fontScale >= 2`; otherwise it preserves the standard centered row.
+  Do not shrink the font or reuse the narrow Back/Close side slots for long
+  accessibility titles. The Consistency header is natively checked on a
+  375-point iPhone at fontScale 3.571.
 - Centered state/celebration headlines (signed-out states, Analyze states,
   Result moments, Paywall title): `type.h1`.
 - Data numerals may size per card, but the SAME role must match everywhere
@@ -878,6 +883,46 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
 
+## Canonical 3D Analysis migration (product direction, 2026-09-05)
+
+The new 3D Analysis system is the intended REPLACEMENT for primary 2D
+exoskeleton/heatmap analysis, not a permanent optional viewer or second mode.
+Keep shipping 2D functional during validation, then make released, eligible
+3D analyses canonical through Result, navigation, loaders, state and storage.
+Legacy 2D remains only where a documented technical fallback, regression
+baseline or historical-record reader is necessary. Preserve raw 2D observations
+when the chosen 3D estimator needs them; that does not preserve a competing UI.
+
+The one analysis has synchronized actual reconstructed motion, a qualified
+coach-reviewed compatible exemplar (otherwise eligible earlier own-best,
+otherwise no reference), and a separately labelled modelled correction of the
+player's own body. Preserve proportions, handedness and unaffected movement;
+modify only supported components. Generated motion never becomes measured
+truth, a rating, a reference observation or training ground truth.
+
+Require separate visualization-, comparison-, coaching- and scoring-grade
+validation, plus corrected-motion, UX/performance, physical-device, privacy,
+release and migration checks. Passing one grade does not authorize another.
+Keep unsupported capabilities blocked; do not unlock from finite XYZ values,
+a demo, LLM agreement or synthetic tests. The current 2D operational guidance
+above remains the shipping safety contract until the versioned cutover gates
+pass; it is not a requirement to retain that primary experience forever.
+
+The existing Astra master plan is `docs/prompts/astra-app-improvement.md`.
+It defines the audit, experiments, evidence requirements, strict acceptance
+criteria, route/history parity, rollback and retirement work. Canonical cutover
+requires scoring-grade approval too: no 2D-score/3D-coaching hybrid, and no
+legacy score to rescue a failed 3D-eligible run. Legacy scoring is limited to
+explicit out-of-scope cohorts or an authorized rollback policy for new runs.
+Before 3D writes, partition rank/best/comparison semantics by scoring definition
+across SQL, shared code and Edge; do not blend 2D and 3D scores. Own-best requires
+same-athlete evidence and approved 3D quality/review, not a legacy 2D score.
+Platform/OS scope, same-clip re-analysis charging and rank-partition display
+need explicit decisions before release. Follow the plan's
+VERIFIED / MEASURED / PARTIAL / BLOCKED distinctions. No runtime cutover,
+production deployment or legacy deletion is authorized merely by updating
+the plan. Preserve account, consent, entitlement and scoring-history safeguards.
+
 ## Supabase production hardening (2026-09-05)
 
 - `20260905190106_api_only_database_access.sql` and the matching Edge Function
@@ -903,11 +948,13 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   rank/progress and billing. Do not cache its verdict. Missing server proof
   raises a database error, which the API reports as retryable 503 rather than
   signing users out; a valid proof with a revoked session returns false/401.
-- `service_role` bypasses RLS but still needs SQL grants. The live audit found
-  missing grants on billing, webhook audit, and external-account cleanup.
-  Grant SELECT/INSERT/UPDATE on `billing_entitlements` and
-  `account_external_credentials`, and SELECT/INSERT on `webhook_events`.
-  Keep webhook UPDATE/DELETE and client writes to these records revoked.
+- `service_role` bypasses RLS but still needs SQL grants. Historical fixes
+  added missing direct-write grants, but later ordered-billing and deletion
+  migrations deliberately replace those writes with narrowly granted RPCs.
+  Use the helpers appropriate to the applied migration boundary; never
+  restore obsolete billing, webhook-audit or credential DML grants to make
+  old callers or fixtures pass. Keep all client writes to these records
+  revoked and coordinate caller/migration deployment.
 - Permits may move from `reserved` to `finalized` or `released`, not back.
   Shot/session and detail/shot ownership checks apply at the database layer.
   Captures and measurements have no API writer; keep their client write
@@ -937,3 +984,152 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   bearer, so RLS is unchanged. Pinned by `__wf__/auth_ip_forwarding.test.ts`
   (secret mode) and `account_routes.test.ts` (publishable fallback).
   Live Auth logs confirmed the forwarded client IP on 2026-09-06.
+
+## Production stays 2D; 3D is parked for v2 (2026-09-05)
+
+The owner explicitly chose to keep the previous 2D analysis for production.
+The main checkout's mobile, native and shared-analysis code has been restored
+to the pre-3D baseline `c23b266`; this includes Debug as well as Release.
+Do not reintroduce the 3D pipeline into this checkout without a new request.
+
+The complete in-progress 3D code, tests and research are saved on local branch
+`codex/3d-analysis-v2`, commit `3616560`, in the separate worktree
+`/Users/raunakgengiti/Pickle-Sensei-3d-v2`. That snapshot is future v2 work, not
+an approved release. The existing Astra master plan remains its roadmap;
+its implementation addendum describes archived work, not the current main app.
+Unrelated backend changes and the separate Astra app-polish worktree are retained.
+
+Never run Debug and Release Xcode builds concurrently against the same Pods
+directory, even with separate DerivedData paths: RN's dependency/core/Hermes
+configuration scripts replace shared prebuilt frameworks. Run them serially.
+
+## Local analysis durability and verification (2026-09-06)
+
+- Mobile verification uses Node 22, matching CI. The journal/pipeline tests use
+  Node's built-in `node:sqlite`; Node 20 is insufficient for those suites.
+  `apps/mobile/testSupport/sqlite.ts` runs the actual local migrations with a
+  real in-memory SQLite engine. It is test-only, not a shipping native adapter.
+- `getDb()` serializes native statements through the OP-SQLite transaction
+  queue. Use `withTransaction(rawDb, async rawTx => ...)` for a compound write;
+  do not issue manual `BEGIN`/`COMMIT` through the public `getDb().execute()`.
+  Derive `forDataOwner(rawTx, context)` for owner-sensitive repository writes.
+  `DataOwnerContext` includes a generation, so A → sign-out → A invalidates old
+  work even though the UUID is the same.
+- The legacy online analysis journal is `analysis_run_journal`. Reservation
+  identity is durable before HTTP; the committed marker, practice set, result,
+  and outbox share one transaction. Ambiguous commit acknowledgement means
+  HOLD/recover, not refund. Operational journal methods take a raw database
+  and immutable original owner/origin; never pass an owner-scoped handle or
+  substitute the currently signed-in account. Recovery excludes active
+  execution, not merely mounted screens. Register new owner tables/namespaces
+  in the repository purge allowlists.
+- A `replayed` analysis outcome reopens the existing result without another
+  review request. `recovery_pending` must not claim that nothing was rated or
+  mint another operation automatically. These guarantees are not the signed
+  offline wallet; that protocol is still separate unfinished work.
+- Guided capture, import, and extraction accept an operation ID/AbortSignal.
+  Cleanup must abort its own operation, not call the global no-argument cancel
+  from a stale screen. Native cancellation can reject promptly while retaining
+  the busy barrier until existing work drains.
+- The auth-owned billing lifecycle automatically reconciles through our
+  backend REST API, including after a restart without a purchase marker.
+  It does not call StoreKit purchase/restore/sync methods. Retries run only
+  while active, using the store's bounded backoff and captured configuration.
+  Ordinary bearer rotation must not reconfigure it. Preserve
+  `billing.pending-fulfilment:<owner>` on sign-out; discard/invalidate it only
+  for that owner after confirmed account deletion.
+- Diagnostics are disabled until provider, disclosure, native-privacy and
+  release-identity gates are approved. Do not add `Sentry.wrap`, another global
+  handler, automatic native collection, or an upload token to bypass these
+  gates. The current Xcode wrapper prepares local artifacts with uploads
+  explicitly disabled; an unsigned build and matching dSYM are not live
+  symbolication or device certification.
+- FFmpeg 9 removed `-vsync`; current timestamp fixtures use the output option
+  `-fps_mode passthrough`. Keep the VFR/duplicate-PTS assertions unchanged.
+  A host without `drawtext` still cannot run the broadcast-overlay fixture.
+
+## Follow-up reliability checks (2026-09-06)
+
+- Rank, streak and walkthrough presentations share `flow/CeremonyHost.tsx`.
+  The iOS host uses the installed `FullWindowOverlay`, not a native Modal
+  controller: an absent `onShow`/`onDismiss` must never hold input or block the
+  queue. Preserve native-fullScreenModal layering, owner generations, stale
+  handler protection and interrupted requests. Renderer tests are not proof
+  of native touch recovery or VoiceOver behavior.
+- Consistency ledger absence and unreadable/corrupt/future-version data are
+  different states. Unknown data cannot authorize a replacement ledger,
+  milestone ceremony or drill/day marker write. Preserve the same owner's
+  last valid snapshot and surface a load error instead of inventing an empty
+  history; notification snapshots must not use incomplete drill facts.
+- `__tests__/xc/xcMatrixNetworkAuth2.keeper.test.ts` retains 1,500 default
+  seeds in 60 batches of 25, with a fixed virtual epoch and drained request,
+  timer and listener cleanup. `XC_SEED` replays a uint32 seed; `XC_SEEDS` may
+  select 1–10,000 seeds. Do not replace this with a larger global timeout,
+  force-exit, skipped seeds or callbacks running after teardown. For repeated
+  verification, set `XC_OUT` to an explicitly owned temporary artifact
+  directory so new machine reports do not dirty the repository or its
+  subsequent formatting check; this does not change seeds or coverage.
+- A RevenueCat webhook audit row is a completion marker. Failed verification,
+  entitlement persistence or audit storage returns retryable failure, not a
+  successful acknowledgement that suppresses replay. FK failure alone does
+  not prove a missing account; require the ticket RPC's locked Auth-row
+  absence or an authoritative Auth admin `user_not_found` response.
+  Previously poisoned markers need approved reconciliation, not an
+  unrequested bulk deletion. Ordered verification is implemented and locally
+  tested, but its cutover must drain old writers and coordinate the migration,
+  Edge deployment and PostgREST reload before traffic resumes.
+- Request Content-Length is advisory for rejection only, never a reason to
+  allocate its claimed size before bytes arrive. The Edge body reader starts
+  at bounded 8 KiB and grows from actual received bytes while preserving the
+  existing per-route caps, cancellation and deadline.
+- Native UI acceptance uses a fresh explicitly owned simulator, a dedicated
+  Metro port and an external XCTest runner. The app is ad-hoc signed for
+  simulator secure-storage testing; unsigned Release compilation does not
+  establish Keychain behavior. Preserve the other running simulators.
+- Hermes Inspector did not await the app's Promise implementation through
+  CDP `awaitPromise`: it returned the Promise representation. Raw injected
+  async helpers also returned premature DB results in the UI probe. Compile
+  injected harness helpers with the installed Babel transforms and await
+  explicitly observed completion; do not alter production Promise globals.
+- In the iOS walkthrough's actual XCTest hierarchy, a React Native
+  ScrollView testID identifies an `Other` wrapper; the native `ScrollView`
+  is its child without that identifier. Resolve the wrapper first and then
+  its native scroll descendant. A failed `app.scrollViews[id]` lookup does
+  not establish that the UI lacks scrolling. Keep native button hit/viewport
+  assertions and verify the end of overflowing copy using real swipes.
+  Inspector clients must send the matching localhost Origin rather than
+  disabling Metro's origin checks.
+- Native test success requires an xcresult with the intended test actually
+  executed, correct device/runtime, zero skips/expected failures, and no
+  failures. An exit-zero selection that ran zero tests is not proof.
+- Onboarding still requires a name (one trimmed character minimum, existing
+  length cap); it may be a preferred name or nickname, not a verified legal
+  name. Preserve the questionnaire, pre-auth ordering, and historical optional
+  storage fields. Updated legal source remains an unpublished draft until an
+  approved deployment; do not claim the live privacy page changed.
+- The mobile CI job runs `node --test
+scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
+  These are offline source/provenance checks, not current-app clearance.
+  Final native delivery also requires `--check-app` with the actual fresh
+  Release source map and explicitly computed bundle/map hashes. Keep the
+  vendor Sentry privacy resource in its own bundle, not the app manifest.
+- Native Supabase SwiftPM linkage was removed with owner approval to preserve
+  iOS 15.1. The business API uses JS and the Edge service; Apple/Google auth,
+  Google AppAuth, Keychain, RevenueCat, and the CocoaPods aggregate remain.
+  Do not re-add the unused Swift products to silence a dependency warning.
+- A Devin renderer crash (`reason: crashed, code: 5`) was recorded on
+  2026-09-07. It is separate from native application test failures. Until the
+  environment is stable, keep active workers bounded, native builds/tests
+  serial with low job counts, and tool output compact. Retain full test
+  evidence in result bundles/reports instead of flooding the chat. Do not
+  disable system security/indexing or change IDE settings as a workaround.
+- Geometry v2 (`geometry-2`, `phase-geometry-2`, `features-geometry-2`) bounds
+  phases to observed samples and does not infer recovery from clip duration.
+  Optional missing phases omit dependent metrics; missing ground or forward
+  direction is not filled with image-bottom/rightward defaults. Keep the
+  scoring checkpoint weights and missing-observation penalties intact.
+  Fusion passes actual width/height into each phase call; the mobile phase
+  provider has no square-video fallback. Historical v1 records are not
+  rewritten or silently upgraded. The geometry/pipeline regression suites
+  cover these contracts; native media timing and scientific approval remain
+  separate requirements.

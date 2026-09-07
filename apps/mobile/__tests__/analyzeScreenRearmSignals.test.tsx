@@ -10,6 +10,7 @@ jest.mock('../src/data/repository', () => ({
   setKv: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('../src/account/apiSession', () => ({
+  ...jest.requireActual('../src/account/apiSession'),
   getApiSession: jest.fn(() => null),
 }));
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
@@ -40,6 +41,7 @@ const cameraFake: {
   resolvers: Array<(clip: unknown) => void>;
 } = { listener: null, resolvers: [] };
 jest.mock('../src/camera/capture', () => ({
+  ...jest.requireActual('../src/camera/capture'),
   subscribeToCameraEvents: (listener: Listener) => {
     cameraFake.listener = listener;
     return () => {
@@ -65,6 +67,11 @@ import {
   consumeTryAgainHandoff,
 } from '../src/screens/tryAgainHandoff';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import { assertCapturedClip } from '../src/camera/capture';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
 /**
  * g22 — repeated capture attempts on one mounted AnalyzeScreen must not let
@@ -76,8 +83,8 @@ import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 
 const runMock = runCaptureAnalysis as jest.Mock;
 
-function guidedClip(id: string) {
-  return {
+function guidedClip(id: string, meanCanonicalJointVisibility: number) {
+  return assertCapturedClip({
     uri: `file:///private/clip-${id}.mov`,
     durationMs: 4200,
     fps: 59.94,
@@ -89,6 +96,44 @@ function guidedClip(id: string) {
       status: 'unknown',
       reason: 'validated_classifier_unavailable',
     },
+    trigger: {
+      startMs: 2000,
+      endMs: 2700,
+      peakMotionMs: 2400,
+      confidence: 0.82,
+      source: 'temporal_pose_motion',
+      modelVersion: 'temporal-stroke-heuristic-2',
+    },
+    captureEvidence: {
+      schemaVersion: 1,
+      window: 'detected_motion',
+      poseSource: 'apple_vision_body_pose',
+      poseModelVersion: 'apple-vision-bodypose-1',
+      triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
+      motionUnit: 'normalized_image_units_per_second',
+      analysisInputFrameCount: 7,
+      poseFrameCount: 6,
+      poseMissingFrameCount: 1,
+      trackedDurationMs: 620,
+      meanCanonicalJointVisibility,
+      meanJointCoverage: 0.94,
+      minimumJointCoverage: 0.83,
+      fullBodyVisibleFrameCount: 4,
+      jointMotion: [
+        {
+          joint: 'left_wrist',
+          sampleCount: 5,
+          meanNormalizedPerSecond: 1.1,
+          peakNormalizedPerSecond: 2.4,
+        },
+      ],
+    },
+    ballSpeed: {
+      status: 'unavailable',
+      reason: 'calibrated_ball_tracker_unavailable',
+    },
+    preRollMs: 2000,
+    postRollMs: 1500,
     targetSeed: { x: 0.5, y: 0.6 },
     poseSequence: {
       schemaVersion: 1,
@@ -99,11 +144,11 @@ function guidedClip(id: string) {
       coordinateSystem: 'normalized_image_top_left',
       poseModelVersion: 'apple-vision-bodypose-1',
     },
-  };
+  });
 }
 
 // Abstained outcome keeps the screen on its own 'analyzed' phase (with the
-// "Capture another" CTA) instead of navigating away, so one mounted screen
+// "Record another clip" CTA) instead of navigating away, so one mounted screen
 // really runs attempt after attempt — the Try Again loop's worst case.
 function abstainedOutcome(analysisId: string) {
   return {
@@ -143,14 +188,19 @@ async function flush() {
 }
 
 describe('g22 — live-window signals never leak into the next attempt', () => {
+  beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
+  });
+
   afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     consumeTryAgainHandoff();
     cameraFake.listener = null;
     cameraFake.resolvers = [];
     jest.clearAllMocks();
   });
 
-  it('a silent second capture window is NOT_MEASURED, not stamped with the previous clip\u2019s signals', async () => {
+  it('a silent second capture window uses its own recorded visibility, not the previous clip\u2019s preview signals', async () => {
     jest.useFakeTimers();
     try {
       runMock.mockImplementation((request: { captureId: string }) =>
@@ -206,21 +256,29 @@ describe('g22 — live-window signals never leak into the next attempt', () => {
         });
       });
       await act(async () => {
-        cameraFake.resolvers[0]!(guidedClip('one'));
+        cameraFake.resolvers[0]!(guidedClip('one', 0.88));
       });
       await flush();
 
       expect(runMock).toHaveBeenCalledTimes(1);
       const first = runMock.mock.calls[0]![0]
         .captureEnvelope as EnvelopeVerdict;
-      expect(status(first, 'player_visibility')).not.toBe('NOT_MEASURED');
-      expect(status(first, 'brightness')).not.toBe('NOT_MEASURED');
+      expect(status(first, 'player_visibility')).toBe('SUPPORTED');
+      expect(first.dimensions).toContainEqual(
+        expect.objectContaining({
+          dimension: 'player_visibility',
+          measured: 0.88,
+        }),
+      );
+      expect(status(first, 'brightness')).toBe('NOT_MEASURED');
+      expect(status(first, 'motion_blur')).toBe('NOT_MEASURED');
+      expect(status(first, 'camera_motion')).toBe('NOT_MEASURED');
 
       // Attempt 2 on the SAME mounted screen: the second live window emits
       // NOTHING before its clip completes.
       const [captureAnother] = renderer.root.findAll(
         node =>
-          node.props.accessibilityLabel === 'Capture another' &&
+          node.props.accessibilityLabel === 'Record another clip' &&
           typeof node.props.onPress === 'function',
       );
       expect(captureAnother).toBeDefined();
@@ -229,7 +287,7 @@ describe('g22 — live-window signals never leak into the next attempt', () => {
       });
       expect(cameraFake.resolvers).toHaveLength(2);
       await act(async () => {
-        cameraFake.resolvers[1]!(guidedClip('two'));
+        cameraFake.resolvers[1]!(guidedClip('two', 0.4));
       });
       await flush();
 
@@ -241,7 +299,13 @@ describe('g22 — live-window signals never leak into the next attempt', () => {
       expect(status(second, 'frame_rate')).not.toBe('NOT_MEASURED');
       expect(status(second, 'clip_duration')).not.toBe('NOT_MEASURED');
       // …but nothing from attempt 1's live window is attributed to it.
-      expect(status(second, 'player_visibility')).toBe('NOT_MEASURED');
+      expect(status(second, 'player_visibility')).toBe('DEGRADED');
+      expect(second.dimensions).toContainEqual(
+        expect.objectContaining({
+          dimension: 'player_visibility',
+          measured: 0.4,
+        }),
+      );
       expect(status(second, 'brightness')).toBe('NOT_MEASURED');
       expect(status(second, 'motion_blur')).toBe('NOT_MEASURED');
       expect(status(second, 'camera_motion')).toBe('NOT_MEASURED');

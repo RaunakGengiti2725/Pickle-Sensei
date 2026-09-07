@@ -639,6 +639,30 @@ final class TemporalStrokeDetectorTests: XCTestCase {
 
   // MARK: - Offline pass (STOP & ANALYZE)
 
+  func testCompletedEventsPreservesEveryWindowInsteadOfChoosingTheLouderSwing() {
+    var path = ready(then: softDinkDeltas)
+    path = move(hold(path, for: 11), by: driveDeltas)
+    let frames = poses(bodySpan: 0.4, path: path)
+    let events = TemporalStrokeDetector.completedEvents(in: frames, config: TemporalStrokeDetector.manualStopConfig)
+    XCTAssertEqual(events.map(\.startMs), [400, 1_360])
+    XCTAssertEqual(events.map(\.peakMotionMs), [440, 1_440])
+    guard events.count == 2 else { return }
+    XCTAssertLessThan(events[0].confidence, events[1].confidence)
+    XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames)?.startMs, events[1].startMs)
+  }
+
+  func testCompletedEventsDefaultsToTheUnchangedLiveConfiguration() {
+    let frames = poses(bodySpan: 0.4, path: ready(then: softDinkDeltas))
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: frames).isEmpty)
+    XCTAssertEqual(TemporalStrokeDetector.completedEvents(in: frames, config: TemporalStrokeDetector.manualStopConfig).count, 1)
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: []).isEmpty)
+  }
+
+  func testCompletedEventsDoesNotInventAnEndForAnUnfinishedTail() {
+    let frames = poses(bodySpan: 0.5, path: ready(then: Array(driveDeltas.prefix(6))))
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: frames).isEmpty)
+  }
+
   func testStrongestEventFindsASoftSwingTheLiveTriggerMissed() {
     let frames = poses(bodySpan: 0.4, path: ready(then: softDinkDeltas))
     // Live config: nothing (0.9 < 1.15).

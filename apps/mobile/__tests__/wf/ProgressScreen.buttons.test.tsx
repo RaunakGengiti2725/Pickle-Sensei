@@ -86,7 +86,12 @@ jest.mock('../../src/progress/rankCelebration', () => {
 import { ProgressScreen } from '../../src/screens/ProgressScreen';
 import type { RootStackParams } from '../../src/navigation/params';
 import { STREAK_MILESTONES } from '../../src/consistency/milestones';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 
+const OWNER = '11111111-1111-4111-8111-111111111111';
 const DAY_MS = 86_400_000;
 
 function daysAgoIso(days: number): string {
@@ -222,6 +227,7 @@ const CONSISTENCY_SNAPSHOT_LABEL =
 
 describe('ProgressScreen button ledger', () => {
   beforeEach(() => {
+    setActiveDataOwner(OWNER);
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockRefreshConsistency.mockClear();
@@ -241,6 +247,7 @@ describe('ProgressScreen button ledger', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   });
 
   it('section tabs switch the dashboard and expose tab semantics', async () => {
@@ -430,6 +437,7 @@ describe('ProgressScreen button ledger', () => {
     mockGetApiSession.mockReturnValue({
       apiBaseUrl: 'https://example.test',
       bearerToken: 'fake',
+      canonicalAppUserId: OWNER,
     });
     mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
     const renderer = await renderScreen();
@@ -437,6 +445,7 @@ describe('ProgressScreen button ledger', () => {
     expect(text).not.toContain('Progress couldn’t load');
     expect(text).toContain('KEY STATISTICS');
     expect(text).not.toContain('OBSERVED SCORE SIGNALS');
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 

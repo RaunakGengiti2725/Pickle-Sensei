@@ -9,6 +9,24 @@ import {
   type EmitterSubscription,
 } from 'react-native';
 import { stabilitySlo } from '../analysis/stabilityTelemetry';
+import {
+  isDataOwnerContextCurrent,
+  subscribeToDataOwner,
+  type DataOwnerContext,
+} from '../data/accountScope';
+import {
+  assertCurrentClipByteComparison,
+  assertNativeMediaIdentity,
+  InvalidNativeMediaIdentityError,
+  type CurrentClipBytesResult,
+  type NativeClipByteComparisonRequest,
+  type NativeMediaIdentityV1,
+} from './nativeMediaIdentity';
+
+export type {
+  CurrentClipBytesResult,
+  NativeMediaIdentityV1,
+} from './nativeMediaIdentity';
 
 export type StrokeRecognition =
   | {
@@ -124,6 +142,8 @@ interface CapturedClipBase {
   width: number;
   height: number;
   byteSize?: number;
+  /** Optional unsigned creation expectation; absence stays byte-unverifiable. */
+  nativeMediaIdentity?: NativeMediaIdentityV1;
   capturedAtIso: string;
   recognition: StrokeRecognition;
   /**
@@ -311,6 +331,7 @@ export type CameraReadinessState =
 
 interface CameraEventBase {
   captureId?: string;
+  operationId?: string;
   emittedAtIso: string;
 }
 
@@ -438,6 +459,9 @@ interface NativeVideoCapture {
   capture(): Promise<unknown>;
   importVideo(): Promise<unknown>;
   readTextFile?(uri: string): Promise<string>;
+  compareCapturedClipBytes?(
+    request: NativeClipByteComparisonRequest,
+  ): Promise<unknown>;
   setCompletionStrategy?(strategy: string): Promise<string>;
   startSessionCapture?(): Promise<unknown>;
   stopSessionCapture?(sessionCaptureId: string): Promise<unknown>;
@@ -451,6 +475,7 @@ interface NativeVideoCapture {
   }): Promise<unknown>;
   extractImportedPoseSequence?(request: {
     uri: string;
+    operationId: string;
     seedX?: number;
     seedY?: number;
   }): Promise<unknown>;
@@ -570,20 +595,219 @@ export function videoImportAvailable(): boolean {
   );
 }
 
-export async function captureStrokeVideo(): Promise<CapturedClip> {
+export async function captureStrokeVideo(
+  options?: CameraOperationOptions,
+): Promise<CapturedClip> {
   if (!native?.capture) {
     throw new Error(
       'Real guided camera capture is not available on this device.',
     );
   }
-  return assertCapturedClip(await native.capture(), 'automatic_pose_trigger');
+  return runNativeCameraOperation(
+    () => native.capture(),
+    payload => assertCapturedClip(payload, 'automatic_pose_trigger'),
+    options,
+  );
 }
 
-export async function importStrokeVideo(): Promise<CapturedClip> {
+export interface CameraOperationOptions {
+  operationId?: string;
+  signal?: AbortSignal;
+}
+
+export type NativeImportOptions = CameraOperationOptions;
+
+let cameraOperationSequence = 0;
+let activeCameraOperation: { id: string; cancel(): void } | null = null;
+
+function cameraCancelledError(): Error & { code: string } {
+  return Object.assign(new Error('Camera operation was canceled.'), {
+    code: 'camera.cancelled',
+  });
+}
+
+function runNativeCameraOperation<T>(
+  start: (operationId: string) => Promise<unknown>,
+  validate: (payload: unknown) => T,
+  options?: CameraOperationOptions,
+): Promise<T> {
+  const operationId =
+    options?.operationId ??
+    `camera-${Date.now().toString(36)}-${++cameraOperationSequence}`;
+  if (
+    typeof operationId !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(operationId)
+  ) {
+    return Promise.reject(new Error('The camera operation id is invalid.'));
+  }
+  const signal = options?.signal;
+  if (signal?.aborted) {
+    return Promise.reject(cameraCancelledError());
+  }
+  if (activeCameraOperation) {
+    return Promise.reject(
+      Object.assign(new Error('Another camera operation is still active.'), {
+        code: 'camera.busy',
+      }),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    let cancelled = false;
+    let started = false;
+    const operation = {
+      id: operationId,
+      cancel() {
+        if (cancelled || activeCameraOperation !== operation) return;
+        cancelled = true;
+        signal?.removeEventListener('abort', operation.cancel);
+        try {
+          if (started) native?.cancel?.();
+        } catch {
+          return;
+        } finally {
+          reject(cameraCancelledError());
+        }
+      },
+    };
+    const finish = () => {
+      signal?.removeEventListener('abort', operation.cancel);
+      if (activeCameraOperation === operation) activeCameraOperation = null;
+    };
+    activeCameraOperation = operation;
+    signal?.addEventListener('abort', operation.cancel, { once: true });
+    if (signal?.aborted || cancelled) {
+      operation.cancel();
+      finish();
+      return;
+    }
+    let result: Promise<unknown>;
+    try {
+      started = true;
+      result = start(operationId);
+    } catch (error) {
+      finish();
+      reject(cancelled ? cameraCancelledError() : error);
+      return;
+    }
+    Promise.resolve(result).then(
+      payload => {
+        finish();
+        if (cancelled || signal?.aborted) {
+          reject(cameraCancelledError());
+          return;
+        }
+        try {
+          resolve(validate(payload));
+        } catch (error) {
+          reject(error);
+        }
+      },
+      error => {
+        finish();
+        reject(cancelled ? cameraCancelledError() : error);
+      },
+    );
+  });
+}
+
+/** Fresh read-only comparison for a future original-settings retry. This does
+ * not reserve, recapture, update storage or prove durable original identity,
+ * ownership/rights/attestation. The owner generation fences async delivery, not
+ * file ownership. Callers must recheck that context before later side effects;
+ * this result is neither cached nor a reusable authorization receipt. */
+export async function verifyCapturedClipCurrentBytes(
+  clip: unknown,
+  ownerContext: DataOwnerContext,
+  options?: CameraOperationOptions,
+): Promise<CurrentClipBytesResult> {
+  const context = Object.freeze({ ...ownerContext });
+  if (!isDataOwnerContextCurrent(context) || options?.signal?.aborted) {
+    return { status: 'cancelled' };
+  }
+  let validated: CapturedClip;
+  try {
+    validated = assertCapturedClip(clip);
+  } catch {
+    return { status: 'invalid' };
+  }
+  if (!validated.nativeMediaIdentity) return { status: 'legacy' };
+  if (!native?.compareCapturedClipBytes) return { status: 'unavailable' };
+  if (
+    options?.operationId !== undefined &&
+    (typeof options.operationId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(options.operationId) ||
+      /[\r\n]/.test(options.operationId))
+  )
+    return { status: 'invalid' };
+
+  // Snapshot BEFORE awaiting; a caller mutating stored metadata cannot change
+  // the expectation against which this invocation's result is accepted.
+  const expectation = Object.freeze({ ...validated.nativeMediaIdentity });
+  const uri = validated.uri;
+  const compare = native.compareCapturedClipBytes.bind(native);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const unsubscribe = subscribeToDataOwner(() => {
+    if (!isDataOwnerContextCurrent(context)) abort();
+  });
+  options?.signal?.addEventListener('abort', abort, { once: true });
+  let comparisonOperationId = '';
+  try {
+    if (!isDataOwnerContextCurrent(context) || options?.signal?.aborted)
+      abort();
+    const result = await runNativeCameraOperation(
+      operationId => {
+        comparisonOperationId = operationId;
+        return compare({
+          uri,
+          byteSize: expectation.byteSize,
+          nativeMediaIdentity: expectation,
+          operationId,
+        });
+      },
+      payload =>
+        assertCurrentClipByteComparison(
+          payload,
+          expectation,
+          comparisonOperationId,
+        ),
+      { operationId: options?.operationId, signal: controller.signal },
+    );
+    // Final epoch fence even if native settled just before an owner transition.
+    if (!isDataOwnerContextCurrent(context) || controller.signal.aborted)
+      return { status: 'cancelled' };
+    return result;
+  } catch (error) {
+    if (
+      !isDataOwnerContextCurrent(context) ||
+      controller.signal.aborted ||
+      (isRecord(error) && error.code === 'camera.cancelled')
+    )
+      return { status: 'cancelled' };
+    if (
+      error instanceof InvalidNativeMediaIdentityError ||
+      (isRecord(error) &&
+        error.code === 'camera.invalid_byte_comparison_request')
+    )
+      return { status: 'invalid' };
+    return { status: 'unavailable' };
+  } finally {
+    unsubscribe();
+    options?.signal?.removeEventListener('abort', abort);
+  }
+}
+
+export async function importStrokeVideo(
+  options?: NativeImportOptions,
+): Promise<CapturedClip> {
   if (!native?.importVideo) {
     throw new Error('Real video import is not available on this device.');
   }
-  return assertCapturedClip(await native.importVideo(), 'imported_video');
+  return runNativeCameraOperation(
+    () => native.importVideo(),
+    payload => assertCapturedClip(payload, 'imported_video'),
+    options,
+  );
 }
 
 /**
@@ -623,23 +847,33 @@ export interface ImportedPoseExtraction {
 export async function extractImportedPoseSequence(
   clip: Extract<CapturedClip, { captureMode: 'imported_video' }>,
   seed?: { x: number; y: number } | null,
+  options?: NativeImportOptions,
 ): Promise<ImportedPoseExtraction> {
   if (!native?.extractImportedPoseSequence) {
     throw new Error(
       'Imported-video pose extraction is not available in this build.',
     );
   }
+  const validatedClip = assertCapturedClip(clip, 'imported_video');
   if (seed && (!isUnitInterval(seed.x) || !isUnitInterval(seed.y))) {
     throw new Error(
       'The target seed must be a normalized point inside the video frame.',
     );
   }
-  const payload = await native.extractImportedPoseSequence({
-    uri: clip.uri,
-    ...(seed ? { seedX: seed.x, seedY: seed.y } : {}),
-  });
-  return assertImportedPoseExtraction(payload);
+  const extract = native.extractImportedPoseSequence.bind(native);
+  return runNativeCameraOperation(
+    operationId =>
+      extract({
+        uri: validatedClip.uri,
+        operationId,
+        ...(seed ? { seedX: seed.x, seedY: seed.y } : {}),
+      }),
+    assertImportedPoseExtraction,
+    options,
+  );
 }
+
+export const MAX_IMPORTED_POSE_FRAMES = 4000;
 
 export function assertImportedPoseExtraction(
   value: unknown,
@@ -652,7 +886,9 @@ export function assertImportedPoseExtraction(
         !value.posterUri.startsWith('file:'))) ||
     !isPositiveInteger(value.framesWithPose) ||
     !isPositiveInteger(value.framesTotal) ||
-    value.framesWithPose > value.framesTotal
+    value.framesWithPose > value.framesTotal ||
+    value.framesTotal > MAX_IMPORTED_POSE_FRAMES ||
+    value.poseSequence.frameCount !== value.framesWithPose
   ) {
     throw new Error(
       'The native importer returned an invalid pose-extraction result.',
@@ -666,7 +902,14 @@ export function assertImportedPoseExtraction(
   };
 }
 
-export function cancelCameraOperation(): void {
+export function cancelCameraOperation(operationId?: string): void {
+  if (activeCameraOperation) {
+    if (operationId !== undefined && operationId !== activeCameraOperation.id)
+      return;
+    activeCameraOperation.cancel();
+    return;
+  }
+  if (operationId !== undefined) return;
   native?.cancel?.();
 }
 
@@ -715,6 +958,15 @@ export function assertCapturedClip(
     !isRecognition(value.recognition)
   ) {
     throw invalidClip();
+  }
+
+  if ('nativeMediaIdentity' in value) {
+    const field = Object.getOwnPropertyDescriptor(value, 'nativeMediaIdentity');
+    if (!field || !('value' in field) || !field.enumerable) throw invalidClip();
+    assertNativeMediaIdentity(field.value, {
+      uri: value.uri,
+      byteSize: value.byteSize,
+    });
   }
 
   if (mode === 'automatic_pose_trigger') {

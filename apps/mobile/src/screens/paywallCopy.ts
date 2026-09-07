@@ -1,13 +1,13 @@
 import type { CanonicalAccessState } from '../billing/types';
 
 export const RATING_CONSUMPTION_RULE =
-  'Only a successful validated score uses a free rating. Every unscored outcome returns the allowance.';
+  'A completed rating uses one free rating. Unscored attempts are not charged. Pending work may keep a rating reserved until it is reconciled.';
 
 export function freeRatingAllowanceCopy(
   access: CanonicalAccessState | null,
 ): string {
   if (!access) {
-    return 'Two successful validated ratings are included once your account is verified.';
+    return 'Two lifetime free ratings are included once your account is verified.';
   }
 
   const { freeRatings } = access;

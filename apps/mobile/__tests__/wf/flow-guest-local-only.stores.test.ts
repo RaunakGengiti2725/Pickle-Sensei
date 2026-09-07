@@ -104,7 +104,10 @@ jest.mock('../../src/account/deviceContext', () => ({
 const mockPurchases = {
   isConfigured: jest.fn(async () => false),
   configure: jest.fn<Promise<void>, [{ apiKey: string; appUserID: string }]>(
-    async () => undefined,
+    async input => {
+      mockPurchases.isConfigured.mockResolvedValue(true);
+      mockPurchases.getAppUserID.mockResolvedValue(input.appUserID);
+    },
   ),
   getAppUserID: jest.fn(async () => 'anon'),
   logIn: jest.fn<Promise<void>, [string]>(async () => undefined),
@@ -115,16 +118,24 @@ const mockBillingConfigs: Array<Record<string, unknown>> = [];
 jest.mock('../../src/billing', () => {
   const actual =
     jest.requireActual<typeof import('../../src/billing')>('../../src/billing');
+  const { createPendingFulfilmentStorage } = jest.requireActual<
+    typeof import('../../src/billing/pendingFulfilment')
+  >('../../src/billing/pendingFulfilment');
   return {
     ...actual,
     createBillingAccessDependencies: (
       config: Parameters<typeof actual.createBillingAccessDependencies>[0],
     ) => {
       mockBillingConfigs.push({ ...config });
-      return actual.createBillingAccessDependencies({
-        ...config,
-        revenueCatSdk: mockPurchases as never,
-      });
+      return {
+        ...actual.createBillingAccessDependencies({
+          ...config,
+          revenueCatSdk: mockPurchases as never,
+        }),
+        pendingFulfilmentStorage: createPendingFulfilmentStorage(() =>
+          mockCurrentDb(),
+        ),
+      };
     },
   };
 });

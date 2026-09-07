@@ -482,15 +482,18 @@ extension TemporalStrokeDetector {
     minWristPathBodyHeights: 0.25
   )
 
+  public static func completedEvents(in poses: [PoseFrame], config: Config = Config()) -> [StrokeEvent] {
+    let pass = TemporalStrokeDetector(config: config)
+    return poses.compactMap { pass.ingest(pose: $0, paddle: nil) }
+  }
+
   /// Runs a FRESH detector over `poses` (ascending timestamps) and returns the
   /// highest-confidence event — i.e. the strongest swing-like window — or nil
   /// when nothing in the history moved like a stroke. Pure: the live detector
   /// is untouched.
   public static func strongestEvent(in poses: [PoseFrame], config: Config = manualStopConfig) -> StrokeEvent? {
-    let pass = TemporalStrokeDetector(config: config)
     var best: StrokeEvent?
-    for pose in poses {
-      guard let event = pass.ingest(pose: pose, paddle: nil) else { continue }
+    for event in completedEvents(in: poses, config: config) {
       if let current = best, current.confidence >= event.confidence { continue }
       best = event
     }

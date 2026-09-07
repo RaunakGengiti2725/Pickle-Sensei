@@ -1,5 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  independentTrialsForZeroEventUpperBound95,
+  zeroEventUpperBound95,
+} from "@pickle/shared-types";
 
 /**
  * F18 analysis over the degradation-ladder artifact: monotonicity checks,
@@ -35,12 +39,12 @@ export function isMonotone(values: number[], direction: "increasing" | "decreasi
  */
 export function ruleOfThreeUpperBound(n: number): number {
   if (n <= 0) return 1;
-  return 1 - Math.pow(0.05, 1 / n);
+  return zeroEventUpperBound95(n);
 }
 
 /** Smallest n with zero observed events whose 95% upper bound ≤ target. */
 export function trialsForUpperBound(target: number): number {
-  return Math.ceil(Math.log(0.05) / Math.log(1 - target));
+  return independentTrialsForZeroEventUpperBound95(target);
 }
 
 /**

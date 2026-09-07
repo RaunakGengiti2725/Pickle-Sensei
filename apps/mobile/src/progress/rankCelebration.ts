@@ -5,9 +5,12 @@ import {
   type PlayerRankTierKey,
 } from '@pickle/shared-types';
 import { getDb } from '../data/db';
+import { identifyCeremony } from '../flow/ceremonyRequest';
 import { getKv, setKv } from '../data/repository';
 import {
+  captureDataOwnerContext,
   getActiveDataOwner,
+  isDataOwnerContextCurrent,
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import {
@@ -106,9 +109,10 @@ interface RankCelebrationState {
   current: RankCelebration | null;
   /** Earned while the walkthrough was showing; raised once it dismisses. */
   pending: RankCelebration | null;
+  queued: RankCelebration[];
   /** Serialized: concurrent reports from multiple screens queue up. */
   maybeCelebrate: (summary: PlayerRankSummary) => Promise<void>;
-  dismiss: () => void;
+  dismiss: (expected?: RankCelebration) => void;
 }
 
 let evaluationQueue: Promise<void> = Promise.resolve();
@@ -117,11 +121,14 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
   (set, get) => ({
     current: null,
     pending: null,
+    queued: [],
 
     maybeCelebrate: async summary => {
+      if (getActiveDataOwner() === SIGNED_OUT_DATA_OWNER) return;
+      const context = captureDataOwnerContext();
+      const owner = context.ownerKey;
       const run = async () => {
-        const owner = getActiveDataOwner();
-        if (owner === SIGNED_OUT_DATA_OWNER) return;
+        if (!isDataOwnerContextCurrent(context)) return;
         let stored: StoredRankRecord | null;
         try {
           stored = parseStoredRecord(
@@ -131,6 +138,7 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           // Unreadable state: skip rather than risk a duplicate ceremony.
           return;
         }
+        if (!isDataOwnerContextCurrent(context)) return;
         const record: StoredRankRecord = {
           version: 1,
           tier: summary.tier,
@@ -142,7 +150,7 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           stored.rating !== record.rating;
         if (changed) {
           try {
-            if (getActiveDataOwner() !== owner) return;
+            if (!isDataOwnerContextCurrent(context)) return;
             await setKv(
               getDb(),
               rankCelebrationKeyForOwner(owner),
@@ -156,8 +164,15 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           }
         }
         const celebration = evaluateRankTransition(stored, summary);
-        if (!celebration || get().current || get().pending) return;
-        if (useWalkthroughStore.getState().visible) {
+        if (!celebration) return;
+        identifyCeremony(celebration, owner);
+        if (
+          !isDataOwnerContextCurrent(context) ||
+          get().current ||
+          get().pending
+        ) {
+          set(state => ({ queued: [...state.queued, celebration] }));
+        } else if (useWalkthroughStore.getState().visible) {
           set({ pending: celebration });
         } else {
           set({ current: celebration });
@@ -167,7 +182,15 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
       await evaluationQueue;
     },
 
-    dismiss: () => set({ current: null }),
+    dismiss: expected => {
+      const target = expected ?? get().current;
+      if (!target) return;
+      set(state => ({
+        current: state.current === target ? null : state.current,
+        pending: state.pending === target ? null : state.pending,
+        queued: state.queued.filter(celebration => celebration !== target),
+      }));
+    },
   }),
 );
 
@@ -180,6 +203,11 @@ useWalkthroughStore.subscribe(state => {
 });
 
 walkthroughYieldsTo({
-  isShowing: () => useRankCelebrationStore.getState().current !== null,
+  isShowing: () => {
+    const current = useRankCelebrationStore.getState().current;
+    if (!current) return false;
+    const { ownerKey } = identifyCeremony(current);
+    return ownerKey === null || ownerKey === getActiveDataOwner();
+  },
   subscribe: listener => useRankCelebrationStore.subscribe(listener),
 });

@@ -181,7 +181,7 @@ const PROBLEMS: Choice[] = [
  */
 const NAME_QUESTION = {
   title: 'What should we call you?',
-  sub: 'Your coach personalizes every session.',
+  sub: 'Enter a preferred name or nickname to continue. No legal name needed.',
 } as const;
 
 const QUESTIONS: Record<
@@ -514,7 +514,7 @@ export function OnboardingScreen(props: {
             {step === 'name' ? (
               <>
                 <TextInput
-                  accessibilityLabel="First name"
+                  accessibilityLabel="Name or nickname (required)"
                   autoFocus
                   autoCapitalize="words"
                   autoComplete="given-name"
@@ -522,7 +522,7 @@ export function OnboardingScreen(props: {
                   autoCorrect={false}
                   returnKeyType="next"
                   maxLength={40}
-                  placeholder="First name"
+                  placeholder="Name or nickname"
                   placeholderTextColor={color.inkSoft}
                   value={answers['name'] ?? ''}
                   onChangeText={text => select('name', text)}

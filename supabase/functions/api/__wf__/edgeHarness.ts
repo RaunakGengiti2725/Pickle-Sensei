@@ -6,7 +6,7 @@
 //   deno test --allow-all --no-check --node-modules-dir=none supabase/functions/api/__wf__/
 
 export const USER_ID = "11111111-1111-4111-8111-111111111111";
-export const API_BASE = "http://127.0.0.1:8000";
+export let API_BASE = "";
 export const DATABASE_REQUEST_KEY = "a1".repeat(32);
 
 export interface RecordedRequest {
@@ -110,7 +110,21 @@ export function bootEdgeFunction(): Promise<void> {
     Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "fake-service-role-key");
     Deno.env.delete("UPSTASH_REDIS_REST_URL");
     Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
-    await import("../index.ts");
+    const realServe = Deno.serve;
+    Deno.serve = ((handler: Deno.ServeHandler) => {
+      if (typeof handler !== "function") throw new Error("Expected the real Edge handler");
+      const server = realServe({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, handler);
+      API_BASE = `http://127.0.0.1:${server.addr.port}`;
+      return server;
+    }) as typeof Deno.serve;
+    try {
+      await import("../index.ts");
+    } catch (error) {
+      await fake.shutdown();
+      throw error;
+    } finally {
+      Deno.serve = realServe;
+    }
     for (let attempt = 0; attempt < 50; attempt += 1) {
       try {
         const res = await fetch(`${API_BASE}/healthz`);
@@ -121,7 +135,7 @@ export function bootEdgeFunction(): Promise<void> {
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    throw new Error("edge function did not start on :8000");
+    throw new Error("edge function did not start on its owned loopback endpoint");
   })();
   return booted;
 }

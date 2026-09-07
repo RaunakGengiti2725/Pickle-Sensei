@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { HostInstance } from 'react-native';
 import type { NavigationProp } from '@react-navigation/native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -101,6 +108,7 @@ function GradientActionButton(props: {
   progress: SharedValue<number>;
   onPress: () => void;
   open: boolean;
+  largeContentViewer: boolean;
   overlay?: boolean;
   bottom?: number;
   /** Walkthrough anchor — set on the in-bar instance only, so the spotlight
@@ -127,6 +135,8 @@ function GradientActionButton(props: {
         props.open ? 'Close coach actions' : 'Open coach actions'
       }
       accessibilityState={{ expanded: props.open }}
+      accessibilityShowsLargeContentViewer={props.largeContentViewer}
+      accessibilityLargeContentTitle="Coach"
       onPress={props.onPress}
       style={({ pressed }) => [
         styles.gradientButtonPressable,
@@ -150,6 +160,10 @@ function GradientActionButton(props: {
 }
 
 export function PremiumTabBar(props: BottomTabBarProps) {
+  // Match the upstream iOS tab pattern: only fixed labels opt out of scaling,
+  // with the full title available through the native large-content viewer.
+  const largeContentViewer =
+    Platform.OS === 'ios' && parseInt(Platform.Version, 10) >= 13;
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   // Walkthrough anchors: the spotlight tour measures these live views.
@@ -277,11 +291,18 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                 <View key={route.key} style={styles.centerSlot}>
                   <GradientActionButton
                     innerRef={coachFabTarget}
+                    largeContentViewer={largeContentViewer}
                     progress={progress}
                     open={menuOpen}
                     onPress={menuOpen ? () => closeMenu() : openMenu}
                   />
-                  <Text style={[type.micro, styles.centerLabel]}>COACH</Text>
+                  <Text
+                    allowFontScaling={!largeContentViewer}
+                    numberOfLines={1}
+                    style={[type.micro, styles.centerLabel]}
+                  >
+                    COACH
+                  </Text>
                 </View>
               );
             }
@@ -309,9 +330,11 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                       ? progressTabTarget
                       : undefined
                 }
-                accessibilityRole="tab"
+                accessibilityRole={Platform.OS === 'ios' ? 'button' : 'tab'}
                 accessibilityLabel={meta.label}
                 accessibilityState={{ selected: isFocused }}
+                accessibilityShowsLargeContentViewer={largeContentViewer}
+                accessibilityLargeContentTitle={meta.label}
                 onLongPress={() =>
                   props.navigation.emit({
                     type: 'tabLongPress',
@@ -335,6 +358,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                   />
                 </View>
                 <Text
+                  allowFontScaling={!largeContentViewer}
                   numberOfLines={1}
                   style={[
                     type.micro,
@@ -391,6 +415,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
           </View>
           <GradientActionButton
             bottom={insets.bottom + 26}
+            largeContentViewer={largeContentViewer}
             overlay
             progress={progress}
             open

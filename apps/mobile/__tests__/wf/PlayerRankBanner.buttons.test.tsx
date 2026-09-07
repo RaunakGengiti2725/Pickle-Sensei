@@ -174,6 +174,63 @@ beforeEach(() => {
 });
 
 describe('PlayerRankBanner button ledger', () => {
+  it('keeps the rating compact and preserves the approximate DUPR and progress detail below it', async () => {
+    mockGetApiSession.mockReturnValue(SESSION);
+    mockFetchPlayerRank.mockResolvedValue({
+      ...SERVER_RANK,
+      rating: 7.02,
+      tier: 'platinum',
+      techniques: [
+        {
+          shotType: 'dink',
+          score: 7.2,
+          capturedAt: '2026-08-20T00:00:00.000Z',
+        },
+      ],
+    });
+    const renderer = await renderBanner({
+      streakDays: 3,
+      onPressStreak: () => {},
+    });
+    try {
+      const texts = renderer.root.findAllByType(Text);
+      const rating = texts.find(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children[0] === '7.02',
+      );
+      expect(rating).toBeDefined();
+      const ratingText = rating!
+        .findAllByType(Text)
+        .map(node => node.props.children)
+        .flat(3)
+        .filter(child => typeof child === 'string')
+        .join('');
+      expect(ratingText).toBe('7.02 /10');
+      expect(rating!.props.numberOfLines).toBe(1);
+      const detail = texts.find(
+        node =>
+          typeof node.props.children === 'string' &&
+          node.props.children.includes('Best: dink 7.2'),
+      );
+      expect(detail?.props.children).toMatch(
+        /^\(≈ DUPR 5\.2\) · Best: dink 7\.2/,
+      );
+      expect(detail?.props.numberOfLines).toBeUndefined();
+      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).toContain(
+        '(≈ DUPR 5.2)',
+      );
+      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).toContain(
+        '7.02 out of 10',
+      );
+      expect(pressable(renderer, STREAK).props.accessibilityLabel).toContain(
+        '3 days',
+      );
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it('exposes exactly two pressables, each a labelled accessibility button', async () => {
     const renderer = await renderBanner({
       streakDays: 4,

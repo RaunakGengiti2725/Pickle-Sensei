@@ -123,6 +123,12 @@ jest.mock('../../src/notifications/notificationStore', () => ({
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import type { LocalShotRow } from '../../src/data/repository';
 import { hasWalkthroughTarget } from '../../src/walkthrough/targets';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+
+const OWNER = '11111111-1111-4111-8111-111111111111';
 
 function shot(overrides: Partial<LocalShotRow>): LocalShotRow {
   return {
@@ -202,6 +208,7 @@ async function press(node: TestRenderer.ReactTestInstance) {
 }
 
 beforeEach(() => {
+  setActiveDataOwner(OWNER);
   mockNavigate.mockClear();
   mockMaybeCelebrate.mockClear();
   mockFetchPlayerRank.mockClear();
@@ -217,6 +224,8 @@ beforeEach(() => {
   mockNotificationState.requestPermissionAndEnable.mockClear();
   mockNotificationState.dismissPrompt.mockClear();
 });
+
+afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
 describe('Home — loading and failure', () => {
   it('shows a labeled loading state until the local reads resolve, then the court', async () => {
@@ -272,7 +281,10 @@ describe('Home — loading and failure', () => {
   });
 
   it('a synced-progress failure never blocks the court (device data still renders)', async () => {
-    mockGetApiSession.mockReturnValue({ token: 't' });
+    mockGetApiSession.mockReturnValue({
+      canonicalAppUserId: OWNER,
+      token: 't',
+    });
     mockFetchCanonicalProgress.mockRejectedValue(new Error('503'));
     mockListShots.mockResolvedValue([shot({})]);
     const renderer = await renderHome();

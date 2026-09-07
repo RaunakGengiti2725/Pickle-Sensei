@@ -1,3 +1,4 @@
+import * as apiSession from '../src/account/apiSession';
 import {
   BillingError,
   createCanonicalAccessClient,
@@ -71,11 +72,13 @@ function sdk(options?: {
   monthly?: RevenueCatPackageLike | null;
   lifetime?: RevenueCatPackageLike | null;
   entitlementId?: 'premium' | 'pickle_sensei_pro';
-}): RevenueCatSdk & Record<string, jest.Mock> {
+}): { [Key in keyof RevenueCatSdk]: RevenueCatSdk[Key] & jest.Mock } {
   let appUserId = CANONICAL_USER_ID;
+  let configured = false;
   return {
-    isConfigured: jest.fn(async () => false),
+    isConfigured: jest.fn(async () => configured),
     configure: jest.fn(async input => {
+      configured = true;
       appUserId = input.appUserID;
     }),
     getAppUserID: jest.fn(async () => appUserId),
@@ -260,6 +263,138 @@ describe('RevenueCat billing client', () => {
       });
     },
   );
+
+  it('configures the real client only once across configure, offerings, and owner rechecks', async () => {
+    const native = sdk();
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    await client.configure();
+    await client.loadPlans();
+    await client.configure();
+    expect(native.configure).toHaveBeenCalledTimes(1);
+    expect(native.isConfigured).toHaveBeenCalledTimes(3);
+    expect(native.getAppUserID.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(native.logIn).not.toHaveBeenCalled();
+    expect(native.purchasePackage).not.toHaveBeenCalled();
+    expect(native.restorePurchases).not.toHaveBeenCalled();
+  });
+
+  it('rebinds a configured SDK through logIn rather than configuring a second time', async () => {
+    const native = sdk();
+    const first = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const second = createRevenueCatBillingClient(
+      {
+        publicSdkKey: 'appl_public',
+        canonicalAppUserId: '22222222-2222-4222-8222-222222222222',
+      },
+      native,
+      'ios',
+    );
+    await first.configure();
+    await second.configure();
+    await second.loadPlans();
+    expect(native.configure).toHaveBeenCalledTimes(1);
+    expect(native.logIn).toHaveBeenCalledTimes(1);
+    expect(native.logIn).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+    );
+    await expect(native.getAppUserID()).resolves.toBe(
+      '22222222-2222-4222-8222-222222222222',
+    );
+  });
+
+  it('holds the original SDK owner until an explicit purchase finishes before configuring its successor', async () => {
+    const native = sdk();
+    native.isConfigured.mockResolvedValue(true);
+    const first = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const second = createRevenueCatBillingClient(
+      {
+        publicSdkKey: 'appl_public',
+        canonicalAppUserId: '22222222-2222-4222-8222-222222222222',
+      },
+      native,
+      'ios',
+    );
+    const plans = await first.loadPlans();
+    const completion = deferredResponse<{
+      customerInfo: RevenueCatCustomerInfoLike;
+    }>();
+    native.purchasePackage.mockReturnValueOnce(completion.promise);
+    const purchase = first.purchase(plans.annual!.id);
+    for (let index = 0; index < 30; index += 1) await Promise.resolve();
+    expect(native.purchasePackage).toHaveBeenCalledTimes(1);
+    const configureSecond = second.configure();
+    for (let index = 0; index < 30; index += 1) await Promise.resolve();
+    expect(native.logIn).not.toHaveBeenCalled();
+    completion.resolve({ customerInfo: customerInfo(true) });
+    await expect(purchase).resolves.toMatchObject({ premium: true });
+    await configureSecond;
+    expect(native.logIn).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+    );
+    expect(native.restorePurchases).not.toHaveBeenCalled();
+  });
+
+  it('preserves a completed store operation even if the SDK omits its customer-info snapshot', async () => {
+    const native = sdk();
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const plans = await client.loadPlans();
+    native.purchasePackage.mockResolvedValueOnce({});
+    native.restorePurchases.mockResolvedValueOnce(null);
+    await expect(client.purchase(plans.annual!.id)).resolves.toEqual({
+      premium: false,
+      productId: null,
+      expirationDate: null,
+    });
+    await expect(client.restore()).resolves.toEqual({
+      premium: false,
+      productId: null,
+      expirationDate: null,
+    });
+  });
+
+  it('invalidates queued SDK work, but still returns a purchase completion for its original owner', async () => {
+    const native = sdk();
+    native.isConfigured.mockResolvedValue(true);
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const plans = await client.loadPlans();
+    const completion = deferredResponse<{
+      customerInfo: RevenueCatCustomerInfoLike;
+    }>();
+    native.purchasePackage.mockReturnValueOnce(completion.promise);
+    const purchase = client.purchase(plans.annual!.id);
+    for (let index = 0; index < 30; index += 1) await Promise.resolve();
+    const restore = client.restore();
+    const rejection = expect(restore).rejects.toMatchObject({
+      code: 'billing.unconfigured',
+    });
+    client.invalidatePendingOperations?.();
+    completion.resolve({ customerInfo: customerInfo(true) });
+    await expect(purchase).resolves.toMatchObject({ premium: true });
+    await rejection;
+    expect(native.restorePurchases).not.toHaveBeenCalled();
+    await client.loadPlans();
+    expect(native.getOfferings).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('canonical access API', () => {
@@ -314,6 +449,178 @@ describe('canonical access API', () => {
     await expect(client.getAccess()).rejects.toMatchObject({
       code: 'billing.backend_unconfigured',
       unconfiguredReason: 'missing_api_token',
+      retryable: true,
     });
+  });
+
+  it('keeps an expired bearer retryable and resolves the rotated token per request', async () => {
+    const report = jest
+      .spyOn(apiSession, 'reportApiUnauthorized')
+      .mockImplementation(() => undefined);
+    let token = 'expired-access-token';
+    const fetchFn = jest.fn(async () => ({
+      ok: token !== 'expired-access-token',
+      status: token === 'expired-access-token' ? 401 : 200,
+      json: async () => access,
+    })) as unknown as jest.MockedFunction<typeof fetch>;
+    const client = createCanonicalAccessClient({
+      baseUrl: 'https://api.example.test',
+      get token() {
+        return token;
+      },
+      fetchFn,
+    });
+    try {
+      await expect(client.getAccess()).rejects.toMatchObject({
+        code: 'billing.backend_unavailable',
+        retryable: true,
+      });
+      expect(report).toHaveBeenCalledWith('expired-access-token');
+      token = 'rotated-access-token';
+      await expect(client.getAccess()).resolves.toEqual(access);
+      expect(fetchFn.mock.calls[1]?.[1]?.headers).toMatchObject({
+        Authorization: 'Bearer rotated-access-token',
+      });
+    } finally {
+      report.mockRestore();
+    }
+  });
+
+  it.each([408, 429, 503])('keeps HTTP %s retryable', async status => {
+    const client = createCanonicalAccessClient({
+      baseUrl: 'https://api.example.test',
+      token: 'access-token',
+      fetchFn: async () => ({ ok: false, status }) as Response,
+    });
+    await expect(client.getAccess()).rejects.toMatchObject({
+      code: 'billing.backend_unavailable',
+      retryable: true,
+    });
+  });
+});
+
+function deferredResponse<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(settle => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+describe('canonical access API deadlines', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it.each(['getAccess', 'syncBilling'] as const)(
+    '%s settles after ten seconds even when fetch ignores abort',
+    async operation => {
+      const pending = deferredResponse<Response>();
+      const fetchFn = jest.fn<Promise<Response>, [string, RequestInit?]>(
+        () => pending.promise,
+      );
+      const report = jest.spyOn(apiSession, 'reportApiUnauthorized');
+      const client = createCanonicalAccessClient({
+        baseUrl: 'https://api.example.test',
+        token: 'access-token',
+        fetchFn,
+      });
+      let result: unknown = null;
+      const request = client[operation]().then(
+        value => {
+          result = value;
+        },
+        error => {
+          result = error;
+        },
+      );
+      await jest.advanceTimersByTimeAsync(9_999);
+      expect(result).toBeNull();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(result).toMatchObject({
+        code: 'billing.backend_unavailable',
+        retryable: true,
+      });
+      expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+      const timeoutResult = result;
+      pending.resolve({ ok: false, status: 401 } as Response);
+      await request;
+      await jest.advanceTimersByTimeAsync(0);
+      expect(result).toBe(timeoutResult);
+      expect(report).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['getAccess', 'syncBilling'] as const)(
+    '%s includes a stalled JSON body in the same deadline as fetch',
+    async operation => {
+      const response = deferredResponse<Response>();
+      const body = deferredResponse<unknown>();
+      const fetchFn = jest.fn<Promise<Response>, [string, RequestInit?]>(
+        () => response.promise,
+      );
+      const json = jest.fn(() => body.promise);
+      const client = createCanonicalAccessClient({
+        baseUrl: 'https://api.example.test',
+        token: 'access-token',
+        fetchFn,
+      });
+      let result: unknown = null;
+      const request = client[operation]().then(
+        value => {
+          result = value;
+        },
+        error => {
+          result = error;
+        },
+      );
+      await jest.advanceTimersByTimeAsync(8_000);
+      response.resolve({ ok: true, status: 200, json } as unknown as Response);
+      await jest.advanceTimersByTimeAsync(1_999);
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(result).toBeNull();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(result).toMatchObject({
+        code: 'billing.backend_unavailable',
+        retryable: true,
+      });
+      expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+      const timeoutResult = result;
+      body.resolve(access);
+      await request;
+      await jest.advanceTimersByTimeAsync(0);
+      expect(result).toBe(timeoutResult);
+      expect(jest.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('clears the deadline after success and invalid JSON', async () => {
+    const fetchFn = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => access,
+    })) as unknown as jest.MockedFunction<typeof fetch>;
+    const client = createCanonicalAccessClient({
+      baseUrl: 'https://api.example.test',
+      token: 'access-token',
+      fetchFn,
+    });
+    await expect(client.getAccess()).resolves.toEqual(access);
+    expect(jest.getTimerCount()).toBe(0);
+    fetchFn.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('incomplete JSON');
+      },
+    } as unknown as Response);
+    await expect(client.getAccess()).rejects.toMatchObject({
+      code: 'billing.backend_invalid_response',
+      retryable: true,
+    });
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

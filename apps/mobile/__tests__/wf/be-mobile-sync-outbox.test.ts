@@ -128,6 +128,13 @@ function fakeDb(options: { failDeleteOnce?: boolean } = {}) {
             .map(() => ({ '1': 1 })),
         };
       }
+      // This outbox-only fixture has no pending work in either journal version.
+      if (
+        sql.startsWith('SELECT * FROM analysis_run_journal') ||
+        sql.startsWith('SELECT * FROM analysis_execution_attempts')
+      ) {
+        return { rows: [] };
+      }
       if (sql.startsWith('SELECT id, kind, payload')) {
         return {
           rows: outbox
@@ -491,7 +498,7 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       status: 200,
       statusText: 'OK',
       headers: { get: () => null },
-      json: async () => ({ acceptedIds: [], rejected: [] }),
+      json: async () => ({ acceptedIds: [analysis.id], rejected: [] }),
     });
     (globalThis as { fetch?: unknown }).fetch = jest.fn(
       (url: string, init: { headers: Record<string, string> }) => {
@@ -504,6 +511,7 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       },
     );
     setActiveDataOwner(owner);
+    establishApiSession(session);
     // Zero jitter so the back-off schedule is deterministic.
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
   });
@@ -514,8 +522,9 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     delete (globalThis as { fetch?: unknown }).fetch;
-    jest.useRealTimers();
+    // Restore the setTimeout spy before uninstalling its underlying fake clock.
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   async function settle(): Promise<void> {
@@ -562,14 +571,25 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     await settle();
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://api.test/v1/shots:sync');
+    expect(fake.outbox).toHaveLength(0);
+    expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
   });
 
   it('without an explicit trigger, the healthy cadence drains again after 30 s', async () => {
     const fake = fakeDb();
     (getDb as jest.Mock).mockReturnValue(fake.db);
+    const schedule = jest.spyOn(globalThis, 'setTimeout');
     configureSyncRuntime(session);
     await settle();
     expect(calls).toHaveLength(0);
+    // Scheduling proves both journal reads and the initial drain completed.
+    expect(SYNC_RETRY_BASE_MS).toBe(30_000);
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      SYNC_RETRY_BASE_MS,
+    );
+    const initialDrainCompletedAt = Date.now();
 
     await saveAnalysis(fake.db, analysis, analysisPermitId);
     jest.advanceTimersByTime(SYNC_RETRY_BASE_MS - 1);
@@ -579,7 +599,60 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     jest.advanceTimersByTime(1);
     await settle();
     expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      atMs: initialDrainCompletedAt + 30_000,
+      url: 'https://api.test/v1/shots:sync',
+      authorization: `Bearer ${session.bearerToken}`,
+    });
+    expect(fake.outbox).toHaveLength(0);
+    expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
+    expect(schedule).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      SYNC_RETRY_BASE_MS,
+    );
   });
+
+  it.each(['analysis_run_journal', 'analysis_execution_attempts'])(
+    'an unreadable %s backs off instead of claiming healthy storage, then returns to 30 s once recovery succeeds',
+    async table => {
+      const fake = fakeDb();
+      const execute = fake.db.execute.bind(fake.db);
+      let unreadable = true;
+      jest.spyOn(fake.db, 'execute').mockImplementation(async (sql, params) => {
+        if (unreadable && sql.startsWith(`SELECT * FROM ${table}`)) {
+          throw new Error('SQLITE_IOERR: recovery storage unavailable');
+        }
+        return execute(sql, params);
+      });
+      (getDb as jest.Mock).mockReturnValue(fake.db);
+      const schedule = jest.spyOn(globalThis, 'setTimeout');
+      const startedAt = Date.now();
+      configureSyncRuntime(session);
+      await settle();
+      expect(calls).toHaveLength(0);
+      expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), 60_000);
+      expect(fake.receipts).toHaveLength(0);
+
+      await saveAnalysis(fake.db, analysis, analysisPermitId);
+      jest.advanceTimersByTime(30_000);
+      await settle();
+      expect(calls).toHaveLength(0);
+      expect(fake.outbox).toHaveLength(1);
+      expect(fake.outbox[0]!.attempts).toBe(0);
+
+      unreadable = false;
+      jest.advanceTimersByTime(29_999);
+      await settle();
+      expect(calls).toHaveLength(0);
+      jest.advanceTimersByTime(1);
+      await settle();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.atMs).toBe(startedAt + 60_000);
+      expect(fake.outbox).toHaveLength(0);
+      expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
+      expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), 30_000);
+    },
+  );
 
   it('nextSyncRetryDelayMs doubles per consecutive failure, caps at 5 min, and applies ±20% jitter', () => {
     expect(nextSyncRetryDelayMs(0, () => 0.5)).toBe(SYNC_RETRY_BASE_MS);

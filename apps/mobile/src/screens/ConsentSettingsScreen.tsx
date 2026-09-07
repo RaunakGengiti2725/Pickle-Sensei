@@ -14,6 +14,7 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { useAuthStore } from '../auth/authStore';
 import { useConsentStore } from '../state/consentStore';
+import { refreshSessionNow } from '../account/sessionKeeper';
 import type { RootStackParams } from '../navigation/params';
 
 /**
@@ -40,7 +41,10 @@ export function ConsentSettingsScreen() {
     void hydrate();
   }, [hydrate, session]);
 
-  const signedOut = availability === 'signed_out';
+  const restoring =
+    availability === 'restoring' ||
+    (availability === 'signed_out' && Boolean(session && !session.localOnly));
+  const signedOut = availability === 'signed_out' && !restoring;
   const loading = availability === 'loading';
   const unavailable = availability === 'unavailable';
   const toggleDisabled = busy || availability !== 'ready';
@@ -108,6 +112,27 @@ export function ConsentSettingsScreen() {
                   label="Connect account"
                   variant="dark"
                   onPress={() => navigation.navigate('ConnectAccount')}
+                />
+              </View>
+            </>
+          ) : null}
+          {restoring ? (
+            <>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[type.caption, styles.noteText]}
+              >
+                You’re still signed in. Your account is reconnecting; connect to
+                the internet to check or change your consent choice.
+              </Text>
+              <View style={styles.actionWrap}>
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={() => {
+                    refreshSessionNow();
+                    void hydrate();
+                  }}
                 />
               </View>
             </>

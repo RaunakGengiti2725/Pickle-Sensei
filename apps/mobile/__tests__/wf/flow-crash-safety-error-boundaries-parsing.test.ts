@@ -33,6 +33,7 @@ jest.mock('../../src/data/db', () => ({
 }));
 
 jest.mock('../../src/account/apiSession', () => ({
+  subscribeToApiSession: () => () => {},
   getApiSession: () => null,
 }));
 
@@ -109,11 +110,9 @@ describe('appStore.hydrate() survives corrupt persisted JSON', () => {
 
 describe('owner-scoped kv parsers reject garbage without throwing', () => {
   it.each(GARBAGE_PAYLOADS)(
-    'parseConsistencyLedger(%j) yields an empty ledger',
+    'parseConsistencyLedger(%j) reports unknown state instead of a writable empty ledger',
     raw => {
-      const ledger = parseConsistencyLedger(raw);
-      expect(ledger.drills).toEqual([]);
-      expect(ledger.celebrated).toEqual({});
+      expect(parseConsistencyLedger(raw)).toBeNull();
     },
   );
 

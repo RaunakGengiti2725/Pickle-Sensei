@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -142,6 +149,19 @@ function localTodayKey(now: Date): string {
     // Fall through to the UTC key below.
   }
   return now.toISOString().slice(0, 10);
+}
+
+/** A day key is already a civil date in the snapshot's zone, not an instant
+ * to convert again. Format its UTC surrogate in UTC so +13/+14 (and DST)
+ * cannot move the selected label into tomorrow. */
+function calendarDayLabel(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    calendar: 'gregory',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
 function monthOf(day: string): { year: number; month: number } {
@@ -304,6 +324,8 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
 }
 
 export function StreakCalendarScreen() {
+  const { fontScale } = useWindowDimensions();
+  const fullWidthStreakLabel = fontScale >= 2;
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const snapshot = useConsistencyStore(s => s.snapshot);
@@ -373,12 +395,27 @@ export function StreakCalendarScreen() {
           ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
           : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
 
+  // At accessibility sizes, let whole words wrap across the card rather than
+  // inside the narrow column beside the flame. Standard-size layout is unchanged.
+  const streakLabel = (
+    <Text
+      style={[
+        type.h3,
+        styles.heroStreakLabel,
+        fullWidthStreakLabel && styles.heroStreakLabelExpanded,
+      ]}
+    >
+      {plural(streak, 'DAY', 'DAY')} STREAK
+    </Text>
+  );
+
   if (!snapshot && loadError) {
     return (
       <SafeAreaView edges={['top']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
           title="Consistency"
+          wrapTitle
           eyebrow="Training streak"
           onBack={() => navigation.goBack()}
         />
@@ -415,6 +452,7 @@ export function StreakCalendarScreen() {
       <StatusBar barStyle="dark-content" />
       <ScreenHeader
         title="Consistency"
+        wrapTitle
         eyebrow="Training streak"
         onBack={() => navigation.goBack()}
       />
@@ -437,11 +475,10 @@ export function StreakCalendarScreen() {
             </View>
             <View style={styles.heroCount}>
               <Text style={styles.heroStreak}>{streak}</Text>
-              <Text style={[type.h3, styles.heroStreakLabel]}>
-                {plural(streak, 'DAY', 'DAY')} STREAK
-              </Text>
+              {!fullWidthStreakLabel && streakLabel}
             </View>
           </View>
+          {fullWidthStreakLabel && streakLabel}
           <Text style={[type.caption, styles.heroStatus]}>{statusLine}</Text>
 
           <View style={styles.momentumBlock}>
@@ -603,10 +640,7 @@ export function StreakCalendarScreen() {
             testID="streak-day-detail"
           >
             <Text style={[type.h3, { color: color.ink }]}>
-              {new Date(`${selectedDay}T12:00:00Z`).toLocaleDateString(
-                undefined,
-                { weekday: 'long', month: 'long', day: 'numeric' },
-              )}
+              {calendarDayLabel(selectedDay)}
             </Text>
             {selectedLog ? (
               selectedLog.shielded ? (
@@ -699,7 +733,8 @@ export function StreakCalendarScreen() {
           A day counts when you complete a stroke analysis, a session stroke, or
           a prescribed drill — opening the app never counts. Streaks earn
           identity and Momentum XP only; your skill rating moves on scored
-          evidence alone.
+          evidence alone. This calendar and Momentum XP use training saved on
+          this device.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -736,6 +771,11 @@ const styles = StyleSheet.create({
     lineHeight: 60,
   },
   heroStreakLabel: { color: color.onDarkMuted, letterSpacing: 2 },
+  heroStreakLabelExpanded: {
+    alignSelf: 'stretch',
+    marginTop: space.sm,
+    letterSpacing: type.h3.letterSpacing,
+  },
   heroStatus: { color: color.onDarkSubtle, marginTop: space.md },
   momentumBlock: { marginTop: space.md },
   momentumHeader: {

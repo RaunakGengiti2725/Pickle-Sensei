@@ -12,6 +12,7 @@
  * ambiguous text narrowing the grid, unknown text re-prompting, and the
  * submit path — all radio-role controls with selected state.
  */
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
@@ -69,10 +70,22 @@ function registerTargets(keys: WalkthroughTargetKey[]) {
   }
 }
 
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
+}
+
 afterEach(() => {
+  for (const renderer of mounted) unmount(renderer);
   for (const cleanup of cleanups) cleanup();
   cleanups = [];
-  useWalkthroughStore.setState({ visible: false });
+  useWalkthroughStore.setState({
+    visible: false,
+    queued: false,
+    request: null,
+  });
   jest.useRealTimers();
 });
 
@@ -110,6 +123,7 @@ async function renderVisible() {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<FirstRunWalkthrough />);
+    mounted.add(renderer);
   });
   return renderer;
 }
@@ -184,11 +198,12 @@ describe('Walkthrough overlay — controls', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      mounted.add(renderer);
     });
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('step one anchors to the Coach button with labeled Skip and Next buttons', async () => {
@@ -211,7 +226,7 @@ describe('Walkthrough overlay — controls', () => {
     );
     expect(next.props.accessibilityRole).toBe('button');
     expect(next.props.accessibilityLabel).toBe('Next');
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Next walks all four steps in order; the last step offers only "Got it" which dismisses', async () => {
@@ -239,7 +254,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Skip dismisses from any step', async () => {
@@ -253,10 +268,10 @@ describe('Walkthrough overlay — controls', () => {
       deepestPressable(renderer, n => n.props.testID === 'walkthrough-skip'),
     );
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
-  it('tapping the backdrop dismisses; hardware back (onRequestClose) dismisses', async () => {
+  it('tapping the backdrop dismisses; hardware back dismisses', async () => {
     registerTargets(Object.keys(RECTS) as WalkthroughTargetKey[]);
     let renderer = await renderVisible();
     await press(
@@ -266,18 +281,14 @@ describe('Walkthrough overlay — controls', () => {
       ),
     );
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     renderer = await renderVisible();
-    const modal = renderer.root.find(
-      n => typeof n.props.onRequestClose === 'function',
-    );
-    expect(modal.props.visible).toBe(true);
     await act(async () => {
-      modal.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('a registered target that never measures is retried briefly, then skipped — no blank scrim', async () => {
@@ -291,7 +302,12 @@ describe('Walkthrough overlay — controls', () => {
     );
     registerTargets(['rank-banner', 'tab-library', 'tab-progress']);
     const renderer = await renderVisible();
-    expect(textOf(renderer)).toBe('');
+    expect(textOf(renderer)).toContain('Finding this part of the app');
+    expect(textOf(renderer)).toContain('Skip');
+    expect(
+      deepestPressable(renderer, n => n.props.testID === 'walkthrough-skip')
+        .props.disabled,
+    ).toBeFalsy();
     for (let i = 0; i < 6; i++) {
       await act(async () => {
         jest.advanceTimersByTime(120);
@@ -302,7 +318,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(useWalkthroughStore.getState().visible).toBe(true);
     expect(textOf(renderer)).toContain(step(1).headline);
     expect(textOf(renderer)).not.toContain(step(0).headline);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('when NO target can be measured the tour ends itself instead of hanging', async () => {
@@ -311,7 +327,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('useWalkthroughTarget registers on mount and releases on unmount', () => {
@@ -324,7 +340,7 @@ describe('Walkthrough overlay — controls', () => {
       renderer = TestRenderer.create(<Anchor />);
     });
     expect(hasWalkthroughTarget('tab-progress')).toBe(true);
-    act(() => renderer.unmount());
+    unmount(renderer);
     expect(hasWalkthroughTarget('tab-progress')).toBe(false);
   });
 });
@@ -370,7 +386,7 @@ describe('Technique intent picker', () => {
     expect(
       chips.every(c => c.props.accessibilityState.selected === false),
     ).toBe(true);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('tapping a chip emits a tap intent with confidence 1; the selected chip reports selected', () => {
@@ -388,7 +404,7 @@ describe('Technique intent picker', () => {
       legacySlug: 'dink',
       confidence: 1,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     const selected = renderPicker(intent);
     const states = radios(selected.renderer).map(c => [
@@ -414,7 +430,7 @@ describe('Technique intent picker', () => {
       legacySlug: null,
       confidence: null,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     const auto = renderPicker(autoDetectIntent());
     const autoChip = radios(auto.renderer).at(-1)!;
@@ -435,7 +451,7 @@ describe('Technique intent picker', () => {
       legacySlug: 'dink',
       confidence: 0.9,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('short text does nothing; ambiguous text narrows the grid and asks to pick; unknown text re-prompts', () => {
@@ -465,7 +481,7 @@ describe('Technique intent picker', () => {
     );
     // The full grid is back so the user is never stranded.
     expect(radios(renderer).length).toBeGreaterThan(5);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('submitting "not sure" selects Auto Detect; submitting a resolved phrase selects it', () => {
@@ -482,6 +498,6 @@ describe('Technique intent picker', () => {
       canonical: 'FOREHAND_VOLLEY',
       rawUserText: 'forehand volley',
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });

@@ -65,14 +65,52 @@ const fs = require('fs') as {
   readFileSync: (p: string, encoding: 'utf8') => string;
   readdirSync: (p: string, options: { withFileTypes: true }) => DirEntry[];
   statSync: (p: string) => { isDirectory(): boolean };
+  mkdtempSync: (prefix: string) => string;
+  writeFileSync: (p: string, data: string, encoding: 'hex') => void;
+  rmSync: (p: string, options: { recursive: true; force: true }) => void;
 };
 const path = require('path') as {
   join: (...parts: string[]) => string;
   resolve: (...parts: string[]) => string;
   relative: (from: string, to: string) => string;
 };
+interface ProbeStream {
+  on(event: 'data', listener: (chunk: { toString(): string }) => void): void;
+}
+interface SpawnedProbe {
+  stdout: ProbeStream;
+  stderr: ProbeStream;
+  kill(signal: 'SIGKILL'): boolean;
+  on(event: 'error', listener: (error: Error) => void): void;
+  on(
+    event: 'close',
+    listener: (status: number | null, signal: string | null) => void,
+  ): void;
+}
 const childProcess = require('child_process') as {
   execSync: (cmd: string, options: { cwd: string; encoding: 'utf8' }) => string;
+  spawn: (
+    executable: string,
+    args: string[],
+    options: { cwd: string; stdio: ['ignore', 'pipe', 'pipe'] },
+  ) => SpawnedProbe;
+  spawnSync: (
+    executable: string,
+    args: string[],
+    options: {
+      cwd: string;
+      encoding: 'utf8';
+      timeout: number;
+      killSignal: 'SIGKILL';
+      maxBuffer: number;
+    },
+  ) => {
+    status: number | null;
+    signal: string | null;
+    error?: { code?: string };
+    stdout: string;
+    stderr: string;
+  };
 };
 
 // ─── Module seams ────────────────────────────────────────────────────────────
@@ -447,6 +485,590 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
+function buildProbe(source: string, args: string[] = [], timeout = 5000) {
+  const { execPath } = require('node:process') as { execPath: string };
+  return childProcess.spawnSync(
+    execPath,
+    ['--max-old-space-size=192', '-e', source, ...args],
+    {
+      cwd: MOBILE_ROOT,
+      encoding: 'utf8',
+      timeout,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024,
+    },
+  );
+}
+
+function loopProbe(source: string, args: string[] = []) {
+  const { execPath } = require('node:process') as { execPath: string };
+  return new Promise<{
+    stdout: string;
+    stderr: string;
+    status: number | null;
+    signal: string | null;
+    timeoutPhase: 'startup' | 'execution' | null;
+    outputLimitExceeded: boolean;
+  }>((resolve, reject) => {
+    const child = childProcess.spawn(
+      execPath,
+      ['--max-old-space-size=192', '-e', source, ...args],
+      {
+        cwd: MOBILE_ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    let ready = false;
+    let timeoutPhase: 'startup' | 'execution' | null = null;
+    let outputLimitExceeded = false;
+    // A cold/busy CI process must actually enter the parser before its short
+    // execution deadline begins. Startup failure is not a reproduced loop.
+    let deadline = setTimeout(() => {
+      timeoutPhase = 'startup';
+      child.kill('SIGKILL');
+    }, 2500);
+    const capOutput = () => {
+      if (stdout.length + stderr.length > 1024 * 1024) {
+        outputLimitExceeded = true;
+        child.kill('SIGKILL');
+      }
+    };
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString();
+      capOutput();
+      if (!ready && stdout.includes('entered:')) {
+        ready = true;
+        clearTimeout(deadline);
+        deadline = setTimeout(() => {
+          timeoutPhase = 'execution';
+          child.kill('SIGKILL');
+        }, 100);
+      }
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+      capOutput();
+    });
+    child.on('error', error => {
+      clearTimeout(deadline);
+      reject(error);
+    });
+    child.on('close', (status, signal) => {
+      clearTimeout(deadline);
+      resolve({
+        stdout,
+        stderr,
+        status,
+        signal,
+        timeoutPhase,
+        outputLimitExceeded,
+      });
+    });
+  });
+}
+
+function successfulProbe(source: string, args: string[] = []): string {
+  const result = buildProbe(source, args);
+  expect({
+    status: result.status,
+    signal: result.signal,
+    error: result.error?.code,
+    stderr: result.stderr,
+  }).toEqual({ status: 0, signal: null, error: undefined, stderr: '' });
+  return result.stdout.trim();
+}
+
+const unsafeImageFixtures = [
+  {
+    type: 'icns',
+    hex: '69636e73000000106963703100000000',
+  },
+  {
+    type: 'jxl',
+    hex: '0000000c4a584c200d0a870a00000014667479706a786c20000000006a786c20000000006a786c70',
+  },
+  ...[
+    '61766966',
+    '6d696631',
+    '6d736631',
+    '68656963',
+    '68656978',
+    '68657663',
+    '68657678',
+  ].map(brand => ({
+    type: 'heif',
+    hex: `0000001066747970${brand}00000000000000006d657461`,
+  })),
+];
+
+const assetInventoryProbe = `
+  const { readFileSync, readdirSync } = require('node:fs');
+  const { createHash } = require('node:crypto');
+  const { join, extname } = require('node:path');
+  const { getAssetSize } = require('metro/private/Assets');
+  const assets = [];
+  function inspect(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const file = join(dir, entry.name);
+      // Notice resources are deliberately regenerated separately from app media.
+      if (file === 'assets/legal') continue;
+      if (entry.isDirectory()) inspect(file);
+      else {
+        const bytes = readFileSync(file);
+        assets.push([file, getAssetSize(extname(file).slice(1), bytes, file),
+          createHash('sha256').update(bytes).digest('hex')]);
+      }
+    }
+  }
+  inspect('assets');
+  console.log(JSON.stringify(assets));
+`;
+
+const workerProbe = `
+  const assert = require('node:assert/strict');
+  const { transform } = require('metro/private/DeltaBundler/Worker');
+  const config = JSON.parse(process.argv[1]);
+  assert.equal(require.cache[require.resolve('./metro.config.js')], undefined);
+  (async () => {
+    const results = [];
+    for (const file of JSON.parse(process.argv[2])) {
+      try {
+        const value = await transform(file, {
+          type: 'asset', platform: 'ios', dev: false, minify: false,
+          inlineRequires: false, experimentalImportSupport: false,
+          unstable_transformProfile: 'hermes-stable',
+        }, config.projectRoot, config.worker);
+        results.push({ output: value.result.output });
+      } catch (error) {
+        results.push({ error: error.message });
+      }
+    }
+    console.log(JSON.stringify(results));
+  })().catch(error => { console.error(error); process.exitCode = 1; });
+`;
+
+function workerConfig(guardedWorker = true): string {
+  return successfulProbe(`
+    const config = require('./metro.config.js');
+    console.log(JSON.stringify({
+      projectRoot: config.projectRoot,
+      worker: {
+        transformerPath: ${guardedWorker} ? config.transformerPath : require.resolve('metro-transform-worker'),
+        transformerConfig: config.transformer,
+      },
+    }));
+  `);
+}
+
+describe('GUARD build dependency security', () => {
+  it('qs 6.16.0 closes GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx through the locked body-parser path', () => {
+    successfulProbe(`
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      const bodyParserRequire = createRequire(require.resolve('body-parser/package.json'));
+      assert.equal(bodyParserRequire.resolve('qs'), require.resolve('qs'));
+      assert.equal(require('qs/package.json').version, '6.16.0');
+      const qs = bodyParserRequire('qs');
+      const input = 'x%5Bconstructor%5D%5BisBuffer%5D=y';
+      for (const options of [{ plainObjects: true }, { allowPrototypes: true }]) {
+        const parsed = qs.parse(input, options);
+        assert.equal(qs.stringify(parsed), input);
+      }
+      const options = { comma: true, arrayLimit: 3, throwOnLimitExceeded: true };
+      for (const input of ['a[]=1,2,3,4', 'a=1,2,3,4']) {
+        assert.throws(() => qs.parse(input, options), RangeError);
+      }
+      assert.deepEqual(qs.parse('name=Pat+Player&tags[]=serve&tags[]=return'), {
+        name: 'Pat Player', tags: ['serve', 'return'],
+      });
+      const { PassThrough } = require('node:stream');
+      const req = new PassThrough();
+      const form = 'name=Pat+Player&tags[]=serve&tags[]=return';
+      req.headers = { 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(form) };
+      require('body-parser').urlencoded({ extended: true })(req, {}, error => {
+        assert.ifError(error);
+        assert.deepEqual(req.body, { name: 'Pat Player', tags: ['serve', 'return'] });
+        console.log('body-parser-compatible');
+      });
+      req.end(form);
+    `);
+  });
+
+  it.each(unsafeImageFixtures.slice(0, 2))(
+    'reproduces the unmitigated $type loop only in a time- and heap-bounded child',
+    async ({ type, hex }) => {
+      const result = await loopProbe(
+        `
+          const { getAssetSize } = require('metro/private/Assets');
+          console.log('entered:${type}');
+          getAssetSize('png', Buffer.from(process.argv[1], 'hex'), 'disguised.png');
+        `,
+        [hex],
+      );
+      expect(result.stdout).toContain(`entered:${type}`);
+      expect(result.timeoutPhase).toBe('execution');
+      expect(result.outputLimitExceeded).toBe(false);
+      expect(result.stderr).toBe('');
+      expect(result.signal).toBe('SIGKILL');
+    },
+  );
+
+  it('the installed HEIF zero-size traversal is already bounded, without treating the advisory as fixed', () => {
+    successfulProbe(
+      `
+      const assert = require('node:assert/strict');
+      const imageSize = require('image-size');
+      assert.equal(require('image-size/package.json').version, '1.2.1');
+      for (const { hex } of JSON.parse(process.argv[1])) {
+        assert.throws(() => imageSize(Buffer.from(hex, 'hex')), /Invalid HEIF, no size found/);
+      }
+    `,
+      [JSON.stringify(unsafeImageFixtures.slice(2))],
+    );
+  });
+
+  it.each(unsafeImageFixtures)(
+    'rejects detected $type bytes disguised as PNG in the config process',
+    ({ type, hex }) => {
+      expect(
+        successfulProbe(
+          `
+        require('./metro.config.js');
+        const assert = require('node:assert/strict');
+        const { getAssetSize } = require('metro/private/Assets');
+        assert.throws(
+          () => getAssetSize('png', Buffer.from(process.argv[1], 'hex'), 'disguised.png'),
+          { name: 'TypeError', message: 'disabled file type: ${type}' },
+        );
+        console.log('rejected-before-decoding');
+      `,
+          [hex],
+        ),
+      ).toBe('rejected-before-decoding');
+    },
+  );
+
+  it('fresh Metro workers fail fast on disguised files without loading the app config', () => {
+    const config = workerConfig();
+    const { tmpdir } = require('node:os') as { tmpdir: () => string };
+    const dir = fs.mkdtempSync(path.join(tmpdir(), 'pickle-build-security-'));
+    try {
+      for (const [index, { type, hex }] of unsafeImageFixtures.entries()) {
+        const file = path.join(dir, `disguised-${index}.png`);
+        fs.writeFileSync(file, hex, 'hex');
+        expect(
+          JSON.parse(
+            successfulProbe(workerProbe, [config, JSON.stringify([file])]),
+          ),
+        ).toEqual([{ error: `disabled file type: ${type}` }]);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves every real app bitmap, font and movie byte/dimension and worker output', () => {
+    const original = JSON.parse(successfulProbe(assetInventoryProbe)) as [
+      string,
+      { width: number; height: number } | null,
+      string,
+    ][];
+    const protectedAssets = JSON.parse(
+      successfulProbe(`require('./metro.config.js'); ${assetInventoryProbe}`),
+    );
+    expect(original.some(([, size]) => size !== null)).toBe(true);
+    expect(protectedAssets).toEqual(original);
+    const files = JSON.stringify(
+      original
+        .filter(([file, size]) => size !== null || /\.(mp4|ttf)$/.test(file))
+        .map(([file]) => file),
+    );
+    const upstream = JSON.parse(
+      successfulProbe(workerProbe, [workerConfig(false), files]),
+    );
+    const transformed = JSON.parse(
+      successfulProbe(workerProbe, [workerConfig(), files]),
+    );
+    expect(transformed).toEqual(upstream);
+    for (const result of transformed) {
+      expect(result.error).toBeUndefined();
+      expect(result.output[0].type).toBe('js/module/asset');
+      expect(result.output[0].data.code).toContain('registerAsset');
+    }
+  });
+
+  it('disables only the affected decoders, preserving cache keys, Sentry configuration, other formats and movie assets', () => {
+    successfulProbe(
+      `
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      const { readFileSync } = require('node:fs');
+      const config = require('./metro.config.js');
+      const metroRequire = createRequire(require.resolve('metro/package.json'));
+      const imageSize = metroRequire('image-size');
+      const wrapped = require(config.transformerPath);
+      const upstream = require('metro-transform-worker');
+      assert.equal(wrapped.transform, upstream.transform);
+      assert.equal(wrapped.getCacheKey, upstream.getCacheKey);
+      assert.equal(typeof wrapped.getCacheKey(config.transformer, { projectRoot: config.projectRoot }), 'string');
+      assert.equal(typeof config.serializer.customSerializer, 'function');
+      const { typeHandlers } = require(require('node:path').join(require.resolve('image-size'), '..', 'types/index.js'));
+      const called = new Set();
+      for (const [type, handler] of Object.entries(typeHandlers)) {
+        handler.validate = input => input[0] === imageSize.types.indexOf(type);
+        handler.calculate = () => { called.add(type); return { width: 1, height: 1 }; };
+      }
+      for (const [index, type] of imageSize.types.entries()) {
+        const decode = () => imageSize(Buffer.from([index]));
+        if (['icns', 'jxl', 'heif'].includes(type)) {
+          assert.throws(decode, { message: 'disabled file type: ' + type });
+          assert.ok(!called.has(type));
+        } else {
+          assert.deepEqual(decode(), { width: 1, height: 1, type });
+          assert.ok(called.has(type));
+        }
+      }
+      const { getAssetSize } = require('metro/private/Assets');
+      assert.ok(config.resolver.assetExts.includes('mp4'));
+      assert.ok(config.resolver.assetExts.includes('mov'));
+      assert.equal(getAssetSize('mp4', readFileSync('assets/brand/splash.mp4'), 'splash.mp4'), null);
+      assert.equal(getAssetSize('mov', Buffer.from(process.argv[1], 'hex'), 'native-import.mov'), null);
+    `,
+      [unsafeImageFixtures[0]!.hex],
+    );
+  });
+
+  it('keeps the vulnerable navigation decoder outside external navigation input while retaining its audit boundary', () => {
+    const sourcePaths = [
+      ...walk(path.join(MOBILE_ROOT, 'src')).filter(file =>
+        /\.[jt]sx?$/.test(file),
+      ),
+      path.join(MOBILE_ROOT, 'App.tsx'),
+      path.join(MOBILE_ROOT, 'index.js'),
+    ];
+    const sources = sourcePaths
+      .map(file => fs.readFileSync(file, 'utf8'))
+      .join('\n');
+    expect(sources).not.toMatch(
+      /\b(getStateFromPath|useLinkTo|useLinkBuilder|useBuildAction|useLinkProps|createStaticNavigation)\b/,
+    );
+    expect(sources).not.toMatch(
+      /['"](?:query-string|decode-uri-component)['"]/,
+    );
+    expect(sources).not.toMatch(/linking\s*=|prefixes:\s*\[/);
+    expect(read('src/navigation/RootNavigator.tsx')).toMatch(
+      /<NavigationContainer ref=\{navigationRef\} theme=\{theme\}>/,
+    );
+    expect(
+      read('node_modules/@react-navigation/native/src/NavigationContainer.tsx'),
+    ).toContain(
+      'const isLinkingEnabled = linking ? linking.enabled !== false : false;',
+    );
+    const nativeLinking = read(
+      'node_modules/@react-navigation/native/src/useLinking.native.tsx',
+    );
+    expect(nativeLinking).toMatch(
+      /if \(enabledRef.current\)\s*\{\s*const url = getInitialURLRef.current\(\)/,
+    );
+    expect(nativeLinking).toMatch(
+      /if \(!enabled \|\| !navigation\)\s*\{\s*return;/,
+    );
+    successfulProbe(`
+      const assert = require('node:assert/strict');
+      assert.equal(require('query-string/package.json').dependencies['decode-uri-component'], '^0.2.2');
+      assert.equal(typeof require('decode-uri-component'), 'function');
+      const lock = require('./package-lock.json');
+      assert.equal(lock.packages['node_modules/@react-navigation/core'].dependencies['query-string'], '^7.1.3');
+    `);
+  });
+
+  it('does not blind-override the CommonJS query-string decoder with an ESM default export', () => {
+    successfulProbe(`
+      const assert = require('node:assert/strict');
+      const Module = require('node:module');
+      const { runInThisContext } = require('node:vm');
+      // Offline export-contract fixture, not a vendored or patched decoder.
+      // The actual 0.5.0 tarball was separately integrity-verified during W11.
+      const source = 'export default function decode(value) { return decodeURIComponent(value); }';
+      (async () => {
+        const namespace = await import('data:text/javascript,' + encodeURIComponent(source));
+        const transformed = require('@babel/core').transformSync(source, {
+          babelrc: false, configFile: false, filename: 'decoder-contract.js',
+          presets: ['module:@react-native/babel-preset'],
+        });
+        const compiled = { exports: {} };
+        runInThisContext(Module.wrap(transformed.code))(
+          compiled.exports, require, compiled, 'decoder-contract.js', process.cwd(),
+        );
+        const originalLoad = Module._load;
+        for (const replacement of [namespace, compiled.exports]) {
+          assert.equal(typeof replacement.default, 'function');
+          assert.equal(typeof replacement, 'object');
+          delete require.cache[require.resolve('query-string')];
+          Module._load = function (id, ...args) {
+            return id === 'decode-uri-component' ? replacement : originalLoad.call(this, id, ...args);
+          };
+          try {
+            assert.throws(() => require('query-string').parse('name=Pat%20Player'), {
+              name: 'TypeError', message: 'decodeComponent is not a function',
+            });
+          } finally { Module._load = originalLoad; }
+        }
+        assert.equal(require('./package-lock.json').packages['node_modules/decode-uri-component'].version, '0.2.2');
+      })().catch(error => { console.error(error); process.exitCode = 1; });
+    `);
+  });
+
+  it('retains the reachable decoder advisory when getStateFromPath is explicitly invoked, in a bounded child only', async () => {
+    const result = await loopProbe(`
+      const { getStateFromPath } = require('./node_modules/@react-navigation/core/lib/module/getStateFromPath.js');
+      console.log('entered:navigation-decoder');
+      getStateFromPath('/Home?name=' + '%FF'.repeat(512));
+    `);
+    expect(result.stdout).toContain('entered:navigation-decoder');
+    expect(result.timeoutPhase).toBe('execution');
+    expect(result.outputLimitExceeded).toBe(false);
+    expect(result.stderr).toBe('');
+    expect(result.signal).toBe('SIGKILL');
+  });
+
+  it('the real native linking hook ignores cold-start and event URLs when disabled, with an enabled positive control', () => {
+    expect(
+      successfulProbe(`
+      const assert = require('node:assert/strict');
+      const Module = require('node:module');
+      const { runInThisContext } = require('node:vm');
+      const React = require('react');
+      const Renderer = require('react-test-renderer');
+      const { getStateFromPath } = require('./node_modules/@react-navigation/core/lib/module/getStateFromPath.js');
+      const { getActionFromState } = require('./node_modules/@react-navigation/core/lib/module/getActionFromState.js');
+      const extract = require('./node_modules/@react-navigation/native/lib/module/extractPathFromURL.js');
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const originalError = console.error;
+      console.error = (message, ...args) => {
+        if (String(message).startsWith('react-test-renderer is deprecated.')) return;
+        originalError(message, ...args);
+      };
+      let listener, parseCalls = 0, initialCalls = 0, removals = 0;
+      let initialURL = 'pickle://Home?name=' + '%FF'.repeat(512);
+      const actions = [];
+      const navigation = { current: {
+        getRootState: () => ({ key: 'root', routes: [{ name: 'Home' }] }),
+        dispatch: action => actions.push(action),
+        resetRoot: state => actions.push(state),
+      } };
+      const Linking = {
+        getInitialURL: () => { initialCalls++; return Promise.resolve(initialURL); },
+        addEventListener: (type, callback) => {
+          assert.equal(type, 'url'); listener = callback;
+          return { remove: () => { removals++; listener = undefined; } };
+        },
+      };
+      const transformed = require('@babel/core').transformFileSync(
+        './node_modules/@react-navigation/native/src/useLinking.native.tsx',
+        { babelrc: false, configFile: false, presets: ['module:@react-native/babel-preset'] },
+      );
+      const compiled = { exports: {} };
+      const localRequire = id => {
+        if (id === 'react-native') return { Linking, Platform: { OS: 'ios' } };
+        if (id === '@react-navigation/core') return {
+          getStateFromPath: (...args) => { parseCalls++; return getStateFromPath(...args); },
+          getActionFromState, useNavigationIndependentTree: () => false,
+        };
+        if (id === './extractPathFromURL') return extract;
+        return require(id);
+      };
+      runInThisContext(Module.wrap(transformed.code))(
+        compiled.exports, localRequire, compiled, 'native-linking-probe.js', process.cwd(),
+      );
+      let hook, tree;
+      function Probe({ enabled }) {
+        hook = compiled.exports.useLinking(navigation, { enabled, prefixes: ['pickle://'] });
+        return null;
+      }
+      (async () => {
+        try {
+          await React.act(async () => { tree = Renderer.create(React.createElement(Probe, { enabled: false })); });
+          assert.equal(await hook.getInitialState(), undefined);
+          listener({ url: initialURL });
+          assert.equal(initialCalls, 0);
+          assert.equal(parseCalls, 0);
+          assert.deepEqual(actions, []);
+          await React.act(async () => { tree.unmount(); });
+          assert.equal(removals, 1);
+          initialURL = 'pickle://Home?name=Pat+Player&tag=serve&tag=return';
+          await React.act(async () => { tree = Renderer.create(React.createElement(Probe, { enabled: true })); });
+          const state = await hook.getInitialState();
+          assert.deepEqual(state.routes[0].params, { name: 'Pat Player', tag: ['serve', 'return'] });
+          listener({ url: initialURL });
+          assert.equal(initialCalls, 1);
+          assert.equal(parseCalls, 2);
+          assert.equal(actions.length, 1);
+          console.log('native-linking-boundary-verified');
+        } finally {
+          await React.act(async () => { tree?.unmount(); });
+          console.error = originalError;
+        }
+      })().catch(error => { console.error(error); process.exitCode = 1; });
+    `),
+    ).toBe('native-linking-boundary-verified');
+  });
+
+  it("the scoped uuid 11.1.1 CommonJS patch preserves xcode's zero-argument v4 calls, outside the advisory buffer paths", () => {
+    successfulProbe(`
+      const assert = require('node:assert/strict');
+      const Module = require('node:module');
+      const xcodeRequire = Module.createRequire(require.resolve('xcode/package.json'));
+      assert.equal(xcodeRequire.resolve('uuid'), require.resolve('uuid'));
+      assert.equal(xcodeRequire('uuid/package.json').version, '11.1.1');
+      assert.ok(xcodeRequire.resolve('uuid').endsWith('/dist/cjs/index.js'));
+      const uuid = xcodeRequire('uuid');
+      const originalLoad = Module._load;
+      const calls = [];
+      Module._load = function (id, ...args) {
+        if (id === 'uuid') return new Proxy({}, {
+          get(_, key) {
+            assert.equal(key, 'v4');
+            return (...values) => { calls.push(values); return uuid.v4(...values); };
+          },
+        });
+        return originalLoad.call(this, id, ...args);
+      };
+      const project = require('xcode').project('in-memory.pbxproj');
+      project.hash = { project: { objects: {} } };
+      const ids = Array.from({ length: 100 }, () => project.generateUuid());
+      assert.equal(new Set(ids).size, 100);
+      assert.ok(ids.every(id => /^[A-F0-9]{24}$/.test(id)));
+      assert.equal(calls.length, 100);
+      assert.ok(calls.every(args => args.length === 0));
+      const lock = require('./package-lock.json');
+      const consumers = Object.entries(lock.packages).filter(([, value]) => value.dependencies?.uuid).map(([name]) => name);
+      assert.deepEqual(consumers, ['node_modules/xcode']);
+      assert.equal(lock.packages['node_modules/react-native-notify-kit'].optionalDependencies.xcode, '^3.0.1');
+      assert.deepEqual(require('./package.json').overrides, { 'xcode@3.0.1': { uuid: '11.1.1' } });
+    `);
+  });
+
+  it('uuid 11.1.1 rejects the v3/v5/v6 advisory output-buffer bounds without partial writes', () => {
+    successfulProbe(`
+      const assert = require('node:assert/strict');
+      const uuid = require('uuid');
+      for (const [size, offset] of [[8, 4], [16, 1], [16, -1]]) {
+        for (const name of ['v3', 'v5', 'v6']) {
+          const bytes = new Uint8Array(size).fill(170);
+          const call = () => name === 'v6'
+            ? uuid.v6({}, bytes, offset)
+            : uuid[name]('x', uuid[name].DNS, bytes, offset);
+          assert.throws(call, RangeError);
+          assert.ok(bytes.every(value => value === 170));
+        }
+      }
+    `);
+  });
+});
+
 // ─── GUARD: secrets in the shipped bundle / native project ───────────────────
 
 describe('GUARD bundle secrets', () => {
@@ -493,7 +1115,11 @@ describe('GUARD bundle secrets', () => {
           /^\d+(\.\d+)*$/.test(value) || // APP_VERSION
           value === 'ios' ||
           value === 'android' ||
-          value === 'react-native'
+          value === 'react-native' ||
+          value === 'com.picklesensei' ||
+          value === 'development' ||
+          value === 'test' ||
+          value === 'production'
         ),
     );
     expect(nonPublic).toEqual([]);
@@ -502,6 +1128,16 @@ describe('GUARD bundle secrets', () => {
     // Supabase access token it minted — transitionally a provider ID token)
     // itself.
     expect(text).not.toMatch(/anon|service_role|SUPABASE_KEY/i);
+  });
+
+  it('pins the API platform JWT setting in versioned CLI configuration', () => {
+    const config = read('../../supabase/config.toml');
+    expect(config).toMatch(/^project_id\s*=\s*"pickle-sensei"\s*$/m);
+    expect(config).toMatch(
+      /^\[functions\.api\]\s*\nverify_jwt\s*=\s*false\s*$/m,
+    );
+    expect(config.match(/^\[/gm)).toHaveLength(1);
+    expect(config).not.toMatch(/secret|token|password|service_role|anon_key/i);
   });
 
   it('no .env / keystore / provisioning secrets are tracked besides the RN template debug keystore', () => {
@@ -593,6 +1229,7 @@ describe('GUARD token storage', () => {
     // Keychain: refresh token + UI descriptor, nothing else.
     expect(vaultRecord()).toEqual({
       version: 1,
+      generation: expect.any(Number),
       provider: 'google',
       canonicalAppUserId: canonicalId,
       refreshToken: REFRESH_TOKEN_1,
@@ -864,7 +1501,7 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expectNeverPersisted(GOOGLE_ID_TOKEN);
   });
 
-  it('session rotation is confined: /v1/auth/refresh is called only from sessionLifecycle.ts, the Keychain is touched only by sessionVault.ts, the in-memory ApiSession store has no refresh primitive, and no module persists tokens elsewhere', () => {
+  it('confines session rotation and credentials to their owners, with deletion capabilities in a separate device-only job vault', () => {
     // The bearer store is a pure in-memory holder — rotation logic lives in
     // sessionLifecycle.ts (HTTP) + sessionKeeper.ts (scheduling), so nothing
     // that merely reads the bearer can mint or persist one.
@@ -902,7 +1539,8 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     ).toEqual([]);
     // Exactly one module holds the durable credential, in the Keychain, and
     // it never stores the access or provider token.
-    expect(filesMatching(/['"]react-native-keychain['"]/)).toEqual([
+    expect(filesMatching(/['"]react-native-keychain['"]/).sort()).toEqual([
+      'src/account/deletionCapabilityVault.ts',
       'src/account/sessionVault.ts',
     ]);
     const vault = read('src/account/sessionVault.ts');
@@ -913,6 +1551,17 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(persistedShape).toMatch(/refreshToken: string;/);
     expect(persistedShape).not.toMatch(
       /accessToken|bearerToken|identityToken|idToken|authorizationCode/,
+    );
+    const deletionVault = read('src/account/deletionCapabilityVault.ts');
+    expect(deletionVault).toContain(
+      'com.picklesensei.account-deletion.v1.${jobId}',
+    );
+    expect(deletionVault).toContain('AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY');
+    expect(deletionVault).toContain('cloudSync: false');
+    expect(deletionVault).toContain('sameDeletionBinding(record, binding)');
+    expect(deletionVault).toContain('parseDeletionSecret(value)');
+    expect(deletionVault).not.toMatch(
+      /refreshToken|accessToken|bearerToken|identityToken|idToken|authorizationCode|resetGenericPassword|sessionVault|sessionLifecycle/,
     );
     // No other durable store is in play for anything: AsyncStorage is not a
     // dependency of the app's sources at all.

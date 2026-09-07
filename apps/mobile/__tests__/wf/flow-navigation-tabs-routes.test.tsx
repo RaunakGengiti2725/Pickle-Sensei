@@ -12,6 +12,10 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { Linking } from 'react-native';
 import type { StoreApi, UseBoundStore } from 'zustand';
 
+// Saved Analyze routes import the native database, but this registry/new-capture
+// suite never loads a saved clip. Saved-route persistence has real-SQLite tests.
+jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
+
 const mockRefNavigate = jest.fn();
 const mockRefReady = jest.fn(() => true);
 
@@ -203,6 +207,7 @@ jest.mock('../../src/config/runtimeConfig', () => ({
 // auto-mock in __mocks__/react-native-notify-kit.ts backs it.
 import notifee, { EventType } from 'react-native-notify-kit';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
+import { getDb } from '../../src/data/db';
 import { color } from '../../src/design/tokens';
 import type {
   MainTabParams,
@@ -294,6 +299,7 @@ function fakeNavigation() {
 }
 
 beforeEach(() => {
+  jest.mocked(getDb).mockClear();
   mockRefNavigate.mockClear();
   mockRefReady.mockReturnValue(true);
   (notifee.onForegroundEvent as jest.Mock).mockClear();
@@ -318,6 +324,7 @@ afterEach(() => {
   act(() => {
     for (const renderer of live.splice(0)) renderer.unmount();
   });
+  expect(getDb).not.toHaveBeenCalled();
 });
 
 describe('navigation-tabs: route table integrity', () => {

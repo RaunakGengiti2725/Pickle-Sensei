@@ -212,7 +212,7 @@ export function createFusionProviders(
   return {
     kind: 'real',
     providers: {
-      phase: new GeometricPhaseSegmenter({ aspectRatio: 1 }),
+      phase: new GeometricPhaseSegmenter(),
       biomechanics: new GeometryBiomechanicsExtractor(),
       scorer: new Sm1TechniqueScorer(),
       faultDetector: new CheckpointThresholdFaultDetector(),

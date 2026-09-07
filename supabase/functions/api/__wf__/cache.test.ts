@@ -8,6 +8,7 @@
 // Run: cd supabase/functions/api && deno test --allow-env --allow-read --allow-net __wf__/
 
 import { assert, assertEquals, configureRedis, fakeUpstash, loadIsolate } from "./harness.ts";
+import { captureConsole } from "./routesHarness.ts";
 
 /** The auth-failure counter exactly as index.ts (router, lines ~2152-2175)
  * maintains it: non-atomic GET → +1 → SET through the layered cache. */
@@ -238,6 +239,52 @@ Deno.test("expired L1 entries are dropped lazily on read", async () => {
     redis.restore();
   }
 });
+
+Deno.test(
+  "failure logs: Redis failures keep cache and rate-limit fallback without printing keys or credentials",
+  async () => {
+    const secret =
+      "FAKE-redis-token FAKE-person@example.test https://FAKE-upstash.test/private?token=FAKE-token";
+    const originalFetch = globalThis.fetch;
+    const originalNow = Date.now;
+    configureRedis(true);
+    Date.now = () => 60_000;
+    try {
+      for (const response of [
+        () => new Response(secret, { status: 503 }),
+        () => Response.json([{ error: secret }]),
+        () => new Response(`{${secret}`),
+        () => {
+          throw new TypeError(secret);
+        },
+      ]) {
+        globalThis.fetch = async () => response();
+        const { cache, rateLimit } = await loadIsolate();
+        const { logs } = await captureConsole(async () => {
+          assertEquals(await cache.cacheGet(secret), null);
+          await cache.cacheSet(secret, secret, 60);
+          assertEquals(await cache.cacheGet(secret), secret);
+          await cache.cacheDel(secret);
+          assertEquals(await cache.cacheGet(secret), null);
+          assertEquals((await rateLimit.enforceRateLimit("user", secret, 2, 60)).remaining, 1);
+          assertEquals((await rateLimit.enforceRateLimit("user", secret, 2, 60)).allowed, true);
+          assertEquals((await rateLimit.peekRateLimit("user", secret, 2, 60)).allowed, false);
+          const denied = await rateLimit.enforceRateLimit("user", secret, 2, 60);
+          assertEquals(denied.allowed, false);
+          const result = rateLimit.rateLimitResponse(denied);
+          assertEquals(result.status, 429);
+          assertEquals(result.headers.get("Retry-After"), "60");
+          assertEquals((await result.json()).error.code, "rate_limited");
+        });
+        assertEquals(logs, []);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+      Date.now = originalNow;
+      configureRedis(false);
+    }
+  },
+);
 
 const invalidRedisCounts: unknown[] = [
   "",

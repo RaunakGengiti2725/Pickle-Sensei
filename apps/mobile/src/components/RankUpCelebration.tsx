@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   AccessibilityInfo,
-  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Svg, {
   Circle,
   Defs,
@@ -29,7 +30,7 @@ import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { formatDuprEstimate } from '../progress/duprEstimate';
-import { useRankCelebrationStore } from '../progress/rankCelebration';
+import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
@@ -207,22 +208,36 @@ function RatingCountUp(props: {
 
   return (
     <View style={styles.ratingRow}>
-      <Text style={[styles.ratingValue, { color: props.accent }]}>
+      <Text
+        style={[styles.ratingValue, { color: props.accent }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.5}
+        accessibilityLabel={`Rating ${props.to.toFixed(2)} out of 10`}
+        testID="rank-up-rating"
+      >
         {value.toFixed(2)}
+        <Text style={[type.caption, styles.ratingScale]}>{' / 10'}</Text>
       </Text>
-      <Text style={[type.caption, styles.ratingScale]}> / 10</Text>
       <Text style={[type.caption, styles.ratingDupr]}>
-        {' '}
         {formatDuprEstimate(props.to)}
       </Text>
     </View>
   );
 }
 
-function CelebrationStage(props: { celebration: RankCelebration }) {
-  const { celebration } = props;
+function CelebrationStage(props: {
+  celebration: RankCelebration;
+  dismiss: () => void;
+}) {
+  const { celebration, dismiss } = props;
   const reduced = useReducedMotion();
-  const dismiss = useRankCelebrationStore(s => s.dismiss);
+  const insets = useContext(SafeAreaInsetsContext) ?? {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  };
   const tierStyle = RANK_TIER_STYLE[celebration.toTier];
   const placement = celebration.fromTier === null;
   const summary = celebration.summary;
@@ -390,94 +405,119 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
       <View
         accessibilityViewIsModal
         pointerEvents="box-none"
-        style={styles.content}
+        style={[
+          styles.content,
+          {
+            paddingTop: Math.max(insets.top, space.md),
+            paddingBottom: Math.max(insets.bottom, space.lg),
+            paddingLeft: insets.left + space.xl,
+            paddingRight: insets.right + space.xl,
+          },
+        ]}
+        testID="rank-up-safe-content"
       >
-        <Animated.View style={eyebrowStyle}>
-          <Text style={[type.micro, styles.eyebrow]}>
-            {placement ? 'PLAYER RANK · PLACED' : 'PLAYER RANK · RANK UP'}
-          </Text>
-        </Animated.View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          contentInsetAdjustmentBehavior="never"
+          testID="rank-up-scroll"
+        >
+          <Animated.View style={eyebrowStyle}>
+            <Text style={[type.micro, styles.eyebrow]}>
+              {placement ? 'PLAYER RANK · PLACED' : 'PLAYER RANK · RANK UP'}
+            </Text>
+          </Animated.View>
 
-        <View style={styles.stage} pointerEvents="none">
-          <Sunburst tint={tierStyle.accent} reduced={reduced} />
-          <Animated.View style={[styles.glowRing, glowStyle]}>
-            <View
-              style={[styles.glowRingShape, { borderColor: tierStyle.accent }]}
-            />
-          </Animated.View>
-          {celebration.fromTier ? (
-            <Animated.View style={[styles.fromEmblem, fromStyle]}>
-              <RankIcon tier={celebration.fromTier} size={FROM_EMBLEM_SIZE} />
+          <View
+            style={styles.stage}
+            pointerEvents="none"
+            testID="rank-up-stage"
+          >
+            <Sunburst tint={tierStyle.accent} reduced={reduced} />
+            <Animated.View style={[styles.glowRing, glowStyle]}>
+              <View
+                style={[
+                  styles.glowRingShape,
+                  { borderColor: tierStyle.accent },
+                ]}
+              />
             </Animated.View>
-          ) : null}
-          <Animated.View style={toStyle}>
-            <RankIcon tier={celebration.toTier} size={EMBLEM_SIZE} />
-          </Animated.View>
-          {SPARKS.map(([angle, distance, size, delay, round], index) => (
-            <Spark
-              key={`${angle}-${distance}`}
-              angle={angle}
-              distance={distance}
-              size={size}
-              delay={delay}
-              round={round}
-              tint={
-                index % 3 === 0
-                  ? color.volt
-                  : index % 3 === 1
-                    ? tierStyle.accent
-                    : tierStyle.glint
-              }
+            {celebration.fromTier ? (
+              <Animated.View style={[styles.fromEmblem, fromStyle]}>
+                <RankIcon tier={celebration.fromTier} size={FROM_EMBLEM_SIZE} />
+              </Animated.View>
+            ) : null}
+            <Animated.View style={toStyle}>
+              <RankIcon tier={celebration.toTier} size={EMBLEM_SIZE} />
+            </Animated.View>
+            {SPARKS.map(([angle, distance, size, delay, round], index) => (
+              <Spark
+                key={`${angle}-${distance}`}
+                angle={angle}
+                distance={distance}
+                size={size}
+                delay={delay}
+                round={round}
+                tint={
+                  index % 3 === 0
+                    ? color.volt
+                    : index % 3 === 1
+                      ? tierStyle.accent
+                      : tierStyle.glint
+                }
+                reduced={reduced}
+              />
+            ))}
+          </View>
+
+          <Animated.View style={[styles.copyBlock, headlineStyle]}>
+            <Text accessibilityRole="header" style={[type.h1, styles.headline]}>
+              {placement
+                ? 'You’re on the board.'
+                : `${summary.tierLabel} unlocked`}
+            </Text>
+            <RatingCountUp
+              from={celebration.fromRating ?? 0}
+              to={summary.rating}
+              accent={tierStyle.accent}
               reduced={reduced}
             />
-          ))}
-        </View>
+          </Animated.View>
 
-        <Animated.View style={[styles.copyBlock, headlineStyle]}>
-          <Text style={[type.h1, styles.headline]}>
-            {placement
-              ? 'You’re on the board.'
-              : `${summary.tierLabel} unlocked`}
-          </Text>
-          <RatingCountUp
-            from={celebration.fromRating ?? 0}
-            to={summary.rating}
-            accent={tierStyle.accent}
-            reduced={reduced}
-          />
-        </Animated.View>
+          <View style={styles.ladder}>
+            {ladderSegments.map((segment, index) => (
+              <View key={segment.key} style={styles.ladderSegment}>
+                {segment.fill > 0 ? (
+                  <LadderFill
+                    fill={segment.fill}
+                    accent={segment.accent}
+                    index={index}
+                    progress={ladder}
+                    reduced={reduced}
+                  />
+                ) : null}
+              </View>
+            ))}
+          </View>
 
-        <View style={styles.ladder}>
-          {ladderSegments.map((segment, index) => (
-            <View key={segment.key} style={styles.ladderSegment}>
-              {segment.fill > 0 ? (
-                <LadderFill
-                  fill={segment.fill}
-                  accent={segment.accent}
-                  index={index}
-                  progress={ladder}
-                  reduced={reduced}
-                />
-              ) : null}
-            </View>
-          ))}
-        </View>
-
-        <Animated.View style={detailStyle}>
-          <Text style={[type.caption, styles.detail]}>
-            {placement
-              ? `Your current form across ${summary.techniqueCount} ${
-                  summary.techniqueCount === 1 ? 'technique' : 'techniques'
-                } — recent swings count most.`
-              : summary.nextTier
-                ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                    summary.nextTier.label
-                  }. Every analysis moves it.`
-                : 'Top tier — every new analysis defends it.'}
-          </Text>
-        </Animated.View>
-
-        <Animated.View style={[styles.ctaBlock, ctaStyle]}>
+          <Animated.View style={detailStyle}>
+            <Text style={[type.caption, styles.detail]}>
+              {placement
+                ? `Your current form across ${summary.techniqueCount} ${
+                    summary.techniqueCount === 1 ? 'technique' : 'techniques'
+                  } — recent swings count most.`
+                : summary.nextTier
+                  ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
+                      summary.nextTier.label
+                    }. Every analysis moves it.`
+                  : 'Top tier — every new analysis defends it.'}
+            </Text>
+          </Animated.View>
+        </ScrollView>
+        <Animated.View
+          style={[styles.ctaBlock, ctaStyle]}
+          testID="rank-up-actions"
+        >
           <Button
             label="Continue"
             variant="volt"
@@ -521,43 +561,38 @@ function LadderFill(props: {
 }
 
 export function RankUpCelebration() {
-  const celebration = useRankCelebrationStore(s => s.current);
-  const dismiss = useRankCelebrationStore(s => s.dismiss);
-
+  const presentation = useCeremonyPresentation();
+  if (!presentation) {
+    return (
+      <CeremonyHost kinds={['rank']}>
+        <RankUpCelebration />
+      </CeremonyHost>
+    );
+  }
+  if (presentation.ceremony.kind !== 'rank') return null;
   return (
-    <Modal
-      visible={celebration !== null}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={dismiss}
-    >
-      {celebration ? (
-        <CelebrationStage
-          key={`${celebration.fromTier ?? 'placement'}-${celebration.toTier}`}
-          celebration={celebration}
-        />
-      ) : null}
-    </Modal>
+    <CelebrationStage
+      celebration={presentation.ceremony.content}
+      dismiss={presentation.dismiss}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.overlayDeep },
+  root: { flex: 1, backgroundColor: color.overlayDeep, overflow: 'hidden' },
   backdrop: { flex: 1 },
-  content: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  content: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
   },
   eyebrow: { color: color.volt, textAlign: 'center' },
   stage: {
-    width: 320,
+    width: '100%',
+    maxWidth: 320,
     height: 250,
     alignItems: 'center',
     justifyContent: 'center',
@@ -573,20 +608,36 @@ const styles = StyleSheet.create({
     borderWidth: 3,
   },
   spark: { position: 'absolute' },
-  copyBlock: { alignItems: 'center', marginTop: space.sm },
-  headline: { color: color.onDark, textAlign: 'center' },
+  copyBlock: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginTop: space.sm,
+  },
+  headline: { color: color.onDark, textAlign: 'center', alignSelf: 'stretch' },
   ratingRow: {
+    alignSelf: 'stretch',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
     justifyContent: 'center',
+    columnGap: space.xs,
+    rowGap: space.xs,
     marginTop: space.sm,
   },
   ratingValue: {
     ...type.score,
     fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    maxWidth: '100%',
+    minWidth: 0,
+    flexShrink: 1,
   },
   ratingScale: { color: color.onDarkSubtle },
-  ratingDupr: { color: color.onDarkFaint },
+  ratingDupr: {
+    color: color.onDarkFaint,
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
   ladder: {
     flexDirection: 'row',
     gap: 5,
@@ -610,5 +661,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: space.md,
   },
-  ctaBlock: { alignSelf: 'stretch', marginTop: space.xl },
+  ctaBlock: { alignSelf: 'stretch', flexShrink: 0, marginTop: space.md },
 });

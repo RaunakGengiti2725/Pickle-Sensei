@@ -1,6 +1,7 @@
 /**
- * Home top-bar streak badge: the 32pt visual chip must still present a ≥44pt
- * touch target (Apple HIG) and route into the StreakCalendar.
+ * Home top-bar streak badge: its 32pt minimum must allow intrinsic large-text
+ * height, retain a ≥44pt touch extent, and route into the StreakCalendar.
+ * These are rendered layout/prop contracts, not native glyph or hit-test proof.
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -75,7 +76,7 @@ jest.mock('../../src/state/appStore', () => ({
 }));
 
 const mockConsistencyState = {
-  snapshot: null as unknown,
+  snapshot: null as { currentStreak: number; atRisk: boolean } | null,
   refresh: jest.fn(async () => {}),
 };
 jest.mock('../../src/consistency/store', () => ({
@@ -84,15 +85,23 @@ jest.mock('../../src/consistency/store', () => ({
   ) => selector(mockConsistencyState),
 }));
 
-import { StyleSheet, Text } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text } from 'react-native';
 import { HomeScreen } from '../../src/screens/HomeScreen';
 
+// The renderer exposes the component inside React.memo, not its wrapper.
+const PressableInner = (Pressable as unknown as { type: React.ComponentType })
+  .type;
+
 const MIN_TOUCH_TARGET_PT = 44;
+const initialWindow = Dimensions.get('window');
+const initialScreen = Dimensions.get('screen');
+const live = new Set<TestRenderer.ReactTestRenderer>();
 
 async function renderHome() {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<HomeScreen />);
+    live.add(renderer);
   });
   await act(async () => {
     await Promise.resolve();
@@ -104,45 +113,95 @@ function hostPressable(
   renderer: TestRenderer.ReactTestRenderer,
   testID: string,
 ) {
-  const host = renderer.root
-    .findAll(node => node.props.testID === testID)
-    .find(node => typeof node.type === 'string');
-  if (!host) throw new Error(`No host node for ${testID}`);
-  return host;
+  const hosts = renderer.root.findAll(
+    node => node.props.testID === testID && typeof node.type === 'string',
+  );
+  expect(hosts).toHaveLength(1);
+  return hosts[0]!;
+}
+
+function streakPressable(renderer: TestRenderer.ReactTestRenderer) {
+  const controls = renderer.root
+    .findAllByType(PressableInner)
+    .filter(node => node.props.testID === 'home-streak-badge');
+  expect(controls).toHaveLength(1);
+  return controls[0]!;
 }
 
 describe('Home streak badge hit target (wf fix-21)', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
     mockListRealAnalysisFacts.mockClear();
+    mockConsistencyState.snapshot = null;
+  });
+  afterEach(() => {
+    act(() => {
+      for (const renderer of live) renderer.unmount();
+      live.clear();
+      Dimensions.set({ window: initialWindow, screen: initialScreen });
+    });
   });
 
-  it('extends the 32pt chip to at least a 44pt touch target via hitSlop', async () => {
+  it.each([
+    { fontScale: 1, currentStreak: 3 },
+    { fontScale: 3.571, currentStreak: 365 },
+  ])('intrinsic height and ≥44pt extent ($fontScale)', async fixture => {
+    const { fontScale, currentStreak } = fixture;
+    const size = { width: 375, height: 667, scale: 2, fontScale };
+    Dimensions.set({ window: size, screen: size });
+    mockConsistencyState.snapshot = { currentStreak, atRisk: false };
     const renderer = await renderHome();
     const badge = hostPressable(renderer, 'home-streak-badge');
-    const style = StyleSheet.flatten(badge.props.style) as { height: number };
+    const style = StyleSheet.flatten(badge.props.style) as {
+      height?: number;
+      maxHeight?: number;
+      minHeight: number;
+      minWidth: number;
+    };
     const hitSlop = badge.props.hitSlop as number;
 
-    expect(style.height).toBe(32);
+    // The host's minimum is a lower bound on its laid-out height. A fixed
+    // height or maxHeight would defeat intrinsic growth for larger text.
+    expect(style.height).toBeUndefined();
+    expect(style.maxHeight).toBeUndefined();
+    expect(style.minHeight).toBe(32);
     expect(typeof hitSlop).toBe('number');
-    expect(style.height + hitSlop * 2).toBeGreaterThanOrEqual(
+    expect(style.minHeight + hitSlop * 2).toBeGreaterThanOrEqual(
+      MIN_TOUCH_TARGET_PT,
+    );
+    expect(style.minWidth + hitSlop * 2).toBeGreaterThanOrEqual(
       MIN_TOUCH_TARGET_PT,
     );
     expect(badge.props.accessibilityRole).toBe('button');
+    expect(badge.props.accessibilityLabel).toBe(
+      `${currentStreak} days training streak. Opens the consistency calendar.`,
+    );
+    const text = streakPressable(renderer).findByType(Text);
+    expect(text.props.children).toBe(currentStreak);
+    expect(text.props.numberOfLines).toBeUndefined();
+    expect(text.props.allowFontScaling).not.toBe(false);
+    expect(text.props.maxFontSizeMultiplier).toBeUndefined();
     act(() => renderer.unmount());
   });
 
-  it('routes to the StreakCalendar when pressed', async () => {
+  it.each([
+    { currentStreak: 0, dayLabel: 'days' },
+    { currentStreak: 1, dayLabel: 'day' },
+    { currentStreak: 3, dayLabel: 'days' },
+  ])('opens calendar once with $currentStreak $dayLabel', async fixture => {
+    const { currentStreak, dayLabel } = fixture;
+    mockConsistencyState.snapshot = { currentStreak, atRisk: false };
     const renderer = await renderHome();
-    const [badge] = renderer.root.findAll(
-      node =>
-        node.props.testID === 'home-streak-badge' &&
-        typeof node.props.onPress === 'function',
+    const badge = streakPressable(renderer);
+    expect(badge.props.accessibilityRole).toBe('button');
+    expect(badge.props.accessibilityLabel).toBe(
+      `${currentStreak} ${dayLabel} training streak. Opens the consistency calendar.`,
     );
-    if (!badge) throw new Error('No pressable home-streak-badge');
+    expect(badge.findByType(Text).props.children).toBe(currentStreak);
     await act(async () => {
       badge.props.onPress();
     });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');
     act(() => renderer.unmount());
   });

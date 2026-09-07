@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
+import { color, type } from '../src/design/tokens';
 import TestRenderer, { act } from 'react-test-renderer';
 import { buildConsistencySnapshot } from '../src/consistency/engine';
 
@@ -30,7 +31,7 @@ jest.mock('@react-navigation/native', () => ({
 
 // Deterministic fixture: three trained days ending "today" (Mar 10, UTC),
 // derived through the real engine so screen and engine can never disagree.
-const mockSnapshot = buildConsistencySnapshot(
+const initialSnapshot = buildConsistencySnapshot(
   [
     {
       kind: 'stroke',
@@ -61,11 +62,28 @@ const mockSnapshot = buildConsistencySnapshot(
   ],
   { asOfIso: '2026-03-10T18:00:00.000Z', timeZone: 'UTC' },
 );
+let mockSnapshot: ReturnType<typeof buildConsistencySnapshot> | null =
+  initialSnapshot;
+let mockLoadError: string | null = null;
 const mockRefresh = jest.fn(async () => undefined);
 jest.mock('../src/consistency/store', () => ({
   useConsistencyStore: (selector: (state: unknown) => unknown) =>
-    selector({ snapshot: mockSnapshot, refresh: mockRefresh }),
+    selector({
+      snapshot: mockSnapshot,
+      loadError: mockLoadError,
+      refresh: mockRefresh,
+    }),
 }));
+
+const initialWindow = Dimensions.get('window');
+const initialScreen = Dimensions.get('screen');
+
+function setFontScale(fontScale: number) {
+  act(() => {
+    const size = { width: 375, height: 667, scale: 2, fontScale };
+    Dimensions.set({ window: size, screen: size });
+  });
+}
 
 import { StreakCalendarScreen } from '../src/screens/StreakCalendarScreen';
 
@@ -90,6 +108,179 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
 }
 
 describe('StreakCalendarScreen', () => {
+  afterEach(() => {
+    mockSnapshot = initialSnapshot;
+    mockLoadError = null;
+    act(() => {
+      Dimensions.set({ window: initialWindow, screen: initialScreen });
+    });
+    jest.restoreAllMocks();
+  });
+
+  it.each([
+    [
+      'Pacific/Kiritimati',
+      '2026-12-31T08:00:00Z',
+      '2026-12-31',
+      'Thursday, December 31',
+    ],
+    [
+      'Pacific/Auckland',
+      '2026-03-07T21:00:00Z',
+      '2026-03-08',
+      'Sunday, March 8',
+    ],
+    [
+      'Pacific/Auckland',
+      '2026-04-05T00:30:00Z',
+      '2026-04-05',
+      'Sunday, April 5',
+    ],
+    [
+      'Pacific/Chatham',
+      '2026-09-26T22:30:00Z',
+      '2026-09-27',
+      'Sunday, September 27',
+    ],
+    [
+      'America/New_York',
+      '2026-03-08T15:00:00Z',
+      '2026-03-08',
+      'Sunday, March 8',
+    ],
+    [
+      'Pacific/Pago_Pago',
+      '2026-01-01T22:30:00Z',
+      '2026-01-01',
+      'Thursday, January 1',
+    ],
+  ])(
+    'keeps the selected civil date in %s across DST and date-line boundaries',
+    (timeZone, atIso, day, label) => {
+      mockSnapshot = buildConsistencySnapshot(
+        [
+          {
+            kind: 'stroke',
+            atIso,
+            shotType: 'dink',
+            overallScore: 6.2,
+            resultKind: 'scored',
+          },
+        ],
+        { asOfIso: atIso, timeZone },
+      );
+      // Model the device's default zone without relying on the Jest worker's TZ.
+      jest
+        .spyOn(Date.prototype, 'toLocaleDateString')
+        .mockImplementation(function (this: Date, _locales, options) {
+          return new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            ...options,
+          }).format(this);
+        });
+      expect(mockSnapshot.asOfDay).toBe(day);
+      const renderer = renderScreen();
+      const detail = renderer.root.findAll(
+        node => node.props.testID === 'streak-day-detail',
+      )[0]!;
+      const heading = detail.findAllByType(Text)[0]!;
+      expect(heading.props.children).toBe(label);
+      expect(allText(renderer)).toContain('dink');
+      act(() => renderer.unmount());
+    },
+  );
+
+  it.each(['loaded', 'load-error'])(
+    'allows the complete Consistency title at largest Dynamic Type in the %s state',
+    state => {
+      mockGoBack.mockClear();
+      setFontScale(3.571);
+      if (state === 'load-error') {
+        mockSnapshot = null;
+        mockLoadError = 'Could not read history';
+      }
+      const renderer = renderScreen();
+      const heading = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === 'Consistency')!;
+      expect(heading.props.numberOfLines).toBeUndefined();
+      expect(heading.props.allowFontScaling).not.toBe(false);
+      expect(heading.props.maxFontSizeMultiplier).toBeUndefined();
+      expect(StyleSheet.flatten(heading.props.style)).toMatchObject(type.h3);
+      const back = renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Back' &&
+          typeof node.props.onClick === 'function',
+      )[0]!;
+      expect(StyleSheet.flatten(back.props.style)).toMatchObject({
+        width: 44,
+        height: 44,
+      });
+      act(() => {
+        back.props.onClick({
+          currentTarget: back,
+          target: back,
+          nativeEvent: {},
+        });
+      });
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('keeps the normal hero design, then gives DAY STREAK the full card width as Dynamic Type grows', () => {
+    setFontScale(1);
+    const renderer = renderScreen();
+    const findHeroCopy = () => {
+      const hero = renderer.root.findAll(
+        node => node.props.testID === 'streak-hero',
+      )[0]!;
+      const texts = hero.findAllByType(Text);
+      const caption = texts.find(
+        node => [node.props.children].flat(3).join('') === 'DAY STREAK',
+      )!;
+      return { count: texts[0]!, caption };
+    };
+    const normal = findHeroCopy();
+    expect(normal.count.props.children).toBe(3);
+    expect(normal.caption.parent).toBe(normal.count.parent);
+    expect(StyleSheet.flatten(normal.count.props.style)).toMatchObject({
+      ...type.display,
+      color: color.onDark,
+      fontSize: 56,
+      lineHeight: 60,
+    });
+    expect(StyleSheet.flatten(normal.caption.props.style)).toMatchObject({
+      ...type.h3,
+      color: color.onDarkMuted,
+      letterSpacing: 2,
+    });
+
+    // React-test-renderer cannot measure glyphs; this pins the removal of the
+    // flame/count column's width constraint, not native word-wrap rendering.
+    setFontScale(3.571);
+    const large = findHeroCopy();
+    expect(large.count.props.children).toBe(3);
+    expect(large.caption.parent?.props.testID).toBe('streak-hero');
+    expect(large.caption.parent).not.toBe(large.count.parent);
+    expect(StyleSheet.flatten(large.caption.props.style)).toMatchObject({
+      ...type.h3,
+      color: color.onDarkMuted,
+      alignSelf: 'stretch',
+    });
+    expect(large.caption.props.numberOfLines).toBeUndefined();
+    for (const text of renderer.root.findAllByType(Text)) {
+      expect(text.props.allowFontScaling).not.toBe(false);
+      expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+    }
+    expect(allText(renderer)).toContain('Day 3 secured');
+    setFontScale(1);
+    const restored = findHeroCopy();
+    expect(restored.caption.parent).toBe(restored.count.parent);
+    act(() => renderer.unmount());
+  });
+
   it('shows the streak hero, momentum, calendar month, and achievements', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
@@ -102,6 +293,9 @@ describe('StreakCalendarScreen', () => {
     expect(copy).toContain('Next reward:');
     // Day 3 secured today → status line reflects it.
     expect(copy).toContain('Day 3 secured');
+    expect(copy).toContain(
+      'This calendar and Momentum XP use training saved on this device.',
+    );
     act(() => renderer.unmount());
   });
 

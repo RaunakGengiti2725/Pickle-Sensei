@@ -55,7 +55,10 @@ export async function analyzeClip(
   if (!pose.ok) return pose;
   if (!paddle.ok) return paddle;
 
-  const phases = await providers.phase.segmentPhases(pose.value, paddle.value, stroke);
+  const phases = await providers.phase.segmentPhases(pose.value, paddle.value, stroke, {
+    width: clip.width,
+    height: clip.height,
+  });
   if (!phases.ok) return phases;
 
   const measurements = await providers.features.extractMeasurements({

@@ -1,3 +1,5 @@
+import type { PendingFulfilmentStorage } from './pendingFulfilment';
+
 export type BillingPeriod = 'annual' | 'monthly' | 'lifetime';
 
 export interface FreeTrialDisplay {
@@ -104,6 +106,7 @@ export class BillingError extends Error {
 }
 
 export interface BillingStoreClient {
+  invalidatePendingOperations?(): void;
   configure(): Promise<void>;
   loadPlans(): Promise<StorePlans>;
   purchase(planId: string): Promise<StoreEntitlementState>;
@@ -117,6 +120,8 @@ export interface CanonicalAccessClient {
 }
 
 export interface BillingAccessDependencies {
+  canonicalAppUserId?: string | null;
+  pendingFulfilmentStorage?: PendingFulfilmentStorage;
   store: BillingStoreClient;
   backend: CanonicalAccessClient;
 }

@@ -16,15 +16,23 @@ import {
 } from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  closeSqliteTestDatabases,
+  createSqliteTestDb,
+  seedSqliteCapture,
+} from '../testSupport/sqlite';
 
 /**
- * EVERY TECHNIQUE SCORES — the product guarantee this suite locks.
+ * EXACT TECHNIQUE COVERAGE — legacy scoring and confirmation boundaries.
  *
- * A guided capture with a real recorded pose sequence, declared as ANY of
- * the eight ShotTypeSlugs (and any selectable canonical technique), must
- * come back `scored`. No "not yet released" refusals, no invented
- * abstentions: the registry resolves sm-v1 for every stroke and every
- * stroke has a complete metric target configuration.
+ * A synthetic pose sequence exercises each supported declared canonical
+ * technique. Ambiguous dink/volley labels request an exact selection without
+ * promoting or charging a result. Explicit canonical cases still exercise
+ * sm-v1 metric configurations; these tests are not scientific validation.
  */
 
 jest.mock('../src/camera/capture', () => {
@@ -41,16 +49,8 @@ let mockReadArtifact: (uri: string) => Promise<string> = async () => {
 
 const owner = '33333333-3333-4333-8333-333333333333';
 
-function recordingDb(): { db: LocalDb; calls: { sql: string }[] } {
-  const calls: { sql: string }[] = [];
-  const db: LocalDb = {
-    async execute(sql) {
-      calls.push({ sql });
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb() {
+  return createSqliteTestDb();
 }
 
 function jsonResponse(body: unknown): Response {
@@ -68,7 +68,7 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
     if (url.endsWith('/v1/analysis-permits')) {
       return jsonResponse({
         permit: {
-          id: 'permit-all-1',
+          id: '66666666-6666-4666-8666-666666666666',
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-08-27T20:00:00.000Z',
@@ -111,7 +111,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
@@ -144,7 +144,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -156,9 +156,11 @@ function request(
   declaredStroke: ShotTypeSlug,
   declaredCanonical: string | null,
 ) {
+  const captureId = '77777777-7777-4777-8777-777777777777';
+  seedSqliteCapture(db, owner, captureId, clip);
   return {
     db,
-    captureId: `capture-all-${declaredStroke}`,
+    captureId,
     clip,
     declaredStroke,
     declaredCanonical,
@@ -169,15 +171,25 @@ function request(
   };
 }
 
-describe('every declared technique produces a real score', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+describe('declared technique scoring and confirmation', () => {
+  beforeEach(() => {
+    setActiveDataOwner(owner);
+    establishApiSession({
+      canonicalAppUserId: owner,
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token-1',
+      provider: 'apple',
+    });
+  });
   afterEach(() => {
+    closeSqliteTestDatabases();
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
 
   it.each(SHOT_TYPES.map(slug => [slug] as const))(
-    'declared "%s" scores end-to-end (no unreleased techniques)',
+    'legacy "%s" scores only after its technique is unambiguous',
     async slug => {
       const { db, calls } = recordingDb();
       const { clip, sidecarJson } = swingClipWithSidecar();
@@ -186,6 +198,18 @@ describe('every declared technique produces a real score', () => {
       (globalThis as { fetch?: unknown }).fetch = fetchMock;
 
       const outcome = await runCaptureAnalysis(request(db, clip, slug, null));
+      if (slug === 'dink' || slug === 'volley') {
+        expect(outcome.kind).toBe('needs_technique_confirmation');
+        if (outcome.kind !== 'needs_technique_confirmation') return;
+        expect(outcome.record.result).toBeNull();
+        expect(finalized).toEqual([
+          { outcome: 'low_confidence', ratingId: null },
+        ]);
+        expect(
+          calls.filter(call => call.sql.includes('INSERT INTO outbox')),
+        ).toHaveLength(0);
+        return;
+      }
       expect(outcome.kind).toBe('scored');
       if (outcome.kind !== 'scored') return;
       expect(outcome.record.result?.shotType).toBe(slug);

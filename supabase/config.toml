@@ -1,0 +1,4 @@
+project_id = "pickle-sensei"
+
+[functions.api]
+verify_jwt = false

@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useContext, useEffect, useMemo } from 'react';
 import {
   AccessibilityInfo,
-  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Svg, {
   Circle,
   Defs,
@@ -31,7 +32,7 @@ import { color, radius, space, type } from '../design/tokens';
 import { badgeArtFor, MilestoneBadge, RARITY_PALETTE } from './MilestoneBadge';
 import { specialistTitle } from './engine';
 import { RARITY_LABEL, VOLUME_ACHIEVEMENTS } from './milestones';
-import { useConsistencyStore } from './store';
+import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { ConsistencyCelebration } from './store';
 import { plural } from '../util/plural';
 
@@ -249,10 +250,18 @@ function Sunburst(props: { tint: string; reduced: boolean }) {
   );
 }
 
-function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
-  const { celebration } = props;
+function CelebrationStage(props: {
+  celebration: ConsistencyCelebration;
+  dismiss: () => void;
+}) {
+  const { celebration, dismiss } = props;
   const reduced = useReducedMotion();
-  const dismiss = useConsistencyStore(s => s.dismissCelebration);
+  const insets = useContext(SafeAreaInsetsContext) ?? {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  };
   const palette = RARITY_PALETTE[celebration.rarity];
   const art = badgeArtFor(celebration.achievementId);
   const { width, height } = useWindowDimensions();
@@ -462,72 +471,99 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
       <View
         accessibilityViewIsModal
         pointerEvents="box-none"
-        style={styles.content}
+        style={[
+          styles.content,
+          {
+            paddingTop: Math.max(insets.top, space.md),
+            paddingBottom: Math.max(insets.bottom, space.lg),
+            paddingLeft: insets.left + space.xl,
+            paddingRight: insets.right + space.xl,
+          },
+        ]}
+        testID="streak-celebration-safe-content"
       >
-        <Animated.View style={eyebrowStyle}>
-          <Text style={[type.micro, styles.eyebrow]}>
-            {celebration.kind === 'streak'
-              ? `STREAK MILESTONE · ${RARITY_LABEL[
-                  celebration.rarity
-                ].toUpperCase()}`
-              : `ACHIEVEMENT · ${RARITY_LABEL[
-                  celebration.rarity
-                ].toUpperCase()}`}
-          </Text>
-        </Animated.View>
-
-        <View style={styles.stage} pointerEvents="none">
-          <Sunburst tint={palette.accent} reduced={reduced} />
-          <Animated.View style={[styles.glowRing, glowStyle]}>
-            <View
-              style={[styles.glowRingShape, { borderColor: palette.accent }]}
-            />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          contentInsetAdjustmentBehavior="never"
+          testID="streak-celebration-scroll"
+        >
+          <Animated.View style={eyebrowStyle}>
+            <Text style={[type.micro, styles.eyebrow]}>
+              {celebration.kind === 'streak'
+                ? `STREAK MILESTONE · ${RARITY_LABEL[
+                    celebration.rarity
+                  ].toUpperCase()}`
+                : `ACHIEVEMENT · ${RARITY_LABEL[
+                    celebration.rarity
+                  ].toUpperCase()}`}
+            </Text>
           </Animated.View>
-          <Animated.View style={badgeStyle}>
-            <MilestoneBadge
-              glyph={art.glyph}
-              {...(art.value !== undefined ? { value: art.value } : {})}
-              rarity={celebration.rarity}
-              earned
-              size={BADGE_SIZE}
-            />
-          </Animated.View>
-          {SPARKS.map(([angle, distance, size, delay, round], index) => (
-            <Spark
-              key={`${angle}-${distance}`}
-              angle={angle}
-              distance={distance}
-              size={size}
-              delay={delay}
-              round={round}
-              tint={
-                index % 3 === 0
-                  ? color.volt
-                  : index % 3 === 1
-                    ? palette.accent
-                    : palette.glint
-              }
-              reduced={reduced}
-            />
-          ))}
-        </View>
 
-        <Animated.View style={[styles.copyBlock, headlineStyle]}>
-          <Text style={[type.h1, styles.headline]}>{title}</Text>
-          <Text style={[type.body, styles.blurb]}>{celebration.blurb}</Text>
-          <Text style={[type.caption, styles.streakLine]}>{streakLine}</Text>
-        </Animated.View>
-
-        <Animated.View style={[styles.rewardPill, rewardStyle]}>
           <View
-            style={[styles.rewardDot, { backgroundColor: palette.accent }]}
-          />
-          <Text style={[type.caption, styles.rewardText]}>
-            {celebration.reward}
-          </Text>
-        </Animated.View>
+            style={styles.stage}
+            pointerEvents="none"
+            testID="streak-celebration-stage"
+          >
+            <Sunburst tint={palette.accent} reduced={reduced} />
+            <Animated.View style={[styles.glowRing, glowStyle]}>
+              <View
+                style={[styles.glowRingShape, { borderColor: palette.accent }]}
+              />
+            </Animated.View>
+            <Animated.View style={badgeStyle}>
+              <MilestoneBadge
+                glyph={art.glyph}
+                {...(art.value !== undefined ? { value: art.value } : {})}
+                rarity={celebration.rarity}
+                earned
+                size={BADGE_SIZE}
+              />
+            </Animated.View>
+            {SPARKS.map(([angle, distance, size, delay, round], index) => (
+              <Spark
+                key={`${angle}-${distance}`}
+                angle={angle}
+                distance={distance}
+                size={size}
+                delay={delay}
+                round={round}
+                tint={
+                  index % 3 === 0
+                    ? color.volt
+                    : index % 3 === 1
+                      ? palette.accent
+                      : palette.glint
+                }
+                reduced={reduced}
+              />
+            ))}
+          </View>
 
-        <Animated.View style={[styles.ctaBlock, ctaStyle]}>
+          <Animated.View style={[styles.copyBlock, headlineStyle]}>
+            <Text accessibilityRole="header" style={[type.h1, styles.headline]}>
+              {title}
+            </Text>
+            <Text style={[type.body, styles.blurb]}>{celebration.blurb}</Text>
+            <Text style={[type.caption, styles.streakLine]}>{streakLine}</Text>
+          </Animated.View>
+
+          <Animated.View
+            style={[styles.rewardPill, rewardStyle]}
+            testID="streak-celebration-reward"
+          >
+            <View
+              style={[styles.rewardDot, { backgroundColor: palette.accent }]}
+            />
+            <Text style={[type.caption, styles.rewardText]}>
+              {celebration.reward}
+            </Text>
+          </Animated.View>
+        </ScrollView>
+        <Animated.View
+          style={[styles.ctaBlock, ctaStyle]}
+          testID="streak-celebration-actions"
+        >
           <Button
             label="Keep training"
             variant="volt"
@@ -541,43 +577,38 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
 }
 
 export function StreakCelebration() {
-  const celebration = useConsistencyStore(s => s.celebration);
-  const dismiss = useConsistencyStore(s => s.dismissCelebration);
-
+  const presentation = useCeremonyPresentation();
+  if (!presentation) {
+    return (
+      <CeremonyHost kinds={['streak']}>
+        <StreakCelebration />
+      </CeremonyHost>
+    );
+  }
+  if (presentation.ceremony.kind !== 'streak') return null;
   return (
-    <Modal
-      visible={celebration !== null}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={dismiss}
-    >
-      {celebration ? (
-        <CelebrationStage
-          key={celebration.achievementId}
-          celebration={celebration}
-        />
-      ) : null}
-    </Modal>
+    <CelebrationStage
+      celebration={presentation.ceremony.content}
+      dismiss={presentation.dismiss}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.overlayDeep },
+  root: { flex: 1, backgroundColor: color.overlayDeep, overflow: 'hidden' },
   backdrop: { flex: 1 },
-  content: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  content: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
   },
   eyebrow: { color: color.volt, textAlign: 'center' },
   stage: {
-    width: 320,
+    width: '100%',
+    maxWidth: 320,
     height: 236,
     alignItems: 'center',
     justifyContent: 'center',
@@ -593,16 +624,25 @@ const styles = StyleSheet.create({
   },
   spark: { position: 'absolute' },
   confetti: { position: 'absolute', top: 0, borderRadius: 2 },
-  copyBlock: { alignItems: 'center', marginTop: space.sm },
-  headline: { color: color.onDark, textAlign: 'center' },
+  copyBlock: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginTop: space.sm,
+  },
+  headline: { color: color.onDark, textAlign: 'center', alignSelf: 'stretch' },
   blurb: {
     color: color.onDarkMuted,
     textAlign: 'center',
     marginTop: space.sm,
     maxWidth: 300,
   },
-  streakLine: { color: color.onDarkSubtle, marginTop: space.sm },
+  streakLine: {
+    color: color.onDarkSubtle,
+    textAlign: 'center',
+    marginTop: space.sm,
+  },
   rewardPill: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -614,7 +654,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineMutedDark,
   },
-  rewardDot: { width: 8, height: 8, borderRadius: 4 },
-  rewardText: { color: color.onDark, letterSpacing: 0.3 },
-  ctaBlock: { alignSelf: 'stretch', marginTop: space.xl },
+  rewardDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  rewardText: {
+    color: color.onDark,
+    letterSpacing: 0.3,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  ctaBlock: { alignSelf: 'stretch', flexShrink: 0, marginTop: space.md },
 });

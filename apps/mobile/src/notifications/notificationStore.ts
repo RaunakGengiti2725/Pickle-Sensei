@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { getDb } from '../data/db';
 import { getKv, setKv } from '../data/repository';
 import {
+  captureDataOwnerContext,
   getActiveDataOwner,
+  isDataOwnerContextCurrent,
   SIGNED_OUT_DATA_OWNER,
+  type DataOwnerContext,
 } from '../data/accountScope';
 import { computeConsistencySnapshot } from '../consistency/store';
 import { buildNotificationPlan, type NotificationPlanContext } from './plan';
@@ -33,6 +36,7 @@ export interface NotificationStoreDeps {
   scheduler?: SchedulerPort;
   loadContext?: () => Promise<NotificationPlanContext>;
   expectedOwnerKey?: string;
+  isCurrent?: () => boolean;
 }
 
 export type NotificationOnboardingChoice = 'enable' | 'not_now';
@@ -131,6 +135,21 @@ async function persistPrefs(
   );
 }
 
+function ownerIsCurrent(
+  owner: string,
+  context: DataOwnerContext | null,
+  deps?: NotificationStoreDeps,
+): boolean {
+  return (
+    getActiveDataOwner() === owner &&
+    (context === null || isDataOwnerContextCurrent(context)) &&
+    (deps?.isCurrent?.() ?? true)
+  );
+}
+
+let scheduleRevision = 0;
+let scheduleQueue: Promise<void> = Promise.resolve();
+
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
@@ -142,11 +161,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   hydrate: async deps => {
     const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
     if (getActiveDataOwner() !== owner) return;
-    const scheduler = deps?.scheduler ?? getScheduler();
+    const context =
+      owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+    const isCurrent = () => ownerIsCurrent(owner, context, deps);
+    if (!isCurrent()) return;
+    const scopedDeps = { ...deps, expectedOwnerKey: owner, isCurrent };
     if (owner === SIGNED_OUT_DATA_OWNER) {
       // No readable owner: nothing may stay scheduled.
-      await scheduler.cancelAllPlanned().catch(() => {});
-      if (getActiveDataOwner() !== owner) return;
       set({
         hydrated: true,
         ownerKey: owner,
@@ -155,6 +176,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         persistFailed: false,
         scheduleFailed: false,
       });
+      await get().syncNow(scopedDeps);
       return;
     }
     let prefs: NotificationPrefs;
@@ -167,7 +189,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
       );
       const pending = parsePendingOnboardingChoice(pendingRaw);
-      if (getActiveDataOwner() !== owner) return;
+      if (!isCurrent()) return;
       if (pending) {
         if (!raw) {
           prefs = {
@@ -176,26 +198,33 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
             promptDismissed: true,
           };
           await persistPrefs(owner, prefs);
-          if (getActiveDataOwner() !== owner) return;
+          if (!isCurrent()) return;
         }
         await setKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
       }
     } catch {
       prefs = { ...DEFAULT_NOTIFICATION_PREFS };
     }
-    if (getActiveDataOwner() !== owner) return;
+    if (!isCurrent()) return;
     set({ hydrated: true, ownerKey: owner, prefs });
-    await get().refreshPermission(deps);
-    if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-    await get().syncNow(deps);
+    await get().refreshPermission(scopedDeps);
+    if (!isCurrent() || get().ownerKey !== owner) return;
+    await get().syncNow(scopedDeps);
   },
 
   refreshPermission: async deps => {
-    const scheduler = deps?.scheduler ?? getScheduler();
+    const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
+    if (getActiveDataOwner() !== owner) return;
+    const context =
+      owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+    const isCurrent = () => ownerIsCurrent(owner, context, deps);
+    if (!isCurrent()) return;
     try {
-      set({ permission: await scheduler.permissionState() });
+      const scheduler = deps?.scheduler ?? getScheduler();
+      const permission = await scheduler.permissionState();
+      if (isCurrent()) set({ permission });
     } catch {
-      set({ permission: 'unknown' });
+      if (isCurrent()) set({ permission: 'unknown' });
     }
   },
 
@@ -265,29 +294,44 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   syncNow: async deps => {
-    const scheduler = deps?.scheduler ?? getScheduler();
-    const owner = getActiveDataOwner();
+    const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
+    if (getActiveDataOwner() !== owner) return;
+    const context =
+      owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+    if (!ownerIsCurrent(owner, context, deps)) return;
+    const revision = ++scheduleRevision;
     const { ownerKey, prefs, permission } = get();
+    const isCurrent = () =>
+      revision === scheduleRevision &&
+      ownerIsCurrent(owner, context, deps) &&
+      get().ownerKey === ownerKey &&
+      get().prefs === prefs &&
+      get().permission === permission;
     try {
+      const scheduler = deps?.scheduler ?? getScheduler();
+      let plan: ReturnType<typeof buildNotificationPlan> | null = null;
       if (
-        owner === SIGNED_OUT_DATA_OWNER ||
-        ownerKey !== owner ||
-        !prefs.enabled ||
-        permission !== 'granted'
+        owner !== SIGNED_OUT_DATA_OWNER &&
+        ownerKey === owner &&
+        prefs.enabled &&
+        permission === 'granted'
       ) {
-        await scheduler.cancelAllPlanned();
-        set({ scheduleFailed: false });
-        return;
+        const loadContext = deps?.loadContext ?? defaultLoadContext;
+        plan = buildNotificationPlan(prefs, await loadContext());
       }
-      const loadContext = deps?.loadContext ?? defaultLoadContext;
-      const plan = buildNotificationPlan(prefs, await loadContext());
-      if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-      await scheduler.applyPlan(plan);
-      set({ scheduleFailed: false });
+      if (!isCurrent()) return;
+      const apply = async () => {
+        if (!isCurrent()) return;
+        if (plan === null) await scheduler.cancelAllPlanned();
+        else await scheduler.applyPlan(plan);
+        if (isCurrent()) set({ scheduleFailed: false });
+      };
+      scheduleQueue = scheduleQueue.then(apply, apply);
+      await scheduleQueue;
     } catch {
       // Scheduling is best-effort by design: a failed sync never breaks the
       // app, and the next foreground pass retries with fresh facts.
-      set({ scheduleFailed: true });
+      if (isCurrent()) set({ scheduleFailed: true });
     }
   },
 }));

@@ -459,7 +459,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
   it('keyboard Next mirrors Continue but never past an empty name', () => {
     const renderer = renderScreen({ mode: 'preauth' });
     const input = renderer.root.findByType(TextInput);
-    expect(input.props.accessibilityLabel).toBe('First name');
+    expect(input.props.accessibilityLabel).toBe('Name or nickname (required)');
     act(() => input.props.onSubmitEditing());
     expect(allText(renderer)).toContain('What should we call you?');
     typeName(renderer, '  ');

@@ -50,7 +50,7 @@ import {
 } from '../../src/billing/types';
 import {
   clearAccessStoreConfiguration,
-  configureAccessStore,
+  configureAccessStore as configureBillingAccessStore,
   useAccessStore,
 } from '../../src/state/accessStore';
 import { BrandSpinner, PressableScale } from '../../src/design/components';
@@ -58,6 +58,24 @@ import {
   PaywallScreen,
   type PaywallScreenProps,
 } from '../../src/screens/PaywallScreen';
+import type {
+  PendingFulfilment,
+  PendingFulfilmentStorage,
+} from '../../src/billing/pendingFulfilment';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+
+const OWNER = '11111111-1111-4111-8111-111111111111';
+let pendingStorage: PendingFulfilmentStorage;
+
+function configureAccessStore(clients: BillingAccessDependencies): void {
+  configureBillingAccessStore(clients, {
+    owner: OWNER,
+    pendingFulfilmentStorage: pendingStorage,
+  });
+}
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
@@ -319,9 +337,24 @@ function expectAccessibleTarget(node: TestRenderer.ReactTestInstance) {
 
 beforeEach(() => {
   clearAccessStoreConfiguration();
+  setActiveDataOwner(OWNER);
+  const records = new Map<string, PendingFulfilment>();
+  pendingStorage = {
+    read: async owner => records.get(owner) ?? null,
+    write: async (record, assertActive) => {
+      assertActive?.();
+      records.set(record.owner, record);
+    },
+    remove: async (record, assertActive) => {
+      assertActive?.();
+      records.delete(record.owner);
+    },
+  };
 });
 
 afterEach(() => {
+  clearAccessStoreConfiguration();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   jest.restoreAllMocks();
 });
 
@@ -702,7 +735,7 @@ describe('PaywallScreen buttons — purchase CTA', () => {
     act(() => renderer.unmount());
   });
 
-  it('backend verification failure after a store purchase: honest pending copy, CTA locked, Try again + Restore offered', async () => {
+  it('backend verification failure after a store purchase: pending copy, store actions locked, backend retry offered', async () => {
     const deps = dependencies();
     deps.backend.syncBilling.mockRejectedValue(new Error('503'));
     configureAccessStore(deps);
@@ -717,22 +750,29 @@ describe('PaywallScreen buttons — purchase CTA', () => {
 
     expect(props.onPurchased).not.toHaveBeenCalled();
     expect(allText(renderer)).toContain(
-      'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
+      'The store completed your purchase, but membership verification is still pending. Retry verification; do not purchase again.',
     );
     // Access fails closed, so purchase is locked but the recovery paths are live.
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
-    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
     expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(false);
 
     // Try again re-verifies with the server and unlocks the CTA.
-    deps.backend.getAccess.mockResolvedValue(freeAccess);
+    deps.backend.syncBilling.mockResolvedValueOnce(premiumSync());
     await act(async () => {
       byTestId(renderer, 'paywall-retry').props.onPress();
     });
     await flush();
-    expect(deps.backend.getAccess).toHaveBeenCalledTimes(2);
+    expect(deps.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    expect(deps.store.purchase).toHaveBeenCalledTimes(1);
+    expect(deps.store.restore).not.toHaveBeenCalled();
     expect(maybeByTestId(renderer, 'paywall-retry')).toHaveLength(0);
-    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
+    expect(maybeByTestId(renderer, 'paywall-continue')).toHaveLength(0);
+    expect(byLabel(renderer, 'Continue coaching').props.disabled).not.toBe(
+      true,
+    );
+    expect(props.onPurchased).toHaveBeenCalledTimes(1);
 
     act(() => renderer.unmount());
   });
@@ -752,10 +792,11 @@ describe('PaywallScreen buttons — purchase CTA', () => {
 
     expect(props.onPurchased).not.toHaveBeenCalled();
     expect(allText(renderer)).toContain(
-      'membership verification is still pending. Try Restore purchases.',
+      'membership verification is still pending. Retry verification; do not purchase again.',
     );
-    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
-    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(false);
 
     act(() => renderer.unmount());
   });
@@ -896,16 +937,210 @@ describe('PaywallScreen buttons — restore purchases', () => {
     await flush();
 
     expect(allText(renderer)).toContain(
-      'Restored purchases could not be verified yet. Please try again.',
+      'Restored purchases could not be verified yet. Retry verification; do not restore or purchase again.',
     );
     expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(false);
-    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
 
     act(() => renderer.unmount());
   });
 });
 
 describe('PaywallScreen buttons — Try again', () => {
+  it('loads pricing on entry after a backend-only startup check established free access', async () => {
+    const deps = dependencies();
+    deps.backend.syncBilling.mockResolvedValueOnce(freeSync());
+    configureAccessStore(deps);
+    await useAccessStore.getState().reconcileBilling();
+    expect(deps.store.configure).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().plans).toBeNull();
+    const renderer = await renderPaywall(screenProps());
+    await openPricing(renderer);
+    expect(deps.store.loadPlans).toHaveBeenCalledTimes(1);
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('shows verification instead of a sales pitch while startup membership reconciliation is in flight', async () => {
+    const deps = dependencies();
+    const verification = deferred<CanonicalBillingSync>();
+    deps.backend.syncBilling.mockReturnValueOnce(verification.promise);
+    configureAccessStore(deps);
+    const request = useAccessStore.getState().reconcileBilling();
+    const renderer = await renderPaywall(screenProps());
+    expect(allText(renderer)).toContain('Verify your membership.');
+    expect(allText(renderer)).not.toContain('A coach for every stroke.');
+    expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(true);
+    await act(async () => {
+      verification.resolve(premiumSync());
+      await request;
+    });
+    expect(allText(renderer)).toContain('MEMBERSHIP VERIFIED');
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('keeps free access while optional verification fails, but sends purchase recovery to the backend', async () => {
+    const deps = dependencies();
+    deps.backend.getAccess.mockResolvedValue({
+      ...freeAccess,
+      freeRatings: {
+        limit: 2,
+        used: 0,
+        reserved: 0,
+        remaining: 2,
+        availableToReserve: 2,
+      },
+      canStartRating: true,
+      paywallRequired: false,
+    });
+    deps.backend.syncBilling.mockRejectedValueOnce(
+      new Error('RevenueCat unavailable'),
+    );
+    configureAccessStore(deps);
+    await useAccessStore.getState().reconcileBilling();
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    await openPricing(renderer);
+    expect(useAccessStore.getState().canonicalAccess?.canStartRating).toBe(
+      true,
+    );
+    expect(useAccessStore.getState().pendingFulfilment).toBeNull();
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+    act(() => {
+      byLabel(renderer, 'Dismiss membership message').props.onPress();
+    });
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+    await act(async () => {
+      byTestId(renderer, 'paywall-retry').props.onPress();
+    });
+    await flush();
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(props.onPurchased).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
+  it('keeps retry single-flight and does not repeat a store request after payment', async () => {
+    const deps = dependencies();
+    deps.backend.syncBilling.mockRejectedValueOnce(new Error('offline'));
+    configureAccessStore(deps);
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    await openPricing(renderer);
+    await act(async () => {
+      byTestId(renderer, 'paywall-continue').props.onPress();
+    });
+    await flush();
+    const verification = deferred<CanonicalBillingSync>();
+    deps.backend.syncBilling.mockReturnValueOnce(verification.promise);
+    await act(async () => {
+      byTestId(renderer, 'paywall-retry').props.onPress();
+      byTestId(renderer, 'paywall-retry').props.onPress();
+    });
+    expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      verification.resolve(premiumSync());
+    });
+    await flush();
+    expect(deps.store.purchase).toHaveBeenCalledTimes(1);
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(props.onPurchased).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
+  it('shows recovery rather than another sales pitch after relaunch and retries without store pricing', async () => {
+    const first = dependencies();
+    first.backend.syncBilling.mockRejectedValueOnce(new Error('offline'));
+    configureAccessStore(first);
+    await useAccessStore.getState().initialize();
+    await useAccessStore.getState().purchaseSelected();
+    const next = dependencies();
+    next.store.loadPlans.mockRejectedValue(new Error('store pricing offline'));
+    next.backend.syncBilling.mockRejectedValueOnce(new Error('still offline'));
+    configureAccessStore(next);
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    expect(allText(renderer)).toContain(
+      'Verification is pending, not another purchase.',
+    );
+    expect(allText(renderer)).not.toContain('A coach for every stroke.');
+    expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(false);
+    await act(async () => {
+      byTestId(renderer, 'paywall-retry').props.onPress();
+    });
+    await flush();
+    expect(next.backend.syncBilling).toHaveBeenCalledTimes(2);
+    expect(next.backend.getAccess).not.toHaveBeenCalled();
+    expect(next.store.loadPlans).toHaveBeenCalledTimes(1);
+    expect(next.store.restore).not.toHaveBeenCalled();
+    expect(next.store.purchase).not.toHaveBeenCalled();
+    expect(props.onPurchased).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
+  it('persists a completion after closing the paywall without navigating the unmounted view', async () => {
+    const deps = dependencies();
+    const completion = deferred<StoreEntitlementState>();
+    deps.store.purchase.mockReturnValueOnce(completion.promise);
+    configureAccessStore(deps);
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    await openPricing(renderer);
+    await act(async () => {
+      byTestId(renderer, 'paywall-continue').props.onPress();
+    });
+    act(() => renderer.unmount());
+    completion.resolve(storeEntitlement);
+    await flush();
+    expect(useAccessStore.getState().canonicalAccess?.premium).toBe(true);
+    expect(useAccessStore.getState().pendingFulfilment).toBeNull();
+    expect(props.onPurchased).not.toHaveBeenCalled();
+  });
+
+  it('retries pending fulfilment through backend sync even when GET returned a nonpremium allowance', async () => {
+    const deps = dependencies();
+    deps.backend.syncBilling.mockResolvedValueOnce(freeSync());
+    configureAccessStore(deps);
+    const props = screenProps();
+    const renderer = await renderPaywall(props);
+    await openPricing(renderer);
+    await act(async () => {
+      byTestId(renderer, 'paywall-continue').props.onPress();
+    });
+    await flush();
+
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-retry').props.accessibilityLabel).toBe(
+      'Retry membership verification',
+    );
+    act(() => {
+      byLabel(renderer, 'Dismiss membership message').props.onPress();
+    });
+    expect(byTestId(renderer, 'paywall-retry').props.disabled).toBe(false);
+
+    await act(async () => {
+      byTestId(renderer, 'paywall-retry').props.onPress();
+    });
+    await flush();
+
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    expect(deps.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(deps.store.loadPlans).toHaveBeenCalledTimes(1);
+    expect(deps.store.purchase).toHaveBeenCalledTimes(1);
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(props.onPurchased).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
   it('reloads store pricing when the offering failed; podium replaces the honest fallback', async () => {
     const deps = dependencies();
     deps.store.loadPlans.mockRejectedValueOnce(new Error('store offline'));
