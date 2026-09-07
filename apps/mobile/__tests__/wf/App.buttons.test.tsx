@@ -187,6 +187,10 @@ jest.mock('../../src/screens/SplashScreen', () => {
   };
 });
 
+jest.mock('../../src/flow/CeremonyHost', () => ({
+  CeremonyHost: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 import App from '../../App';
 import { useAppStore } from '../../src/state/appStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
@@ -574,6 +578,7 @@ describe('App.tsx — WelcomeScreen callbacks', () => {
 describe('App.tsx — SignInScreen callback', () => {
   it('"Back" -> onBack: returns to Welcome from sign-in (both entry paths)', async () => {
     const renderer = await renderReadyWelcome();
+    act(() => markers(renderer, 'SplashScreen')[0]!.props.onFinished());
     press(renderer, 'I already have an account');
     onSignIn(renderer);
     const back = findPressable(renderer, 'Back');
@@ -596,6 +601,7 @@ describe('App.tsx — SignInScreen callback', () => {
 
   it('sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)', async () => {
     const renderer = await renderReadyWelcome();
+    act(() => markers(renderer, 'SplashScreen')[0]!.props.onFinished());
     press(renderer, 'I already have an account');
     onSignIn(renderer);
     press(renderer, 'Continue with Google');

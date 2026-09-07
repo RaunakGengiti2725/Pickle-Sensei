@@ -1,5 +1,6 @@
 import type { ShotTypeSlug } from '@pickle/shared-types';
 import {
+  DataOwnerChangedError,
   getActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
@@ -216,6 +217,9 @@ export async function commitPracticeSet(
   plan: PracticeSetPlan,
   nowIso?: string,
 ): Promise<void> {
+  if ((db.ownerContext?.ownerKey ?? writableOwner()) !== plan.owner) {
+    throw new DataOwnerChangedError();
+  }
   const now = resolveNow(nowIso ?? plan.nowIso);
   if (!plan.resumed) {
     await saveSession(db, {

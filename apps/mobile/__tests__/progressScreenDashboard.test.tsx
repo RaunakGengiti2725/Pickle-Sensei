@@ -23,11 +23,14 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 const mockNavigate = jest.fn();
+let mockFocused = true;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = jest.requireActual<typeof import('react')>('react');
-    React.useEffect(() => callback(), [callback]);
+    React.useEffect(() => {
+      if (mockFocused) return callback();
+    }, [callback, mockFocused]);
   },
 }));
 
@@ -61,7 +64,10 @@ jest.mock('../src/progress/playerRank', () => {
   return { ...actual, fetchPlayerRank: jest.fn(async () => null) };
 });
 
-const mockAppState = { profile: null as { skillLevel?: string } | null };
+const mockAppState = {
+  ownerKey: null as string | null,
+  profile: null as { skillLevel?: string } | null,
+};
 jest.mock('../src/state/appStore', () => ({
   useAppStore: (selector: (s: typeof mockAppState) => unknown) =>
     selector(mockAppState),
@@ -88,8 +94,45 @@ jest.mock('../src/progress/rankCelebration', () => {
 import { ProgressScreen } from '../src/screens/ProgressScreen';
 import type { RealAnalysisFact } from '../src/data/repository';
 import type { CaptureEvidenceV1 } from '../src/camera/capture';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
+const OWNER = '11111111-1111-4111-8111-111111111111';
+const OTHER_OWNER = '22222222-2222-4222-8222-222222222222';
 const DAY_MS = 86_400_000;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function syncedProgress(score: number) {
+  return {
+    series: [
+      {
+        day: daysAgoDay(2),
+        shotType: 'serve',
+        scoringModelVersion: 'model-2',
+        shotCount: 1,
+        avgScore: score,
+        bestScore: score,
+      },
+    ],
+    improving: [],
+    needsAttention: [],
+    streak: {
+      currentDays: 0,
+      longestDays: 0,
+      practicedToday: false,
+      lastPracticeDate: null,
+    },
+  };
+}
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * DAY_MS).toISOString();
@@ -334,6 +377,7 @@ describe('ProgressScreen dashboard', () => {
     // Fake timers keep the chart reveal animations from outliving the test.
     jest.useFakeTimers();
     mockNavigate.mockClear();
+    mockFocused = true;
     mockListRealAnalysisFacts.mockReset();
     mockListCaptureHistory.mockReset();
     mockListCaptureHistory.mockResolvedValue([]);
@@ -341,6 +385,8 @@ describe('ProgressScreen dashboard', () => {
     mockGetApiSession.mockReturnValue(null);
     mockFetchCanonicalProgress.mockReset();
     mockAppState.profile = null;
+    mockAppState.ownerKey = OWNER;
+    setActiveDataOwner(OWNER);
     mockConsistencyState.snapshot = null;
   });
 
@@ -349,6 +395,156 @@ describe('ProgressScreen dashboard', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  });
+
+  it('never requests canonical history with a different owner’s API session', async () => {
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 6.4 })]);
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('6.4');
+    expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('rejects local history from a previous sign-in even when the same owner returns before render', async () => {
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    setActiveDataOwner(OWNER);
+    await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
+    expect(renderedText(renderer)).not.toContain('4.2');
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 8.3 })]);
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(2);
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('hides loaded history and rejects canonical work from an earlier sign-in generation', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 4.2 })]);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    setActiveDataOwner(OWNER);
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(renderedText(renderer)).toContain('Loading measured progress');
+    expect(renderedText(renderer)).not.toContain('4.2');
+    await act(async () => canonical.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).toContain('Loading measured progress');
+    await act(async () => local.resolve([]));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2');
+    act(() => renderer.unmount());
+  });
+
+  it('ignores canonical work after blur and starts a fresh request on refocus', async () => {
+    const first = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    mockFocused = false;
+    await act(async () => renderer.update(<ProgressScreen />));
+    await act(async () => first.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).not.toContain('4.2');
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockFocused = true;
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(2);
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('paints local technique and practice data before a deferred canonical request', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValue(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 6.4 })]);
+    mockListCaptureHistory.mockResolvedValue([capture('local', daysAgoIso(1))]);
+    const renderer = await renderScreen();
+
+    expect(
+      findByTestId(renderer, 'technique-stat-reps')?.props.accessibilityLabel,
+    ).toBe('SCORED REPS: 1');
+    expect(renderedText(renderer)).toContain('6.4');
+    await pressByLabel(renderer, 'practice progress');
+    expect(
+      findByTestId(renderer, 'practice-stat-captures')?.props
+        .accessibilityLabel,
+    ).toBe('CAPTURES: 1');
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
+    await act(async () => canonical.resolve(syncedProgress(8.3)));
+    await pressByLabel(renderer, 'technique progress');
+    expect(renderedText(renderer)).toContain('6.4');
+    act(() => renderer.unmount());
+  });
+
+  it('merges canonical data later without holding the empty local dashboard behind it', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValue(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('KEY STATISTICS');
+    expect(renderedText(renderer)).not.toContain('serve daily average');
+    await act(async () => canonical.resolve(syncedProgress(8.3)));
+    expect(renderedText(renderer)).toContain('serve daily average');
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('discards the previous owner’s deferred local history on an owner switch', async () => {
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    mockAppState.ownerKey = OTHER_OWNER;
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({ shotType: 'serve', overallScore: 8.3 }),
+    ]);
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(renderedText(renderer)).toContain('8.3');
+    await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2');
+    act(() => renderer.unmount());
+  });
+
+  it('ignores the previous owner’s canonical result after the new owner has loaded', async () => {
+    const first = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    mockAppState.ownerKey = OTHER_OWNER;
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    await act(async () => renderer.update(<ProgressScreen />));
+    await act(async () => first.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2');
+    act(() => renderer.unmount());
+  });
+
+  it('keeps unmount cancellation when local history finishes late', async () => {
+    const local = deferred<unknown[]>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockListRealAnalysisFacts.mockReturnValue(local.promise);
+    const renderer = await renderScreen();
+    act(() => renderer.unmount());
+    await act(async () => local.resolve([fact({})]));
+    expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
+    expect(renderer.toJSON()).toBeNull();
   });
 
   it('shows practice key statistics without inventing a first-period comparison', async () => {
@@ -612,7 +808,10 @@ describe('ProgressScreen dashboard', () => {
   });
 
   it('renders the account-synced series and server signals when signed in', async () => {
-    mockGetApiSession.mockReturnValue({ token: 'fake' });
+    mockGetApiSession.mockReturnValue({
+      canonicalAppUserId: OWNER,
+      token: 'fake',
+    });
     mockListRealAnalysisFacts.mockResolvedValue([]);
     mockFetchCanonicalProgress.mockResolvedValue({
       series: [

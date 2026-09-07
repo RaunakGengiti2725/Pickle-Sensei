@@ -98,6 +98,8 @@ import {
   accessLogEntry,
   clientIp,
   constantTimeEqual,
+  failureDetail,
+  isSupabaseEndpointRequest,
   emitAccessLog,
   errorCodeOf,
   JSON_SECURITY_HEADERS,
@@ -115,9 +117,22 @@ import {
   encryptAppleRefreshToken,
   exchangeAppleAuthorizationCode,
   ExternalAccountError,
-  isPermanentExternalAccountError,
   revokeAppleRefreshToken,
 } from "./externalAccounts.ts";
+import {
+  AccountDeletionStatusBudget,
+  accountDeletionAllowsAppleBootstrap,
+  accountDeletionStatusResponse,
+  accountDeletionStatusUnavailableResponse,
+  beginAccountDeletionOperation,
+  confirmAccountDeletionOperation,
+  isAccountDeletionStatusCapability,
+  isIntendedAuthUserNotFound,
+  isIntendedRevenueCatCustomerNotFound,
+  readAccountDeletionResponseBody,
+  storeAccountAppleCredential,
+  type DeletionOperationRpc,
+} from "./accountDeletionOperations.ts";
 
 // Publishable key (sb_publishable_…) set via `supabase secrets set
 // SB_PUBLISHABLE_KEY=…`, falling back to the platform-injected legacy anon
@@ -127,7 +142,7 @@ import {
 // storage, external-deletion checkpoints, and Auth user deletion) use the
 // platform-injected service-role key through billingAdminDb below. The client
 // has no write policy to any of those server-owned records.
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_AUTH_SECRET_KEY = ((key) => (key.startsWith("sb_secret_") ? key : null))(
   Deno.env.get("SB_SECRET_KEY") ?? "",
@@ -170,21 +185,28 @@ const errorJson = (status: number, message: string): Response =>
   json(status, { error: { message } });
 
 /** 5xx responses NEVER carry internal detail (DB error strings, stack traces,
- * table names). The detail is logged server-side for operators; the client
+ * table names). Only bounded diagnostics are logged for operators; the client
  * gets a stable, generic, retryable message. */
 const serviceUnavailable = (
   context: string,
   detail?: unknown,
-  retryAfterSeconds?: number,
+  options: {
+    status?: number;
+    operation?: BillingFailureDetail["operation"];
+    retryAfterSeconds?: number;
+  } = {},
 ): Response => {
-  console.error(`[api] ${context}:`, detail ?? "(no detail)");
+  console.error(`[api] ${context}:`, {
+    ...failureDetail(detail, options.status),
+    ...(options.operation ? { operation: options.operation } : {}),
+  });
   const response = json(503, {
     error: {
       message: `${context} is temporarily unavailable. Please try again.`,
     },
   });
-  if (retryAfterSeconds !== undefined) {
-    response.headers.set("Retry-After", String(retryAfterSeconds));
+  if (options.retryAfterSeconds !== undefined) {
+    response.headers.set("Retry-After", String(options.retryAfterSeconds));
   }
   return response;
 };
@@ -244,7 +266,10 @@ const isIsoDate = (value: unknown): value is string => {
  * (SQLSTATE-only since 20260904000000) but the log line must stay categorical
  * even if a future RPC ever echoed input. */
 const RPC_STATUS_LOG_MAX = 120;
-const logSafeStatus = (status: string): string => sanitizeUserText(status, RPC_STATUS_LOG_MAX);
+const logSafeStatus = (status: string): string =>
+  /^shot\.write_failed:(?:[A-Z0-9]{5}|PGRST[0-9]{3})$/.test(status)
+    ? sanitizeUserText(status, RPC_STATUS_LOG_MAX)
+    : "shot.write_failed:unknown";
 
 /** Largest JSON body any route accepts. Shot batches are ~2 KB per shot ×
  * 200; evaluation trials are the biggest legitimate payload and get the
@@ -307,8 +332,7 @@ async function readBoundedText(request: Request, maxBytes: number): Promise<stri
       cancelReader();
       throw new RequestBodyInvalid("Request body could not be read.");
     }
-    const initialBytes = Number.isFinite(declared) && declared > 0 ? declared : 8_192;
-    let bytes = new Uint8Array(Math.min(maxBytes, Math.max(initialBytes, 8_192)));
+    let bytes = new Uint8Array(Math.min(maxBytes, 8_192));
     let received = 0;
     for (;;) {
       const { done, value } = await reader.read();
@@ -461,7 +485,7 @@ async function fenceRevokedSession(token: string): Promise<void> {
       // Upstream has already refused the session; only the cross-isolate
       // fence is missing, so other isolates' cached verifications of it age
       // out on their own (≤ AUTH_CACHE_MAX_TTL_SECONDS) instead of dying now.
-      console.warn(`[api] session fence not shared (Redis unavailable): ${sessionId}`);
+      console.warn("[api] session fence not shared (Redis unavailable)");
     }
   }
   await cacheDel(await authCacheKey(token));
@@ -580,12 +604,12 @@ function userScopedClient(accessToken: string): SupabaseClient {
     global: {
       headers: { Authorization: `Bearer ${accessToken}` },
       fetch: async (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (!url.startsWith(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/`)) {
+        const outbound = new Request(input, init);
+        if (!isSupabaseEndpointRequest(outbound.url, SUPABASE_URL, "rest")) {
+          await outbound.body?.cancel().catch(() => undefined);
           throw new Error("Unexpected database request target.");
         }
         const key = await getDatabaseRequestKey();
-        const outbound = new Request(input, init);
         outbound.headers.set("Authorization", `Bearer ${accessToken}`);
         outbound.headers.set("apikey", SUPABASE_ANON_KEY);
         outbound.headers.set("x-pickle-api-key", key);
@@ -604,6 +628,10 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   let response: Response;
   try {
     const outbound = new Request(input, init);
+    if (!isSupabaseEndpointRequest(outbound.url, SUPABASE_URL, "auth")) {
+      await outbound.body?.cancel().catch(() => undefined);
+      return new Response(null, { status: 503 });
+    }
     response = await fetch(outbound, {
       redirect: "error",
       signal: AbortSignal.any([outbound.signal, AbortSignal.timeout(AUTH_FETCH_TIMEOUT_MS)]),
@@ -633,13 +661,8 @@ function isRetryableAuthError(error: unknown): boolean {
   );
 }
 
-function authErrorDetail(error: unknown): Record<string, string | number> {
-  const detail = isRecord(error) ? error : {};
-  return {
-    name: typeof detail.name === "string" ? detail.name : "AuthError",
-    code: typeof detail.code === "string" ? detail.code : "no-code",
-    status: typeof detail.status === "number" ? detail.status : "no-status",
-  };
+function authErrorDetail(error: unknown): ReturnType<typeof failureDetail> {
+  return failureDetail(error);
 }
 
 const IPV4_LITERAL =
@@ -712,8 +735,8 @@ function authUpstreamTimeoutMs(): number {
 
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; detail: string }
-  | { kind: "unavailable"; detail: string; retryAfterSeconds: number };
+  | { kind: "refused"; status: number; detail: ReturnType<typeof failureDetail> }
+  | { kind: "unavailable"; detail: ReturnType<typeof failureDetail>; retryAfterSeconds: number };
 
 interface AuthUserLike {
   id: string;
@@ -769,8 +792,14 @@ function authSessionOf(payload: unknown): (SupabaseSessionLike & { user: AuthUse
 
 /** GoTrue error bodies come as `{code, error_code, msg}` or
  * `{error, error_description}`; keep a short operator-facing summary. */
-function authResponseErrorDetail(status: number, body: unknown): string {
-  return `HTTP ${status}${typeof body === "string" && body ? " (non-JSON body)" : ""}`;
+function authResponseErrorDetail(status: number, body: unknown): ReturnType<typeof failureDetail> {
+  return failureDetail(
+    {
+      name: "AuthApiError",
+      code: isRecord(body) ? (body.code ?? body.error_code) : undefined,
+    },
+    status,
+  );
 }
 
 function retryAfterOf(header: string | null): number {
@@ -786,6 +815,7 @@ class AuthDeadlineError extends Error {
 }
 
 function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const onAbort = () => {
       clearTimeout(timer);
@@ -842,12 +872,18 @@ async function authRequest<T>(
   deadline.catch(() => undefined);
   const unreachable = (detail: string): AuthVerdict<T> => ({
     kind: "unavailable",
-    detail: `Supabase Auth unreachable: ${detail}`,
+    detail: failureDetail({
+      name: detail.startsWith("no answer within") ? "TimeoutError" : "AuthRetryableFetchError",
+    }),
     retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
   });
   let httpAnswered = false;
   const attemptOnce = async () => {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+    const target = `${SUPABASE_URL}/auth/v1${path}`;
+    if (!isSupabaseEndpointRequest(target, SUPABASE_URL, "auth")) {
+      throw new TypeError("Unexpected Auth request target.");
+    }
+    const response = await fetch(target, {
       method: init.method,
       headers,
       body: init.body ? JSON.stringify(init.body) : undefined,
@@ -926,13 +962,13 @@ async function authRequest<T>(
     if (value !== null) return { kind: "ok", value };
     return {
       kind: "unavailable",
-      detail: `Supabase Auth answered HTTP ${answer.status} without a usable body`,
+      detail: failureDetail({ name: "InvalidSessionResponse" }, answer.status),
       retryAfterSeconds: AUTH_RETRY_AFTER_SECONDS,
     };
   }
   return {
     kind: "unavailable",
-    detail: `Supabase Auth answered ${authResponseErrorDetail(answer.status, body)}`,
+    detail: authResponseErrorDetail(answer.status, body),
     retryAfterSeconds: retryAfterOf(answer.retryAfter),
   };
 }
@@ -1179,7 +1215,9 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 
   const verified = await verifyAccessToken(request, token);
   if (verified.kind === "unavailable") {
-    return serviceUnavailable("Session verification", verified.detail, verified.retryAfterSeconds);
+    return serviceUnavailable("Session verification", verified.detail, {
+      retryAfterSeconds: verified.retryAfterSeconds,
+    });
   }
   if (verified.kind === "refused") {
     return errorJson(401, "The session is no longer valid. Sign in again.");
@@ -1257,13 +1295,16 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   if (
     typeof refreshToken !== "string" ||
     !refreshToken.trim() ||
-    refreshToken.length > MAX_REFRESH_TOKEN_LENGTH
+    refreshToken.length > MAX_REFRESH_TOKEN_LENGTH ||
+    isAccountDeletionStatusCapability(refreshToken.trim())
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
   const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
-    return serviceUnavailable("Session refresh", rotated.detail, rotated.retryAfterSeconds);
+    return serviceUnavailable("Session refresh", rotated.detail, {
+      retryAfterSeconds: rotated.retryAfterSeconds,
+    });
   }
   if (rotated.kind === "refused") {
     return errorJson(401, "The session could not be refreshed. Sign in again.");
@@ -1327,7 +1368,7 @@ async function readProfile(user: AuthedUser): Promise<ProfileRow | Response> {
     profile = await select();
   }
   if (profile.error || !profile.data) {
-    return serviceUnavailable("Your account", profile.error?.message);
+    return serviceUnavailable("Your account", profile.error, { status: profile.status });
   }
   return profile.data as unknown as ProfileRow;
 }
@@ -1410,7 +1451,7 @@ async function accessPayload(
   // three sequential PostgREST calls per access check.
   const stateQ = await user.db.rpc("access_state");
   if (stateQ.error) {
-    return serviceUnavailable("Access state", stateQ.error.message);
+    return serviceUnavailable("Access state", stateQ.error, { status: stateQ.status });
   }
   const rows = stateQ.data as Array<{
     premium: boolean;
@@ -1419,7 +1460,7 @@ async function accessPayload(
   }> | null;
   const state = rows?.[0];
   if (!state) {
-    return serviceUnavailable("Access state", "access_state returned no row");
+    return serviceUnavailable("Access state", { name: "EmptyResult" }, { status: stateQ.status });
   }
   const billing = verifiedBilling ?? {
     premium: Boolean(state.premium),
@@ -1480,7 +1521,7 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     p_idempotency_key: idempotencyKey,
   });
   if (reserved.error) {
-    return serviceUnavailable("Rating reservation", reserved.error.message);
+    return serviceUnavailable("Rating reservation", reserved.error, { status: reserved.status });
   }
   const row = (Array.isArray(reserved.data) ? reserved.data[0] : reserved.data) as {
     result: string;
@@ -1490,7 +1531,11 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     permit_created_at: string | null;
   } | null;
   if (!row) {
-    return serviceUnavailable("Rating reservation", "reserve_analysis_permit returned no row");
+    return serviceUnavailable(
+      "Rating reservation",
+      { name: "EmptyResult" },
+      { status: reserved.status },
+    );
   }
   if (row.result === "access.paywall_required") {
     return codedError(
@@ -1500,7 +1545,11 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     );
   }
   if (row.result !== "accepted" || !row.permit_id) {
-    return serviceUnavailable("Rating reservation", row.result);
+    return serviceUnavailable(
+      "Rating reservation",
+      { name: "UnexpectedResult" },
+      { status: reserved.status },
+    );
   }
   return respond({
     id: row.permit_id,
@@ -1565,7 +1614,7 @@ async function finalizeAnalysisPermitRoute(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (found.error) {
-    return serviceUnavailable("Rating finalize", found.error.message);
+    return serviceUnavailable("Rating finalize", found.error, { status: found.status });
   }
   if (!found.data) {
     return codedError(404, "access.permit_not_found", "Analysis permit not found.");
@@ -1608,7 +1657,7 @@ async function finalizeAnalysisPermitRoute(
         "Analysis permit is already settled and cannot be finalized again.",
       );
     }
-    return serviceUnavailable("Rating finalize", updated.error.message);
+    return serviceUnavailable("Rating finalize", updated.error, { status: updated.status });
   }
   if (!updated.data) {
     // Lost a race with another finalize/sync; report the settled state.
@@ -1894,14 +1943,15 @@ async function readAllRows(
     to: number,
   ) => PromiseLike<{
     data: unknown[] | null;
-    error: { message: string } | null;
+    error: { message: string; code?: string } | null;
+    status?: number;
   }>,
-): Promise<{ rows: Array<Record<string, unknown>> } | { error: string }> {
+): Promise<{ rows: Array<Record<string, unknown>> } | { error: ReturnType<typeof failureDetail> }> {
   const rows: Array<Record<string, unknown>> = [];
   for (let index = 0; index < MAX_PAGES; index += 1) {
     const from = index * PAGE_ROWS;
     const result = await page(from, from + PAGE_ROWS - 1);
-    if (result.error) return { error: result.error.message };
+    if (result.error) return { error: failureDetail(result.error, result.status) };
     const batch = (result.data ?? []) as Array<Record<string, unknown>>;
     rows.push(...batch);
     if (batch.length < PAGE_ROWS) break;
@@ -1974,7 +2024,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       );
     if (existing.error) {
       // Retryable for the whole batch: the outbox keeps every row.
-      return serviceUnavailable("Shot sync", existing.error.message);
+      return serviceUnavailable("Shot sync", existing.error, { status: existing.status });
     }
     replayIds = new Set(((existing.data ?? []) as Array<{ id: string }>).map((row) => row.id));
   }
@@ -2005,7 +2055,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       },
     });
     if (applied.error) {
-      console.error("[api] shot sync RPC failed:", applied.error.message);
+      console.error("[api] shot sync RPC failed:", failureDetail(applied.error, applied.status));
       reject(
         shot.id,
         "shot.write_failed",
@@ -2023,10 +2073,16 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       reject(shot.id, status, SYNC_STATUS_MESSAGES[status]);
       continue;
     }
+    // shot.write_failed:<detail> and anything unexpected: log only the class,
+    // reject with the stable code and a generic message.
     // shot.write_failed:<SQLSTATE> and anything unexpected: log the status
     // (sanitized to one capped line), reject with the stable code and a
     // generic message.
-    console.error("[api] shot sync write failed:", logSafeStatus(status));
+    console.error(
+      "[api] shot sync write failed:",
+      logSafeStatus(status),
+      failureDetail({ name: "UnexpectedResult" }, applied.status),
+    );
     reject(
       shot.id,
       "shot.write_failed",
@@ -2069,7 +2125,7 @@ async function createSession(authed: AuthedUser, request: Request): Promise<Resp
       { onConflict: "id", ignoreDuplicates: true },
     );
   if (upserted.error) {
-    return serviceUnavailable("Session sync", upserted.error.message);
+    return serviceUnavailable("Session sync", upserted.error, { status: upserted.status });
   }
   const owned = await authed.db
     .from("sessions")
@@ -2078,7 +2134,7 @@ async function createSession(authed: AuthedUser, request: Request): Promise<Resp
     .eq("user_id", authed.id)
     .maybeSingle();
   if (owned.error) {
-    return serviceUnavailable("Session sync", owned.error.message);
+    return serviceUnavailable("Session sync", owned.error, { status: owned.status });
   }
   if (!owned.data) {
     return codedError(409, "session.id_conflict", "Session id belongs to another user.");
@@ -2100,7 +2156,7 @@ async function finalizeSession(authed: AuthedUser, sessionId: string): Promise<R
     .eq("user_id", authed.id)
     .maybeSingle();
   if (found.error) {
-    return serviceUnavailable("Session finalize", found.error.message);
+    return serviceUnavailable("Session finalize", found.error, { status: found.status });
   }
   if (!found.data) {
     return codedError(404, "session.not_found", "Session not found.");
@@ -2112,7 +2168,7 @@ async function finalizeSession(authed: AuthedUser, sessionId: string): Promise<R
       .eq("id", sessionId)
       .eq("user_id", authed.id);
     if (updated.error) {
-      return serviceUnavailable("Session finalize", updated.error.message);
+      return serviceUnavailable("Session finalize", updated.error, { status: updated.status });
     }
   }
   return json(200, {});
@@ -2139,7 +2195,7 @@ async function loadConsentRows(authed: AuthedUser): Promise<ConsentRow[] | Respo
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
   if (rows.error) {
-    return serviceUnavailable("Consent status", rows.error.message);
+    return serviceUnavailable("Consent status", rows.error, { status: rows.status });
   }
   return (rows.data ?? []) as unknown as ConsentRow[];
 }
@@ -2194,7 +2250,7 @@ async function grantConsent(authed: AuthedUser, request: Request): Promise<Respo
       typeof body.captureMode === "string" ? sanitizeUserText(body.captureMode, 64) : null,
   });
   if (inserted.error) {
-    return serviceUnavailable("Consent update", inserted.error.message);
+    return serviceUnavailable("Consent update", inserted.error, { status: inserted.status });
   }
   const rows = await loadConsentRows(authed);
   return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
@@ -2222,7 +2278,7 @@ async function withdrawConsent(authed: AuthedUser, request: Request): Promise<Re
     device: typeof body.device === "string" ? sanitizeUserText(body.device, 512) : null,
   });
   if (inserted.error) {
-    return serviceUnavailable("Consent update", inserted.error.message);
+    return serviceUnavailable("Consent update", inserted.error, { status: inserted.status });
   }
   const rows = await loadConsentRows(authed);
   return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
@@ -2295,7 +2351,10 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
         { onConflict: "id", ignoreDuplicates: true },
       );
     if (upserted.error) {
-      console.error("[api] evaluation trial write failed:", upserted.error.message);
+      console.error(
+        "[api] evaluation trial write failed:",
+        failureDetail(upserted.error, upserted.status),
+      );
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
@@ -2310,7 +2369,10 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
       .eq("user_id", authed.id)
       .maybeSingle();
     if (owned.error) {
-      console.error("[api] evaluation trial ownership read failed:", owned.error.message);
+      console.error(
+        "[api] evaluation trial ownership read failed:",
+        failureDetail(owned.error, owned.status),
+      );
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
@@ -2386,7 +2448,7 @@ async function submitAnalysisFeedback(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (shot.error) {
-    return serviceUnavailable("Feedback", shot.error.message);
+    return serviceUnavailable("Feedback", shot.error, { status: shot.status });
   }
   if (!shot.data) {
     return codedError(404, "analysis.not_found", "Analysis not found.");
@@ -2414,7 +2476,7 @@ async function submitAnalysisFeedback(
         "Feedback was already recorded for this analysis.",
       );
     }
-    return serviceUnavailable("Feedback", inserted.error.message);
+    return serviceUnavailable("Feedback", inserted.error, { status: inserted.status });
   }
   const row = inserted.data as unknown as { id: string; created_at: string };
   return json(201, {
@@ -2642,7 +2704,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
       .maybeSingle(),
   ]);
   if (techniquesQ.error) {
-    return serviceUnavailable("Player rank", techniquesQ.error.message);
+    return serviceUnavailable("Player rank", techniquesQ.error, { status: techniquesQ.status });
   }
   // confidence_weight rides along for the inline fallback compute only; the
   // payload rows expose sampled_count but never the weight.
@@ -2664,7 +2726,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   }
 
   if (stateQ.error) {
-    return serviceUnavailable("Player rank", stateQ.error.message);
+    return serviceUnavailable("Player rank", stateQ.error, { status: stateQ.status });
   }
   const state = stateQ.data as {
     rating: unknown;
@@ -2779,7 +2841,7 @@ async function listCatalogDrills(authed: AuthedUser, url: URL): Promise<Response
   });
   const saved = await authed.db.from("user_saved_drills").select("slug").eq("user_id", authed.id);
   if (saved.error) {
-    return serviceUnavailable("Drill catalog", saved.error.message);
+    return serviceUnavailable("Drill catalog", saved.error, { status: saved.status });
   }
   const savedSlugs = new Set(
     ((saved.data ?? []) as Array<{ slug: string }>).map((row) => row.slug),
@@ -2808,7 +2870,7 @@ async function getCatalogDrill(authed: AuthedUser, slug: string): Promise<Respon
     .eq("slug", slug)
     .maybeSingle();
   if (saved.error) {
-    return serviceUnavailable("Drill detail", saved.error.message);
+    return serviceUnavailable("Drill detail", saved.error, { status: saved.status });
   }
   const { families: _families, validation_state: _state, ...drill } = entry;
   return json(200, {
@@ -2827,7 +2889,7 @@ async function listSavedDrills(authed: AuthedUser): Promise<Response> {
     .eq("user_id", authed.id)
     .order("saved_at", { ascending: false });
   if (rows.error) {
-    return serviceUnavailable("Saved drills", rows.error.message);
+    return serviceUnavailable("Saved drills", rows.error, { status: rows.status });
   }
   const items = await Promise.all(
     ((rows.data ?? []) as Array<Record<string, unknown>>).map(async (row) => ({
@@ -2857,7 +2919,7 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
     },
   );
   if (upserted.error) {
-    return serviceUnavailable("Drill save", upserted.error.message);
+    return serviceUnavailable("Drill save", upserted.error, { status: upserted.status });
   }
   const row = await authed.db
     .from("user_saved_drills")
@@ -2866,7 +2928,7 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
     .eq("slug", slug)
     .maybeSingle();
   if (row.error || !row.data) {
-    return serviceUnavailable("Drill save", row.error?.message);
+    return serviceUnavailable("Drill save", row.error, { status: row.status });
   }
   return json(200, {
     slug,
@@ -2885,7 +2947,7 @@ async function unsaveDrill(authed: AuthedUser, slug: string): Promise<Response> 
     .eq("user_id", authed.id)
     .eq("slug", slug);
   if (deleted.error) {
-    return serviceUnavailable("Drill unsave", deleted.error.message);
+    return serviceUnavailable("Drill unsave", deleted.error, { status: deleted.status });
   }
   return noContent();
 }
@@ -2995,13 +3057,13 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   } catch {
     subscriber = null;
   }
-  if (!subscriber) return null;
+  if (!subscriber || !isRecord(subscriber.entitlements)) return null;
 
   // entitlements is an object map keyed by entitlement identifier. An
   // entitlement is ACTIVE when expires_date is null (lifetime) or parses
-  // to a future timestamp; anything else — including malformed shapes —
-  // honestly does not grant membership.
-  const entitlementMap = isRecord(subscriber.entitlements) ? subscriber.entitlements : {};
+  // to a future timestamp. Malformed provider state is unavailable, never a
+  // negative verification that could revoke an existing membership.
+  const entitlementMap = subscriber.entitlements;
   const verdict: BillingVerdict = {
     premium: false,
     productKey: null,
@@ -3010,14 +3072,17 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     verifiedAt: requestDate ?? startedAt,
   };
   for (const name of PREMIUM_ENTITLEMENT_KEYS) {
+    if (!Object.hasOwn(entitlementMap, name)) continue;
     const entitlement = entitlementMap[name];
-    if (!isRecord(entitlement)) continue;
+    if (!isRecord(entitlement)) return null;
     const expires = entitlement.expires_date;
-    const active =
-      expires === null ||
-      (typeof expires === "string" &&
-        Number.isFinite(Date.parse(expires)) &&
-        Date.parse(expires) > Date.now());
+    if (
+      expires !== null &&
+      (typeof expires !== "string" || !Number.isFinite(Date.parse(expires)))
+    ) {
+      return null;
+    }
+    const active = expires === null || Date.parse(expires) > Date.now();
     if (!active) continue;
     verdict.activeEntitlements.push(name);
     if (!verdict.premium) {
@@ -3032,18 +3097,164 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   return verdict;
 }
 
-interface PersistBillingError {
-  /** PostgREST/Postgres SQLSTATE (e.g. "23503"), or null when the write
-   * never reached the database (service role unavailable). */
-  code: string | null;
-  message: string;
+interface BillingFailureDetail {
+  operation:
+    | "verification_begin"
+    | "entitlement_upsert"
+    | "user_lookup"
+    | "event_lookup"
+    | "event_claim"
+    | "event_release"
+    | "event_audit"
+    | "webhook_processing";
+  code: string;
+  status: number | null;
 }
 
-const SERVICE_ROLE_UNAVAILABLE: PersistBillingError = {
-  code: null,
-  message: "service role unavailable",
-};
+function billingFailureDetail(
+  operation: BillingFailureDetail["operation"],
+  error?: unknown,
+  status?: number,
+): BillingFailureDetail {
+  const code = isRecord(error) ? error.code : null;
+  return {
+    operation,
+    code:
+      typeof code === "string" && /^(?:[A-Z0-9]{5}|PGRST[0-9]{3})$/.test(code) ? code : "unknown",
+    status:
+      typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
+        ? status
+        : null,
+  };
+}
 
+type BillingPersistenceResult =
+  | { outcome: "persisted"; billing: BillingVerdict & { verifiedAt: string }; applied: boolean }
+  | { outcome: "user_missing" }
+  | { outcome: "unconfigured" }
+  | { outcome: "retryable"; failure: BillingFailureDetail };
+
+type BillingVerificationTicket =
+  | { outcome: "issued"; userId: string; ticketId: string }
+  | { outcome: "user_missing"; userId: string };
+
+type BillingVerificationStart =
+  | { outcome: "issued"; tickets: BillingVerificationTicket[] }
+  | { outcome: "duplicate" }
+  | { outcome: "unconfigured" }
+  | { outcome: "retryable"; failure: BillingFailureDetail };
+
+async function beginBillingVerification(
+  userIds: string[],
+  eventId: string | null = null,
+  payload: Record<string, unknown> | null = null,
+  leaseToken: string | null = null,
+): Promise<BillingVerificationStart> {
+  try {
+    const adminDb = billingAdminDb();
+    if (!adminDb) return { outcome: "unconfigured" };
+    const issued = await adminDb
+      .rpc("begin_billing_verification", {
+        p_user_ids: userIds,
+        p_event_id: eventId,
+        p_payload: payload,
+        p_lease_token: leaseToken,
+      })
+      .abortSignal(AbortSignal.timeout(10_000));
+    if (
+      !issued.error &&
+      eventId !== null &&
+      isRecord(issued.data) &&
+      issued.data.outcome === "duplicate" &&
+      issued.data.event_id === eventId
+    ) {
+      return { outcome: "duplicate" };
+    }
+    if (issued.error || !Array.isArray(issued.data) || issued.data.length !== userIds.length) {
+      return {
+        outcome: "retryable",
+        failure: billingFailureDetail("verification_begin", issued.error, issued.status),
+      };
+    }
+    const remaining = new Set(userIds);
+    const ticketIds = new Set<string>();
+    const tickets: BillingVerificationTicket[] = [];
+    for (const row of issued.data) {
+      if (!isRecord(row) || !isUuid(row.user_id) || !remaining.delete(row.user_id)) {
+        return { outcome: "retryable", failure: billingFailureDetail("verification_begin") };
+      }
+      if (row.outcome === "issued" && isUuid(row.ticket_id) && !ticketIds.has(row.ticket_id)) {
+        ticketIds.add(row.ticket_id);
+        tickets.push({ outcome: "issued", userId: row.user_id, ticketId: row.ticket_id });
+      } else if (row.outcome === "user_missing") {
+        tickets.push({ outcome: "user_missing", userId: row.user_id });
+      } else {
+        return { outcome: "retryable", failure: billingFailureDetail("verification_begin") };
+      }
+    }
+    return { outcome: "issued", tickets };
+  } catch {
+    return { outcome: "retryable", failure: billingFailureDetail("verification_begin") };
+  }
+}
+
+function persistedBillingSnapshot(
+  value: unknown,
+): (BillingVerdict & { verifiedAt: string }) | null {
+  if (
+    !isRecord(value) ||
+    typeof value.premium !== "boolean" ||
+    !(value.productKey === null || typeof value.productKey === "string") ||
+    !(value.expiresAt === null || isoTimestamp(value.expiresAt) !== null) ||
+    isoTimestamp(value.verifiedAt) === null ||
+    !Array.isArray(value.activeEntitlements) ||
+    !value.activeEntitlements.every(
+      (name) => typeof name === "string" && PREMIUM_ENTITLEMENT_KEYS.some((key) => key === name),
+    ) ||
+    value.premium !== value.activeEntitlements.length > 0 ||
+    (!value.premium && (value.productKey !== null || value.expiresAt !== null))
+  ) {
+    return null;
+  }
+  const stored = persistedBillingOf({
+    premium: value.premium,
+    product_key: value.productKey,
+    expires_at: value.expiresAt,
+    verified_at: value.verifiedAt,
+  });
+  if (!stored) return null;
+  const premium = effectivePremium(stored);
+  return {
+    premium,
+    productKey: premium ? stored.productKey : null,
+    expiresAt: premium ? stored.expiresAt : null,
+    verifiedAt: stored.verifiedAt,
+    activeEntitlements: premium ? value.activeEntitlements : [],
+  };
+}
+
+function billingPayloadMatches(left: unknown, right: unknown): boolean {
+  const pending: Array<[unknown, unknown]> = [[left, right]];
+  while (pending.length > 0) {
+    const [a, b] = pending.pop()!;
+    if (a === b) continue;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i += 1) pending.push([a[i], b[i]]);
+    } else if (isRecord(a) && isRecord(b)) {
+      const keys = Object.keys(a);
+      if (keys.length !== Object.keys(b).length) return false;
+      for (const key of keys) {
+        if (!Object.hasOwn(b, key)) return false;
+        pending.push([a[key], b[key]]);
+      }
+    } else return false;
+  }
+  return true;
+}
+
+/** PostgREST/Postgres SQLSTATE (e.g. "23503"), or null when the write
+ * never reached the database (service role unavailable). */
 /** Postgres FK violation: the user has no profiles row (never bootstrapped). */
 const FK_VIOLATION = "23503";
 
@@ -3056,10 +3267,6 @@ interface PersistedBilling {
   expiresAt: string | null;
   verifiedAt: string;
 }
-
-type PersistBillingOutcome =
-  | { ok: true; billing: PersistedBilling; superseded: boolean }
-  | { ok: false; error: PersistBillingError };
 
 /** The ONE effective-premium rule, identical to what every database decision
  * point applies to a billing_entitlements row — `access_state()`,
@@ -3075,12 +3282,14 @@ function effectivePremium(row: PersistedBilling, nowMs = Date.now()): boolean {
   return Number.isFinite(expiresMs) && expiresMs > nowMs;
 }
 
-const BILLING_ENTITLEMENT_COLUMNS = "premium, product_key, expires_at, verified_at";
-
 const isoTimestamp = (value: unknown): string | null => {
-  if (typeof value !== "string") return null;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+  )
+    return null;
   const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : value;
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 };
 
 function persistedBillingOf(row: unknown): PersistedBilling | null {
@@ -3109,61 +3318,82 @@ function persistedBillingOf(row: unknown): PersistedBilling | null {
 async function persistBillingVerdict(
   userId: string,
   verdict: BillingVerdict,
-): Promise<PersistBillingOutcome> {
-  const adminDb = billingAdminDb();
-  if (!adminDb) return { ok: false, error: SERVICE_ROLE_UNAVAILABLE };
-  const upserted = await adminDb
-    .from("billing_entitlements")
-    .upsert(
-      {
-        user_id: userId,
-        premium: verdict.premium,
-        product_key: verdict.productKey,
-        expires_at: verdict.expiresAt,
-        verified_at: verdict.verifiedAt,
-      },
-      { onConflict: "user_id" },
-    )
-    .select(BILLING_ENTITLEMENT_COLUMNS);
-  if (upserted.error) {
-    return {
-      ok: false,
-      error: { code: upserted.error.code || null, message: upserted.error.message },
-    };
+  ticketId: string,
+): Promise<BillingPersistenceResult> {
+  try {
+    const adminDb = billingAdminDb();
+    if (!adminDb) return { outcome: "unconfigured" };
+    const upserted = await adminDb
+      .rpc("persist_billing_verdict", {
+        p_user_id: userId,
+        p_ticket_id: ticketId,
+        p_verdict: {
+          premium: verdict.premium,
+          productKey: verdict.productKey,
+          expiresAt: verdict.expiresAt,
+          activeEntitlements: verdict.activeEntitlements,
+          verifiedAt: verdict.verifiedAt,
+        },
+      })
+      .abortSignal(AbortSignal.timeout(10_000));
+    if (!upserted.error) {
+      const result: unknown = upserted.data;
+      if (isRecord(result) && result.user_id === userId) {
+        if (result.outcome === "user_missing") return { outcome: "user_missing" };
+        const billing = persistedBillingSnapshot(result.billing);
+        if (result.outcome === "persisted" && billing && typeof result.applied === "boolean") {
+          return { outcome: "persisted", billing, applied: result.applied };
+        }
+      }
+      // The row that outranked us is gone (deleted between the two statements):
+      // nothing durable to report — retryable.
+      return { outcome: "retryable", failure: billingFailureDetail("entitlement_upsert") };
+    }
+    const failure = billingFailureDetail("entitlement_upsert", upserted.error, upserted.status);
+    if (upserted.error.code !== FK_VIOLATION) return { outcome: "retryable", failure };
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return { outcome: "unconfigured" };
+    try {
+      const lookup = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(userId)}`,
+        {
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "X-Supabase-Api-Version": "2024-01-01",
+          },
+          signal: AbortSignal.timeout(10_000),
+          redirect: "error",
+        },
+      );
+      if (lookup.status === 404) {
+        const body: unknown = await readAccountDeletionResponseBody(lookup);
+        if (
+          isRecord(body) &&
+          isIntendedAuthUserNotFound({
+            status: lookup.status,
+            code: body.code,
+            error_code: body.error_code,
+          })
+        ) {
+          return { outcome: "user_missing" };
+        }
+      } else {
+        await lookup.body?.cancel().catch(() => undefined);
+      }
+      return {
+        outcome: "retryable",
+        failure: lookup.ok
+          ? failure
+          : billingFailureDetail("user_lookup", undefined, lookup.status),
+      };
+    } catch {
+      return { outcome: "retryable", failure: billingFailureDetail("user_lookup") };
+    }
+  } catch {
+    return { outcome: "retryable", failure: billingFailureDetail("entitlement_upsert") };
   }
-  const landed: PersistedBilling = {
-    premium: verdict.premium,
-    productKey: verdict.productKey,
-    expiresAt: verdict.expiresAt,
-    verifiedAt: verdict.verifiedAt,
-  };
-  if (!Array.isArray(upserted.data) || upserted.data.length > 0) {
-    return { ok: true, billing: landed, superseded: false };
-  }
-  console.warn(
-    `[api] billing verdict superseded by a newer verification: ${userId} @ ${verdict.verifiedAt}`,
-  );
-  const stored = await adminDb
-    .from("billing_entitlements")
-    .select(BILLING_ENTITLEMENT_COLUMNS)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (stored.error) {
-    return {
-      ok: false,
-      error: { code: stored.error.code || null, message: stored.error.message },
-    };
-  }
-  const persisted = persistedBillingOf(stored.data);
-  if (!persisted) {
-    // The row that outranked us is gone (deleted between the two statements):
-    // nothing durable to report — retryable.
-    return {
-      ok: false,
-      error: { code: null, message: `superseding billing row for ${userId} not found` },
-    };
-  }
-  return { ok: true, billing: persisted, superseded: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3215,8 +3445,78 @@ function positiveIntegerEnv(name: string, fallback: number): number {
 }
 
 interface WebhookEventState {
+  provider: string;
   claimed_at: string;
   processed_at: string | null;
+  payload: unknown;
+}
+
+async function claimWebhookDelivery(
+  adminDb: SupabaseClient,
+  eventId: string,
+  payload: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<{ leaseToken: string } | Response> {
+  // Reserve the event id. The row's primary key is the atomic dedupe: with
+  // ignoreDuplicates the insert returns the row only when THIS delivery
+  // created it, so concurrent deliveries of one id elect exactly one owner.
+  const waitMs = positiveIntegerEnv("WEBHOOK_DUPLICATE_WAIT_MS", WEBHOOK_DUPLICATE_WAIT_MS_DEFAULT);
+  const pollMs = positiveIntegerEnv("WEBHOOK_DUPLICATE_POLL_MS", WEBHOOK_DUPLICATE_POLL_MS_DEFAULT);
+  const deadline = Date.now() + Math.min(waitMs, WEBHOOK_CLAIM_LEASE_MS);
+  let waiting = false;
+  while (!signal.aborted) {
+    const claimed = await adminDb
+      .rpc("claim_billing_webhook_delivery", {
+        p_event_id: eventId,
+        p_payload: payload,
+        p_waiting: waiting,
+      })
+      .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(10_000)]));
+    const result: unknown = claimed.data;
+    if (claimed.error || !isRecord(result) || result.event_id !== eventId) {
+      return serviceUnavailable("Webhook event reservation", claimed.error, {
+        status: claimed.status,
+        operation: "event_claim",
+      });
+    }
+    if (result.outcome === "duplicate") return json(200, { received: true, duplicate: true });
+    if (result.outcome === "claimed" && isUuid(result.lease_token)) {
+      return { leaseToken: result.lease_token };
+    }
+    if (result.outcome === "released") {
+      return serviceUnavailable(
+        "Webhook event processing",
+        { name: "UnexpectedResult" },
+        {
+          retryAfterSeconds: WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS,
+          operation: "event_claim",
+        },
+      );
+    }
+    if (result.outcome !== "in_progress") {
+      return serviceUnavailable("Webhook event reservation", { name: "UnexpectedResult" });
+    }
+    waiting = true;
+    // Someone else holds (or held) this id. Poll its row: processed →
+    // duplicate ack; in flight → keep waiting up to the bound, then
+    // retryable, so an owner that dies mid-flight cannot turn RevenueCat's
+    // redelivery into a false "already processed"; lease lapsed → take it
+    // over (guarded so only one redelivery wins) and process it here.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return serviceUnavailable(
+        "Webhook event processing",
+        { name: "UnexpectedResult" },
+        {
+          retryAfterSeconds: WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS,
+          operation: "event_claim",
+        },
+      );
+    }
+    // Another redelivery reclaimed it first; wait for that one like any owner.
+    await sleepUnlessAborted(Math.min(pollMs, remaining), signal);
+  }
+  return serviceUnavailable("Webhook event processing", { name: "AbortError" });
 }
 
 async function handleRevenueCatWebhook(request: Request): Promise<Response> {
@@ -3236,202 +3536,206 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     return errorJson(400, "Missing event payload.");
   }
   const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
-  const eventType = typeof event.type === "string" ? event.type : "unknown";
 
   // The subscribers to re-verify: app_user_id, falling back to any alias that
   // parses as our canonical uuid. TRANSFER events carry no app_user_id — both
   // sides of the transfer (transferred_from / transferred_to) are re-verified
   // so the source account loses premium as soon as RevenueCat moves it.
   const uuidList = (value: unknown): string[] =>
-    Array.isArray(value) ? (value as unknown[]).filter(isUuid) : [];
+    Array.isArray(value) ? (value as unknown[]).filter(isUuid).map((id) => id.toLowerCase()) : [];
   const subjectIds = new Set<string>();
   if (isUuid(event.app_user_id)) {
-    subjectIds.add(event.app_user_id);
+    subjectIds.add(event.app_user_id.toLowerCase());
   } else {
     const alias = uuidList(event.aliases)[0];
     if (alias) subjectIds.add(alias);
   }
   for (const id of uuidList(event.transferred_from)) subjectIds.add(id);
   for (const id of uuidList(event.transferred_to)) subjectIds.add(id);
-  const appUserId: string | null = subjectIds.values().next().value ?? null;
   if (subjectIds.size > MAX_WEBHOOK_SUBJECTS) {
     return errorJson(400, "Too many subscriber ids in one event.");
   }
 
-  const adminDb = billingAdminDb();
-  if (!adminDb) {
-    return errorJson(503, "Webhook processing is not configured.");
-  }
+  let release: (() => Promise<void>) | null = null;
+  let auditAttempted = false;
+  try {
+    const adminDb = billingAdminDb();
+    if (!adminDb) {
+      return errorJson(503, "Webhook processing is not configured.");
+    }
 
-  // Reserve the event id. The row's primary key is the atomic dedupe: with
-  // ignoreDuplicates the insert returns the row only when THIS delivery
-  // created it, so concurrent deliveries of one id elect exactly one owner.
-  const claimedAt = new Date().toISOString();
-  const reserved = await adminDb
-    .from("webhook_events")
-    .upsert(
-      {
-        id: eventId,
-        provider: "revenuecat",
-        event_type: eventType,
-        app_user_id: appUserId,
-        payload: body,
-        claimed_at: claimedAt,
-        processed_at: null,
-      },
-      { onConflict: "id", ignoreDuplicates: true },
-    )
-    .select("id");
-  if (reserved.error) {
-    return serviceUnavailable("Webhook event reservation", reserved.error.message);
-  }
-  if (!Array.isArray(reserved.data) || reserved.data.length === 0) {
-    // Someone else holds (or held) this id. Poll its row: processed →
-    // duplicate ack; in flight → keep waiting up to the bound, then
-    // retryable, so an owner that dies mid-flight cannot turn RevenueCat's
-    // redelivery into a false "already processed"; lease lapsed → take it
-    // over (guarded so only one redelivery wins) and process it here.
-    const waitMs = positiveIntegerEnv(
-      "WEBHOOK_DUPLICATE_WAIT_MS",
-      WEBHOOK_DUPLICATE_WAIT_MS_DEFAULT,
-    );
-    const pollMs = positiveIntegerEnv(
-      "WEBHOOK_DUPLICATE_POLL_MS",
-      WEBHOOK_DUPLICATE_POLL_MS_DEFAULT,
-    );
-    const deadline = Date.now() + waitMs;
-    let reclaimedHere = false;
-    while (!reclaimedHere) {
-      const existing = await adminDb
-        .from("webhook_events")
-        .select("claimed_at, processed_at")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (existing.error) {
-        return serviceUnavailable("Webhook event lookup", existing.error.message);
-      }
-      const state = existing.data as WebhookEventState | null;
-      if (!state) {
-        // Released by the failing owner: RevenueCat's redelivery re-processes.
-        return serviceUnavailable("Webhook event lookup", `${eventId} released mid-flight`, 5);
-      }
-      if (state.processed_at) {
-        return json(200, { received: true, duplicate: true });
-      }
-      const leaseExpired = Date.parse(state.claimed_at) + WEBHOOK_CLAIM_LEASE_MS <= Date.now();
-      if (leaseExpired) {
-        const reclaimed = await adminDb
-          .from("webhook_events")
-          .update({ claimed_at: claimedAt })
-          .eq("id", eventId)
-          .eq("claimed_at", state.claimed_at)
-          .is("processed_at", null)
-          .select("id");
-        if (reclaimed.error) {
-          return serviceUnavailable("Webhook event reclaim", reclaimed.error.message);
-        }
-        if (Array.isArray(reclaimed.data) && reclaimed.data.length > 0) {
-          reclaimedHere = true;
-          break;
-        }
-        // Another redelivery reclaimed it first; wait for that one like any owner.
-      }
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+    // The audit row is written only after every subject is persisted or
+    // authoritatively absent. Its presence marks completion: replays skip
+    // billing work. Failures before that write leave no marker, so a retry
+    // re-verifies and repairs all subjects, including a partial transfer.
+    const seen = await adminDb
+      .from("webhook_events")
+      .select("id,provider,payload,claimed_at,processed_at")
+      .eq("id", eventId)
+      .abortSignal(AbortSignal.timeout(10_000))
+      .maybeSingle();
+    if (seen.error) {
+      return serviceUnavailable(
+        "Webhook event lookup",
+        billingFailureDetail("event_lookup", seen.error, seen.status),
+        { operation: "event_lookup" },
+      );
+    }
+    if (seen.data) {
+      const state = seen.data as WebhookEventState;
+      if (state.provider !== "revenuecat" || !billingPayloadMatches(state.payload, body)) {
         return serviceUnavailable(
-          "Webhook event processing",
-          `${eventId} in flight`,
-          WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS,
+          "Webhook event lookup",
+          { code: "22023" },
+          {
+            operation: "event_lookup",
+          },
         );
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(pollMs, remaining)));
+      if (state.processed_at !== null) {
+        return isoTimestamp(state.processed_at) !== null
+          ? json(200, { received: true, duplicate: true })
+          : serviceUnavailable("Webhook event lookup", { name: "UnexpectedResult" });
+      }
     }
-  }
-
-  // Hand the id back so RevenueCat's redelivery is fully re-processed. Best
-  // effort: if the delete itself fails the row stays in flight and is
-  // reclaimed once its lease lapses.
-  const release = async () => {
-    const released = await adminDb
-      .from("webhook_events")
-      .delete()
-      .eq("id", eventId)
-      .eq("claimed_at", claimedAt)
-      .is("processed_at", null);
-    if (released.error) {
-      console.error("[api] webhook event release failed:", released.error.message);
-    }
-  };
-  const complete = async (verified: boolean): Promise<Response> => {
-    const marked = await adminDb
-      .from("webhook_events")
-      .update({ processed_at: new Date().toISOString() })
-      .eq("id", eventId)
-      .eq("claimed_at", claimedAt);
-    if (marked.error) {
+    const claim = await claimWebhookDelivery(adminDb, eventId, body, request.signal);
+    if (claim instanceof Response) return claim;
+    // Hand the id back so RevenueCat's redelivery is fully re-processed. Best
+    // effort: if the delete itself fails the row stays in flight and is
+    // reclaimed once its lease lapses.
+    release = async () => {
+      try {
+        const released = await adminDb
+          .rpc("release_billing_webhook_delivery", {
+            p_event_id: eventId,
+            p_payload: body,
+            p_lease_token: claim.leaseToken,
+          })
+          .abortSignal(AbortSignal.timeout(5_000));
+        if (released.error) {
+          console.error(
+            "[api] webhook event release failed:",
+            failureDetail(released.error, released.status),
+          );
+        }
+      } catch (error) {
+        console.error("[api] webhook event release failed:", failureDetail(error));
+      }
+    };
+    const ticketIds: Record<string, string> = {};
+    const logEvent = async (): Promise<Response> => {
+      const logged = await adminDb
+        .rpc("complete_billing_webhook", {
+          p_event_id: eventId,
+          p_payload: body,
+          p_tickets: ticketIds,
+          p_lease_token: claim.leaseToken,
+        })
+        .abortSignal(AbortSignal.timeout(10_000));
+      const result: unknown = logged.data;
+      if (!logged.error && isRecord(result) && result.received === true) {
+        if (result.duplicate === true) return json(200, { received: true, duplicate: true });
+        if (typeof result.verified === "boolean") {
+          return json(200, { received: true, verified: result.verified });
+        }
+      }
       // The verdict IS persisted; keep the reservation so the redelivery
       // waits out the lease instead of re-verifying, then marks it again.
-      return serviceUnavailable("Webhook event completion", marked.error.message, 30);
+      return serviceUnavailable(
+        "Webhook audit",
+        billingFailureDetail("event_audit", logged.error, logged.status),
+        { operation: "event_audit", retryAfterSeconds: WEBHOOK_IN_FLIGHT_RETRY_AFTER_SECONDS },
+      );
+    };
+
+    // Bind every event (including anonymous-only events) in the database.
+    // Issuance rechecks completion under the same lock used by the audit RPC,
+    // so a stale lookup cannot authorize another fetch or a changed scope.
+    const started = await beginBillingVerification(
+      [...subjectIds],
+      eventId,
+      body,
+      claim.leaseToken,
+    );
+    if (started.outcome === "duplicate") {
+      return json(200, { received: true, duplicate: true });
     }
-    return json(200, { received: true, verified });
-  };
-
-  if (!appUserId) {
-    // Nothing to verify (e.g. an anonymous-only subscriber). Acknowledge so
-    // RevenueCat stops retrying; the audit row preserves the event.
-    return await complete(false);
-  }
-
-  const verdicts: Array<{ userId: string; verdict: BillingVerdict }> = [];
-  for (const userId of subjectIds) {
-    const verdict = await verifyRevenueCatSubscriber(userId);
-    if (!verdict) {
-      // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
-      await release();
+    if (started.outcome !== "issued") {
+      return serviceUnavailable(
+        "Webhook verification",
+        started.outcome === "retryable" ? started.failure : { name: "ConfigurationError" },
+        { operation: "verification_begin" },
+      );
+    }
+    const verdicts: Array<{ userId: string; ticketId: string; verdict: BillingVerdict }> = [];
+    let retryableFailure = false;
+    for (const ticket of started.tickets) {
+      if (ticket.outcome === "user_missing") continue;
+      const { userId, ticketId } = ticket;
+      ticketIds[userId] = ticketId;
+      const verdict = await verifyRevenueCatSubscriber(userId);
+      if (!verdict) {
+        // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
+        retryableFailure = true;
+        continue;
+      }
+      verdicts.push({ userId, ticketId, verdict });
+    }
+    for (const { userId, ticketId, verdict } of verdicts) {
+      const persisted = await persistBillingVerdict(userId, verdict, ticketId);
+      if (persisted.outcome !== "persisted") {
+        // A missing profile is terminal only when Auth confirms user absence;
+        // every unconfirmed failure stays retryable, without a completion marker.
+        if (persisted.outcome !== "user_missing") {
+          console.error("[api] webhook verdict persist failed:", persisted);
+          retryableFailure = true;
+        }
+      }
+    }
+    if (retryableFailure) {
+      // Anything else is transient: all-or-nothing across the subjects — the
+      // reservation is released and RevenueCat retries the whole event.
       return errorJson(503, "Verification is temporarily unavailable.");
     }
-    verdicts.push({ userId, verdict });
+    // Nothing to verify (e.g. an anonymous-only subscriber). Acknowledge so
+    // RevenueCat stops retrying; the audit row preserves the event.
+    auditAttempted = true;
+    return await logEvent();
+  } catch {
+    return serviceUnavailable("Webhook processing", billingFailureDetail("webhook_processing"), {
+      operation: "webhook_processing",
+    });
+  } finally {
+    if (release && !auditAttempted) await release();
   }
-  let verified = true;
-  for (const { userId, verdict } of verdicts) {
-    const persisted = await persistBillingVerdict(userId, verdict);
-    if (persisted.ok) continue;
-    if (persisted.error.code === FK_VIOLATION) {
-      // A user who has never bootstrapped has no profiles row (FK target); log
-      // and acknowledge — their state will be written on first billing sync.
-      console.error("[api] webhook verdict persist failed:", persisted.error.message);
-      verified = false;
-      continue;
-    }
-    // Anything else is transient: all-or-nothing across the subjects — the
-    // reservation is released and RevenueCat retries the whole event.
-    await release();
-    return serviceUnavailable("Webhook verdict persist", persisted.error.message);
-  }
-  return await complete(verified);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Two-step account deletion.
 //
-//   POST /v1/me/delete-request { survey? } → { challenge, expiresAt }
-//   POST /v1/me/delete-confirm { challenge } → { deleted: true }
+//   POST /v1/me/delete-request { survey? }
+//     → { challenge, expiresAt, operationId, statusCapability, statusExpiresAt }
+//   POST /v1/me/delete-confirm { challenge, operationId? }
+//     → { deleted: true, operationId, completionReceipt, appleAuthorizationRevocation }
+//        or 202 { operationId, state: "in_progress" }
+//   POST /v1/me/delete-status { operationId }, bearer = statusCapability only
+//     → minimal operation state; never authenticates a session or resumes work.
 //
 // The confirm call must present the challenge minted by a SEPARATE prior
 // request (min age enforced), so no single call — accidental or scripted —
 // can destroy an account. The actual deletion uses the service-role Auth
 // admin API; the auth.users → profiles cascade removes every user row
 // (shots, sessions, permits, consent, trials, feedback, saved drills,
-// billing entitlement, rank state, deletion request itself). Two things
-// outlive the account, both disclosed in the privacy policy (legal.ts §7/§8):
+// billing entitlement, rank state, legacy deletion request itself). Existing
+// retained records disclosed in the privacy policy (legal.ts §7/§8) remain:
 // the optional exit survey (account_deletion_feedback, FK ON DELETE SET NULL
 // → anonymized, kept) and the free-rating identity ledger
 // (free_rating_ledger: SHA-256 of the provider sign-in identifier → lifetime
 // scored count, no FK by design, migration 20260902150000), which is what
-// stops delete-and-recreate from re-earning the two free ratings.
+// stops delete-and-recreate from re-earning the two free ratings. The new
+// private operation/receipt has a DRAFT 24-hour capability / 7-day retention
+// window. That policy is not legally approved and this is not deployment approval.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const DELETE_CONFIRM_MIN_AGE_MS = 3_000;
 
 /** Exit-survey vocabularies — mirror apps/mobile/src/account/deletion.ts
  * ACCOUNT_DELETION_REASONS / ACCOUNT_DELETION_WANTED verbatim. The database
@@ -3514,7 +3818,9 @@ async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey):
   if (stateQ.error || profileQ.error) {
     console.warn(
       "[api] delete-request: survey context partial:",
-      stateQ.error?.message ?? profileQ.error?.message,
+      stateQ.error
+        ? failureDetail(stateQ.error, stateQ.status)
+        : failureDetail(profileQ.error, profileQ.status),
     );
   }
   const inserted = await authed.db.from("account_deletion_feedback").insert({
@@ -3530,227 +3836,287 @@ async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey):
     scored_count: state && Number.isFinite(state.scored_count) ? state.scored_count : null,
   });
   if (inserted.error) {
-    console.error("[api] delete-request: exit survey not recorded:", inserted.error.message);
+    console.error(
+      "[api] delete-request: exit survey not recorded:",
+      failureDetail(inserted.error, inserted.status),
+    );
   }
+}
+
+function deletionOperationRpc(adminDb: SupabaseClient): DeletionOperationRpc {
+  return (name, parameters) =>
+    adminDb.rpc(name, parameters).abortSignal(AbortSignal.timeout(10_000));
 }
 
 async function requestAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const survey = parseDeletionSurvey(body);
-  const challenge = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
-  const upserted = await authed.db.from("account_deletion_requests").upsert(
-    {
-      user_id: authed.id,
-      challenge,
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    },
-    { onConflict: "user_id" },
-  );
-  if (upserted.error) {
-    return serviceUnavailable("Account deletion", upserted.error.message);
+  const adminDb = billingAdminDb();
+  if (!adminDb) return serviceUnavailable("Account deletion", { name: "ConfigurationError" });
+  const result = await beginAccountDeletionOperation(deletionOperationRpc(adminDb), authed.id);
+  if (result.outcome === "confirmation_in_progress") {
+    return codedError(
+      409,
+      "account.deletion_in_progress",
+      "Account deletion is already confirmed. Check its status before starting again.",
+    );
   }
+  if (result.outcome !== "requested") {
+    // Even authoritative Auth absence at admission is not a completion receipt.
+    return serviceUnavailable("Account deletion", { name: "UnexpectedResult" });
+  }
+  // Survey failure must not discard the newly minted recovery capability.
+  // A retry may supersede an unconfirmed operation, but never confirmed work.
   // Only after the challenge is safely minted: a 503 above makes the app
   // retry this whole request, and the survey must not be double-counted.
-  if (survey) await recordDeletionSurvey(authed, survey);
-  return json(200, { challenge, expiresAt });
-}
-
-interface ExternalCredentialRow {
-  apple_refresh_token_encrypted: string | null;
-  apple_revoked_at: string | null;
-  revenuecat_deleted_at: string | null;
-}
-
-type AppleDeletionOutcome = "revoked" | "not_applicable" | "manual_action_required";
-
-/** Complete provider-side erasure before removing the Supabase identity. A
- * successful external step is checkpointed in the service-role-only row so a
- * later provider/database failure can be retried safely. */
-async function deleteExternalAccounts(
-  authed: AuthedUser,
-  adminDb: SupabaseClient,
-): Promise<AppleDeletionOutcome | Response> {
-  const externalQ = await adminDb
-    .from("account_external_credentials")
-    .select("apple_refresh_token_encrypted, apple_revoked_at, revenuecat_deleted_at")
-    .eq("user_id", authed.id)
-    .maybeSingle();
-  if (externalQ.error) {
-    return serviceUnavailable("Account deletion", externalQ.error.message);
-  }
-  const external = externalQ.data as ExternalCredentialRow | null;
-  let appleOutcome: AppleDeletionOutcome = "not_applicable";
-
-  if (
-    authed.provider === "apple" ||
-    external?.apple_refresh_token_encrypted ||
-    external?.apple_revoked_at
-  ) {
-    if (external?.apple_revoked_at) {
-      appleOutcome = "revoked";
-    } else if (external?.apple_refresh_token_encrypted) {
-      const config = appleServerConfiguration();
-      if (!config) {
-        return serviceUnavailable("Account deletion", "Apple server secrets unavailable");
-      }
-      let revoked = false;
-      try {
-        const refreshToken = await decryptAppleRefreshToken(
-          external.apple_refresh_token_encrypted,
-          authed.id,
-          config.tokenEncryptionKey,
-        );
-        await revokeAppleRefreshToken(refreshToken, config);
-        revoked = true;
-      } catch (error) {
-        const detail = error instanceof ExternalAccountError ? error.message : error;
-        // Transport failures, Apple 5xx/429, missing secrets and Apple
-        // refusing OUR client secret are retried by the client (fail closed:
-        // nothing downstream runs). A credential that can never be revoked —
-        // ciphertext under a rotated key, a token Apple refuses with
-        // invalid_grant — must not leave the account undeletable:
-        // Apple requires deletion to be fulfilled, so it is dropped and the
-        // user is directed to Apple's manual authorization controls.
-        if (!isPermanentExternalAccountError(error)) {
-          return serviceUnavailable("Account deletion", detail);
-        }
-        console.error(
-          `[api] account deletion: Apple credential unrevocable for ${authed.id}:`,
-          detail,
-        );
-      }
-      // Checkpoint before RevenueCat so a later failure retries without a
-      // second revoke attempt. The capture pair (token + captured_at) is
-      // cleared together — the table constrains them to be null together.
-      const now = new Date().toISOString();
-      const marked = await adminDb
-        .from("account_external_credentials")
-        .update(
-          revoked
-            ? { apple_revoked_at: now, updated_at: now }
-            : {
-                apple_refresh_token_encrypted: null,
-                apple_token_captured_at: null,
-                updated_at: now,
-              },
-        )
-        .eq("user_id", authed.id);
-      if (marked.error) {
-        return serviceUnavailable("Account deletion", marked.error.message);
-      }
-      appleOutcome = revoked ? "revoked" : "manual_action_required";
-    } else {
-      // Accounts created by an older app build have no stored Apple refresh
-      // token. Apple explicitly says deletion must still be fulfilled; the
-      // response tells the client to direct that user to Apple's manual
-      // Sign in with Apple authorization controls.
-      appleOutcome = "manual_action_required";
-      console.warn(`[api] account deletion has no Apple revocation token: ${authed.id}`);
-    }
-  }
-
-  if (!external?.revenuecat_deleted_at) {
-    const revenueCatSecret = Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? "";
+  if (survey) {
     try {
-      await deleteRevenueCatCustomer(authed.id, revenueCatSecret);
+      await recordDeletionSurvey(authed, survey);
     } catch (error) {
-      const detail = error instanceof ExternalAccountError ? error.message : error;
-      return serviceUnavailable("Account deletion", detail);
-    }
-    const now = new Date().toISOString();
-    const marked = await adminDb
-      .from("account_external_credentials")
-      .upsert(
-        { user_id: authed.id, revenuecat_deleted_at: now, updated_at: now },
-        { onConflict: "user_id" },
-      );
-    if (marked.error) {
-      return serviceUnavailable("Account deletion", marked.error.message);
+      console.warn("[api] delete-request: exit survey unavailable:", failureDetail(error));
     }
   }
+  return json(200, {
+    challenge: result.challenge,
+    expiresAt: result.expiresAt,
+    operationId: result.operationId,
+    statusCapability: result.statusCapability,
+    statusExpiresAt: result.statusExpiresAt,
+  });
+}
 
-  return appleOutcome;
+/** Reuse the existing Apple crypto/protocol implementation without allowing
+ * redirects or unbounded provider bodies into the deletion/bootstrap path. */
+async function accountAppleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, { ...init, redirect: "error" });
+  const body = await readAccountDeletionResponseBody(response);
+  return new Response([204, 205, 304].includes(response.status) ? null : JSON.stringify(body), {
+    status: response.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function deleteAccountRevenueCatCustomer(ownerId: string): Promise<void> {
+  let intendedAbsence = true;
+  await deleteRevenueCatCustomer(
+    ownerId,
+    Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? "",
+    async (input, init) => {
+      const response = await fetch(input, { ...init, redirect: "error" });
+      if (response.status === 404) {
+        intendedAbsence = isIntendedRevenueCatCustomerNotFound(
+          await readAccountDeletionResponseBody(response),
+        );
+      } else {
+        await response.body?.cancel().catch(() => undefined);
+      }
+      return new Response(null, { status: response.status });
+    },
+  );
+  // The legacy transport accepts HTTP 404. The operation checkpoint requires
+  // the precise RevenueCat subscriber-absence code, not a gateway/HTML 404.
+  if (!intendedAbsence) {
+    throw new ExternalAccountError(
+      "invalid_response",
+      "revenuecat",
+      "Customer absence is unverified.",
+      404,
+    );
+  }
+}
+
+/** Inspect both raw Auth codes rather than allowing SDK normalization to hide
+ * a conflicting code/error_code. Only the helper's exact user_not_found test
+ * may proceed to the separate, authoritative trigger receipt read. */
+async function deleteAccountAuthUser(ownerId: string): Promise<{ error?: unknown }> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) throw new Error("Auth deletion is unavailable.");
+  const response = await authFetch(
+    `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(ownerId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "X-Supabase-Api-Version": "2024-01-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ should_soft_delete: false }),
+    },
+  );
+  if (response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return { error: null };
+  }
+  const body = response.status === 404 ? await readAccountDeletionResponseBody(response) : null;
+  if (response.status !== 404) await response.body?.cancel().catch(() => undefined);
+  return {
+    error: {
+      status: response.status,
+      code: isRecord(body) ? body.code : undefined,
+      error_code: isRecord(body) ? body.error_code : undefined,
+    },
+  };
 }
 
 async function confirmAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
-  const challenge = body.challenge;
-  if (!isUuid(challenge)) {
+  if (
+    !isUuid(body.challenge) ||
+    (Object.hasOwn(body, "operationId") && !isUuid(body.operationId))
+  ) {
     return codedError(
       400,
       "validation.account_deletion",
-      "challenge must be the UUID returned by delete-request.",
+      "challenge and any supplied operationId must be the UUIDs returned by delete-request.",
     );
   }
-  const pending = await authed.db
-    .from("account_deletion_requests")
-    .select("challenge, created_at, expires_at")
-    .eq("user_id", authed.id)
-    .maybeSingle();
-  if (pending.error) {
-    return serviceUnavailable("Account deletion", pending.error.message);
+  const adminDb = billingAdminDb();
+  if (!adminDb) return serviceUnavailable("Account deletion", { name: "ConfigurationError" });
+  const result = await confirmAccountDeletionOperation(
+    deletionOperationRpc(adminDb),
+    {
+      verifyLiveSession: async (ownerId) => {
+        if (ownerId !== authed.id.toLowerCase()) return false;
+        // Recheck after the bounded body read, immediately before accepting the
+        // irreversible confirmation. The earlier router check is not cached proof.
+        const live = await authed.db
+          .rpc("is_api_session_active")
+          .abortSignal(AbortSignal.timeout(10_000));
+        if (live.error || typeof live.data !== "boolean")
+          throw new Error("Session check unavailable.");
+        return live.data;
+      },
+      revokeAppleCredential: async (encryptedToken, ownerId) => {
+        const config = appleServerConfiguration();
+        if (!config) throw new Error("Apple cleanup is unavailable.");
+        const token = await decryptAppleRefreshToken(
+          encryptedToken,
+          ownerId,
+          config.tokenEncryptionKey,
+        );
+        await revokeAppleRefreshToken(token, config, accountAppleFetch);
+      },
+      deleteRevenueCatCustomer: deleteAccountRevenueCatCustomer,
+      deleteAuthUser: deleteAccountAuthUser,
+      onFailure: (code, status) => console.error("[api] Account deletion:", { code, status }),
+    },
+    authed.id,
+    body,
+  );
+  if (result.outcome === "unavailable") {
+    return errorJson(503, "Account deletion is temporarily unavailable. Please try again.");
   }
-  const row = pending.data as {
-    challenge: string;
-    created_at: string;
-    expires_at: string;
-  } | null;
-  if (!row || row.challenge !== challenge) {
+  if (result.outcome === "in_progress") {
+    const response = json(202, { operationId: result.operationId, state: "in_progress" });
+    response.headers.set("Retry-After", "3");
+    return response;
+  }
+  if (result.outcome === "rejected") {
+    if (result.code === "session_invalid") {
+      await cacheDel(await authCacheKey(bearerOf(request)));
+      return errorJson(401, "The session is no longer valid. Sign in again.");
+    }
+    if (result.code === "too_fast") {
+      return codedError(
+        429,
+        "account.deletion_too_fast",
+        "Please review the confirmation before deleting.",
+      );
+    }
+    if (result.code === "expired") {
+      return codedError(
+        403,
+        "account.deletion_challenge_expired",
+        "The deletion request expired. Start again from Settings.",
+      );
+    }
+    if (result.code === "blocked") {
+      return codedError(
+        409,
+        "account.deletion_blocked",
+        "Account deletion could not be completed. Check its status or contact support.",
+      );
+    }
+
     return codedError(
       403,
       "account.deletion_challenge_invalid",
       "This deletion was not requested, or the confirmation does not match. Start again from Settings.",
     );
   }
-  if (Date.parse(row.expires_at) <= Date.now()) {
-    return codedError(
-      403,
-      "account.deletion_challenge_expired",
-      "The deletion request expired. Start again from Settings.",
-    );
-  }
-  if (Date.now() - Date.parse(row.created_at) < DELETE_CONFIRM_MIN_AGE_MS) {
-    return codedError(
-      429,
-      "account.deletion_too_fast",
-      "Please review the confirmation before deleting.",
-    );
-  }
 
-  const adminDb = billingAdminDb();
-  if (!adminDb) {
-    return serviceUnavailable("Account deletion", "service role unavailable");
-  }
-  const appleAuthorizationRevocation = await deleteExternalAccounts(authed, adminDb);
-  if (appleAuthorizationRevocation instanceof Response) {
-    return appleAuthorizationRevocation;
-  }
-
-  const deleted = await adminDb.auth.admin.deleteUser(authed.id);
-  const authError = deleted.error as {
-    status?: number;
-    code?: string;
-    error_code?: string;
-    message?: string;
-  } | null;
-  const alreadyDeleted =
-    authError?.status === 404 ||
-    authError?.code === "user_not_found" ||
-    authError?.error_code === "user_not_found";
-  if (authError && !alreadyDeleted) {
-    return serviceUnavailable("Account deletion", authErrorDetail(authError));
-  }
-
+  // Only a sealed Auth-delete trigger receipt authorizes success. Cache
+  // eviction is best-effort; every remaining bearer still faces live-session RLS.
+  await cacheDel(
+    rankCacheKey(authed.id),
+    progressCacheKey(authed.id),
+    await authCacheKey(bearerOf(request)),
+  ).catch(() => undefined);
   // Drop this user's cached derived state AND fence the session that just
   // deleted the account, so none of its bearers can keep authenticating (a
   // bearer of another device's session ages out within ≤10 min, and every
   // query behind it hits RLS-empty rows).
-  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));
-  await fenceRevokedSession(bearerOf(request));
-  console.warn(`[api] account deleted: ${authed.id}`);
-  return json(200, { deleted: true, appleAuthorizationRevocation });
+  await fenceRevokedSession(bearerOf(request)).catch(() => undefined);
+  if (result.appleAuthorizationRevocation === "manual_action_required") {
+    // Accounts created by an older app build have no stored Apple refresh
+    // token. Apple explicitly says deletion must still be fulfilled; the
+    // response tells the client to direct that user to Apple's manual
+    // Sign in with Apple authorization controls.
+    console.warn("[api] account deletion has no Apple revocation token");
+  }
+  console.warn("[api] account deleted");
+  return json(200, {
+    deleted: true,
+    operationId: result.operationId,
+    completionReceipt: result.completionReceipt,
+    appleAuthorizationRevocation: result.appleAuthorizationRevocation,
+  });
+}
+
+const deletionStatusBudget = new AccountDeletionStatusBudget();
+
+async function accountDeletionStatusRoute(request: Request, ip: string): Promise<Response> {
+  const limited = deletionStatusBudget.admit(ip);
+  if (limited) {
+    void request.body?.cancel().catch(() => undefined);
+    return limited;
+  }
+  let response: Response;
+  try {
+    const authorization = request.headers.get("Authorization") ?? "";
+    const url = new URL(request.url);
+    let body: unknown = null;
+    if (
+      request.method === "POST" &&
+      !url.search &&
+      !url.hash &&
+      authorization.slice(0, 7).toLowerCase() === "bearer " &&
+      isAccountDeletionStatusCapability(authorization.slice(7))
+    ) {
+      const bounded = new Request(request, {
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(5_000)]),
+      });
+      body = await readBody(bounded, 1_024);
+    } else {
+      void request.body?.cancel().catch(() => undefined);
+    }
+    response = await accountDeletionStatusResponse(
+      (name, parameters) => {
+        const adminDb = billingAdminDb();
+        if (!adminDb) throw new Error("Deletion status is unavailable.");
+        return deletionOperationRpc(adminDb)(name, parameters);
+      },
+      request,
+      body,
+    );
+  } catch (error) {
+    response = accountDeletionStatusUnavailableResponse(
+      error instanceof RequestBodyTooLarge ? 413 : 404,
+    );
+  }
+  if (response.status === 404 || response.status === 413) deletionStatusBudget.recordFailure(ip);
+  return response;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3841,6 +4207,21 @@ async function bootstrapAccount(
   }
 
   if (authed.provider === "apple") {
+    const adminDb = billingAdminDb();
+    if (!adminDb) return serviceUnavailable("Apple sign-in", { name: "ConfigurationError" });
+    const rpc = deletionOperationRpc(adminDb);
+    const confirmationInProgress = () =>
+      codedError(
+        409,
+        "account.deletion_in_progress",
+        "Account deletion is already confirmed. Check its status before signing in again.",
+      );
+    try {
+      if (!(await accountDeletionAllowsAppleBootstrap(rpc, authed.id)))
+        return confirmationInProgress();
+    } catch (error) {
+      return serviceUnavailable("Apple sign-in", error);
+    }
     const authorizationCode = body.appleAuthorizationCode;
     const supportsRevocationProtocol = request.headers.get("X-Apple-Revocation-Protocol") === "1";
     const usableAuthorizationCode =
@@ -3858,18 +4239,19 @@ async function bootstrapAccount(
       // Deployment must precede the new mobile build. A pre-protocol build
       // has no authorization code to send, so keep it working and let its
       // eventual deletion use Apple's documented manual-disconnect path.
-      console.warn(`[api] legacy Apple bootstrap has no revocation credential: ${authed.id}`);
+      console.warn("[api] legacy Apple bootstrap has no revocation credential");
     } else {
       const config = appleServerConfiguration();
-      const adminDb = billingAdminDb();
-      if (!config || !adminDb) {
-        return serviceUnavailable(
-          "Apple sign-in",
-          "Apple server secrets or service role unavailable",
-        );
+      if (!config) {
+        return serviceUnavailable("Apple sign-in", { name: "ConfigurationError" });
       }
+      let uncommittedRefreshToken: string | null = null;
       try {
-        const grant = await exchangeAppleAuthorizationCode(authorizationCode.trim(), config);
+        const grant = await exchangeAppleAuthorizationCode(
+          authorizationCode.trim(),
+          config,
+          accountAppleFetch,
+        );
         if (grant.subject !== providerSubject) {
           return codedError(
             401,
@@ -3877,26 +4259,34 @@ async function bootstrapAccount(
             "Apple returned authorization for a different account. Try again.",
           );
         }
+        uncommittedRefreshToken = grant.refreshToken;
         const encrypted = await encryptAppleRefreshToken(
           grant.refreshToken,
           authed.id,
           config.tokenEncryptionKey,
         );
-        const now = new Date().toISOString();
-        const stored = await adminDb.from("account_external_credentials").upsert(
-          {
-            user_id: authed.id,
-            apple_refresh_token_encrypted: encrypted,
-            apple_token_captured_at: now,
-            apple_revoked_at: null,
-            updated_at: now,
-          },
-          { onConflict: "user_id" },
-        );
-        if (stored.error) {
-          return serviceUnavailable("Apple sign-in", stored.error.message);
+        const stored = await storeAccountAppleCredential(rpc, authed.id, encrypted);
+        if (stored !== "stored") {
+          // Confirmation may win while Apple is exchanging the code. Never
+          // overwrite its fenced credential or checkpoint. Revoke only this
+          // newly exchanged, owner-matched grant before reporting rejection.
+          uncommittedRefreshToken = null;
+          await revokeAppleRefreshToken(grant.refreshToken, config, accountAppleFetch);
+          return stored === "confirmation_in_progress"
+            ? confirmationInProgress()
+            : errorJson(401, "The session is no longer valid. Sign in again.");
         }
+        uncommittedRefreshToken = null;
       } catch (error) {
+        if (uncommittedRefreshToken) {
+          // An ambiguous store acknowledgement is not permission to restore an
+          // older row. No credential DML is performed during compensation.
+          try {
+            await revokeAppleRefreshToken(uncommittedRefreshToken, config, accountAppleFetch);
+          } catch (cleanupError) {
+            return serviceUnavailable("Apple sign-in", cleanupError);
+          }
+        }
         if (error instanceof ExternalAccountError && error.kind === "invalid_grant") {
           return codedError(
             401,
@@ -3904,8 +4294,7 @@ async function bootstrapAccount(
             "Apple could not validate this sign-in authorization. Try again.",
           );
         }
-        const detail = error instanceof ExternalAccountError ? error.message : error;
-        return serviceUnavailable("Apple sign-in", detail);
+        return serviceUnavailable("Apple sign-in", error);
       }
     }
   }
@@ -3934,7 +4323,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     } else if (error instanceof RequestBodyTimeout) {
       response = errorJson(408, error.message);
     } else {
-      console.error(`[api] unhandled error (${requestId}):`, error);
+      console.error(`[api] unhandled error (${requestId}):`, failureDetail(error));
       response = errorJson(500, "Something went wrong. Please try again.");
     }
   }
@@ -3950,6 +4339,19 @@ async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const ip = clientIp(request);
   const isPublicRead = request.method === "GET" || request.method === "HEAD";
+
+  // Capability recovery must survive Auth deletion and auth-failure throttles.
+  // Match only known gateway mounts; never send the capability to ordinary
+  // authentication, shared rate-limit/Redis machinery, or a worker-resume path.
+  if (
+    [
+      "/v1/me/delete-status",
+      "/api/v1/me/delete-status",
+      "/functions/v1/api/v1/me/delete-status",
+    ].includes(url.pathname)
+  ) {
+    return accountDeletionStatusRoute(request, forwardableClientIp(request) ?? "unknown");
+  }
 
   // ── Public, pre-auth routes (matched on the RAW pathname suffix — these
   // paths never contain "/v1/", so the gateway's mount prefix is irrelevant).
@@ -4041,6 +4443,11 @@ async function handleRequest(request: Request): Promise<Response> {
   // read-then-write, so concurrent bad bearers cannot under-count.
   const recordAuthFailure = () =>
     enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+
+  if (isAccountDeletionStatusCapability(bearerOf(request))) {
+    await recordAuthFailure();
+    return errorJson(401, "A deletion status capability cannot authorize this route.");
+  }
 
   // ── Session establishment and rotation run BEFORE general authentication:
   // bootstrap is the one route that spends a provider ID token (and mints
@@ -4252,7 +4659,9 @@ async function handleRequest(request: Request): Promise<Response> {
         )
         .maybeSingle();
       if (updated.error || !updated.data) {
-        return serviceUnavailable("Your coaching profile", updated.error?.message);
+        return serviceUnavailable("Your coaching profile", updated.error, {
+          status: updated.status,
+        });
       }
       const saved = updated.data as unknown as {
         skill_level: string | null;
@@ -4301,8 +4710,33 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
 
-      const verdict = await verifyRevenueCatSubscriber(authed.id);
-      if (!verdict) {
+      const started = await beginBillingVerification([authed.id]);
+      if (started.outcome === "unconfigured") {
+        return codedError(
+          503,
+          "billing_unconfigured",
+          "Billing verification is not configured on the server.",
+        );
+      }
+      if (started.outcome !== "issued") {
+        return serviceUnavailable(
+          "Billing verification",
+          started.outcome === "retryable"
+            ? started.failure
+            : billingFailureDetail("verification_begin"),
+          { operation: "verification_begin" },
+        );
+      }
+      const ticket = started.tickets[0];
+      if (ticket.outcome === "user_missing") {
+        return serviceUnavailable(
+          "Billing verification",
+          { code: "user_not_found" },
+          { operation: "user_lookup" },
+        );
+      }
+      const providerVerdict = await verifyRevenueCatSubscriber(authed.id);
+      if (!providerVerdict) {
         return codedError(
           502,
           "billing_unavailable",
@@ -4310,18 +4744,30 @@ async function handleRequest(request: Request): Promise<Response> {
         );
       }
 
-      const persisted = await persistBillingVerdict(authed.id, verdict);
-      if (!persisted.ok) {
-        if (persisted.error === SERVICE_ROLE_UNAVAILABLE) {
-          return codedError(
-            503,
-            "billing_unconfigured",
-            "Billing verification is not configured on the server.",
-          );
-        }
-        return serviceUnavailable("Billing verification", persisted.error.message);
+      const persisted = await persistBillingVerdict(authed.id, providerVerdict, ticket.ticketId);
+      if (persisted.outcome === "unconfigured") {
+        return codedError(
+          503,
+          "billing_unconfigured",
+          "Billing verification is not configured on the server.",
+        );
+      }
+      if (persisted.outcome !== "persisted") {
+        return serviceUnavailable(
+          "Billing verification",
+          persisted.outcome === "retryable" ? persisted.failure : { code: "user_not_found" },
+          {
+            operation:
+              persisted.outcome === "retryable"
+                ? persisted.failure.operation
+                : "entitlement_upsert",
+          },
+        );
       }
 
+      // Use the canonical snapshot returned by atomic persistence, not this
+      // request's potentially superseded provider verdict. Both response
+      // objects describe that same snapshot; the DB enforces later access.
       // Build BOTH billing and access from the state that is durably stored
       // (the verdict just landed, or the newer row that outranked it — never
       // a dropped verdict), evaluated with the same effective-premium rule
@@ -4335,7 +4781,7 @@ async function handleRequest(request: Request): Promise<Response> {
         // Entitlement identifiers are known only for the verdict just
         // verified; a superseded verdict reports the stored row exactly as
         // GET /v1/me/access does.
-        activeEntitlements: persisted.superseded ? [] : verdict.activeEntitlements,
+        activeEntitlements: premium ? billing.activeEntitlements : [],
       });
       if (access instanceof Response) return access;
       return json(200, {

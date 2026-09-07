@@ -38,6 +38,125 @@ export function legalTextResponse(text: string, status = 200): Response {
   });
 }
 
+const FAILURE_NAMES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "URIError",
+  "AggregateError",
+  "AbortError",
+  "TimeoutError",
+  "DataError",
+  "OperationError",
+  "NetworkError",
+  "AuthError",
+  "AuthApiError",
+  "AuthRetryableFetchError",
+  "AuthUnknownError",
+  "ExternalAccountError",
+  "InvalidSessionResponse",
+  "SessionCheckError",
+  "ConfigurationError",
+  "EmptyResult",
+  "UnexpectedResult",
+]);
+const AUTH_FAILURE_CODES = new Set([
+  "unexpected_failure",
+  "request_timeout",
+  "over_request_rate_limit",
+  "over_email_send_rate_limit",
+  "over_sms_send_rate_limit",
+  "bad_jwt",
+  "session_not_found",
+  "session_expired",
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "user_not_found",
+  "user_banned",
+]);
+const EXTERNAL_FAILURE_KINDS = new Set([
+  "configuration",
+  "invalid_grant",
+  "invalid_response",
+  "unavailable",
+]);
+
+export function isSupabaseEndpointRequest(
+  target: string,
+  serviceUrl: string,
+  endpoint: "auth" | "rest",
+): boolean {
+  try {
+    if (endpoint !== "auth" && endpoint !== "rest") return false;
+    const base = new URL(serviceUrl);
+    const url = new URL(target);
+    const prefix = `${base.pathname.replace(/\/+$/, "")}/${endpoint}/v1/`;
+    return (
+      (base.protocol === "https:" || base.protocol === "http:") &&
+      !base.username &&
+      !base.password &&
+      !base.search &&
+      !base.hash &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      url.origin === base.origin &&
+      url.pathname.startsWith(prefix) &&
+      !/%(?:2f|5c|25)/i.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function failureDetail(
+  error?: unknown,
+  status?: unknown,
+): {
+  name: string;
+  code: string;
+  status: number | null;
+  kind?: string;
+  provider?: string;
+} {
+  const fallback = { name: "unknown", code: "unknown", status: null };
+  try {
+    const detail =
+      error !== null && typeof error === "object" && !Array.isArray(error)
+        ? (error as Record<string, unknown>)
+        : {};
+    const name = detail.name;
+    const code = detail.code;
+    const httpStatus = status ?? detail.status;
+    const result: ReturnType<typeof failureDetail> = {
+      name: typeof name === "string" && FAILURE_NAMES.has(name) ? name : "unknown",
+      code:
+        typeof code === "string" &&
+        (/^(?:[A-Z0-9]{5}|PGRST[0-9]{3})$/.test(code) || AUTH_FAILURE_CODES.has(code))
+          ? code
+          : "unknown",
+      status:
+        typeof httpStatus === "number" &&
+        Number.isInteger(httpStatus) &&
+        httpStatus >= 100 &&
+        httpStatus <= 599
+          ? httpStatus
+          : null,
+    };
+    if (result.name === "ExternalAccountError") {
+      const kind = detail.kind;
+      const provider = detail.provider;
+      if (typeof kind === "string" && EXTERNAL_FAILURE_KINDS.has(kind)) result.kind = kind;
+      if (provider === "apple" || provider === "revenuecat") result.provider = provider;
+    }
+    return result;
+  } catch {
+    return fallback;
+  }
+}
+
 // Stripping control characters is sanitizeUserText's purpose.
 const CONTROL_AND_SPOOFING_CHARS =
   // eslint-disable-next-line no-control-regex
@@ -100,18 +219,69 @@ export const REQUEST_ID_HEADER = "x-request-id";
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
 export function resolveRequestId(request: Request): string {
   const incoming = request.headers.get(REQUEST_ID_HEADER)?.trim() ?? "";
-  return REQUEST_ID_RE.test(incoming) ? incoming : crypto.randomUUID();
+  return REQUEST_ID_RE.test(incoming) &&
+    !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(incoming) &&
+    incoming !== request.headers.get("Authorization")?.replace(/^Bearer /i, "")
+    ? incoming
+    : crypto.randomUUID();
 }
 
 /** Route template for logs: UUIDs and long digit runs collapse to `:id` so
  * lines never carry a user, shot, or session identifier. */
 const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DIGITS_SEGMENT = /^\d{4,}$/;
+const ROUTE_WORDS = new Set([
+  "",
+  "functions",
+  "api",
+  "v1",
+  "healthz",
+  "privacy",
+  "terms",
+  "support",
+  "webhooks",
+  "revenuecat",
+  "account",
+  "bootstrap",
+  "auth",
+  "refresh",
+  "logout",
+  "me",
+  "onboarding",
+  "access",
+  "billing",
+  "sync",
+  "analysis-permits",
+  "finalize",
+  "shots",
+  "shots:sync",
+  "sessions",
+  "end",
+  "analyses",
+  "feedback",
+  "consent",
+  "status",
+  "grant",
+  "withdraw",
+  "evaluation",
+  "trials",
+  "progress",
+  "rank",
+  "catalog",
+  "drills",
+  "saved-drills",
+  "delete-request",
+  "delete-confirm",
+  "delete-status",
+]);
 export function routeTemplate(pathname: string): string {
   return pathname
     .split("/")
+    .slice(0, 32)
     .map((segment) =>
-      UUID_SEGMENT.test(segment) || DIGITS_SEGMENT.test(segment) ? ":id" : segment,
+      UUID_SEGMENT.test(segment) || DIGITS_SEGMENT.test(segment) || !ROUTE_WORDS.has(segment)
+        ? ":id"
+        : segment,
     )
     .join("/");
 }

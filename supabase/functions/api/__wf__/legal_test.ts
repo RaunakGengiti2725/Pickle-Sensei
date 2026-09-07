@@ -78,6 +78,96 @@ Deno.test(
   },
 );
 
+Deno.test("privacy discloses a required onboarding name without legal-name verification", () => {
+  const text = flat(PRIVACY_POLICY_TEXT);
+  for (const needle of [
+    "Onboarding requires a name for account personalization",
+    "You may enter your preferred name or a nickname",
+    "we do not require or verify your legal name for this field",
+    "We use it to address you in the app",
+    "skill level, dominant hand, training goals, and your biggest problem",
+    "The questionnaire is required",
+    'You may choose "Prefer not to say" for gender',
+    "Completed answers are stored on your device before sign-in",
+    "linked to your account and synced to our servers after you sign in",
+  ]) {
+    assertStringIncludes(text, needle);
+  }
+  assert(!/optional first name|name \(optional\)/i.test(text));
+});
+
+Deno.test("privacy distinguishes the provider display name, which may be absent", () => {
+  const accountInfo =
+    flat(PRIVACY_POLICY_TEXT)
+      .split("A. Account and sign-in information")[1]
+      ?.split("B. Coaching profile and preferences")[0] ?? "";
+  assertStringIncludes(accountInfo, "This may include your email address, display name");
+  assertStringIncludes(accountInfo, "Apple or Google may not supply a display name");
+  assertStringIncludes(
+    accountInfo,
+    "Any provider display name is separate from the name you enter during onboarding",
+  );
+  assert(!/must provide|required display name|verified legal name/i.test(accountInfo));
+});
+
+Deno.test(
+  "support and terms allow nicknames without conflating onboarding and provider names",
+  () => {
+    const support = flat(SUPPORT_TEXT);
+    for (const needle of [
+      "The name you enter in onboarding is required for account personalization",
+      "Use a preferred name or nickname; it does not need to be your legal name",
+      "Settings → Player shows this name",
+      "Manage account shows the display name from Apple or Google, if provided, which may be different",
+    ]) {
+      assertStringIncludes(support, needle);
+    }
+    const terms = flat(TERMS_TEXT);
+    assertStringIncludes(
+      terms,
+      "You may use a preferred name or nickname for the required onboarding name",
+    );
+    assertStringIncludes(terms, "You do not need to provide a legal name for that field");
+    assertStringIncludes(terms, "One person may not impersonate another");
+  },
+);
+
+Deno.test(
+  "submission name disclosures describe current collection as an unpublished draft",
+  async () => {
+    const text = flat(
+      await Deno.readTextFile(new URL("../../../../docs/APP_STORE_SUBMISSION.md", import.meta.url)),
+    );
+    for (const needle of [
+      "local draft; it has not been published to the legal pages or App Store Connect",
+      "Onboarding requires a name for account personalization",
+      "A preferred name or nickname is accepted, without legal-name verification",
+      "Older stored profiles may lack the onboarding name",
+      "name or nickname (required)",
+      "Provider display name, if available, and required onboarding name or nickname",
+    ]) {
+      assert(text.includes(needle), `Missing name disclosure: ${needle}`);
+    }
+    assert(!/optional first name|name \(optional\)/i.test(text));
+  },
+);
+
+Deno.test(
+  "the copy clarification retains legal dates, individual ownership, and age and international scope",
+  () => {
+    for (const text of [SUPPORT_TEXT, PRIVACY_POLICY_TEXT, TERMS_TEXT]) {
+      assertStringIncludes(text, "Last updated: September 3, 2026");
+    }
+    const privacy = flat(PRIVACY_POLICY_TEXT);
+    assertStringIncludes(privacy, `${LEGAL_OWNER}, an individual`);
+    assertStringIncludes(privacy, "business or data controller responsible for Pickle Sensei");
+    assertStringIncludes(privacy, "countries other than the one where you live");
+    assertStringIncludes(privacy, "honor mandatory local rights");
+    assertStringIncludes(privacy, "not directed to children under 13");
+    assertStringIncludes(flat(TERMS_TEXT), "You must be at least 13 years old");
+  },
+);
+
 Deno.test(
   "privacy policy accurately separates device-only media from synced structured data",
   () => {

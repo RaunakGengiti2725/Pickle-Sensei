@@ -2,6 +2,11 @@ import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalDb } from '../src/data/db';
+import { createPendingFulfilmentStorage } from '../src/billing/pendingFulfilment';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../testSupport/sqlite';
 import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
@@ -145,19 +150,26 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 40,
       poseFrameCount: 40,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 2700,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
       fullBodyVisibleFrameCount: 40,
-      jointMotion: [],
+      jointMotion: [
+        {
+          joint: 'right_wrist',
+          sampleCount: 10,
+          meanNormalizedPerSecond: 0.6,
+          peakNormalizedPerSecond: 1.4,
+        },
+      ],
     },
     ballSpeed: {
       status: 'unavailable',
       reason: 'calibrated_ball_tracker_unavailable',
     },
     preRollMs: 2000,
-    postRollMs: 1500,
+    postRollMs: 0,
   };
 }
 
@@ -243,13 +255,19 @@ beforeEach(() => {
   // The snapshot the gate admitted this visit on: two ratings untouched.
   // The server, by the time the screen is left, says otherwise.
   clients = backendReturning(async () => freeAccess(1, 1));
-  configureAccessStore(clients);
+  const { db } = createSqliteTestDb();
+  configureAccessStore(clients, {
+    owner,
+    pendingFulfilmentStorage: createPendingFulfilmentStorage(() => db),
+  });
   useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
 });
 
 afterEach(() => {
+  clearAccessStoreConfiguration();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  closeSqliteTestDatabases();
 });
 
 describe('AnalyzeScreen access re-read', () => {
@@ -309,6 +327,44 @@ describe('AnalyzeScreen access re-read', () => {
     expect(clients.backend.getAccess).not.toHaveBeenCalled();
     expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(0));
   });
+
+  it.each(['origin', 'origin_ABA'])(
+    'does not let a retired analysis refresh another service after %s',
+    async change => {
+      mockOutcome = async () => scoredOutcome(false);
+      const renderer = await renderScreen();
+      try {
+        await runOneAnalysis(renderer);
+        await waitFor(
+          () => mockNavigation.replace.mock.calls.length > 0,
+          'Result navigation',
+        );
+        await act(async () => {
+          establishApiSession({
+            apiBaseUrl: 'https://different-api.test',
+            bearerToken: 'other-test-token',
+            canonicalAppUserId: owner,
+            provider: 'apple',
+          });
+          if (change === 'origin_ABA')
+            establishApiSession({
+              apiBaseUrl: 'https://api.test',
+              bearerToken: 'returned-test-token',
+              canonicalAppUserId: owner,
+              provider: 'apple',
+            });
+        });
+        await act(async () => renderer.unmount());
+        await flush();
+        expect(clients.backend.getAccess).not.toHaveBeenCalled();
+        expect(useAccessStore.getState().canonicalAccess).toEqual(
+          freeAccess(0),
+        );
+      } finally {
+        await act(async () => renderer.unmount());
+      }
+    },
+  );
 
   it('stays quiet on a store that was reset (signed out) before unmount', async () => {
     mockOutcome = async () => scoredOutcome(false);

@@ -64,6 +64,10 @@ import { BrandToggle } from '../../src/design/components';
 import { useConsentStore } from '../../src/state/consentStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+import {
   clearApiSession,
   establishApiSession,
   type ApiSession,
@@ -189,6 +193,7 @@ function buttonLabeled(
 }
 
 function resetStores() {
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   useConsentStore.setState({
     availability: 'loading',
     modelTrainingActive: false,
@@ -215,6 +220,7 @@ describe('ConsentSettingsScreen button ledger', () => {
   });
 
   it('exposes exactly the two interactive elements in the ledger when ready', async () => {
+    setActiveDataOwner(apiSession.canonicalAppUserId);
     establishApiSession(apiSession);
     useAuthStore.setState({ session: authSession });
     mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -279,6 +285,7 @@ describe('ConsentSettingsScreen button ledger', () => {
 
   describe('Switch "Use my feedback to improve scoring"', () => {
     it('is a labelled switch, hydrates from the server on mount and defaults OFF', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -293,6 +300,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('grants model-training consent through the API and reflects the server answer', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -317,6 +325,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('withdraws consent through the API when switched off', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(true));
@@ -336,6 +345,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('disables itself while a request is pending and ignores a second flip', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -363,6 +373,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('shows the server error, keeps the ledger state and re-enables on a ConsentApiError', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -392,6 +403,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('shows the generic failure copy on an unexpected rejection', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(true));
@@ -448,6 +460,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('hides Connect account and Try again once the ledger is ready', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue(status(false));
@@ -459,6 +472,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('is disabled with visible copy when the status fetch fails', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockRejectedValue(
@@ -477,6 +491,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('re-fetches the ledger from the Try again button and re-enables the switch on success', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockRejectedValueOnce(
@@ -510,6 +525,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('keeps Try again available and the error visible when the retry fails again', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockRejectedValue(
@@ -531,6 +547,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('stays disabled with loading copy while the status is loading, then clears it', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       const pending = deferred<ConsentStatus>();
@@ -551,6 +568,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('shows the loading copy again while Try again is in flight', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockRejectedValueOnce(
@@ -578,6 +596,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
 
     it('does not throw when the server omits the model_training scope', async () => {
+      setActiveDataOwner(apiSession.canonicalAppUserId);
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       mockFetchConsentStatus.mockResolvedValue({

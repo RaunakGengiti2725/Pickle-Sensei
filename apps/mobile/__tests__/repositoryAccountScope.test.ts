@@ -7,6 +7,7 @@ import {
 } from '../src/data/accountScope';
 import {
   getAnalysis,
+  getKv,
   hasShotSyncReceipt,
   listRealAnalysisFacts,
   OWNER_SCOPED_KV_NAMESPACES,
@@ -48,6 +49,20 @@ const analysis: ShotAnalysis = {
 
 describe('account-scoped local repository', () => {
   afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+
+  it('lets strict readers distinguish an existing blank KV value from absence', async () => {
+    const db: LocalDb = {
+      async execute(_sql, params = []) {
+        return { rows: params[0] === 'blank' ? [{ value: '' }] : [] };
+      },
+      close() {},
+    };
+    await expect(getKv(db, 'blank')).resolves.toBeNull();
+    await expect(getKv(db, 'blank', { preserveEmpty: true })).resolves.toBe('');
+    await expect(
+      getKv(db, 'absent', { preserveEmpty: true }),
+    ).resolves.toBeNull();
+  });
 
   it('atomically binds a real score and outbox entry to one owner', async () => {
     setActiveDataOwner(ownerA);
@@ -127,6 +142,7 @@ describe('account-scoped local repository', () => {
       'notifications',
       'consistency',
       'practice.set',
+      'billing.pending-fulfilment',
     ]);
     expect(practiceSetKeyForOwner(ownerA)).toBe(`practice.set:${ownerA}`);
   });

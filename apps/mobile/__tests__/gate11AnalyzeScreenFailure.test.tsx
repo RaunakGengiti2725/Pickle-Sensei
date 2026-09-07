@@ -16,7 +16,10 @@ jest.mock('../src/data/repository', () => ({
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
-jest.mock('../src/account/apiSession', () => ({ getApiSession: () => null }));
+jest.mock('../src/account/apiSession', () => ({
+  ...jest.requireActual('../src/account/apiSession'),
+  getApiSession: () => null,
+}));
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
   return {
@@ -82,6 +85,10 @@ import {
   cancelCameraOperation,
 } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
 const importedClip = assertCapturedClip({
   uri: 'file:///private/var/mobile/import.mov',
@@ -115,11 +122,13 @@ async function renderLibraryScreen(): Promise<ReactTestRenderer> {
 
 describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.useFakeTimers();
     jest.clearAllMocks();
   });
 
   afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     jest.useRealTimers();
   });
 
@@ -175,7 +184,7 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
     const rendered = textContents(renderer);
     expect(rendered).toContain('Nothing was rated.');
     expect(rendered).toContain('took too long to respond');
-    expect(rendered).toContain('Try again');
+    expect(rendered).toContain('Import another video');
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();

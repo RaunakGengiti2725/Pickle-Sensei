@@ -33,11 +33,18 @@ import type { MascotPose, MascotTone } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
 import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
+import {
+  captureAccountDeletionContext,
+  useAuthStore,
+  type AuthProvider,
+} from '../auth/authStore';
+import { isDataOwnerContextCurrent } from '../data/accountScope';
 import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
+  ACCOUNT_DELETION_UNKNOWN_MESSAGE,
   AccountDeletionError,
+  type AccountDeletionContext,
   type AccountDeletionResult,
   type AccountDeletionReason,
   type AccountDeletionSurvey,
@@ -141,10 +148,44 @@ type DeleteAccountStep =
   | { phase: 'kept' }
   | { phase: 'review' }
   | { phase: 'requesting' }
-  | { phase: 'armed'; challenge: string; secondsLeft: number }
-  | { phase: 'deleting'; challenge: string };
+  | {
+      phase: 'armed';
+      challenge: string;
+      secondsLeft: number;
+      context: AccountDeletionContext;
+    }
+  | { phase: 'deleting'; challenge: string; context: AccountDeletionContext };
 
 type PageDirection = 'forward' | 'back' | 'none';
+
+function apiSessionForDeletion(context: AccountDeletionContext | null) {
+  if (!context || !isDataOwnerContextCurrent(context)) {
+    throw new AccountDeletionError(
+      'deletion.rejected',
+      'The signed-in account changed. Close this dialog and start again for the account you want to delete.',
+      false,
+    );
+  }
+  const session = getApiSession();
+  if (!session) {
+    throw new AccountDeletionError(
+      'deletion.unavailable',
+      'Your account is still reconnecting. Check your connection and try again before deleting it.',
+      true,
+    );
+  }
+  if (
+    session.canonicalAppUserId.toLowerCase() !== context.ownerKey ||
+    session.provider !== context.provider
+  ) {
+    throw new AccountDeletionError(
+      'deletion.rejected',
+      'The signed-in account changed. Close this dialog and start again for the account you want to delete.',
+      false,
+    );
+  }
+  return session;
+}
 
 /** One page of the dialog: slides in from the side it came from (forward =
  * from the right, back = from the left) with a fade, 220ms ease-out, so a
@@ -296,8 +337,12 @@ function ChoiceRow(props: {
  */
 function DeleteAccountDialog(props: {
   visible: boolean;
+  context: AccountDeletionContext | null;
   onCancel: () => void;
-  onDeleted: (result: AccountDeletionResult) => void;
+  onDeleted: (
+    result: AccountDeletionResult,
+    context: AccountDeletionContext,
+  ) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -307,6 +352,7 @@ function DeleteAccountDialog(props: {
   const [details, setDetails] = useState('');
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completionUnknown, setCompletionUnknown] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Bumped every time the dialog closes: an async step that started in an
   // earlier presentation must not mutate the state of a later (or closed)
@@ -333,6 +379,7 @@ function DeleteAccountDialog(props: {
       setDetails('');
       setSurvey(null);
       setError(null);
+      setCompletionUnknown(false);
       directionRef.current = 'none';
       entrance.setValue(0);
     } else if (reduced) {
@@ -402,16 +449,17 @@ function DeleteAccountDialog(props: {
 
   const beginRequest = async () => {
     const presentation = presentationRef.current;
+    const context = props.context;
     setError(null);
     setStep({ phase: 'requesting' });
     try {
-      const { challenge } = await requestAccountDeletion(
-        getApiSession(),
-        survey,
-      );
+      const apiSession = apiSessionForDeletion(context);
+      if (!context) return;
+      const { challenge } = await requestAccountDeletion(apiSession, survey);
       if (presentation !== presentationRef.current) return;
+      apiSessionForDeletion(context);
       const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
-      setStep({ phase: 'armed', challenge, secondsLeft });
+      setStep({ phase: 'armed', challenge, secondsLeft, context });
       timerRef.current = setInterval(() => {
         setStep(current => {
           if (current.phase !== 'armed') return current;
@@ -433,26 +481,38 @@ function DeleteAccountDialog(props: {
     }
   };
 
-  const confirmDeletion = async (challenge: string) => {
+  const confirmDeletion = async (
+    challenge: string,
+    context: AccountDeletionContext,
+  ) => {
     const presentation = presentationRef.current;
     setError(null);
-    setStep({ phase: 'deleting', challenge });
+    setStep({ phase: 'deleting', challenge, context });
     try {
-      const result = await confirmAccountDeletion(getApiSession(), challenge);
-      props.onDeleted(result);
+      const result = await confirmAccountDeletion(
+        apiSessionForDeletion(context),
+        challenge,
+      );
+      props.onDeleted(result, context);
     } catch (e) {
       if (presentation !== presentationRef.current) return;
       const canRetrySameChallenge =
         e instanceof AccountDeletionError ? e.retryable : true;
+      if (
+        !(e instanceof AccountDeletionError) ||
+        e.code === 'deletion.unknown'
+      ) {
+        setCompletionUnknown(true);
+      }
       setStep(
         canRetrySameChallenge
-          ? { phase: 'armed', challenge, secondsLeft: 0 }
+          ? { phase: 'armed', challenge, secondsLeft: 0, context }
           : { phase: 'review' },
       );
       setError(
         e instanceof AccountDeletionError
           ? e.message
-          : 'The deletion could not be completed. Nothing was deleted.',
+          : ACCOUNT_DELETION_UNKNOWN_MESSAGE,
       );
     }
   };
@@ -617,7 +677,11 @@ function DeleteAccountDialog(props: {
       <DialogHeader
         question={null}
         onClose={props.onCancel}
-        closeLabel="Close account deletion confirmation"
+        closeLabel={
+          completionUnknown
+            ? 'Close deletion status'
+            : 'Close account deletion confirmation'
+        }
         disabled={busy}
       />
     );
@@ -639,7 +703,9 @@ function DeleteAccountDialog(props: {
               { color: color.ink, textAlign: 'center', marginTop: space.lg },
             ]}
           >
-            Delete your account?
+            {completionUnknown
+              ? 'Deletion status unknown'
+              : 'Delete your account?'}
           </Text>
           <Text
             style={[
@@ -695,7 +761,7 @@ function DeleteAccountDialog(props: {
         </ScrollView>
         <View style={[styles.footer, { gap: 10 }]}>
           <Button
-            label="Keep my account"
+            label={completionUnknown ? 'Close' : 'Keep my account'}
             variant="dark"
             disabled={busy}
             onPress={props.onCancel}
@@ -718,7 +784,9 @@ function DeleteAccountDialog(props: {
                   ? 'Deleting…'
                   : step.phase === 'armed' && step.secondsLeft > 0
                     ? `Permanently delete (${step.secondsLeft})`
-                    : 'Permanently delete'
+                    : completionUnknown
+                      ? 'Retry deletion'
+                      : 'Permanently delete'
               }
               variant="danger"
               disabled={
@@ -727,7 +795,7 @@ function DeleteAccountDialog(props: {
               }
               onPress={() => {
                 if (step.phase === 'armed') {
-                  void confirmDeletion(step.challenge);
+                  void confirmDeletion(step.challenge, step.context);
                 }
               }}
             />
@@ -823,6 +891,8 @@ export function ManageAccountScreen() {
   const session = useAuthStore(s => s.session);
   const completeAccountDeletion = useAuthStore(s => s.completeAccountDeletion);
   const [confirmingDeletion, setConfirmingDeletion] = useState(false);
+  const [deletionContext, setDeletionContext] =
+    useState<AccountDeletionContext | null>(null);
 
   const providerLabel = session ? PROVIDER_LABELS[session.provider] : '—';
 
@@ -864,7 +934,19 @@ export function ManageAccountScreen() {
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Delete account"
-            onPress={() => setConfirmingDeletion(true)}
+            onPress={() => {
+              try {
+                setDeletionContext(captureAccountDeletionContext(session));
+                setConfirmingDeletion(true);
+              } catch {
+                showBrandNotice({
+                  title: 'Account changed',
+                  detail:
+                    'Open Manage account again for the account you want to delete.',
+                  tone: 'neutral',
+                });
+              }
+            }}
             style={styles.deleteLink}
           >
             <Text style={[type.caption, { color: color.bad }]}>
@@ -876,19 +958,20 @@ export function ManageAccountScreen() {
 
       <DeleteAccountDialog
         visible={confirmingDeletion}
+        context={deletionContext}
         onCancel={() => setConfirmingDeletion(false)}
-        onDeleted={result => {
+        onDeleted={(result, context) => {
           setConfirmingDeletion(false);
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
+          void completeAccountDeletion(context).then(outcome => {
+            const cleanup = outcome ?? useAuthStore.getState().deletionCleanup;
             if (cleanup?.localPurge === 'failed') {
               showBrandNotice({
                 title: 'Account deleted',
                 detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+                  'The account you requested to delete and its synced data were deleted. Some of its data on this phone could not be removed. Contact support for help; clearing app storage would also remove other accounts’ local data.',
                 tone: 'danger',
                 eyebrow: 'LOCAL CLEANUP NEEDED',
               });
@@ -901,6 +984,14 @@ export function ManageAccountScreen() {
                   'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
                 tone: 'neutral',
                 eyebrow: 'ONE APPLE STEP',
+              });
+            } else {
+              showBrandNotice({
+                title: 'Account deleted',
+                detail:
+                  'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.',
+                tone: 'success',
+                eyebrow: 'DELETION CONFIRMED',
               });
             }
           });

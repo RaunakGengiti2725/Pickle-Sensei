@@ -7,6 +7,15 @@ import {
 } from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  closeSqliteTestDatabases,
+  createSqliteTestDb,
+  seedSqliteCapture,
+} from '../testSupport/sqlite';
 import { importedPoseExtractionFailureMessage } from '../src/screens/AnalyzeScreen';
 
 /**
@@ -39,21 +48,8 @@ let mockReadArtifact: (uri: string) => Promise<string> = async () => {
 
 const owner = '33333333-3333-4333-8333-333333333333';
 
-interface RecordedCall {
-  sql: string;
-  params: unknown[];
-}
-
-function recordingDb(): { db: LocalDb; calls: RecordedCall[] } {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb() {
+  return createSqliteTestDb();
 }
 
 function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
@@ -62,7 +58,7 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
     if (url.endsWith('/v1/analysis-permits')) {
       return jsonResponse({
         permit: {
-          id: 'permit-imported-1',
+          id: '66666666-6666-4666-8666-666666666666',
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-08-30T20:00:00.000Z',
@@ -98,9 +94,9 @@ function importedClipWithSidecar(): {
   const clip: CapturedClip = {
     uri: 'file:///imports/rally-clip.mov',
     durationMs: window.endMs,
-    fps: 30,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-08-30T10:00:00.000Z',
     captureMode: 'imported_video',
     recognition: { status: 'unknown', reason: 'analysis_not_run' },
@@ -113,16 +109,18 @@ function importedClipWithSidecar(): {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
 }
 
 function request(db: LocalDb, clip: CapturedClip) {
+  const captureId = '77777777-7777-4777-8777-777777777777';
+  seedSqliteCapture(db, owner, captureId, clip);
   return {
     db,
-    captureId: 'capture-imported-1',
+    captureId,
     clip,
     declaredStroke: 'forehand_drive' as const,
     handedness: 'right' as const,
@@ -137,8 +135,18 @@ function request(db: LocalDb, clip: CapturedClip) {
 }
 
 describe('runCaptureAnalysis imported-video gate', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+  beforeEach(() => {
+    setActiveDataOwner(owner);
+    establishApiSession({
+      canonicalAppUserId: owner,
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token-1',
+      provider: 'apple',
+    });
+  });
   afterEach(() => {
+    closeSqliteTestDatabases();
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });

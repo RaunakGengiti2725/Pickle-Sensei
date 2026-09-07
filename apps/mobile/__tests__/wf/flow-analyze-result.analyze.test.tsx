@@ -7,7 +7,7 @@
  *     Paywall{source:'rating'}) / "See my score" (Result), no OS review ask
  *   - quality-blocked capture → honest error surface with guidance + retry
  *   - classifier abstention (result-null record) → analyzed surface with
- *     "Capture another" / "Close" and NO Result button
+ *     "Record another clip" / "Close" and NO Result button
  *   - import failure → error surface; "Close" leaves, "Try again" recovers
  *   - working-surface Close cancels the native operation before leaving
  *   - accessibility contract of every state (alert / live region / modal)
@@ -25,6 +25,7 @@ jest.mock('../../src/review/appStoreReview', () => ({
   reportScoredAnalysisForReview: jest.fn(async () => {}),
 }));
 jest.mock('../../src/account/apiSession', () => ({
+  ...jest.requireActual('../../src/account/apiSession'),
   getApiSession: () => null,
 }));
 jest.mock('../../src/camera/capture', () => {
@@ -94,9 +95,13 @@ import {
   type CapturedClip,
 } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { reportScoredAnalysisForReview } from '../../src/review/appStoreReview';
 
-const guidedClip: CapturedClip = {
+const guidedClip: CapturedClip = assertCapturedClip({
   uri: 'file:///captures/guided.mov',
   durationMs: 2700,
   fps: 60,
@@ -127,7 +132,7 @@ const guidedClip: CapturedClip = {
     analysisInputFrameCount: 42,
     poseFrameCount: 42,
     poseMissingFrameCount: 0,
-    trackedDurationMs: 2700,
+    trackedDurationMs: 700,
     meanCanonicalJointVisibility: 0.9,
     meanJointCoverage: 0.9,
     minimumJointCoverage: 0.8,
@@ -156,7 +161,7 @@ const guidedClip: CapturedClip = {
     coordinateSystem: 'normalized_image_top_left',
     poseModelVersion: 'apple-vision-bodypose-1',
   },
-};
+});
 
 const importedClip = assertCapturedClip({
   uri: 'file:///private/var/mobile/import.mov',
@@ -251,7 +256,12 @@ async function runGuidedAttempt(renderer: ReactTestRenderer) {
 }
 
 beforeEach(() => {
+  setActiveDataOwner('11111111-1111-4111-8111-111111111111');
   jest.clearAllMocks();
+});
+
+afterEach(() => {
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
 describe('camera landing', () => {
@@ -379,7 +389,7 @@ describe('quality-blocked capture', () => {
     (captureStrokeVideo as jest.Mock).mockImplementation(
       () => new Promise(() => {}),
     );
-    await press(renderer, 'Try again');
+    await press(renderer, 'Record another clip');
     expect(captureStrokeVideo).toHaveBeenCalledTimes(2);
     expect(textOf(renderer)).toContain('Opening camera');
     await act(async () => renderer.unmount());
@@ -388,7 +398,7 @@ describe('quality-blocked capture', () => {
 });
 
 describe('unknown / abstained stroke (result-null record)', () => {
-  it('surfaces RATING NOT CONSUMED with no Result button, and "Capture another" / "Close" are live', async () => {
+  it('surfaces RATING NOT CONSUMED with no Result button, and "Record another clip" / "Close" are live', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'low_confidence',
       analysisId: 'analysis-abstained',
@@ -414,7 +424,7 @@ describe('unknown / abstained stroke (result-null record)', () => {
     expect(rendered).toContain('RATING NOT CONSUMED');
     expect(rendered).toContain('result withheld');
     expect(findButton(renderer, 'See the full read')).toBeNull();
-    expect(findButton(renderer, 'Capture another')).not.toBeNull();
+    expect(findButton(renderer, 'Record another clip')).not.toBeNull();
     expect(
       hosts(renderer, n => n.props.accessibilityLiveRegion === 'polite').length,
     ).toBeGreaterThan(0);

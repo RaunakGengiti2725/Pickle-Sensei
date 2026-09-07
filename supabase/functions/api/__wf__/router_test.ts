@@ -54,6 +54,9 @@ Deno.test({
   sanitizeResources: false,
   async fn() {
     await bootEdgeFunction();
+    const target = new URL(API_BASE);
+    assertEquals(target.hostname, "127.0.0.1");
+    assert(Number(target.port) > 0);
     const health = await fetch(`${API_BASE}/functions/v1/api/healthz`);
     assertEquals(health.status, 200);
     assertEquals(await health.json(), { ok: true });
@@ -137,9 +140,10 @@ Deno.test({
     // fetch() forbids a hand-set Content-Length, so speak HTTP/1.1 directly:
     // declare 6 MB and send nothing — the router must answer from the header
     // alone (index.ts:2142-2145) without waiting for the body.
-    const conn = await Deno.connect({ hostname: "127.0.0.1", port: 8000 });
+    const target = new URL(API_BASE);
+    const conn = await Deno.connect({ hostname: target.hostname, port: Number(target.port) });
     const head =
-      "POST /v1/sessions HTTP/1.1\r\nHost: 127.0.0.1:8000\r\nContent-Type: application/json\r\n" +
+      `POST /v1/sessions HTTP/1.1\r\nHost: ${target.host}\r\nContent-Type: application/json\r\n` +
       "Content-Length: 6000000\r\n\r\n";
     await conn.write(new TextEncoder().encode(head));
     const buf = new Uint8Array(4096);

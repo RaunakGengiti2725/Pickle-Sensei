@@ -38,6 +38,15 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 import type { LocalDb } from '../src/data/db';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  closeSqliteTestDatabases,
+  createSqliteTestDb,
+  seedSqliteCapture,
+} from '../testSupport/sqlite';
 
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
@@ -88,12 +97,7 @@ function loadRealSequence(): { sequence: PoseSequence; sidecarJson: string } {
 }
 
 function recordingDb(): LocalDb {
-  return {
-    async execute() {
-      return { rows: [] };
-    },
-    close() {},
-  } as unknown as LocalDb;
+  return createSqliteTestDb().db;
 }
 
 const describeReal = artifactsPresent ? describe : describe.skip;
@@ -101,10 +105,20 @@ const describeReal = artifactsPresent ? describe : describe.skip;
 describeReal(
   'imported-video analysis over REAL pickleball footage (wm-volley-02 canonical run; SKIPPED when the gitignored Mac run artifacts are absent)',
   () => {
-    beforeEach(() =>
-      setActiveDataOwner('33333333-3333-4333-8333-333333333333'),
-    );
-    afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+    beforeEach(() => {
+      setActiveDataOwner('33333333-3333-4333-8333-333333333333');
+      establishApiSession({
+        canonicalAppUserId: '33333333-3333-4333-8333-333333333333',
+        apiBaseUrl: 'https://example.test',
+        bearerToken: 'test-bearer',
+        provider: 'apple',
+      });
+    });
+    afterEach(() => {
+      closeSqliteTestDatabases();
+      clearApiSession();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    });
 
     it('produces a durable, honest analysis outcome from real Apple Vision poses', async () => {
       const { sequence, sidecarJson } = loadRealSequence();
@@ -140,7 +154,7 @@ describeReal(
             statusText: 'OK',
             json: async () => ({
               permit: {
-                id: 'permit-real-footage-1',
+                id: '66666666-6666-4666-8666-666666666666',
                 accessSource: 'free',
                 status: 'reserved',
                 expiresAt: '2026-08-30T20:00:00.000Z',
@@ -166,9 +180,17 @@ describeReal(
       (globalThis as { fetch?: unknown }).fetch = fetchMock;
       let outcome;
       try {
+        const db = recordingDb();
+        const captureId = '77777777-7777-4777-8777-777777777777';
+        seedSqliteCapture(
+          db,
+          '33333333-3333-4333-8333-333333333333',
+          captureId,
+          clip,
+        );
         outcome = await runCaptureAnalysis({
-          db: recordingDb(),
-          captureId: 'real-footage-capture-1',
+          db,
+          captureId,
           clip,
           declaredStroke: 'forehand_drive',
           handedness: 'right',

@@ -70,13 +70,26 @@ async function request<T>(
   body?: unknown,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   // Read the bearer once: it is resolved per request and may rotate while
   // this call is in flight, and a 401 must name the token that was SENT.
   const token = config.token;
-  let response: Response;
-  try {
-    response = await fetch(`${config.baseUrl}${path}`, {
+  const timeoutError = () =>
+    new ApiError(
+      408,
+      'network.timeout',
+      'The server took too long to respond. Your work is saved on this device — try again when the connection recovers.',
+    );
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(timeoutError());
+      controller.abort();
+    }, API_REQUEST_TIMEOUT_MS);
+  });
+  const fetchAndRead = async (): Promise<T> => {
+    const response = await fetch(`${config.baseUrl}${path}`, {
       method,
       headers: {
         'content-type': 'application/json',
@@ -86,31 +99,30 @@ async function request<T>(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
     });
-  } catch (error) {
-    if (controller.signal.aborted) {
+    if (timedOut) throw timeoutError();
+    const json = (await response.json().catch(() => null)) as
+      (T & { error?: { code: string; message: string } }) | null;
+    if (timedOut) throw timeoutError();
+    if (!response.ok) {
+      if (response.status === 401 && token) {
+        reportApiUnauthorized(token);
+      }
       throw new ApiError(
-        408,
-        'network.timeout',
-        'The server took too long to respond. Your work is saved on this device — try again when the connection recovers.',
+        response.status,
+        json?.error?.code ?? 'unknown',
+        json?.error?.message ?? response.statusText,
       );
     }
+    return json as T;
+  };
+  try {
+    return await Promise.race([fetchAndRead(), deadline]);
+  } catch (error) {
+    if (timedOut) throw timeoutError();
     throw error;
   } finally {
     clearTimeout(timer);
   }
-  const json = (await response.json().catch(() => null)) as
-    (T & { error?: { code: string; message: string } }) | null;
-  if (!response.ok) {
-    if (response.status === 401 && token) {
-      reportApiUnauthorized(token);
-    }
-    throw new ApiError(
-      response.status,
-      json?.error?.code ?? 'unknown',
-      json?.error?.message ?? response.statusText,
-    );
-  }
-  return json as T;
 }
 
 export function createTransport(config: ApiConfigState): SyncTransport {

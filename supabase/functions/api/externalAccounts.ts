@@ -33,6 +33,7 @@ export class ExternalAccountError extends Error {
     readonly kind: "configuration" | "invalid_grant" | "invalid_response" | "unavailable",
     readonly provider: "apple" | "revenuecat",
     message: string,
+    readonly status?: number,
   ) {
     super(message);
     this.name = "ExternalAccountError";
@@ -243,9 +244,10 @@ export async function exchangeAppleAuthorizationCode(
   if (!response.ok) {
     const code = await appleErrorCode(response);
     throw new ExternalAccountError(
-      code === "invalid_grant" ? "invalid_grant" : "unavailable",
+      response.status === 400 && code === "invalid_grant" ? "invalid_grant" : "unavailable",
       "apple",
-      `Apple authorization-code exchange failed (${response.status}${code ? ` ${code}` : ""}).`,
+      `Apple authorization-code exchange failed (${response.status}).`,
+      response.status,
     );
   }
   let body: unknown;
@@ -271,6 +273,7 @@ export async function exchangeAppleAuthorizationCode(
       "invalid_response",
       "apple",
       "Apple returned an incomplete token grant.",
+      response.status,
     );
   }
   return { refreshToken, subject };
@@ -297,9 +300,10 @@ export async function revokeAppleRefreshToken(
     // request, so the same token revokes fine once the operator repairs it;
     // code-less 4xx, 429 and 5xx are transport/provider trouble.
     throw new ExternalAccountError(
-      code === "invalid_grant" ? "invalid_grant" : "unavailable",
+      response.status === 400 && code === "invalid_grant" ? "invalid_grant" : "unavailable",
       "apple",
-      `Apple token revocation failed (${response.status}${code ? ` ${code}` : ""}).`,
+      `Apple token revocation failed (${response.status}).`,
+      response.status,
     );
   }
 }
@@ -405,6 +409,7 @@ export async function deleteRevenueCatCustomer(
       "unavailable",
       "revenuecat",
       `RevenueCat customer deletion failed (${response.status}).`,
+      response.status,
     );
   }
 }

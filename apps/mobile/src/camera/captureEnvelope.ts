@@ -8,7 +8,11 @@ import {
   evaluateCaptureEnvelope,
   type CaptureEnvelopeMeasurements,
 } from '@pickle/capture-envelope';
-import type { CapturedClip, CaptureQualitySignalsV1 } from './capture';
+import {
+  assertCapturedClip,
+  type CapturedClip,
+  type CaptureQualitySignalsV1,
+} from './capture';
 
 /**
  * Capture envelope — the canonical EnvelopeVerdict from @pickle/shared-types
@@ -94,11 +98,20 @@ export function liveCaptureEnvelope(
  * over from the live window (null when never emitted/observed).
  */
 export function attemptCaptureEnvelope(
-  clip: Pick<CapturedClip, 'width' | 'height' | 'fps' | 'durationMs'>,
+  clip:
+    | CapturedClip
+    | Pick<CapturedClip, 'width' | 'height' | 'fps' | 'durationMs'>,
   quality: CaptureQualitySignalsV1 | null,
   readiness: ReadinessSnapshot | null,
 ): EnvelopeVerdict {
-  const proxies = qualityMeasurements(quality);
+  const capture = 'captureMode' in clip ? assertCapturedClip(clip) : null;
+  const proxies = qualityMeasurements(capture ? null : quality);
+  const playerMeanJointVisibility =
+    capture?.captureMode === 'automatic_pose_trigger'
+      ? capture.captureEvidence.meanCanonicalJointVisibility
+      : capture
+        ? null
+        : readinessVisibility(readiness);
   return evaluateCaptureEnvelope({
     ...proxies,
     frameWidthPx: clip.width,
@@ -111,7 +124,7 @@ export function attemptCaptureEnvelope(
     contrastNormalizedFrameDiff: null,
     clipDurationMs: clip.durationMs,
     playerPixelHeightFraction: null,
-    playerMeanJointVisibility: readinessVisibility(readiness),
+    playerMeanJointVisibility,
   });
 }
 

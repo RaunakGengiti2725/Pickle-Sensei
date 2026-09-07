@@ -23,6 +23,7 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 import { clearSyncRuntime } from '../src/data/syncRuntime';
+import { stopBillingLifecycle } from '../src/billing/lifecycle';
 
 // ─── Module seams ────────────────────────────────────────────────────────────
 
@@ -143,6 +144,7 @@ function installFetch(fetchMock: jest.Mock): void {
 beforeEach(() => {
   jest.clearAllMocks();
   mockKv.clear();
+  stopBillingLifecycle();
   clearSyncRuntime();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
@@ -167,6 +169,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  stopBillingLifecycle();
   clearSyncRuntime();
   clearApiSession();
   globalThis.fetch = realFetch;

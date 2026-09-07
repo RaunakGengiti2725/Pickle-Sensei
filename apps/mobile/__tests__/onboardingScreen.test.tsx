@@ -108,8 +108,11 @@ function press(renderer: TestRenderer.ReactTestRenderer, label: string) {
 }
 
 /** Answers every step so the reveal's primary button becomes reachable. */
-function walkToReveal(renderer: TestRenderer.ReactTestRenderer) {
-  act(() => renderer.root.findByType(TextInput).props.onChangeText(' Dana '));
+function walkToReveal(
+  renderer: TestRenderer.ReactTestRenderer,
+  name = ' Dana ',
+) {
+  act(() => renderer.root.findByType(TextInput).props.onChangeText(name));
   press(renderer, 'Continue');
   press(renderer, 'Female');
   press(renderer, 'Continue');
@@ -243,14 +246,15 @@ describe('OnboardingScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('starts on the name step with Continue locked until a real name is typed', () => {
+  it('explains that the required name can be a preferred name or nickname, not a legal name', () => {
     const renderer = renderScreen();
     // Every step opens with the same kicker → title → sub block.
     expect(allText(renderer)).toContain('PLAYER SETUP');
     expect(allText(renderer)).toContain('What should we call you?');
     expect(allText(renderer)).toContain(
-      'Your coach personalizes every session.',
+      'Enter a preferred name or nickname to continue. No legal name needed.',
     );
+    expect(allText(renderer)).not.toMatch(/optional|skip/i);
 
     const continueButton = findPressable(renderer, 'Continue');
     expect(continueButton.props.disabled).toBe(true);
@@ -264,10 +268,15 @@ describe('OnboardingScreen', () => {
     });
 
     const input = renderer.root.findByType(TextInput);
-    expect(input.props.placeholder).toBe('First name');
+    expect(input.props.placeholder).toBe('Name or nickname');
+    expect(input.props.accessibilityLabel).toBe('Name or nickname (required)');
     expect(input.props.maxLength).toBe(40);
     expect(input.props.autoCapitalize).toBe('words');
+    expect(input.props.autoComplete).toBe('given-name');
     expect(input.props.textContentType).toBe('givenName');
+    expect(input.props.autoFocus).toBe(true);
+    expect(input.props.autoCorrect).toBe(false);
+    expect(input.props.returnKeyType).toBe('next');
 
     // Whitespace alone must not unlock the step.
     act(() => input.props.onChangeText('   '));
@@ -277,6 +286,76 @@ describe('OnboardingScreen', () => {
     expect(findPressable(renderer, 'Continue').props.disabled).toBe(false);
     act(() => renderer.unmount());
   });
+
+  it.each(['account', 'preauth'] as const)(
+    '%s mode blocks blank names and preserves the one-character minimum',
+    mode => {
+      const onFinished = jest.fn();
+      const renderer = renderScreen({ mode, onFinished, onBack: jest.fn() });
+      const input = renderer.root.findByType(TextInput);
+
+      for (const value of ['', '   ', '\t\n', '\u00a0']) {
+        act(() => input.props.onChangeText(value));
+        expect(findPressable(renderer, 'Continue').props.disabled).toBe(true);
+        act(() => input.props.onSubmitEditing());
+        expect(allText(renderer)).toContain('What should we call you?');
+        expect(
+          renderer.root.findByProps({ accessibilityRole: 'progressbar' }).props
+            .accessibilityValue.now,
+        ).toBe(1);
+        expect(onFinished).not.toHaveBeenCalled();
+        expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+        expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+        expect(mockCompleteNotificationOnboarding).not.toHaveBeenCalled();
+      }
+
+      act(() => input.props.onChangeText(' Q '));
+      expect(findPressable(renderer, 'Continue').props.disabled).toBe(false);
+      expect(allText(renderer)).toContain('What should we call you?');
+      act(() => input.props.onSubmitEditing());
+      expect(allText(renderer)).toContain('How do you identify?');
+      expect(onFinished).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    },
+  );
+
+  it.each(['account', 'preauth'] as const)(
+    '%s mode saves a trimmed nickname as firstName only after the required questionnaire and notification choice',
+    async mode => {
+      const onFinished = jest.fn();
+      const renderer = renderScreen({ mode, onFinished, onBack: jest.fn() });
+      walkToReveal(renderer, '  Ace  ');
+      expect(allText(renderer)).toContain('Built for Ace.');
+      expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+      expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
+      press(renderer, 'Continue');
+      expect(allText(renderer)).toContain('Stay match-ready.');
+      expect(mockCompleteNotificationOnboarding).not.toHaveBeenCalled();
+      expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+      expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
+      press(renderer, 'Not now');
+      await act(async () => {});
+
+      expect(mockCompleteNotificationOnboarding).toHaveBeenCalledWith(
+        'not_now',
+      );
+      const expectedProfile = { ...walkedProfile, firstName: 'Ace' };
+      if (mode === 'preauth') {
+        expect(mockCompletePreAuthOnboarding).toHaveBeenCalledWith(
+          expectedProfile,
+        );
+        expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+        expect(onFinished).toHaveBeenCalledTimes(1);
+      } else {
+        expect(mockCompleteOnboarding).toHaveBeenCalledWith(expectedProfile);
+        expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+        expect(onFinished).not.toHaveBeenCalled();
+      }
+      act(() => renderer.unmount());
+    },
+  );
 
   it('advances from the keyboard only when the trimmed name is non-empty', () => {
     const renderer = renderScreen();

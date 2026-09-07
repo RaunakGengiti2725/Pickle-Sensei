@@ -1,3 +1,4 @@
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import { Modal } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -9,7 +10,7 @@ import type { PlayerRankSummary } from '@pickle/shared-types';
  * hydration failure paths (unreadable SQLite, corrupt kv rows), and the three
  * global overlays that App.tsx mounts (RankUpCelebration, StreakCelebration,
  * FirstRunWalkthrough) driven through every dismiss control — backdrop,
- * primary CTA, and the Modal's onRequestClose (Android back) — including
+ * primary CTA, and the host's hardware-back handler — including
  * double taps and all three overlays raised at once.
  * react-native-video is auto-mocked from `__mocks__/` (canonical harness:
  * `__tests__/splashScreen.test.tsx`).
@@ -44,6 +45,7 @@ jest.mock('../../src/data/db', () => ({
 }));
 
 jest.mock('../../src/account/apiSession', () => ({
+  subscribeToApiSession: () => () => {},
   getApiSession: () => null,
 }));
 
@@ -69,6 +71,8 @@ import {
 } from '../../src/data/repository';
 import { getDb } from '../../src/data/db';
 import { RankUpCelebration } from '../../src/components/RankUpCelebration';
+import { CeremonyHost } from '../../src/flow/CeremonyHost';
+import { identifyCeremony } from '../../src/flow/ceremonyRequest';
 import {
   rankCelebrationKeyForOwner,
   useRankCelebrationStore,
@@ -110,18 +114,20 @@ const thirtyDayClub: ConsistencyCelebration = {
 };
 
 function raiseRank() {
-  useRankCelebrationStore.setState({
-    current: {
-      fromTier: 'platinum',
-      toTier: 'diamond',
-      fromRating: 7.1,
-      summary: diamondSummary,
-    },
-  });
+  const current = {
+    fromTier: 'platinum',
+    toTier: 'diamond',
+    fromRating: 7.1,
+    summary: diamondSummary,
+  } as const;
+  identifyCeremony(current, GUEST_DATA_OWNER);
+  useRankCelebrationStore.setState({ current });
 }
 
 function raiseStreak() {
-  useConsistencyStore.setState({ celebration: thirtyDayClub });
+  const celebration = { ...thirtyDayClub };
+  identifyCeremony(celebration, GUEST_DATA_OWNER);
+  useConsistencyStore.setState({ celebration });
 }
 
 function withSafeArea(children: React.ReactNode) {
@@ -144,6 +150,19 @@ function registerAllTargets() {
     );
   }
   return () => unregister.forEach(fn => fn());
+}
+
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function createRenderer(element: React.ReactElement) {
+  const renderer = TestRenderer.create(element);
+  mounted.add(renderer);
+  return renderer;
+}
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
 }
 
 function hostByTestId(
@@ -188,16 +207,13 @@ function requestClose(
   renderer: TestRenderer.ReactTestRenderer,
   rootTestId: string,
 ) {
-  const modals = renderer.root
-    .findAllByType(Modal)
-    .filter(
-      modal =>
-        modal.props.visible &&
-        modal.findAll(node => node.props?.testID === rootTestId).length > 0,
-    );
-  expect(modals).toHaveLength(1);
-  expect(typeof modals[0]!.props.onRequestClose).toBe('function');
-  modals[0]!.props.onRequestClose();
+  const overlays = hostByTestId(renderer, 'ceremony-overlay').filter(
+    overlay =>
+      overlay.findAll(node => node.props?.testID === rootTestId).length > 0,
+  );
+  expect(overlays).toHaveLength(1);
+  expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+  expect(dispatchHardwareBack()).toBe(true);
 }
 
 async function flush() {
@@ -214,9 +230,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useRankCelebrationStore.setState({ current: null });
-  useConsistencyStore.setState({ celebration: null });
-  useWalkthroughStore.setState({ visible: false });
+  for (const renderer of mounted) unmount(renderer);
+  useRankCelebrationStore.setState({
+    current: null,
+    pending: null,
+    queued: [],
+  });
+  useConsistencyStore.setState({ celebration: null, queuedCelebrations: [] });
+  useWalkthroughStore.setState({
+    visible: false,
+    queued: false,
+    request: null,
+  });
 });
 
 function splashVideo(renderer: TestRenderer.ReactTestRenderer) {
@@ -234,9 +259,7 @@ describe('SplashScreen fade on readiness', () => {
     const onFinished = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(
-        <SplashScreen ready onFinished={onFinished} />,
-      );
+      renderer = createRenderer(<SplashScreen ready onFinished={onFinished} />);
     });
     // Ready from the first frame, intro still playing: nothing leaves short
     // of the watchdog.
@@ -250,14 +273,14 @@ describe('SplashScreen fade on readiness', () => {
     // A late watchdog cannot re-run the handoff.
     act(() => jest.advanceTimersByTime(WATCHDOG_MS + 5000));
     expect(onFinished).toHaveBeenCalledTimes(1);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('never fades before hydration is ready, then fades once ready flips', async () => {
     const onFinished = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = createRenderer(
         <SplashScreen ready={false} onFinished={onFinished} />,
       );
     });
@@ -269,19 +292,17 @@ describe('SplashScreen fade on readiness', () => {
     });
     act(() => jest.advanceTimersByTime(EXIT_MS + 50));
     expect(onFinished).toHaveBeenCalledTimes(1);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('cleans up its timers on unmount and never reports after it is gone', async () => {
     const onFinished = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(
-        <SplashScreen ready onFinished={onFinished} />,
-      );
+      renderer = createRenderer(<SplashScreen ready onFinished={onFinished} />);
     });
     act(() => jest.advanceTimersByTime(300));
-    act(() => renderer.unmount());
+    unmount(renderer);
     act(() => jest.advanceTimersByTime(WATCHDOG_MS + EXIT_MS + 10_000));
     expect(onFinished).not.toHaveBeenCalled();
   });
@@ -289,7 +310,7 @@ describe('SplashScreen fade on readiness', () => {
   it('exposes the intro to screen readers as a labelled image — never as a labelled root that would hide Skip', async () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = createRenderer(
         <SplashScreen ready={false} onFinished={() => {}} />,
       );
     });
@@ -314,7 +335,7 @@ describe('SplashScreen fade on readiness', () => {
         node => node.props?.accessibilityLabel === 'Pickle Sensei is starting',
       ),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });
 
@@ -372,6 +393,7 @@ describe('AGENTS.md owner-scoping invariants for overlay state', () => {
       'notifications',
       'consistency',
       'practice.set',
+      'billing.pending-fulfilment',
     ]);
     expect(rankCelebrationKeyForOwner('owner-1')).toBe(
       'rank.celebrated:owner-1',
@@ -404,31 +426,31 @@ describe('RankUpCelebration dismiss controls', () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
     await act(async () => pressLabel(renderer, 'Dismiss rank celebration'));
     expect(useRankCelebrationStore.getState().current).toBeNull();
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
-  it('Android back (onRequestClose) dismisses', async () => {
+  it('Android hardware back dismisses', async () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     await act(async () => requestClose(renderer, 'rank-up-celebration'));
     expect(useRankCelebrationStore.getState().current).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Continue is a labelled button and a double tap is harmless', async () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
     const button = hostPressable(renderer, 'rank-up-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -439,16 +461,16 @@ describe('RankUpCelebration dismiss controls', () => {
     });
     expect(useRankCelebrationStore.getState().current).toBeNull();
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('unmounting mid-ceremony does not throw or leave the store dirty', async () => {
     raiseRank();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
+      renderer = createRenderer(withSafeArea(<RankUpCelebration />));
     });
-    expect(() => act(() => renderer.unmount())).not.toThrow();
+    expect(() => unmount(renderer)).not.toThrow();
     useRankCelebrationStore.getState().dismiss();
     expect(useRankCelebrationStore.getState().current).toBeNull();
   });
@@ -459,7 +481,7 @@ describe('StreakCelebration dismiss controls', () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(1);
     await act(async () =>
@@ -467,25 +489,25 @@ describe('StreakCelebration dismiss controls', () => {
     );
     expect(useConsistencyStore.getState().celebration).toBeNull();
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
-  it('Android back (onRequestClose) dismisses', async () => {
+  it('Android hardware back dismisses', async () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     await act(async () => requestClose(renderer, 'streak-celebration'));
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Keep training is a labelled button and a double tap is harmless', async () => {
     raiseStreak();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
+      renderer = createRenderer(withSafeArea(<StreakCelebration />));
     });
     const button = hostPressable(renderer, 'streak-celebration-continue');
     expect(button.props.accessibilityRole).toBe('button');
@@ -495,7 +517,7 @@ describe('StreakCelebration dismiss controls', () => {
       button.props.onPress();
     });
     expect(useConsistencyStore.getState().celebration).toBeNull();
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });
 
@@ -506,24 +528,24 @@ describe('FirstRunWalkthrough dismiss controls', () => {
   });
   afterEach(() => unregister());
 
-  it('Android back (onRequestClose) dismisses the tour', async () => {
+  it('Android hardware back dismisses the tour', async () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     expect(hostByTestId(renderer, 'walkthrough-advance').length).toBe(1);
     await act(async () => requestClose(renderer, 'walkthrough-advance'));
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Skip and Next carry button roles/labels; double-tapping Skip is harmless', async () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     const skip = hostPressable(renderer, 'walkthrough-skip');
@@ -537,14 +559,14 @@ describe('FirstRunWalkthrough dismiss controls', () => {
       skip.props.onPress();
     });
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('a replay starts from the first step after a completed tour', async () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
     await flush();
     for (let i = 0; i < WALKTHROUGH_STEPS.length; i++) {
@@ -560,16 +582,16 @@ describe('FirstRunWalkthrough dismiss controls', () => {
     expect(
       hostPressable(renderer, 'walkthrough-advance').props.accessibilityLabel,
     ).toBe('Next');
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('unmounting while a step is measuring does not throw', async () => {
     useWalkthroughStore.setState({ visible: true });
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(withSafeArea(<FirstRunWalkthrough />));
+      renderer = createRenderer(withSafeArea(<FirstRunWalkthrough />));
     });
-    expect(() => act(() => renderer.unmount())).not.toThrow();
+    expect(() => unmount(renderer)).not.toThrow();
     await flush();
   });
 });
@@ -581,43 +603,48 @@ describe('all three global overlays raised together (App.tsx mount order)', () =
   });
   afterEach(() => unregister());
 
-  it('every overlay stays independently dismissable; none traps the others', async () => {
+  it('serializes all three requests through the App host without losing any dismiss control', async () => {
     raiseRank();
     raiseStreak();
-    useWalkthroughStore.setState({ visible: true });
+    useWalkthroughStore.getState().replay();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = createRenderer(
         withSafeArea(
-          <>
+          <CeremonyHost>
             <RankUpCelebration />
             <StreakCelebration />
             <FirstRunWalkthrough />
-          </>,
+          </CeremonyHost>,
         ),
       );
     });
     await flush();
+    expect(hostByTestId(renderer, 'ceremony-overlay')).toHaveLength(1);
     expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
+    expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(0);
+    expect(hostByTestId(renderer, 'walkthrough-advance')).toHaveLength(0);
+
+    await act(async () => pressTestId(renderer, 'rank-up-continue'));
+    expect(hostByTestId(renderer, 'ceremony-overlay')).toHaveLength(1);
+    expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(0);
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(1);
-    expect(hostByTestId(renderer, 'walkthrough-advance')).toHaveLength(1);
+    expect(hostByTestId(renderer, 'walkthrough-advance')).toHaveLength(0);
 
     await act(async () =>
       pressLabel(renderer, 'Dismiss milestone celebration'),
     );
+    expect(hostByTestId(renderer, 'ceremony-overlay')).toHaveLength(1);
     expect(hostByTestId(renderer, 'streak-celebration')).toHaveLength(0);
-    expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
     expect(hostByTestId(renderer, 'walkthrough-advance')).toHaveLength(1);
 
     await act(async () => pressTestId(renderer, 'walkthrough-skip'));
     expect(hostByTestId(renderer, 'walkthrough-advance')).toHaveLength(0);
-    expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(1);
-
-    await act(async () => pressTestId(renderer, 'rank-up-continue'));
-    expect(hostByTestId(renderer, 'rank-up-celebration')).toHaveLength(0);
-    expect(renderer.root.findAllByType(Modal).some(m => m.props.visible)).toBe(
-      false,
-    );
-    act(() => renderer.unmount());
+    expect(hostByTestId(renderer, 'ceremony-overlay')).toHaveLength(0);
+    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+    expect(useRankCelebrationStore.getState().current).toBeNull();
+    expect(useConsistencyStore.getState().celebration).toBeNull();
+    expect(useWalkthroughStore.getState().visible).toBe(false);
+    unmount(renderer);
   });
 });

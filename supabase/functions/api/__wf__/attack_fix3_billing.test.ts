@@ -22,7 +22,7 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
+  VERDICT_URL,
   EVENTS_URL,
   expiredSubscriber,
   simulate,
@@ -238,7 +238,7 @@ Deno.test(
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, lastPremium, "newest verified_at wins regardless of arrival");
       const verifiedAts = sim.h
-        .callsTo(ENTITLEMENTS_URL)
+        .callsTo(VERDICT_URL)
         .filter((c) => c.method === "POST")
         .map((c) => Date.parse(String((c.body as Record<string, unknown>).verified_at)));
       assertEquals(Date.parse(String(row?.verified_at)), Math.max(...verifiedAts));
@@ -370,7 +370,7 @@ Deno.test(
       let entitlementPosts = 0;
       sim.faults.push({
         match: (m, u) => {
-          if (m !== "POST" || !u.startsWith(ENTITLEMENTS_URL)) return false;
+          if (m !== "POST" || !u.startsWith(VERDICT_URL)) return false;
           entitlementPosts += 1;
           return entitlementPosts === 2; // B's write
         },
@@ -693,7 +693,7 @@ Deno.test(
         ((audit?.payload as Record<string, unknown>).event as Record<string, unknown>).product_id,
         "pickle_sensei_pro_lifetime",
       );
-      const post = sim.h.callsTo(ENTITLEMENTS_URL)[0];
+      const post = sim.h.callsTo(VERDICT_URL)[0];
       assertEquals(post.headers["authorization"], "Bearer service-role-test-key");
     } finally {
       sim.restore();

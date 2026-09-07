@@ -9,6 +9,7 @@ import { drillInstructionalMedia } from "../drillMedia.ts";
 import { captureAccessLog } from "../http.ts";
 import {
   activeSubscriber,
+  captureConsole,
   fakeGoogleIdToken,
   fakeSupabaseAccessToken,
   loadHarness,
@@ -21,6 +22,38 @@ import {
 import { simulate } from "./webhookSim.ts";
 
 const ACCESS_ROW = [{ premium: false, scored_count: 0, reserved_count: 0 }];
+const FAILURE_MARKERS = [
+  "FAKE-edge-access-token",
+  "FAKE-edge-refresh-token",
+  "FAKE-provider-credential",
+  "FAKE-person@example.test",
+  "https://FAKE-private.test/capture?token=FAKE-edge-access-token",
+  TEST_USER_ID,
+  OTHER_USER_ID,
+];
+const FAILURE_TEXT = FAILURE_MARKERS.join(" ");
+
+function assertPrivateFailureAbsent(output: string): void {
+  for (const marker of FAILURE_MARKERS) {
+    assert(!output.includes(marker), "console must not emit private failure material");
+  }
+}
+
+function privateDatabaseFailure(code = "23514", status = 400): Response {
+  return Response.json(
+    {
+      code,
+      message: FAILURE_TEXT,
+      details: FAILURE_TEXT,
+      hint: FAILURE_TEXT,
+      name: FAILURE_TEXT,
+      stack: FAILURE_TEXT,
+      body: FAILURE_TEXT,
+      headers: { Authorization: FAILURE_TEXT },
+    },
+    { status },
+  );
+}
 
 // ── drills ───────────────────────────────────────────────────────────────────
 
@@ -281,9 +314,9 @@ Deno.test(
       rc[0].url.endsWith(encodeURIComponent(TEST_USER_ID)),
       "verifies the AUTHENTICATED user only",
     );
-    const row = h.callsTo("/rest/v1/billing_entitlements")[0];
+    const row = h.callsTo("/rest/v1/rpc/persist_billing_verdict")[0];
     assertEquals(row.headers["apikey"], "service-role-test-key");
-    assertEquals((row.body as Record<string, unknown>).user_id, TEST_USER_ID);
+    assertEquals((row.body as Record<string, unknown>).p_user_id, TEST_USER_ID);
   },
 );
 
@@ -297,7 +330,11 @@ Deno.test(
     assertEquals(lapsed.status, 200);
     assertEquals((await lapsed.json()).billing.premium, false);
     assertEquals(
-      (h.callsTo("/rest/v1/billing_entitlements")[0].body as Record<string, unknown>).premium,
+      (
+        h.callsTo("/rest/v1/rpc/persist_billing_verdict")[0].body as {
+          p_verdict: { premium: boolean };
+        }
+      ).p_verdict.premium,
       false,
     );
 
@@ -718,6 +755,7 @@ Deno.test(
     await response.text();
     assertEquals(h.callsTo(RC_URL).length, 0);
     assertEquals(h.callsTo("/rest/v1/webhook_events").length, 0);
+    assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 0);
     assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
   },
 );
@@ -744,9 +782,10 @@ Deno.test(
       assertEquals(response.status, 200);
       await response.text();
       assertEquals(h.callsTo(RC_URL).length, 16);
+      assertEquals(h.callsTo("/rest/v1/rpc/complete_billing_webhook").length, 1);
       assertEquals(
         h.callsTo("/rest/v1/webhook_events").filter((call) => call.method === "POST").length,
-        1,
+        0,
       );
       assert(sim.auditRows.get("sixteen-subjects")?.processed_at);
     } finally {
@@ -860,11 +899,250 @@ Deno.test(
     assertEquals(response.status, 503);
     assertEquals((await response.text()).includes("injected rpc failure"), false);
     assertEquals(h.callsTo(RC_URL).length, 0);
+    assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 0);
     assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
     delete h.rpcErrors.is_api_session_active;
     const recovered = await h.handler(userRequest("GET", "/v1/me/access", { token, ip }));
     assertEquals(recovered.status, 200);
     await recovered.text();
     assertEquals(h.callsTo("/auth/v1/token").length, 1);
+  },
+);
+
+Deno.test(
+  "failure logs: DB and paginated failures retain codes/status, not free text",
+  async () => {
+    for (const [path, target, context] of [
+      ["/v1/me", "profiles", "Your account"],
+      ["/v1/me/access", "rpc/access_state", "Access state"],
+      ["/v1/me/access", "rpc/is_api_session_active", "Session check"],
+      ["/v1/progress", "progress_daily", "Progress"],
+      ["/v1/progress", "practice_days", "Progress"],
+      ["/v1/rank", "player_technique_rating", "Player rank"],
+      ["/v1/me/consent/status", "consent_records", "Consent status"],
+      ["/v1/me/saved-drills", "user_saved_drills", "Saved drills"],
+    ]) {
+      const h = await loadHarness();
+      h.respond = (call) =>
+        new URL(call.url).pathname === `/rest/v1/${target}` ? privateDatabaseFailure() : null;
+      const { result, logs, output } = await captureConsole(() =>
+        h.handler(
+          userRequest("GET", path, { token: fakeSupabaseAccessToken(crypto.randomUUID()) }),
+        ),
+      );
+      assertEquals(result.status, 503, target);
+      assertEquals(await result.json(), {
+        error: { message: `${context} is temporarily unavailable. Please try again.` },
+      });
+      assertEquals(logs.length, 1, target);
+      assertEquals(logs[0].level, "error");
+      assertEquals(logs[0].args[0], `[api] ${context}:`);
+      assertPrivateFailureAbsent(output);
+      const detail = logs[0].args[1] as Record<string, unknown>;
+      assertEquals(detail.code, "23514", target);
+      assertEquals(detail.status, 400, target);
+      assertEquals(result.headers.get("cache-control"), "no-store");
+    }
+  },
+);
+
+Deno.test(
+  "failure logs: auth code injection keeps upstream 429 retryable and credential-free",
+  async () => {
+    const h = await loadHarness();
+    h.respond = (call) =>
+      call.url.includes("/auth/v1/user")
+        ? Response.json(
+            { code: FAILURE_TEXT, msg: FAILURE_TEXT },
+            { status: 429, headers: { "X-Supabase-Api-Version": "2024-01-01" } },
+          )
+        : null;
+    const { result, logs, output } = await captureConsole(() =>
+      h.handler(
+        userRequest("GET", "/v1/me", { token: fakeSupabaseAccessToken(crypto.randomUUID()) }),
+      ),
+    );
+    assertEquals(result.status, 503);
+    assertEquals(await result.json(), {
+      error: { message: "Session verification is temporarily unavailable. Please try again." },
+    });
+    assertEquals(logs.length, 1);
+    assertPrivateFailureAbsent(output);
+    assertEquals(logs[0].args[1], { name: "AuthApiError", code: "unknown", status: 429 });
+    assertEquals(h.callsTo("/rest/v1/").length, 0);
+  },
+);
+
+Deno.test(
+  "failure logs: unhandled thrown values keep the generic 500 and bounded class",
+  async () => {
+    const h = await loadHarness();
+    const realDigest = crypto.subtle.digest;
+    try {
+      for (const error of [
+        new Error(FAILURE_TEXT, { cause: FAILURE_TEXT }),
+        new TypeError(FAILURE_TEXT),
+        Object.assign(new Error(FAILURE_TEXT), {
+          name: FAILURE_TEXT,
+          stack: FAILURE_TEXT,
+          code: FAILURE_TEXT,
+          status: FAILURE_TEXT,
+          headers: { Authorization: FAILURE_TEXT },
+        }),
+        FAILURE_TEXT,
+      ]) {
+        crypto.subtle.digest = () => Promise.reject(error);
+        const { result, logs, output } = await captureConsole(() =>
+          h.handler(userRequest("GET", "/v1/me")),
+        );
+        assertEquals(result.status, 500);
+        assertEquals(await result.json(), {
+          error: { message: "Something went wrong. Please try again." },
+        });
+        assertEquals(logs.length, 1);
+        assertEquals(
+          logs[0].args[0],
+          `[api] unhandled error (${result.headers.get("x-request-id")}):`,
+        );
+        assertPrivateFailureAbsent(output);
+        assertEquals(logs[0].args[1], {
+          name:
+            error instanceof TypeError
+              ? "TypeError"
+              : error instanceof Error && error.name === "Error"
+                ? "Error"
+                : "unknown",
+          code: "unknown",
+          status: null,
+        });
+      }
+    } finally {
+      crypto.subtle.digest = realDigest;
+    }
+  },
+);
+
+Deno.test(
+  "failure logs: shot RPC errors and status details preserve retryable batch rejection",
+  async () => {
+    const shot = {
+      id: crypto.randomUUID(),
+      analysisPermitId: crypto.randomUUID(),
+      source: "real",
+      sessionId: null,
+      shotType: "dink",
+      cameraView: "side",
+      capturedAt: "2026-09-01T10:00:00.000Z",
+      timestamps: { startMs: 0, contactMs: 100, endMs: 200 },
+      overallScore: 7,
+      confidence: 0.9,
+      resultKind: "scored",
+      phases: [],
+      checkpoints: [],
+      versionVector: Object.fromEntries(
+        [
+          "appVersion",
+          "modelBundleVersion",
+          "poseModelVersion",
+          "paddleModelVersion",
+          "strokeDetectorVersion",
+          "phaseModelVersion",
+          "scoringModelVersion",
+          "shotConfigVersion",
+        ].map((key) => [key, "fake-version"]),
+      ),
+    };
+    for (const rpcError of [true, false]) {
+      const h = await loadHarness();
+      h.respond = (call) =>
+        call.url.includes("/rpc/apply_synced_shot")
+          ? rpcError
+            ? privateDatabaseFailure("57014", 503)
+            : Response.json(`shot.write_failed:${FAILURE_TEXT}`)
+          : null;
+      const { result, logs, output } = await captureConsole(() =>
+        h.handler(
+          userRequest("POST", "/v1/shots:sync", {
+            token: fakeSupabaseAccessToken(crypto.randomUUID()),
+            body: { shots: [shot] },
+          }),
+        ),
+      );
+      assertEquals(result.status, 200);
+      assertEquals(await result.json(), {
+        acceptedIds: [],
+        rejected: [
+          {
+            id: shot.id,
+            code: "shot.write_failed",
+            message:
+              "The analysis could not be saved right now. It stays on this device and will retry.",
+          },
+        ],
+      });
+      assertEquals(logs.length, 1);
+      assertPrivateFailureAbsent(output);
+      assertEquals(
+        logs[0].args[0],
+        rpcError ? "[api] shot sync RPC failed:" : "[api] shot sync write failed:",
+      );
+      assertEquals(
+        (logs[0].args[1] as Record<string, unknown>).code,
+        rpcError ? "57014" : "unknown",
+      );
+      assertEquals((logs[0].args[1] as Record<string, unknown>).status, rpcError ? 503 : 200);
+    }
+  },
+);
+
+Deno.test(
+  "failure logs: both evaluation write and ownership sinks omit submitted evidence",
+  async () => {
+    for (const method of ["POST", "GET"]) {
+      const h = await loadHarness();
+      h.tables.consent_records = [
+        {
+          id: crypto.randomUUID(),
+          scope: "evaluation_telemetry",
+          action: "grant",
+          consent_version: "1",
+          created_at: "2026-09-01T10:00:00.000Z",
+        },
+      ];
+      h.respond = (call) =>
+        call.url.includes("/rest/v1/evaluation_trials") && call.method === method
+          ? privateDatabaseFailure("42501", 403)
+          : null;
+      const trialId = crypto.randomUUID();
+      const { result, logs, output } = await captureConsole(() =>
+        h.handler(
+          userRequest("POST", "/v1/me/evaluation/trials", {
+            token: fakeSupabaseAccessToken(crypto.randomUUID()),
+            body: { trials: [{ trialId, details: FAILURE_TEXT }] },
+          }),
+        ),
+      );
+      assertEquals(result.status, 200);
+      assertEquals(await result.json(), {
+        acceptedTrialIds: [],
+        rejected: [
+          {
+            trialId,
+            code: "evaluation.trial_write_failed",
+            message:
+              "The trial could not be saved right now. It stays on this device and will retry.",
+          },
+        ],
+      });
+      assertEquals(logs.length, 1);
+      assertEquals(
+        logs[0].args[0],
+        method === "POST"
+          ? "[api] evaluation trial write failed:"
+          : "[api] evaluation trial ownership read failed:",
+      );
+      assertPrivateFailureAbsent(output);
+      assertEquals(logs[0].args[1], { name: "unknown", code: "42501", status: 403 });
+    }
   },
 );

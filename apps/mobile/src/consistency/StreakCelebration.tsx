@@ -1,13 +1,11 @@
 import React, { useEffect } from 'react';
 import {
   AccessibilityInfo,
-  Modal,
   Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, {
@@ -23,7 +21,7 @@ import { color, radius, space, type } from '../design/tokens';
 import { badgeArtFor, MilestoneBadge } from './MilestoneBadge';
 import { specialistTitle } from './engine';
 import { RARITY_LABEL, VOLUME_ACHIEVEMENTS } from './milestones';
-import { useConsistencyStore } from './store';
+import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { ConsistencyCelebration } from './store';
 import { plural } from '../util/plural';
 
@@ -50,13 +48,13 @@ const ENTRY_MS = 220;
  * layout used immediately when reduced motion is enabled. */
 const ENTRY_DISTANCE = 8;
 
-function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
-  const { celebration } = props;
+function CelebrationStage(props: {
+  celebration: ConsistencyCelebration;
+  dismiss: () => void;
+}) {
+  const { celebration, dismiss } = props;
   const reduced = useReducedMotion();
-  const { fontScale, height } = useWindowDimensions();
   const insets = useReliableSafeAreaInsets();
-  const scrollable = fontScale >= 1.5 || height < 600;
-  const dismiss = useConsistencyStore(s => s.dismissCelebration);
   const art = badgeArtFor(celebration.achievementId);
   const entry = useSharedValue(reduced ? 1 : 0);
 
@@ -114,7 +112,11 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
           : `ACHIEVEMENT · ${RARITY_LABEL[celebration.rarity].toUpperCase()}`}
       </Text>
 
-      <View style={styles.stage} pointerEvents="none">
+      <View
+        style={styles.stage}
+        pointerEvents="none"
+        testID="streak-celebration-stage"
+      >
         <MilestoneBadge
           glyph={art.glyph}
           {...(art.value !== undefined ? { value: art.value } : {})}
@@ -125,12 +127,14 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
       </View>
 
       <View style={styles.copyBlock}>
-        <Text style={[type.h1, styles.headline]}>{title}</Text>
+        <Text accessibilityRole="header" style={[type.h1, styles.headline]}>
+          {title}
+        </Text>
         <Text style={[type.body, styles.blurb]}>{celebration.blurb}</Text>
         <Text style={[type.caption, styles.streakLine]}>{streakLine}</Text>
       </View>
 
-      <View style={styles.rewardPill}>
+      <View style={styles.rewardPill} testID="streak-celebration-reward">
         <Text style={[type.caption, styles.rewardText]}>
           {celebration.reward}
         </Text>
@@ -139,13 +143,7 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
   );
 
   return (
-    <View
-      style={[
-        styles.root,
-        { paddingTop: insets.top, paddingBottom: insets.bottom },
-      ]}
-      testID="streak-celebration"
-    >
+    <View style={styles.root} testID="streak-celebration">
       <StatusBar barStyle="light-content" />
       <Pressable
         accessibilityRole="button"
@@ -160,26 +158,27 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
         pointerEvents="box-none"
         style={[
           styles.content,
-          scrollable && styles.contentScrollable,
+          {
+            paddingTop: Math.max(insets.top, space.md),
+            paddingBottom: Math.max(insets.bottom, space.lg),
+            paddingLeft: insets.left + space.xl,
+            paddingRight: insets.right + space.xl,
+          },
           entryStyle,
         ]}
+        testID="streak-celebration-safe-content"
       >
-        {scrollable ? (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            bounces={false}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-          >
-            {facts}
-          </ScrollView>
-        ) : (
-          facts
-        )}
-        <View
-          style={[styles.ctaBlock, scrollable && styles.ctaBlockScrollable]}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          bounces={false}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          testID="streak-celebration-scroll"
         >
+          {facts}
+        </ScrollView>
+        <View style={styles.ctaBlock} testID="streak-celebration-actions">
           <Button
             label="Keep training"
             variant="volt"
@@ -193,45 +192,37 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
 }
 
 export function StreakCelebration() {
-  const celebration = useConsistencyStore(s => s.celebration);
-  const dismiss = useConsistencyStore(s => s.dismissCelebration);
-
+  const presentation = useCeremonyPresentation();
+  if (!presentation) {
+    return (
+      <CeremonyHost kinds={['streak']}>
+        <StreakCelebration />
+      </CeremonyHost>
+    );
+  }
+  if (presentation.ceremony.kind !== 'streak') return null;
   return (
-    <Modal
-      visible={celebration !== null}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={dismiss}
-    >
-      {celebration ? (
-        <CelebrationStage
-          key={celebration.achievementId}
-          celebration={celebration}
-        />
-      ) : null}
-    </Modal>
+    <CelebrationStage
+      celebration={presentation.ceremony.content}
+      dismiss={presentation.dismiss}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.surfaceDark },
-  content: {
-    flex: 1,
+  root: { flex: 1, backgroundColor: color.surfaceDark, overflow: 'hidden' },
+  content: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
-  },
-  contentScrollable: {
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
     paddingVertical: space.md,
   },
-  scroll: { flex: 1, minHeight: 0 },
-  scrollContent: { alignItems: 'center', paddingBottom: space.md },
   eyebrow: { color: color.volt, textAlign: 'center' },
   stage: {
-    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: 320,
     minHeight: 188,
     alignItems: 'center',
     justifyContent: 'center',
@@ -242,7 +233,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: space.sm,
   },
-  headline: { color: color.onDark, textAlign: 'center', maxWidth: '100%' },
+  headline: { color: color.onDark, textAlign: 'center', alignSelf: 'stretch' },
   blurb: {
     color: color.onDarkMuted,
     textAlign: 'center',
@@ -255,6 +246,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
   rewardPill: {
+    maxWidth: '100%',
     marginTop: space.lg,
     paddingHorizontal: space.md,
     paddingVertical: 9,
@@ -263,7 +255,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
   },
-  rewardText: { color: color.onDark, letterSpacing: 0.3, textAlign: 'center' },
-  ctaBlock: { alignSelf: 'stretch', marginTop: space.xl },
-  ctaBlockScrollable: { flexShrink: 0, marginTop: space.md },
+  rewardText: {
+    color: color.onDark,
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  ctaBlock: { alignSelf: 'stretch', flexShrink: 0, marginTop: space.md },
 });

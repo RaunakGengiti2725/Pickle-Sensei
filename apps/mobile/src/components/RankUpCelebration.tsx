@@ -1,13 +1,11 @@
 import React, { useEffect } from 'react';
 import {
   AccessibilityInfo,
-  Modal,
   Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, {
@@ -22,7 +20,7 @@ import { Button, useReducedMotion } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, space, type } from '../design/tokens';
 import { formatDuprEstimate } from '../progress/duprEstimate';
-import { useRankCelebrationStore } from '../progress/rankCelebration';
+import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
@@ -57,13 +55,13 @@ function segmentFill(rating: number, index: number): number {
   return Math.max(0, Math.min(1, (rating - floor) / (ceiling - floor)));
 }
 
-function CelebrationStage(props: { celebration: RankCelebration }) {
-  const { celebration } = props;
+function CelebrationStage(props: {
+  celebration: RankCelebration;
+  dismiss: () => void;
+}) {
+  const { celebration, dismiss } = props;
   const reduced = useReducedMotion();
-  const { fontScale, height } = useWindowDimensions();
   const insets = useReliableSafeAreaInsets();
-  const scrollable = fontScale >= 1.5 || height < 600;
-  const dismiss = useRankCelebrationStore(s => s.dismiss);
   const placement = celebration.fromTier === null;
   const summary = celebration.summary;
   const entry = useSharedValue(reduced ? 1 : 0);
@@ -88,7 +86,7 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
             2,
           )} out of 10.`,
     );
-  }, [placement, summary]);
+  }, [placement, summary.rating, summary.tierLabel]);
 
   const entryStyle = useAnimatedStyle(() => ({
     opacity: entry.value,
@@ -107,7 +105,7 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
         {placement ? 'PLAYER RANK · PLACED' : 'PLAYER RANK · RANK UP'}
       </Text>
 
-      <View style={styles.stage} pointerEvents="none">
+      <View style={styles.stage} pointerEvents="none" testID="rank-up-stage">
         {celebration.fromTier ? (
           <View style={styles.fromEmblem}>
             <RankIcon tier={celebration.fromTier} size={FROM_EMBLEM_SIZE} />
@@ -117,14 +115,19 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
       </View>
 
       <View style={styles.copyBlock}>
-        <Text style={[type.h1, styles.headline]}>
+        <Text accessibilityRole="header" style={[type.h1, styles.headline]}>
           {placement ? 'You’re on the board.' : `${summary.tierLabel} unlocked`}
         </Text>
         <View style={styles.ratingRow}>
-          <Text style={styles.ratingValue}>{summary.rating.toFixed(2)}</Text>
-          <Text style={[type.caption, styles.ratingScale]}> / 10</Text>
+          <Text
+            style={styles.ratingValue}
+            accessibilityLabel={`Rating ${summary.rating.toFixed(2)} out of 10`}
+            testID="rank-up-rating"
+          >
+            {summary.rating.toFixed(2)}
+            <Text style={[type.caption, styles.ratingScale]}>{' / 10'}</Text>
+          </Text>
           <Text style={[type.caption, styles.ratingDupr]}>
-            {' '}
             {formatDuprEstimate(summary.rating)}
           </Text>
         </View>
@@ -155,13 +158,7 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
   );
 
   return (
-    <View
-      style={[
-        styles.root,
-        { paddingTop: insets.top, paddingBottom: insets.bottom },
-      ]}
-      testID="rank-up-celebration"
-    >
+    <View style={styles.root} testID="rank-up-celebration">
       <StatusBar barStyle="light-content" />
       <Pressable
         accessibilityRole="button"
@@ -175,26 +172,27 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
         pointerEvents="box-none"
         style={[
           styles.content,
-          scrollable && styles.contentScrollable,
+          {
+            paddingTop: Math.max(insets.top, space.md),
+            paddingBottom: Math.max(insets.bottom, space.lg),
+            paddingLeft: insets.left + space.xl,
+            paddingRight: insets.right + space.xl,
+          },
           entryStyle,
         ]}
+        testID="rank-up-safe-content"
       >
-        {scrollable ? (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            bounces={false}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-          >
-            {facts}
-          </ScrollView>
-        ) : (
-          facts
-        )}
-        <View
-          style={[styles.ctaBlock, scrollable && styles.ctaBlockScrollable]}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          bounces={false}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          testID="rank-up-scroll"
         >
+          {facts}
+        </ScrollView>
+        <View style={styles.ctaBlock} testID="rank-up-actions">
           <Button
             label="Continue"
             variant="volt"
@@ -221,47 +219,40 @@ function LadderFill(props: { fill: number; accent: string }) {
 }
 
 export function RankUpCelebration() {
-  const celebration = useRankCelebrationStore(s => s.current);
-  const dismiss = useRankCelebrationStore(s => s.dismiss);
-
+  const presentation = useCeremonyPresentation();
+  if (!presentation) {
+    return (
+      <CeremonyHost kinds={['rank']}>
+        <RankUpCelebration />
+      </CeremonyHost>
+    );
+  }
+  if (presentation.ceremony.kind !== 'rank') return null;
   return (
-    <Modal
-      visible={celebration !== null}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={dismiss}
-    >
-      {celebration ? (
-        <CelebrationStage
-          key={`${celebration.fromTier ?? 'placement'}-${celebration.toTier}`}
-          celebration={celebration}
-        />
-      ) : null}
-    </Modal>
+    <CelebrationStage
+      celebration={presentation.ceremony.content}
+      dismiss={presentation.dismiss}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.surfaceDark },
-  content: {
-    flex: 1,
+  root: { flex: 1, backgroundColor: color.surfaceDark, overflow: 'hidden' },
+  content: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.xl,
-  },
-  contentScrollable: {
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
     paddingVertical: space.md,
   },
-  scroll: { flex: 1, minHeight: 0 },
-  scrollContent: { alignItems: 'center', paddingBottom: space.md },
   eyebrow: { color: color.volt, textAlign: 'center' },
   stage: {
-    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: 320,
     minHeight: 180,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.lg,
@@ -273,18 +264,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: space.sm,
   },
-  headline: { color: color.onDark, textAlign: 'center', maxWidth: '100%' },
+  headline: { color: color.onDark, textAlign: 'center', alignSelf: 'stretch' },
   ratingRow: {
     alignSelf: 'stretch',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'baseline',
     justifyContent: 'center',
+    columnGap: space.xs,
+    rowGap: space.xs,
     marginTop: space.sm,
   },
-  ratingValue: { ...type.score, color: color.onDark },
+  ratingValue: {
+    ...type.score,
+    color: color.onDark,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    maxWidth: '100%',
+    minWidth: 0,
+    flexShrink: 1,
+  },
   ratingScale: { color: color.onDarkSubtle },
-  ratingDupr: { color: color.onDarkFaint },
+  ratingDupr: {
+    color: color.onDarkFaint,
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
   ladder: {
     flexDirection: 'row',
     gap: 5,
@@ -298,15 +303,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.onDarkTint,
     overflow: 'hidden',
   },
-  ladderFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
+  ladderFill: { height: '100%', borderRadius: 3 },
   detail: {
     color: color.onDarkSubtle,
     textAlign: 'center',
     marginTop: space.md,
   },
-  ctaBlock: { alignSelf: 'stretch', marginTop: space.xl },
-  ctaBlockScrollable: { flexShrink: 0, marginTop: space.md },
+  ctaBlock: { alignSelf: 'stretch', flexShrink: 0, marginTop: space.md },
 });

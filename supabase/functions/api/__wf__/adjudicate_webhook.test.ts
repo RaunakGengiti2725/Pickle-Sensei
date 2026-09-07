@@ -36,7 +36,7 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
+  VERDICT_URL,
   EVENTS_URL,
   expiredSubscriber,
   simulate,
@@ -65,7 +65,7 @@ Deno.test(
       });
       sim.h.subscriber = expiredSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -111,7 +111,7 @@ Deno.test(
       sim.h.subscriber = expiredSubscriber();
       sim.h.rpcs["access_state"] = ACCESS_ROW;
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -149,7 +149,7 @@ Deno.test(
       // Destination has never bootstrapped → FK violation on ITS upsert only.
       sim.faults.push({
         match: (m, u) =>
-          m === "POST" && u.startsWith(ENTITLEMENTS_URL) && sim.entitlementUpserts() === 2,
+          m === "POST" && u.startsWith(VERDICT_URL) && sim.entitlementUpserts() === 2,
         status: 409,
         body: { code: "23503", message: "violates foreign key constraint" },
         times: 1,
@@ -418,13 +418,13 @@ Deno.test(
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, false, "the newer (expired) verdict stands");
       const fastWrite = sim.h
-        .callsTo(ENTITLEMENTS_URL)
+        .callsTo(VERDICT_URL)
         .map((c) => c.body as Record<string, unknown>)
         .find((body) => body.premium === false);
       assert(fastWrite, "fast delivery wrote premium:false");
       assertEquals(row?.verified_at, fastWrite.verified_at, "verified_at is the fast delivery's");
       const slowWrite = sim.h
-        .callsTo(ENTITLEMENTS_URL)
+        .callsTo(VERDICT_URL)
         .map((c) => c.body as Record<string, unknown>)
         .find((body) => body.premium === true);
       assert(slowWrite, "slow delivery attempted premium:true");

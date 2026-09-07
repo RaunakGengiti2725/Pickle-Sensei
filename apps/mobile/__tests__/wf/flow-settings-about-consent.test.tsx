@@ -27,6 +27,10 @@ import { BrandToggle } from '../../src/design/components';
 import { useConsentStore } from '../../src/state/consentStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+import {
   clearApiSession,
   establishApiSession,
 } from '../../src/account/apiSession';
@@ -125,6 +129,7 @@ beforeEach(() => {
   mockGoBack.mockClear();
   act(() => {
     useAuthStore.setState({ session: syncedSession });
+    setActiveDataOwner(syncedSession.canonicalAppUserId!);
     establishApiSession({
       apiBaseUrl: API_BASE,
       bearerToken: 'test-bearer',
@@ -146,6 +151,7 @@ afterEach(() => {
     if (renderer.toJSON() !== null) act(() => renderer.unmount());
   }
   globalThis.fetch = realFetch;
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   clearApiSession();
 });
 
@@ -224,6 +230,7 @@ describe('Data & consent — hydrate on open', () => {
 
   it('signed out: the toggle is disabled and the user is told nothing is shared', async () => {
     act(() => {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       clearApiSession();
       useAuthStore.setState({ session: null });
     });
@@ -366,6 +373,7 @@ describe('Data & consent — toggling', () => {
 
   it('a change attempted without an API session sends no request and explains that nothing changed', async () => {
     act(() => {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       clearApiSession();
       useAuthStore.setState({ session: null });
     });

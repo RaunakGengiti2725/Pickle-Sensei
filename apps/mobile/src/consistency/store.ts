@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { getDb } from '../data/db';
+import { identifyCeremony } from '../flow/ceremonyRequest';
 import { getKv, listActivityShots, setKv } from '../data/repository';
 import {
+  captureDataOwnerContext,
   getActiveDataOwner,
+  isDataOwnerContextCurrent,
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
 import {
@@ -61,51 +64,78 @@ export function consistencyKeyForOwner(owner: string): string {
   return `consistency:${owner}`;
 }
 
-export function parseConsistencyLedger(raw: string | null): ConsistencyLedger {
-  if (!raw) return { ...EMPTY_LEDGER, drills: [], celebrated: {} };
+export function parseConsistencyLedger(
+  raw: string | null,
+): ConsistencyLedger | null {
+  if (raw === null) return { ...EMPTY_LEDGER, drills: [], celebrated: {} };
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { ...EMPTY_LEDGER, drills: [], celebrated: {} };
+      return null;
     }
     const record = parsed as Record<string, unknown>;
-    const drills = Array.isArray(record['drills'])
-      ? (record['drills'] as unknown[])
-          .filter(
-            (entry): entry is Record<string, unknown> =>
-              Boolean(entry) && typeof entry === 'object',
-          )
-          .map(entry => ({
-            id: String(entry['id'] ?? ''),
-            slug: String(entry['slug'] ?? ''),
-            title: String(entry['title'] ?? ''),
-            completedAtIso: String(entry['completedAtIso'] ?? ''),
-          }))
-          .filter(entry => entry.id && entry.completedAtIso)
-      : [];
     const celebratedRaw = record['celebrated'];
-    const celebrated: Record<string, string> = {};
-    if (
-      celebratedRaw &&
-      typeof celebratedRaw === 'object' &&
-      !Array.isArray(celebratedRaw)
-    ) {
-      for (const [key, value] of Object.entries(
-        celebratedRaw as Record<string, unknown>,
-      )) {
-        if (typeof value === 'string') celebrated[key] = value;
-      }
-    }
     const shown = record['daySecuredShownDay'];
+    const isDay = (value: unknown): value is string =>
+      typeof value === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      new Date(value).toISOString().slice(0, 10) === value;
+    if (
+      record['version'] !== 1 ||
+      !Array.isArray(record['drills']) ||
+      !celebratedRaw ||
+      typeof celebratedRaw !== 'object' ||
+      Array.isArray(celebratedRaw) ||
+      (shown !== null && !isDay(shown))
+    ) {
+      return null;
+    }
+    const drills: ConsistencyDrillRecord[] = [];
+    for (const entry of record['drills'] as unknown[]) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return null;
+      }
+      const { id, slug, title, completedAtIso } = entry as Record<
+        string,
+        unknown
+      >;
+      if (
+        typeof id !== 'string' ||
+        !id ||
+        typeof slug !== 'string' ||
+        typeof title !== 'string' ||
+        typeof completedAtIso !== 'string' ||
+        !Number.isFinite(Date.parse(completedAtIso))
+      ) {
+        return null;
+      }
+      drills.push({ id, slug, title, completedAtIso });
+    }
+    const entries = Object.entries(celebratedRaw);
+    if (entries.some(([, value]) => !isDay(value))) {
+      return null;
+    }
     return {
       version: 1,
       drills,
-      celebrated,
-      daySecuredShownDay: typeof shown === 'string' ? shown : null,
+      celebrated: Object.fromEntries(entries) as Record<string, string>,
+      daySecuredShownDay: shown,
     };
   } catch {
-    return { ...EMPTY_LEDGER, drills: [], celebrated: {} };
+    return null;
   }
+}
+
+async function readConsistencyLedger(
+  db: ReturnType<typeof getDb>,
+  owner: string,
+): Promise<ConsistencyLedger> {
+  const ledger = parseConsistencyLedger(
+    await getKv(db, consistencyKeyForOwner(owner), { preserveEmpty: true }),
+  );
+  if (!ledger) throw new Error('Consistency ledger could not be read.');
+  return ledger;
 }
 
 export interface ConsistencyCelebration {
@@ -133,9 +163,10 @@ interface ConsistencyState {
   hydrated: boolean;
   ownerKey: string | null;
   snapshot: ConsistencySnapshot | null;
-  /** True when the last refresh could not read the activity history. */
+  /** True when the last refresh could not read the activity history or ledger. */
   loadError: boolean;
   celebration: ConsistencyCelebration | null;
+  queuedCelebrations: ConsistencyCelebration[];
   /** Pending "Day N secured" moment; consumed once by the result surface. */
   daySecured: DaySecuredMoment | null;
   hydrate: () => Promise<void>;
@@ -143,7 +174,7 @@ interface ConsistencyState {
   recordDrillCompletion: (record: ConsistencyDrillRecord) => Promise<void>;
   /** Returns the pending moment (if it is still today's) exactly once. */
   consumeDaySecured: () => DaySecuredMoment | null;
-  dismissCelebration: () => void;
+  dismissCelebration: (expected?: ConsistencyCelebration) => void;
 }
 
 function deviceTimeZone(): string {
@@ -171,13 +202,8 @@ export async function loadConsistencyActivities(): Promise<{
     celebrated: {},
   };
   if (owner !== SIGNED_OUT_DATA_OWNER) {
-    try {
-      ledger = parseConsistencyLedger(
-        await getKv(db, consistencyKeyForOwner(owner)),
-      );
-    } catch {
-      // Unreadable ledger: derive from shots alone rather than failing.
-    }
+    // Unreadable ledger: fail without replacing unknown history or markers.
+    ledger = await readConsistencyLedger(db, owner);
   }
   const activities: TrainingActivityInput[] = shots.map(shot => ({
     kind: shot.sessionId ? 'session_stroke' : 'stroke',
@@ -276,6 +302,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   snapshot: null,
   loadError: false,
   celebration: null,
+  queuedCelebrations: [],
   daySecured: null,
 
   hydrate: async () => {
@@ -287,27 +314,41 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         snapshot: null,
         loadError: false,
         celebration: null,
+        queuedCelebrations: get().celebration
+          ? [...get().queuedCelebrations, get().celebration!]
+          : get().queuedCelebrations,
         daySecured: null,
       });
       return;
     }
-    set({ ownerKey: owner });
+    const context = captureDataOwnerContext();
+    if (get().ownerKey !== owner) {
+      set({
+        ownerKey: owner,
+        hydrated: false,
+        snapshot: null,
+        loadError: false,
+        daySecured: null,
+      });
+    }
     await get().refresh();
-    set({ hydrated: true });
+    if (isDataOwnerContextCurrent(context)) set({ hydrated: true });
   },
 
   refresh: async () => {
+    const owner = getActiveDataOwner();
+    if (owner === SIGNED_OUT_DATA_OWNER) {
+      set({
+        ownerKey: owner,
+        snapshot: null,
+        loadError: false,
+        daySecured: null,
+      });
+      return;
+    }
+    const context = captureDataOwnerContext();
     const run = async () => {
-      const owner = getActiveDataOwner();
-      if (owner === SIGNED_OUT_DATA_OWNER) {
-        set({
-          ownerKey: owner,
-          snapshot: null,
-          loadError: false,
-          daySecured: null,
-        });
-        return;
-      }
+      if (!isDataOwnerContextCurrent(context)) return;
       let activities: TrainingActivityInput[];
       let ledger: ConsistencyLedger;
       try {
@@ -315,10 +356,16 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         activities = loaded.activities;
         ledger = loaded.ledger;
       } catch {
-        if (getActiveDataOwner() !== owner) return;
-        set({ ownerKey: owner, loadError: true });
+        if (!isDataOwnerContextCurrent(context)) return;
+        set(state => ({
+          ownerKey: owner,
+          loadError: true,
+          snapshot: state.ownerKey === owner ? state.snapshot : null,
+          daySecured: state.ownerKey === owner ? state.daySecured : null,
+        }));
         return;
       }
+      if (!isDataOwnerContextCurrent(context)) return;
       const snapshot = buildConsistencySnapshot(activities, {
         asOfIso: new Date().toISOString(),
         timeZone: deviceTimeZone(),
@@ -335,7 +382,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         for (const id of markCelebrated) celebrated[id] = snapshot.asOfDay;
         const nextLedger: ConsistencyLedger = { ...ledger, celebrated };
         try {
-          if (getActiveDataOwner() !== owner) return;
+          if (!isDataOwnerContextCurrent(context)) return;
           await setKv(
             getDb(),
             consistencyKeyForOwner(owner),
@@ -345,7 +392,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         } catch {
           // Could not persist: skip the ceremony rather than risk replaying
           // it forever. The next successful refresh retries.
-          if (getActiveDataOwner() !== owner) return;
+          if (!isDataOwnerContextCurrent(context)) return;
           set({ ownerKey: owner, snapshot, loadError: false });
           return;
         }
@@ -370,13 +417,25 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
             }
           : null;
 
-      if (getActiveDataOwner() !== owner) return;
+      if (celebration) identifyCeremony(celebration, owner);
+      if (!isDataOwnerContextCurrent(context)) {
+        if (celebration) {
+          set(state => ({
+            queuedCelebrations: [...state.queuedCelebrations, celebration],
+          }));
+        }
+        return;
+      }
       set(state => ({
         ownerKey: owner,
         snapshot,
         loadError: false,
         daySecured,
         celebration: state.celebration ?? celebration,
+        queuedCelebrations:
+          state.celebration && celebration
+            ? [...state.queuedCelebrations, celebration]
+            : state.queuedCelebrations,
       }));
     };
     refreshQueue = refreshQueue.then(run, run);
@@ -388,9 +447,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     if (owner === SIGNED_OUT_DATA_OWNER) return;
     try {
       const db = getDb();
-      const ledger = parseConsistencyLedger(
-        await getKv(db, consistencyKeyForOwner(owner)),
-      );
+      const ledger = await readConsistencyLedger(db, owner);
       if (ledger.drills.some(existing => existing.id === record.id)) return;
       const drills = [...ledger.drills, record].slice(-MAX_LEDGER_DRILLS);
       if (getActiveDataOwner() !== owner) return;
@@ -416,9 +473,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     void (async () => {
       try {
         const db = getDb();
-        const ledger = parseConsistencyLedger(
-          await getKv(db, consistencyKeyForOwner(owner)),
-        );
+        const ledger = await readConsistencyLedger(db, owner);
         if (getActiveDataOwner() !== owner) return;
         await setKv(
           db,
@@ -432,5 +487,14 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     return pending;
   },
 
-  dismissCelebration: () => set({ celebration: null }),
+  dismissCelebration: expected => {
+    const target = expected ?? get().celebration;
+    if (!target) return;
+    set(state => ({
+      celebration: state.celebration === target ? null : state.celebration,
+      queuedCelebrations: state.queuedCelebrations.filter(
+        celebration => celebration !== target,
+      ),
+    }));
+  },
 }));

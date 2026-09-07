@@ -25,7 +25,7 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
+  VERDICT_URL,
   EVENTS_URL,
   expiredSubscriber,
   type Row,
@@ -349,7 +349,7 @@ Deno.test(
             times: 2,
           });
           sim.faults.push({
-            match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+            match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
             ...dbUnavailable,
             times: 1,
           });
@@ -703,7 +703,7 @@ Deno.test(
       let entitlementPosts = 0;
       sim.faults.push({
         match: (m, u) => {
-          if (m !== "POST" || !u.startsWith(ENTITLEMENTS_URL)) return false;
+          if (m !== "POST" || !u.startsWith(VERDICT_URL)) return false;
           entitlementPosts += 1;
           return entitlementPosts === 2;
         },

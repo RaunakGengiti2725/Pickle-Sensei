@@ -4273,23 +4273,50 @@ end $$;
 reset role;
 
 set local role service_role;
-insert into public.billing_entitlements (user_id, premium, product_key, verified_at)
-values ('00000000-0000-4000-8000-000000000092', true, 'verified-product', now())
-on conflict (user_id) do update set premium = excluded.premium,
-  product_key = excluded.product_key, verified_at = excluded.verified_at;
-update public.billing_entitlements set premium = false
-  where user_id = '00000000-0000-4000-8000-000000000092';
-insert into public.account_external_credentials (user_id, revenuecat_deleted_at)
-values ('00000000-0000-4000-8000-000000000092', now())
-on conflict (user_id) do update set revenuecat_deleted_at = excluded.revenuecat_deleted_at;
-update public.account_external_credentials set updated_at = now()
-  where user_id = '00000000-0000-4000-8000-000000000092';
-insert into public.webhook_events (id, event_type, app_user_id, payload)
-values ('service-role-boundary-test', 'TEST', '00000000-0000-4000-8000-000000000092', '{}')
-on conflict (id) do nothing;
-insert into public.webhook_events (id, event_type, app_user_id, payload)
-values ('service-role-boundary-test', 'TEST', '00000000-0000-4000-8000-000000000092', '{}')
-on conflict (id) do nothing;
+do $$
+declare
+  u uuid := '00000000-0000-4000-8000-000000000092';
+  t uuid;
+  lease uuid;
+  payload jsonb := '{"event":{"id":"service-role-boundary-test","type":"TEST","app_user_id":"00000000-0000-4000-8000-000000000092"}}';
+begin
+  t := (public.begin_billing_verification(array[u])->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(u, t,
+    '{"premium":true,"productKey":"verified-product","expiresAt":null,"activeEntitlements":["pickle_sensei_pro"]}');
+  lease := (public.claim_billing_webhook_delivery('service-role-boundary-test', payload)->>'lease_token')::uuid;
+  t := (public.begin_billing_verification(array[u], 'service-role-boundary-test', payload, lease)->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(u, t,
+    '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}');
+  perform public.complete_billing_webhook('service-role-boundary-test', payload, jsonb_build_object(u::text, t), lease);
+  perform public.complete_billing_webhook('service-role-boundary-test', payload, jsonb_build_object(u::text, t), lease);
+end $$;
+-- External credential DML was intentionally retired by W08. Exercise the
+-- same fenced service helpers as Edge, including the real minimum-age gate.
+do $$
+declare
+  u uuid := '00000000-0000-4000-8000-000000000092';
+  operation_id uuid := gen_random_uuid();
+  challenge_hash bytea := sha256(convert_to('M2 synthetic deletion challenge', 'UTF8'));
+  claimed jsonb;
+  lease_token uuid;
+begin
+  perform public.store_account_apple_credential(u, 'v1.abcdefghijklmnop.fixtureEncryptedToken');
+  perform public.begin_account_deletion_operation(u, operation_id, challenge_hash,
+    sha256(convert_to('M2 synthetic status capability', 'UTF8')));
+  perform pg_sleep(3.01);
+  claimed := public.confirm_account_deletion_operation(u, challenge_hash, operation_id);
+  if claimed->>'outcome' <> 'claimed' then
+    raise exception 'M2: the service helper must claim confirmed cleanup';
+  end if;
+  lease_token := (claimed->>'leaseToken')::uuid;
+  perform public.checkpoint_account_deletion_operation(u, operation_id, lease_token, 'apple', 'revoked');
+  perform public.checkpoint_account_deletion_operation(u, operation_id, lease_token, 'revenuecat');
+  if has_table_privilege('service_role', 'public.account_external_credentials', 'INSERT,UPDATE,DELETE')
+    or has_any_column_privilege('service_role', 'public.account_external_credentials', 'INSERT,UPDATE') then
+    raise exception 'M2: direct credential writes must stay revoked';
+  end if;
+end $$;
+
 do $$
 begin
   if not exists (select 1 from public.billing_entitlements
@@ -4315,11 +4342,9 @@ begin
     raise exception 'M5: a live webhook lease must not be stolen';
   exception when insufficient_privilege then null;
   end;
-  update public.webhook_events set processed_at = now()
-    where id = 'service-role-boundary-test';
   if not exists (select 1 from public.webhook_events
                  where id = 'service-role-boundary-test' and processed_at is not null) then
-    raise exception 'M6: the service role must complete a pending webhook';
+    raise exception 'M6: the service role must complete a pending webhook through its helper';
   end if;
   begin
     update public.webhook_events set processed_at = null
@@ -4332,22 +4357,504 @@ begin
     raise exception 'M8: the service role must not delete completed audit history';
   exception when insufficient_privilege then null;
   end;
-  insert into public.webhook_events (id, event_type, payload, claimed_at)
-    values ('service-role-pending-retry', 'TEST', '{}', now() - interval '6 minutes');
-  update public.webhook_events set claimed_at = now()
-    where id = 'service-role-pending-retry' and processed_at is null;
-  if not exists (select 1 from public.webhook_events
-                 where id = 'service-role-pending-retry' and claimed_at = now()) then
+end $$;
+reset role;
+
+insert into public.webhook_events (id, event_type, payload, claimed_at)
+  values ('service-role-pending-retry', 'TEST', '{"event":{"id":"service-role-pending-retry","type":"TEST"}}', now() - interval '6 minutes');
+set local role service_role;
+do $$
+declare
+  v_payload jsonb := '{"event":{"id":"service-role-pending-retry","type":"TEST"}}';
+  claimed jsonb;
+  lease uuid;
+begin
+  claimed := public.claim_billing_webhook_delivery('service-role-pending-retry', v_payload);
+  lease := (claimed->>'lease_token')::uuid;
+  if claimed->>'outcome' <> 'claimed' or lease is null or not exists (
+    select 1 from public.webhook_events where id = 'service-role-pending-retry'
+      and processed_at is null and claimed_at > now() - interval '1 second'
+  ) then
     raise exception 'M9: an expired webhook lease must be reclaimable';
   end if;
-  delete from public.webhook_events
-    where id = 'service-role-pending-retry' and claimed_at = now() and processed_at is null;
-  if exists (select 1 from public.webhook_events where id = 'service-role-pending-retry') then
-    raise exception 'M10: a failed pending webhook must be releasable for redelivery';
+  if public.claim_billing_webhook_delivery('service-role-pending-retry', v_payload)->>'outcome' <> 'in_progress' then
+    raise exception 'M5: a live webhook lease must not be stolen through the helper';
+  end if;
+  perform public.release_billing_webhook_delivery('service-role-pending-retry', v_payload, lease);
+  claimed := public.claim_billing_webhook_delivery('service-role-pending-retry', v_payload);
+  if claimed->>'outcome' <> 'claimed' or (claimed->>'lease_token')::uuid = lease or not exists (
+    select 1 from public.webhook_events where id = 'service-role-pending-retry'
+      and processed_at is null and public.webhook_events.payload = v_payload
+  ) then
+    raise exception 'M10: a failed pending webhook must be releasable without erasing its audit history';
+  end if;
+  if public.release_billing_webhook_delivery('service-role-pending-retry', v_payload, lease)->>'outcome' <> 'stale_lease' then
+    raise exception 'M10: a stale worker must not release the replacement delivery';
   end if;
 end $$;
 reset role;
 
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-0000000000a1', 'billing-a@example.test', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-0000000000a2', 'billing-b@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000a3', 'billing-deleted@example.test', '{"provider":"google"}');
+insert into public.billing_entitlements (user_id, premium, verified_at)
+values ('00000000-0000-4000-8000-0000000000a1', true, '2026-01-01T00:00:00Z');
+
+set local role service_role;
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  b uuid := '00000000-0000-4000-8000-0000000000a2';
+  older uuid;
+  newer uuid;
+  r jsonb;
+  active jsonb := '{"premium":true,"productKey":"pickle_sensei_pro_monthly","expiresAt":"2099-01-01T00:00:00.000Z","activeEntitlements":["pickle_sensei_pro"]}';
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  before_time timestamptz;
+  after_time timestamptz;
+  before_order bigint;
+begin
+  older := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  newer := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  before_time := clock_timestamp();
+  r := public.persist_billing_verdict(a, newer, inactive);
+  after_time := clock_timestamp();
+  if r->>'outcome' <> 'persisted' or r->'billing'->>'premium' <> 'false' then
+    raise exception 'W07-1: newer inactive verification must revoke the legacy premium row';
+  end if;
+  if (r->'billing'->>'verifiedAt')::timestamptz not between before_time and after_time then
+    raise exception 'W07-2: verifiedAt must come from the database, not provider/client clocks';
+  end if;
+  select verification_order into before_order from public.billing_entitlements where user_id = a;
+  r := public.persist_billing_verdict(a, older, active);
+  if r->>'outcome' <> 'persisted' or r->>'applied' <> 'false'
+     or r->'billing'->>'premium' <> 'false'
+     or (select premium from public.billing_entitlements where user_id = a)
+     or (select verification_order from public.billing_entitlements where user_id = a) <> before_order then
+    raise exception 'W07-3: delayed old-active verification must return canonical inactive without overwriting';
+  end if;
+  r := public.persist_billing_verdict(a, older, active);
+  if r->>'applied' <> 'false' or r->'billing'->>'premium' <> 'false' then
+    raise exception 'W07-4: same ticket and verdict replay must be idempotent';
+  end if;
+  begin
+    perform public.persist_billing_verdict(a, older, inactive);
+    raise exception 'W07-5: a consumed ticket must reject a conflicting verdict';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.persist_billing_verdict(b, newer, active);
+    raise exception 'W07-6: verification tickets must be bound to one user';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.persist_billing_verdict(a, gen_random_uuid(), active);
+    raise exception 'W07-7: a caller cannot invent a verification ticket';
+  exception when invalid_parameter_value then null;
+  end;
+  older := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  newer := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(a, older, inactive);
+  r := public.persist_billing_verdict(a, newer, active);
+  if r->>'applied' <> 'true' or r->'billing'->>'premium' <> 'true' then
+    raise exception 'W07-8: the opposite completion order must still preserve the newer active state';
+  end if;
+  older := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  newer := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(a, newer, active || '{"expiresAt":"2098-01-01T00:00:00.000Z"}');
+  r := public.persist_billing_verdict(a, older, active);
+  if (r->'billing'->>'expiresAt')::timestamptz <> '2098-01-01T00:00:00Z'::timestamptz then
+    raise exception 'W07-9: an old active snapshot cannot extend the newer verified expiry';
+  end if;
+  before_order := (select verification_order from public.billing_entitlements where user_id = a);
+  perform public.begin_billing_verification(array[a]);
+  if not (select premium from public.billing_entitlements where user_id = a)
+     or (select verification_order from public.billing_entitlements where user_id = a) <> before_order then
+    raise exception 'W07-10: issuing a ticket without a successful verification is not a negative entitlement';
+  end if;
+  begin
+    insert into public.billing_entitlements (user_id, premium, verified_at)
+    values (a, true, '2999-01-01T00:00:00Z')
+    on conflict (user_id) do update set premium = excluded.premium, verified_at = excluded.verified_at;
+    raise exception 'W07-11: rolling old writers must fail closed rather than bypass verification order';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.billing_entitlements set premium = true where user_id = a;
+    raise exception 'W07-12: direct service-role updates must not bypass ordered persistence';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.webhook_events (id, payload) values ('old-writer-poison', '{}');
+    raise exception 'W07-13: rolling old audit writers must not create unvalidated completion markers';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  b uuid := '00000000-0000-4000-8000-0000000000a2';
+  payload jsonb := '{"event":{"id":"w07-transfer","type":"TRANSFER","transferred_from":["00000000-0000-4000-8000-0000000000a1"],"transferred_to":["00000000-0000-4000-8000-0000000000a2"]}}';
+  issued jsonb;
+  tickets jsonb;
+  a_ticket uuid;
+  b_ticket uuid;
+  lease uuid;
+  active jsonb := '{"premium":true,"productKey":null,"expiresAt":null,"activeEntitlements":["pickle_sensei_pro"]}';
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[a,b], 'w07-transfer', payload, lease);
+  select (item->>'ticket_id')::uuid into a_ticket from jsonb_array_elements(issued) item where item->>'user_id' = a::text;
+  select (item->>'ticket_id')::uuid into b_ticket from jsonb_array_elements(issued) item where item->>'user_id' = b::text;
+  tickets := jsonb_build_object(a::text, a_ticket, b::text, b_ticket);
+  perform public.persist_billing_verdict(b, b_ticket, active);
+  begin
+    perform public.complete_billing_webhook('w07-transfer', payload, tickets, lease);
+    raise exception 'W07-14: a partially persisted transfer must not create a completion marker';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  if exists (select 1 from public.webhook_events where id = 'w07-transfer' and processed_at is not null)
+     or not (select premium from public.billing_entitlements where user_id = b) then
+    raise exception 'W07-15: a failed transfer must preserve healthy-side repair without poisoning audit';
+  end if;
+  begin
+    perform public.complete_billing_webhook('w07-transfer', payload, jsonb_build_object(b::text, b_ticket), lease);
+    raise exception 'W07-16: omitting a failed transfer subject cannot complete the audit';
+  exception when invalid_parameter_value or object_not_in_prerequisite_state then null;
+  end;
+  perform public.persist_billing_verdict(a, a_ticket, inactive);
+  begin
+    perform public.complete_billing_webhook('w07-transfer', payload, jsonb_build_object(a::text, b_ticket, b::text, a_ticket), lease);
+    raise exception 'W07-17: audit proofs must be bound to the matching subjects';
+  exception when invalid_parameter_value or object_not_in_prerequisite_state then null;
+  end;
+  r := public.complete_billing_webhook('w07-transfer', payload, tickets, lease);
+  if r->>'verified' <> 'true' then
+    raise exception 'W07-18: a repaired transfer must complete';
+  end if;
+  perform public.complete_billing_webhook('w07-transfer', payload, tickets, lease);
+  if (select count(*) from public.webhook_events where id = 'w07-transfer') <> 1 then
+    raise exception 'W07-19: duplicate audit completion must leave exactly one immutable marker';
+  end if;
+  begin
+    perform public.complete_billing_webhook('w07-transfer', jsonb_set(payload, '{event,type}', '"REFUND"'), tickets);
+    raise exception 'W07-20: a conflicting event payload cannot reuse verification proofs';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.begin_billing_verification(array[a], 'w07-transfer', payload);
+    raise exception 'W07-21: issuance must include every transfer subject';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.begin_billing_verification(array[a,b], 'wrong-event', payload);
+    raise exception 'W07-22: tickets must be bound to the supplied event identity';
+  exception when invalid_parameter_value then null;
+  end;
+  r := public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000ff'::uuid]);
+  if r->0->>'outcome' <> 'user_missing' then
+    raise exception 'W07-23: only authoritative Auth absence is terminal';
+  end if;
+  perform set_config('w07.deleted_ticket', public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000a3'::uuid])->0->>'ticket_id', true);
+end $$;
+reset role;
+
+delete from auth.users where id = '00000000-0000-4000-8000-0000000000a3';
+set local role service_role;
+do $$
+declare r jsonb;
+begin
+  r := public.persist_billing_verdict('00000000-0000-4000-8000-0000000000a3', current_setting('w07.deleted_ticket')::uuid,
+    '{"premium":true,"productKey":null,"expiresAt":null,"activeEntitlements":["pickle_sensei_pro"]}');
+  if r->>'outcome' <> 'user_missing' then
+    raise exception 'W07-24: deletion between issuance and persistence must not resurrect entitlement state';
+
+  end if;
+end $$;
+reset role;
+
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000a1'::uuid]);
+    raise exception 'W07-31: an authenticated API caller must not issue service billing tickets';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.persist_billing_verdict('00000000-0000-4000-8000-0000000000a1', gen_random_uuid(), '{}');
+    raise exception 'W07-32: an authenticated API caller must not persist billing claims';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.complete_billing_webhook('client-completion', '{"event":{}}', '{}');
+    raise exception 'W07-33: an authenticated API caller must not complete server audit events';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local role anon;
+do $$
+begin
+  begin
+    perform public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000a1'::uuid]);
+    raise exception 'W07-34: anonymous callers must not issue verification tickets';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.persist_billing_verdict('00000000-0000-4000-8000-0000000000a1', gen_random_uuid(), '{}');
+    raise exception 'W07-35: anonymous callers must not persist billing claims';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.complete_billing_webhook('anon-completion', '{"event":{}}', '{}');
+    raise exception 'W07-36: anonymous callers must not complete server audit events';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+do $$
+declare
+  u uuid := '00000000-0000-4000-8000-0000000000a4';
+  payload jsonb := '{"event":{"id":"subject-appears-before-audit","app_user_id":"00000000-0000-4000-8000-0000000000a4"}}';
+  r jsonb;
+  lease uuid;
+begin
+  lease := (public.claim_billing_webhook_delivery('subject-appears-before-audit', payload)->>'lease_token')::uuid;
+  r := public.begin_billing_verification(array[u], 'subject-appears-before-audit', payload, lease);
+  if r->0->>'outcome' <> 'user_missing' then
+    raise exception 'W07-37: the unprovisioned fixture must be missing at issuance';
+  end if;
+  insert into auth.users (id, email, raw_app_meta_data) values (u, 'billing-appeared@example.test', '{"provider":"google"}');
+  begin
+    perform public.complete_billing_webhook('subject-appears-before-audit', payload, '{}', lease);
+    raise exception 'W07-38: a subject appearing before completion requires fresh verification';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  if exists (select 1 from public.webhook_events where id = 'subject-appears-before-audit' and processed_at is not null) then
+    raise exception 'W07-39: absence at issuance cannot poison audit completion after the subject appears';
+  end if;
+end $$;
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  b uuid := '00000000-0000-4000-8000-0000000000a2';
+  payload jsonb := '{"event":{"id":"w07-first-claim","app_user_id":"00000000-0000-4000-8000-0000000000a1"}}';
+  issued jsonb;
+  ticket uuid;
+  before_count bigint;
+  lease uuid;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-first-claim', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[a], 'w07-first-claim', payload, lease);
+  ticket := (issued->0->>'ticket_id')::uuid;
+  select count(*) into before_count from api_private.billing_verification_tickets;
+  begin
+    perform public.begin_billing_verification(array[b], 'w07-first-claim', jsonb_set(payload, '{event,app_user_id}', to_jsonb(b)));
+    raise exception 'W07-41: a conflicting in-flight event must not allocate tickets for another scope';
+  exception when invalid_parameter_value then null;
+  end;
+  if (select count(*) from api_private.billing_verification_tickets) <> before_count then
+    raise exception 'W07-42: rejected claims must leave no verification tickets';
+  end if;
+  perform public.persist_billing_verdict(a, ticket,
+    '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}');
+  perform public.complete_billing_webhook('w07-first-claim', payload, jsonb_build_object(a::text, ticket), lease);
+  issued := public.begin_billing_verification(array[a], 'w07-first-claim', payload);
+  if issued <> '{"outcome":"duplicate","event_id":"w07-first-claim"}'::jsonb
+     or (select count(*) from api_private.billing_verification_tickets) <> before_count then
+    raise exception 'W07-43: completion must fence later issuance even after a stale Edge audit lookup';
+  end if;
+end $$;
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  b uuid := '00000000-0000-4000-8000-0000000000a2';
+  anonymous jsonb := '{"event":{"id":"w07-anonymous-claim","app_user_id":"$RCAnonymousID:unlinked"}}';
+  payload jsonb;
+  issued jsonb;
+  r jsonb;
+  ids uuid[];
+  ticket uuid;
+  invalid jsonb;
+  lease uuid;
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-anonymous-claim', anonymous)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification('{}', 'w07-anonymous-claim', anonymous, lease);
+  if issued <> '[]'::jsonb or not exists (select 1 from api_private.billing_webhook_claims where event_id = 'w07-anonymous-claim') then
+    raise exception 'W07-47: anonymous-only events still need a durable non-completion claim';
+  end if;
+  begin
+    perform public.begin_billing_verification(array[a], 'w07-anonymous-claim', jsonb_set(anonymous, '{event,app_user_id}', to_jsonb(a)));
+    raise exception 'W07-48: a failed anonymous delivery cannot change to a canonical scope on retry';
+  exception when invalid_parameter_value then null;
+  end;
+  r := public.complete_billing_webhook('w07-anonymous-claim', anonymous, '{}', lease);
+  if r->>'verified' <> 'false' then
+    raise exception 'W07-49: an anonymous audit completes without inventing verified entitlements';
+  end if;
+  payload := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-scope-normalization', 'app_user_id', '$RCAnonymousID:alias',
+    'aliases', jsonb_build_array('not-a-user', upper(a::text), b::text),
+    'transferred_from', jsonb_build_array(a, upper(a::text)),
+    'transferred_to', jsonb_build_array(b, upper(b::text))));
+  lease := (public.claim_billing_webhook_delivery('w07-scope-normalization', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[b,a], 'w07-scope-normalization', payload, lease);
+  if jsonb_array_length(issued) <> 2
+     or (select count(distinct verification_order) from api_private.billing_verification_tickets where event_id = 'w07-scope-normalization') <> 1 then
+    raise exception 'W07-50: alias fallback, case normalization and transfer deduplication must share one order';
+  end if;
+  foreach ids slice 1 in array array[array[a,a],array[a,b],array[a,null::uuid]] loop
+    begin
+      perform public.begin_billing_verification(ids);
+      raise exception 'W07-51: sync admission must reject duplicate, multiple or null subjects';
+    exception when invalid_parameter_value then null;
+    end;
+  end loop;
+  begin
+    perform public.begin_billing_verification('{}'::uuid[]);
+    raise exception 'W07-52: sync admission cannot omit its canonical user';
+  exception when invalid_parameter_value then null;
+  end;
+  payload := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-no-alias-escalation', 'app_user_id', a, 'aliases', jsonb_build_array(b)));
+  begin
+    perform public.begin_billing_verification(array[a,b], 'w07-no-alias-escalation', payload);
+    raise exception 'W07-53: a valid primary subject must not also authorize unrelated aliases';
+  exception when invalid_parameter_value then null;
+  end;
+  ticket := (public.begin_billing_verification(array[a])->0->>'ticket_id')::uuid;
+  foreach invalid in array array[
+    'null'::jsonb, '{}'::jsonb,
+    inactive || '{"verificationOrder":999999999999,"verifiedAt":"2999-01-01T00:00:00Z"}'::jsonb,
+    inactive || '{"premium":true}'::jsonb,
+    inactive || '{"activeEntitlements":["client-premium"]}'::jsonb,
+    inactive || '{"productKey":"unverified-product"}'::jsonb,
+    inactive || '{"premium":true,"activeEntitlements":["premium"],"expiresAt":"infinity"}'::jsonb
+  ] loop
+    begin
+      perform public.persist_billing_verdict(a, ticket, invalid);
+      raise exception 'W07-54: malformed/client-metadata verdicts cannot consume a verification ticket';
+    exception when invalid_parameter_value then null;
+    end;
+  end loop;
+  if (select verdict from api_private.billing_verification_tickets where id = ticket) is not null then
+    raise exception 'W07-55: invalid verdict rejection must be atomic with ticket consumption';
+  end if;
+  perform public.persist_billing_verdict(a, ticket, inactive);
+  lease := (public.claim_billing_webhook_delivery('w07-no-alias-escalation', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[a], 'w07-no-alias-escalation', payload, lease);
+  begin
+    perform public.complete_billing_webhook('w07-no-alias-escalation', payload, jsonb_build_object(a::text, ticket), lease);
+    raise exception 'W07-56: a sync ticket cannot prove a webhook with the same subject';
+  exception when invalid_parameter_value then null;
+  end;
+  ticket := (issued->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(a, ticket,
+    '{"premium":true,"productKey":"expired-product","expiresAt":"2000-01-01T00:00:00Z","activeEntitlements":["pickle_sensei_pro"]}');
+  if (r->'billing') - 'verifiedAt' is distinct from inactive then
+    raise exception 'W07-57: expiry at persistence must yield a canonical inactive response without a stale grant';
+  end if;
+  select array_agg(format('00000000-0000-4000-8000-%s', lpad(i::text, 12, '0'))::uuid)
+    into ids from generate_series(201,217) i;
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-too-many', 'transferred_to', to_jsonb(ids)));
+  begin
+    perform public.begin_billing_verification(ids, 'w07-too-many', payload);
+    raise exception 'W07-58: the database must enforce the 16-subject cap before issuing tickets';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  payload jsonb := '{"event":{"id":"w07-historical-poison","app_user_id":"00000000-0000-4000-8000-0000000000a1"}}';
+  original jsonb;
+  ticket_count bigint;
+  r jsonb;
+begin
+  insert into public.webhook_events (id, payload, received_at, processed_at)
+    values ('w07-historical-poison', payload, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  select to_jsonb(e) into original from public.webhook_events e where id = 'w07-historical-poison';
+  select count(*) into ticket_count from api_private.billing_verification_tickets;
+  r := public.begin_billing_verification(array[a], 'w07-historical-poison', payload);
+  perform public.complete_billing_webhook('w07-historical-poison', payload, '{}');
+  if r is distinct from '{"outcome":"duplicate","event_id":"w07-historical-poison"}'::jsonb
+     or (select to_jsonb(e) from public.webhook_events e where id = 'w07-historical-poison') is distinct from original
+     or (select count(*) from api_private.billing_verification_tickets) <> ticket_count then
+    raise exception 'W07-59: historical markers are preserved, never automatically deleted or repaired';
+  end if;
+end $$;
+
+do $$
+declare f regprocedure; r text;
+begin
+  foreach f in array array[
+    'public.begin_billing_verification(uuid[],text,jsonb,uuid)'::regprocedure,
+    'public.persist_billing_verdict(uuid,uuid,jsonb)'::regprocedure,
+    'public.complete_billing_webhook(text,jsonb,jsonb,uuid)'::regprocedure,
+    'public.claim_billing_webhook_delivery(text,jsonb,boolean)'::regprocedure,
+    'public.release_billing_webhook_delivery(text,jsonb,uuid)'::regprocedure
+  ] loop
+    if not has_function_privilege('service_role', f, 'EXECUTE') then
+      raise exception 'W07-25: verification helpers require explicit service-role execution grants';
+    end if;
+    foreach r in array array['anon','authenticated'] loop
+      if has_function_privilege(r, f, 'EXECUTE') then
+        raise exception 'W07-26: clients cannot execute billing helper %', f;
+      end if;
+    end loop;
+    if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+      where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+      raise exception 'W07-27: PUBLIC must not execute billing helper %', f;
+    end if;
+    if not exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']) then
+      raise exception 'W07-28: service-only helpers must use a fixed empty search_path';
+    end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'api_private.billing_verification_tickets'::regclass) then
+    raise exception 'W07-29: private verification tickets must have RLS enabled';
+  end if;
+  if (select count(distinct verification_order) from api_private.billing_verification_tickets
+      where event_id = 'w07-transfer') <> 1 then
+    raise exception 'W07-40: all transfer subjects must share one database-issued verification order';
+  end if;
+  foreach r in array array['anon','authenticated','service_role'] loop
+    if has_function_privilege(r, 'api_private.begin_billing_verification(uuid[],text,jsonb)', 'EXECUTE')
+       or has_function_privilege(r, 'api_private.complete_billing_webhook(text,jsonb,jsonb)', 'EXECUTE') then
+      raise exception 'W07-30: unfenced internal billing entrypoints must not be callable (%)', r;
+    end if;
+    if has_table_privilege(r, 'api_private.billing_verification_tickets', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_table_privilege(r, 'api_private.billing_webhook_claims', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_sequence_privilege(r, 'api_private.billing_verification_order_seq', 'USAGE,SELECT,UPDATE') then
+      raise exception 'W07-30: even the service role must use helpers rather than forge tickets or claims (%)', r;
+    end if;
+    if has_any_column_privilege(r, 'public.billing_entitlements', 'INSERT,UPDATE,REFERENCES')
+       or has_any_column_privilege(r, 'public.webhook_events', 'INSERT,UPDATE,REFERENCES') then
+      raise exception 'W07-44: neither column grants nor table grants may bypass billing helpers (%)', r;
+    end if;
+    foreach f in array array[
+      'api_private.billing_webhook_subjects(jsonb)'::regprocedure,
+      'api_private.claim_billing_webhook(text,jsonb)'::regprocedure
+    ] loop
+      if has_function_privilege(r, f, 'EXECUTE')
+         or not exists (select 1 from pg_proc p where p.oid = f and not p.prosecdef and p.proconfig @> array['search_path=""']) then
+        raise exception 'W07-45: internal claim/scope helpers must be inaccessible and use a fixed search_path';
+      end if;
+    end loop;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'api_private.billing_webhook_claims'::regclass) then
+    raise exception 'W07-46: private event claims must have RLS enabled';
+  end if;
+end $$;
 insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
 values ('00000000-0000-4000-8000-000000009299', '00000000-0000-4000-8000-000000000092',
         'api-tombstone-proof', 'finalized', 'scored');
@@ -4396,4 +4903,315 @@ end $$;
 
 rollback;
 
+create schema w07_probe;
+create extension dblink with schema w07_probe;
+
+create function w07_probe.await_lock(p_application text)
+returns void language plpgsql set search_path = '' as $$
+declare deadline timestamptz := clock_timestamp() + interval '3 seconds';
+begin
+  loop
+    perform pg_stat_clear_snapshot();
+    if exists (select 1 from pg_stat_activity where application_name = p_application and wait_event_type = 'Lock') then
+      return;
+    end if;
+    if clock_timestamp() > deadline then
+      raise exception 'W07 concurrency: the second connection never encountered the expected database lock';
+    end if;
+    perform pg_sleep(0.01);
+  end loop;
+end $$;
+
+create function w07_probe.collect(p_connection text, p_error text default null)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r jsonb;
+begin
+  select value into r from w07_probe.dblink_get_result(p_connection, p_error is null) as result(value jsonb);
+  if p_error is not null and position(p_error in w07_probe.dblink_error_message(p_connection)) = 0 then
+    raise exception 'W07 concurrency: expected rejection % was not observed', p_error;
+  end if;
+  perform 1 from w07_probe.dblink_get_result(p_connection, false) as result(value jsonb);
+  return r;
+end $$;
+
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-0000000000e1', 'billing-race@example.test', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-0000000000e2', 'billing-delete-race@example.test', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-0000000000e3', 'billing-profile-race@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000e4', 'billing-admission-race@example.test', '{"provider":"google"}');
+
+do $$
+<<billing_matrix>>
+declare
+  connection text := format('host=%s port=%s dbname=%s user=postgres',
+    split_part(current_setting('unix_socket_directories'), ',', 1), current_setting('port'), current_database());
+  c text;
+  a uuid := '00000000-0000-4000-8000-0000000000e1';
+  deleted_user uuid := '00000000-0000-4000-8000-0000000000e2';
+  profile_user uuid := '00000000-0000-4000-8000-0000000000e3';
+  older uuid;
+  newer uuid;
+  first_ticket uuid;
+  second_ticket uuid;
+  first_verdict jsonb;
+  second_verdict jsonb;
+  active jsonb := '{"premium":true,"productKey":"verified-store-product","expiresAt":null,"activeEntitlements":["pickle_sensei_pro"]}';
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  newest_active boolean;
+  newest_first boolean;
+  conflicting boolean;
+  issued jsonb;
+  r jsonb;
+  first_result jsonb;
+  payload jsonb;
+  conflicting_payload jsonb;
+  proofs jsonb;
+  query text;
+  event_id text;
+  scenario_count integer := 0;
+  ticket_count bigint;
+begin
+  foreach c in array array['w07_setup','w07_first','w07_second'] loop
+    perform w07_probe.dblink_connect(c, connection || ' application_name=' || c);
+    perform w07_probe.dblink_exec(c, 'set statement_timeout = ''5s''');
+  end loop;
+  perform w07_probe.dblink_exec('w07_setup', 'set role service_role');
+  foreach newest_active in array array[false,true] loop
+    foreach newest_first in array array[false,true] loop
+      select value into issued from w07_probe.dblink('w07_setup', format(
+        'select public.begin_billing_verification(%L::uuid[])', array[a]::text
+      )) as result(value jsonb);
+      older := (issued->0->>'ticket_id')::uuid;
+      select value into issued from w07_probe.dblink('w07_setup', format(
+        'select public.begin_billing_verification(%L::uuid[])', array[a]::text
+      )) as result(value jsonb);
+      newer := (issued->0->>'ticket_id')::uuid;
+      first_ticket := case when newest_first then newer else older end;
+      second_ticket := case when newest_first then older else newer end;
+      first_verdict := case when newest_first = newest_active then active else inactive end;
+      second_verdict := case when newest_first = newest_active then inactive else active end;
+      perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+      select value into first_result from w07_probe.dblink('w07_first', format(
+        'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, first_ticket, first_verdict
+      )) as result(value jsonb);
+      perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+      perform w07_probe.dblink_send_query('w07_second', format(
+        'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, second_ticket, second_verdict
+      ));
+      perform w07_probe.await_lock('w07_second');
+      perform w07_probe.dblink_exec('w07_first', 'commit');
+      r := w07_probe.collect('w07_second');
+      perform w07_probe.dblink_exec('w07_second', 'commit');
+      if r->>'outcome' <> 'persisted' or (r->'billing'->>'premium')::boolean <> newest_active
+         or (r->>'applied')::boolean = newest_first
+         or (select premium from public.billing_entitlements where user_id = a) <> newest_active then
+        raise exception 'W07 concurrency: atomic persistence failed (newest active %, newest first %)', newest_active, newest_first;
+      end if;
+      scenario_count := scenario_count + 1;
+    end loop;
+  end loop;
+
+  foreach conflicting in array array[false,true] loop
+    select value into issued from w07_probe.dblink('w07_setup', format(
+      'select public.begin_billing_verification(%L::uuid[])', array[a]::text
+    )) as result(value jsonb);
+    older := (issued->0->>'ticket_id')::uuid;
+    perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+    select value into first_result from w07_probe.dblink('w07_first', format(
+      'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older, active
+    )) as result(value jsonb);
+    perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+    perform w07_probe.dblink_send_query('w07_second', format(
+      'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older,
+      case when conflicting then inactive else active end
+    ));
+    perform w07_probe.await_lock('w07_second');
+    perform w07_probe.dblink_exec('w07_first', 'commit');
+    r := w07_probe.collect('w07_second', case when conflicting then 'Conflicting verification ticket verdict' else null end);
+    perform w07_probe.dblink_exec('w07_second', case when conflicting then 'rollback' else 'commit' end);
+    if not (select premium from public.billing_entitlements where user_id = a)
+       or (not conflicting and (r->>'applied' <> 'false' or r->'billing' <> first_result->'billing')) then
+      raise exception 'W07 concurrency: repeated ticket persistence must be identical or reject a conflicting verdict';
+    end if;
+    scenario_count := scenario_count + 1;
+  end loop;
+
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-concurrent-audit', 'app_user_id', a));
+  select value into issued from w07_probe.dblink('w07_setup', format(
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, 'w07-concurrent-audit', payload
+  )) as result(value jsonb);
+  older := (issued->0->>'ticket_id')::uuid;
+  perform value from w07_probe.dblink('w07_setup', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older, inactive
+  )) as result(value jsonb);
+  proofs := jsonb_build_object(a::text, older);
+  query := format('select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-concurrent-audit', payload, proofs);
+  perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+  perform value from w07_probe.dblink('w07_first', query) as result(value jsonb);
+  perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+  perform w07_probe.dblink_send_query('w07_second', query);
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  r := w07_probe.collect('w07_second');
+  perform w07_probe.dblink_exec('w07_second', 'commit');
+  if r->>'received' <> 'true' or (select count(*) from public.webhook_events where id = 'w07-concurrent-audit') <> 1 then
+    raise exception 'W07 concurrency: simultaneous audit completions must retain one immutable event';
+  end if;
+  scenario_count := scenario_count + 1;
+
+  foreach conflicting in array array[false,true] loop
+    event_id := 'w07-concurrent-claim-' || conflicting::text;
+    payload := jsonb_build_object('event', jsonb_build_object('id', event_id, 'app_user_id', a));
+    conflicting_payload := case when conflicting then jsonb_set(payload, '{event,app_user_id}', to_jsonb(profile_user)) else payload end;
+    perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+    select value into issued from w07_probe.dblink('w07_first', format(
+      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+    )) as result(value jsonb);
+    older := (issued->0->>'ticket_id')::uuid;
+    perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+    perform w07_probe.dblink_send_query('w07_second', format(
+      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)',
+      array[case when conflicting then profile_user else a end]::text, event_id, conflicting_payload
+    ));
+    perform w07_probe.await_lock('w07_second');
+    perform w07_probe.dblink_exec('w07_first', 'commit');
+    r := w07_probe.collect('w07_second', case when conflicting then 'Conflicting webhook verification payload' else null end);
+    perform w07_probe.dblink_exec('w07_second', case when conflicting then 'rollback' else 'commit' end);
+    if (select count(*) from api_private.billing_webhook_claims c where c.event_id = billing_matrix.event_id) <> 1
+       or (select count(*) from api_private.billing_verification_tickets t where t.event_id = billing_matrix.event_id) <> (case when conflicting then 1 else 2 end)
+       or (not conflicting and (r->0->>'outcome' <> 'issued' or r->0->>'ticket_id' = older::text)) then
+      raise exception 'W07 concurrency: identical claims must get fresh ordered tickets, conflicting scopes must get none';
+    end if;
+    if not conflicting and (select verification_order from api_private.billing_verification_tickets where id = (r->0->>'ticket_id')::uuid)
+       <= (select verification_order from api_private.billing_verification_tickets where id = older) then
+      raise exception 'W07 concurrency: serialized admissions must assign strictly increasing database orders';
+    end if;
+    scenario_count := scenario_count + 1;
+  end loop;
+
+  event_id := 'w07-complete-before-admission';
+  payload := jsonb_build_object('event', jsonb_build_object('id', event_id, 'app_user_id', a));
+  select value into issued from w07_probe.dblink('w07_setup', format(
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+  )) as result(value jsonb);
+  older := (issued->0->>'ticket_id')::uuid;
+  perform value from w07_probe.dblink('w07_setup', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older, inactive
+  )) as result(value jsonb);
+  select count(*) into ticket_count from api_private.billing_verification_tickets;
+  perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+  perform value from w07_probe.dblink('w07_first', format(
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', event_id, payload, jsonb_build_object(a::text, older)
+  )) as result(value jsonb);
+  perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+  perform w07_probe.dblink_send_query('w07_second', format(
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+  ));
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  r := w07_probe.collect('w07_second');
+  perform w07_probe.dblink_exec('w07_second', 'commit');
+  if r is distinct from jsonb_build_object('outcome', 'duplicate', 'event_id', event_id)
+     or (select count(*) from api_private.billing_verification_tickets) <> ticket_count then
+    raise exception 'W07 concurrency: admission must observe a concurrently committed completion without allocating tickets';
+  end if;
+  scenario_count := scenario_count + 1;
+
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-conflicting-audit', 'app_user_id', a, 'type', 'RENEWAL'));
+  conflicting_payload := jsonb_set(payload, '{event,type}', '"REFUND"');
+  select value into issued from w07_probe.dblink('w07_setup', format(
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, 'w07-conflicting-audit', payload
+  )) as result(value jsonb);
+  older := (issued->0->>'ticket_id')::uuid;
+  perform value from w07_probe.dblink('w07_setup', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older, inactive
+  )) as result(value jsonb);
+  perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+  perform value from w07_probe.dblink('w07_first', format(
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-conflicting-audit', payload, jsonb_build_object(a::text, older)
+  )) as result(value jsonb);
+  perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+  perform w07_probe.dblink_send_query('w07_second', format(
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-conflicting-audit', conflicting_payload, jsonb_build_object(a::text, older)
+  ));
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  perform w07_probe.collect('w07_second', 'Conflicting webhook verification payload');
+  perform w07_probe.dblink_exec('w07_second', 'rollback');
+  if (select e.payload from public.webhook_events e where id = 'w07-conflicting-audit') <> payload then
+    raise exception 'W07 concurrency: conflicting audit completion must not rewrite or silently acknowledge another payload';
+  end if;
+  scenario_count := scenario_count + 1;
+
+  select value into issued from w07_probe.dblink('w07_setup', format(
+    'select public.begin_billing_verification(%L::uuid[])', array[deleted_user]::text
+  )) as result(value jsonb);
+  older := (issued->0->>'ticket_id')::uuid;
+  perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+  perform value from w07_probe.dblink('w07_first', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', deleted_user, older, active
+  )) as result(value jsonb);
+  perform w07_probe.dblink_exec('w07_second', 'begin');
+  perform w07_probe.dblink_send_query('w07_second', format(
+    'with removed as (delete from auth.users where id = %L::uuid returning id) select jsonb_build_object(''deleted'', count(*)) from removed', deleted_user
+  ));
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  r := w07_probe.collect('w07_second');
+  perform w07_probe.dblink_exec('w07_second', 'commit');
+  if r->>'deleted' <> '1' or exists (select 1 from public.billing_entitlements where user_id = deleted_user)
+     or exists (select 1 from api_private.billing_verification_tickets where user_id = deleted_user) then
+    raise exception 'W07 concurrency: account deletion must serialize and cascade all verification state';
+  end if;
+  select value into r from w07_probe.dblink('w07_setup', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', deleted_user, older, active
+  )) as result(value jsonb);
+  if r->>'outcome' <> 'user_missing' then
+    raise exception 'W07 concurrency: a delayed completion must not resurrect a deleted subject';
+  end if;
+  scenario_count := scenario_count + 1;
+
+  select value into issued from w07_probe.dblink('w07_setup', format(
+    'select public.begin_billing_verification(%L::uuid[])', array[profile_user]::text
+  )) as result(value jsonb);
+  older := (issued->0->>'ticket_id')::uuid;
+  perform w07_probe.dblink_exec('w07_first', 'begin');
+  perform w07_probe.dblink_exec('w07_first', format('delete from public.profiles where id = %L::uuid', profile_user));
+  perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+  perform w07_probe.dblink_send_query('w07_second', format(
+    'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', profile_user, older, active
+  ));
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  perform w07_probe.collect('w07_second', 'Billing profile is unavailable');
+  perform w07_probe.dblink_exec('w07_second', 'rollback');
+  if not exists (select 1 from auth.users where id = profile_user)
+     or (select verdict from api_private.billing_verification_tickets where id = older) is not null then
+    raise exception 'W07 concurrency: a missing profile is retryable and must not seal a verification ticket';
+  end if;
+  scenario_count := scenario_count + 1;
+  perform w07_probe.dblink_exec('w07_first', 'begin');
+  perform w07_probe.dblink_exec('w07_first', 'delete from auth.users where id = ''00000000-0000-4000-8000-0000000000e4''');
+  perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
+  perform w07_probe.dblink_send_query('w07_second',
+    'select public.begin_billing_verification(array[''00000000-0000-4000-8000-0000000000e4''::uuid])');
+  perform w07_probe.await_lock('w07_second');
+  perform w07_probe.dblink_exec('w07_first', 'commit');
+  r := w07_probe.collect('w07_second');
+  perform w07_probe.dblink_exec('w07_second', 'commit');
+  if r->0->>'outcome' <> 'user_missing'
+     or exists (select 1 from api_private.billing_verification_tickets where user_id = '00000000-0000-4000-8000-0000000000e4') then
+    raise exception 'W07 concurrency: admission must serialize against deletion and never issue a ticket for a deleted subject';
+  end if;
+  scenario_count := scenario_count + 1;
+  if scenario_count <> 14 then
+    raise exception 'W07 concurrency: expected all 14 scenarios to execute, got %', scenario_count;
+  end if;
+  raise notice 'W07 concurrent billing scenarios passed: %', scenario_count;
+  foreach c in array array['w07_setup','w07_first','w07_second'] loop
+    perform w07_probe.dblink_disconnect(c);
+  end loop;
+end $$;
+
+\echo W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED

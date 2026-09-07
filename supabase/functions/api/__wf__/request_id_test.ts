@@ -43,6 +43,21 @@ Deno.test("routeTemplate collapses uuids and long digit runs, keeps route words"
   );
   assertEquals(routeTemplate("/v1/sessions/123456/end"), "/v1/sessions/:id/end");
   assertEquals(routeTemplate("/v1/me/access"), "/v1/me/access");
+  assertEquals(
+    routeTemplate("/v1/catalog/drills/FAKE-private%40example.test"),
+    "/v1/catalog/drills/:id",
+  );
+  assertEquals(routeTemplate(`/v1/me/delete-status/${"A".repeat(43)}`), "/v1/me/delete-status/:id");
+  assert(routeTemplate(`/v1/${"private/".repeat(100)}`).length < 200);
+});
+
+Deno.test("request ids cannot echo deletion capabilities or the request bearer", () => {
+  for (const token of ["A".repeat(43), "FAKE-session-bearer"]) {
+    const request = new Request("http://edge.test/v1/me/delete-status", {
+      headers: { Authorization: `Bearer ${token}`, "x-request-id": token },
+    });
+    assertMatch(resolveRequestId(request), UUID);
+  }
 });
 
 Deno.test(
@@ -134,7 +149,7 @@ Deno.test(
     assert(unknownRoute.headers.get("x-request-id"));
     const entry = JSON.parse(lines.find((l) => l.startsWith('{"evt":"api_request"')) ?? "{}");
     assertEquals(entry.status, unknownRoute.status);
-    assertEquals(entry.route, "/functions/v1/api/v1/definitely-not-a-route");
+    assertEquals(entry.route, "/functions/v1/api/v1/:id");
     const body = await unknownRoute.json();
     if (typeof body?.error?.code === "string") assertEquals(entry.code, body.error.code);
   },

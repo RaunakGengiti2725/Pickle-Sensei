@@ -479,7 +479,9 @@ describe('PaywallScreen podium', () => {
     // Page 1 is the value pitch: benefits present, prices absent.
     const copy = allText(renderer);
     expect(copy).toContain('A coach for every stroke.');
-    expect(copy).toContain('Unlimited validated ratings');
+    expect(copy).toContain('Unlimited technique analyses');
+    expect(copy).not.toContain('validated ratings');
+    expect(copy).not.toContain('rights-cleared coaching videos');
     expect(copy).toContain('Rank and progress from real scores');
     expect(copy).not.toContain('$');
     expect(pressable(renderer, 'paywall-see-plans')).toBeTruthy();
@@ -529,7 +531,8 @@ describe('PaywallScreen podium', () => {
     expect(copy).toContain('SAVE 33%');
     expect(copy).toContain('/month · billed monthly');
     expect(copy).toContain('$3.33/mo · billed yearly');
-    expect(copy).toContain('one-time · yours forever');
+    expect(copy).toContain('one-time · no recurring fee');
+    expect(copy).not.toContain('yours forever');
 
     act(() => renderer.unmount());
   });

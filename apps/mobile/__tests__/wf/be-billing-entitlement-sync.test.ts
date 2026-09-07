@@ -30,6 +30,15 @@ import {
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
 import {
+  clearApiSession,
+  establishApiSession,
+} from '../../src/account/apiSession';
+import {
+  closeSqliteTestDatabases,
+  createSqliteTestDb,
+  seedSqliteCapture,
+} from '../../testSupport/sqlite';
+import {
   createCanonicalAccessClient,
   createRevenueCatBillingClient,
   type BillingAccessDependencies,
@@ -39,12 +48,22 @@ import {
 import type { RevenueCatSdk } from '../../src/billing/revenueCatClient';
 import {
   clearAccessStoreConfiguration,
-  configureAccessStore,
+  configureAccessStore as configureBillingAccessStore,
   selectCanStartRating,
   selectHasPremium,
   selectPaywallRequired,
   useAccessStore,
 } from '../../src/state/accessStore';
+import { createPendingFulfilmentStorage } from '../../src/billing/pendingFulfilment';
+
+function configureAccessStore(clients: BillingAccessDependencies): void {
+  setActiveDataOwner(CANONICAL_USER);
+  const { db } = createSqliteTestDb();
+  configureBillingAccessStore(clients, {
+    owner: CANONICAL_USER,
+    pendingFulfilmentStorage: createPendingFulfilmentStorage(() => db),
+  });
+}
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -218,8 +237,13 @@ describe('legacy premium alias', () => {
 
 describe('purchase completes but the backend rejects the bearer (401)', () => {
   beforeEach(() => clearAccessStoreConfiguration());
+  afterEach(() => {
+    clearAccessStoreConfiguration();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeSqliteTestDatabases();
+  });
 
-  it('accessApi maps a 401 to a NON-retryable backend_unavailable error', async () => {
+  it('accessApi maps a transient 401 to a retryable backend_unavailable error', async () => {
     const client = createCanonicalAccessClient({
       baseUrl: 'https://api.test',
       token: 'expired-provider-id-token',
@@ -230,20 +254,27 @@ describe('purchase completes but the backend rejects the bearer (401)', () => {
     });
     await expect(client.syncBilling()).rejects.toMatchObject({
       code: 'billing.backend_unavailable',
-      retryable: false,
+      retryable: true,
     });
     await expect(client.getAccess()).rejects.toMatchObject({
       code: 'billing.backend_unavailable',
-      retryable: false,
+      retryable: true,
     });
   });
 
-  it('StoreKit purchase succeeds, sync 401s → access null, gate denies, Restore and Retry fail identically', async () => {
+  it('StoreKit completion survives a 401 and retries only the backend with the rotated bearer', async () => {
     let backendAccepts = true;
+    let token = 'expired-access-token';
+    const requestedTokens: unknown[] = [];
     const backend = createCanonicalAccessClient({
       baseUrl: 'https://api.test',
-      token: 'provider-id-token',
-      fetchFn: async (input: string) => {
+      get token() {
+        return token;
+      },
+      fetchFn: async (input: string, init) => {
+        requestedTokens.push(
+          (init?.headers as Record<string, string>)?.Authorization,
+        );
         if (!backendAccepts) {
           return jsonResponse(401, {
             error: { message: 'The identity token could not be verified.' },
@@ -251,6 +282,17 @@ describe('purchase completes but the backend rejects the bearer (401)', () => {
         }
         if (input.endsWith('/v1/me/access')) {
           return jsonResponse(200, access(1));
+        }
+        if (input.endsWith('/v1/billing/sync')) {
+          return jsonResponse(200, {
+            access: access(1, 0, true),
+            billing: {
+              premium: true,
+              productKey: 'pickle_sensei_pro_annual',
+              expiresAt: '2027-09-01T00:00:00.000Z',
+              verifiedAt: '2026-09-01T00:00:00.000Z',
+            },
+          });
         }
         throw new Error(`unexpected ${input}`);
       },
@@ -281,6 +323,8 @@ describe('purchase completes but the backend rejects the bearer (401)', () => {
     // bearer and fails the same way.
     const restored = await useAccessStore.getState().restorePurchases();
     expect(restored).toBe(false);
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(1);
     state = useAccessStore.getState();
     expect(state.canonicalAccess).toBeNull();
     expect(state.error?.code).toBe('billing.backend_verification_pending');
@@ -290,6 +334,17 @@ describe('purchase completes but the backend rejects the bearer (401)', () => {
     state = useAccessStore.getState();
     expect(state.canonicalAccess).toBeNull();
     expect(selectPaywallRequired(state)).toBe(true);
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    token = 'rotated-access-token';
+    backendAccepts = true;
+    await expect(
+      useAccessStore.getState().retryPendingFulfilment(),
+    ).resolves.toBe(true);
+    expect(requestedTokens.at(-1)).toBe('Bearer rotated-access-token');
+    expect(deps.backend.getAccess).toHaveBeenCalledTimes(1);
+    expect(deps.store.purchase).toHaveBeenCalledTimes(1);
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().pendingFulfilment).toBeNull();
   });
 });
 
@@ -297,6 +352,11 @@ describe('purchase completes but the backend rejects the bearer (401)', () => {
 
 describe('accessStore snapshot after the free ratings are consumed', () => {
   beforeEach(() => clearAccessStoreConfiguration());
+  afterEach(() => {
+    clearAccessStoreConfiguration();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeSqliteTestDatabases();
+  });
 
   it('keeps canStartRating=true until refreshAccess() is called explicitly', async () => {
     let serverAccess = access(0);
@@ -322,31 +382,73 @@ describe('accessStore snapshot after the free ratings are consumed', () => {
     expect(selectCanStartRating(useAccessStore.getState())).toBe(false);
     expect(selectPaywallRequired(useAccessStore.getState())).toBe(true);
   });
+
+  it('honors live free-rating reservations, released quota, lifetime exhaustion, and server-verified premium', async () => {
+    let serverAccess = access(1);
+    const deps = dependencies({
+      getAccess: async () => serverAccess,
+      syncBilling: async () => {
+        throw new Error('quota refresh must not purchase or sync billing');
+      },
+    });
+    configureAccessStore(deps);
+    await useAccessStore.getState().initialize();
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(true);
+
+    serverAccess = access(1, 1);
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
+    expect(useAccessStore.getState().canonicalAccess?.freeRatings).toEqual({
+      limit: 2,
+      used: 1,
+      reserved: 1,
+      remaining: 1,
+      availableToReserve: 0,
+    });
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(false);
+    expect(selectPaywallRequired(useAccessStore.getState())).toBe(true);
+
+    // Only a fresh server snapshot can say that the live hold was released.
+    serverAccess = access(1, 0);
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(true);
+    expect(selectPaywallRequired(useAccessStore.getState())).toBe(false);
+
+    serverAccess = access(2);
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(false);
+    expect(selectPaywallRequired(useAccessStore.getState())).toBe(true);
+
+    serverAccess = access(2, 0, true);
+    await expect(useAccessStore.getState().refreshAccess()).resolves.toBe(true);
+    expect(selectHasPremium(useAccessStore.getState())).toBe(true);
+    expect(selectCanStartRating(useAccessStore.getState())).toBe(true);
+    expect(selectPaywallRequired(useAccessStore.getState())).toBe(false);
+    expect(deps.backend.getAccess).toHaveBeenCalledTimes(5);
+    expect(deps.backend.syncBilling).not.toHaveBeenCalled();
+    expect(deps.store.purchase).not.toHaveBeenCalled();
+    expect(deps.store.restore).not.toHaveBeenCalled();
+  });
 });
 
-// ── 4. 402 at reserve time is an outage-shaped error ────────────────────────
+// ── 4. 402 at reserve time is distinct from an outage ───────────────────────
 
 function recordingDb(): { db: LocalDb; calls: string[] } {
+  const store = createSqliteTestDb();
   const calls: string[] = [];
-  const db: LocalDb = {
-    async execute(sql) {
-      calls.push(sql);
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+  store.observeStatements(call => calls.push(call.sql));
+  return { db: store.db, calls };
 }
 
 function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
+  // Reserve tests must use metadata from these exact bytes, not a native model label.
   const { sequence, window } = generateSwingSequence({});
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
     uri: 'file:///captures/stroke-wf.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-01T18:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -365,7 +467,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
@@ -398,15 +500,25 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
 }
 
 describe('runCaptureAnalysis when the server refuses the reserve with 402', () => {
-  beforeEach(() => setActiveDataOwner(CANONICAL_USER));
+  beforeEach(() => {
+    setActiveDataOwner(CANONICAL_USER);
+    establishApiSession({
+      canonicalAppUserId: CANONICAL_USER,
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'id-token',
+      provider: 'apple',
+    });
+  });
   afterEach(() => {
+    closeSqliteTestDatabases();
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
@@ -429,9 +541,15 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
     });
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
 
+    seedSqliteCapture(
+      db,
+      CANONICAL_USER,
+      '77777777-7777-4777-8777-777777777777',
+      clip,
+    );
     const outcome = await runCaptureAnalysis({
       db,
-      captureId: 'capture-wf',
+      captureId: '77777777-7777-4777-8777-777777777777',
       clip,
       declaredStroke: 'forehand_drive',
       handedness: 'right',
@@ -441,6 +559,13 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.test/v1/analysis-permits',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ authorization: 'Bearer id-token' }),
+      }),
+    );
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     // The server's prose survives, and the 402 access.paywall_required verdict
@@ -451,27 +576,48 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
     );
     expect(outcome.cause).toBe('paywall_required');
     expect(Object.keys(outcome).sort()).toEqual(['cause', 'kind', 'reason']);
-    // Nothing was written locally either: the capture is left as it was.
+    // No rating is written: only the reserve rejection is durably journaled.
     expect(calls.some(sql => sql.includes('local_analysis_record'))).toBe(
       false,
     );
+    expect(calls.some(sql => sql.includes('INSERT INTO outbox'))).toBe(false);
+    const journal = await db.execute(
+      'SELECT state, terminal_reason, last_http_status FROM analysis_run_journal',
+    );
+    expect(journal.rows).toEqual([
+      {
+        state: 'terminal',
+        terminal_reason: 'reservation_rejected',
+        last_http_status: 402,
+      },
+    ]);
   });
 
   it('an outage produces an "unavailable" outcome WITHOUT a paywall cause', async () => {
-    const { db } = recordingDb();
+    const { db, calls } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
-    (globalThis as { fetch?: unknown }).fetch = jest.fn(async () =>
-      jsonResponse(503, {
-        error: {
-          message: 'Access is temporarily unavailable. Please try again.',
-        },
-      }),
-    );
+    const fetchMock = jest.fn(async (url: string) => {
+      if (url.endsWith('/v1/analysis-permits')) {
+        return jsonResponse(503, {
+          error: {
+            message: 'Access is temporarily unavailable. Please try again.',
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
 
+    seedSqliteCapture(
+      db,
+      CANONICAL_USER,
+      '77777777-7777-4777-8777-777777777777',
+      clip,
+    );
     const outcome = await runCaptureAnalysis({
       db,
-      captureId: 'capture-wf',
+      captureId: '77777777-7777-4777-8777-777777777777',
       clip,
       declaredStroke: 'forehand_drive',
       handedness: 'right',
@@ -479,8 +625,35 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
       apiConfig: { baseUrl: 'https://api.test', token: 'id-token' },
       appVersion: '0.1.0',
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.test/v1/analysis-permits',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ authorization: 'Bearer id-token' }),
+      }),
+    );
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(Object.keys(outcome).sort()).toEqual(['kind', 'reason']);
+    expect(outcome.reason).toBe(
+      'Access is temporarily unavailable. Please try again.',
+    );
+    expect(calls.some(sql => sql.includes('local_analysis_record'))).toBe(
+      false,
+    );
+    expect(calls.some(sql => sql.includes('INSERT INTO outbox'))).toBe(false);
+    const journal = await db.execute(
+      'SELECT state, terminal_reason, last_http_status, permit_id, result_id FROM analysis_run_journal',
+    );
+    expect(journal.rows).toEqual([
+      {
+        state: 'release_pending',
+        terminal_reason: null,
+        last_http_status: 503,
+        permit_id: null,
+        result_id: null,
+      },
+    ]);
   });
 });

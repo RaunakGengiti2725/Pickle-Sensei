@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -112,6 +113,7 @@ function CoachActionButton(props: {
   progress: SharedValue<number>;
   onPress: () => void;
   open: boolean;
+  largeContentViewer: boolean;
   overlay?: boolean;
   bottom?: number;
   /** Walkthrough anchor — set on the in-bar instance only, so the spotlight
@@ -138,6 +140,8 @@ function CoachActionButton(props: {
         props.open ? 'Close coach actions' : 'Open coach actions'
       }
       accessibilityState={{ expanded: props.open }}
+      accessibilityShowsLargeContentViewer={props.largeContentViewer}
+      accessibilityLargeContentTitle="Coach"
       onPress={props.onPress}
       style={({ pressed }) => [
         styles.actionButtonPressable,
@@ -156,6 +160,10 @@ function CoachActionButton(props: {
 }
 
 export function PremiumTabBar(props: BottomTabBarProps) {
+  // Match the upstream iOS tab pattern: only fixed labels opt out of scaling,
+  // with the full title available through the native large-content viewer.
+  const largeContentViewer =
+    Platform.OS === 'ios' && parseInt(Platform.Version, 10) >= 13;
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const actionsBottom = insets.bottom + BAR_HEIGHT + space.xl;
@@ -293,11 +301,18 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                 <View key={route.key} style={styles.centerSlot}>
                   <CoachActionButton
                     innerRef={coachFabTarget}
+                    largeContentViewer={largeContentViewer}
                     progress={progress}
                     open={menuOpen}
                     onPress={menuOpen ? () => closeMenu() : openMenu}
                   />
-                  <Text style={[type.micro, styles.centerLabel]}>COACH</Text>
+                  <Text
+                    allowFontScaling={!largeContentViewer}
+                    numberOfLines={1}
+                    style={[type.micro, styles.centerLabel]}
+                  >
+                    COACH
+                  </Text>
                 </View>
               );
             }
@@ -325,9 +340,11 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                       ? progressTabTarget
                       : undefined
                 }
-                accessibilityRole="tab"
+                accessibilityRole={Platform.OS === 'ios' ? 'button' : 'tab'}
                 accessibilityLabel={meta.label}
                 accessibilityState={{ selected: isFocused }}
+                accessibilityShowsLargeContentViewer={largeContentViewer}
+                accessibilityLargeContentTitle={meta.label}
                 onLongPress={() =>
                   props.navigation.emit({
                     type: 'tabLongPress',
@@ -351,6 +368,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
                   />
                 </View>
                 <Text
+                  allowFontScaling={!largeContentViewer}
                   numberOfLines={1}
                   style={[
                     type.micro,
@@ -419,6 +437,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
           </View>
           <CoachActionButton
             bottom={insets.bottom + 26}
+            largeContentViewer={largeContentViewer}
             overlay
             progress={progress}
             open

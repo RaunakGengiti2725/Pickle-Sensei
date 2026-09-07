@@ -149,6 +149,7 @@ let mockApiSession: {
 } | null = null;
 jest.mock('../../src/account/apiSession', () => ({
   getApiSession: () => mockApiSession,
+  subscribeToApiSession: () => () => {},
 }));
 
 const mockFetchCanonical = jest.fn<Promise<Profile | null>, [unknown]>(
@@ -273,6 +274,10 @@ jest.mock('../../src/walkthrough/walkthroughStore', () => {
 });
 jest.mock('../../src/consistency/useConsistencyBootstrap', () => ({
   useConsistencyBootstrap: () => {},
+}));
+
+jest.mock('../../src/flow/CeremonyHost', () => ({
+  CeremonyHost: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 import App from '../../App';

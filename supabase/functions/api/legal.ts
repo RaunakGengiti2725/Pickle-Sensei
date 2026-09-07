@@ -43,6 +43,11 @@ a separate Pickle Sensei password. If sign in fails, confirm that the device
 has internet access and that the selected provider account is available on
 the device, then try again.
 
+The name you enter in onboarding is required for account personalization.
+Use a preferred name or nickname; it does not need to be your legal name.
+Settings → Player shows this name. Manage account shows the display name
+from Apple or Google, if provided, which may be different.
+
 
 PURCHASES
 
@@ -133,6 +138,8 @@ When you sign in with Apple or Google, we receive the information that the
 provider makes available and that is needed to create or access your account.
 This may include your email address, display name, sign-in provider, provider
 account identifier, and an internal Pickle Sensei account identifier.
+Apple or Google may not supply a display name. Any provider display name is
+separate from the name you enter during onboarding.
 
 The Google Sign-In software included in the app declares that it may process
 name, email address, phone number, network-derived coarse location, user and
@@ -150,10 +157,16 @@ and server sessions are handled through Supabase Auth.
 
 B. Coaching profile and preferences
 
-We collect the onboarding answers and profile details you choose to provide,
-such as skill level, dominant hand, training goals, focus area, optional first
-name, and optional gender selection. We use them to personalize coaching,
-recommended drills, and the in-app experience.
+Onboarding requires a name for account personalization. You may enter your
+preferred name or a nickname; we do not require or verify your legal name
+for this field. We use it to address you in the app.
+
+We also collect onboarding answers about skill level, dominant hand,
+training goals, and your biggest problem, and use them to set your starting
+focus area and personalize coaching, recommended drills, and the in-app
+experience. The questionnaire is required. You may choose "Prefer not to
+say" for gender. Completed answers are stored on your device before sign-in
+and linked to your account and synced to our servers after you sign in.
 
 C. Stroke analysis, activity, and progress information
 
@@ -560,6 +573,9 @@ information, use only an account you are authorized to use, maintain the
 security of your device and provider account, and promptly notify us of
 suspected unauthorized access. You are responsible for activity under your
 account except to the extent caused by our breach of these Terms or law.
+
+You may use a preferred name or nickname for the required onboarding name.
+You do not need to provide a legal name for that field.
 
 One person may not impersonate another, transfer an account, evade a valid
 suspension, or use another person's store purchase without authorization.

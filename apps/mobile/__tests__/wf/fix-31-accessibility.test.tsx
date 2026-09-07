@@ -1,3 +1,4 @@
+import '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';

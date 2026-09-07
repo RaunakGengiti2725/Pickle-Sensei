@@ -322,15 +322,21 @@ describe('Library flow · Reads tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failing local read never strands the spinner: it renders an error state with retry, never the first-run empty state', async () => {
-    mockListShots.mockRejectedValue(new Error('sqlite closed'));
+  it('a failing local read ends loading with retry; only a successful empty read shows the empty state', async () => {
+    mockListShots.mockRejectedValueOnce(new Error('sqlite closed'));
     const renderer = await renderLibrary();
-    const text = allText(renderer);
-    expect(text).not.toContain('Opening your library…');
-    expect(text).not.toContain('Your measured reads, in one place.');
-    expect(text).toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).not.toContain('Opening your library…');
+    expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).not.toContain(
+      'Your measured reads, in one place.',
+    );
+    expect(findByLabel(renderer, 'Analyze your first stroke')).toHaveLength(0);
     const retry = oneByLabel(renderer, 'Try again');
     expect(retry.props.accessibilityRole).toBe('button');
+    await pressByLabel(renderer, 'Try again');
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).toContain('Your measured reads, in one place.');
     act(() => renderer.unmount());
   });
 
@@ -402,7 +408,7 @@ describe('Library flow · Reads tab', () => {
     // tab is never a dead end. No Result row exists for an unscored clip.
     expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain(
-      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     expect(text).toContain('Your measured reads, in one place.');
     expect(text).toContain('Analyze your first stroke');

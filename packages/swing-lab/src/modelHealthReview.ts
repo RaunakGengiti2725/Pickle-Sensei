@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  type Dirent,
+} from "node:fs";
 import { join, relative, sep } from "node:path";
 import { DEFAULT_MODEL_MANIFEST, type ModelManifestEntry } from "@pickle/model-registry";
 import { REPO_ROOT } from "./engine/corpus.js";
@@ -88,15 +96,34 @@ function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-function listFilesRecursive(root: string): string[] {
-  if (!existsSync(root) || !statSync(root).isDirectory()) return [];
-  const out: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const full = join(root, entry.name);
-    if (entry.isDirectory()) out.push(...listFilesRecursive(full));
-    else if (entry.isFile()) out.push(full);
+function inventoryFilesRecursive(root: string): { files: string[]; symlinks: Set<string> } {
+  const files: string[] = [];
+  const symlinks = new Set<string>();
+  if (!existsSync(root) || !statSync(root).isDirectory()) return { files, symlinks };
+
+  function visit(directory: string): void {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(directory, { withFileTypes: true });
+    } catch (error) {
+      // Dirents already identify child directories. Recheck only failed reads
+      // to preserve skipping children that disappeared or became non-directories;
+      // errors reading an existing directory still propagate.
+      if (directory !== root && (!existsSync(directory) || !statSync(directory).isDirectory())) {
+        return;
+      }
+      throw error;
+    }
+    for (const entry of entries) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (entry.isFile()) files.push(full);
+      else if (entry.isSymbolicLink()) symlinks.add(full);
+    }
   }
-  return out;
+
+  visit(root);
+  return { files, symlinks };
 }
 
 /* --------------------------------------------- */
@@ -186,7 +213,14 @@ export function collectHealthReviewInputs(repoRoot: string): HealthReviewInputs 
   const datasetsRoot = join(repoRoot, "datasets");
   const rel = (full: string): string => toPosix(relative(repoRoot, full));
 
-  const experimentFiles = listFilesRecursive(experimentsRoot).sort();
+  const datasetInventory = inventoryFilesRecursive(datasetsRoot);
+  const allDatasetFiles = datasetInventory.files.sort();
+  const experimentsPrefix = `${experimentsRoot}${sep}`;
+  // Explicit walk roots historically follow symlinks; nested Dirents do not.
+  // Keep a symlinked experiments root out of dataset-wide artifact lists.
+  const experimentFiles = datasetInventory.symlinks.has(experimentsRoot)
+    ? inventoryFilesRecursive(experimentsRoot).files.sort()
+    : allDatasetFiles.filter((full) => full.startsWith(experimentsPrefix));
   const experimentSummaries: ExperimentSummaryRef[] = [];
   for (const full of experimentFiles) {
     const name = full.split(sep).at(-1) ?? "";
@@ -285,7 +319,6 @@ export function collectHealthReviewInputs(repoRoot: string): HealthReviewInputs 
     };
   }
 
-  const allDatasetFiles = listFilesRecursive(datasetsRoot).sort();
   const hardSliceArtifacts = allDatasetFiles.filter((f) => HARD_SLICE_PATTERN.test(f)).map(rel);
   const latencyArtifacts = allDatasetFiles.filter((f) => LATENCY_PATTERN.test(f)).map(rel);
   const complaintArtifacts = allDatasetFiles.filter((f) => COMPLAINT_PATTERN.test(f)).map(rel);

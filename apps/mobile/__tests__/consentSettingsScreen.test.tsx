@@ -66,6 +66,17 @@ describe('ConsentSettingsScreen', () => {
     act(() => renderer.unmount());
   });
 
+  it('shows restoring copy and retry instead of a connect-account loop without the initial bearer', () => {
+    useConsentStore.setState({ availability: 'restoring' });
+    const renderer = renderScreen();
+    expect(renderer.root.findByType(BrandToggle).props.disabled).toBe(true);
+    expect(allText(renderer)).toContain('still signed in');
+    expect(allText(renderer)).toContain('Try again');
+    expect(allText(renderer)).not.toContain('Connect account');
+    expect(allText(renderer)).not.toContain('Sign in to change this.');
+    act(() => renderer.unmount());
+  });
+
   it('separates analyze-my-video from model-training opt-in', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);

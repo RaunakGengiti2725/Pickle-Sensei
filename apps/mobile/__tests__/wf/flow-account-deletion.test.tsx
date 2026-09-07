@@ -60,6 +60,7 @@ import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { BrandSpinner, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
   clearApiSession,
   establishApiSession,
@@ -231,6 +232,7 @@ function armedResponders() {
 }
 
 beforeEach(() => {
+  setActiveDataOwner(OWNER);
   mockGoBack.mockClear();
   mockNavigate.mockClear();
   useAuthStore.setState({
@@ -773,9 +775,8 @@ describe('Delete account sheet — step 1 request', () => {
     await openSheet(renderer);
     await pressContinue(renderer);
     expect(calls).toHaveLength(0);
-    expect(allText(renderer)).toContain(
-      'Sign in to a synced account before deleting it.',
-    );
+    expect(allText(renderer)).toContain('Your account is still reconnecting.');
+    expect(allText(renderer)).not.toContain('Sign in to a synced account');
     expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(false);
     act(() => renderer.unmount());
   });

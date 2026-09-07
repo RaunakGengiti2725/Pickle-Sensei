@@ -42,10 +42,10 @@ describe('pending section header', () => {
     expect(PENDING_SECTION_PILL).toBe('NOT SCORED');
   });
 
-  it('never promises an analyze action the library cannot perform', () => {
+  it('distinguishes saved-confirmation reopening from read-only clips without promising an automatic rating', () => {
     expect(PENDING_SECTION_LABEL).not.toMatch(/ready/i);
     expect(PENDING_SECTION_NOTE).toBe(
-      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
   });
 });

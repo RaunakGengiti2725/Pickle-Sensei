@@ -78,7 +78,8 @@ export function PlayerRankBanner(props: {
   const [foldOutMounted, setFoldOutMounted] = useState(false);
   const foldAwayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useReducedMotion();
-  const largeText = useWindowDimensions().fontScale >= 1.5;
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = fontScale >= 1.5 || width / fontScale < 360;
 
   useEffect(
     () => () => {
@@ -167,7 +168,7 @@ export function PlayerRankBanner(props: {
 
   const best = summary?.techniques[0] ?? null;
   const detailLine = summary
-    ? `Best: ${
+    ? `${formatDuprEstimate(summary.rating)} · Best: ${
         best
           ? `${best.shotType.replace(/_/g, ' ')} ${best.score.toFixed(1)}`
           : '—'
@@ -188,7 +189,10 @@ export function PlayerRankBanner(props: {
 
   return (
     <View style={styles.banner} testID="player-rank-banner">
-      <View style={[styles.row, largeText && styles.rowStacked]}>
+      <View
+        style={[styles.row, stacked && styles.rowStacked]}
+        testID="player-rank-banner-row"
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${rankLabel} ${detailLine}`}
@@ -199,37 +203,45 @@ export function PlayerRankBanner(props: {
           }
           accessibilityState={{ expanded }}
           onPress={toggle}
-          style={[styles.mainPress, largeText && styles.mainPressStacked]}
+          style={[styles.mainPress, stacked && styles.mainPressStacked]}
           testID="player-rank-banner-toggle"
         >
-          <RankIcon tier={summary?.tier ?? null} size={46} />
-          <View style={[styles.body, largeText && styles.bodyStacked]}>
+          <View style={stacked && styles.emblemStacked}>
+            <RankIcon tier={summary?.tier ?? null} size={46} />
+          </View>
+          <View
+            style={[styles.body, stacked && styles.bodyStacked]}
+            testID="player-rank-banner-body"
+          >
             <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
-            <View style={[styles.tierRow, largeText && styles.tierRowStacked]}>
+            <View
+              style={[styles.tierRow, stacked && styles.tierRowStacked]}
+              testID="player-rank-banner-tier"
+            >
               <Text style={[type.h3, styles.tierLabel]}>
                 {summary
                   ? `${summary.tierLabel} ${summary.divisionLabel}`
                   : 'Unranked'}
               </Text>
               {summary ? (
-                <Text style={[type.bodyBold, { color: color.onDark }]}>
+                <Text
+                  style={[
+                    type.bodyBold,
+                    styles.rating,
+                    { color: color.onDark },
+                  ]}
+                  accessibilityLabel={`Rating ${summary.rating.toFixed(2)} out of 10`}
+                  testID="player-rank-banner-rating"
+                >
                   {summary.rating.toFixed(2)}
-                  <Text style={[type.micro, styles.ratingScale]}>
-                    {' /10 '}
-                    {formatDuprEstimate(summary.rating)}
-                  </Text>
+                  <Text style={[type.micro, styles.ratingScale]}>{' /10'}</Text>
                 </Text>
               ) : null}
             </View>
-            <Text
-              style={[type.caption, styles.detail]}
-              numberOfLines={largeText ? undefined : 1}
-            >
-              {detailLine}
-            </Text>
+            <Text style={[type.caption, styles.detail]}>{detailLine}</Text>
           </View>
           <Animated.View
-            style={[chevronStyle, largeText && styles.chevronStacked]}
+            style={[chevronStyle, stacked && styles.chevronStacked]}
           >
             <Icon name="chevron" color={color.onDarkFaint} size={16} />
           </Animated.View>
@@ -244,7 +256,7 @@ export function PlayerRankBanner(props: {
           }. Opens the consistency calendar.`}
           disabled={!props.onPressStreak}
           onPress={props.onPressStreak}
-          style={[styles.streakBlock, largeText && styles.streakBlockStacked]}
+          style={[styles.streakBlock, stacked && styles.streakBlockStacked]}
           testID="player-rank-banner-streak"
         >
           <View style={styles.streakTop}>
@@ -303,7 +315,9 @@ export function PlayerRankBanner(props: {
                     style={[
                       styles.tierListRow,
                       active && styles.tierListRowActive,
+                      stacked && styles.tierListRowStacked,
                     ]}
+                    testID={`player-rank-banner-tier-${tier.key}`}
                   >
                     <RankIcon tier={tier.key} size={26} />
                     <Text
@@ -311,6 +325,7 @@ export function PlayerRankBanner(props: {
                         type.caption,
                         styles.tierListLabel,
                         active && styles.tierListLabelActive,
+                        stacked && styles.tierListLabelStacked,
                       ]}
                     >
                       {tier.label}
@@ -375,26 +390,45 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     padding: space.md,
     gap: space.sm,
   },
-  rowStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  rowStacked: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
+  },
   mainPress: {
-    flex: 1,
+    minHeight: 44,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 200,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm + 4,
   },
   mainPressStacked: {
-    flex: 0,
+    width: '100%',
+    flexBasis: 'auto',
+    flexGrow: 0,
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
   },
-  chevronStacked: { position: 'absolute', right: 0, top: space.md },
+  emblemStacked: { alignSelf: 'flex-start' },
+  chevronStacked: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 44,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   body: { flex: 1, minWidth: 0 },
-  bodyStacked: { flex: 0, alignSelf: 'stretch' },
+  bodyStacked: { flex: 0, width: '100%' },
   eyebrow: { color: color.volt },
   tierRow: {
     flexDirection: 'column',
@@ -403,29 +437,47 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tierRowStacked: { flexDirection: 'column', alignItems: 'stretch' },
-  tierLabel: { color: color.onDark, flexShrink: 1 },
+  tierLabel: { color: color.onDark, flexShrink: 1, maxWidth: '100%' },
+  rating: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+    fontVariant: ['tabular-nums'],
+  },
   ratingScale: { color: color.onDarkSubtle },
   detail: { color: color.onDarkSubtle, marginTop: 2 },
   streakBlock: {
+    minHeight: 44,
+    maxWidth: '100%',
     alignItems: 'center',
+    marginLeft: 'auto',
     flexShrink: 0,
     paddingHorizontal: space.sm,
     paddingVertical: 6,
     borderRadius: radius.md,
     backgroundColor: color.onDarkTint,
   },
-  streakBlockStacked: { minHeight: 44, maxWidth: '100%' },
-  streakTop: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  streakBlockStacked: { width: '100%', marginLeft: 0 },
+  streakTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    maxWidth: '100%',
+  },
   streakCount: {
     ...type.h3,
     color: color.onDark,
     fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+    minWidth: 0,
   },
   streakLabel: {
     ...type.micro,
     color: color.onDarkMuted,
     letterSpacing: 0.5,
     marginTop: 1,
+    textAlign: 'center',
+    maxWidth: '100%',
   },
   streakLabelAtRisk: { color: color.flame },
   expanded: {
@@ -455,14 +507,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   tierListRowActive: { backgroundColor: color.onDarkTint },
+  tierListRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: space.xs,
+  },
   tierListLabel: { color: color.onDarkMuted, flex: 1 },
   tierListLabelActive: { color: color.onDark },
+  tierListLabelStacked: { flex: 0 },
   tierListRange: {
     color: color.onDarkMuted,
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.4,
+    maxWidth: '100%',
   },
   youPill: {
+    maxWidth: '100%',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.pill,
@@ -475,6 +535,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm + 2,
   },
   techniqueChip: {
+    maxWidth: '100%',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,

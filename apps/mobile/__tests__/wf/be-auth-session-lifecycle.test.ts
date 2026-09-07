@@ -447,6 +447,7 @@ describe('auth-session-lifecycle: the bearer is a server-minted session, not the
     // Keychain, nothing else anywhere.
     expect(vaultRecord()).toEqual({
       version: 1,
+      generation: expect.any(Number),
       provider: 'apple',
       canonicalAppUserId: canonicalId,
       refreshToken: 'refresh-1',
@@ -596,7 +597,7 @@ describe('auth-session-lifecycle: a 401 on the current bearer rotates the sessio
     expect(bearerOf(fetchFn.mock.calls[1]![1])).toBe('access-2');
   });
 
-  it('billing client: 401 is a distinct, non-retryable sign-in-expired error for THAT call (a 503 is a retryable outage), while the session is refreshed rather than torn down', async () => {
+  it('billing client: 401 stays retryable while the current session rotates, and a 503 does not trigger auth recovery', async () => {
     const { fetchMock } = await signInDurably({
       '/v1/auth/refresh': () =>
         refreshOk({ access: 'access-2', refresh: 'refresh-2' }),
@@ -628,9 +629,9 @@ describe('auth-session-lifecycle: a 401 on the current bearer rotates the sessio
     expect(caught).toBeInstanceOf(BillingError);
     expect(caught).toMatchObject({
       code: 'billing.backend_unavailable',
-      retryable: false,
+      retryable: true,
       message:
-        'Your sign-in has expired. Sign in again to check membership access.',
+        'Your account connection needs to refresh. Please try verification again.',
     });
     expect(bearerOf(fetchFn.mock.calls[0]![1])).toBe('access-1');
     // A 503 is a retryable outage with different copy and no auth reaction.

@@ -65,6 +65,8 @@ import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { SignInScreen } from '../../src/screens/SignInScreen';
 import { BrandToggle, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { establishApiSession } from '../../src/account/apiSession';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import { useConsentStore } from '../../src/state/consentStore';
 
 const syncedSession: AuthSession = {
@@ -291,6 +293,13 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
     mockGoBack.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
+    setActiveDataOwner(syncedSession.canonicalAppUserId!);
+    establishApiSession({
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'test-access-token',
+      canonicalAppUserId: syncedSession.canonicalAppUserId!,
+      provider: 'apple',
+    });
     useAuthStore.setState({
       hydrated: true,
       session: syncedSession,
@@ -357,11 +366,10 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
       await act(async () => {
         sheetButton(renderer, 'Permanently delete').props.onPress();
       });
-      expect(allText(renderer)).toContain(
-        'The deletion could not be completed. Nothing was deleted.',
-      );
-      const again = sheetButton(renderer, 'Permanently delete');
-      expect(again.props.label).toBe('Permanently delete');
+      expect(allText(renderer)).toContain('The request may have completed.');
+      expect(allText(renderer)).not.toContain('Nothing was deleted');
+      const again = sheetButton(renderer, 'Retry deletion');
+      expect(again.props.label).toBe('Retry deletion');
       expect(again.props.disabled).toBe(false);
       expect(
         useAuthStore.getState().completeAccountDeletion,

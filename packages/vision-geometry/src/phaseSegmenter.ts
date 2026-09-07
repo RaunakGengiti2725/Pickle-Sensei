@@ -1,7 +1,8 @@
 import type { PaddleFrame, PhaseSpan, PoseFrame, Result } from "@pickle/shared-types";
 import { fail, failure, ok } from "@pickle/shared-types";
-import type { IPhaseSegmenter, StrokeEvent } from "@pickle/vision-contracts";
+import type { IPhaseSegmenter, StrokeEvent, VideoClipRef } from "@pickle/vision-contracts";
 import {
+  frameNearest,
   mean,
   median,
   movingAverage,
@@ -17,26 +18,58 @@ import {
  * peak (contact neighborhood for paddle sports). Phases are cut at measured
  * speed landmarks around that peak — no learned model, no invented frames:
  *   ready | prepare (speed rises past noise) | accelerate (run-up to peak) |
- *   contact (peak ± one sample) | follow_through (decay to quiet) | recover.
+ *   contact proxy (peak ± one sample) | follow_through (decay to quiet).
  *
  * Abstains (`low_confidence`) when the profile has no distinct peak or too few
  * measured frames, instead of guessing.
  */
 export class GeometricPhaseSegmenter implements IPhaseSegmenter {
-  public readonly modelVersion = "phase-geometry-1";
+  public readonly modelVersion = "phase-geometry-2";
   public readonly source = "real" as const;
 
   private readonly aspectRatio: number;
 
-  public constructor(options: { aspectRatio: number }) {
-    this.aspectRatio = options.aspectRatio;
+  public constructor(options?: { aspectRatio: number }) {
+    this.aspectRatio = options?.aspectRatio ?? Number.NaN;
   }
 
   public async segmentPhases(
     poseFrames: PoseFrame[],
     _paddleFrames: PaddleFrame[],
     stroke: StrokeEvent,
+    video?: Pick<VideoClipRef, "width" | "height">,
   ): Promise<Result<PhaseSpan[]>> {
+    const aspectRatio = video ? video.width / video.height : this.aspectRatio;
+    if (
+      !Number.isFinite(aspectRatio) ||
+      aspectRatio <= 0 ||
+      (video &&
+        (!Number.isFinite(video.width) ||
+          !Number.isFinite(video.height) ||
+          video.width <= 0 ||
+          video.height <= 0)) ||
+      !Number.isFinite(stroke.startMs) ||
+      !Number.isFinite(stroke.endMs) ||
+      stroke.startMs < 0 ||
+      stroke.endMs <= stroke.startMs ||
+      poseFrames.some(
+        (frame, index) =>
+          !Number.isFinite(frame.timestampMs) ||
+          frame.timestampMs < 0 ||
+          !Number.isFinite(frame.confidence) ||
+          frame.confidence < 0 ||
+          frame.confidence > 1 ||
+          (index > 0 && frame.timestampMs <= poseFrames[index - 1]!.timestampMs),
+      )
+    ) {
+      return fail(
+        failure(
+          "low_confidence",
+          "phase.invalid_observations",
+          "Phase timing observations are invalid or unordered.",
+        ),
+      );
+    }
     const windowFrames = poseFrames.filter(
       (frame) => frame.timestampMs >= stroke.startMs && frame.timestampMs <= stroke.endMs,
     );
@@ -52,8 +85,8 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
 
     // The swinging hand is the wrist that travels farthest inside the window —
     // measured, not assumed from handedness.
-    const wrist = this.swingingWrist(windowFrames, stroke);
-    const rawSpeeds = speedSeries(windowFrames, wrist, this.aspectRatio);
+    const wrist = this.swingingWrist(windowFrames, stroke, aspectRatio);
+    const rawSpeeds = speedSeries(windowFrames, wrist, aspectRatio);
     if (rawSpeeds.length < 4) {
       return fail(
         failure(
@@ -95,10 +128,10 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
       }
     }
 
-    // The recorded trigger measured contact on-device at capture time. When
-    // the speed peak agrees with it to within about one sample, the recorded
-    // event is the better sub-frame estimate — central differences smear the
-    // peak across the junction. Only a clear disagreement overrides it.
+    // The recorded trigger supplies a motion/contact proxy at capture time.
+    // When the speed peak agrees within about one sample, its timestamp helps
+    // localize the proxy despite the central-difference smoothing. Agreement
+    // is not evidence of observed ball-paddle contact or sub-frame accuracy.
     if (stroke.contactMs !== null) {
       const hint = stroke.contactMs;
       const rawPeakTs = rawSpeeds[peakIndex]?.timestampMs;
@@ -190,29 +223,40 @@ export class GeometricPhaseSegmenter implements IPhaseSegmenter {
         confidence,
       },
       span("follow_through", boundaries.contactEnd, boundaries.followEnd, confidence),
-      span("recover", boundaries.followEnd, stroke.endMs, confidence),
     ];
 
     // Guarantee ordered, non-negative spans even at the window edges.
-    let cursor = stroke.startMs;
+    let cursor = windowFrames[0]!.timestampMs;
+    const observedEnd = windowFrames[windowFrames.length - 1]!.timestampMs;
+    const observedSpans: PhaseSpan[] = [];
     for (const entry of spans) {
-      entry.startMs = Math.max(entry.startMs, cursor);
-      entry.endMs = Math.max(entry.endMs, entry.startMs);
+      entry.startMs = Math.max(Math.min(entry.startMs, observedEnd), cursor);
+      entry.endMs = Math.min(Math.max(entry.endMs, entry.startMs), observedEnd);
       entry.representativeMs = Math.min(
         Math.max(entry.representativeMs, entry.startMs),
         entry.endMs,
       );
       cursor = entry.endMs;
+      const representative = frameNearest(
+        windowFrames.filter(
+          (frame) => frame.timestampMs >= entry.startMs && frame.timestampMs <= entry.endMs,
+        ),
+        entry.representativeMs,
+      );
+      if (entry.endMs > entry.startMs && representative) {
+        observedSpans.push({ ...entry, representativeMs: representative.timestampMs });
+      }
     }
-    return ok(spans);
+    return ok(observedSpans);
   }
 
   private swingingWrist(
     frames: readonly PoseFrame[],
     stroke: StrokeEvent,
+    aspectRatio: number,
   ): "left_wrist" | "right_wrist" {
-    const left = pathLength(frames, "left_wrist", stroke.startMs, stroke.endMs, this.aspectRatio);
-    const right = pathLength(frames, "right_wrist", stroke.startMs, stroke.endMs, this.aspectRatio);
+    const left = pathLength(frames, "left_wrist", stroke.startMs, stroke.endMs, aspectRatio);
+    const right = pathLength(frames, "right_wrist", stroke.startMs, stroke.endMs, aspectRatio);
     return right >= left ? "right_wrist" : "left_wrist";
   }
 

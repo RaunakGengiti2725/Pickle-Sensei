@@ -43,7 +43,7 @@ jest.mock('../../src/camera/capture', () => {
 
 import {
   runCaptureAnalysis,
-  type CaptureAnalysisOutcome,
+  type RunCaptureAnalysisOutcome,
 } from '../../src/analysis/runCaptureAnalysis';
 
 const SUITE = 'permitLifecycleMatrix';
@@ -275,7 +275,10 @@ async function runOnce(
   clip: CapturedClip,
   declared: 'forehand_drive' | null,
   extra: { captureEnvelope?: EnvelopeVerdict | null } = {},
-): Promise<{ outcome: CaptureAnalysisOutcome | null; error: string | null }> {
+): Promise<{
+  outcome: RunCaptureAnalysisOutcome | null;
+  error: string | null;
+}> {
   try {
     const outcome = await runCaptureAnalysis({
       db: fake.db,

@@ -25,7 +25,7 @@ import {
   userRequest,
   webhookRequest,
 } from "./routesHarness.ts";
-import { ENTITLEMENTS_URL, expiredSubscriber, simulate, sleep } from "./webhookSim.ts";
+import { VERDICT_URL, expiredSubscriber, simulate, sleep } from "./webhookSim.ts";
 import {
   FakeSupabase,
   SERVICE_ROLE_KEY,
@@ -216,7 +216,7 @@ Deno.test(
       assertEquals(body.access.entitlements, []);
       assertEquals(body.access.paywallRequired, false, "free ratings remain (scored_count 0)");
 
-      const reads = sim.h.callsTo(ENTITLEMENTS_URL).filter((c) => c.method === "GET");
+      const reads = sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET");
       assertEquals(reads.length, 1, "exactly one re-read of the durable row");
     } finally {
       sim.restore();
@@ -250,7 +250,7 @@ Deno.test(
       assertEquals(Date.parse(body.billing.verifiedAt), Date.parse(String(stored.verified_at)));
       assertEquals(body.access.premium, true);
       assertEquals(body.access.entitlements, ["premium", "pickle_sensei_pro"]);
-      assertEquals(sim.h.callsTo(ENTITLEMENTS_URL).filter((c) => c.method === "GET").length, 0);
+      assertEquals(sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET").length, 0);
     } finally {
       sim.restore();
     }
@@ -280,7 +280,7 @@ Deno.test(
       // 500 rather than 503: postgrest-js transparently retries idempotent
       // 503s (1 s / 2 s / 4 s backoff), which this test is not about.
       sim.faults.push({
-        match: (m, u) => m === "GET" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "GET" && u.startsWith(VERDICT_URL),
         status: 500,
         body: { code: "XX000", message: "could not connect to database" },
         times: 1,

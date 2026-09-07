@@ -72,10 +72,14 @@ jest.mock('../../src/auth/authStore', () => ({
 }));
 
 import React from 'react';
-import { Modal } from 'react-native';
+import { Modal, Platform, Pressable, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { PremiumTabBar } from '../../src/navigation/PremiumTabBar';
+
+// The renderer exposes the component inside React.memo, not its wrapper.
+const PressableInner = (Pressable as unknown as { type: React.ComponentType })
+  .type;
 
 const mockRootNavigate = jest.fn();
 const mockTabNavigate = jest.fn();
@@ -142,8 +146,14 @@ function menuVisible(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findByType(Modal).props.visible === true;
 }
 
-describe('Coach tab — FAB and action menu replace the empty Add portal', () => {
+describe.each([
+  { os: 'ios', version: '26.0', role: 'button', viewer: true },
+  { os: 'android', version: '35', role: 'tab', viewer: false },
+] as const)('Coach Add portal on $os', fixture => {
+  const { os, version, role, viewer } = fixture;
   beforeEach(() => {
+    jest.replaceProperty(Platform, 'OS', os);
+    jest.spyOn(Platform, 'Version', 'get').mockReturnValue(version);
     jest.useFakeTimers();
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
@@ -155,18 +165,29 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
-  it('the Add slot renders the Coach FAB (button role, expanded state) instead of a tab', () => {
+  it('the Add slot renders the Coach FAB (button role, expanded state), not a selectable route', () => {
     const renderer = renderBar();
+    const controls = renderer.root.findAllByType(PressableInner);
+    expect(controls.map(t => t.props.accessibilityLabel)).toEqual([
+      'Home',
+      'Library',
+      'Open coach actions',
+      'Progress',
+      'Settings',
+    ]);
     const [fab] = pressablesByLabel(renderer, 'Open coach actions');
     expect(fab).toBeDefined();
     expect(fab!.props.accessibilityRole).toBe('button');
     expect(fab!.props.accessibilityState).toEqual({ expanded: false });
-    // No tab-role control exists for the Add route.
-    const tabs = renderer.root.findAll(
-      n => typeof n.type === 'string' && n.props.accessibilityRole === 'tab',
+    expect(fab!.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+    expect(fab!.props.accessibilityLargeContentTitle).toBe('Coach');
+    // iOS navigation uses selected buttons; Android retains the tab role.
+    const tabs = controls.filter(
+      n => n.props.accessibilityState?.selected !== undefined,
     );
     expect(tabs.map(t => t.props.accessibilityLabel)).toEqual([
       'Home',
@@ -174,6 +195,23 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
       'Progress',
       'Settings',
     ]);
+    expect(tabs.map(t => t.props.accessibilityState)).toEqual([
+      { selected: true },
+      { selected: false },
+      { selected: false },
+      { selected: false },
+    ]);
+    for (const tab of tabs) {
+      expect(tab.props.accessibilityRole).toBe(role);
+      expect(typeof tab.props.onPress).toBe('function');
+      expect(tab.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+      expect(tab.props.accessibilityLargeContentTitle).toBe(
+        tab.props.accessibilityLabel,
+      );
+      expect(tab.findByType(Text).props.children).toBe(
+        tab.props.accessibilityLabel,
+      );
+    }
     expect(menuVisible(renderer)).toBe(false);
     act(() => renderer.unmount());
   });

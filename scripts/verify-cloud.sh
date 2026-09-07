@@ -221,7 +221,13 @@ stage_db() {
 stage_mobile() {
   need npm
   [ -d apps/mobile/node_modules ] || { echo "apps/mobile/node_modules missing — run the deps stage"; exit 75; }
-  (cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent)
+  (
+    cd apps/mobile
+    npx tsc --noEmit
+    npx jest --ci --silent
+    node --test scripts/generate-third-party-notices.test.mjs
+    node scripts/generate-third-party-notices.mjs --check
+  )
 }
 
 stage_ml() {
@@ -241,6 +247,7 @@ stage_edge() {
   need deno
   (cd supabase/functions/api/__wf__ && deno task test)
   deno check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts
+  deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts supabase/functions/api/canonicalDigest.test.ts
   (cd supabase/functions/api && deno check cache.ts rateLimit.ts http.ts legal.ts)
 }
 

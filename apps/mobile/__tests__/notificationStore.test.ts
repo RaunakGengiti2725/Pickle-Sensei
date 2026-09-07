@@ -79,6 +79,28 @@ function deps(scheduler: FakeScheduler) {
   return { scheduler, loadContext: async () => planContext };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function enabledScheduler() {
+  setActiveDataOwner(owner);
+  const scheduler = new FakeScheduler();
+  scheduler.permission = 'granted';
+  mockKvTable.set(
+    notificationPrefsKeyForOwner(owner),
+    JSON.stringify({ ...DEFAULT_NOTIFICATION_PREFS, enabled: true }),
+  );
+  await useNotificationStore.getState().hydrate(deps(scheduler));
+  scheduler.appliedPlans = [];
+  scheduler.cancelAllCalls = 0;
+  return scheduler;
+}
+
 function resetStore() {
   useNotificationStore.setState({
     hydrated: false,
@@ -97,9 +119,136 @@ beforeEach(() => {
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
-afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+afterEach(() => {
+  jest.restoreAllMocks();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+});
 
 describe('notification store', () => {
+  it('lets the newest context win when reminder syncs finish out of order', async () => {
+    const scheduler = await enabledScheduler();
+    const context = deferred<NotificationPlanContext>();
+    const first = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: () => context.promise,
+    });
+    await useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: async () => ({ ...planContext, practicedToday: true }),
+    });
+    context.resolve(planContext);
+    await first;
+    expect(scheduler.appliedPlans).toHaveLength(1);
+    const streak = scheduler.appliedPlans[0]!.find(
+      item => item.id === 'ps.reminder.streak',
+    );
+    expect(new Date(streak!.timestampMs).getDate()).toBe(26);
+  });
+
+  it('does not re-arm opted-out reminders when an old context finishes loading', async () => {
+    const scheduler = await enabledScheduler();
+    const context = deferred<NotificationPlanContext>();
+    const first = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: () => context.promise,
+    });
+    await useNotificationStore
+      .getState()
+      .setPrefs({ enabled: false }, deps(scheduler));
+    context.resolve(planContext);
+    await first;
+    expect(scheduler.appliedPlans).toEqual([]);
+    expect(scheduler.cancelAllCalls).toBe(1);
+  });
+
+  it('ignores work explicitly requested for an owner who is no longer active', async () => {
+    const scheduler = await enabledScheduler();
+    setActiveDataOwner(otherOwner);
+    await useNotificationStore
+      .getState()
+      .syncNow({ ...deps(scheduler), expectedOwnerKey: owner });
+    expect(scheduler.appliedPlans).toEqual([]);
+    expect(scheduler.cancelAllCalls).toBe(0);
+  });
+
+  it('rejects an old sign-in generation even when the same account is current again', async () => {
+    const scheduler = await enabledScheduler();
+    const context = deferred<NotificationPlanContext>();
+    const first = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: () => context.promise,
+    });
+    setActiveDataOwner(otherOwner);
+    setActiveDataOwner(owner);
+    context.resolve(planContext);
+    await first;
+    expect(scheduler.appliedPlans).toEqual([]);
+  });
+
+  it('honors caller teardown before applying a deferred context', async () => {
+    const scheduler = await enabledScheduler();
+    const context = deferred<NotificationPlanContext>();
+    let active = true;
+    const first = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: () => context.promise,
+      isCurrent: () => active,
+    });
+    active = false;
+    context.resolve(planContext);
+    await first;
+    expect(scheduler.appliedPlans).toEqual([]);
+  });
+
+  it('serializes native cancellation after an already-started apply so sign-out wins', async () => {
+    const scheduler = await enabledScheduler();
+    const started = deferred<void>();
+    const finish = deferred<void>();
+    let scheduled: readonly PlannedNotification[] = [];
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    jest.spyOn(scheduler, 'applyPlan').mockImplementation(async plan => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      started.resolve();
+      await finish.promise;
+      scheduled = plan;
+      activeCalls -= 1;
+    });
+    jest.spyOn(scheduler, 'cancelAllPlanned').mockImplementation(async () => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      scheduled = [];
+      activeCalls -= 1;
+    });
+    const first = useNotificationStore.getState().syncNow(deps(scheduler));
+    await started.promise;
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    const signOut = useNotificationStore.getState().hydrate(deps(scheduler));
+    finish.resolve();
+    await Promise.all([first, signOut]);
+    expect(maxActiveCalls).toBe(1);
+    expect(scheduled).toEqual([]);
+    expect(useNotificationStore.getState().ownerKey).toBe(
+      SIGNED_OUT_DATA_OWNER,
+    );
+  });
+
+  it('does not make sign-out wait for a pending history read before cancelling', async () => {
+    const scheduler = await enabledScheduler();
+    const context = deferred<NotificationPlanContext>();
+    const first = useNotificationStore.getState().syncNow({
+      scheduler,
+      loadContext: () => context.promise,
+    });
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(scheduler.cancelAllCalls).toBe(1);
+    context.resolve(planContext);
+    await first;
+    expect(scheduler.appliedPlans).toEqual([]);
+  });
+
   it('cancels everything for a signed-out process', async () => {
     const scheduler = new FakeScheduler();
     await useNotificationStore.getState().hydrate(deps(scheduler));

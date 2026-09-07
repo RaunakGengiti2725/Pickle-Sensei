@@ -4,7 +4,7 @@
  * The rating permit is server-gated. When the rating service is unreachable
  * (airplane mode, timeout, 5xx) or the session has expired (401), the real
  * AnalyzeScreen must land in a typed error phase with visible copy, offer
- * Try again + Close, never navigate to a Result, and never leave a spinner.
+ * Import another video + Close, never navigate to a Result, and never leave a spinner.
  */
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 jest.mock('../../src/data/repository', () => ({
@@ -15,6 +15,7 @@ jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
 jest.mock('../../src/account/apiSession', () => ({
+  ...jest.requireActual('../../src/account/apiSession'),
   getApiSession: () => null,
 }));
 jest.mock('../../src/camera/capture', () => {
@@ -81,6 +82,10 @@ import {
   importStrokeVideo,
 } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { Button } from '../../src/design/components';
 
 const importedClip = assertCapturedClip({
@@ -138,12 +143,16 @@ async function renderAndScore(): Promise<ReactTestRenderer> {
 
 describe('AnalyzeScreen — rating service unreachable', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.useFakeTimers();
     jest.clearAllMocks();
   });
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    jest.useRealTimers();
+  });
 
-  it('offline permit reservation → typed error phase with copy, Try again and Close, no Result navigation', async () => {
+  it('offline permit reservation → typed error phase with copy, Import another video and Close, no Result navigation', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'unavailable',
       reason:
@@ -158,9 +167,9 @@ describe('AnalyzeScreen — rating service unreachable', () => {
     expect(
       renderer.root.findAll(n => n.props.accessibilityRole === 'alert').length,
     ).toBeGreaterThan(0);
-    expect(buttonLabelled(renderer, 'Try again').props.onPress).toEqual(
-      expect.any(Function),
-    );
+    expect(
+      buttonLabelled(renderer, 'Import another video').props.onPress,
+    ).toEqual(expect.any(Function));
     await act(async () => {
       buttonLabelled(renderer, 'Close').props.onPress();
     });
@@ -180,7 +189,7 @@ describe('AnalyzeScreen — rating service unreachable', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Nothing was rated.');
     expect(copy).toContain('took too long to respond');
-    expect(buttonLabelled(renderer, 'Try again')).toBeTruthy();
+    expect(buttonLabelled(renderer, 'Import another video')).toBeTruthy();
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();

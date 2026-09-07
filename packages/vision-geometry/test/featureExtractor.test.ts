@@ -69,6 +69,31 @@ async function measure(truthOverrides: Partial<SwingTruth>): Promise<{
   return { truth, byKey: new Map(measured.value.map((entry) => [entry.metricKey, entry])) };
 }
 
+async function phaseFixture() {
+  const swing = generateSwing();
+  const phases = await new GeometricPhaseSegmenter({ aspectRatio: 1 }).segmentPhases(
+    swing.frames,
+    [],
+    {
+      startMs: swing.window.startMs,
+      endMs: swing.window.endMs,
+      contactMs: swing.window.peakMs,
+      shotTypeHypothesis: null,
+      confidence: 0.9,
+    },
+  );
+  expect(phases.ok).toBe(true);
+  if (!phases.ok) throw new Error("phase fixture unavailable");
+  return {
+    poseFrames: swing.frames,
+    paddleFrames: [],
+    phases: phases.value,
+    shotType: "forehand_drive" as const,
+    handedness: "right" as const,
+    cameraView: "side" as const,
+  };
+}
+
 describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
   for (const athlete of ATHLETES) {
     it(`measures ${athlete.name} within tolerance of constructed truth`, async () => {
@@ -99,15 +124,12 @@ describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
       expect(Math.abs(backswing!.value - truth.backswingLengthNorm)).toBeLessThanOrEqual(0.15);
 
       // The constructed swing dips then rises into contact: slope must be
-      // positive, and recovery time must match the constructed recover phase.
+      // positive; a generated phase endpoint is not observed return-to-ready evidence.
       const slope = byKey.get("path_low_to_high_slope");
       expect(slope, "path_low_to_high_slope missing").toBeDefined();
       expect(slope!.value).toBeGreaterThan(0);
 
-      const recovery = byKey.get("recovery_time_ms");
-      expect(recovery, "recovery_time_ms missing").toBeDefined();
-      expect(recovery!.value).toBeGreaterThan(0);
-      expect(recovery!.value).toBeLessThanOrEqual(truth.recoverMs + truth.followMs);
+      expect(byKey.get("recovery_time_ms")).toBeUndefined();
 
       // A stationary lower body means near-zero weight transfer — the
       // generator holds hips fixed, so measured transfer must be ~0.
@@ -163,6 +185,152 @@ describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
         Math.max(0.02, Math.abs(entry.value) * 0.02),
       );
     }
+  });
+
+  it("does not turn a supplied recovery span into an observed return-to-ready measurement", async () => {
+    const input = await phaseFixture();
+    const startMs = input.phases.at(-1)!.endMs;
+    const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements({
+      ...input,
+      phases: [
+        ...input.phases,
+        {
+          key: "recover",
+          startMs,
+          endMs: startMs + 1000,
+          representativeMs: startMs + 500,
+          confidence: 1,
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.value.some((measurement) => measurement.metricKey === "recovery_time_ms")).toBe(
+        false,
+      );
+  });
+
+  it.each(["ready", "prepare", "follow_through", "recover"] as const)(
+    "keeps independent measurements when %s was not observed",
+    async (missing) => {
+      const input = await phaseFixture();
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        {
+          ...input,
+          phases: input.phases.filter((phase) => phase.key !== missing),
+        },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const keys = result.value.map((measurement) => measurement.metricKey);
+      expect(keys).toContain("contact_height_ratio");
+      expect(keys).not.toContain("recovery_time_ms");
+      const omitted =
+        missing === "ready"
+          ? ["stance_width_ratio", "knee_flexion_deg", "paddle_ready_height_ratio"]
+          : missing === "prepare"
+            ? [
+                "shoulder_turn_deg",
+                "paddle_set_height_ratio",
+                "paddle_set_forward_norm",
+                "backswing_length_norm",
+              ]
+            : missing === "follow_through"
+              ? ["follow_through_length_norm", "wrist_angle_variance_deg"]
+              : [];
+      for (const key of omitted) expect(keys).not.toContain(key);
+    },
+  );
+
+  it("does not borrow a ready pose from outside the supplied observed phase", async () => {
+    const input = await phaseFixture();
+    const ready = input.phases.find((phase) => phase.key === "ready")!;
+    const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements({
+      ...input,
+      poseFrames: input.poseFrames.filter((frame) => frame.timestampMs > ready.endMs),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.value.some((measurement) => measurement.metricKey === "contact_height_ratio"),
+    ).toBe(true);
+    expect(result.value.some((measurement) => measurement.metricKey === "stance_width_ratio")).toBe(
+      false,
+    );
+  });
+
+  it("does not substitute a different frame for an unobserved contact-proxy timestamp", async () => {
+    const input = await phaseFixture();
+    const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements({
+      ...input,
+      phases: input.phases.map((phase) =>
+        phase.key === "contact"
+          ? { ...phase, representativeMs: phase.representativeMs + 0.1 }
+          : phase,
+      ),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const keys = result.value.map((measurement) => measurement.metricKey);
+    expect(keys).toContain("stance_width_ratio");
+    expect(keys).not.toContain("contact_height_ratio");
+    expect(keys).not.toContain("contact_forward_of_hip_norm");
+  });
+
+  it("omits ground-relative height when no ankle ground reference was observed", async () => {
+    const input = await phaseFixture();
+    const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements({
+      ...input,
+      poseFrames: input.poseFrames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.filter((point) => !point.name.endsWith("ankle")),
+      })),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.value.some((measurement) => measurement.metricKey === "contact_forward_of_hip_norm"),
+    ).toBe(true);
+    expect(
+      result.value.some((measurement) => measurement.metricKey === "contact_height_ratio"),
+    ).toBe(false);
+  });
+
+  it("does not invent horizontal forward direction from poses outside acceleration", async () => {
+    const input = await phaseFixture();
+    const accelerate = input.phases.find((phase) => phase.key === "accelerate")!;
+    const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements({
+      ...input,
+      poseFrames: input.poseFrames.filter(
+        (frame) => frame.timestampMs < accelerate.startMs || frame.timestampMs > accelerate.endMs,
+      ),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const keys = result.value.map((measurement) => measurement.metricKey);
+    expect(keys).toContain("contact_height_ratio");
+    expect(keys).not.toContain("contact_forward_of_hip_norm");
+    expect(keys).not.toContain("paddle_set_forward_norm");
+    expect(keys).not.toContain("weight_transfer_norm");
+  });
+
+  it("keeps body normalization independent of padding outside the selected phases", async () => {
+    const input = await phaseFixture();
+    const extractor = new PoseGeometryFeatureExtractor({ aspectRatio: 1 });
+    const expected = await extractor.extractMeasurements(input);
+    const lastTimestamp = input.poseFrames.at(-1)!.timestampMs;
+    const padding = input.poseFrames.flatMap((frame, index) =>
+      [0, 1].map((copy) => ({
+        ...frame,
+        timestampMs: lastTimestamp + 1000 + index * 40 + copy * 20,
+        landmarks: frame.landmarks.map((landmark) => ({ ...landmark, y: landmark.y * 0.5 })),
+      })),
+    );
+    const actual = await extractor.extractMeasurements({
+      ...input,
+      poseFrames: [...input.poseFrames, ...padding],
+    });
+    expect(actual).toEqual(expected);
   });
 
   it("is deterministic across repeated runs", async () => {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getDb } from '../data/db';
 import { getKv, setKv } from '../data/repository';
+import { identifyCeremony } from '../flow/ceremonyRequest';
 
 /**
  * First-run walkthrough state. The tour is raised exactly once per DEVICE,
@@ -55,13 +56,14 @@ export function walkthroughYieldsTo(
 
 interface WalkthroughState {
   visible: boolean;
+  request: object | null;
   /** Ready to show, waiting for another ceremony to be dismissed. */
   queued: boolean;
   /** Raise the tour once per device; safe to call from every main-app mount. */
   maybeShowFirstRun: () => Promise<void>;
   /** Settings → "App walkthrough · Replay". Never touches the seen record. */
   replay: () => void;
-  dismiss: () => void;
+  dismiss: (expected?: object | null) => void;
 }
 
 /** Serialized: concurrent mounts (gate re-renders) must not race the KV
@@ -70,13 +72,17 @@ let evaluationQueue: Promise<void> = Promise.resolve();
 
 export const useWalkthroughStore = create<WalkthroughState>((set, get) => {
   const raise = () => {
-    if (anotherCeremonyShowing()) set({ queued: true });
-    else set({ queued: false, visible: true });
+    if (get().visible || get().queued) return;
+    const request = {};
+    identifyCeremony(request);
+    if (anotherCeremonyShowing()) set({ queued: true, request });
+    else set({ queued: false, visible: true, request });
   };
 
   return {
     visible: false,
     queued: false,
+    request: null,
 
     maybeShowFirstRun: async () => {
       const run = async () => {
@@ -104,6 +110,9 @@ export const useWalkthroughStore = create<WalkthroughState>((set, get) => {
 
     replay: () => raise(),
 
-    dismiss: () => set({ visible: false, queued: false }),
+    dismiss: expected => {
+      if (expected !== undefined && get().request !== expected) return;
+      set({ visible: false, queued: false, request: null });
+    },
   };
 });

@@ -30,7 +30,7 @@ import {
   userRequest,
   webhookRequest,
 } from "./routesHarness.ts";
-import { ENTITLEMENTS_URL, expiredSubscriber, type Row, simulate, sleep } from "./webhookSim.ts";
+import { VERDICT_URL, expiredSubscriber, type Row, simulate, sleep } from "./webhookSim.ts";
 
 const rcFor = (userId: string) => `${RC_URL}${encodeURIComponent(userId)}`;
 
@@ -82,7 +82,7 @@ Deno.test(
         times: 1,
       });
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         delayMs: 200,
         times: 1,
       });
@@ -102,7 +102,7 @@ Deno.test(
       assert(Date.parse(String(stored.expires_at)) < Date.now(), "…and its expires_at has passed");
       assertEquals(sim.entitlementWrites.length, 1, "exactly the fresh verdict was written");
       assertEquals(
-        sim.h.callsTo(ENTITLEMENTS_URL).filter((c) => c.method === "GET").length,
+        sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET").length,
         0,
         "fresh path: the row was answered from RETURNING, never re-read",
       );
@@ -181,7 +181,7 @@ Deno.test(
       assertEquals(stored.premium, true);
       assert(Date.parse(String(stored.expires_at)) < Date.now());
       assertEquals(
-        sim.h.callsTo(ENTITLEMENTS_URL).filter((c) => c.method === "GET").length,
+        sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET").length,
         1,
         "re-read path: the stored row was fetched once",
       );

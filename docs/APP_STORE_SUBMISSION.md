@@ -314,14 +314,23 @@ Path: sidebar → **App Privacy** → Get Started / Edit.
 
 ### 5.1 What actually leaves the device (audit summary)
 
+The name-disclosure clarification in this dossier and `legal.ts` is a local
+draft; it has not been published to the legal pages or App Store Connect.
+Onboarding requires a name for account personalization. A preferred name or
+nickname is accepted, without legal-name verification. The questionnaire
+remains required. Users may choose "Prefer not to say" for gender. Settings
+→ Player shows the onboarding name; Manage account shows the provider
+display name, if available. Older stored profiles may lack the onboarding
+name.
+
 Read from `apps/mobile/src/account/*.ts`, `src/evaluation/trialCapture.ts`,
 `src/data/api.ts`, `supabase/functions/api/index.ts`, and the migrations:
 
 | Data                                                                                                                                   | Where it goes                                                                 | Linked to account?                                      | Purpose                                                                            |
 | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Email address and display name from Apple/Google sign-in                                                                               | Supabase Auth + `public.profiles` (`email`, `display_name`, `avatar_url`)     | Yes (it is the account)                                 | Authentication, account                                                            |
+| Email address and display name from Apple/Google sign-in, when provided                                                                | Supabase Auth + `public.profiles` (`email`, `display_name`, `avatar_url`)     | Yes (it is the account)                                 | Authentication, account                                                            |
 | Account ID (Supabase UUID). Also used as the RevenueCat `appUserID`.                                                                   | Supabase, RevenueCat                                                          | Yes                                                     | Account, entitlement verification                                                  |
-| Coaching profile: skill level, dominant hand, goal, biggest problem, optional first name, optional gender                              | `public.profiles` via `PUT /v1/me/onboarding`                                 | Yes                                                     | Personalizing coaching                                                             |
+| Coaching profile: skill level, dominant hand, goal, biggest problem, name or nickname (required), gender (can decline)                 | `public.profiles` via `PUT /v1/me/onboarding`                                 | Yes                                                     | Personalizing coaching                                                             |
 | Analysis results: stroke type, technique score, checkpoint scores, phases, confidence, timestamps, model/config versions, session id   | `public.shots`, `public.sessions` via `POST /v1/shots:sync`                   | Yes                                                     | Progress history, rank, free-rating accounting                                     |
 | Purchase/entitlement state: premium yes/no, product key, expiry, verified_at; RevenueCat holds the StoreKit transaction history        | `public.billing_entitlements`, RevenueCat                                     | Yes                                                     | Unlocking Pro, fraud prevention                                                    |
 | Consent ledger rows (scope, grant/withdraw, version, source, client device string)                                                     | `public.consent_records`                                                      | Yes                                                     | Accountability for opt-in programs                                                 |
@@ -368,7 +377,7 @@ shipping binary's behavior changes.
 
 | Data type           | Usage purposes to tick                                                         | Linked to identity? | What it covers                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
-| Name                | Product Personalization; App Functionality                                     | Yes                 | Provider/display name and optional first name                                                  |
+| Name                | Product Personalization; App Functionality                                     | Yes                 | Provider display name, if available, and required onboarding name or nickname                  |
 | Email Address       | App Functionality                                                              | Yes                 | Apple/Google account identity                                                                  |
 | Phone Number        | App Functionality                                                              | Yes                 | Google Sign-In SDK declaration                                                                 |
 | Fitness             | Product Personalization; Analytics; App Functionality                          | Yes                 | Structured stroke, technique, session, and evaluation records                                  |
@@ -888,10 +897,10 @@ Support: picklesenseidev@gmail.com
 1. **Splash**: 5 s brand video, skippable after 1 s.
 2. **Welcome**: "See the stroke. Know the fix." → "Start your first read" or
    "I already have an account".
-3. **Onboarding** (cannot be skipped): name (optional), gender (optional),
-   playing level, hitting hand, what to own, what breaks down, then a reminders
-   step ("Turn on reminders" requests notification permission; "Not now" does
-   not).
+3. **Onboarding** (cannot be skipped): name or nickname (required), gender
+   (includes "Prefer not to say"), playing level, hitting hand, what to own,
+   what breaks down, then a reminders step ("Turn on reminders" requests
+   notification permission; "Not now" does not).
 4. **Sign-in**: Continue with Apple / Continue with Google. Required.
 5. **Tabs**: Home · Library · Coach (center) · Progress · Settings.
 6. **Coach menu**: Auto Analyze · Import Video · Drill Library.

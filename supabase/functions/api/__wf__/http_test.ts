@@ -8,6 +8,7 @@ import {
   constantTimeEqual,
   JSON_SECURITY_HEADERS,
   legalTextResponse,
+  isSupabaseEndpointRequest,
   sanitizeUserText,
   withBrowserHardening,
 } from "../http.ts";
@@ -68,6 +69,62 @@ Deno.test(
   },
 );
 
+Deno.test("Supabase service targets retain exact origin and their own endpoint namespace", () => {
+  const base = "https://supabase.test";
+  for (const path of [
+    "/auth/v1/token?grant_type=refresh_token",
+    "/auth/v1/logout?scope=local",
+    "/auth/v1/admin/users/user-id",
+  ]) {
+    assert(isSupabaseEndpointRequest(base + path, base, "auth"));
+    assert(!isSupabaseEndpointRequest(base + path, base, "rest"));
+  }
+  assert(isSupabaseEndpointRequest(base + "/rest/v1/rpc/access_state", base + "/", "rest"));
+  assert(
+    isSupabaseEndpointRequest(
+      "http://127.0.0.1:54321/auth/v1/token",
+      "http://127.0.0.1:54321",
+      "auth",
+    ),
+  );
+  assert(isSupabaseEndpointRequest(base + "/prefix/auth/v1/user", base + "/prefix/", "auth"));
+});
+
+const rejectedAuthTargets = [
+  "https://other.test/auth/v1/token",
+  "https://supabase.test.other.test/auth/v1/token",
+  "https://supabase.test:444/auth/v1/token",
+  "http://supabase.test/auth/v1/token",
+  "https://supabase.test/rest/v1/users",
+  "https://supabase.test/storage/v1/object",
+  "https://supabase.test/auth/v1-other/user",
+  "https://supabase.test/auth/v1/../../rest/v1/users",
+  "https://supabase.test/auth/v1/%2e%2e/%2e%2e/rest/v1/users",
+  "https://supabase.test/auth/v1/%2f..%2frest/v1/users",
+  "https://supabase.test/auth/v1/%5c..%5crest/v1/users",
+  "https://supabase.test/auth/v1/%252f..%252frest/v1/users",
+  "https://embedded-user:fixture-only@supabase.test/auth/v1/user",
+  "https://supabase.test/auth/v1/token#unexpected",
+  "/auth/v1/token",
+  "not a URL",
+];
+for (const [index, target] of rejectedAuthTargets.entries()) {
+  Deno.test(`Supabase auth target boundary rejects case ${index + 1}`, () => {
+    assert(!isSupabaseEndpointRequest(target, "https://supabase.test", "auth"));
+  });
+}
+
+Deno.test("Supabase target boundary rejects malformed trusted configuration", () => {
+  assert(!isSupabaseEndpointRequest("https://supabase.test/auth/v1/user", "not a URL", "auth"));
+  assert(
+    !isSupabaseEndpointRequest(
+      "https://supabase.test/auth/v1/user",
+      "https://embedded-user:fixture-only@supabase.test",
+      "auth",
+    ),
+  );
+});
+
 Deno.test("constantTimeEqual compares byte-wise and rejects length mismatch", () => {
   assert(constantTimeEqual("secret", "secret"));
   assert(!constantTimeEqual("secret", "secreT"));
@@ -117,6 +174,131 @@ Deno.test("legalTextResponse is text/plain, nosniff, publicly cacheable for 1h",
   assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
 });
 
+Deno.test(
+  "failureDetail projects only bounded diagnostics, never message/stack/body/identity",
+  async () => {
+    const { failureDetail } = await import("../http.ts");
+    const secret =
+      "FAKE-token FAKE-email@example.test https://FAKE-private.test/clip?token=FAKE-token";
+    const error = Object.assign(new TypeError(secret, { cause: secret }), {
+      code: "23514",
+      status: 409,
+      details: secret,
+      hint: secret,
+      userId: secret,
+      operation: secret,
+      provider: secret,
+      headers: { Authorization: secret },
+      body: secret,
+      toJSON: () => {
+        throw new Error("must not serialize the error");
+      },
+    });
+    Object.defineProperties(error, {
+      message: {
+        get() {
+          throw new Error("must not read message");
+        },
+      },
+      stack: {
+        get() {
+          throw new Error("must not read stack");
+        },
+      },
+    });
+    assertEquals(failureDetail(error), { name: "TypeError", code: "23514", status: 409 });
+    assertEquals(
+      failureDetail({ name: "AuthApiError", code: "over_request_rate_limit", status: 429 }),
+      {
+        name: "AuthApiError",
+        code: "over_request_rate_limit",
+        status: 429,
+      },
+    );
+    assertEquals(failureDetail({ code: "PGRST202" }, 404), {
+      name: "unknown",
+      code: "PGRST202",
+      status: 404,
+    });
+    assertEquals(failureDetail({ name: "InvalidSessionResponse" }, 200), {
+      name: "InvalidSessionResponse",
+      code: "unknown",
+      status: 200,
+    });
+    assertEquals(
+      failureDetail({
+        name: "ExternalAccountError",
+        kind: "configuration",
+        provider: "apple",
+        status: 503,
+      }),
+      {
+        name: "ExternalAccountError",
+        code: "unknown",
+        status: 503,
+        kind: "configuration",
+        provider: "apple",
+      },
+    );
+    assertEquals(failureDetail({ name: "ExternalAccountError", kind: secret, provider: secret }), {
+      name: "ExternalAccountError",
+      code: "unknown",
+      status: null,
+    });
+    for (const value of [secret, new String("23514"), null, undefined, [], 42]) {
+      assertEquals(failureDetail(value), { name: "unknown", code: "unknown", status: null });
+    }
+    for (const status of [secret, "503", 0, 99, 600, -1, 500.5, NaN, Infinity]) {
+      assertEquals(failureDetail({ name: secret, code: secret, status }), {
+        name: "unknown",
+        code: "unknown",
+        status: null,
+      });
+    }
+    for (const code of [
+      "23514\n",
+      "PGRST202\r\n",
+      "23514\nFAKE-token",
+      "23514-extra",
+      "pgrst202",
+      "PGRST20",
+      "FAKE-token",
+      23514,
+    ]) {
+      assertEquals(failureDetail({ code }).code, "unknown");
+    }
+    assertEquals(
+      failureDetail({
+        get code() {
+          throw new Error(secret);
+        },
+      }),
+      {
+        name: "unknown",
+        code: "unknown",
+        status: null,
+      },
+    );
+  },
+);
+
+Deno.test(
+  "failure logging sink inventory covers every first-party shipping Edge module",
+  async () => {
+    const sinks: Record<string, number> = {};
+    for await (const entry of Deno.readDir(new URL("..", import.meta.url))) {
+      if (!entry.isFile || !entry.name.endsWith(".ts")) continue;
+      const source = await Deno.readTextFile(new URL(`../${entry.name}`, import.meta.url));
+      const matches = source.match(/\bconsole\s*(?:\.|\[)/g) ?? [];
+      if (matches.length) sinks[entry.name] = matches.length;
+    }
+    assertEquals(sinks, { "http.ts": 2, "index.ts": 18 });
+    const deletion = await Deno.readTextFile(
+      new URL("../accountDeletionOperations.ts", import.meta.url),
+    );
+    assert(deletion.includes("dependencies.onFailure?.(failureCode, boundedFailureStatus(error))"));
+  },
+);
 Deno.test("legalTextResponse carries CSP, frame denial, and HSTS like the JSON routes", () => {
   const res = legalTextResponse("hello");
   for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {

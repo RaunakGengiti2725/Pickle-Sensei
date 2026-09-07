@@ -321,12 +321,12 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "AUTO DETECT declared-null profile resolution (strokeAutoResolution.ts). Ships inside FUSION_ENGINE_VERSION and has no independent version constant; resolution ladder is leaf → shared side profile → abstained, never an invented stroke.",
+        "AUTO DETECT and ambiguous legacy declarations require an explicit supported exact technique before scoring. Ships inside FUSION_ENGINE_VERSION with no independent version constant. Preserves original prediction and disagreement evidence; classifier confidence is not scientific release approval.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "phase.geometry",
-      version: "phase-geometry-1",
+      version: "phase-geometry-2",
       task: "phase_segmentation",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -334,7 +334,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "Deterministic wrist-kinematics phase segmentation. Upgrade path: learned temporal segmenter once labeled data exists.",
+        "Deterministic wrist-kinematics phases bounded by actual observations. Contact is a motion proxy; return-to-ready is not inferred from the clip endpoint. Upgrade path: learned temporal segmenter once labeled data exists.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
@@ -352,7 +352,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "biomech.geometry",
-      version: "features-geometry-1",
+      version: "features-geometry-2",
       task: "biomechanics_extraction",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -360,7 +360,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "Measured 2D geometry features from recorded pose. One modality signal for fusion — not 'the model'.",
+        "Measured 2D geometry from observed phase-local poses. Missing phases omit dependent features; recovery time stays unavailable without observed return-to-ready evidence. One modality signal for fusion — not 'the model'.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,

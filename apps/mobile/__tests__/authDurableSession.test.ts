@@ -28,7 +28,15 @@ import {
   SESSION_VAULT_SERVICE,
   loadPersistedSession,
 } from '../src/account/sessionVault';
-import { stopSessionKeeper } from '../src/account/sessionKeeper';
+import {
+  refreshSessionNow,
+  stopSessionKeeper,
+} from '../src/account/sessionKeeper';
+import { stopBillingLifecycle } from '../src/billing/lifecycle';
+import { useAppStore } from '../src/state/appStore';
+import { useConsentStore } from '../src/state/consentStore';
+import * as accessStore from '../src/state/accessStore';
+import * as trainingStore from '../src/training/store';
 import {
   SIGNED_OUT_DATA_OWNER,
   getActiveDataOwner,
@@ -185,6 +193,7 @@ beforeEach(() => {
   mockKv.clear();
   mockDbOpenError = null;
   __keychainStore.clear();
+  stopBillingLifecycle();
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
@@ -194,6 +203,14 @@ beforeEach(() => {
     session: null,
     busy: false,
     error: null,
+  });
+  useAppStore.setState({
+    hydrated: false,
+    ownerKey: null,
+    ownerContext: null,
+    awaitingApiSession: false,
+    profile: null,
+    hydrateError: null,
   });
   mockGoogleSignin.hasPreviousSignIn.mockReturnValue(false);
   mockGoogleSignin.signInSilently.mockResolvedValue({
@@ -217,6 +234,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  stopBillingLifecycle();
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
@@ -227,6 +245,50 @@ afterEach(() => {
 // ─── Sign-in persists exactly the right material ─────────────────────────────
 
 describe('signing in persists a durable session', () => {
+  it.each(['apple', 'google'] as const)(
+    'keeps the live %s session and owner consistent when secure persistence fails',
+    async provider => {
+      mockGoogleSignin.signIn.mockResolvedValue({
+        type: 'success',
+        data: {
+          user: {
+            id: 'google-uid-1',
+            name: 'Pat Player',
+            email: 'pat@example.test',
+          },
+          idToken: 'google-id-token',
+        },
+      });
+      installRoutes({
+        '/v1/account/bootstrap': () =>
+          response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      });
+      const writeVault = jest
+        .spyOn(__keychainStore, 'set')
+        .mockImplementationOnce(() => {
+          throw new Error('Vault write failed');
+        });
+      try {
+        const action =
+          provider === 'apple' ? 'signInWithApple' : 'signInWithGoogle';
+        await useAuthStore.getState()[action]();
+        expect(useAuthStore.getState().error?.code).toBe(
+          'auth.storage_unavailable',
+        );
+        expect(useAuthStore.getState().session).toMatchObject({
+          provider,
+          canonicalAppUserId: canonicalId,
+        });
+        expect(getApiSession()?.bearerToken).toBe('access-1');
+        expect(getActiveDataOwner()).toBe(canonicalId);
+        expect(writeVault).toHaveBeenCalledTimes(1);
+        expect(vaultRecord()).toBeNull();
+      } finally {
+        writeVault.mockRestore();
+      }
+    },
+  );
+
   it('Apple sign-in bears the Supabase access token and stores ONLY the refresh token + descriptor in the Keychain', async () => {
     installRoutes({
       '/v1/account/bootstrap': init => {
@@ -258,6 +320,7 @@ describe('signing in persists a durable session', () => {
     });
     expect(vaultRecord()).toEqual({
       version: 1,
+      generation: expect.any(Number),
       provider: 'apple',
       canonicalAppUserId: canonicalId,
       refreshToken: 'refresh-1',
@@ -312,6 +375,162 @@ describe('signing in persists a durable session', () => {
 // ─── Relaunch restores from the vault ────────────────────────────────────────
 
 describe('relaunch (hydrate) with a persisted session', () => {
+  it('resumes missing profile and consent after the launch deadline, while ordinary rotation preserves their state and service configuration', async () => {
+    jest.useFakeTimers({
+      doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'],
+    });
+    const configureAccess = jest.spyOn(accessStore, 'configureAccessStore');
+    const configureTraining = jest.spyOn(
+      trainingStore,
+      'configureTrainingStore',
+    );
+    let releaseRefresh!: (response: Response) => void;
+    let refreshCalls = 0;
+    const initialRefresh = new Promise<Response>(resolve => {
+      releaseRefresh = resolve;
+    });
+    seedVault('refresh-1');
+    const fetchMock = installRoutes({
+      '/v1/auth/refresh': () =>
+        ++refreshCalls === 1
+          ? initialRefresh
+          : response(refreshBody({ access: 'access-3', refresh: 'refresh-3' })),
+      '/v1/me': () =>
+        response({
+          onboardingState: 'complete',
+          profile: {
+            first_name: 'Pat',
+            skill_level: '3.5',
+            handedness: 'right',
+            primary_goal: 'drops',
+            biggest_problem: 'control',
+          },
+        }),
+      '/v1/me/consent/status': () =>
+        response({
+          subjectPseudonym: 'test-subject',
+          scopes: [
+            {
+              scope: 'model_training',
+              active: true,
+              consentVersion: 'test-version',
+              lastAction: 'granted',
+              lastActionAt: '2026-09-01T00:00:00.000Z',
+            },
+          ],
+        }),
+      '/v1/auth/logout': () => response(null, 204),
+    });
+    try {
+      const restore = useAuthStore.getState().hydrate();
+      await jest.advanceTimersByTimeAsync(8_000);
+      await restore;
+      await useAppStore.getState().hydrate();
+      await useConsentStore.getState().hydrate();
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(useAppStore.getState()).toMatchObject({
+        profile: null,
+        awaitingApiSession: true,
+      });
+      expect(useConsentStore.getState().availability).toBe('restoring');
+      expect(configureAccess).not.toHaveBeenCalled();
+
+      releaseRefresh(
+        response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),
+      );
+      for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+      expect(useAppStore.getState().profile).toMatchObject({
+        firstName: 'Pat',
+        skillLevel: '3.5',
+      });
+      expect(useAppStore.getState().awaitingApiSession).toBe(false);
+      expect(useConsentStore.getState().modelTrainingActive).toBe(true);
+      expect(configureAccess).toHaveBeenCalledTimes(1);
+      expect(configureTraining).toHaveBeenCalledTimes(1);
+      const profile = useAppStore.getState().profile;
+      const consent = useConsentStore.getState();
+      useAppStore.getState().setLastShotType('backhand_drive');
+
+      refreshSessionNow();
+      for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+
+      expect(getApiSession()?.bearerToken).toBe('access-3');
+      expect(vaultRecord()?.refreshToken).toBe('refresh-3');
+      expect(useAppStore.getState().profile).toBe(profile);
+      expect(useAppStore.getState().lastShotType).toBe('backhand_drive');
+      expect(useConsentStore.getState()).toBe(consent);
+      expect(
+        fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/v1/me')),
+      ).toHaveLength(1);
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).endsWith('/v1/me/consent/status'),
+        ),
+      ).toHaveLength(1);
+      expect(configureAccess).toHaveBeenCalledTimes(1);
+      expect(configureTraining).toHaveBeenCalledTimes(1);
+
+      const signOut = useAuthStore.getState().signOut();
+      expect(useConsentStore.getState()).toMatchObject({
+        availability: 'signed_out',
+        modelTrainingActive: false,
+        lastActionAt: null,
+      });
+      await signOut;
+    } finally {
+      stopBillingLifecycle();
+      stopSessionKeeper();
+      configureAccess.mockRestore();
+      configureTraining.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it('ignores an old restore after A signs out and signs back into a newer A generation', async () => {
+    jest.useFakeTimers({
+      doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'],
+    });
+    seedVault('old-refresh');
+    let release!: (response: Response) => void;
+    installRoutes({
+      '/v1/auth/refresh': () =>
+        new Promise<Response>(resolve => {
+          release = resolve;
+        }),
+      '/v1/account/bootstrap': () =>
+        response(
+          bootstrapBody({
+            access: 'current-access',
+            refresh: 'current-refresh',
+          }),
+        ),
+    });
+    try {
+      const restore = useAuthStore.getState().hydrate();
+      await jest.advanceTimersByTimeAsync(8_000);
+      await restore;
+      await useAuthStore.getState().signOut();
+      await useAuthStore.getState().signInWithApple();
+      const current = useAuthStore.getState().session;
+      release(
+        response(
+          refreshBody({ access: 'stale-access', refresh: 'stale-refresh' }),
+        ),
+      );
+      for (let turn = 0; turn < 80; turn += 1) await Promise.resolve();
+
+      expect(useAuthStore.getState().session).toBe(current);
+      expect(getApiSession()?.bearerToken).toBe('current-access');
+      expect(vaultRecord()?.refreshToken).toBe('current-refresh');
+    } finally {
+      stopBillingLifecycle();
+      stopSessionKeeper();
+      jest.useRealTimers();
+    }
+  });
+
   it('restores an Apple session from the Keychain alone: no provider SDK, one refresh, rotated token re-persisted', async () => {
     seedVault('refresh-1', 'apple');
     const fetchMock = installRoutes({
@@ -525,7 +744,6 @@ describe('access-token rotation', () => {
     expect(bearerTokenFor('11111111-1111-4111-8111-111111111111')).toBeNull();
 
     // Relaunch → refresh rotates the bearer; the same resolver follows it.
-    seedVault('refresh-1', 'apple');
     installRoutes({
       '/v1/auth/refresh': () =>
         response(refreshBody({ access: 'access-2', refresh: 'refresh-2' })),

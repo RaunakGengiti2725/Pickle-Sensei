@@ -65,6 +65,8 @@ import { AccountDeletionError } from '../../src/account/deletion';
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { establishApiSession } from '../../src/account/apiSession';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 
 const syncedSession: AuthSession = {
   provider: 'apple',
@@ -73,6 +75,13 @@ const syncedSession: AuthSession = {
   localOnly: false,
   displayName: 'Jordan Lee',
   email: 'jordan@example.com',
+};
+
+const apiSession = {
+  apiBaseUrl: 'https://api.example.test',
+  bearerToken: 'test-access-token',
+  canonicalAppUserId: syncedSession.canonicalAppUserId!,
+  provider: 'apple' as const,
 };
 
 function renderScreen() {
@@ -151,6 +160,8 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     mockGoBack.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
+    setActiveDataOwner(apiSession.canonicalAppUserId);
+    establishApiSession(apiSession);
     useAuthStore.setState({
       hydrated: true,
       session: syncedSession,
@@ -231,7 +242,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
       await act(async () => {
         sheetButton(renderer, 'Continue to delete').props.onPress();
       });
-      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, null);
       act(() => renderer.unmount());
     });
 
@@ -258,7 +269,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
         sheetButton(renderer, 'Continue to delete').props.onPress();
       });
       expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
-        null,
+        apiSession,
         expect.objectContaining({
           reason: 'privacy',
           wanted: null,
@@ -294,7 +305,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
       await act(async () => {
         sheetButton(renderer, 'Continue to delete').props.onPress();
       });
-      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, {
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, {
         reason: 'too_expensive',
         wanted: 'price',
         details: '$60 a year is steep for a rec player.',
@@ -493,7 +504,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
         confirm.props.onPress();
       });
       expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
-        null,
+        apiSession,
         'challenge-3',
       );
       expect(allText(renderer)).toContain(
@@ -512,7 +523,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
         confirm.props.onPress();
       });
       expect(mockConfirmAccountDeletion).toHaveBeenLastCalledWith(
-        null,
+        apiSession,
         'challenge-3',
       );
       expect(
@@ -549,7 +560,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
         confirm.props.onPress();
       });
       expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
-        null,
+        apiSession,
         'challenge-3',
       );
       expect(allText(renderer)).toContain(

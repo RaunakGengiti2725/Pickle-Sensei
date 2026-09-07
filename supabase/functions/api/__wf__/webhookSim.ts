@@ -32,6 +32,7 @@
 
 import {
   activeSubscriber,
+  billingRpcResponse,
   type Harness,
   loadHarness,
   RC_URL,
@@ -40,6 +41,11 @@ import {
 
 export const EVENTS_URL = `${SUPABASE_URL}/rest/v1/webhook_events`;
 export const ENTITLEMENTS_URL = `${SUPABASE_URL}/rest/v1/billing_entitlements`;
+export const VERDICT_URL = `${SUPABASE_URL}/rest/v1/rpc/persist_billing_verdict`;
+export const EVENT_CLAIM_URL = `${SUPABASE_URL}/rest/v1/rpc/claim_billing_webhook_delivery`;
+export const EVENT_COMPLETE_URL = `${SUPABASE_URL}/rest/v1/rpc/complete_billing_webhook`;
+export const EVENT_RELEASE_URL = `${SUPABASE_URL}/rest/v1/rpc/release_billing_webhook_delivery`;
+export const BILLING_BEGIN_URL = `${SUPABASE_URL}/rest/v1/rpc/begin_billing_verification`;
 
 export type Row = Record<string, unknown>;
 
@@ -67,6 +73,8 @@ export interface Sim {
   entitlementRows: Map<string, Row>;
   /** Every ACCEPTED billing_entitlements write, in order (dropped stale writes excluded). */
   entitlementWrites: Row[];
+  verdictResults: Row[];
+  expireLease(eventId: string): void;
   faults: Fault[];
   errors: string[];
   restore(): void;
@@ -164,6 +172,7 @@ export async function simulate(): Promise<Sim> {
   const auditRows = new Map<string, Row>();
   const entitlementRows = new Map<string, Row>();
   const entitlementWrites: Row[] = [];
+  const verdictResults: Row[] = [];
   const faults: Fault[] = [];
   const errors: string[] = [];
   const realError = console.error;
@@ -202,13 +211,11 @@ export async function simulate(): Promise<Sim> {
     const path = `${parsed.origin}${parsed.pathname}`;
 
     if (url.startsWith(RC_URL)) counts.rc += 1;
-    if (path === ENTITLEMENTS_URL && method === "POST") counts.ent += 1;
-    if (path === EVENTS_URL) {
-      if (method === "POST") counts.auditPost += 1;
-      if (method === "GET") counts.auditGet += 1;
-      if (method === "PATCH") counts.auditPatch += 1;
-      if (method === "DELETE") counts.auditDelete += 1;
-    }
+    if (path === VERDICT_URL && method === "POST") counts.ent += 1;
+    if (path === EVENT_CLAIM_URL && method === "POST") counts.auditPost += 1;
+    if (path === EVENT_COMPLETE_URL && method === "POST") counts.auditPatch += 1;
+    if (path === EVENT_RELEASE_URL && method === "POST") counts.auditDelete += 1;
+    if (path === EVENTS_URL && method === "GET") counts.auditGet += 1;
 
     const fault = faults.find((f) => f.match(method, url) && (f.times ?? 1) > 0);
     if (fault) {
@@ -239,6 +246,45 @@ export async function simulate(): Promise<Sim> {
       }
     }
 
+    if (
+      method === "POST" &&
+      [
+        VERDICT_URL,
+        EVENT_CLAIM_URL,
+        EVENT_COMPLETE_URL,
+        EVENT_RELEASE_URL,
+        BILLING_BEGIN_URL,
+      ].includes(path)
+    ) {
+      record(request, body);
+      if (
+        request.headers.get("apikey") !== "service-role-test-key" ||
+        request.headers.get("authorization") !== "Bearer service-role-test-key"
+      ) {
+        return pgError(403, "42501", "server credentials required");
+      }
+      const name = parsed.pathname.split("/").at(-1)!;
+      if (name in h.rpcErrors) return pgError(h.rpcErrors[name], "XX000", "injected rpc failure");
+      if (name in h.rpcs) return jsonResponse(200, h.rpcs[name]);
+      h.tables.webhook_events = [...auditRows.values()];
+      h.tables.billing_entitlements = [...entitlementRows.values()];
+      const result = billingRpcResponse(h, name, isRecord(body) ? body : {})!;
+      for (const row of h.tables.webhook_events as Row[]) auditRows.set(String(row.id), row);
+      for (const row of h.tables.billing_entitlements as Row[]) {
+        const userId = String(row.user_id);
+        if (entitlementRows.get(userId) !== row) entitlementWrites.push(row);
+        entitlementRows.set(userId, row);
+      }
+      if (name === "persist_billing_verdict") {
+        const verdictResult = await result.clone().json();
+        if (isRecord(verdictResult)) verdictResults.push(verdictResult);
+      }
+      return result;
+    }
+    if ([EVENTS_URL, ENTITLEMENTS_URL].includes(path) && method !== "GET") {
+      record(request, body);
+      return pgError(403, "42501", "ordered billing helpers required");
+    }
     if (path === EVENTS_URL) {
       record(request, body);
       const filters = parseFilters(parsed);
@@ -341,6 +387,15 @@ export async function simulate(): Promise<Sim> {
     auditRows,
     entitlementRows,
     entitlementWrites,
+    verdictResults,
+    expireLease(eventId) {
+      const row = auditRows.get(eventId);
+      if (row) row.claimed_at = new Date(Date.now() - 300_001).toISOString();
+      const claim = (h.tables.billing_webhook_claims as Row[] | undefined)?.find(
+        (item) => item.event_id === eventId,
+      );
+      if (claim) claim.lease_expires_at_ms = Date.now() - 1;
+    },
     faults,
     errors,
     restore() {

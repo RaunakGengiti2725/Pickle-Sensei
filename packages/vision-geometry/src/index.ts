@@ -67,7 +67,7 @@ export {
  * versioned, tested math over recorded pose inference. It is not a learned
  * classifier; stroke identity still requires a validated recognizer.
  */
-export const GEOMETRY_BUNDLE_VERSION = "geometry-1";
+export const GEOMETRY_BUNDLE_VERSION = "geometry-2";
 
 export interface RecordedStrokeInput {
   /** Pose frames measured on-device while the clip was recorded. */
