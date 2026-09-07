@@ -175,6 +175,17 @@ export function withRequestId(response: Response, requestId: string): Response {
   return out;
 }
 
+/** Egress guard: every response leaving the function carries
+ * BROWSER_HARDENING_HEADERS, including 204s and 429s built outside the JSON
+ * helpers. Headers a route already set are left untouched. */
+export function withBrowserHardening(response: Response): Response {
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+    if (!out.headers.has(name)) out.headers.set(name, value);
+  }
+  return out;
+}
+
 /** Extract `error.code` from an error body clone without consuming the
  * response the client receives. Returns undefined for non-JSON / no code. */
 export async function errorCodeOf(response: Response): Promise<string | undefined> {

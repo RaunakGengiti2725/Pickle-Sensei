@@ -7,13 +7,14 @@
 import { assert, assertEquals, assertMatch, assertNotEquals } from "@std/assert";
 import {
   accessLogEntry,
+  BROWSER_HARDENING_HEADERS,
   captureAccessLog,
   errorCodeOf,
   resolveRequestId,
   routeTemplate,
   withRequestId,
 } from "../http.ts";
-import { loadHarness, userRequest } from "./routesHarness.ts";
+import { fakeSupabaseAccessToken, loadHarness, userRequest } from "./routesHarness.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -136,5 +137,52 @@ Deno.test(
     assertEquals(entry.route, "/functions/v1/api/v1/definitely-not-a-route");
     const body = await unknownRoute.json();
     if (typeof body?.error?.code === "string") assertEquals(entry.code, body.error.code);
+  },
+);
+
+Deno.test(
+  "handler: browser hardening headers on every egress — 200, 404, 204 logout, 429",
+  async () => {
+    const h = await loadHarness();
+    h.reset();
+    const expectHardened = (res: Response, label: string) => {
+      for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+        assertEquals(res.headers.get(name), value, `${label}: ${name}`);
+      }
+    };
+
+    const ok = await h.handler(userRequest("GET", "/healthz", { ip: "203.0.113.240" }));
+    assertEquals(ok.status, 200);
+    expectHardened(ok, "200 healthz");
+    await ok.body?.cancel();
+
+    const missing = await h.handler(
+      userRequest("GET", "/v1/definitely-not-a-route", { ip: "203.0.113.241" }),
+    );
+    assertEquals(missing.status, 404);
+    expectHardened(missing, "404 unknown route");
+    await missing.body?.cancel();
+
+    const logout = await h.handler(
+      userRequest("POST", "/v1/auth/logout", {
+        token: fakeSupabaseAccessToken(),
+        ip: "203.0.113.242",
+      }),
+    );
+    assertEquals(logout.status, 204);
+    expectHardened(logout, "204 logout");
+
+    const limitedIp = "203.0.113.243";
+    let limited: Response | null = null;
+    for (let i = 0; i < 61 && !limited; i += 1) {
+      const res = await h.handler(userRequest("GET", "/healthz", { ip: limitedIp }));
+      if (res.status === 429) limited = res;
+      else await res.body?.cancel();
+    }
+    assert(limited, "public page budget never tripped");
+    assertEquals(limited.headers.get("content-type"), "application/json");
+    assert(limited.headers.get("retry-after"));
+    expectHardened(limited, "429 rate limited");
+    assertEquals((await limited.json()).error.code, "rate_limited");
   },
 );
