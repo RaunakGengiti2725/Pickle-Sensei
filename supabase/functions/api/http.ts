@@ -1,6 +1,16 @@
 // HTTP hardening helpers: security headers, HTML escaping, user-text
 // sanitization, client-IP extraction, and constant-time secret comparison.
 
+/** Browser-facing hardening shared by every response (OWASP REST Security
+ * Cheat Sheet): no script/resource loading, no framing, and HTTPS pinned
+ * for two years. Native clients ignore these; they only matter when a
+ * response is opened in a browser. */
+export const BROWSER_HARDENING_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+  "X-Frame-Options": "DENY",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+};
+
 /** Headers attached to every JSON API response. The API serves per-user
  * state, so responses are never cacheable by intermediaries. */
 export const JSON_SECURITY_HEADERS: Record<string, string> = {
@@ -8,6 +18,7 @@ export const JSON_SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
+  ...BROWSER_HARDENING_HEADERS,
 };
 
 /** Public support and legal documents. Plain text on purpose: the
@@ -22,6 +33,7 @@ export function legalTextResponse(text: string, status = 200): Response {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "Cache-Control": "public, max-age=3600",
+      ...BROWSER_HARDENING_HEADERS,
     },
   });
 }
@@ -160,6 +172,17 @@ export function captureAccessLog(sink: AccessLogSink): () => void {
 export function withRequestId(response: Response, requestId: string): Response {
   const out = new Response(response.body, response);
   out.headers.set(REQUEST_ID_HEADER, requestId);
+  return out;
+}
+
+/** Egress guard: every response leaving the function carries
+ * BROWSER_HARDENING_HEADERS, including 204s and 429s built outside the JSON
+ * helpers. Headers a route already set are left untouched. */
+export function withBrowserHardening(response: Response): Response {
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+    if (!out.headers.has(name)) out.headers.set(name, value);
+  }
   return out;
 }
 

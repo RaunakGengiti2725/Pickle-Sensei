@@ -3,11 +3,13 @@
 
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import {
+  BROWSER_HARDENING_HEADERS,
   clientIp,
   constantTimeEqual,
   JSON_SECURITY_HEADERS,
   legalTextResponse,
   sanitizeUserText,
+  withBrowserHardening,
 } from "../http.ts";
 
 Deno.test("sanitizeUserText strips C0/C1 controls, zero-width, bidi overrides, BOM", () => {
@@ -73,14 +75,29 @@ Deno.test("constantTimeEqual compares byte-wise and rejects length mismatch", ()
   assert(!constantTimeEqual("", "a"));
 });
 
-Deno.test("JSON_SECURITY_HEADERS pin content-type, nosniff, no-store, no-referrer", () => {
-  assertEquals(JSON_SECURITY_HEADERS, {
-    "Content-Type": "application/json",
-    "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "no-store",
-    "Referrer-Policy": "no-referrer",
-  });
-});
+Deno.test(
+  "BROWSER_HARDENING_HEADERS deny scripts, framing, and plaintext downgrade (OWASP REST cheat sheet)",
+  () => {
+    assertEquals(BROWSER_HARDENING_HEADERS, {
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Frame-Options": "DENY",
+      "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+    });
+  },
+);
+
+Deno.test(
+  "JSON_SECURITY_HEADERS pin content-type, nosniff, no-store, no-referrer + browser hardening",
+  () => {
+    assertEquals(JSON_SECURITY_HEADERS, {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      ...BROWSER_HARDENING_HEADERS,
+    });
+  },
+);
 
 Deno.test("Headers API rejects CR/LF so a hostile value cannot split response headers", () => {
   let threw = false;
@@ -98,4 +115,46 @@ Deno.test("legalTextResponse is text/plain, nosniff, publicly cacheable for 1h",
   assertEquals(res.headers.get("content-type"), "text/plain; charset=utf-8");
   assertEquals(res.headers.get("x-content-type-options"), "nosniff");
   assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
+});
+
+Deno.test("legalTextResponse carries CSP, frame denial, and HSTS like the JSON routes", () => {
+  const res = legalTextResponse("hello");
+  for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+    assertEquals(res.headers.get(name), value);
+  }
+  assertEquals(res.headers.get("referrer-policy"), "no-referrer");
+});
+
+Deno.test(
+  "withBrowserHardening adds the missing headers to bare responses (204, 429)",
+  async () => {
+    const empty = withBrowserHardening(new Response(null, { status: 204 }));
+    assertEquals(empty.status, 204);
+    assertEquals(empty.body, null);
+    for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+      assertEquals(empty.headers.get(name), value);
+    }
+
+    const limited = withBrowserHardening(
+      new Response(JSON.stringify({ error: { code: "rate_limited" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Retry-After": "7" },
+      }),
+    );
+    assertEquals(limited.status, 429);
+    assertEquals(limited.headers.get("retry-after"), "7");
+    assertEquals(limited.headers.get("content-type"), "application/json");
+    for (const [name, value] of Object.entries(BROWSER_HARDENING_HEADERS)) {
+      assertEquals(limited.headers.get(name), value);
+    }
+    assertEquals((await limited.json()).error.code, "rate_limited");
+  },
+);
+
+Deno.test("withBrowserHardening never overrides a header the route already set", () => {
+  const res = withBrowserHardening(
+    new Response("x", { headers: { "Content-Security-Policy": "default-src 'self'" } }),
+  );
+  assertEquals(res.headers.get("content-security-policy"), "default-src 'self'");
+  assertEquals(res.headers.get("x-frame-options"), "DENY");
 });

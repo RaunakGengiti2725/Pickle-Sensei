@@ -104,6 +104,7 @@ import {
   legalTextResponse,
   resolveRequestId,
   sanitizeUserText,
+  withBrowserHardening,
   withRequestId,
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
@@ -3939,7 +3940,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
   const code = await errorCodeOf(response);
   emitAccessLog(accessLogEntry(request, response, requestId, startedAt, code));
-  const identified = withRequestId(response, requestId);
+  const identified = withBrowserHardening(withRequestId(response, requestId));
   return response.status >= 400
     ? new Response(await identified.arrayBuffer(), identified)
     : identified;
