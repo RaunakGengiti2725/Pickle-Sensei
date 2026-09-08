@@ -1374,7 +1374,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       }
     });
 
-    it('fallback: a 429 on the first confirmation stays unknown rather than re-arming the challenge', async () => {
+    it('fallback: a 429 refusing the first confirmation re-arms the SAME challenge (the server acted on nothing), never a new request', async () => {
       mockDatabaseUnavailable = true;
       let confirmAttempts = 0;
       route({
@@ -1394,17 +1394,52 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       try {
         await armDeletion(renderer);
         await press(renderer, sheetButton(renderer, 'Permanently delete'));
-        expectUnknownOutcome(renderer);
         expect(allText(renderer)).toContain('Too many requests.');
+        expect(allText(renderer)).not.toContain('Deletion status unknown');
         expectNotDeleted(renderer);
+        expect(calls('delete-request')).toHaveLength(1);
 
-        await pressWhenArmed(renderer, 'Retry deletion');
+        await pressWhenArmed(renderer, 'Permanently delete');
+        expect(calls('delete-request')).toHaveLength(1);
         expect(calls('delete-confirm')).toHaveLength(2);
         expect(bodyOf(calls('delete-confirm')[1]!)).toEqual({
           challenge: deletionId(11),
           operationId: deletionId(10),
         });
         expectDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('fallback: a 429 on the retry of a lost confirmation stays unknown — the first send may already have acted', async () => {
+      mockDatabaseUnavailable = true;
+      let confirmAttempts = 0;
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => {
+          confirmAttempts += 1;
+          return confirmAttempts === 1
+            ? Promise.reject(new TypeError('Network lost'))
+            : reply(
+                'delete-confirm',
+                { error: { message: 'Too many requests.' } },
+                429,
+              );
+        },
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expectUnknownOutcome(renderer);
+        expectNotDeleted(renderer);
+
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expect(calls('delete-confirm')).toHaveLength(2);
+        expectUnknownOutcome(renderer);
+        expect(allText(renderer)).toContain('Too many requests.');
+        expectNotDeleted(renderer);
       } finally {
         act(() => renderer.unmount());
       }
