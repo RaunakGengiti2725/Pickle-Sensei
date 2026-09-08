@@ -85,7 +85,9 @@ import {
   readVerifiedReleasePolicy,
   type ChargeableReleaseAdmission,
   type ReleaseIneligibilityReason,
+  type VerifiedReleasePolicy,
 } from "./releasePolicy.ts";
+import { canonicalizeOfflineJson, digestCanonicalOfflineJson } from "./canonicalDigest.ts";
 import {
   cacheDel,
   cacheFence,
@@ -1518,6 +1520,7 @@ async function chargeableReleaseAdmission(): Promise<ChargeableReleaseAdmission>
 }
 
 const RELEASE_NOT_AUTHORIZED_CODE = "access.release_not_authorized";
+const RECEIPT_MISMATCH_CODE = "shot.receipt_mismatch";
 
 /** Typed, final, non-chargeable verdict: no active release policy authorizes
  * a validated rating right now. 409 (not 5xx) so the client treats it as a
@@ -1783,6 +1786,17 @@ interface SyncShot {
   versionVector: Record<(typeof VERSION_VECTOR_KEYS)[number], string>;
 }
 
+/** Device-side settlement claims presented beside a shot: the installation,
+ * offline grant, allocation ticket and operation the client settled under.
+ * Each is null when the client holds none — recorded as absent, never
+ * fabricated — and every claim it does present must be exactly shaped. */
+interface SettlementClaims {
+  installationKeyId: string | null;
+  grant: { grantId: string; grantJwsSha256: string } | null;
+  ticket: { allocationId: string; generation: number; ticketId: string } | null;
+  operationId: string | null;
+}
+
 /** Millisecond offsets land in Postgres `int` columns (shot_phases, shots). */
 const MAX_MS = 2_147_483_647;
 const isMs = (v: unknown): v is number =>
@@ -1796,7 +1810,9 @@ const isUnit = (v: unknown): v is number =>
  * rejected PER SHOT — one bad row never poisons the batch. */
 function parseSyncShot(
   value: unknown,
-): { shot: SyncShot } | { rejectedCode: string; rejectedMessage: string } {
+):
+  | { shot: SyncShot; settlement: SettlementClaims }
+  | { rejectedCode: string; rejectedMessage: string } {
   const invalid = (message: string) => ({
     rejectedCode: "shot.invalid_payload",
     rejectedMessage: message,
@@ -1933,7 +1949,14 @@ function parseSyncShot(
     }
     versionVector[key] = v;
   }
+  const settlement = parseSettlementClaims(value.settlement);
+  if (!settlement) {
+    return invalid(
+      "settlement must be omitted or { installationKeyId, grant, ticket, operationId } with each claim null or exactly shaped.",
+    );
+  }
   return {
+    settlement,
     shot: {
       id: value.id,
       analysisPermitId: value.analysisPermitId,
@@ -1952,6 +1975,185 @@ function parseSyncShot(
       versionVector,
     },
   };
+}
+
+const CLAIM_ID_RE = /^[A-Za-z0-9._:/+=-]{1,128}$/;
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+const MAX_TICKET_GENERATION = 999_999_999;
+const isClaimId = (value: unknown): value is string =>
+  typeof value === "string" && CLAIM_ID_RE.test(value);
+const isSha256Hex = (value: unknown): value is string =>
+  typeof value === "string" && SHA256_HEX_RE.test(value);
+const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
+  Object.keys(value).length === keys.length && keys.every((key) => key in value);
+
+/** An omitted `settlement` is the honest "no claims" (every field null). A
+ * present one must carry all four claims, each null or exactly shaped —
+ * anything else is invalid, never coerced. Returns null when invalid. */
+function parseSettlementClaims(value: unknown): SettlementClaims | null {
+  if (value === undefined) {
+    return { installationKeyId: null, grant: null, ticket: null, operationId: null };
+  }
+  if (!isRecord(value)) return null;
+  if (!hasExactKeys(value, ["installationKeyId", "grant", "ticket", "operationId"])) return null;
+  const { installationKeyId, grant, ticket, operationId } = value;
+  if (installationKeyId !== null && !isClaimId(installationKeyId)) return null;
+  if (operationId !== null && !isClaimId(operationId)) return null;
+  let parsedGrant: SettlementClaims["grant"] = null;
+  if (grant !== null) {
+    if (
+      !isRecord(grant) ||
+      !hasExactKeys(grant, ["grantId", "grantJwsSha256"]) ||
+      !isClaimId(grant.grantId) ||
+      !isSha256Hex(grant.grantJwsSha256)
+    ) {
+      return null;
+    }
+    parsedGrant = { grantId: grant.grantId, grantJwsSha256: grant.grantJwsSha256 };
+  }
+  let parsedTicket: SettlementClaims["ticket"] = null;
+  if (ticket !== null) {
+    if (
+      !isRecord(ticket) ||
+      !hasExactKeys(ticket, ["allocationId", "generation", "ticketId"]) ||
+      !isClaimId(ticket.allocationId) ||
+      !isClaimId(ticket.ticketId) ||
+      !Number.isInteger(ticket.generation) ||
+      (ticket.generation as number) < 1 ||
+      (ticket.generation as number) > MAX_TICKET_GENERATION
+    ) {
+      return null;
+    }
+    parsedTicket = {
+      allocationId: ticket.allocationId,
+      generation: ticket.generation as number,
+      ticketId: ticket.ticketId,
+    };
+  }
+  return { installationKeyId, grant: parsedGrant, ticket: parsedTicket, operationId };
+}
+
+/** The settlement receipt apply_synced_shot persists beside the shot
+ * (migration 20260908110000) and the client receives. `binding` names every
+ * identity the settlement rests on plus the RFC 8785 digest of exactly the
+ * row payload the RPC writes; `policy` is the lineage of the verified release
+ * authority a scored charge was admitted under (null for abstentions, which
+ * are never admitted). Transported as canonical bytes + their digest so the
+ * RPC and a replay compare bytes, not interpretations. */
+interface SettlementBinding {
+  ownerId: string;
+  shotId: string;
+  analysisPermitId: string;
+  resultKind: SyncShot["resultKind"];
+  installationKeyId: string | null;
+  grant: SettlementClaims["grant"];
+  ticket: SettlementClaims["ticket"];
+  operationId: string | null;
+  payloadSha256: string;
+}
+interface SettlementPolicyLineage {
+  version: string;
+  sha256: string;
+  validFrom: number;
+  validUntil: number;
+  mechanics: VerifiedReleasePolicy["document"]["mechanics"];
+  benchmark: { lineage: VerifiedReleasePolicy["document"]["benchmark"]["lineage"] };
+  approval: {
+    mechanicsApprovedAt: number | null;
+    benchmarkApprovedAt: number | null;
+    withdrawnAt: number | null;
+    denyNewAuthorizations: boolean;
+  };
+}
+interface SettlementReceipt {
+  schemaVersion: 1;
+  kind: "settlement_receipt";
+  binding: SettlementBinding;
+  bindingSha256: string;
+  policy: SettlementPolicyLineage | null;
+}
+interface SettlementReceiptTransport {
+  canonical: string;
+  sha256: string;
+}
+
+function settlementPolicyLineage(policy: VerifiedReleasePolicy): SettlementPolicyLineage {
+  const { document, approval } = policy;
+  return {
+    version: document.version,
+    sha256: approval.policy.sha256,
+    validFrom: document.validFrom,
+    validUntil: document.validUntil,
+    mechanics: { lineage: document.mechanics.lineage },
+    benchmark: { lineage: document.benchmark.lineage },
+    approval: {
+      mechanicsApprovedAt: approval.mechanicsApprovedAt,
+      benchmarkApprovedAt: approval.benchmarkApprovedAt,
+      withdrawnAt: approval.withdrawnAt,
+      denyNewAuthorizations: approval.denyNewAuthorizations,
+    },
+  };
+}
+
+async function settlementBinding(
+  ownerId: string,
+  shot: SyncShot,
+  settlement: SettlementClaims,
+): Promise<SettlementBinding> {
+  return {
+    ownerId,
+    shotId: shot.id,
+    analysisPermitId: shot.analysisPermitId,
+    resultKind: shot.resultKind,
+    installationKeyId: settlement.installationKeyId,
+    grant: settlement.grant,
+    ticket: settlement.ticket,
+    operationId: settlement.operationId,
+    payloadSha256: await digestCanonicalOfflineJson(shot),
+  };
+}
+
+async function settlementReceiptTransport(
+  binding: SettlementBinding,
+  policy: SettlementPolicyLineage | null,
+): Promise<SettlementReceiptTransport> {
+  const receipt: SettlementReceipt = {
+    schemaVersion: 1,
+    kind: "settlement_receipt",
+    binding,
+    bindingSha256: await digestCanonicalOfflineJson(binding),
+    policy,
+  };
+  const canonical = canonicalizeOfflineJson(receipt);
+  return { canonical, sha256: await sha256Hex(canonical) };
+}
+
+/** A stored receipt is trusted only when its bytes are canonical and still
+ * hash to the stored digest; anything else is corrupt state (null), which is
+ * never a replay match and never fabricated into one. */
+async function verifiedStoredReceipt(
+  row: Record<string, unknown>,
+): Promise<{ transport: SettlementReceiptTransport; binding: string } | null> {
+  const canonical = row.receipt_canonical;
+  const sha256 = row.receipt_sha256;
+  if (typeof canonical !== "string" || !isSha256Hex(sha256)) return null;
+  if ((await sha256Hex(canonical)) !== sha256) return null;
+  let receipt: unknown;
+  try {
+    receipt = JSON.parse(canonical);
+    if (canonicalizeOfflineJson(receipt) !== canonical) return null;
+  } catch {
+    return null;
+  }
+  if (
+    !isRecord(receipt) ||
+    receipt.schemaVersion !== 1 ||
+    receipt.kind !== "settlement_receipt" ||
+    !isRecord(receipt.binding)
+  ) {
+    return null;
+  }
+  return { transport: { canonical, sha256 }, binding: canonicalizeOfflineJson(receipt.binding) };
 }
 
 /** Cache keys for a user's derived read models (rank, progress). Busted on
@@ -2036,6 +2238,13 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
     "Both lifetime free ratings have been used. Membership is required for another rating.",
   "shot.session_not_found": "Session not found or not yours.",
   "shot.id_conflict": "Shot id is already bound to a different user.",
+  // Receipt binding (migration 20260908110000): the same shot id was already
+  // settled under a different owner/device/grant/ticket/operation/payload/
+  // policy binding, or the receipt presented with a fresh shot is malformed.
+  // Neither consumes a credit, a permit or a sequence.
+  [RECEIPT_MISMATCH_CODE]:
+    "This analysis was already settled with different details. It was not counted again.",
+  "shot.receipt_invalid": "The settlement receipt could not be validated. It was not counted.",
   [RELEASE_NOT_AUTHORIZED_CODE]:
     "This rating could not be validated for release. It stays on this device and was not counted.",
 };
@@ -2057,11 +2266,26 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
 
   const acceptedIds: string[] = [];
   const rejected: Array<{ id: string; code: string; message: string }> = [];
+  const receipts: Array<{ id: string } & SettlementReceiptTransport> = [];
   const reject = (id: string, code: string, message: string) =>
     rejected.push({ id, code, message });
+  // The one operator sink for a settlement that cannot be trusted: the RPC's
+  // unexpected status or a stored receipt that failed verification.
+  const rejectWriteFailed = (id: string, status: string, detail: unknown, httpStatus?: number) => {
+    console.error(
+      "[api] shot sync write failed:",
+      logSafeStatus(status),
+      failureDetail(detail, httpStatus),
+    );
+    reject(
+      id,
+      "shot.write_failed",
+      "The analysis could not be saved right now. It stays on this device and will retry.",
+    );
+  };
 
   // Validate the whole batch first; malformed entries never cost a query.
-  const parsedShots: SyncShot[] = [];
+  const parsedShots: Array<{ shot: SyncShot; binding: SettlementBinding }> = [];
   for (const raw of shotsRaw) {
     const rawId = isRecord(raw) && typeof raw.id === "string" ? raw.id : "unknown";
     const parsed = parseSyncShot(raw);
@@ -2069,12 +2293,22 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       reject(rawId, parsed.rejectedCode, parsed.rejectedMessage);
       continue;
     }
-    parsedShots.push(parsed.shot);
+    parsedShots.push({
+      shot: parsed.shot,
+      binding: await settlementBinding(authed.id, parsed.shot, parsed.settlement),
+    });
   }
 
   // Idempotent replay: rows this user already owns (a prior sync committed
   // them) are acknowledged without rewriting — one batched SELECT for all.
   let replayIds = new Set<string>();
+  // Receipt-bound replay (migration 20260908110000): the durable receipt of
+  // each owned row decides whether this sync IS that settlement (identical
+  // binding → the original receipt is returned, nothing is spent) or a
+  // different settlement wearing its id (rejected here, before the authority
+  // read and the chargeable RPC). A row settled before receipts existed has
+  // none and keeps the ownership verdict. One batched owner-scoped read.
+  const storedReceipts = new Map<string, Record<string, unknown>>();
   if (parsedShots.length > 0) {
     const existing = await authed.db
       .from("shots")
@@ -2082,13 +2316,49 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
       .eq("user_id", authed.id)
       .in(
         "id",
-        parsedShots.map((shot) => shot.id),
+        parsedShots.map(({ shot }) => shot.id),
       );
     if (existing.error) {
       // Retryable for the whole batch: the outbox keeps every row.
       return serviceUnavailable("Shot sync", existing.error, { status: existing.status });
     }
     replayIds = new Set(((existing.data ?? []) as Array<{ id: string }>).map((row) => row.id));
+    const stored = await authed.db
+      .from("settlement_receipts")
+      .select("shot_id, receipt_canonical, receipt_sha256")
+      .eq("user_id", authed.id)
+      .in(
+        "shot_id",
+        parsedShots.map(({ shot }) => shot.id),
+      );
+    if (stored.error) {
+      return serviceUnavailable("Shot sync", stored.error, { status: stored.status });
+    }
+    for (const row of (stored.data ?? []) as Array<Record<string, unknown>>) {
+      if (typeof row.shot_id === "string") storedReceipts.set(row.shot_id, row);
+    }
+  }
+  const pending: Array<{ shot: SyncShot; binding: SettlementBinding }> = [];
+  for (const entry of parsedShots) {
+    const row = storedReceipts.get(entry.shot.id);
+    if (!row) {
+      if (replayIds.has(entry.shot.id)) acceptedIds.push(entry.shot.id);
+      else pending.push(entry);
+      continue;
+    }
+    const verified = await verifiedStoredReceipt(row);
+    if (!verified) {
+      // The stored receipt is unreadable or its bytes no longer match their
+      // digest: unknown state is neither a replay nor a fresh settlement.
+      rejectWriteFailed(entry.shot.id, "shot.write_failed", { name: "DataError" });
+      continue;
+    }
+    if (verified.binding === canonicalizeOfflineJson(entry.binding)) {
+      acceptedIds.push(entry.shot.id);
+      receipts.push({ id: entry.shot.id, ...verified.transport });
+      continue;
+    }
+    reject(entry.shot.id, RECEIPT_MISMATCH_CODE, SYNC_STATUS_MESSAGES[RECEIPT_MISMATCH_CODE]);
   }
 
   // Scored settlement is the charge (finalized/scored spends a free rating),
@@ -2099,7 +2369,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
   // every row), exactly like the replay lookup above; an ineligible one is a
   // typed per-shot verdict.
   let release: ChargeableReleaseAdmission | null = null;
-  if (parsedShots.some((shot) => shot.resultKind === "scored" && !replayIds.has(shot.id))) {
+  if (pending.some(({ shot }) => shot.resultKind === "scored")) {
     release = await chargeableReleaseAdmission();
     if (release.status === "unavailable") {
       return serviceUnavailable("Shot sync", release.error);
@@ -2107,19 +2377,22 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
   }
 
   let wroteEvidence = false;
-  for (const shot of parsedShots) {
-    if (replayIds.has(shot.id)) {
-      acceptedIds.push(shot.id);
-      continue;
+  for (const { shot, binding } of pending) {
+    // A scored settlement is admitted under exactly one verified policy and
+    // its receipt names that lineage; no active policy is never authorization.
+    let policy: SettlementPolicyLineage | null = null;
+    if (shot.resultKind === "scored") {
+      if (release?.status !== "active") {
+        reject(
+          shot.id,
+          RELEASE_NOT_AUTHORIZED_CODE,
+          SYNC_STATUS_MESSAGES[RELEASE_NOT_AUTHORIZED_CODE],
+        );
+        continue;
+      }
+      policy = settlementPolicyLineage(release.policy);
     }
-    if (shot.resultKind === "scored" && release?.status === "ineligible") {
-      reject(
-        shot.id,
-        RELEASE_NOT_AUTHORIZED_CODE,
-        SYNC_STATUS_MESSAGES[RELEASE_NOT_AUTHORIZED_CODE],
-      );
-      continue;
-    }
+    const settlementReceipt = await settlementReceiptTransport(binding, policy);
     const applied = await authed.db.rpc("apply_synced_shot", {
       shot: {
         id: shot.id,
@@ -2137,6 +2410,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
         phases: shot.phases,
         checkpoints: shot.checkpoints,
         versionVector: shot.versionVector,
+        settlementReceipt,
       },
     });
     if (applied.error) {
@@ -2151,6 +2425,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
     const status = String(applied.data ?? "");
     if (status === "accepted") {
       acceptedIds.push(shot.id);
+      receipts.push({ id: shot.id, ...settlementReceipt });
       wroteEvidence = true;
       continue;
     }
@@ -2163,16 +2438,7 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
     // shot.write_failed:<SQLSTATE> and anything unexpected: log the status
     // (sanitized to one capped line), reject with the stable code and a
     // generic message.
-    console.error(
-      "[api] shot sync write failed:",
-      logSafeStatus(status),
-      failureDetail({ name: "UnexpectedResult" }, applied.status),
-    );
-    reject(
-      shot.id,
-      "shot.write_failed",
-      "The analysis could not be saved right now. It stays on this device and will retry.",
-    );
+    rejectWriteFailed(shot.id, status, { name: "UnexpectedResult" }, applied.status);
   }
 
   if (wroteEvidence) {
@@ -2180,7 +2446,13 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
     await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));
   }
 
-  return json(200, { acceptedIds, rejected });
+  // Receipts travel only when a settlement carries one (a receipt-backed
+  // acceptance); the acknowledgement shape is otherwise unchanged.
+  return json(200, {
+    acceptedIds,
+    rejected,
+    ...(receipts.length > 0 ? { receipts } : {}),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
