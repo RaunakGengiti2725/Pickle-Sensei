@@ -170,6 +170,30 @@ beforeEach(() => {
 
 afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
+describe('invalid stored coaching choices', () => {
+  it.each([
+    { handedness: 'none' },
+    { focusCheckpoint: 'unknown_checkpoint' },
+    { skillLevel: ' ' },
+    { goal: '' },
+    { biggestProblem: '\t' },
+  ])('recovers canonical coaching data instead of using %j', async invalid => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    installLiveSession();
+    mockKvTable.set(
+      profileKeyFor(CANONICAL_OWNER),
+      JSON.stringify({ ...answers, ...invalid }),
+    );
+    mockFetchCanonical.mockResolvedValue(answers);
+    await useAppStore.getState().hydrate();
+    expect(mockFetchCanonical).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(answers);
+  });
+});
+
 describe('pending answers with a corrupt older profile', () => {
   it.each([GUEST_DATA_OWNER, CANONICAL_OWNER])(
     'adopts the newest answers for %s without trusting the old JSON',

@@ -32,7 +32,7 @@ import type {
   SchedulerPort,
 } from '../../../src/notifications/service';
 import type { PlannedNotification } from '../../../src/notifications/types';
-import type { PlayerRankSummary } from '@pickle/shared-types';
+import { CHECKPOINTS, type PlayerRankSummary } from '@pickle/shared-types';
 import { NativeModules } from 'react-native';
 import { FakeLocalDb } from '../../../xc-harness/lifecycle-persistence/fakeLocalDb';
 import {
@@ -80,7 +80,7 @@ jest.mock('../../../src/account/onboarding', () => ({
           handedness: 'right',
           goal: 'consistency',
           biggestProblem: 'popups',
-          focusCheckpoint: 'contact_point',
+          focusCheckpoint: 'contact_position',
           firstName: 'Server',
         }
       : null;
@@ -93,7 +93,7 @@ jest.mock('../../../src/account/onboarding', () => ({
     if (mockOnboarding.saveMode === 'throws') {
       throw new Error('503 (simulated)');
     }
-    return { ...profile, focusCheckpoint: 'server_focus' };
+    return { ...profile, focusCheckpoint: 'paddle_set' };
   },
 }));
 
@@ -543,13 +543,19 @@ function isProfileShape(value: unknown): boolean {
   if (value === null) return true;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  return [
-    'skillLevel',
-    'handedness',
-    'goal',
-    'biggestProblem',
-    'focusCheckpoint',
-  ].every(key => typeof record[key] === 'string');
+  return (
+    [
+      'skillLevel',
+      'handedness',
+      'goal',
+      'biggestProblem',
+      'focusCheckpoint',
+    ].every(
+      key => typeof record[key] === 'string' && record[key].trim().length > 0,
+    ) &&
+    ['right', 'left', 'ambidextrous'].includes(String(record['handedness'])) &&
+    CHECKPOINTS.some(key => key === record['focusCheckpoint'])
+  );
 }
 
 function isPrefsShape(value: unknown): boolean {
@@ -817,7 +823,7 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
         app.profile !== null &&
         app.profile.goal === validProfile().goal &&
         (!canonicalOnline ||
-          String(app.profile.focusCheckpoint) === 'server_focus')
+          String(app.profile.focusCheckpoint) === 'paddle_set')
       : kvAfter['onboarding.pending-profile'] ===
         PENDING_PROFILE_KV_VARIANTS['valid'];
   }

@@ -240,7 +240,7 @@ export function validProfile(
     handedness: 'right',
     goal: 'consistency',
     biggestProblem: 'popups',
-    focusCheckpoint: 'contact_point',
+    focusCheckpoint: 'contact_position',
     ...overrides,
   };
 }
@@ -250,6 +250,13 @@ export const PROFILE_KV_VARIANTS: Record<string, string | null> = {
   valid: JSON.stringify(validProfile()),
   'valid-with-name': JSON.stringify(validProfile({ firstName: 'Pat' })),
   'missing-focus': JSON.stringify(omit(validProfile(), 'focusCheckpoint')),
+  'unsupported-focus': JSON.stringify(
+    validProfile({ focusCheckpoint: 'unknown' }),
+  ),
+  'unsupported-handedness': JSON.stringify(
+    validProfile({ handedness: 'none' }),
+  ),
+  'blank-goal': JSON.stringify(validProfile({ goal: ' \t' })),
   'wrong-types': JSON.stringify({
     skillLevel: 3,
     handedness: null,

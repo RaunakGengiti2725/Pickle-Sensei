@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ShotTypeSlug } from '@pickle/shared-types';
+import { CHECKPOINTS, type ShotTypeSlug } from '@pickle/shared-types';
 import { getDb } from '../data/db';
 import { getKv, setKv } from '../data/repository';
 import { forDataOwner, withTransaction } from '../data/transactions';
@@ -51,7 +51,19 @@ function profileFromValue(value: unknown): Profile | null {
     'biggestProblem',
     'focusCheckpoint',
   ] as const;
-  if (requiredStrings.some(key => typeof candidate[key] !== 'string'))
+  if (
+    requiredStrings.some(key => {
+      const field = candidate[key];
+      return typeof field !== 'string' || !field.trim();
+    })
+  )
+    return null;
+  if (
+    !['right', 'left', 'ambidextrous'].includes(
+      String(candidate['handedness']),
+    ) ||
+    !CHECKPOINTS.some(key => key === candidate['focusCheckpoint'])
+  )
     return null;
   if (
     candidate['firstName'] !== undefined &&
