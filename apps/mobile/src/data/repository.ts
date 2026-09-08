@@ -997,7 +997,7 @@ export async function hasShotSyncReceipt(
 export type ShotOutboxStatus =
   | { state: 'absent' }
   | {
-      state: 'queued' | 'rejected' | 'exhausted';
+      state: 'queued' | 'rejected' | 'exhausted' | 'needs_repair';
       attempts: number;
       lastError: string | null;
     };
@@ -1013,9 +1013,9 @@ export async function getShotOutboxStatus(
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
   const { rows } = await db.execute(
-    `SELECT attempts, last_error FROM outbox
+    `SELECT attempts, last_error, repair_reason FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
+       AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?
      ORDER BY id DESC LIMIT 1`,
     [owner, shotId],
   );
@@ -1026,11 +1026,48 @@ export async function getShotOutboxStatus(
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
       : null;
+  if (row['repair_reason'] != null) {
+    return { state: 'needs_repair', attempts, lastError };
+  }
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
   }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };
+}
+
+/** Explicitly retry a held read and its parent, without changing saved evidence.
+ * The caller retains the owner generation from the screen that offered retry. */
+export async function retryShotSync(
+  db: LocalDb,
+  shotId: string,
+  context: DataOwnerContext,
+): Promise<boolean> {
+  return withTransaction(forDataOwner(db, context), async transaction => {
+    const { rows } = await transaction.execute(
+      `SELECT id, CASE WHEN json_valid(payload) THEN json_extract(payload, '$.sessionId') END AS session_id FROM outbox
+       WHERE owner_key = ? AND kind = 'shot.sync' AND repair_reason IS NOT NULL
+         AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?`,
+      [context.ownerKey, shotId],
+    );
+    for (const row of rows) {
+      await transaction.execute(
+        `UPDATE outbox SET repair_reason = NULL, last_error = NULL,
+         attempts = 0, last_attempt_order = 0 WHERE owner_key = ? AND id = ?`,
+        [context.ownerKey, row['id']],
+      );
+      if (typeof row['session_id'] === 'string') {
+        await transaction.execute(
+          `UPDATE outbox SET repair_reason = NULL, last_error = NULL,
+           attempts = 0, last_attempt_order = 0
+           WHERE owner_key = ? AND kind IN ('session.create', 'session.finalize')
+             AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?`,
+          [context.ownerKey, row['session_id']],
+        );
+      }
+    }
+    return rows.length > 0;
+  });
 }
 
 export async function getKv(

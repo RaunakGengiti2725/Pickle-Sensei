@@ -34,7 +34,7 @@ export function nextSyncRetryDelayMs(
 }
 
 let generation = 0;
-const runningGenerations = new Set<number>();
+const runningGenerations = new Map<number, Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
 let triggerForGeneration: (() => Promise<void>) | null = null;
@@ -93,41 +93,44 @@ export function configureSyncRuntime(session: ApiSession): void {
     );
   };
 
-  const trigger = async () => {
-    if (
-      configuredGeneration !== generation ||
-      runningGenerations.has(configuredGeneration)
-    ) {
-      return;
-    }
+  const trigger = (): Promise<void> => {
+    if (configuredGeneration !== generation) return Promise.resolve();
+    const running = runningGenerations.get(configuredGeneration);
+    if (running) return running;
     if (getActiveDataOwner() !== owner) {
       schedule();
-      return;
+      return Promise.resolve();
     }
-    runningGenerations.add(configuredGeneration);
-    try {
-      const db = getDb();
-      const recovered = await recoverAnalysisJournals(db, scope, permits, {
-        excludeOperationIds: runJournal.activeOperationIds(scope),
-      });
-      if (configuredGeneration !== generation || getActiveDataOwner() !== owner)
-        return;
-      const result = await drainOutbox(db, transport);
-      const pendingRecovery =
-        recovered.unknownStorage ||
-        recovered.items.some(
-          item => item.kind === 'pending' || item.kind === 'held',
-        );
-      consecutiveFailures =
-        result.failed > 0 || pendingRecovery ? consecutiveFailures + 1 : 0;
-    } catch {
-      // Outbox rows remain durable with their attempt history. The foreground
-      // event or the backed-off timer retries without inventing a receipt.
-      consecutiveFailures += 1;
-    } finally {
-      runningGenerations.delete(configuredGeneration);
-      schedule();
-    }
+    const operation = (async () => {
+      try {
+        const db = getDb();
+        const recovered = await recoverAnalysisJournals(db, scope, permits, {
+          excludeOperationIds: runJournal.activeOperationIds(scope),
+        });
+        if (
+          configuredGeneration !== generation ||
+          getActiveDataOwner() !== owner
+        )
+          return;
+        const result = await drainOutbox(db, transport);
+        const pendingRecovery =
+          recovered.unknownStorage ||
+          recovered.items.some(
+            item => item.kind === 'pending' || item.kind === 'held',
+          );
+        consecutiveFailures =
+          result.failed > 0 || pendingRecovery ? consecutiveFailures + 1 : 0;
+      } catch {
+        // Outbox rows remain durable with their attempt history. The foreground
+        // event or the backed-off timer retries without inventing a receipt.
+        consecutiveFailures += 1;
+      } finally {
+        runningGenerations.delete(configuredGeneration);
+        schedule();
+      }
+    })();
+    runningGenerations.set(configuredGeneration, operation);
+    return operation;
   };
 
   triggerForGeneration = trigger;
@@ -139,6 +142,6 @@ export function configureSyncRuntime(session: ApiSession): void {
 }
 
 /** Called after a new local result enters the durable outbox. */
-export function triggerOutboxSync(): void {
-  void triggerForGeneration?.();
+export async function triggerOutboxSync(): Promise<void> {
+  await triggerForGeneration?.();
 }

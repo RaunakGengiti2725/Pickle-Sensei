@@ -202,6 +202,22 @@ describe('fix-12: getShotOutboxStatus', () => {
     });
     await expect(
       getShotOutboxStatus(
+        fakeDb([
+          {
+            attempts: 0,
+            last_error: 'session.missing',
+            repair_reason: 'session.missing',
+          },
+        ]),
+        'shot-1',
+      ),
+    ).resolves.toEqual({
+      state: 'needs_repair',
+      attempts: 0,
+      lastError: 'session.missing',
+    });
+    await expect(
+      getShotOutboxStatus(
         fakeDb([{ attempts: 3, last_error: 'permit_invalid: expired' }]),
         'shot-1',
       ),
@@ -229,7 +245,9 @@ describe('fix-12: getShotOutboxStatus', () => {
     await getShotOutboxStatus(db, 'shot-9');
     const [sql, params] = db.execute.mock.calls[0]!;
     expect(sql).toMatch(/kind = 'shot\.sync'/);
-    expect(sql).toMatch(/json_extract\(payload, '\$\.id'\)/);
+    expect(sql).toMatch(
+      /CASE WHEN json_valid\(payload\) THEN json_extract\(payload, '\$\.id'\) END/,
+    );
     expect(sql).toMatch(/owner_key = \?/);
     expect(params).toEqual([expect.any(String), 'shot-9']);
     await expect(hasShotSyncReceipt(db, 'shot-9')).resolves.toBe(false);

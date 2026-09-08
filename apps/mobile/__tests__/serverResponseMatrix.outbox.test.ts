@@ -137,7 +137,17 @@ function expectationFor(judgedAs: OutboxClass): OutboxExpectation {
     case 'ok':
       return { deleted: ALL_ROWS, kept: [], receipts: [SHOT_A, SHOT_B] };
     case 'client_error':
-      return { deleted: [], kept: kept(ALL_ROWS, 1), receipts: [] };
+      return {
+        deleted: [],
+        kept: [
+          ['session', 1],
+          ['finalize', 0],
+          ['shotA', 0],
+          ['shotB', 0],
+          ['trial', 1],
+        ],
+        receipts: [],
+      };
     case 'unauthorized':
     case 'timeout_408':
     case 'rate_limited':
@@ -364,6 +374,14 @@ describe('drainOutbox × every deterministic response class (real transport, rea
         );
         expect(row.violations).toEqual([]);
         expect(row.settlement).toBe('resolved');
+        if (judgedAs === 'client_error') {
+          // A rejected parent prevents futile child requests and exposes the
+          // dependency repair state without spending the child's own budget.
+          expect(row.requests).toHaveLength(2);
+          expect(
+            row.requests.some(request => request.includes('/v1/shots:sync')),
+          ).toBe(false);
+        }
         if (judgedAs === 'unauthorized') {
           // One 401 per request; the void rows and both batches each report once.
           expect(row.unauthorizedReports).toBe(row.requests.length);
@@ -414,7 +432,7 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
     expect(prepared.fake.receipts).toHaveLength(2);
   });
 
-  test('D2 acceptedIds lists the same shot twice: one receipt, one delete per shot', async () => {
+  test('D2 duplicate accepted identifiers preserve the whole shot batch without receipts', async () => {
     if (!selected('dup_accepted_id_twice')) return;
     const prepared = seedQueue();
     const row = await runScenario(
@@ -434,7 +452,11 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
                 GOOD_BY_PATH[request.url] ??
                 GOOD_BY_PATH[`/v1/sessions/${SESSION_ID}/finalize`],
             },
-      { deleted: ALL_ROWS, kept: [], receipts: [SHOT_A, SHOT_B] },
+      {
+        deleted: ['session', 'finalize', 'trial'],
+        kept: kept(['shotA', 'shotB'], 0),
+        receipts: [],
+      },
       prepared,
     );
     expect(row.violations).toEqual([]);
@@ -442,10 +464,10 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
       prepared.fake.statements.filter(sql =>
         sql.startsWith('DELETE FROM outbox'),
       ).length,
-    ).toBe(5);
+    ).toBe(3);
   });
 
-  test('D3 shot listed as BOTH accepted and rejected: accepted wins exactly once, no attempt burned', async () => {
+  test('D3 overlapping verdicts preserve the whole shot batch without receipts or consumed attempts', async () => {
     if (!selected('dup_accepted_and_rejected')) return;
     const prepared = seedQueue();
     const row = await runScenario(
@@ -470,13 +492,17 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
                 GOOD_BY_PATH[request.url] ??
                 GOOD_BY_PATH[`/v1/sessions/${SESSION_ID}/finalize`],
             },
-      { deleted: ALL_ROWS, kept: [], receipts: [SHOT_A, SHOT_B] },
+      {
+        deleted: ['session', 'finalize', 'trial'],
+        kept: kept(['shotA', 'shotB'], 0),
+        receipts: [],
+      },
       prepared,
     );
     expect(row.violations).toEqual([]);
   });
 
-  test('D4 replayed STALE acknowledgement (ids of another batch): nothing deleted, no receipt; unacknowledged shots burn one attempt (permanent by contract)', async () => {
+  test('D4 foreign acknowledgement preserves every submitted shot and trial without receipts or consumed attempts', async () => {
     if (!selected('dup_stale_replay')) return;
     const prepared = seedQueue();
     const row = await runScenario(
@@ -504,22 +530,22 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
                   GOOD_BY_PATH[request.url] ??
                   GOOD_BY_PATH[`/v1/sessions/${SESSION_ID}/finalize`],
               },
-      { deleted: VOID_ROWS, kept: kept(BATCH_ROWS, 1), receipts: [] },
+      { deleted: VOID_ROWS, kept: kept(BATCH_ROWS, 0), receipts: [] },
       prepared,
     );
     expect(row.violations).toEqual([]);
     const shotRows = prepared.fake.outbox.filter(r => r.kind === 'shot.sync');
     expect(shotRows.map(r => r.last_error)).toEqual([
-      'shot.sync_unacknowledged',
-      'shot.sync_unacknowledged',
+      expect.stringContaining('could not confirm'),
+      expect.stringContaining('could not confirm'),
     ]);
     expect(
       prepared.fake.outbox.find(r => r.kind === 'evaluation.trial')?.last_error,
-    ).toBe('evaluation.trial_unacknowledged');
+    ).toEqual(expect.stringContaining('could not confirm'));
   });
 
-  test('D5 stale replay repeated OUTBOX_MAX_ATTEMPTS times abandons the shot rows from sync (local data intact, row stays in table)', async () => {
-    if (!selected('dup_stale_replay_exhausts')) return;
+  test('D5 repeated empty acknowledgements never exhaust valid local shots and a complete acknowledgement recovers them', async () => {
+    if (!selected('dup_stale_replay_preserves')) return;
     const prepared = seedQueue();
     server.respondWith(request =>
       request.url === '/v1/shots:sync'
@@ -541,19 +567,17 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
       trail.push(await drainOutbox(prepared.fake.db, transport));
     }
     const shotRows = prepared.fake.outbox.filter(r => r.kind === 'shot.sync');
-    expect(shotRows.map(r => r.attempts)).toEqual([
-      OUTBOX_MAX_ATTEMPTS,
-      OUTBOX_MAX_ATTEMPTS,
-    ]);
-    // The 9th drain no longer selects them (attempts < OUTBOX_MAX_ATTEMPTS).
+    expect(shotRows.map(r => r.attempts)).toEqual([0, 0]);
+    // The ninth drain still attempts both rows; an ambiguous server reply
+    // cannot permanently strand the locally saved evidence.
     expect(trail[OUTBOX_MAX_ATTEMPTS]).toEqual({
       synced: 0,
-      failed: 0,
+      failed: 2,
       remaining: 2,
     });
     expect(prepared.fake.receipts).toHaveLength(0);
     rows.push({
-      scenario: 'dup_stale_replay_exhausts',
+      scenario: 'dup_stale_replay_preserves',
       class: 'duplicate',
       judgedAs: 'duplicate',
       description: `{acceptedIds:[],rejected:[]} × ${OUTBOX_MAX_ATTEMPTS + 1} drains`,
@@ -567,8 +591,21 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
       unauthorizedReports: 0,
       unhandledRejections: rejections.count(),
       violations: [],
-      replay: `cd apps/mobile && MATRIX_FILTER='outbox::dup_stale_replay_exhausts' npx jest --ci ${TEST_FILE}`,
+      replay: `cd apps/mobile && MATRIX_FILTER='outbox::dup_stale_replay_preserves' npx jest --ci ${TEST_FILE}`,
     });
+    server.respondWith(request => ({
+      kind: 'json',
+      body: GOOD_BY_PATH[request.url],
+    }));
+    expect(await drainOutbox(prepared.fake.db, transport)).toEqual({
+      synced: 2,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(prepared.fake.receipts.map(receipt => receipt.entityId)).toEqual([
+      SHOT_A,
+      SHOT_B,
+    ]);
   });
 
   test('D6 partial acceptance with a transient rejection: accepted row deleted with a receipt, rejected row keeps its budget', async () => {
@@ -642,6 +679,68 @@ describe('duplicate / replayed / conflicting acknowledgements', () => {
       prepared,
     );
     expect(row.violations).toEqual([]);
+  });
+  test('D8 a partial acknowledgement cannot delete the accepted-looking subset', async () => {
+    if (!selected('partial_ack_missing_verdict')) return;
+    const row = await runScenario(
+      dup('partial_ack_missing_verdict', 'A accepted, B has no verdict'),
+      request => ({
+        kind: 'json',
+        body:
+          request.url === '/v1/shots:sync'
+            ? { acceptedIds: [SHOT_A], rejected: [] }
+            : (GOOD_BY_PATH[request.url] ??
+              GOOD_BY_PATH[`/v1/sessions/${SESSION_ID}/finalize`]),
+      }),
+      {
+        deleted: ['session', 'finalize', 'trial'],
+        kept: kept(['shotA', 'shotB'], 0),
+        receipts: [],
+      },
+    );
+    expect(row.violations).toEqual([]);
+  });
+
+  test('D9 overlapping evaluation-trial verdicts preserve the trial for a valid retry', async () => {
+    if (!selected('trial_ack_overlap')) return;
+    const prepared = seedQueue();
+    const row = await runScenario(
+      dup('trial_ack_overlap', 'The same trial is accepted and rejected'),
+      request => ({
+        kind: 'json',
+        body:
+          request.url === '/v1/me/evaluation/trials'
+            ? {
+                acceptedTrialIds: [TRIAL_ID],
+                rejected: [
+                  {
+                    trialId: TRIAL_ID,
+                    code: 'evaluation.invalid',
+                    message: 'conflict',
+                  },
+                ],
+              }
+            : (GOOD_BY_PATH[request.url] ??
+              GOOD_BY_PATH[`/v1/sessions/${SESSION_ID}/finalize`]),
+      }),
+      {
+        deleted: ['session', 'finalize', 'shotA', 'shotB'],
+        kept: [['trial', 0]],
+        receipts: [SHOT_A, SHOT_B],
+      },
+      prepared,
+    );
+    expect(row.violations).toEqual([]);
+    server.respondWith(request => ({
+      kind: 'json',
+      body: GOOD_BY_PATH[request.url],
+    }));
+    expect(
+      await drainOutbox(
+        prepared.fake.db,
+        createTransport({ baseUrl: server.baseUrl, token: MATRIX_TOKEN }),
+      ),
+    ).toEqual({ synced: 1, failed: 0, remaining: 0 });
   });
 });
 

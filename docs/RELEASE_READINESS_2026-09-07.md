@@ -62,6 +62,28 @@ individual severity/refinement is recorded in the dated entries below.
 
 ### Evidence entries (append-only)
 
+- **Sequencing update, owner instruction:** Independent Phase 1 implementation
+  proceeds while remaining Phase 0 failures are investigated. Acceptance gates,
+  scientific requirements and human release boundaries are unchanged.
+- **W02 sync recovery, P1, FIXED / LOCAL_INTEGRATION:** The production outbox
+  finds session parents beyond its fifty-row batch, durably rotates attempted
+  batches to prevent starvation, reconstructs missing sessions only from the
+  original owner's valid metadata, and holds unrecoverable reads for explicit
+  repair. The actual scored and unscored Result routes offer owner-generation-
+  fenced “Retry saving”; original media/results remain intact. Entire shot/trial
+  acknowledgements must be complete, unique and disjoint before any receipt or
+  deletion; conflicting duplicate identities are held across batch boundaries.
+  The retired F5 invalid-ACK exception was removed and former endless-orphan
+  assertions replaced with stronger preservation/recovery checks.
+  `artifacts/readiness-20260907-baseline/w02-focused-final.json`: 13 suites,
+  684 tests pass, zero skipped, including mounted full analysis flows, journal,
+  original retry, runtime storms and 31 real SQLite recovery cases. Red evidence:
+  `w02-sync-red.json` (10 failures), `w02-ui-red.json` (4),
+  `w02-recovery-red.json` (3 further defects). Mobile typecheck, owned ESLint,
+  Prettier and diff checks pass. Residual: physical process-death/native UI
+  proof and the same-final-commit full product gates remain required; W02's
+  overall device acceptance is not complete.
+
 - **P0-MOBILE baseline, P1:** `artifacts/readiness-20260907-baseline/mobile.json`
   and `mobile-failures.md`: 266 passing suites, 41 failing suites; 5,260 passed,
   524 failed, 6 preexisting skipped tests. Run used Node 22.22.0 and two workers.

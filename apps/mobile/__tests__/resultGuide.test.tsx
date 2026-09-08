@@ -25,9 +25,17 @@ jest.mock('../src/review/poseSidecar', () => ({
 }));
 
 const mockHasShotSyncReceipt = jest.fn();
+const mockGetShotOutboxStatus = jest.fn();
+const mockRetryShotSync = jest.fn();
+const mockTriggerOutboxSync = jest.fn();
+jest.mock('../src/data/syncRuntime', () => ({
+  triggerOutboxSync: () => mockTriggerOutboxSync(),
+}));
 const mockListRealAnalysisFacts = jest.fn();
 jest.mock('../src/data/repository', () => ({
   hasShotSyncReceipt: (...args: unknown[]) => mockHasShotSyncReceipt(...args),
+  getShotOutboxStatus: (...args: unknown[]) => mockGetShotOutboxStatus(...args),
+  retryShotSync: (...args: unknown[]) => mockRetryShotSync(...args),
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
 }));
@@ -110,6 +118,11 @@ import type {
   ShotAnalysis,
 } from '@pickle/shared-types';
 import { ResultScreen } from '../src/screens/ResultScreen';
+import {
+  getDataOwnerSnapshot,
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 import {
   clearTryAgainHandoff,
   peekTryAgainHandoff,
@@ -478,6 +491,14 @@ beforeEach(() => {
   mockLoadEvidence.mockResolvedValue(scoredEvidence());
   mockLoadSequence.mockResolvedValue(fullBodySequence());
   mockHasShotSyncReceipt.mockResolvedValue(false);
+  mockGetShotOutboxStatus.mockResolvedValue({
+    state: 'queued',
+    attempts: 0,
+    lastError: null,
+  });
+  mockRetryShotSync.mockResolvedValue(true);
+  mockTriggerOutboxSync.mockResolvedValue(undefined);
+  setActiveDataOwner(session.canonicalAppUserId);
   mockListRealAnalysisFacts.mockResolvedValue([]);
   mockGetApiSession.mockReturnValue(session);
   mockListCatalogDrills.mockResolvedValue(CATALOG);
@@ -490,6 +511,89 @@ afterEach(async () => {
     });
   }
   jest.useRealTimers();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+});
+
+describe('Result guide — saved read recovery', () => {
+  beforeEach(() => {
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'needs_repair',
+      attempts: 0,
+      lastError: 'session.missing',
+    });
+  });
+
+  it('makes recovery reachable on the score page and refreshes the receipt after an owner-bound retry', async () => {
+    const context = getDataOwnerSnapshot();
+    const renderer = await renderScreen();
+    expect(allText(renderer)).toContain('Saved on this device');
+    expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
+    mockHasShotSyncReceipt.mockResolvedValue(true);
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledWith({}, 'analysis-1', context);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(hostByTestId(renderer, 'result-sync-repair')).toHaveLength(0);
+    expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved read visible when retry storage fails and permits an explicit retry', async () => {
+    const renderer = await renderScreen();
+    mockRetryShotSync.mockRejectedValueOnce(
+      new Error('private SQLite diagnostic'),
+    );
+    await press(renderer, 'result-sync-retry');
+    expect(allText(renderer)).toContain('Your read is still saved here');
+    expect(allText(renderer)).not.toContain('private SQLite diagnostic');
+    expect(mockTriggerOutboxSync).not.toHaveBeenCalled();
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledTimes(2);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces repeated presses and never triggers the new account after an A→B→A switch', async () => {
+    let finish!: (value: boolean) => void;
+    mockRetryShotSync.mockImplementationOnce(
+      () =>
+        new Promise<boolean>(resolve => {
+          finish = resolve;
+        }),
+    );
+    const renderer = await renderScreen();
+    const retry = pressableByTestId(renderer, 'result-sync-retry').props
+      .onPress;
+    await act(async () => {
+      retry();
+      retry();
+    });
+    expect(mockRetryShotSync).toHaveBeenCalledTimes(1);
+    setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+    setActiveDataOwner(session.canonicalAppUserId);
+    await act(async () => {
+      finish(true);
+    });
+    await settle();
+    expect(mockTriggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockHasShotSyncReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps retry on the unscored result page too', async () => {
+    const unscored = {
+      ...scoredAnalysis,
+      resultKind: 'low_confidence' as const,
+      overallScore: null,
+    };
+    mockLoadEvidence.mockResolvedValue({
+      ...scoredEvidence(),
+      analysis: unscored,
+      record: null,
+    });
+    const renderer = await renderScreen();
+    expect(hostByTestId(renderer, 'result-guide-step-abstained')).toHaveLength(
+      1,
+    );
+    expect(pressableByTestId(renderer, 'result-sync-retry')).toBeDefined();
+  });
 });
 
 // ─── Scored: the four pages ─────────────────────────────────────────────────

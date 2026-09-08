@@ -1,3 +1,4 @@
+import { createFakeOutboxDb } from '../../__harness__/serverResponseMatrix/outboxFakeDb';
 /**
  * mobile-sync-outbox audit — focused reproductions over a fake LocalDb.
  *
@@ -6,7 +7,6 @@
  * runtime's triggers and backed-off retry cadence.
  */
 import type { ShotAnalysis } from '@pickle/shared-types';
-import type { LocalDb } from '../../src/data/db';
 import { ApiError } from '../../src/data/api';
 import {
   drainOutbox,
@@ -50,156 +50,17 @@ const { readdirSync, readFileSync, statSync } = require('fs') as {
 };
 const { join } = require('path') as { join: (...parts: string[]) => string };
 
-interface OutboxRow {
-  id: number;
-  owner_key: string;
-  kind: string;
-  payload: string;
-  attempts: number;
-  last_error: string | null;
-}
-
-interface Receipt {
-  owner: string;
-  entityId: string;
-}
-
-/**
- * Fake LocalDb with real-enough transaction semantics: BEGIN snapshots the
- * outbox + receipts, ROLLBACK restores them, so a statement failure inside
- * the accepted-shot transaction behaves like SQLite would.
- */
 function fakeDb(options: { failDeleteOnce?: boolean } = {}) {
-  let outbox: OutboxRow[] = [];
-  let receipts: Receipt[] = [];
-  let snapshot: { outbox: OutboxRow[]; receipts: Receipt[] } | null = null;
-  let failDelete = options.failDeleteOnce ?? false;
-  let nextId = 1;
-  const statements: string[] = [];
-  const db: LocalDb = {
-    async execute(sql: string, params: unknown[] = []) {
-      statements.push(sql);
-      if (sql === 'BEGIN IMMEDIATE') {
-        snapshot = {
-          outbox: outbox.map(r => ({ ...r })),
-          receipts: receipts.map(r => ({ ...r })),
-        };
-        return { rows: [] };
-      }
-      if (sql === 'COMMIT') {
-        snapshot = null;
-        return { rows: [] };
-      }
-      if (sql === 'ROLLBACK') {
-        if (snapshot) {
-          outbox = snapshot.outbox;
-          receipts = snapshot.receipts;
-        }
-        snapshot = null;
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
-        receipts.push({
-          owner: String(params[0]),
-          entityId: String(params[1]),
-        });
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT OR REPLACE INTO local_shot')) {
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO outbox')) {
-        outbox.push({
-          id: nextId++,
-          owner_key: String(params[0]),
-          kind: 'shot.sync',
-          payload: String(params[params.length - 1]),
-          attempts: 0,
-          last_error: null,
-        });
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT 1 FROM sync_receipt')) {
-        return {
-          rows: receipts
-            .filter(
-              r => r.owner === String(params[0]) && r.entityId === params[1],
-            )
-            .map(() => ({ '1': 1 })),
-        };
-      }
-      // This outbox-only fixture has no pending work in either journal version.
-      if (
-        sql.startsWith('SELECT * FROM analysis_run_journal') ||
-        sql.startsWith('SELECT * FROM analysis_execution_attempts')
-      ) {
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .sort((a, b) => a.id - b.id)
-            .slice(0, 50)
-            .map(r => ({ ...r })),
-        };
-      }
-      if (sql.startsWith('DELETE FROM outbox')) {
-        if (failDelete) {
-          failDelete = false;
-          throw new Error('SQLITE_IOERR: process killed mid-flush');
-        }
-        const idx = outbox.findIndex(
-          r => r.owner_key === params[0] && r.id === params[1],
-        );
-        if (idx >= 0) outbox.splice(idx, 1);
-        return { rows: [] };
-      }
-      if (sql.startsWith('UPDATE outbox')) {
-        const row = outbox.find(
-          r => r.owner_key === params[1] && r.id === params[2],
-        );
-        if (row) {
-          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
-          row.last_error = String(params[0]);
-        }
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT count(*)')) {
-        return {
-          rows: [
-            { n: outbox.filter(row => row.owner_key === params[0]).length },
-          ],
-        };
-      }
-      throw new Error(`fakeDb: unhandled sql ${sql}`);
-    },
-    close() {},
-  };
-  const push = (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) => {
-    outbox.push({
-      id: nextId++,
-      owner_key: owner,
-      kind,
-      payload: JSON.stringify(payload),
-      attempts: 0,
-      last_error: null,
-    });
-  };
+  const fake = createFakeOutboxDb();
+  if (options.failDeleteOnce)
+    fake.failNext(
+      'DELETE FROM outbox',
+      new Error('SQLITE_IOERR: process killed mid-flush'),
+    );
   return {
-    db,
-    push,
-    statements,
-    get outbox() {
-      return outbox;
-    },
-    get receipts() {
-      return receipts;
-    },
+    ...fake,
+    push: (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) =>
+      fake.push(kind, payload, owner),
   };
 }
 
@@ -292,7 +153,7 @@ describe('mobile-sync-outbox — per-item rejection classification', () => {
     expect(acceptingSyncShots).toHaveBeenCalledTimes(1);
     expect(after).toMatchObject({ synced: 1, failed: 0, remaining: 0 });
     expect(receipts).toEqual([
-      { owner: GUEST_DATA_OWNER, entityId: analysis.id },
+      { owner: GUEST_DATA_OWNER, kind: 'shot.sync', entityId: analysis.id },
     ]);
     expect(await hasShotSyncReceipt(db, analysis.id)).toBe(true);
   });
@@ -441,7 +302,7 @@ describe('mobile-sync-outbox — kill mid-flush and replay', () => {
     );
     expect(second).toMatchObject({ synced: 1, remaining: 0 });
     expect(fake.receipts).toEqual([
-      { owner: GUEST_DATA_OWNER, entityId: analysis.id },
+      { owner: GUEST_DATA_OWNER, kind: 'shot.sync', entityId: analysis.id },
     ]);
     expect(await hasShotSyncReceipt(fake.db, analysis.id)).toBe(true);
   });
@@ -450,14 +311,15 @@ describe('mobile-sync-outbox — kill mid-flush and replay', () => {
     const fake = fakeDb();
     fake.push('shot.sync', permittedAnalysis);
     await drainOutbox(fake.db, acceptAll);
-    const begin = fake.statements.indexOf('BEGIN IMMEDIATE');
-    const commit = fake.statements.indexOf('COMMIT');
     const receipt = fake.statements.findIndex(s =>
       s.includes('INSERT OR REPLACE INTO sync_receipt'),
     );
     const del = fake.statements.findIndex(s =>
       s.startsWith('DELETE FROM outbox'),
     );
+    const begin = fake.statements.lastIndexOf('BEGIN IMMEDIATE', receipt);
+    const commit = fake.statements.indexOf('COMMIT', receipt);
+    expect(fake.statements.slice(begin + 1, commit)).not.toContain('COMMIT');
     expect(begin).toBeGreaterThanOrEqual(0);
     expect(receipt).toBeGreaterThan(begin);
     expect(del).toBeGreaterThan(receipt);
@@ -531,7 +393,7 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     for (let i = 0; i < 5; i++) await flushMicrotasks();
   }
 
-  it('triggerOutboxSync is wired to the capture flow: AnalyzeScreen calls it after a scored result is persisted', () => {
+  it('triggerOutboxSync is reachable from capture completion and the saved-result repair action', () => {
     const root = join(__dirname, '..', '..', 'src');
     const hits: string[] = [];
     const walk = (dir: string) => {
@@ -551,6 +413,7 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     expect(hits.sort()).toEqual([
       'data/syncRuntime.ts',
       'screens/AnalyzeScreen.tsx',
+      'screens/ResultScreen.tsx',
     ]);
   });
 
@@ -572,7 +435,9 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://api.test/v1/shots:sync');
     expect(fake.outbox).toHaveLength(0);
-    expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
+    expect(fake.receipts).toEqual([
+      { owner, kind: 'shot.sync', entityId: analysis.id },
+    ]);
   });
 
   it('without an explicit trigger, the healthy cadence drains again after 30 s', async () => {
@@ -605,7 +470,9 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       authorization: `Bearer ${session.bearerToken}`,
     });
     expect(fake.outbox).toHaveLength(0);
-    expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
+    expect(fake.receipts).toEqual([
+      { owner, kind: 'shot.sync', entityId: analysis.id },
+    ]);
     expect(schedule).toHaveBeenLastCalledWith(
       expect.any(Function),
       SYNC_RETRY_BASE_MS,
@@ -649,7 +516,9 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       expect(calls).toHaveLength(1);
       expect(calls[0]!.atMs).toBe(startedAt + 60_000);
       expect(fake.outbox).toHaveLength(0);
-      expect(fake.receipts).toEqual([{ owner, entityId: analysis.id }]);
+      expect(fake.receipts).toEqual([
+        { owner, kind: 'shot.sync', entityId: analysis.id },
+      ]);
       expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), 30_000);
     },
   );

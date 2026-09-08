@@ -58,6 +58,104 @@ export class ApiError extends Error {
   }
 }
 
+function syncRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function syncIds(values: readonly unknown[], key: 'id' | 'trialId'): string[] {
+  return values.map(value => {
+    if (
+      !syncRecord(value) ||
+      typeof value[key] !== 'string' ||
+      !value[key].trim() ||
+      value[key].length > 128
+    ) {
+      throw new ApiError(
+        400,
+        'sync.invalid_id',
+        'The saved item has an invalid identifier.',
+      );
+    }
+    return value[key];
+  });
+}
+
+/** Validate the whole batch before any acknowledgement can delete local work. */
+function decodeSyncVerdicts(
+  value: unknown,
+  submittedIds: readonly string[],
+  acceptedKey: 'acceptedIds' | 'acceptedTrialIds',
+  idKey: 'id' | 'trialId',
+) {
+  const invalid = () =>
+    new ApiError(
+      502,
+      'sync.invalid_acknowledgement',
+      'The server could not confirm which items were saved. Your work remains on this device and will be retried.',
+    );
+  const expected = new Set(submittedIds);
+  if (expected.size !== submittedIds.length) throw invalid();
+  if (!syncRecord(value)) throw invalid();
+  const accepted = value[acceptedKey];
+  const rejected = value.rejected;
+  if (
+    !Array.isArray(accepted) ||
+    !Array.isArray(rejected) ||
+    accepted.length + rejected.length !== expected.size
+  )
+    throw invalid();
+  const observed = new Set<string>();
+  const acceptId = (id: unknown): string => {
+    if (typeof id !== 'string' || !expected.has(id) || observed.has(id))
+      throw invalid();
+    observed.add(id);
+    return id;
+  };
+  const acceptedIds = accepted.map(acceptId);
+  const rejections = rejected.map(item => {
+    if (
+      !syncRecord(item) ||
+      typeof item.code !== 'string' ||
+      !/^[a-z][a-z0-9_.-]{0,127}$/.test(item.code) ||
+      typeof item.message !== 'string' ||
+      item.message.length > 2000
+    )
+      throw invalid();
+    return {
+      id: acceptId(item[idKey]),
+      code: item.code,
+      message: item.message,
+    };
+  });
+  return { acceptedIds, rejected: rejections };
+}
+
+export function parseShotSyncAcknowledgement(
+  value: unknown,
+  ids: readonly string[],
+) {
+  return decodeSyncVerdicts(value, ids, 'acceptedIds', 'id');
+}
+
+export function parseTrialSyncAcknowledgement(
+  value: unknown,
+  ids: readonly string[],
+) {
+  const response = decodeSyncVerdicts(
+    value,
+    ids,
+    'acceptedTrialIds',
+    'trialId',
+  );
+  return {
+    acceptedTrialIds: response.acceptedIds,
+    rejected: response.rejected.map(({ id, ...verdict }) => ({
+      trialId: id,
+      ...verdict,
+    })),
+  };
+}
+
 /** Every request is bounded: a backend that stops responding must surface as
  * a typed timeout the caller can retry, never an indefinitely pending await
  * (which the capture flow would render as an unbounded spinner). */
@@ -128,7 +226,11 @@ async function request<T>(
 export function createTransport(config: ApiConfigState): SyncTransport {
   return {
     async syncShots(shots) {
-      return request(config, 'POST', '/v1/shots:sync', { shots });
+      const ids = syncIds(shots, 'id');
+      return parseShotSyncAcknowledgement(
+        await request(config, 'POST', '/v1/shots:sync', { shots }),
+        ids,
+      );
     },
     async createSession(session) {
       await request(config, 'POST', '/v1/sessions', session);
@@ -137,7 +239,11 @@ export function createTransport(config: ApiConfigState): SyncTransport {
       await request(config, 'POST', `/v1/sessions/${id}/finalize`);
     },
     async uploadEvaluationTrials(trials) {
-      return request(config, 'POST', '/v1/me/evaluation/trials', { trials });
+      const ids = syncIds(trials, 'trialId');
+      return parseTrialSyncAcknowledgement(
+        await request(config, 'POST', '/v1/me/evaluation/trials', { trials }),
+        ids,
+      );
     },
   };
 }

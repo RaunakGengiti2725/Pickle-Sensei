@@ -236,6 +236,17 @@ function ensureAccountScopedSchema(db: DB): void {
         `ALTER TABLE outbox ADD COLUMN owner_key TEXT NOT NULL DEFAULT '${GUEST_DATA_OWNER}'`,
       );
     }
+    if (!hasColumn(db, 'outbox', 'last_attempt_order')) {
+      db.executeSync(
+        'ALTER TABLE outbox ADD COLUMN last_attempt_order INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!hasColumn(db, 'outbox', 'repair_reason')) {
+      db.executeSync('ALTER TABLE outbox ADD COLUMN repair_reason TEXT');
+    }
+    db.executeSync(
+      'CREATE INDEX IF NOT EXISTS idx_outbox_owner_drain ON outbox (owner_key, repair_reason, last_attempt_order, id)',
+    );
     db.executeSync(
       'CREATE INDEX IF NOT EXISTS idx_local_shot_owner_time ON local_shot (owner_key, captured_at DESC)',
     );

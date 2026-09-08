@@ -1,10 +1,10 @@
+import { createFakeOutboxDb } from '../../__harness__/serverResponseMatrix/outboxFakeDb';
 /**
  * Outbox retry hygiene: per-item rejections the server marks as its own
  * (transient) failure keep the row's attempt budget intact, and the runtime's
  * retry cadence backs off exponentially with jitter instead of every device
  * retrying on the same fixed beat.
  */
-import type { LocalDb } from '../../src/data/db';
 import {
   OUTBOX_MAX_ATTEMPTS,
   drainOutbox,
@@ -24,76 +24,18 @@ import {
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 
-interface OutboxRow {
-  id: number;
-  owner_key: string;
-  kind: string;
-  payload: string;
-  attempts: number;
-  last_error: string | null;
-}
-
-function fakeDb() {
-  const outbox: OutboxRow[] = [];
-  let nextId = 1;
-  const db: LocalDb = {
-    async execute(sql: string, params: unknown[] = []) {
-      if (sql === 'BEGIN IMMEDIATE' || sql === 'COMMIT' || sql === 'ROLLBACK') {
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
-      }
-      if (sql.startsWith('DELETE FROM outbox')) {
-        const idx = outbox.findIndex(
-          r => r.owner_key === params[0] && r.id === params[1],
-        );
-        if (idx >= 0) outbox.splice(idx, 1);
-        return { rows: [] };
-      }
-      if (sql.startsWith('UPDATE outbox')) {
-        const row = outbox.find(
-          r => r.owner_key === params[1] && r.id === params[2],
-        );
-        if (row) {
-          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
-          row.last_error = String(params[0]);
-        }
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT count(*)')) {
-        return {
-          rows: [
-            { n: outbox.filter(row => row.owner_key === params[0]).length },
-          ],
-        };
-      }
-      throw new Error(`fakeDb: unhandled sql ${sql}`);
-    },
-    close() {},
+function fakeDb(options: { failDeleteOnce?: boolean } = {}) {
+  const fake = createFakeOutboxDb();
+  if (options.failDeleteOnce)
+    fake.failNext(
+      'DELETE FROM outbox',
+      new Error('SQLITE_IOERR: process killed mid-flush'),
+    );
+  return {
+    ...fake,
+    push: (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) =>
+      fake.push(kind, payload, owner),
   };
-  const push = (kind: string, payload: unknown) => {
-    outbox.push({
-      id: nextId++,
-      owner_key: GUEST_DATA_OWNER,
-      kind,
-      payload: JSON.stringify(payload),
-      attempts: 0,
-      last_error: null,
-    });
-  };
-  return { db, push, outbox };
 }
 
 const SHOT_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -202,6 +144,8 @@ describe('transient per-item rejections keep the attempt budget', () => {
       payload: '{not json',
       attempts: 0,
       last_error: null,
+      last_attempt_order: 0,
+      repair_reason: null,
     });
     outbox.push({
       id: 2,
@@ -210,6 +154,8 @@ describe('transient per-item rejections keep the attempt budget', () => {
       payload: JSON.stringify({ trialId: TRIAL_ID, schemaVersion: 1 }),
       attempts: 0,
       last_error: null,
+      last_attempt_order: 0,
+      repair_reason: null,
     });
     const transport = {
       syncShots: jest.fn(),

@@ -1,5 +1,5 @@
+import { createFakeOutboxDb } from '../__harness__/serverResponseMatrix/outboxFakeDb';
 /** Outbox sync engine tests over a fake LocalDb (no native module needed). */
-import type { LocalDb } from '../src/data/db';
 import {
   drainOutbox,
   SESSION_NOT_FOUND_REJECTION,
@@ -12,91 +12,18 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 
-function fakeDb() {
-  interface OutboxRow {
-    id: number;
-    owner_key: string;
-    kind: string;
-    payload: string;
-    attempts: number;
-    last_error: string | null;
-  }
-  const outbox: OutboxRow[] = [];
-  const receipts: Array<{ owner: string; entityId: string }> = [];
-  let nextId = 1;
-  const db: LocalDb = {
-    async execute(sql: string, params: unknown[] = []) {
-      if (sql === 'BEGIN IMMEDIATE' || sql === 'COMMIT' || sql === 'ROLLBACK') {
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
-        receipts.push({
-          owner: String(params[0]),
-          entityId: String(params[1]),
-        });
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO outbox')) {
-        outbox.push({
-          id: nextId++,
-          owner_key: String(params[0]),
-          kind: String(params[1] ?? 'shot.sync'),
-          payload: String(params[params.length - 1]),
-          attempts: 0,
-          last_error: null,
-        });
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
-      }
-      if (sql.startsWith('DELETE FROM outbox')) {
-        const idx = outbox.findIndex(
-          r => r.owner_key === params[0] && r.id === params[1],
-        );
-        if (idx >= 0) outbox.splice(idx, 1);
-        return { rows: [] };
-      }
-      if (sql.startsWith('UPDATE outbox')) {
-        const row = outbox.find(
-          r => r.owner_key === params[1] && r.id === params[2],
-        );
-        if (row) {
-          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
-          row.last_error = String(params[0]);
-        }
-        return { rows: [] };
-      }
-      if (sql.startsWith('SELECT count(*)')) {
-        return {
-          rows: [
-            { n: outbox.filter(row => row.owner_key === params[0]).length },
-          ],
-        };
-      }
-      throw new Error(`fakeDb: unhandled sql ${sql}`);
-    },
-    close() {},
+function fakeDb(options: { failDeleteOnce?: boolean } = {}) {
+  const fake = createFakeOutboxDb();
+  if (options.failDeleteOnce)
+    fake.failNext(
+      'DELETE FROM outbox',
+      new Error('SQLITE_IOERR: process killed mid-flush'),
+    );
+  return {
+    ...fake,
+    push: (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) =>
+      fake.push(kind, payload, owner),
   };
-  const push = (kind: string, payload: unknown, owner = GUEST_DATA_OWNER) => {
-    outbox.push({
-      id: nextId++,
-      owner_key: owner,
-      kind,
-      payload: JSON.stringify(payload),
-      attempts: 0,
-      last_error: null,
-    });
-  };
-  return { db, push, outbox, receipts };
 }
 
 const analysis: ShotAnalysis = {
@@ -175,9 +102,10 @@ describe('drainOutbox', () => {
     expect(result.remaining).toBe(0);
     expect(sent[0]).toHaveLength(2);
     expect(receipts).toEqual([
-      { owner: GUEST_DATA_OWNER, entityId: analysis.id },
+      { owner: GUEST_DATA_OWNER, kind: 'shot.sync', entityId: analysis.id },
       {
         owner: GUEST_DATA_OWNER,
+        kind: 'shot.sync',
         entityId: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
       },
     ]);
@@ -228,13 +156,13 @@ describe('drainOutbox', () => {
     });
   });
 
-  it('does not spend the retry budget on a shot whose practice-set session has not synced yet', async () => {
-    // The practice set's session.create row is queued moments AFTER its
-    // first scored shot (the set is committed once a score exists). If a
-    // drain slips between the two writes, the server rejects the shot as
-    // session_not_found — an ordering artifact, not a permanent failure, so
-    // the row keeps its full attempt budget for the next pass.
-    const { db, push, outbox } = fakeDb();
+  it('reconstructs a missing practice-set parent from the original owner without spending the retry budget', async () => {
+    const { db, push, outbox, sessions } = fakeDb();
+    sessions.push({
+      owner: GUEST_DATA_OWNER,
+      id: '11111111-2222-4333-8444-555555555555',
+      startedAt: '2026-08-26T18:00:00.000Z',
+    });
     push('shot.sync', {
       ...permittedAnalysis,
       sessionId: '11111111-2222-4333-8444-555555555555',
@@ -253,7 +181,12 @@ describe('drainOutbox', () => {
       createSession: async () => {},
       finalizeSession: async () => {},
     });
-    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 2 });
+    expect(outbox[1]).toMatchObject({ kind: 'session.create', attempts: 0 });
+    expect(JSON.parse(outbox[1]!.payload)).toEqual({
+      id: sessions[0]!.id,
+      startedAt: sessions[0]!.startedAt,
+    });
     expect(outbox[0]).toMatchObject({
       attempts: 0,
       last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,

@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Easing,
@@ -38,9 +44,17 @@ import {
   getShotOutboxStatus,
   hasShotSyncReceipt,
   listRealAnalysisFacts,
+  retryShotSync,
   type ShotOutboxStatus,
 } from '../data/repository';
 import { OUTBOX_MAX_ATTEMPTS } from '../data/sync';
+import { triggerOutboxSync } from '../data/syncRuntime';
+import {
+  assertDataOwnerContext,
+  getDataOwnerSnapshot,
+  isDataOwnerContextCurrent,
+  type DataOwnerContext,
+} from '../data/accountScope';
 import type { RootStackParams } from '../navigation/params';
 import {
   FixList,
@@ -136,7 +150,7 @@ export type SyncEvidenceState =
   | { kind: 'pending' }
   | { kind: 'unknown' }
   | {
-      kind: 'rejected' | 'exhausted';
+      kind: 'rejected' | 'exhausted' | 'needs_repair';
       attempts: number;
       lastError: string | null;
     };
@@ -145,6 +159,7 @@ function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
   switch (status.state) {
     case 'rejected':
     case 'exhausted':
+    case 'needs_repair':
       return {
         kind: status.state,
         attempts: status.attempts,
@@ -205,7 +220,13 @@ export function useStrokeResultEvidence(analysisId: string): {
   /** The verified pose sequence; `undefined` while it is still being read. */
   sequence: ReviewPoseSequence | null | undefined;
   syncEvidence: SyncEvidenceState;
+  refreshSyncEvidence: () => void;
 } {
+  const [syncRevision, setSyncRevision] = useState(0);
+  const refreshSyncEvidence = useCallback(
+    () => setSyncRevision(value => value + 1),
+    [],
+  );
   const [evidence, setEvidence] = useState<StrokeResultEvidence | undefined>(
     undefined,
   );
@@ -291,9 +312,9 @@ export function useStrokeResultEvidence(analysisId: string): {
     return () => {
       cancelled = true;
     };
-  }, [analysis]);
+  }, [analysis, syncRevision]);
 
-  return { evidence, analysis, sequence, syncEvidence };
+  return { evidence, analysis, sequence, syncEvidence, refreshSyncEvidence };
 }
 
 export function ResultScreen() {
@@ -301,7 +322,8 @@ export function ResultScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Result'>>();
   const analysisId = route.params.analysisId;
-  const { evidence, analysis, sequence, syncEvidence } =
+  const ownerContext = useRef(getDataOwnerSnapshot()).current;
+  const { evidence, analysis, sequence, syncEvidence, refreshSyncEvidence } =
     useStrokeResultEvidence(analysisId);
   const loadCurrentPlan = useTrainingStore(state => state.loadCurrentPlan);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
@@ -379,6 +401,8 @@ export function ResultScreen() {
       sequence={sequence}
       practiceSet={practiceSet}
       syncEvidence={syncEvidence}
+      ownerContext={ownerContext}
+      onSyncRetried={refreshSyncEvidence}
       onClose={() => navigation.popToTop()}
       onTryAgain={() => {
         // §2 TRY AGAIN: re-arm the guided capture flow with the SAME intent —
@@ -417,6 +441,8 @@ interface ResultGuideProps {
   sequence: ReviewPoseSequence | null | undefined;
   practiceSet: PracticeSetSummary | null;
   syncEvidence: SyncEvidenceState;
+  ownerContext: DataOwnerContext;
+  onSyncRetried: () => void;
   onClose: () => void;
   onTryAgain: () => void;
   onOpenAttempt: (analysisId: string) => void;
@@ -503,6 +529,13 @@ function ResultGuide(props: ResultGuideProps) {
         }
       >
         <View testID="result-guide-step-abstained">
+          {props.syncEvidence.kind === 'needs_repair' ? (
+            <SyncRepairNotice
+              analysisId={props.analysisId}
+              ownerContext={props.ownerContext}
+              onRetried={props.onSyncRetried}
+            />
+          ) : null}
           <ResultBreakdownSheet
             analysisId={props.analysisId}
             analysis={analysis}
@@ -562,13 +595,22 @@ function ResultGuide(props: ResultGuideProps) {
       }
     >
       {step === 'score' ? (
-        <ScorePage
-          analysis={scored}
-          shotLabel={shotLabel}
-          insight={insight}
-          practiceSet={props.practiceSet}
-          onOpenAttempt={props.onOpenAttempt}
-        />
+        <>
+          {props.syncEvidence.kind === 'needs_repair' ? (
+            <SyncRepairNotice
+              analysisId={props.analysisId}
+              ownerContext={props.ownerContext}
+              onRetried={props.onSyncRetried}
+            />
+          ) : null}
+          <ScorePage
+            analysis={scored}
+            shotLabel={shotLabel}
+            insight={insight}
+            practiceSet={props.practiceSet}
+            onOpenAttempt={props.onOpenAttempt}
+          />
+        </>
       ) : step === 'problem' ? (
         <ProblemPage
           analysis={scored}
@@ -591,6 +633,67 @@ function ResultGuide(props: ResultGuideProps) {
         <NextPage analysis={scored} priorityFix={priorityFix} />
       )}
     </GuideShell>
+  );
+}
+
+function SyncRepairNotice(props: {
+  analysisId: string;
+  ownerContext: DataOwnerContext;
+  onRetried: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const retry = async () => {
+    if (inFlight.current || !isDataOwnerContextCurrent(props.ownerContext))
+      return;
+    inFlight.current = true;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await retryShotSync(getDb(), props.analysisId, props.ownerContext);
+      assertDataOwnerContext(props.ownerContext);
+      if (!mounted.current) return;
+      await triggerOutboxSync();
+      assertDataOwnerContext(props.ownerContext);
+      if (mounted.current) props.onRetried();
+    } catch {
+      if (mounted.current && isDataOwnerContextCurrent(props.ownerContext))
+        setFailed(true);
+    } finally {
+      inFlight.current = false;
+      if (mounted.current && isDataOwnerContextCurrent(props.ownerContext))
+        setBusy(false);
+    }
+  };
+  return (
+    <Card tone="dark" style={styles.syncRepair} testID="result-sync-repair">
+      <Text style={[type.bodyBold, styles.insightSentence]}>
+        Saved on this device
+      </Text>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={[type.body, styles.insightSentence]}
+      >
+        {failed
+          ? 'Couldn’t retry yet. Your read is still saved here.'
+          : 'This read needs another attempt to save to your account.'}
+      </Text>
+      <Button
+        variant="secondary"
+        label={busy ? 'Retrying…' : 'Retry saving'}
+        disabled={busy}
+        onPress={() => void retry()}
+        testID="result-sync-retry"
+      />
+    </Card>
   );
 }
 
@@ -1698,6 +1801,7 @@ function TrainingPlanSection(props: {
 }
 
 const styles = StyleSheet.create({
+  syncRepair: { marginBottom: space.lg, gap: space.sm },
   screen: { flex: 1, backgroundColor: color.surfaceDark },
   flex: { flex: 1 },
   // ── Shell ──
