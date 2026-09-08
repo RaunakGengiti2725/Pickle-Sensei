@@ -161,6 +161,7 @@ export class FakeSupabase {
   tables: Record<string, Array<Record<string, unknown>>> = {
     profiles: [],
     shots: [],
+    settlement_receipts: [],
     analysis_permits: [],
     billing_entitlements: [],
     sessions: [],
@@ -490,6 +491,16 @@ export class FakeSupabase {
         created_at: new Date().toISOString(),
       };
       this.tables.shots.push(row as unknown as Record<string, unknown>);
+      // 20260908110000: the settlement receipt is persisted beside the shot.
+      const receipt = isRecord(shot.settlementReceipt) ? shot.settlementReceipt : null;
+      if (receipt) {
+        this.tables.settlement_receipts.push({
+          shot_id: id,
+          user_id: userId,
+          receipt_canonical: receipt.canonical,
+          receipt_sha256: receipt.sha256,
+        });
+      }
       if (resultKind === "scored") {
         // shots_record_free_rating_ledger trigger
         const user = this.users.get(userId);

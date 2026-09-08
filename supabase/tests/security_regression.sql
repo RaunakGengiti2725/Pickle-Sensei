@@ -59,6 +59,13 @@
 --      deletion through auth.users AND through public.profiles still removes
 --      every permit, shot and tombstone and frees the ids; the tombstone
 --      table is invisible to clients
+--   T. (W01-03, 20260908110000) settlement receipts bind the scored
+--      settlement to owner/device/grant/ticket/operation/payload digest/
+--      policy lineage: an identical replay is accepted and moves nothing, a
+--      mismatched replay is refused before any permit or count is touched,
+--      an invalid receipt persists nothing, and the receipt table is owner-
+--      readable through the API gate only, client-unwritable, append-only
+--      for every role and removed only by the shot/account cascade
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -4559,7 +4566,8 @@ begin
     ('free_rating_ledger', false, false, false, array[]::text[]),
     ('progress_daily', true, false, false, array[]::text[]),
     ('practice_days', true, false, false, array[]::text[]),
-    ('player_technique_rating', true, false, false, array[]::text[])
+    ('player_technique_rating', true, false, false, array[]::text[]),
+    ('settlement_receipts', true, false, false, array[]::text[])
   ) as expected(name, can_select, can_insert, can_delete, updatable)
   loop
     relation := format('public.%I', r.name)::regclass;
@@ -5427,6 +5435,386 @@ begin
   perform public.complete_billing_webhook('lease-fencing-proof', payload, jsonb_build_object(u::text, new_ticket), new_lease);
   if not exists (select 1 from public.webhook_events where id = 'lease-fencing-proof' and processed_at is not null) then
     raise exception 'M20: replacement worker must complete with its own verified ticket';
+  end if;
+end $$;
+rollback;
+
+-- ============================================================================
+-- T. (W01-03, 20260908110000) settlement receipts bind the scored settlement
+-- to owner / device / grant / ticket / operation / payload digest / policy
+-- lineage. An identical replay is accepted (the original receipt stands) and
+-- moves nothing; a replay that differs in ANY bound field is refused as
+-- shot.receipt_mismatch BEFORE any permit, ledger row or shot is touched; a
+-- receipt that does not describe the shot it travels with is refused as
+-- shot.receipt_invalid on a fresh settlement; the receipt table is owner-
+-- readable through the API gate only, client-unwritable, append-only for
+-- every role, and removed only by the shot/account cascade.
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000093', 'tess@example.test',
+   '{"full_name":"Tess"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000094', 'theo@example.test',
+   '{"full_name":"Theo"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-tess', '00000000-0000-4000-8000-000000000093',
+   '{"sub":"google-sub-tess","email":"tess@example.test"}'),
+  ('apple', 'apple-sub-theo', '00000000-0000-4000-8000-000000000094',
+   '{"sub":"apple-sub-theo","email":"theo@example.test"}');
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values
+  ('00000000-0000-4000-8000-0000000000d1',
+   '00000000-0000-4000-8000-000000000093', 'w0103-t-first'),
+  ('00000000-0000-4000-8000-0000000000d2',
+   '00000000-0000-4000-8000-000000000093', 'w0103-t-spare'),
+  ('00000000-0000-4000-8000-0000000000d3',
+   '00000000-0000-4000-8000-000000000094', 'w0103-t-theo');
+
+-- Test-only builders (superuser-owned, dropped with the rollback): the shot
+-- payload the edge function sends to the RPC, and the receipt transport it
+-- attaches — binding + bindingSha256 + policy lineage, canonical bytes and
+-- their digest — so the matrix exercises the RPC exactly as the API does.
+create schema t_probe;
+create function t_probe.shot(p_shot uuid, p_permit uuid, p_score numeric)
+returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', p_shot,
+    'analysisPermitId', p_permit,
+    'resultKind', 'scored',
+    'shotType', 'drive',
+    'cameraView', 'side',
+    'capturedAt', '2026-09-08T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', p_score, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+create function t_probe.claims()
+returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'installationKeyId', 'ik_tess_phone',
+    'grant', jsonb_build_object('grantId', 'grant_t1', 'grantJwsSha256', repeat('a', 64)),
+    'ticket', jsonb_build_object('allocationId', 'alloc_t1', 'generation', 3, 'ticketId', 'ticket_t1'),
+    'operationId', 'op_t1')
+$$;
+create function t_probe.policy(p_version text)
+returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object('version', p_version, 'sha256', repeat('b', 64))
+$$;
+create function t_probe.receipt(p_owner uuid, p_shot jsonb, p_claims jsonb, p_policy jsonb)
+returns jsonb language sql immutable set search_path = '' as $$
+  with binding as (
+    select jsonb_build_object(
+      'ownerId', p_owner,
+      'shotId', p_shot ->> 'id',
+      'analysisPermitId', p_shot ->> 'analysisPermitId',
+      'resultKind', p_shot ->> 'resultKind',
+      'installationKeyId', p_claims -> 'installationKeyId',
+      'grant', p_claims -> 'grant',
+      'ticket', p_claims -> 'ticket',
+      'operationId', p_claims -> 'operationId',
+      'payloadSha256', encode(pg_catalog.sha256(convert_to(p_shot::text, 'UTF8')), 'hex')
+    ) as b
+  ), receipt as (
+    select jsonb_build_object(
+      'schemaVersion', 1,
+      'kind', 'settlement_receipt',
+      'binding', b,
+      'bindingSha256', encode(pg_catalog.sha256(convert_to(b::text, 'UTF8')), 'hex'),
+      'policy', p_policy
+    ) as r
+    from binding
+  )
+  select jsonb_build_object(
+    'canonical', r::text,
+    'sha256', encode(pg_catalog.sha256(convert_to(r::text, 'UTF8')), 'hex')
+  )
+  from receipt
+$$;
+create function t_probe.settle(p_owner uuid, p_shot jsonb, p_claims jsonb, p_policy jsonb)
+returns jsonb language sql immutable set search_path = '' as $$
+  select p_shot || jsonb_build_object(
+    'settlementReceipt', t_probe.receipt(p_owner, p_shot, p_claims, p_policy))
+$$;
+grant usage on schema t_probe to authenticated;
+grant execute on all functions in schema t_probe to authenticated;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000093';
+
+-- T1: a fresh scored settlement with its receipt is accepted; the receipt is
+-- written in the same transaction with every bound field denormalized, the
+-- named permit is consumed exactly once and the lifetime count moves by one.
+do $$
+declare
+  tess uuid := '00000000-0000-4000-8000-000000000093';
+  first_permit uuid := '00000000-0000-4000-8000-0000000000d1';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e1';
+  settlement jsonb;
+  transport jsonb;
+  stored record;
+  v text;
+begin
+  settlement := t_probe.settle(tess, t_probe.shot(v_shot, first_permit, 7.1),
+                               t_probe.claims(), t_probe.policy('policy-2026-09-08'));
+  transport := settlement -> 'settlementReceipt';
+  v := public.apply_synced_shot(settlement);
+  if v <> 'accepted' then
+    raise exception 'T1: a fresh settlement with its receipt must be accepted (got %)', v;
+  end if;
+  select * into stored from public.settlement_receipts where shot_id = v_shot;
+  if not found then
+    raise exception 'T1: the receipt must be durable with the shot';
+  end if;
+  if stored.user_id <> tess
+     or stored.analysis_permit_id <> first_permit
+     or stored.result_kind <> 'scored'
+     or stored.installation_key_id <> 'ik_tess_phone'
+     or stored.grant_id <> 'grant_t1'
+     or stored.grant_jws_sha256 <> repeat('a', 64)
+     or stored.ticket_allocation_id <> 'alloc_t1'
+     or stored.ticket_generation <> 3
+     or stored.ticket_id <> 'ticket_t1'
+     or stored.operation_id <> 'op_t1'
+     or stored.payload_sha256 <> (stored.receipt -> 'binding' ->> 'payloadSha256')
+     or stored.binding_sha256 <> (stored.receipt ->> 'bindingSha256')
+     or stored.policy_version <> 'policy-2026-09-08'
+     or stored.policy_sha256 <> repeat('b', 64)
+     or stored.receipt_canonical <> (transport ->> 'canonical')
+     or stored.receipt_sha256 <> (transport ->> 'sha256')
+     or stored.receipt <> (transport ->> 'canonical')::jsonb then
+    raise exception 'T1: the stored receipt must be exactly the presented receipt with its binding denormalized';
+  end if;
+  if (select status || '/' || coalesce(outcome, '') from public.analysis_permits where id = first_permit)
+     <> 'finalized/scored' then
+    raise exception 'T1: the named permit must be consumed once';
+  end if;
+  if (select status || '/' || coalesce(outcome, '') from public.analysis_permits
+      where id = '00000000-0000-4000-8000-0000000000d2') <> 'reserved/' then
+    raise exception 'T1: the spare permit must be untouched';
+  end if;
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'T1: one scored settlement counts once (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- T2: an IDENTICAL replay is accepted — the original receipt stands, no
+-- second receipt, no permit movement, no second count.
+do $$
+declare
+  tess uuid := '00000000-0000-4000-8000-000000000093';
+  first_permit uuid := '00000000-0000-4000-8000-0000000000d1';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e1';
+  before_sha text;
+  v text;
+begin
+  select receipt_sha256 into before_sha from public.settlement_receipts where shot_id = v_shot;
+  v := public.apply_synced_shot(t_probe.settle(tess, t_probe.shot(v_shot, first_permit, 7.1),
+                                               t_probe.claims(), t_probe.policy('policy-2026-09-08')));
+  if v <> 'accepted' then
+    raise exception 'T2: an identical replay must be accepted (got %)', v;
+  end if;
+  if (select count(*) from public.shots where id = v_shot) <> 1
+     or (select count(*) from public.settlement_receipts where shot_id = v_shot) <> 1
+     or (select receipt_sha256 from public.settlement_receipts where shot_id = v_shot) <> before_sha then
+    raise exception 'T2: the replay must leave the one original receipt';
+  end if;
+  if (select count(*) from public.analysis_permits
+      where user_id = (select auth.uid()) and status = 'finalized') <> 1
+     or public.lifetime_scored_count() <> 1 then
+    raise exception 'T2: the replay must consume nothing';
+  end if;
+end $$;
+
+-- T3: a replay that differs in ANY bound field — payload digest, permit,
+-- device, grant, ticket, operation id, policy lineage, claims withheld or the
+-- receipt withheld — is refused as shot.receipt_mismatch. Each attempt names
+-- the still-reserved spare permit where it can; it is never consumed and the
+-- lifetime count never moves: the check runs before the permit is touched.
+do $$
+declare
+  tess uuid := '00000000-0000-4000-8000-000000000093';
+  first_permit uuid := '00000000-0000-4000-8000-0000000000d1';
+  spare uuid := '00000000-0000-4000-8000-0000000000d2';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e1';
+  original jsonb := t_probe.shot('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000d1', 7.1);
+  claims jsonb := t_probe.claims();
+  policy jsonb := t_probe.policy('policy-2026-09-08');
+  attempt record;
+  v text;
+begin
+  for attempt in
+    select * from (values
+      ('payload digest', t_probe.settle(tess, t_probe.shot(v_shot, first_permit, 7.6), claims, policy)),
+      ('different permit', t_probe.settle(tess, t_probe.shot(v_shot, spare, 7.1), claims, policy)),
+      ('different device', t_probe.settle(tess, original, claims || '{"installationKeyId":"ik_other"}', policy)),
+      ('different grant', t_probe.settle(tess, original,
+         claims || jsonb_build_object('grant', jsonb_build_object('grantId', 'grant_x', 'grantJwsSha256', repeat('a', 64))), policy)),
+      ('different ticket', t_probe.settle(tess, original,
+         claims || jsonb_build_object('ticket', jsonb_build_object('allocationId', 'alloc_t1', 'generation', 9, 'ticketId', 'ticket_t1')), policy)),
+      ('different operation', t_probe.settle(tess, original, claims || '{"operationId":"op_x"}', policy)),
+      ('different policy lineage', t_probe.settle(tess, original, claims, t_probe.policy('policy-other'))),
+      ('claims withheld', t_probe.settle(tess, original, null, policy)),
+      ('receipt withheld', original)
+    ) as cases(label, payload)
+  loop
+    v := public.apply_synced_shot(attempt.payload);
+    if v <> 'shot.receipt_mismatch' then
+      raise exception 'T3 (%): a mismatched replay must be refused (got %)', attempt.label, v;
+    end if;
+    if (select count(*) from public.shots where id = v_shot) <> 1
+       or (select count(*) from public.settlement_receipts where shot_id = v_shot) <> 1 then
+      raise exception 'T3 (%): the refused replay must write nothing', attempt.label;
+    end if;
+    if (select status || '/' || coalesce(outcome, '') from public.analysis_permits where id = spare) <> 'reserved/'
+       or (select status || '/' || coalesce(outcome, '') from public.analysis_permits where id = first_permit) <> 'finalized/scored' then
+      raise exception 'T3 (%): zero credit may be consumed by a refused replay', attempt.label;
+    end if;
+    if public.lifetime_scored_count() <> 1 then
+      raise exception 'T3 (%): zero sequence may be consumed by a refused replay', attempt.label;
+    end if;
+  end loop;
+end $$;
+
+-- T4: on a FRESH settlement a receipt that does not describe this owner, shot
+-- or permit, carries no policy lineage for a scored result, or whose bytes do
+-- not match their digest is refused as shot.receipt_invalid: nothing persists
+-- and the permit stays reserved for a clean retry.
+do $$
+declare
+  tess uuid := '00000000-0000-4000-8000-000000000093';
+  theo uuid := '00000000-0000-4000-8000-000000000094';
+  first_permit uuid := '00000000-0000-4000-8000-0000000000d1';
+  spare uuid := '00000000-0000-4000-8000-0000000000d2';
+  fresh_id uuid := '00000000-0000-4000-8000-0000000000e2';
+  fresh jsonb := t_probe.shot('00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-0000000000d2', 6.4);
+  claims jsonb := t_probe.claims();
+  policy jsonb := t_probe.policy('policy-2026-09-08');
+  attempt record;
+  v text;
+begin
+  for attempt in
+    select * from (values
+      ('receipt for another shot id', fresh || jsonb_build_object('settlementReceipt',
+         t_probe.receipt(tess, t_probe.shot('00000000-0000-4000-8000-0000000000e3', spare, 6.4), claims, policy))),
+      ('receipt for another owner', fresh || jsonb_build_object('settlementReceipt',
+         t_probe.receipt(theo, fresh, claims, policy))),
+      ('receipt for another permit', fresh || jsonb_build_object('settlementReceipt',
+         t_probe.receipt(tess, t_probe.shot(fresh_id, first_permit, 6.4), claims, policy))),
+      ('scored without policy lineage', t_probe.settle(tess, fresh, claims, null)),
+      ('receipt digest mismatch', fresh || jsonb_build_object('settlementReceipt',
+         t_probe.receipt(tess, fresh, claims, policy) || jsonb_build_object('sha256', repeat('f', 64)))),
+      ('receipt not an object', fresh || '{"settlementReceipt":"receipt"}')
+    ) as cases(label, payload)
+  loop
+    v := public.apply_synced_shot(attempt.payload);
+    if v <> 'shot.receipt_invalid' then
+      raise exception 'T4 (%): an invalid receipt must be refused (got %)', attempt.label, v;
+    end if;
+    if exists (select 1 from public.shots where id = fresh_id)
+       or exists (select 1 from public.settlement_receipts where shot_id = fresh_id) then
+      raise exception 'T4 (%): an invalid receipt must persist nothing', attempt.label;
+    end if;
+    if (select status || '/' || coalesce(outcome, '') from public.analysis_permits where id = spare) <> 'reserved/'
+       or public.lifetime_scored_count() <> 1 then
+      raise exception 'T4 (%): an invalid receipt must consume nothing', attempt.label;
+    end if;
+  end loop;
+end $$;
+
+-- T5: the owner reads exactly their own receipt through the API gate and
+-- holds no write on the table — a receipt cannot be forged, altered or
+-- removed from a client session.
+do $$
+declare v_shot uuid := '00000000-0000-4000-8000-0000000000e1';
+begin
+  if (select count(*) from public.settlement_receipts) <> 1 then
+    raise exception 'T5: the owner must read exactly their own receipt';
+  end if;
+  begin
+    insert into public.settlement_receipts (
+      shot_id, user_id, analysis_permit_id, result_kind, payload_sha256, binding_sha256,
+      policy_version, policy_sha256, receipt, receipt_canonical, receipt_sha256
+    ) values (
+      v_shot, (select auth.uid()), '00000000-0000-4000-8000-0000000000d2', 'scored',
+      repeat('0', 64), repeat('0', 64), 'forged', repeat('0', 64), '{}', '{}', repeat('0', 64)
+    );
+    raise exception 'T5: clients must not insert receipts';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.settlement_receipts set operation_id = 'op_forged' where shot_id = v_shot;
+    raise exception 'T5: clients must not alter receipts';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.settlement_receipts where shot_id = v_shot;
+    raise exception 'T5: clients must not remove receipts';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.headers', '{}', true);
+  if exists (select 1 from public.settlement_receipts) then
+    raise exception 'T5: receipts must be invisible without the API gate';
+  end if;
+end $$;
+reset role;
+
+-- T6: another owner sees nothing; anonymous holds no privilege at all.
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000094';
+do $$
+begin
+  if exists (select 1 from public.settlement_receipts) then
+    raise exception 'T6: receipts must be owner-isolated';
+  end if;
+  if has_table_privilege('anon', 'public.settlement_receipts',
+                         'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+     or has_table_privilege('authenticated', 'public.settlement_receipts',
+                            'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+    raise exception 'T6: the receipt table must be read-only for the owner and closed to anon';
+  end if;
+end $$;
+reset role;
+
+-- T7: append-only for EVERY role (table owner included); the only removal is
+-- the cascade that removes the shot — and then the receipt goes with it.
+do $$
+declare v_shot uuid := '00000000-0000-4000-8000-0000000000e1';
+begin
+  begin
+    update public.settlement_receipts set operation_id = 'op_forged' where shot_id = v_shot;
+    raise exception 'T7: receipts must be append-only even for the table owner';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.settlement_receipts where shot_id = v_shot;
+    raise exception 'T7: a receipt must outlive every path but the shot cascade';
+  exception when check_violation then null;
+  end;
+  if (select count(*) from public.settlement_receipts where shot_id = v_shot) <> 1 then
+    raise exception 'T7: the refused writes must leave the receipt intact';
+  end if;
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000093';
+  if exists (select 1 from public.settlement_receipts where shot_id = v_shot)
+     or exists (select 1 from public.shots where id = v_shot) then
+    raise exception 'T7: account deletion must cascade the receipt with the shot';
   end if;
 end $$;
 rollback;
