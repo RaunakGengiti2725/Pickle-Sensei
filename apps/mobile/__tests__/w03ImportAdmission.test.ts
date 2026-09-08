@@ -629,6 +629,35 @@ describe('W03-01 regression — round 6: wind-up and recovery are direction-awar
     expect(decision.comparableEventCount).toBe(2);
   });
 
+  it('a stroke-sized backward burst is a second stroke however hard the swing beside it (forehand, then backhand)', () => {
+    // A 12 torso/s drive would allow a 6 torso/s "recovery" by ratio alone;
+    // the absolute stroke floor (4 torso/s) says a burst that fast is a
+    // stroke wherever it sits.
+    const drive = along(1, hump(1700, 150, 2.4));
+    for (const centerMs of [1300, 2100]) {
+      const backhand = along(-1, hump(centerMs, 150, 1.1));
+      const decision = admitImportedStrokeEvents(
+        wristTravelProfile(3200, 60, sumVelocities(backhand, drive)),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBe(2);
+      const slower = decision.candidates
+        .filter(c => c.comparable)
+        .sort((a, b) => a.peakSpeed - b.peakSpeed)[0];
+      expect(slower?.peakTorsoPerSecond).toBeGreaterThanOrEqual(
+        IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+      );
+      expect(slower?.peakSpeed).toBeLessThan(
+        decision.candidates
+          .filter(c => c.comparable)
+          .sort((a, b) => b.peakSpeed - a.peakSpeed)[0]!.peakSpeed *
+          IMPORT_ADMISSION_LIMITS.maxWindUpPeakRatio,
+      );
+    }
+  });
+
   it('folds at most one wind-up and one recovery: a second backward burst before the swing is a stroke', () => {
     const decision = admitImportedStrokeEvents(
       wristTravelProfile(
