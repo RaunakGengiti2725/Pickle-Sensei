@@ -93,6 +93,7 @@ export class AccountDeletionError extends Error {
     readonly code:
       | 'deletion.not_configured'
       | 'deletion.session_expired'
+      | 'deletion.in_progress'
       | 'deletion.rejected'
       | 'deletion.unknown'
       | 'deletion.unavailable',
@@ -110,6 +111,12 @@ export interface AccountDeletionContext extends DataOwnerContext {
 
 export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
   'We could not confirm whether your account was deleted. The request may have completed. Check your connection and retry, or contact support if you still cannot confirm.';
+
+/** The server refused a request because a confirmed deletion of this
+ * account is already being carried out (HTTP 409
+ * `account.deletion_in_progress`). Nothing new was requested. */
+export const ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE =
+  'A deletion of this account was already confirmed and is being carried out by the server. This attempt requested nothing new — close this dialog and check back later.';
 
 export interface AccountDeletionChallenge {
   challenge: string;
@@ -196,6 +203,17 @@ async function post(
         isRecord(payload) && isRecord(payload['error'])
           ? payload['error']
           : null;
+      if (
+        !confirming &&
+        response.status === 409 &&
+        error?.['code'] === 'account.deletion_in_progress'
+      ) {
+        throw new AccountDeletionError(
+          'deletion.in_progress',
+          ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+          false,
+        );
+      }
       const message =
         error && typeof error['message'] === 'string'
           ? error['message']
@@ -476,6 +494,10 @@ export type AccountDeletionState =
       readonly attempt: AccountDeletionAttempt;
       readonly nextAttemptAtMs: number;
     }
+  /** The server is already carrying out a confirmed deletion of this
+   * account that this attempt did not start; the attempt requested nothing
+   * and holds no capability to observe it, so it can only be closed. */
+  | { readonly status: 'already_in_progress'; readonly message: string }
   | {
       readonly status: 'failed';
       readonly message: string;
@@ -523,6 +545,10 @@ const RECORD_FAILED_MESSAGE =
   'Account deletion could not be recorded on this phone. Nothing was deleted — please try again.';
 const JOURNAL_FULL_MESSAGE =
   'This phone still holds too many unfinished deletion attempts to record another. Nothing was deleted — come back after an earlier attempt has expired.';
+/** A confirmation this flow cannot carry: the attempt belongs to the other
+ * flow, so nothing was sent and the outcome is known — nothing happened. */
+const CONFIRMATION_UNSENT_MESSAGE =
+  'This deletion attempt could not be confirmed from here, so no confirmation was sent. Nothing was deleted — start again.';
 
 function requestIssueMessage(issue: DeletionIssue | null): string {
   switch (issue) {
@@ -632,6 +658,12 @@ function durableState(
   switch (entry.phase) {
     case 'request_pending':
     case 'request_unknown':
+      if (entry.lastIssue === 'in_progress') {
+        return {
+          status: 'already_in_progress',
+          message: ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+        };
+      }
       return {
         status: 'request_unknown',
         attempt,
@@ -713,11 +745,12 @@ function resumable(
     return false;
   if (isTerminalServerState(entry)) return false;
   if (entry.operationId === null || entry.receipt !== null) return true;
+  // A sent confirmation stays unresolved until the server says otherwise;
+  // the status window closing does not make the account provably present.
+  if (entry.phase !== 'securing' && entry.phase !== 'ready') return true;
   const window =
-    entry.phase === 'securing' || entry.phase === 'ready'
-      ? // Never confirmed: only a live challenge can still be presented.
-        Date.parse(entry.expiresAt ?? '')
-      : Date.parse(entry.statusExpiresAt ?? '');
+    // Never confirmed: only a live challenge can still be presented.
+    Date.parse(entry.expiresAt ?? '');
   return Number.isFinite(window) && nowMs < window;
 }
 
@@ -744,6 +777,14 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       status: 'failed',
       outcome: 'nothing_deleted',
       message: requestIssueMessage(reason),
+    };
+  }
+
+  function confirmUnsent(): AccountDeletionState {
+    return {
+      status: 'failed',
+      outcome: 'nothing_deleted',
+      message: CONFIRMATION_UNSENT_MESSAGE,
     };
   }
 
@@ -846,6 +887,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       );
     },
     confirm(attempt) {
+      if (attempt.kind !== 'durable') return Promise.resolve(confirmUnsent());
       return operate(
         attempt,
         handle => foundation.confirm(handle),
@@ -904,6 +946,8 @@ async function legacyRequest(
       message: null,
     };
   } catch (e) {
+    if (e instanceof AccountDeletionError && e.code === 'deletion.in_progress')
+      return { status: 'already_in_progress', message: e.message };
     return {
       status: 'failed',
       outcome: 'nothing_deleted',
@@ -919,13 +963,20 @@ async function legacyConfirm(
   client: AccountDeletionLegacyClient,
   attempt: AccountDeletionAttempt,
   session: ApiSession,
+  retrying: boolean,
 ): Promise<AccountDeletionState> {
   if (attempt.kind !== 'legacy') {
-    return {
-      status: 'failed',
-      outcome: 'unknown',
-      message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
-    };
+    return retrying
+      ? {
+          status: 'failed',
+          outcome: 'unknown',
+          message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
+        }
+      : {
+          status: 'failed',
+          outcome: 'nothing_deleted',
+          message: CONFIRMATION_UNSENT_MESSAGE,
+        };
   }
   try {
     const result = await client.confirmAccountDeletion(
@@ -936,43 +987,55 @@ async function legacyConfirm(
     );
     return { status: 'completed', result };
   } catch (e) {
-    if (!(e instanceof AccountDeletionError) || e.code === 'deletion.unknown') {
-      return {
-        status: 'confirm_unknown',
-        attempt,
-        nextAttemptAtMs: 0,
-        message:
-          e instanceof AccountDeletionError
-            ? e.message
-            : ACCOUNT_DELETION_UNKNOWN_MESSAGE,
-      };
+    if (!retrying && e instanceof AccountDeletionError) {
+      // A first confirmation is known not to have acted only when the
+      // client never sent it (unavailable, not configured) or the server
+      // explicitly refused it; a dead bearer or a throttle proves nothing.
+      if (e.code === 'deletion.unavailable') {
+        return {
+          status: 'ready',
+          attempt,
+          reviewAfterMs: Date.now(),
+          message: e.message,
+        };
+      }
+      if (
+        e.code === 'deletion.not_configured' ||
+        (e.code === 'deletion.rejected' && !e.retryable)
+      ) {
+        return {
+          status: 'failed',
+          outcome: 'nothing_deleted',
+          message: e.message,
+        };
+      }
     }
-    if (e.retryable) {
-      return {
-        status: 'ready',
-        attempt,
-        reviewAfterMs: Date.now(),
-        message: e.message,
-      };
-    }
-    return { status: 'failed', outcome: 'nothing_deleted', message: e.message };
+    const message = !(e instanceof AccountDeletionError)
+      ? ACCOUNT_DELETION_UNKNOWN_MESSAGE
+      : e.code === 'deletion.unknown' || e.code === 'deletion.session_expired'
+        ? e.message
+        : e.code === 'deletion.rejected'
+          ? `${e.message} ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`
+          : ACCOUNT_DELETION_UNKNOWN_MESSAGE;
+    return { status: 'confirm_unknown', attempt, nextAttemptAtMs: 0, message };
   }
 }
 
 export function legacyAccountDeletionFlow(
   client: AccountDeletionLegacyClient,
 ): AccountDeletionFlow {
-  const confirm = (attempt: AccountDeletionAttempt, session: ApiSession) =>
-    legacyConfirm(client, attempt, session);
+  const retry = (attempt: AccountDeletionAttempt, session: ApiSession) =>
+    legacyConfirm(client, attempt, session, true);
   return {
     durable: false,
     resume: async () => null,
     request: (session, survey) => legacyRequest(client, session, survey),
     retryRequest: (_attempt, session, survey) =>
       legacyRequest(client, session, survey),
-    confirm,
-    recover: confirm,
-    poll: confirm,
+    confirm: (attempt, session) =>
+      legacyConfirm(client, attempt, session, false),
+    recover: retry,
+    poll: retry,
   };
 }
 
