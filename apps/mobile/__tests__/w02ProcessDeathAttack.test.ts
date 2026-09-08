@@ -481,7 +481,10 @@ describe('C. network failures during recovery', () => {
     expectHeldCancelled(result.server, reportOf(third!));
   });
 
-  it('a finalize that never answers blocks the launch (no request deadline) but consumes nothing; the next launch reconciles', async () => {
+  // The shipping client aborts a request after API_REQUEST_TIMEOUT_MS
+  // (20s, src/data/api.ts) and surfaces it as a retryable 408, so this
+  // attack necessarily runs longer than the suite default.
+  it('a finalize that never answers hits the 20s client deadline (408), is retried on the same permit, and consumes nothing', async () => {
     const result = await runSequence([
       {
         launch: '1',
@@ -494,19 +497,19 @@ describe('C. network failures during recovery', () => {
         faults: [
           { pathIncludes: '/finalize', ordinal: 1, fault: { kind: 'hang' } },
         ],
-        timeoutMs: 15_000,
+        timeoutMs: 45_000,
       },
       { launch: '2', operationId: THIRD_OPERATION_ID },
     ]);
     const [, second, third] = launchesOf(result);
     expect(second!.proxy?.injected).toHaveLength(1);
-    // The shipping recovery has no request deadline: the launch is still
-    // waiting on the hung finalize when the 15s harness guard fires.
-    expect(second!.timedOut).toBe(true);
-    expect(second!.signal).toBe('SIGKILL');
-    expect(second!.report).toBeNull();
+    expect(second!.timedOut).toBe(false);
+    expect(second!.signal).toBeNull();
+    const hung = reportOf(second!);
+    expect(finalizeRequests(second!).length).toBeGreaterThanOrEqual(2);
+    expectHeldCancelled(result.server, hung);
     expectHeldCancelled(result.server, reportOf(third!));
-  });
+  }, 60_000);
 
   it('409 permit_already_finalized (server-side sweep) on the recovery finalize ends terminal without a new permit', async () => {
     const result = await runSequence([
