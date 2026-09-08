@@ -1,5 +1,9 @@
 import { generateSwingSequence } from '@pickle/evaluation';
-import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
+import {
+  serializePoseSequence,
+  sha256Hex,
+  type PoseSequence,
+} from '@pickle/swing-domain';
 import type { LocalDb } from '../src/data/db';
 import {
   SIGNED_OUT_DATA_OWNER,
@@ -27,6 +31,12 @@ import { importedPoseExtractionFailureMessage } from '../src/screens/AnalyzeScre
  * WITH a validated sidecar analyzes for real (integrity hash + canonical
  * parse unchanged), while one WITHOUT keeps the honest refusal — nothing is
  * reconstructed, no permit is touched.
+ *
+ * W03-01 regression (fails on BASE 42291369): an imported sidecar holding
+ * TWO comparable strokes reached the permit path — `POST /v1/analysis-permits`
+ * was called and the permit finalized downstream — instead of being refused
+ * up front with the precise admission reason. Import admission must run
+ * BEFORE any permit reservation, journal row or fusion work.
  */
 
 // AnalyzeScreen (imported here only for its pure failure-copy helper) pulls
@@ -85,15 +95,24 @@ function jsonResponse(body: unknown): Response {
 
 /** An imported clip whose extraction pass already attached a REAL sidecar
  * ref (hash of the actual serialized sequence, exactly as native records). */
-function importedClipWithSidecar(): {
+function importedClipWithSidecar(
+  sequenceOverride?: PoseSequence,
+  durationOverrideMs?: number,
+): {
   clip: CapturedClip;
   sidecarJson: string;
 } {
-  const { sequence, window } = generateSwingSequence();
+  const generated = generateSwingSequence();
+  const sequence = sequenceOverride ?? generated.sequence;
+  const lastMs =
+    sequence.frames[sequence.frames.length - 1]?.timestampMs ??
+    generated.window.endMs;
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
     uri: 'file:///imports/rally-clip.mov',
-    durationMs: window.endMs,
+    durationMs:
+      durationOverrideMs ??
+      (sequenceOverride ? lastMs + 200 : generated.window.endMs),
     fps: sequence.video.fps,
     width: sequence.video.width,
     height: sequence.video.height,
@@ -113,6 +132,28 @@ function importedClipWithSidecar(): {
     },
   };
   return { clip, sidecarJson };
+}
+
+/** Two sequences played back to back, the second starting `gapMs` after the
+ * first ends. */
+function concatSequences(
+  first: PoseSequence,
+  second: PoseSequence,
+  gapMs: number,
+): PoseSequence {
+  const lastFirst = first.frames[first.frames.length - 1];
+  const offset = (lastFirst?.timestampMs ?? 0) + gapMs;
+  return {
+    ...first,
+    frames: [
+      ...first.frames,
+      ...second.frames.map(frame => ({
+        ...frame,
+        frameIndex: first.frames.length + frame.frameIndex,
+        timestampMs: frame.timestampMs + offset,
+      })),
+    ],
+  };
 }
 
 function request(db: LocalDb, clip: CapturedClip) {
@@ -222,6 +263,81 @@ describe('runCaptureAnalysis imported-video gate', () => {
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.reason).toContain('integrity check');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an ambiguous two-stroke import BEFORE any permit is reserved (W03-01)', async () => {
+    const { db, calls } = recordingDb();
+    const first = generateSwingSequence();
+    const second = generateSwingSequence();
+    const rally = concatSequences(first.sequence, second.sequence, 1000);
+    const { clip, sidecarJson } = importedClipWithSidecar(rally);
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('unavailable');
+    if (outcome.kind !== 'unavailable') return;
+    expect(outcome.reason).toMatch(/one stroke|single stroke/i);
+    // Never reached charging: no reservation, no finalization, no journal.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(finalized).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses two strokes with a sub-500 ms ready pause BEFORE any permit is reserved (W03-01 round 3)', async () => {
+    const { db, calls } = recordingDb();
+    const first = generateSwingSequence({ readyMs: 400, recoverMs: 550 });
+    const second = generateSwingSequence({ readyMs: 200, recoverMs: 550 });
+    const rally = concatSequences(first.sequence, second.sequence, 0);
+    const { clip, sidecarJson } = importedClipWithSidecar(rally);
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('unavailable');
+    if (outcome.kind !== 'unavailable') return;
+    expect(outcome.reason).toMatch(/one stroke|single stroke/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(finalized).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an import whose sidecar covers only a sliver of the clip BEFORE any permit is reserved', async () => {
+    const { db, calls } = recordingDb();
+    const { sequence } = generateSwingSequence();
+    const { clip, sidecarJson } = importedClipWithSidecar(sequence, 45_000);
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('unavailable');
+    if (outcome.kind !== 'unavailable') return;
+    expect(outcome.reason).toMatch(/tracked/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an import outside the media envelope before the sidecar is even read', async () => {
+    const { db, calls } = recordingDb();
+    const { clip } = importedClipWithSidecar(undefined, 60_001);
+    let sidecarReads = 0;
+    mockReadArtifact = async () => {
+      sidecarReads += 1;
+      throw new Error('sidecar must not be read for an oversized import');
+    };
+    const fetchSpy = jest.fn();
+    (globalThis as { fetch?: unknown }).fetch = fetchSpy;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('unavailable');
+    if (outcome.kind !== 'unavailable') return;
+    expect(outcome.reason).toContain('60 seconds');
+    expect(sidecarReads).toBe(0);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
