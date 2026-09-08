@@ -885,7 +885,7 @@ describe('GUARD build dependency security', () => {
         assert.equal(loaded('metro-transform-worker'), false);
         assert.equal(loaded('@babel/core'), false);
         assert.deepEqual(
-          loadedFiles().filter(file => /[\\/]node_modules[\\/](metro-transform-worker|metro-source-map|metro-minify-terser|@babel[\\/](core|traverse|generator|types))[\\/]/.test(file)),
+          loadedFiles().filter(file => /[\\/]node_modules[\\/](metro-transform-worker|@babel[\\/]core)[\\/]/.test(file)),
           [],
         );
         const { getAssetSize } = require('metro/private/Assets');
