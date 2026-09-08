@@ -26,6 +26,8 @@ const modules = [
 const owned = new Set(
   modules.map(name => path.join(root, 'src/account', `${name}.ts`)),
 );
+/** The one shipping adapter allowed to wire the foundation (W08-01). */
+const integrationPoint = path.join(root, 'src/account/deletion.ts');
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -38,13 +40,29 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
-test('none of the currently bundled sources import or export the new standalone foundation', () => {
+test('only the deletion adapter imports the standalone foundation; no other bundled source reaches it', () => {
   const files = [
     ...sourceFiles(path.join(root, 'src')),
     path.join(root, 'App.tsx'),
     path.join(root, 'index.js'),
   ];
-  for (const file of files.filter(file => !owned.has(file))) {
+  const adapterImports = ts.preProcessFile(
+    readFileSync(integrationPoint, 'utf8'),
+    true,
+    true,
+  ).importedFiles;
+  expect(
+    adapterImports
+      .map(item => item.fileName)
+      .filter(name =>
+        modules.some(module =>
+          new RegExp(`(?:^|/)${module}(?:\\.[jt]s)?$`).test(name),
+        ),
+      ),
+  ).toEqual(['./deletionOperation', './deletionOperationContracts']);
+  for (const file of files.filter(
+    file => !owned.has(file) && file !== integrationPoint,
+  )) {
     const imports = ts.preProcessFile(
       readFileSync(file, 'utf8'),
       true,
