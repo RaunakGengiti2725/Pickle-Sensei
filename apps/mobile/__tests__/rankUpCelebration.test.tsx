@@ -2,6 +2,10 @@ import '../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  initialWindowMetrics: { insets: { top: 0, bottom: 0, left: 0, right: 0 } },
+}));
 import TestRenderer, { act } from 'react-test-renderer';
 import * as Components from '../src/design/components';
 import { space, type, color, type as typography } from '../src/design/tokens';
@@ -148,7 +152,12 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
           StyleSheet.flatten(
             hostNodes(renderer, 'rank-up-stage')[0]!.props.style,
           ),
-        ).toMatchObject({ width: '100%', maxWidth: 320, height: 250 });
+        ).toMatchObject({
+          width: '100%',
+          maxWidth: 320,
+          minHeight: 180,
+          flexWrap: 'wrap',
+        });
         expect(
           StyleSheet.flatten(
             hostNodes(renderer, 'rank-up-celebration')[0]!.props.style,
@@ -183,7 +192,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
     },
   );
 
-  it('keeps the fitted 7.02 / 10 numeral distinct from uncapped DUPR and remaining-points copy', async () => {
+  it('keeps the reflowing 7.02 / 10 numeral distinct from uncapped DUPR and remaining-points copy', async () => {
     const previous = {
       window: Dimensions.get('window'),
       screen: Dimensions.get('screen'),
@@ -217,7 +226,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
     let renderer!: TestRenderer.ReactTestRenderer;
     try {
       await act(async () => {
-        renderer = TestRenderer.create(<RankUpCelebration />);
+        renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
       });
       const rating = renderer.root
         .findAllByType(Text)
@@ -227,10 +236,10 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
             node.props.children === '7.02',
         )!;
       expect(rating.props).toMatchObject({
-        numberOfLines: 1,
-        adjustsFontSizeToFit: true,
         accessibilityLabel: 'Rating 7.02 out of 10',
       });
+      expect(rating.props.numberOfLines).toBeUndefined();
+      expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
       expect(rating.props.children[0]).toBe('7.02');
       expect(
         rating

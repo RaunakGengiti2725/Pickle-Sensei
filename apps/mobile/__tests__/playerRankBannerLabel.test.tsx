@@ -151,10 +151,10 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
           node => node.props.testID === 'player-rank-banner-rating',
         )!;
         expect(rating.props).toMatchObject({
-          numberOfLines: 1,
-          adjustsFontSizeToFit: true,
           accessibilityLabel: 'Rating 7.02 out of 10',
         });
+        expect(rating.props.numberOfLines).toBeUndefined();
+        expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
         expect(rating.props.children[0]).toBe('7.02');
         expect(
           rating

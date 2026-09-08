@@ -315,7 +315,8 @@ describe('PremiumTabBar coach menu', () => {
     );
     expect(tabs).toHaveLength(4);
     for (const tab of tabs) {
-      expect(tab.props.accessibilityRole).toBe('tab');
+      expect(tab.props.accessibilityRole).toBe('button');
+      expect(typeof tab.props.accessibilityState.selected).toBe('boolean');
       const style = controlStyle(tab);
       expect(style.minWidth).toBeGreaterThanOrEqual(44);
       expect(style.minHeight).toBeGreaterThanOrEqual(44);

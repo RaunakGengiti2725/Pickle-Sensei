@@ -207,7 +207,8 @@ describe('PlayerRankBanner button ledger', () => {
         .filter(child => typeof child === 'string')
         .join('');
       expect(ratingText).toBe('7.02 /10');
-      expect(rating!.props.numberOfLines).toBe(1);
+      expect(rating!.props.numberOfLines).toBeUndefined();
+      expect(rating!.props.adjustsFontSizeToFit).not.toBe(true);
       const detail = texts.find(
         node =>
           typeof node.props.children === 'string' &&

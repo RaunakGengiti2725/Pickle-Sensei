@@ -682,7 +682,7 @@ describe('LibraryScreen · reads tab', () => {
     expect(text).toContain('Forehand Drive · auto capture');
     expect(text).toContain('Clip saved — analysis has not run yet');
     expect(text).toContain(
-      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
+      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     // The clip rows are not buttons; the only non-tab control is the
     // always-reachable Analyze CTA so the page is never a dead end.

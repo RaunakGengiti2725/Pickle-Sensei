@@ -388,22 +388,9 @@ function withCaptureBridge(bridge: {
   capture: jest.Mock;
   captureWithOptions?: jest.Mock;
 }) {
-  let module!: typeof import('../src/camera/capture');
-  jest.doMock('react-native', () => ({
-    NativeModules: { PickleVideoCapture: bridge },
-    Platform: { OS: 'ios' },
-    NativeEventEmitter: jest.fn(),
-  }));
-  try {
-    jest.isolateModules(() => {
-      module = jest.requireActual<typeof import('../src/camera/capture')>(
-        '../src/camera/capture',
-      );
-    });
-  } finally {
-    jest.dontMock('react-native');
-  }
-  return module;
+  mockBridge.capture = bridge.capture;
+  mockBridge.captureWithOptions = bridge.captureWithOptions;
+  return { captureStrokeVideo };
 }
 
 describe('guided capture uses the declared hitting hand', () => {

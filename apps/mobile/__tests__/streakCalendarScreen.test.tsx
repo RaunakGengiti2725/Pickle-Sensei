@@ -270,8 +270,8 @@ describe('StreakCalendarScreen', () => {
     expect(StyleSheet.flatten(normal.count.props.style)).toMatchObject({
       ...type.display,
       color: color.onDark,
-      fontSize: 56,
-      lineHeight: 60,
+      fontSize: type.display.fontSize,
+      lineHeight: type.display.lineHeight,
     });
     expect(StyleSheet.flatten(normal.caption.props.style)).toMatchObject({
       ...type.h3,

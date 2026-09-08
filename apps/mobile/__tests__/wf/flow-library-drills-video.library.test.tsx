@@ -1,3 +1,4 @@
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import React from 'react';
 import { Linking, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -283,6 +284,7 @@ async function openSavedTab(renderer: TestRenderer.ReactTestRenderer) {
 
 describe('Library flow · Reads tab', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.clearAllMocks();
     authState.session = { localOnly: false };
     mockListShots.mockResolvedValue([]);
@@ -408,7 +410,7 @@ describe('Library flow · Reads tab', () => {
     // tab is never a dead end. No Result row exists for an unscored clip.
     expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain(
-      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
+      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     expect(text).toContain('Your measured reads, in one place.');
     expect(text).toContain('Analyze your first stroke');
@@ -441,6 +443,7 @@ describe('Library flow · Reads tab', () => {
 
 describe('Library flow · Saved drills tab', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.clearAllMocks();
     authState.session = { localOnly: false };
     mockListShots.mockResolvedValue([readRow]);

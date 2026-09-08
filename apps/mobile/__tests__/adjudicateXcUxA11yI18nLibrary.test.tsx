@@ -5,13 +5,9 @@
  *       (`.catch(() => { setShots([]); setCaptures([]); })`) and rendered as
  *       the first-run empty state, with no error copy and no retry.
  *       FIXED (XC-UAI-05): the reads tab now renders an error state with a
- *       retry; the original reproduction is kept inverted (`test.failing`)
- *       so a regression flips it back to passing and fails the suite.
- *  D2 — the header counts every pending clip but only the first three rows
- *       render, with no "show more" affordance and no copy that says so.
- *
- * `test.failing` blocks assert the EXPECTED behaviour and must be flipped to
- * plain `test` by the fix.
+ *       retry; both the regression reproduction and the expected-state test
+ *       assert this contract.
+ *  D2 — FIXED: every pending clip counted by the header renders a row.
  *
  * Run: cd apps/mobile && npx jest --ci __tests__/adjudicateXcUxA11yI18nLibrary.test.tsx
  */
@@ -128,23 +124,20 @@ beforeEach(() => {
   });
 });
 
-describe('D1 — Library repository failure is rendered as the first-run empty state', () => {
+describe('D1 — Library repository failure stays distinct from the first-run empty state', () => {
   const EMPTY_TITLE = 'Your measured reads, in one place.';
 
-  test.failing(
-    'reproduction (fixed, must no longer reproduce): listShots rejecting shows the first-run empty state and no error/retry copy',
-    async () => {
-      mockListShots.mockImplementation(async () => {
-        throw new Error('SQLITE_IOERR: disk I/O error');
-      });
-      const renderer = await renderLibrary();
-      const text = renderedText(renderer);
-      expect(text).toContain(EMPTY_TITLE);
-      expect(text).toContain('Analyze your first stroke');
-      expect(text).not.toMatch(/couldn.t|try again|retry|unavailable/i);
-      act(() => renderer.unmount());
-    },
-  );
+  test('regression: listShots rejecting keeps the error and retry state', async () => {
+    mockListShots.mockImplementation(async () => {
+      throw new Error('SQLITE_IOERR: disk I/O error');
+    });
+    const renderer = await renderLibrary();
+    const text = renderedText(renderer);
+    expect(text).not.toContain(EMPTY_TITLE);
+    expect(text).not.toContain('Analyze your first stroke');
+    expect(text).toMatch(/couldn.t|try again|retry|unavailable/i);
+    act(() => renderer.unmount());
+  });
 
   test('expected: a repository failure shows error copy with a retry, never the first-run empty state', async () => {
     mockListShots.mockImplementation(async () => {
@@ -164,32 +157,29 @@ function countRows(text: string): number {
   return text.split(caption).length - 1;
 }
 
-describe('D2 — Library counts every pending clip but renders only three', () => {
-  test('reproduction: 5 pending clips → header says 5, 3 rows rendered, no "more" affordance', async () => {
+describe('D2 — Library renders every counted pending clip', () => {
+  test('regression: 5 pending clips → header says 5 and all 5 rows render', async () => {
     mockListPendingCaptures.mockImplementation(async () =>
       [0, 1, 2, 3, 4].map(pendingCapture),
     );
     const renderer = await renderLibrary();
     const text = renderedText(renderer);
     expect(text).toContain('5 pending clips');
-    expect(countRows(text)).toBe(3);
+    expect(countRows(text)).toBe(5);
     expect(text).not.toMatch(/show more|see all|more clips|and \d+ more/i);
     act(() => renderer.unmount());
   });
 
-  test.failing(
-    'expected: every counted pending clip is reachable (rendered or behind a "more" affordance)',
-    async () => {
-      mockListPendingCaptures.mockImplementation(async () =>
-        [0, 1, 2, 3, 4].map(pendingCapture),
-      );
-      const renderer = await renderLibrary();
-      const text = renderedText(renderer);
-      expect(
-        countRows(text) === 5 ||
-          /show more|see all|more clips|and \d+ more/i.test(text),
-      ).toBe(true);
-      act(() => renderer.unmount());
-    },
-  );
+  test('expected: every counted pending clip is reachable (rendered or behind a "more" affordance)', async () => {
+    mockListPendingCaptures.mockImplementation(async () =>
+      [0, 1, 2, 3, 4].map(pendingCapture),
+    );
+    const renderer = await renderLibrary();
+    const text = renderedText(renderer);
+    expect(
+      countRows(text) === 5 ||
+        /show more|see all|more clips|and \d+ more/i.test(text),
+    ).toBe(true);
+    act(() => renderer.unmount());
+  });
 });

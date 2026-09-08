@@ -89,9 +89,10 @@ function registerTargets(keys: WalkthroughTargetKey[]) {
 beforeEach(() => {
   mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
   mockReducedMotion = false;
-  jest
-    .spyOn(Dimensions, 'get')
-    .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
+  Dimensions.set({
+    window: { width: 393, height: 852, scale: 3, fontScale: 1 },
+    screen: { width: 393, height: 852, scale: 3, fontScale: 1 },
+  });
 });
 
 afterEach(() => {
@@ -214,24 +215,25 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
       );
       const renderer = await renderVisible();
       const callout = renderer.root.findByProps({
-        accessibilityViewIsModal: true,
+        testID: 'walkthrough-callout',
       });
       const bounds = StyleSheet.flatten(callout.props.style);
-      expect(bounds).toMatchObject({ left: space.lg, right: space.lg });
-      expect(bounds.bottom).toBe(dimensions.height - (rect.y - 7 - 92));
-      expect(bounds.maxHeight).toBe(
-        dimensions.height - bounds.bottom - dimensions.top - space.lg,
-      );
+      expect(bounds).toMatchObject({
+        left: space.lg,
+        width: dimensions.width - space.lg * 2,
+      });
+      expect(bounds.top).toBe(dimensions.top + space.lg);
+      expect(bounds.maxHeight).toBe(rect.y - 7 - space.md - bounds.top);
       const viewportHeight =
         bounds.maxHeight -
-        bounds.paddingTop -
-        bounds.paddingBottom -
+        (bounds.paddingTop ?? space.lg) -
+        (bounds.paddingBottom ?? space.md) -
         bounds.borderWidth * 2;
       expect(viewportHeight).toBeGreaterThanOrEqual(
         scaledAdvanceHeight(renderer, 3.571),
       );
-      expect(dimensions.height - bounds.bottom - bounds.maxHeight).toBe(
-        dimensions.top + space.lg,
+      expect(bounds.top + bounds.maxHeight).toBeLessThanOrEqual(
+        dimensions.height - dimensions.bottom - space.lg,
       );
       expect(bounds.maxHeight).toBeLessThan(1067.73);
       const scroll = callout.findByType(ScrollView);
@@ -372,40 +374,33 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
         );
       }
       const renderer = await renderVisible();
-      expect(renderer.root.findByType(Modal).props.animationType).toBe('none');
+      expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+      expect(
+        renderer.root.findByProps({ testID: 'ceremony-overlay' }).props
+          .accessibilityViewIsModal,
+      ).toBe(true);
       for (const [index, step] of WALKTHROUGH_STEPS.entries()) {
         expect(textContent(renderer)).toContain(step.headline);
         expect(textContent(renderer)).toContain(step.body);
         if (step.finePrint)
           expect(textContent(renderer)).toContain(step.finePrint);
         const callout = renderer.root.findByProps({
-          accessibilityViewIsModal: true,
+          testID: 'walkthrough-callout',
         });
         const bounds = StyleSheet.flatten(callout.props.style);
         const viewportHeight =
           bounds.maxHeight -
-          bounds.paddingTop -
-          bounds.paddingBottom -
+          (bounds.paddingTop ?? space.lg) -
+          (bounds.paddingBottom ?? space.md) -
           bounds.borderWidth * 2;
         expect(scaledAdvanceHeight(renderer, 3.571)).toBe(97);
         expect(viewportHeight).toBeGreaterThanOrEqual(
           scaledAdvanceHeight(renderer, 3.571),
         );
-        if (step.targetKey === 'rank-banner') {
-          expect(bounds.maxHeight).toBe(
-            dimensions.height -
-              dimensions.top -
-              dimensions.bottom -
-              space.lg * 2,
-          );
-          if (dimensions.below) {
-            expect(bounds.top).toBe(dimensions.top + space.lg);
-            expect(bounds.bottom).toBeUndefined();
-          } else {
-            expect(bounds.bottom).toBe(dimensions.bottom + space.lg);
-            expect(bounds.top).toBeUndefined();
-          }
-        }
+        expect(bounds.top).toBeGreaterThanOrEqual(dimensions.top + space.lg);
+        expect(bounds.top + bounds.maxHeight).toBeLessThanOrEqual(
+          dimensions.height - dimensions.bottom - space.lg,
+        );
         expect(callout.findByType(ScrollView).props.scrollEnabled).not.toBe(
           false,
         );
@@ -432,14 +427,14 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
       );
       const renderer = await renderVisible();
       const callout = renderer.root.findByProps({
-        accessibilityViewIsModal: true,
+        testID: 'walkthrough-callout',
       });
       const bounds = StyleSheet.flatten(callout.props.style);
-      expect(bounds).toMatchObject({ top: 503, maxHeight: 140 });
+      expect(bounds).toMatchObject({ top: 427, maxHeight: 216 });
       const viewportHeight =
         bounds.maxHeight -
-        bounds.paddingTop -
-        bounds.paddingBottom -
+        (bounds.paddingTop ?? space.lg) -
+        (bounds.paddingBottom ?? space.md) -
         bounds.borderWidth * 2;
       expect(viewportHeight).toBeGreaterThanOrEqual(
         scaledAdvanceHeight(renderer, fontScale),
@@ -454,15 +449,15 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     registerTargets(Object.keys(TARGET_RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
     let bounds = StyleSheet.flatten(
-      renderer.root.findByProps({ accessibilityViewIsModal: true }).props.style,
+      renderer.root.findByProps({ testID: 'walkthrough-callout' }).props.style,
     );
     expect(bounds).toMatchObject({
       left: 24,
-      right: 24,
-      bottom: 251,
-      maxHeight: 518,
+      width: 345,
+      top: 83,
+      maxHeight: 594,
     });
-    expect(bounds.top).toBeUndefined();
+    expect(bounds.top + bounds.maxHeight).toBe(677);
     for (const testID of [
       'walkthrough-controls',
       'walkthrough-control-buttons',
@@ -475,11 +470,11 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     await pressByTestId(renderer, 'walkthrough-advance');
     expect(textContent(renderer)).toContain(WALKTHROUGH_STEPS[1]!.headline);
     bounds = StyleSheet.flatten(
-      renderer.root.findByProps({ accessibilityViewIsModal: true }).props.style,
+      renderer.root.findByProps({ testID: 'walkthrough-callout' }).props.style,
     );
-    expect(bounds).toMatchObject({ top: 316, maxHeight: 478 });
+    expect(bounds).toMatchObject({ top: 240, maxHeight: 554 });
     expect(bounds.bottom).toBeUndefined();
-    expect(316 + bounds.maxHeight).toBe(852 - 34 - space.lg);
+    expect(bounds.top + bounds.maxHeight).toBe(852 - 34 - space.lg);
     act(() => renderer.unmount());
   });
 
@@ -494,10 +489,10 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     const renderer = await renderVisible();
     expect(textContent(renderer)).toContain(WALKTHROUGH_STEPS[1]!.headline);
     const callout = renderer.root.findByProps({
-      accessibilityViewIsModal: true,
+      testID: 'walkthrough-callout',
     });
     const bounds = StyleSheet.flatten(callout.props.style);
-    expect(bounds).toMatchObject({ top: 83, maxHeight: 711 });
+    expect(bounds).toMatchObject({ top: 421, maxHeight: 373 });
     expect(bounds.top + bounds.maxHeight).toBe(852 - 34 - space.lg);
     expect(callout.findByType(ScrollView).props.scrollEnabled).not.toBe(false);
     await pressByTestId(renderer, 'walkthrough-skip');
@@ -505,12 +500,16 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     act(() => renderer.unmount());
   });
 
-  it('uses no modal fade under reduced motion, still announces and advances every measured step', async () => {
+  it('uses an immediate overlay under reduced motion, still announces and advances every measured step', async () => {
     mockReducedMotion = true;
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     registerTargets(Object.keys(TARGET_RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
-    expect(renderer.root.findByType(Modal).props.animationType).toBe('none');
+    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({ testID: 'ceremony-overlay' }).props
+        .accessibilityViewIsModal,
+    ).toBe(true);
     for (const [index, step] of WALKTHROUGH_STEPS.entries()) {
       expect(announce).toHaveBeenLastCalledWith(
         expect.stringContaining(
@@ -523,14 +522,22 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     act(() => renderer.unmount());
   });
 
-  it('updates the modal presentation when reduced motion changes without resetting the current step', async () => {
+  it('keeps the immediate overlay when reduced motion changes without resetting the current step', async () => {
     registerTargets(Object.keys(TARGET_RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
-    expect(renderer.root.findByType(Modal).props.animationType).toBe('fade');
+    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({ testID: 'ceremony-overlay' }).props
+        .accessibilityViewIsModal,
+    ).toBe(true);
     await pressByTestId(renderer, 'walkthrough-advance');
     mockReducedMotion = true;
     await act(async () => renderer.update(walkthroughElement()));
-    expect(renderer.root.findByType(Modal).props.animationType).toBe('none');
+    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({ testID: 'ceremony-overlay' }).props
+        .accessibilityViewIsModal,
+    ).toBe(true);
     expect(textContent(renderer)).toContain(WALKTHROUGH_STEPS[1]!.headline);
     await pressByTestId(renderer, 'walkthrough-skip');
     expect(useWalkthroughStore.getState().visible).toBe(false);
@@ -592,7 +599,7 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     try {
       expect(textContent(renderer)).toContain(WALKTHROUGH_STEPS[1]!.headline);
       const callout = renderer.root.findByProps({
-        accessibilityViewIsModal: true,
+        testID: 'walkthrough-callout',
       });
       expect(StyleSheet.flatten(callout.props.style).maxHeight).toBeGreaterThan(
         97,

@@ -437,7 +437,9 @@ describe('HomeScreen button ledger', () => {
           alignItems: 'stretch',
         });
         expect(flatStyle(toggle)).toMatchObject({
-          flex: 0,
+          width: '100%',
+          flexBasis: 'auto',
+          flexGrow: 0,
           flexDirection: 'column',
         });
         expect(flatStyle(streak)).toMatchObject({
@@ -450,7 +452,7 @@ describe('HomeScreen button ledger', () => {
         )!;
         expect(StyleSheet.flatten(eyebrow.parent!.props.style)).toMatchObject({
           flex: 0,
-          alignSelf: 'stretch',
+          width: '100%',
         });
         const title = rankTexts.find(
           node => node.props.children === 'Platinum III',

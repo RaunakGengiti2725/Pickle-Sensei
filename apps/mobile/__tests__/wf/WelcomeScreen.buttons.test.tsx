@@ -111,7 +111,7 @@ describe('WelcomeScreen button ledger', () => {
     { width: 375, height: 667, fontScale: 2 },
     { width: 320, height: 568, fontScale: 3 },
   ])(
-    'keeps both actions in a scrollable, uncapped flow at $width×$height / text scale $fontScale',
+    'keeps uncapped actions in the safe footer beside the scrollable body at $width×$height / text scale $fontScale',
     metrics => {
       const previous = {
         window: Dimensions.get('window'),
@@ -130,9 +130,11 @@ describe('WelcomeScreen button ledger', () => {
         expect(
           StyleSheet.flatten(scroll.props.contentContainerStyle),
         ).toMatchObject({ flexGrow: 1 });
+        const footer = renderer.root.findByProps({ testID: 'welcome-actions' });
+        expect(StyleSheet.flatten(footer.props.style).flexShrink).toBe(0);
         for (const label of [START_LABEL, SIGN_IN_LABEL]) {
           const action = pressableByLabel(renderer, label);
-          expect(scroll.findAll(node => node === action)).toHaveLength(1);
+          expect(footer.findAll(node => node === action)).toHaveLength(1);
           expect(resolvedStyle(action).minHeight).toBeGreaterThanOrEqual(44);
           for (const text of action.findAllByType(Text)) {
             expect(text.props.allowFontScaling).not.toBe(false);
@@ -140,7 +142,7 @@ describe('WelcomeScreen button ledger', () => {
             expect(text.props.numberOfLines).toBeUndefined();
           }
           let ancestor = action.parent;
-          while (ancestor && ancestor !== scroll) {
+          while (ancestor && ancestor !== footer) {
             const style = StyleSheet.flatten(ancestor.props.style) ?? {};
             expect(style.position).not.toBe('absolute');
             expect(style.height).toBeUndefined();

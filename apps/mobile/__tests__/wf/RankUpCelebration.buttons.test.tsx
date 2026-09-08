@@ -253,7 +253,7 @@ describe('RankUpCelebration button ledger', () => {
         right: 0,
       });
       try {
-        const root = hostNodes(renderer, 'rank-up-celebration')[0]!;
+        const root = hostNodes(renderer, 'rank-up-safe-content')[0]!;
         expect(StyleSheet.flatten(root.props.style)).toMatchObject({
           flex: 1,
           paddingTop: 59,
@@ -327,7 +327,7 @@ describe('RankUpCelebration button ledger', () => {
     setPromotion();
     const renderer = await render();
     expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(1);
-    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
 
     const pressables = renderer.root.findAll(
       node =>

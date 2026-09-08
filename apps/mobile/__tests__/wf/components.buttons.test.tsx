@@ -537,13 +537,13 @@ describe('Button <label> -> props.onPress', () => {
         justifyContent: 'center',
         gap: space.sm,
       });
-      expect(flat(row).paddingVertical).toBeUndefined();
+      expect(flat(row).paddingVertical).toBe(space.sm);
       expect(StyleSheet.flatten(label.props.style)).toMatchObject({
         fontSize: type.bodyBold.fontSize,
         lineHeight: type.bodyBold.lineHeight,
       });
-      expect(StyleSheet.flatten(label.props.style).flexShrink).toBeUndefined();
-      expect(StyleSheet.flatten(label.props.style).textAlign).toBeUndefined();
+      expect(StyleSheet.flatten(label.props.style).flexShrink).toBe(1);
+      expect(StyleSheet.flatten(label.props.style).textAlign).toBe('center');
       act(() => renderer.unmount());
     },
   );

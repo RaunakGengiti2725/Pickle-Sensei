@@ -45,7 +45,7 @@ describe('pending section header', () => {
   it('distinguishes saved-confirmation reopening from read-only clips without promising an automatic rating', () => {
     expect(PENDING_SECTION_LABEL).not.toMatch(/ready/i);
     expect(PENDING_SECTION_NOTE).toBe(
-      'Saved technique confirmations reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
+      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
   });
 });

@@ -185,6 +185,10 @@ describe('StreakCelebration layout contracts (not native viewport proof)', () =>
         window: { width, height, fontScale, scale: 2 },
         screen: { width, height, fontScale, scale: 2 },
       });
+      mockInitialWindowMetrics = {
+        frame: { x: 0, y: 0, width, height },
+        insets: { top, bottom, left: side, right: side },
+      };
       const motion = jest
         .spyOn(Components, 'useReducedMotion')
         .mockReturnValue(reduced);
@@ -251,7 +255,7 @@ describe('StreakCelebration layout contracts (not native viewport proof)', () =>
         ).toMatchObject({
           width: '100%',
           maxWidth: 320,
-          height: 236,
+          minHeight: 188,
         });
         const texts = scroll.findAllByType(Text);
         for (const copy of [
@@ -338,7 +342,7 @@ describe('StreakCelebration', () => {
       try {
         const root = renderer.root.findAll(
           node =>
-            node.props.testID === 'streak-celebration' &&
+            node.props.testID === 'streak-celebration-safe-content' &&
             typeof node.type === 'string',
         )[0]!;
         expect(StyleSheet.flatten(root.props.style)).toMatchObject({
@@ -363,7 +367,9 @@ describe('StreakCelebration', () => {
         );
         expect(allText(renderer)).toContain('30 days of real training');
         expect(allText(renderer)).toContain('Exclusive profile frame');
-        const dismiss = useConsistencyStore.getState().dismissCelebration;
+        const dismiss = renderer.root.findByProps({
+          testID: 'ceremony-overlay',
+        }).props.onAccessibilityEscape;
         const backdrop = renderer.root.findAll(
           node =>
             node.props.accessibilityLabel === 'Dismiss milestone celebration' &&
@@ -375,9 +381,7 @@ describe('StreakCelebration', () => {
             node.props.onPress,
         )[0]!;
         expect(backdrop.props.onPress).toBe(dismiss);
-        expect(renderer.root.findByType(Modal).props.onRequestClose).toBe(
-          dismiss,
-        );
+        expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
         expect(cta.props.onPress).toBe(dismiss);
         act(() => cta.props.onPress());
         expect(useConsistencyStore.getState().celebration).toBeNull();
@@ -453,7 +457,7 @@ describe('StreakCelebration', () => {
         );
         const content = renderer.root.findAll(
           node =>
-            node.props.accessibilityViewIsModal &&
+            node.props.testID === 'streak-celebration-safe-content' &&
             typeof node.type === 'string',
         )[0]!;
         expect(StyleSheet.flatten(content.props.style)).toMatchObject({
@@ -489,7 +493,7 @@ describe('StreakCelebration', () => {
       renderer = TestRenderer.create(withSafeArea(<StreakCelebration />));
     });
     const copy = allText(renderer);
-    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
     expect(copy).toContain('30 Day Club');
     expect(copy).toContain('Exclusive profile frame');
     expect(copy).toContain('EPIC');
