@@ -343,7 +343,7 @@ describe('SettingsScreen — guest', () => {
 
     const copy = allText(renderer);
     expect(copy).toContain('LOCAL');
-    expect(copy).toContain('Guest · this device');
+    expect(copy).toContain('Local · this device');
     expect(copy).not.toContain('SYNCED');
     expect(pressables(renderer, 'Manage account, Details')).toHaveLength(0);
     expect(copy).not.toContain('Manage account');

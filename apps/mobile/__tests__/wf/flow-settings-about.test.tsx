@@ -524,7 +524,7 @@ describe('Settings root — guest (local-only) sessions', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     expect(copy).toContain('Alex');
-    expect(copy).toContain('Guest · this device');
+    expect(copy).toContain('Local · this device');
     expect(copy).toContain('LOCAL');
     expect(rowsStartingWith(renderer, 'Manage account')).toHaveLength(0);
     expect(copy).not.toContain('Account details');

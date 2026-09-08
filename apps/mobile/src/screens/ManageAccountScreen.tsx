@@ -58,7 +58,7 @@ import type { RootStackParams } from '../navigation/params';
 const PROVIDER_LABELS: Record<AuthProvider, string> = {
   apple: 'Apple',
   google: 'Google',
-  guest: 'Guest',
+  guest: 'Local',
 };
 
 /** Final-confirm hold-off (ms). Must exceed the server's 3s minimum age

@@ -67,7 +67,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedCaptureEnvelope: CAPTURE_ENVELOPE,
       runtimeRequirements: ["mediapipe-tasks-vision"],
       license: "apache-2.0",
-      notes: "MediaPipe Pose Landmarker bundled with the Android build.",
+      notes: "MediaPipe Pose Landmarker; not part of the iOS build.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,

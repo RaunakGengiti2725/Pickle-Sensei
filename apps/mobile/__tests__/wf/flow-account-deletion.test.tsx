@@ -324,7 +324,7 @@ describe('ManageAccount screen chrome', () => {
     useAuthStore.setState({ session: guestSession });
     const renderer = render(<ManageAccountScreen />);
     expect(byLabel(renderer, 'Delete account')).toHaveLength(0);
-    expect(allText(renderer)).toContain('Guest');
+    expect(allText(renderer)).toContain('Local');
     act(() => renderer.unmount());
   });
 });
