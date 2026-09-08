@@ -158,9 +158,7 @@ describe('W03-01 import admission — container envelope', () => {
     const { sequence } = singleSwing();
     const clip = importedClip(sequence);
     for (const rotationDegrees of [0, 90, 180, 270, -90, 450]) {
-      expect(admitImportedMedia(clip, { rotationDegrees }).admitted).toBe(
-        true,
-      );
+      expect(admitImportedMedia(clip, { rotationDegrees }).admitted).toBe(true);
     }
     for (const codec of ['avc1', 'AVC1', 'h264', 'hvc1', 'hev1', 'hevc']) {
       expect(admitImportedMedia(clip, { codec }).admitted).toBe(true);
@@ -276,6 +274,44 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     expect(decision.comparableEventCount).toBe(1);
   });
 
+  it('follows the striking wrist for a left-handed player', () => {
+    const { sequence, window } = generateSwingSequence({ handed: 'left' });
+    const decision = admitImportedStrokeEvents(sequence);
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.event.wrist).toBe('left_wrist');
+    expect(Math.abs(decision.event.peakMs - window.peakMs)).toBeLessThanOrEqual(
+      100,
+    );
+  });
+
+  it('treats both wrists moving through the same swing as ONE event', () => {
+    const { sequence, window } = singleSwing();
+    const twoHanded: PoseSequence = {
+      ...sequence,
+      frames: sequence.frames.map(frame => {
+        const right = frame.landmarks.find(mark => mark.name === 'right_wrist');
+        return {
+          ...frame,
+          landmarks: frame.landmarks.map(mark =>
+            mark.name === 'left_wrist' && right
+              ? { ...mark, x: right.x - 0.02, y: right.y + 0.01 }
+              : mark,
+          ),
+        };
+      }),
+    };
+    const decision = admitImportedStrokeEvents(twoHanded);
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.comparableEventCount).toBe(1);
+    expect(decision.candidates.filter(c => c.comparable)).toHaveLength(2);
+    expect(new Set(decision.candidates.map(c => c.wrist)).size).toBe(2);
+    expect(Math.abs(decision.event.peakMs - window.peakMs)).toBeLessThanOrEqual(
+      100,
+    );
+  });
+
   it('is deterministic for identical input', () => {
     const { sequence } = singleSwing();
     expect(admitImportedStrokeEvents(sequence)).toEqual(
@@ -305,8 +341,12 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
         0) +
       1000 +
       second.window.peakMs;
-    expect(Math.abs((comparable[0]?.peakMs ?? 0) - first.window.peakMs)).toBeLessThanOrEqual(100);
-    expect(Math.abs((comparable[1]?.peakMs ?? 0) - secondPeak)).toBeLessThanOrEqual(100);
+    expect(
+      Math.abs((comparable[0]?.peakMs ?? 0) - first.window.peakMs),
+    ).toBeLessThanOrEqual(100);
+    expect(
+      Math.abs((comparable[1]?.peakMs ?? 0) - secondPeak),
+    ).toBeLessThanOrEqual(100);
     expect(decision.detail).toContain(String(comparable[0]?.peakMs));
     expect(decision.detail).toContain(String(comparable[1]?.peakMs));
   });
@@ -326,17 +366,20 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
 
   it('admits one stroke beside clearly weaker incidental motion, exposing both', () => {
     const swing = singleSwing();
-    const idleFidget = wristSpeedProfile(2000, 60, hump(1000, 400, 0.04));
+    // ~0.3× the swing's peak wrist speed: measurable motion, not a stroke.
+    const idleFidget = wristSpeedProfile(2000, 60, hump(1000, 400, 0.7));
     const clip = concatSequences(swing.sequence, idleFidget, 600);
     const decision = admitImportedStrokeEvents(clip);
     expect(decision.admitted).toBe(true);
     if (!decision.admitted) return;
-    expect(Math.abs(decision.event.peakMs - swing.window.peakMs)).toBeLessThanOrEqual(
-      100,
-    );
+    expect(
+      Math.abs(decision.event.peakMs - swing.window.peakMs),
+    ).toBeLessThanOrEqual(100);
     expect(decision.comparableEventCount).toBe(1);
     expect(decision.candidates.length).toBeGreaterThanOrEqual(2);
-    expect(decision.candidates.filter(c => !c.comparable).length).toBeGreaterThanOrEqual(1);
+    expect(
+      decision.candidates.filter(c => !c.comparable).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('rejects a clip with no stroke event (idle player)', () => {
@@ -400,7 +443,10 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
 
   it('rejects sequences with too few frames or no tracked wrist', () => {
     const { sequence } = singleSwing();
-    const sparse: PoseSequence = { ...sequence, frames: sequence.frames.slice(0, 11) };
+    const sparse: PoseSequence = {
+      ...sequence,
+      frames: sequence.frames.slice(0, 11),
+    };
     const sparseDecision = admitImportedStrokeEvents(sparse);
     expect(sparseDecision.admitted).toBe(false);
     if (!sparseDecision.admitted) {
