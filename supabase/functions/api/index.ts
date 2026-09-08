@@ -3009,6 +3009,29 @@ function parseBillingFulfilment(value: unknown): BillingFulfilmentRequest | null
   };
 }
 
+/** A RevenueCat transaction identifier as the mobile evidence carries it: iOS
+ * `store_transaction_id` values arrive as JSON numbers in RevenueCat's v1
+ * customer info, so exact safe integers compare by their decimal string. */
+function providerIdentifier(value: unknown): string | null {
+  if (typeof value === "string") return value === "" ? null : value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return null;
+}
+
+/** The identity a provider transaction record proves. The store transaction id
+ * wins whenever RevenueCat reports one (a conflicting store id is never
+ * overridden). A lifetime purchase RevenueCat reports without any store
+ * transaction id is identified by its own purchase `id`; subscriptions never
+ * are. Anything else is unidentified and can only stay pending. */
+function providerTransactionIdentity(
+  row: Record<string, unknown>,
+  lifetimePurchase: boolean,
+): string | null {
+  if (row.store_transaction_id !== undefined && row.store_transaction_id !== null)
+    return providerIdentifier(row.store_transaction_id);
+  return lifetimePurchase ? providerIdentifier(row.id) : null;
+}
+
 function billingFulfilmentOf(
   request: BillingFulfilmentRequest,
   subscriber: Record<string, unknown>,
@@ -3031,8 +3054,7 @@ function billingFulfilmentOf(
   const matching = candidates.filter(
     (row): row is Record<string, unknown> =>
       isRecord(row) &&
-      typeof row.store_transaction_id === "string" &&
-      row.store_transaction_id === transactionId &&
+      providerTransactionIdentity(row, row !== subscriptions[productId]) === transactionId &&
       isoTimestamp(row.purchase_date) === purchasedAt,
   );
   // Ambiguous absence, product-only matches, RC's own non-subscription `id`, or
