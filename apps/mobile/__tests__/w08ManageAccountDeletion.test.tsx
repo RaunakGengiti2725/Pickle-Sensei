@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import * as Keychain from 'react-native-keychain';
 
 /**
  * W08-01 — the shipping ManageAccount deletion path must run on the durable
@@ -17,7 +18,11 @@ import TestRenderer, { act } from 'react-test-renderer';
  *     and completes ONLY from a verified receipt (confirm or status poll);
  *   - re-entry (same dialog, or a fresh screen after teardown) resumes the
  *     durable operation with the SAME operation id — never a new request;
- *   - the original owner's operation is isolated from a replacement account.
+ *   - the original owner's operation is isolated from a replacement account;
+ *   - the failure boundaries stay honest and recoverable: a crash between
+ *     the journal and Keychain writes never reads as "may have completed",
+ *     a double tap is one request / one confirmation, and abandoned requests
+ *     never fill the journal for good.
  */
 
 jest.mock('../src/config/authConfig', () => ({
@@ -78,6 +83,10 @@ const OWNER_A = '11111111-1111-4111-8111-111111111111';
 const OWNER_B = '22222222-2222-4222-8222-222222222222';
 const BEARER_A = 'session.bearer.owner-a';
 const BEARER_B = 'session.bearer.owner-b';
+
+/** deletionOperationContracts.DELETION_FOUNDATION_LIMITS.journalEntries. */
+const JOURNAL_CAPACITY = 32;
+const DAY_MS = 86_400_000;
 
 type DeletionPath = 'delete-request' | 'delete-confirm' | 'delete-status';
 
@@ -228,6 +237,34 @@ function sheetButton(renderer: TestRenderer.ReactTestRenderer, label: string) {
   const matches = sheetButtons(renderer, label);
   expect(matches.length).toBeGreaterThan(0);
   return matches[0]!;
+}
+
+function buttonLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
+  return renderer.root
+    .findAllByType(Button)
+    .map(node => String(node.props.label));
+}
+
+async function advance(ms: number) {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
+  await act(async () => {});
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function ownerId(index: number): string {
+  const digits = String(index).padStart(12, '0');
+  return `33333333-3333-4333-8333-${digits}`;
 }
 
 async function press(
@@ -696,6 +733,266 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       expect(calls('delete-confirm')).toHaveLength(0);
       expect(allText(renderer)).toContain('The signed-in account changed.');
       expectNotDeleted(renderer);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('treats a Keychain write lost after the `securing` journal write as nothing deleted: no unknown-outcome claim on re-entry, and a fresh request is offered', async () => {
+    let requests = 0;
+    route({
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
+      'delete-confirm': () => reply('delete-confirm', completionPayload(20)),
+    });
+    // The device Keychain refuses exactly one write — the one that stores
+    // the status capability right after the journal moved to `securing`.
+    // This is the persisted state a process death between the two writes
+    // leaves behind: journal row with an operation id, no capability.
+    const keychainWrite = jest
+      .spyOn(Keychain, 'setGenericPassword')
+      .mockRejectedValueOnce(new Error('errSecInteractionNotAllowed'));
+
+    const first = renderScreen();
+    try {
+      await openReview(first);
+      await press(first, sheetButton(first, 'Continue to delete'));
+
+      expect(sheetButtons(first, 'Permanently delete')).toHaveLength(0);
+      expect(allText(first)).toContain('Nothing was deleted');
+      expect(journalRows()).toMatchObject([
+        { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'securing' },
+      ]);
+      expect(deletionKeychainStore.size).toBe(0);
+      expectNotDeleted(first);
+      act(() => first.unmount());
+
+      // Relaunch: no confirmation was ever sent (the operation never reached
+      // `ready`), so the screen must not claim the request may have
+      // completed, must not spend a status check on it, and must let the
+      // owner start a fresh request.
+      const second = renderScreen();
+      try {
+        await press(second, pressable(second, 'Delete account')[0]!);
+        await act(async () => {});
+        const text = allText(second);
+        expect(text).not.toContain('Deletion status unknown');
+        expect(text).not.toContain('may have completed');
+        expect(sheetButtons(second, 'Retry deletion')).toHaveLength(0);
+        expect(text).toContain("What's making you leave?");
+        expect(calls('delete-status')).toHaveLength(0);
+
+        await press(second, pressable(second, 'Skip the survey')[0]!);
+        await press(second, sheetButton(second, 'Continue to delete'));
+        expect(calls('delete-request')).toHaveLength(2);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'securing' },
+          { owner_id: OWNER_A, operation_id: deletionId(20), phase: 'ready' },
+        ]);
+        await advance(5_000);
+        await press(second, sheetButton(second, 'Permanently delete'));
+        expect(calls('delete-confirm').map(bodyOf)).toEqual([
+          { challenge: deletionId(21), operationId: deletionId(20) },
+        ]);
+        expect(
+          useAuthStore.getState().completeAccountDeletion,
+        ).toHaveBeenCalledTimes(1);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'securing' },
+          { operation_id: deletionId(20), phase: 'receipt_verified' },
+        ]);
+      } finally {
+        act(() => second.unmount());
+      }
+    } finally {
+      keychainWrite.mockRestore();
+    }
+  });
+
+  it('mints one request and one journal entry for two presses of "Continue to delete" in one frame', async () => {
+    let requests = 0;
+    route({
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
+    });
+    const renderer = renderScreen();
+    try {
+      await openReview(renderer);
+      await act(async () => {
+        const button = sheetButton(renderer, 'Continue to delete');
+        button.props.onPress();
+        button.props.onPress();
+      });
+      await act(async () => {});
+
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(journalRows()).toMatchObject([
+        { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'ready' },
+      ]);
+      expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+      expectNotDeleted(renderer);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('keeps "Deleting…" on screen for two presses of "Permanently delete" in one frame: one confirmation, no account-changed or unknown copy', async () => {
+    const confirm = deferred<Response>();
+    route({
+      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-confirm': () => confirm.promise,
+    });
+    const renderer = renderScreen();
+    try {
+      await armDeletion(renderer);
+      await act(async () => {
+        const button = sheetButton(renderer, 'Permanently delete');
+        button.props.onPress();
+        button.props.onPress();
+      });
+      await act(async () => {});
+
+      expect(calls('delete-confirm')).toHaveLength(1);
+      const text = allText(renderer);
+      expectNotDeleted(renderer);
+      expect(text).not.toContain('The signed-in account changed.');
+      expect(text).not.toContain('Deletion status unknown');
+      expect(text).not.toContain('may have completed');
+      expect(buttonLabels(renderer)).toEqual(['Keep my account', 'Deleting…']);
+      expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
+
+      await act(async () => {
+        confirm.resolve(reply('delete-confirm', completionPayload()));
+      });
+      await act(async () => {});
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).toHaveBeenCalledTimes(1);
+      expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('reclaims expired abandoned requests when the journal is full so the owner can still delete the account', async () => {
+    let requests = 0;
+    route({
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
+    });
+    const renderer = renderScreen();
+    try {
+      for (let day = 0; day < JOURNAL_CAPACITY; day += 1) {
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+        await press(renderer, sheetButton(renderer, 'Keep my account'));
+        // The status window (24h) lapses before the owner comes back.
+        await advance(DAY_MS + 60_000);
+      }
+      expect(calls('delete-request')).toHaveLength(JOURNAL_CAPACITY);
+      expect(journalRows()).toHaveLength(JOURNAL_CAPACITY);
+      expectNotDeleted(renderer);
+
+      // Day 33: nothing is resumable, so the owner must be able to start a
+      // fresh request — the account-deletion path may never go dark.
+      await openReview(renderer);
+      await press(renderer, sheetButton(renderer, 'Continue to delete'));
+      expect(allText(renderer)).not.toContain('could not be recorded');
+      expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+      expect(calls('delete-request')).toHaveLength(JOURNAL_CAPACITY + 1);
+      expect(journalRows()).toMatchObject([
+        {
+          owner_id: OWNER_A,
+          operation_id: deletionId((JOURNAL_CAPACITY + 1) * 10),
+          phase: 'ready',
+        },
+      ]);
+      expectNotDeleted(renderer);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('does not reclaim live requests of other accounts and does not promise that retrying will help when the journal cannot be reclaimed', async () => {
+    let requests = 0;
+    route({
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
+    });
+    const renderer = renderScreen();
+    try {
+      for (let index = 0; index < JOURNAL_CAPACITY; index += 1) {
+        await act(async () => {
+          signIn(ownerId(index), `session.bearer.${index}`, 'google');
+        });
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+        await press(renderer, sheetButton(renderer, 'Keep my account'));
+      }
+      expect(journalRows()).toHaveLength(JOURNAL_CAPACITY);
+
+      await act(async () => {
+        signIn(OWNER_A, BEARER_A, 'google');
+      });
+      await openReview(renderer);
+      await press(renderer, sheetButton(renderer, 'Continue to delete'));
+      expect(calls('delete-request')).toHaveLength(JOURNAL_CAPACITY);
+      expect(journalRows()).toHaveLength(JOURNAL_CAPACITY);
+      expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(0);
+      const text = allText(renderer);
+      expect(text).toContain('Nothing was deleted');
+      expect(text).not.toContain('please try again');
+      expectNotDeleted(renderer);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
+  it('refuses to confirm with a challenge the device clock says has expired and offers a fresh request instead of re-arming silently', async () => {
+    let requests = 0;
+    route({
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
+      'delete-confirm': () => reply('delete-confirm', completionPayload(20)),
+    });
+    const renderer = renderScreen();
+    try {
+      await armDeletion(renderer);
+      // The owner walks away; the 15-minute challenge lapses.
+      await advance(900_000);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+
+      expect(calls('delete-confirm')).toHaveLength(0);
+      expect(calls('delete-status')).toHaveLength(0);
+      const text = allText(renderer);
+      expect(text).toContain('expired');
+      expect(text).toContain('Nothing was deleted');
+      expect(text).not.toContain('Deletion status unknown');
+      expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(0);
+      expectNotDeleted(renderer);
+
+      await press(renderer, sheetButton(renderer, 'Continue to delete'));
+      expect(calls('delete-request')).toHaveLength(2);
+      await advance(5_000);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+      expect(calls('delete-confirm').map(bodyOf)).toEqual([
+        { challenge: deletionId(21), operationId: deletionId(20) },
+      ]);
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).toHaveBeenCalledTimes(1);
     } finally {
       act(() => renderer.unmount());
     }
