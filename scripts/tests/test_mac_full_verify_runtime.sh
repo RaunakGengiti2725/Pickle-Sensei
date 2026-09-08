@@ -171,6 +171,16 @@ for expected in \
 done
 grep -F "mobile runtime: v22.22.0 at $WORK/mobile-node/node" "$WORK/mobile-runtime.log" >/dev/null
 test "$(node --version)" = v20.20.0
+python3 - "$NATIVE_TRACE" <<'PY_SIGN'
+import sys
+commands = [line for line in open(sys.argv[1]) if line.startswith('xcodebuild|') and '|build ' in line]
+assert len(commands) == 1, commands
+command = commands[0]
+assert "-destination generic/platform=iOS Simulator" in command, command
+assert "CODE_SIGNING_ALLOWED=YES" in command and "CODE_SIGN_IDENTITY=-" in command, command
+assert "CODE_SIGNING_REQUIRED=NO" in command, command
+assert "-allowProvisioning" not in command and " archive " not in command, command
+PY_SIGN
 echo '[test_mac_full_verify_runtime] PASS: selected mobile Node reaches npm/tsc/Jest/Xcode; caller Node20 preserved'
 
 export VERIFY_MOBILE_NODE_BIN="$WORK/missing-node"

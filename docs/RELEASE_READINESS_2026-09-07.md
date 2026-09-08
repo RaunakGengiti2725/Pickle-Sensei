@@ -27,10 +27,10 @@ individual severity/refinement is recorded in the dated entries below.
 
 | ID              | Implementation   | Evidence grade    | Finding / next proof                                                                                                                                                                                  |
 | --------------- | ---------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0-MOBILE       | IN_PROGRESS      | LOCAL_INTEGRATION | Full baseline: 41 failing suites, 524 failing tests. Fixture reconciliation and genuine auth/profile fixes underway.                                                                                  |
+| P0-MOBILE       | IN_PROGRESS      | LOCAL_INTEGRATION | Baseline repaired to 307 suites / 5,807 tests passing; first frozen cloud run had one guarded child-process timeout. Whole-gate rerun required.                                                       |
 | P0-EDGE         | FIXED            | LOCAL_INTEGRATION | 735 tests, 31 steps, zero failures/ignored with disposable PostgreSQL; frozen Deno and 227 crypto vectors pass.                                                                                       |
 | P0-SQL          | FIXED            | LOCAL_INTEGRATION | Fresh install plus production, upstream and ordered upgrade histories pass, including stale billing lease/ticket rejection.                                                                           |
-| P0-NATIVE       | OPEN             | SOURCE_VERIFIED   | Merged app/native sources have not yet passed the canonical Apple gate in this session.                                                                                                               |
+| P0-NATIVE       | OPEN             | SOURCE_VERIFIED   | Real Swift/macOS/iOS tests and Release build pass; unsigned launch exposed unusable Keychain. Xcode ad-hoc simulator correction reaches Welcome; final whole-gate rerun remains.                      |
 | P0-HOUSEKEEPING | IN_PROGRESS      | AUTOMATED_LOGIC   | Focused changed-file checks pass; full canonical checks remain.                                                                                                                                       |
 | W00             | IN_PROGRESS      | SOURCE_VERIFIED   | Program adopted after owner explicitly requested completion for App Store publication; iPhone 2D scope and human release boundary preserved.                                                          |
 | W01             | OPEN             | SOURCE_VERIFIED   | Shared joint chargeability contract exists; every production charging boundary still needs integration verification.                                                                                  |
@@ -50,7 +50,7 @@ individual severity/refinement is recorded in the dated entries below.
 | H02-BACKUP      | BLOCKED_EXTERNAL | SOURCE_VERIFIED   | Owner must authorize dashboard backup access and restore the latest backup into a disposable project; then run the security matrix.                                                                   |
 | H03-LOAD        | OPEN             | SOURCE_VERIFIED   | Disposable load dry run and Retry-After/degraded Redis evidence required.                                                                                                                             |
 | H04-ADVISORIES  | OPEN             | SOURCE_VERIFIED   | Fresh workspace/mobile dependency audit and reachability assessment required.                                                                                                                         |
-| H05-NOTICES     | OPEN             | SOURCE_VERIFIED   | Actual Release binary and fresh bundle-map notice check required; font/splash rights need owner evidence.                                                                                             |
+| H05-NOTICES     | OPEN             | SOURCE_VERIFIED   | Fresh Release binary/map membership and bundled resources pass; final candidate rerun and owner font/splash rights evidence remain.                                                                   |
 | H06-COPY        | OPEN             | SOURCE_VERIFIED   | Scan complete candidate diff and store copy for forbidden/unsupported claims.                                                                                                                         |
 | H07-COLD-START  | OPEN             | SOURCE_VERIFIED   | Measure Edge served bundle and startup latency locally.                                                                                                                                               |
 | H08-KILL-SWITCH | OPEN             | SOURCE_VERIFIED   | Implement/test denial of new authorizations and policy withdrawal; bounded offline leases cannot be instantly revoked.                                                                                |
@@ -124,6 +124,50 @@ individual severity/refinement is recorded in the dated entries below.
   verified absent in `profile-cleanup-final.log`. Mobile typecheck and owned
   ESLint pass. Residual: this intermediate run is not the frozen candidate
   gate; historical billing-recovery findings outside fixture scope remain.
+
+- **P0-MOBILE/P0-NATIVE frozen attempt, P1, IN_PROGRESS:** candidate
+  `1b70eddc0d66835a44633ccab659eb2e39812a43` began clean. Command:
+  `scripts/verify-all.sh --cloud-args '--tier full --fresh-deps'`.
+  `phase0-full-cloud/summary.json` records 14/15 stages passing. The sole
+  failure was the five-second subprocess deadline in the Metro ICNS guard
+  test; 5,806 other mobile tests passed. Four diagnostic subprocesses then
+  rejected the bytes immediately after 135–242 ms startup, and the unchanged
+  focused suite passed. The separate Mac fresh install reran all 307 suites /
+  5,807 tests successfully. This does not erase the cloud failure or prove
+  its timing cause. Entire combined run remains FAILED.
+  `phase0-full-mac/summary.json` records all three Mac stages passing:
+  Vision 105 and managed-media 37 tests on both platforms, real pose
+  extraction, Release app build, and 25-second crash-free launch.
+  **Visual review invalidated a healthy-launch interpretation:**
+  `launch/launch-settled.png` showed secure-storage-unavailable and its log
+  recorded OSStatus -34018 (missing simulator entitlements). The previous
+  gate detected crashes only. No auth safeguard was relaxed.
+  CocoaPods also normalized comments/empty sections in the Xcode project;
+  commit that generated output before the next clean candidate run.
+- **H05-NOTICES, P1, IN_PROGRESS / LOCAL_BINARY:** fresh built Release
+  app passed `generate-third-party-notices.mjs --check-app` with explicit
+  source-map path and both expected SHA-256 hashes. Evidence:
+  `artifacts/readiness-20260907-baseline/phase0-binary-notices.log`.
+  Bundle hash `8745c4c9bd8c72cb7d4657d64183aa0cdf0d314b7ddcb4b1ed3ad304713214ad`;
+  map hash `e41672168e2123d16987c9ba091440d9674b48a2b32d3bbf1673dbed5831bf39`.
+  This proves membership/resource delivery for that pair, not rights,
+  distribution signing or App Store clearance. Recheck the final binary.
+
+- **P0-NATIVE launch verification, P1, FIXED / SIMULATOR:** Xcode's
+  explicit ad-hoc simulator build restores the simulated application identity
+  without a distribution certificate, provisioning update or archive. The
+  unchanged Release app reaches Welcome with its primary and returning-user
+  actions, stays alive 25 seconds, and logs zero Keychain entitlement errors.
+  Evidence: `keychain-xcode-probe.xcresult`,
+  `keychain-xcode-launch-verified/launch-settled.png` and
+  `keychain-xcode-launch-verified/launch-summary.txt` under the baseline
+  artifact directory. The canonical launch gate now fails missing Keychain
+  entitlements and failed screenshots; relative artifact paths are resolved
+  before invoking simctl. The orchestration regression requires a simulator
+  destination and explicit certificate-free identity. Self-test log:
+  `mac-launch-runtime-selftest.log`. Residual: this is fresh signed-out launch
+  evidence, not physical sign-in/restore or complete native screen acceptance.
+  The corrected whole gate must still run on a clean committed tree.
 
 ## 3. Canonical gates
 

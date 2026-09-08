@@ -9,6 +9,7 @@
 #   - a crash report for the app appears in ~/Library/Logs/DiagnosticReports
 #   - the app log contains a fatal React Native error (RCTFatal /
 #     "Unhandled JS Exception")
+#   - secure storage is unusable because the simulator build lacks entitlements
 #
 # Usage: simulator-launch-check.sh <path/to/PickleSensei.app> <bundle id> <artifact dir> [settle seconds]
 set -euo pipefail
@@ -20,6 +21,7 @@ SETTLE_SECONDS="${4:-25}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "::error::app bundle not found at $APP_PATH"
@@ -79,7 +81,7 @@ fi
 
 # Early screenshot (splash / first frame), then the settled screen.
 sleep 5
-xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-05s.png" >/dev/null || true
+xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-05s.png" >/dev/null
 ALIVE=1
 for _ in $(seq 1 "$((SETTLE_SECONDS - 5))"); do
   if ! kill -0 "$PID" 2>/dev/null; then
@@ -88,7 +90,7 @@ for _ in $(seq 1 "$((SETTLE_SECONDS - 5))"); do
   fi
   sleep 1
 done
-xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-settled.png" >/dev/null || true
+xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-settled.png" >/dev/null
 
 # Give the log stream a moment to flush, then stop it.
 sleep 2
@@ -108,6 +110,7 @@ if [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
 fi
 
 FATAL_LINES="$(grep -E 'RCTFatal|Unhandled JS Exception|Terminating app due to uncaught exception' "$OUT_DIR/app-log-stream.txt" || true)"
+KEYCHAIN_LINES="$(grep -E 'Code=-34018|error:\[-34018\]|neither application-identifier nor keychain-access-groups' "$OUT_DIR/app-log-stream.txt" || true)"
 
 {
   echo "bundle_id=$BUNDLE_ID"
@@ -118,6 +121,7 @@ FATAL_LINES="$(grep -E 'RCTFatal|Unhandled JS Exception|Terminating app due to u
   echo "alive_after_${SETTLE_SECONDS}s=$ALIVE"
   echo "crash_reports=$CRASHES"
   echo "fatal_log_lines=$(printf '%s' "$FATAL_LINES" | grep -c . || true)"
+  echo "keychain_entitlement_errors=$(printf '%s' "$KEYCHAIN_LINES" | grep -c . || true)"
 } | tee "$OUT_DIR/launch-summary.txt"
 
 STATUS=0
@@ -131,6 +135,10 @@ fi
 if [ -n "$FATAL_LINES" ]; then
   echo "::error::fatal React Native error(s) in the app log:"
   echo "$FATAL_LINES" | head -20
+  STATUS=1
+fi
+if [ -n "$KEYCHAIN_LINES" ]; then
+  echo "::error::simulator secure storage is unavailable because signing entitlements are missing"
   STATUS=1
 fi
 

@@ -1169,7 +1169,11 @@ configuration scripts replace shared prebuilt frameworks. Run them serially.
 - Native UI acceptance uses a fresh explicitly owned simulator, a dedicated
   Metro port and an external XCTest runner. The app is ad-hoc signed for
   simulator secure-storage testing; unsigned Release compilation does not
-  establish Keychain behavior. Preserve the other running simulators.
+  establish Keychain behavior. The canonical Mac app build uses Xcode's
+  `CODE_SIGN_IDENTITY=-` simulator path so simulated entitlements enter the
+  binary; adding restricted entitlements with a post-build codesign command
+  is not equivalent. No distribution certificate or profile is used. Missing
+  Keychain entitlements fail the launch gate. Preserve other simulators.
 - Hermes Inspector did not await the app's Promise implementation through
   CDP `awaitPromise`: it returned the Promise representation. Raw injected
   async helpers also returned premature DB results in the UI probe. Compile

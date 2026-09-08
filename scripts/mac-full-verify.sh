@@ -17,7 +17,7 @@
 #   ios-app      apps/mobile/ios/PickleSensei.xcworkspace, scheme PickleSensei
 #                (iOS-only app: SUPPORTED_PLATFORMS = iphoneos iphonesimulator):
 #                npm ci, CocoaPods install, SwiftPM resolution, `xcodebuild
-#                build` Release for the iOS Simulator (unsigned, embedded JS
+#                build` Release for the iOS Simulator (ad-hoc, embedded JS
 #                bundle), then install + launch on a simulator and verify the
 #                process stays alive.
 #
@@ -272,10 +272,13 @@ stage_ios_app() {
 
   local result app
   result="$ARTIFACTS/PickleSensei-build.xcresult"; rm -rf "$result"
+  # Xcode places simulated entitlements in the binary for Keychain access.
+  # The explicit '-' identity signs locally without a certificate or profile;
+  # this command is fixed to iOS Simulator and never archives for distribution.
   xcodebuild build -jobs "$NATIVE_JOBS" -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
     -destination 'generic/platform=iOS Simulator' -derivedDataPath "$PICKLE_CI_CACHE/app-derived" \
-    -resultBundlePath "$result" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGN_IDENTITY="" COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
+    -resultBundlePath "$result" ARCHS=arm64 CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY=- COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
     | tee "$ARTIFACTS/xcodebuild-build.log" \
     | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; } | tail -60
   restore_xcode_node_environment
