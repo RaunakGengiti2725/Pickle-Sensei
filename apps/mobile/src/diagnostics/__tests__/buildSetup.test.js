@@ -6,6 +6,65 @@ const { execFileSync } = require('node:child_process');
 const mobileRoot = path.resolve(__dirname, '../../..');
 const root = path.resolve(mobileRoot, '../..');
 const debugId = '11111111-2222-4333-8444-555555555555';
+const generatedIdentityFile = 'src/config/releaseIdentity.generated.json';
+const identityRecord = {
+  marketingVersion: '1.0',
+  buildNumber: 1,
+  bundleIdentifier: 'com.picklesensei',
+  moduleName: 'PickleSensei',
+  displayName: 'Pickle Sensei',
+  configurations: ['Debug', 'Release'],
+  gitSha: '0123456789abcdef0123456789abcdef01234567',
+  committed: true,
+  uncommitted: [],
+  identityFiles: ['infra/release/release-manifest.json'],
+};
+
+// A stand-in apps/mobile tree: the bundle phase resolves everything from
+// PROJECT_DIR (ios/), so the fake release-identity script and the generated
+// file live where the real ones do, without touching this checkout.
+function mirrorTree(directory, releaseIdentityScript) {
+  const mobile = path.join(directory, 'mobile');
+  const rn = path.join(directory, 'react native');
+  fs.mkdirSync(path.join(mobile, 'ios'), { recursive: true });
+  fs.mkdirSync(path.join(mobile, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(mobile, 'src/config'), { recursive: true });
+  fs.mkdirSync(path.join(rn, 'scripts'), { recursive: true });
+  fs.writeFileSync(
+    path.join(rn, 'scripts/react-native-xcode.sh'),
+    'printf "%s\\n" "$SENTRY_DISABLE_AUTO_UPLOAD" "$SOURCEMAP_FILE"',
+  );
+  fs.writeFileSync(
+    path.join(mobile, 'scripts/release-identity.mjs'),
+    `const args = process.argv.slice(2);
+if (JSON.stringify(args) !== JSON.stringify(['--check', '--require-committed', '--json'])) {
+  process.stderr.write(\`unexpected arguments \${JSON.stringify(args)}\\n\`);
+  process.exit(2);
+}
+${releaseIdentityScript}
+`,
+  );
+  return { mobile, rn };
+}
+
+function runBundlePhase(directory, { mobile, rn }, configuration) {
+  return execFileSync(
+    '/bin/bash',
+    [path.join(mobileRoot, 'src/diagnostics/bundle-xcode.sh')],
+    {
+      env: {
+        PATH: '/usr/bin:/bin',
+        NODE_BINARY: process.execPath,
+        CONFIGURATION: configuration,
+        REACT_NATIVE_PATH: rn,
+        PROJECT_DIR: path.join(mobile, 'ios'),
+        DERIVED_FILE_DIR: directory,
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+}
 
 function maps() {
   return [
@@ -194,6 +253,7 @@ describe('matching local Hermes maps, with no uploads', () => {
           {
             env: {
               PATH: '/usr/bin:/bin',
+              NODE_BINARY: path.join(directory, 'missing-node'),
               CONFIGURATION: configuration,
               REACT_NATIVE_PATH: rn,
               PROJECT_DIR: path.join(mobileRoot, 'ios'),
@@ -208,6 +268,7 @@ describe('matching local Hermes maps, with no uploads', () => {
           configuration === 'Debug'
             ? [
                 'Sentry uploads blocked: Debug bundling unchanged.',
+                'Release identity: node unavailable; diagnostics identity stays blocked.',
                 'true',
                 'true',
                 '',
@@ -215,6 +276,7 @@ describe('matching local Hermes maps, with no uploads', () => {
               ]
             : [
                 'Sentry uploads blocked: preparing local source maps only.',
+                'Release identity: node unavailable; diagnostics identity stays blocked.',
                 'true',
                 'true',
                 path.join(directory, 'main.jsbundle.map'),
@@ -226,6 +288,80 @@ describe('matching local Hermes maps, with no uploads', () => {
       }
     },
   );
+
+  it.each(['Release', 'Debug'])(
+    'writes the committed release identity for the bundle before bundling (%s)',
+    configuration => {
+      const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'pickle-release-identity-'),
+      );
+      try {
+        const tree = mirrorTree(
+          directory,
+          `process.stdout.write(\`\${JSON.stringify(${JSON.stringify(identityRecord)})}\\n\`);`,
+        );
+        const file = path.join(tree.mobile, generatedIdentityFile);
+        fs.writeFileSync(file, '{"gitSha":"stale"}');
+        const output = runBundlePhase(directory, tree, configuration);
+        expect(output.split('\n').slice(0, -1)).toEqual([
+          configuration === 'Debug'
+            ? 'Sentry uploads blocked: Debug bundling unchanged.'
+            : 'Sentry uploads blocked: preparing local source maps only.',
+          'Release identity: committed candidate written for diagnostics.',
+          'true',
+          configuration === 'Debug'
+            ? ''
+            : path.join(directory, 'main.jsbundle.map'),
+        ]);
+        expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(
+          identityRecord,
+        );
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('removes any stale identity and bundles without one when the candidate is refused', () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'pickle-release-identity-'),
+    );
+    try {
+      const tree = mirrorTree(
+        directory,
+        "process.stderr.write('the release identity is uncommitted\\n');\nprocess.exit(1);",
+      );
+      const file = path.join(tree.mobile, generatedIdentityFile);
+      fs.writeFileSync(file, JSON.stringify(identityRecord));
+      const output = runBundlePhase(directory, tree, 'Release');
+      expect(output.split('\n').slice(0, -1)).toEqual([
+        'Sentry uploads blocked: preparing local source maps only.',
+        'Release identity: refused; diagnostics identity stays blocked.',
+        'true',
+        path.join(directory, 'main.jsbundle.map'),
+      ]);
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the generated identity file out of git and off the identity list', () => {
+    const ignored = execFileSync(
+      'git',
+      ['check-ignore', '--', path.join('apps/mobile', generatedIdentityFile)],
+      { cwd: root, encoding: 'utf8' },
+    );
+    expect(ignored.trim()).toBe(
+      path.join('apps/mobile', generatedIdentityFile),
+    );
+    expect(
+      fs.readFileSync(
+        path.join(mobileRoot, 'scripts/release-identity.mjs'),
+        'utf8',
+      ),
+    ).not.toContain('releaseIdentity.generated');
+  });
 
   it('keeps the Xcode Sentry phases local and does not wire SDK upload scripts', () => {
     const project = fs.readFileSync(
