@@ -146,6 +146,60 @@ export function screenTargetFromNotificationData(
   return screen === 'Home' || screen === 'Performance' ? screen : null;
 }
 
+/** Presses held while nothing can navigate yet; the oldest are dropped past this. */
+export const MAX_QUEUED_NOTIFICATION_PRESSES = 4;
+
+/**
+ * Appends `item` to a bounded FIFO. An equal entry already queued is collapsed
+ * into the new (newest) slot, so a replay dispatches each distinct press once.
+ */
+export function enqueueBounded<T>(
+  queue: readonly T[],
+  item: T,
+  limit: number = MAX_QUEUED_NOTIFICATION_PRESSES,
+): T[] {
+  const next = queue.filter(queued => queued !== item);
+  next.push(item);
+  return next.length > limit ? next.slice(next.length - limit) : next;
+}
+
+const MAX_ROUTED_PRESS_IDS = 8;
+
+/**
+ * Process-wide press intake shared by the foreground listener, the background
+ * handler (index.js) and the cold-start read. A press that arrives while no
+ * navigator is subscribed waits in `pending`; `routedIds` remembers which
+ * notification ids already arrived as PRESS events so the cold-start
+ * `getInitialNotification()` read of that same tap is not dispatched twice.
+ */
+const pressIntake: {
+  sink: ((screen: NotificationScreenTarget) => void) | null;
+  pending: NotificationScreenTarget[];
+  routedIds: string[];
+} = { sink: null, pending: [], routedIds: [] };
+
+function deliverPress(target: NotificationScreenTarget): void {
+  if (pressIntake.sink) {
+    pressIntake.sink(target);
+    return;
+  }
+  pressIntake.pending = enqueueBounded(pressIntake.pending, target);
+}
+
+function routePressedNotification(
+  notification: { id?: string; data?: unknown } | undefined,
+): void {
+  if (typeof notification?.id === 'string') {
+    pressIntake.routedIds = enqueueBounded(
+      pressIntake.routedIds,
+      notification.id,
+      MAX_ROUTED_PRESS_IDS,
+    );
+  }
+  const target = screenTargetFromNotificationData(notification?.data);
+  if (target) deliverPress(target);
+}
+
 /**
  * Wires notification press handling: a cold-start press (getInitialNotification)
  * and warm presses (foreground events) both route through `navigate`.
@@ -156,25 +210,32 @@ export function subscribeToNotificationPresses(
 ): () => void {
   const module = loadModule();
   const { EventType } = module;
+  pressIntake.sink = navigate;
+  const waiting = pressIntake.pending;
+  pressIntake.pending = [];
+  for (const target of waiting) navigate(target);
   void module.default
     .getInitialNotification()
     .then(initial => {
       if (!initial) return;
+      const { id } = initial.notification;
+      if (typeof id === 'string' && pressIntake.routedIds.includes(id)) return;
       const target = screenTargetFromNotificationData(
         initial.notification.data,
       );
-      if (target) navigate(target);
+      if (target) deliverPress(target);
     })
     .catch(() => {
       // A failed initial-notification read only costs the deep link.
     });
-  return module.default.onForegroundEvent(event => {
+  const unsubscribe = module.default.onForegroundEvent(event => {
     if (event.type !== EventType.PRESS) return;
-    const target = screenTargetFromNotificationData(
-      event.detail.notification?.data,
-    );
-    if (target) navigate(target);
+    routePressedNotification(event.detail.notification);
   });
+  return () => {
+    if (pressIntake.sink === navigate) pressIntake.sink = null;
+    unsubscribe();
+  };
 }
 
 /**
@@ -183,7 +244,14 @@ export function subscribeToNotificationPresses(
  */
 export function registerBackgroundNotificationHandler(): void {
   const module = loadModule();
-  module.default.onBackgroundEvent(async () => {
+  const { EventType } = module;
+  // iOS hands a tap made while the app is inactive or suspended (a warm start
+  // from a reminder) to this channel, not to the foreground listener.
+  module.default.onBackgroundEvent(async event => {
+    if (event.type === EventType.PRESS) {
+      routePressedNotification(event.detail.notification);
+      return;
+    }
     // Local reminders carry no background side effects.
   });
 }

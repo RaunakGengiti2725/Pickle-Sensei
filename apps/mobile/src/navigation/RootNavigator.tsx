@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -18,6 +19,7 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { color, space, type } from '../design/tokens';
 import type { MainTabParams, RootStackParams } from './params';
+import type { NotificationScreenTarget } from '../notifications/types';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LibraryScreen } from '../screens/LibraryScreen';
 import { ProgressScreen } from '../screens/ProgressScreen';
@@ -527,27 +529,56 @@ const theme = {
 
 const navigationRef = createNavigationContainerRef<RootStackParams>();
 
+/** Presses held until the container reports ready; the oldest drop past this. */
+const MAX_PRESSES_AWAITING_READY = 4;
+
+function holdPress(
+  queue: readonly NotificationScreenTarget[],
+  target: NotificationScreenTarget,
+): NotificationScreenTarget[] {
+  const next = queue.filter(held => held !== target);
+  next.push(target);
+  return next.slice(-MAX_PRESSES_AWAITING_READY);
+}
+
+function navigateToPressedTab(target: NotificationScreenTarget): void {
+  navigationRef.navigate('Tabs', {
+    screen: target === 'Performance' ? 'Performance' : 'Home',
+  });
+}
+
 /** Routes a pressed reminder to its declared tab once navigation is live. */
-function useNotificationPressRouting() {
+function useNotificationPressRouting(): () => void {
+  const awaitingReady = useRef<NotificationScreenTarget[]>([]);
   useEffect(() => {
     // Lazy require keeps the notification native module out of module
     // evaluation (and out of any environment that merely imports this file).
     const { subscribeToNotificationPresses } =
       require('../notifications/service') as typeof import('../notifications/service');
     const unsubscribe = subscribeToNotificationPresses(target => {
-      if (!navigationRef.isReady()) return;
-      navigationRef.navigate('Tabs', {
-        screen: target === 'Performance' ? 'Performance' : 'Home',
-      });
+      if (!navigationRef.isReady()) {
+        awaitingReady.current = holdPress(awaitingReady.current, target);
+        return;
+      }
+      navigateToPressedTab(target);
     });
     return unsubscribe;
+  }, []);
+  return useCallback(() => {
+    const replay = awaitingReady.current;
+    awaitingReady.current = [];
+    for (const target of replay) navigateToPressedTab(target);
   }, []);
 }
 
 export function RootNavigator() {
-  useNotificationPressRouting();
+  const onNavigationReady = useNotificationPressRouting();
   return (
-    <NavigationContainer ref={navigationRef} theme={theme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={theme}
+      onReady={onNavigationReady}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
