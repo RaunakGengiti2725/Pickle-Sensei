@@ -139,6 +139,106 @@ not incident resolution.
    There is no independent missed-heartbeat alert, guaranteed 15-minute detection,
    or automatic alert for crashes/user-specific backend failures in this lean setup.
 
+### Edge served-bundle size and cold start (local measurement, H07-COLD-START)
+
+`supabase/functions/api/index.ts` is the shipping backend, and it grew by
+~1.5k lines in the 2026-09-07 integration. The reproducible local measurement
+is `tools/diagnostics/edge_cold_start.ts` (run from the repo root):
+
+```bash
+deno run -A tools/diagnostics/edge_cold_start.ts            # 3 cycles × (1 cold + 10 warm)
+deno run -A tools/diagnostics/edge_cold_start.ts --cycles 5 --warm-requests 20
+deno test -A tools/diagnostics/edge_cold_start.ts           # self-tests of the parsers/summaries
+```
+
+What it measures (everything runs on the local machine; the hosted project
+`ucqnaiwqwjtgvlduiuib` is never contacted and these numbers are NOT hosted
+latency evidence):
+
+1. **Served bundle** — `deno bundle --config supabase/functions/api/deno.json
+--platform deno -o <out> supabase/functions/api/index.ts` (Deno's
+   esbuild-backed bundler, honouring the function's import map and lockfile;
+   the `npm:` dependencies are inlined). Reports raw bytes, gzip bytes (Web
+   `CompressionStream("gzip")`), bundled module count, bundle time and sha256.
+2. **Source graph** — `deno info --json` over the same entrypoint: first-party
+   (`file:`) module count/bytes and the npm packages in the graph, i.e. what
+   `supabase functions deploy` uploads before the platform bundles it.
+   `@types/node`/`undici-types` appear there because `deno.json`
+   `compilerOptions.types` pulls them in for type-checking; they are not runtime
+   code.
+3. **Cold start** — `npx --yes supabase@2.117.0 functions serve --no-verify-jwt`
+   against the local stack (`supabase start -x <everything except db and
+kong>`; the script starts that minimal stack if `supabase_db_<project>` is
+   absent, and leaves it running — `npx --yes supabase@2.117.0 stop` to tear it
+   down). Each cycle removes `supabase_edge_runtime_<project>`, spawns the CLI
+   fresh, waits for the runtime main service
+   (`GET /functions/v1/_internal/health` → 200 through Kong on `[api] port`),
+   then times the FIRST `GET /functions/v1/api/healthz` — user-worker creation +
+   module evaluation + handler, through Kong — followed by N warm requests to the
+   same worker. Two serve targets are attempted; a target whose CLI process exits
+   before the runtime is healthy is reported `UNAVAILABLE` with the CLI's own
+   message and never counted as a sample:
+   - `source-tree` — the repo checkout itself (what `supabase functions serve`
+     from the repo root does).
+   - `bundle` — a generated workdir (`artifacts/edge-cold-start/<UTC>/workdir`)
+     whose `[functions.api] entrypoint` is the bundle from step 1. This is the
+     target the exit code depends on.
+
+Exit code 0 only when the bundle was measured AND the `bundle` target produced
+a cold-start sample for every requested cycle. Artifacts land in
+`artifacts/edge-cold-start/<UTC>/` (git-ignored): `report.json`, the bundle,
+the generated workdir and one CLI log per serve cycle. Pin a different CLI with
+`EDGE_COLD_START_SUPABASE_CLI_VERSION`. Side effects of the CLI itself: any
+`supabase` invocation from the repo root rewrites the tracked marker
+`supabase/.temp/cli-latest` and `supabase start` creates `supabase/.branches/`;
+restore/remove them before committing.
+
+Recorded run (VERIFIED, `deno run -A tools/diagnostics/edge_cold_start.ts`,
+exit 0, 2026-09-08, commit `55d80326` sources, Linux x86_64, Deno 2.9.6,
+Supabase CLI 2.117.0, Docker 29.7.2, `supabase-edge-runtime-1.74.3`
+(compatible with Deno v2.1.4); report
+`artifacts/edge-cold-start/20260908T183813Z/report.json`):
+
+| Measurement                                      | Value                                                                                                                                                                |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Served bundle (raw)                              | 1,033,186 B (1009.0 KiB), 62 modules, sha256 `4585b5cb…`                                                                                                             |
+| Served bundle (gzip)                             | 218,834 B (213.7 KiB)                                                                                                                                                |
+| Bundle time                                      | 73.6 ms                                                                                                                                                              |
+| First-party source graph                         | 17 `file:` modules, 438,144 B (427.9 KiB)                                                                                                                            |
+| npm packages in graph                            | 13 (`@supabase/supabase-js@2.112.4` + 6 transitive `@supabase/*`/`iceberg-js`/`tslib`, `jose@6.2.10`, `canonicalize@4.0.0`, type-only `@types/node`, `undici-types`) |
+| Cold `GET /healthz` (`bundle` target, 3 cycles)  | min 48.87 / median 57.24 / max 91.65 ms                                                                                                                              |
+| Warm `GET /healthz` (same worker, n=30)          | median 2.44 ms                                                                                                                                                       |
+| CLI spawn → runtime healthy (container bring-up) | median 2048.81 ms (1646.51–2082.47)                                                                                                                                  |
+| `source-tree` target                             | UNAVAILABLE — see below                                                                                                                                              |
+
+Reading the numbers: the ~1 MiB bundle evaluates in well under 100 ms on this
+machine once the container is up, so the 2026-09-07 growth of `index.ts` has
+not made local cold start material; the dominant local cost is container
+bring-up, which is a CLI/Docker cost and not part of a hosted cold start.
+Hosted cold start additionally includes the platform's eszip load and isolate
+scheduling, which this method cannot observe — treat hosted latency as UNKNOWN
+until measured from the hosted project's own logs (`api_request.durationMs`
+covers only the handler, not the worker boot).
+
+Known limitation surfaced by the measurement (VERIFIED with CLI 2.117.0):
+`supabase functions serve` on the repo checkout fails before creating the
+runtime container with
+`failed to read file: open packages/shared-types/src/techniqueBenchmark.js: no such file or directory`.
+The CLI's import scanner matches import-map keys against the raw specifier
+(spec-strict exact / `/`-suffixed prefix match), so the relative
+`./techniqueBenchmark.js` / `./errors.js` / `./domain.js` imports inside
+`packages/shared-types/src/*.ts` are resolved literally instead of through
+the `../../../packages/shared-types/src/*.js → *.ts` entries in
+`supabase/functions/api/deno.json` that Deno itself applies (which is why
+`deno bundle`, `deno info` and the in-process `__wf__` harness all resolve the
+same graph fine). `supabase functions deploy` uses the same scanner with a
+warn-and-continue policy for missing files and additionally uploads the import
+map's targets, so the deploy path is INFERRED unaffected but has not been
+re-verified here. Whether to make the source tree servable (e.g. by importing
+shared-types with `.ts` specifiers or by adding the relative keys to the
+function's import map) is a `shared-types` / `edge-index` decision outside this
+measurement.
+
 ## Event taxonomy
 
 All telemetry flows through the typed `AnalyticsEvent` union in

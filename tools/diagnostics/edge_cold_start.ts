@@ -44,6 +44,17 @@
 // Exit code: 0 only when the bundle was measured AND the "bundle" serve target
 // produced a cold-start sample for every requested cycle; 1 otherwise.
 
+import { createHash } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+// Root eslint forbids console.log in *.ts; this diagnostic's report IS its stdout.
+const print = (line: string): void => {
+  Deno.stdout.writeSync(encoder.encode(`${line}\n`));
+};
+
 export const DEFAULT_SUPABASE_CLI_VERSION = "2.117.0";
 export const SUPABASE_CLI_VERSION_ENV = "EDGE_COLD_START_SUPABASE_CLI_VERSION";
 export const FUNCTION_SLUG = "api";
@@ -234,6 +245,148 @@ export function tail(text: string, maxChars = 600): string {
 // Process helpers
 // ---------------------------------------------------------------------------
 
+interface RunResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+async function run(cmd: string, args: readonly string[], cwd: string): Promise<RunResult> {
+  const startedAt = performance.now();
+  const output = await new Deno.Command(cmd, {
+    args: [...args],
+    cwd,
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  return {
+    code: output.code,
+    stdout: decoder.decode(output.stdout),
+    stderr: decoder.decode(output.stderr),
+    durationMs: performance.now() - startedAt,
+  };
+}
+
+async function runOrThrow(cmd: string, args: readonly string[], cwd: string): Promise<RunResult> {
+  const result = await run(cmd, args, cwd);
+  if (result.code !== 0) {
+    throw new Error(
+      `${cmd} ${args.join(" ")} exited ${result.code}\n${tail(result.stderr || result.stdout, 1200)}`,
+    );
+  }
+  return result;
+}
+
+async function descendantPids(pid: number): Promise<number[]> {
+  const result = await run("pgrep", ["-P", String(pid)], Deno.cwd());
+  if (result.code !== 0) {
+    return [];
+  }
+  const children = result.stdout
+    .split(/\s+/)
+    .filter((token) => /^\d+$/.test(token))
+    .map(Number);
+  const nested: number[] = [];
+  for (const child of children) {
+    nested.push(...(await descendantPids(child)));
+  }
+  return [...nested, ...children];
+}
+
+function signal(pid: number, sig: Deno.Signal): void {
+  try {
+    Deno.kill(pid, sig);
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) {
+      throw error;
+    }
+  }
+}
+
+/**
+ * `npx` does not forward SIGINT to the CLI binary it spawned, and the CLI keeps
+ * polling a removed container forever; interrupt the whole tree, deepest first,
+ * so the CLI's own cleanup ("Stopped serving …") runs.
+ */
+async function interruptTree(child: Deno.ChildProcess, timeoutMs: number): Promise<number | null> {
+  const pids = await descendantPids(child.pid);
+  for (const pid of pids) {
+    signal(pid, "SIGINT");
+  }
+  signal(child.pid, "SIGINT");
+  const exited = await Promise.race([
+    child.status.then((status) => status.code),
+    new Promise<null>((resolveTimeout) => setTimeout(() => resolveTimeout(null), timeoutMs)),
+  ]);
+  if (exited === null) {
+    for (const pid of [...(await descendantPids(child.pid)), child.pid]) {
+      signal(pid, "SIGKILL");
+    }
+    await child.status;
+  }
+  return exited;
+}
+
+function collect(
+  stream: ReadableStream<Uint8Array>,
+  sink: (chunk: Uint8Array) => void,
+): Promise<void> {
+  return stream.pipeTo(
+    new WritableStream<Uint8Array>({
+      write(chunk) {
+        sink(chunk);
+      },
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Measurements
+// ---------------------------------------------------------------------------
+
+interface BundleReport {
+  command: string;
+  rawBytes: number;
+  gzipBytes: number;
+  moduleCount: number | null;
+  bundleMs: number;
+  sha256: string;
+  outputPath: string;
+}
+
+async function gzipSize(bytes: Uint8Array): Promise<number> {
+  const compressed = await new Response(
+    new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream("gzip")),
+  ).arrayBuffer();
+  return compressed.byteLength;
+}
+
+async function measureBundle(repoRoot: string, outputPath: string): Promise<BundleReport> {
+  await Deno.mkdir(dirname(outputPath), { recursive: true });
+  const args = [
+    "bundle",
+    "--config",
+    FUNCTION_DENO_CONFIG,
+    "--platform",
+    "deno",
+    "-o",
+    outputPath,
+    FUNCTION_ENTRYPOINT,
+  ];
+  const result = await runOrThrow(Deno.execPath(), args, repoRoot);
+  const bytes = await Deno.readFile(outputPath);
+  return {
+    command: `deno ${args.join(" ")}`,
+    rawBytes: bytes.byteLength,
+    gzipBytes: await gzipSize(bytes),
+    moduleCount: parseBundledModuleCount(`${result.stdout}\n${result.stderr}`),
+    bundleMs: round(result.durationMs),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    outputPath,
+  };
+}
+
 interface SourceGraphReport {
   command: string;
   firstPartyModules: number;
@@ -270,6 +423,431 @@ export function summarizeDenoInfo(info: DenoInfoJson): Omit<SourceGraphReport, "
       : [];
   return { firstPartyModules, firstPartyBytes, npmPackages };
 }
+
+async function measureSourceGraph(repoRoot: string): Promise<SourceGraphReport> {
+  const args = ["info", "--json", "--config", FUNCTION_DENO_CONFIG, FUNCTION_ENTRYPOINT];
+  const result = await runOrThrow(Deno.execPath(), args, repoRoot);
+  const parsed: unknown = JSON.parse(result.stdout);
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error("deno info --json did not return an object");
+  }
+  return { command: `deno ${args.join(" ")}`, ...summarizeDenoInfo(parsed as DenoInfoJson) };
+}
+
+interface ColdStartCycle {
+  cycle: number;
+  serveReadyMs: number;
+  coldStartMs: number;
+  coldStatus: number;
+  warmMs: number[];
+  logPath: string;
+}
+
+interface ServeTargetReport {
+  target: "source-tree" | "bundle";
+  workdir: string;
+  command: string;
+  status: "measured" | "unavailable";
+  reason: string | null;
+  runtime: RuntimeVersion | null;
+  cycles: ColdStartCycle[];
+  coldStart: Summary | null;
+  warm: Summary | null;
+  serveReady: Summary | null;
+}
+
+interface Stack {
+  projectId: string;
+  apiPort: number;
+  baseUrl: string;
+  edgeContainer: string;
+}
+
+interface Cli {
+  npx: string;
+  version: string;
+  args(...rest: string[]): string[];
+}
+
+async function fetchStatus(url: string): Promise<number | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    await response.body?.cancel();
+    return response.status;
+  } catch {
+    return null;
+  }
+}
+
+async function removeEdgeContainer(stack: Stack): Promise<void> {
+  await run("docker", ["rm", "-f", stack.edgeContainer], Deno.cwd());
+}
+
+class ServeUnavailable extends Error {}
+
+async function serveCycle(
+  cli: Cli,
+  stack: Stack,
+  workdir: string,
+  cycle: number,
+  logPath: string,
+  options: Options,
+): Promise<{ cycle: ColdStartCycle; log: string }> {
+  await removeEdgeContainer(stack);
+  const logChunks: Uint8Array[] = [];
+  const spawnedAt = performance.now();
+  const child = new Deno.Command(cli.npx, {
+    args: cli.args("--workdir", workdir, "functions", "serve", "--no-verify-jwt"),
+    cwd: workdir,
+    stdin: "null",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  const sink = (chunk: Uint8Array): void => {
+    logChunks.push(chunk);
+  };
+  const drained = Promise.all([collect(child.stdout, sink), collect(child.stderr, sink)]);
+  const logText = (): string => decoder.decode(concat(logChunks));
+  let exited = false;
+  const exitWatch = child.status.then(() => {
+    exited = true;
+  });
+  try {
+    let serveReadyMs: number | null = null;
+    while (serveReadyMs === null) {
+      if (exited) {
+        await drained;
+        throw new ServeUnavailable(
+          `supabase functions serve exited before the runtime became healthy:\n${tail(logText())}`,
+        );
+      }
+      if (performance.now() - spawnedAt > options.startupTimeoutMs) {
+        throw new Error(`runtime not healthy after ${options.startupTimeoutMs}ms`);
+      }
+      const status = await fetchStatus(`${stack.baseUrl}/functions/v1/_internal/health`);
+      if (status === 200) {
+        serveReadyMs = performance.now() - spawnedAt;
+      } else {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      }
+    }
+    const coldStartedAt = performance.now();
+    const cold = await fetch(`${stack.baseUrl}/functions/v1/${FUNCTION_SLUG}/healthz`, {
+      signal: AbortSignal.timeout(60_000),
+    });
+    await cold.body?.cancel();
+    const coldStartMs = performance.now() - coldStartedAt;
+    if (cold.status !== 200) {
+      throw new Error(`cold GET /healthz returned ${cold.status}`);
+    }
+    const warmMs: number[] = [];
+    for (let index = 0; index < options.warmRequests; index += 1) {
+      const startedAt = performance.now();
+      const warm = await fetch(`${stack.baseUrl}/functions/v1/${FUNCTION_SLUG}/healthz`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      await warm.body?.cancel();
+      if (warm.status !== 200) {
+        throw new Error(`warm GET /healthz #${index + 1} returned ${warm.status}`);
+      }
+      warmMs.push(round(performance.now() - startedAt));
+    }
+    return {
+      cycle: {
+        cycle,
+        serveReadyMs: round(serveReadyMs),
+        coldStartMs: round(coldStartMs),
+        coldStatus: cold.status,
+        warmMs,
+        logPath,
+      },
+      log: logText(),
+    };
+  } finally {
+    if (!exited) {
+      await interruptTree(child, 15_000);
+    }
+    await exitWatch;
+    await drained;
+    await removeEdgeContainer(stack);
+    await Deno.writeTextFile(logPath, stripAnsi(logText()));
+  }
+}
+
+function concat(chunks: readonly Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+async function measureServeTarget(
+  cli: Cli,
+  stack: Stack,
+  target: ServeTargetReport["target"],
+  workdir: string,
+  outDir: string,
+  options: Options,
+): Promise<ServeTargetReport> {
+  const report: ServeTargetReport = {
+    target,
+    workdir,
+    command: `npx --yes supabase@${cli.version} --workdir ${workdir} functions serve --no-verify-jwt`,
+    status: "measured",
+    reason: null,
+    runtime: null,
+    cycles: [],
+    coldStart: null,
+    warm: null,
+    serveReady: null,
+  };
+  for (let cycle = 1; cycle <= options.cycles; cycle += 1) {
+    const logPath = join(outDir, `serve-${target}-${cycle}.log`);
+    print(`  [${target}] cycle ${cycle}/${options.cycles} …`);
+    try {
+      const result = await serveCycle(cli, stack, workdir, cycle, logPath, options);
+      report.cycles.push(result.cycle);
+      report.runtime ??= parseEdgeRuntimeVersion(result.log);
+      print(
+        `  [${target}] cycle ${cycle}: serve ready ${result.cycle.serveReadyMs} ms, ` +
+          `cold /healthz ${result.cycle.coldStartMs} ms, warm median ${summarize(result.cycle.warmMs)?.median ?? "n/a"} ms`,
+      );
+    } catch (error) {
+      if (error instanceof ServeUnavailable && report.cycles.length === 0) {
+        report.status = "unavailable";
+        report.reason = error.message;
+        print(`  [${target}] UNAVAILABLE: ${error.message.split("\n")[0]}`);
+        break;
+      }
+      throw error;
+    }
+  }
+  report.coldStart = summarize(report.cycles.map((cycle) => cycle.coldStartMs));
+  report.serveReady = summarize(report.cycles.map((cycle) => cycle.serveReadyMs));
+  report.warm = summarize(report.cycles.flatMap((cycle) => cycle.warmMs));
+  return report;
+}
+
+// ---------------------------------------------------------------------------
+// Local stack
+// ---------------------------------------------------------------------------
+
+async function runningContainers(): Promise<Set<string>> {
+  const result = await runOrThrow("docker", ["ps", "--format", "{{.Names}}"], Deno.cwd());
+  return new Set(result.stdout.split(/\r?\n/).filter((name) => name.length > 0));
+}
+
+async function ensureStack(cli: Cli, repoRoot: string, stack: Stack): Promise<string> {
+  const db = `supabase_db_${stack.projectId}`;
+  const kong = `supabase_kong_${stack.projectId}`;
+  let running = await runningContainers();
+  if (running.has(db) && running.has(kong)) {
+    return "already running";
+  }
+  if (running.has(db)) {
+    throw new Error(
+      `${db} is running but ${kong} is not; the measurement needs Kong on :${stack.apiPort}. ` +
+        `Run \`npx --yes supabase@${cli.version} stop\` and re-run this script (it starts db + kong).`,
+    );
+  }
+  const args = cli.args("start", "-x", START_EXCLUDED_SERVICES.join(","));
+  print(`  starting local stack: npx --yes supabase@${cli.version} ${args.slice(1).join(" ")}`);
+  await runOrThrow(cli.npx, args, repoRoot);
+  running = await runningContainers();
+  for (const name of [db, kong]) {
+    if (!running.has(name)) {
+      throw new Error(`${name} is not running after supabase start`);
+    }
+  }
+  return "started by this script";
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+interface Report {
+  generatedAt: string;
+  repoRoot: string;
+  gitHead: string | null;
+  entrypoint: string;
+  environment: {
+    os: string;
+    arch: string;
+    deno: string;
+    v8: string;
+    typescript: string;
+    supabaseCli: string;
+    docker: string | null;
+    stack: string;
+  };
+  options: Options;
+  bundle: BundleReport;
+  sourceGraph: SourceGraphReport;
+  serve: ServeTargetReport[];
+  ok: boolean;
+}
+
+function utcStamp(date: Date): string {
+  return date
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
+}
+
+async function main(argv: readonly string[]): Promise<number> {
+  const options = parseArgs(argv);
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const startedAt = new Date();
+  const outDir = resolve(
+    repoRoot,
+    options.outDir ?? join("artifacts", "edge-cold-start", utcStamp(startedAt)),
+  );
+  await Deno.mkdir(outDir, { recursive: true });
+
+  const cliVersion = Deno.env.get(SUPABASE_CLI_VERSION_ENV) ?? DEFAULT_SUPABASE_CLI_VERSION;
+  const cli: Cli = {
+    npx: "npx",
+    version: cliVersion,
+    args: (...rest) => ["--yes", `supabase@${cliVersion}`, ...rest],
+  };
+
+  print(`edge_cold_start: ${FUNCTION_ENTRYPOINT} (local only; artifacts → ${outDir})`);
+
+  const gitHead = await run("git", ["rev-parse", "HEAD"], repoRoot);
+  const cliVersionOut = await runOrThrow(cli.npx, cli.args("--version"), repoRoot);
+  const dockerVersion = await run(
+    "docker",
+    ["version", "--format", "{{.Server.Version}}"],
+    repoRoot,
+  );
+  if (dockerVersion.code !== 0) {
+    throw new Error(
+      `docker is required for supabase functions serve:\n${tail(dockerVersion.stderr)}`,
+    );
+  }
+
+  print("bundle: deno bundle --platform deno …");
+  const bundle = await measureBundle(
+    repoRoot,
+    join(outDir, "workdir", "supabase", "functions", FUNCTION_SLUG, "index.js"),
+  );
+  print(
+    `  raw ${formatBytes(bundle.rawBytes)}, gzip ${formatBytes(bundle.gzipBytes)}, ` +
+      `${bundle.moduleCount ?? "?"} modules, ${bundle.bundleMs} ms, sha256 ${bundle.sha256.slice(0, 12)}…`,
+  );
+
+  print("source graph: deno info --json …");
+  const sourceGraph = await measureSourceGraph(repoRoot);
+  print(
+    `  ${sourceGraph.firstPartyModules} first-party modules, ${formatBytes(sourceGraph.firstPartyBytes)}, ` +
+      `npm: ${sourceGraph.npmPackages.length} packages`,
+  );
+
+  const configToml = await Deno.readTextFile(join(repoRoot, "supabase", "config.toml"));
+  const projectId = readProjectId(configToml);
+  const apiPort = readApiPort(configToml);
+  const stack: Stack = {
+    projectId,
+    apiPort,
+    baseUrl: `http://127.0.0.1:${apiPort}`,
+    edgeContainer: `supabase_edge_runtime_${projectId}`,
+  };
+  print(`local stack: project_id=${projectId}, api ${stack.baseUrl}`);
+  const stackState = await ensureStack(cli, repoRoot, stack);
+  print(`  ${stackState}`);
+
+  const bundleWorkdir = join(outDir, "workdir");
+  await Deno.writeTextFile(
+    join(bundleWorkdir, "supabase", "config.toml"),
+    renderBundleWorkdirConfig(projectId, apiPort),
+  );
+
+  print(
+    `cold start: ${options.cycles} cycle(s) × (1 cold + ${options.warmRequests} warm GET /healthz)`,
+  );
+  const serve: ServeTargetReport[] = [];
+  serve.push(await measureServeTarget(cli, stack, "source-tree", repoRoot, outDir, options));
+  serve.push(await measureServeTarget(cli, stack, "bundle", bundleWorkdir, outDir, options));
+
+  const bundleTarget = serve.find((entry) => entry.target === "bundle");
+  const ok =
+    bundleTarget !== undefined &&
+    bundleTarget.status === "measured" &&
+    bundleTarget.cycles.length === options.cycles;
+
+  const report: Report = {
+    generatedAt: startedAt.toISOString(),
+    repoRoot,
+    gitHead: gitHead.code === 0 ? gitHead.stdout.trim() : null,
+    entrypoint: FUNCTION_ENTRYPOINT,
+    environment: {
+      os: Deno.build.os,
+      arch: Deno.build.arch,
+      deno: Deno.version.deno,
+      v8: Deno.version.v8,
+      typescript: Deno.version.typescript,
+      supabaseCli: stripAnsi(cliVersionOut.stdout).trim(),
+      docker: dockerVersion.stdout.trim(),
+      stack: stackState,
+    },
+    options,
+    bundle,
+    sourceGraph,
+    serve,
+    ok,
+  };
+  const reportPath = join(outDir, "report.json");
+  await Deno.writeTextFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+
+  print("");
+  print("summary");
+  print(
+    `  deno ${report.environment.deno}, supabase cli ${report.environment.supabaseCli}, docker ${report.environment.docker}, ${report.environment.os}/${report.environment.arch}`,
+  );
+  print(
+    `  served bundle: ${formatBytes(bundle.rawBytes)} raw, ${formatBytes(bundle.gzipBytes)} gzip, ${bundle.moduleCount ?? "?"} modules`,
+  );
+  print(
+    `  source graph: ${sourceGraph.firstPartyModules} first-party modules (${formatBytes(sourceGraph.firstPartyBytes)}), npm ${sourceGraph.npmPackages.join(", ") || "none"}`,
+  );
+  for (const target of serve) {
+    if (target.status === "unavailable") {
+      print(`  serve[${target.target}]: UNAVAILABLE — ${target.reason?.split("\n").pop() ?? ""}`);
+      continue;
+    }
+    const cold = target.coldStart;
+    const warm = target.warm;
+    const ready = target.serveReady;
+    print(
+      `  serve[${target.target}] ${target.runtime?.edgeRuntime ?? "runtime ?"}: cold /healthz ` +
+        `min ${cold?.min} / median ${cold?.median} / max ${cold?.max} ms over ${cold?.count} cycle(s); ` +
+        `warm median ${warm?.median} ms (n=${warm?.count}); serve ready median ${ready?.median} ms`,
+    );
+  }
+  print(`  report: ${reportPath}`);
+  print(ok ? "RESULT: measured" : "RESULT: FAILED — bundle target did not produce every cycle");
+  return ok ? 0 : 1;
+}
+
+if (import.meta.main) {
+  let code = 1;
+  try {
+    code = await main(Deno.args);
+  } catch (error) {
+    print(`edge_cold_start: ${error instanceof Error ? error.message : String(error)}`);
+    code = 1;
+  }
+  Deno.exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// Self-tests (deno test -A tools/diagnostics/edge_cold_start.ts)
+// ---------------------------------------------------------------------------
 
 function assertEquals<T>(actual: T, expected: T, label: string): void {
   const a = JSON.stringify(actual);
