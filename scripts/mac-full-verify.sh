@@ -25,6 +25,8 @@
 # *.xcresult, xunit XML, Info.plist, launch screenshots/logs, summary.json.
 # PICKLE_NATIVE_JOBS bounds compiler/test workers (default 2); SwiftPM scratch
 # and Xcode DerivedData both live under PICKLE_CI_CACHE.
+# VERIFY_MOBILE_NODE_BIN optionally selects mobile Node for ios-app only;
+# workspace/environment stages retain the caller's runtime.
 # Per-step helpers live in tools/macos-ci/ (simulator selection, CocoaPods,
 # launch/crash check, xcresult and swing-lab summaries); this script is the
 # only orchestrator, so the workflow YAML stays a thin wrapper.
@@ -231,9 +233,19 @@ stage_swift_native() {
 }
 
 stage_ios_app() {
+  # run_stage executes this function in its own subshell, so verify-all can
+  # keep Node20 for workspace gates while npm, Pods and the bundle use Node22.
+  if [ -n "${VERIFY_MOBILE_NODE_BIN:-}" ]; then
+    if [ ! -x "$VERIFY_MOBILE_NODE_BIN/node" ]; then
+      echo "VERIFY_MOBILE_NODE_BIN must contain an executable node: $VERIFY_MOBILE_NODE_BIN" >&2
+      return 75
+    fi
+    export PATH="$VERIFY_MOBILE_NODE_BIN:$PATH"
+  fi
   if [ "$CLEAN" = 1 ]; then rm -rf "$PICKLE_CI_CACHE/app-derived"; fi
   command -v node >/dev/null || { echo "node is required (apps/mobile engines >= 22.11)"; return 1; }
-  node --version; npm --version
+  echo "mobile runtime: $(node --version) at $(command -v node)"
+  npm --version
   (cd apps/mobile && npm ci --no-audit --no-fund)
   if [ "$SKIP_JS" = 0 ]; then
     (cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent --maxWorkers="$NATIVE_JOBS" 2>&1 | tee "$ARTIFACTS/jest.log" | tail -15)

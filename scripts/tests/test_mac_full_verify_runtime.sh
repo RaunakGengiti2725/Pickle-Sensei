@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$WORK/repo/scripts" "$WORK/repo/tools/macos-ci" "$WORK/tools" "$WORK/bin" \
+mkdir -p "$WORK/repo/scripts" "$WORK/repo/tools/macos-ci" "$WORK/tools" "$WORK/bin" "$WORK/root-node" "$WORK/mobile-node" \
   "$WORK/repo/native/vision-core/.build" "$WORK/repo/native/managed-media" \
   "$WORK/repo/native/swing-lab" "$WORK/repo/datasets/pickleball/fresh-candidates" \
   "$WORK/repo/apps/mobile/ios"
@@ -34,6 +34,10 @@ SH_SWIFT
 cat >"$WORK/tools/xcodebuild" <<'SH_XCODE'
 #!/usr/bin/env bash
 printf 'xcodebuild|%s|%s\n' "$(basename "$PWD")" "$*" >>"$NATIVE_TRACE"
+if [ "${1:-}" = build ]; then
+  source apps/mobile/ios/.xcode.env.local
+  printf 'xcode-node|%s|%s\n' "$NODE_BINARY" "$("$NODE_BINARY" --version)" >>"$NATIVE_TRACE"
+fi
 case "${1:-}" in
   -list) printf 'Schemes:\n  PickleVisionCore\n  PickleManagedMedia\n' ;;
   -version) printf 'Xcode Test\nBuild version Test\n' ;;
@@ -50,7 +54,17 @@ case "${1:-}" in
     ;;
 esac
 SH_XCODE
-printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/tools/npm"
+for spec in root:20.20.0 mobile:22.22.0; do
+  name=${spec%%:*}; version=${spec#*:}
+  printf '#!/usr/bin/env bash\necho v%s\n' "$version" >"$WORK/$name-node/node"
+  chmod +x "$WORK/$name-node/node"
+done
+for tool in npm npx; do
+  cat >"$WORK/tools/$tool" <<'SH_NODE_TOOL'
+#!/usr/bin/env bash
+printf '%s|%s|%s\n' "$(basename "$0")" "$(node --version)" "$*" >>"$NATIVE_TRACE"
+SH_NODE_TOOL
+done
 cat >"$WORK/bin/swing-lab" <<'SH_SWING'
 #!/usr/bin/env bash
 printf 'swing-lab|%s\n' "$*" >>"$NATIVE_TRACE"
@@ -58,12 +72,12 @@ mkdir -p "$4"
 echo '{"tooling-test":true}' >"$4/extract-meta.json"
 SH_SWING
 chmod +x "$WORK/tools/"* "$WORK/bin/swing-lab" "$WORK/repo/tools/macos-ci/"*
-export PATH="$WORK/tools:$PATH" DEVELOPER_DIR="$WORK/developer"
+export PATH="$WORK/root-node:$WORK/tools:$PATH" DEVELOPER_DIR="$WORK/developer"
 export NATIVE_TRACE="$WORK/trace" FAKE_NATIVE_BIN="$WORK/bin"
 export MAC_ARTIFACTS="$WORK/artifacts" PICKLE_CI_CACHE="$WORK/cache"
 export PICKLE_CI_SIMULATOR_UDID=dedicated-test-device
-unset PICKLE_NATIVE_JOBS
-"$WORK/repo/scripts/mac-full-verify.sh" --only swift-native --clean >"$WORK/run.log" 2>&1
+unset PICKLE_NATIVE_JOBS VERIFY_MOBILE_NODE_BIN
+"$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native --clean >"$WORK/run.log" 2>&1
 python3 - "$NATIVE_TRACE" "$MAC_ARTIFACTS/summary.json" "$PICKLE_CI_CACHE" <<'PY'
 import json, sys
 trace = open(sys.argv[1], encoding="utf-8").read().splitlines()
@@ -94,7 +108,7 @@ echo '[test_mac_full_verify_runtime] PASS: both packages run macOS/iOS tests; wo
 
 for failure in FAIL_MANAGED_SWIFT FAIL_MANAGED_IOS; do
   export "$failure=1"
-  if "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native >"$WORK/failure.log" 2>&1; then
+  if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native >"$WORK/failure.log" 2>&1; then
     echo "[test_mac_full_verify_runtime] $failure unexpectedly passed" >&2; exit 1
   fi
   python3 - "$MAC_ARTIFACTS/summary.json" <<'PY'
@@ -108,7 +122,7 @@ echo '[test_mac_full_verify_runtime] PASS: managed-media Swift and iOS failures 
 
 for invalid in 0 00 invalid; do
   export PICKLE_NATIVE_JOBS="$invalid"
-  if "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native >"$WORK/invalid.log" 2>&1; then
+  if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native >"$WORK/invalid.log" 2>&1; then
     echo '[test_mac_full_verify_runtime] invalid worker bound unexpectedly passed' >&2; exit 1
   fi
   grep -F 'PICKLE_NATIVE_JOBS must be a positive integer' "$WORK/invalid.log" >/dev/null
@@ -126,7 +140,7 @@ for existing in present absent; do
     export FAIL_APP_BUILD="$build_failure"
     # A successful fake compiler intentionally produces no app bundle. This
     # exercises normal restoration before the subsequent missing-bundle error.
-    if "$WORK/repo/scripts/mac-full-verify.sh" --only ios-app --skip-js --skip-launch >"$WORK/app.log" 2>&1; then
+    if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only ios-app --skip-js --skip-launch >"$WORK/app.log" 2>&1; then
       echo '[test_mac_full_verify_runtime] missing fake app unexpectedly passed' >&2; exit 1
     fi
     if [ "$existing" = present ]; then
@@ -142,3 +156,30 @@ for existing in present absent; do
   done
 done
 echo '[test_mac_full_verify_runtime] PASS: local Xcode node config restored after successful and failed compiler commands'
+
+export VERIFY_MOBILE_NODE_BIN="$WORK/mobile-node" FAIL_APP_BUILD=1
+: >"$NATIVE_TRACE"
+if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only ios-app >"$WORK/mobile-runtime.log" 2>&1; then
+  echo '[test_mac_full_verify_runtime] fake failed compiler unexpectedly passed' >&2; exit 1
+fi
+for expected in \
+  'npm|v22.22.0|ci --no-audit --no-fund' \
+  'npx|v22.22.0|tsc --noEmit' \
+  'npx|v22.22.0|jest --ci --silent --maxWorkers=2' \
+  "xcode-node|$WORK/mobile-node/node|v22.22.0"; do
+  grep -F "$expected" "$NATIVE_TRACE" >/dev/null
+done
+grep -F "mobile runtime: v22.22.0 at $WORK/mobile-node/node" "$WORK/mobile-runtime.log" >/dev/null
+test "$(node --version)" = v20.20.0
+echo '[test_mac_full_verify_runtime] PASS: selected mobile Node reaches npm/tsc/Jest/Xcode; caller Node20 preserved'
+
+export VERIFY_MOBILE_NODE_BIN="$WORK/missing-node"
+: >"$NATIVE_TRACE"
+if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only ios-app >"$WORK/missing-runtime.log" 2>&1; then
+  echo '[test_mac_full_verify_runtime] missing selected Node unexpectedly passed' >&2; exit 1
+fi
+grep -F 'VERIFY_MOBILE_NODE_BIN must contain an executable node' "$WORK/missing-runtime.log" >/dev/null
+if grep -E '^(npm|npx)\|' "$NATIVE_TRACE" >/dev/null; then
+  echo '[test_mac_full_verify_runtime] invalid runtime reached dependency commands' >&2; exit 1
+fi
+echo '[test_mac_full_verify_runtime] PASS: invalid mobile runtime fails before dependency installation'
