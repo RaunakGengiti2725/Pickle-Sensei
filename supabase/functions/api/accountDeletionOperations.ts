@@ -602,7 +602,6 @@ async function runClaimedDeletion(
     p_lease_token: lease.leaseToken,
   };
   let failureCode: DeletionFailureCode = "checkpoint_unavailable";
-  let failureDetail: DeletionFailureDetail | undefined;
   const checkpoint = async (step: string, appleOutcome: AppleDeletionOutcome | null = null) => {
     failureCode = "checkpoint_unavailable";
     const result = await rpcData(rpc, "checkpoint_account_deletion_operation", {
@@ -666,11 +665,14 @@ async function runClaimedDeletion(
     if (!result) throw new Error("Account deletion completion is unverified.");
     const residue = ownerNamespaceResidue(await verifyOwnerNamespacesEmpty(dependencies, ownerId));
     if (!residue) return result;
-    failureDetail = residue.detail;
-    throw new OwnerNamespaceResidueError(residue.httpStatus);
+    throw new OwnerNamespaceResidueError(residue.httpStatus, residue.detail);
   } catch (error) {
     try {
-      dependencies.onFailure?.(failureCode, boundedFailureStatus(error), failureDetail);
+      if (error instanceof OwnerNamespaceResidueError) {
+        dependencies.onFailure?.(failureCode, error.status, error.detail);
+      } else {
+        dependencies.onFailure?.(failureCode, boundedFailureStatus(error));
+      }
     } catch {
       // Diagnostics cannot change the worker's outcome or lease release.
     }
@@ -687,7 +689,10 @@ async function runClaimedDeletion(
 }
 
 class OwnerNamespaceResidueError extends Error {
-  constructor(readonly status: number | null) {
+  constructor(
+    readonly status: number | null,
+    readonly detail: DeletionFailureDetail,
+  ) {
     super("Account deletion left owner rows behind.");
   }
 }

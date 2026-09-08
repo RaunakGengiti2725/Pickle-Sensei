@@ -257,6 +257,20 @@ async function fakeSupabase(request: Request): Promise<Response> {
     return jsonResponse(200, await deletions.rpc(name, args));
   }
 
+  // auth.users cascade: once the Auth user is gone, every owner-keyed table
+  // answers a service-role `owner=eq.<id>` read with no rows.
+  const ownerFilter = [...url.searchParams].find(
+    ([column, filter]) => (column === "id" || column === "user_id") && filter.startsWith("eq."),
+  );
+  if (
+    request.method === "GET" &&
+    request.headers.get("authorization") === "Bearer service-role-key" &&
+    ownerFilter &&
+    deletions.missingOwners.has(ownerFilter[1].slice(3))
+  ) {
+    return jsonResponse(200, []);
+  }
+
   if (path === "/rest/v1/account_deletion_requests" && request.method === "GET") {
     return jsonResponse(200, state.deletionRows);
   }
