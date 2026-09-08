@@ -170,6 +170,33 @@ function trimSequence(
   };
 }
 
+/** Drops the right wrist's visibility below the floor inside [fromMs, toMs]. */
+function occludeRightWrist(
+  sequence: PoseSequence,
+  fromMs: number,
+  toMs: number,
+): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames.map(frame =>
+      frame.timestampMs >= fromMs && frame.timestampMs <= toMs
+        ? {
+            ...frame,
+            landmarks: frame.landmarks.map(mark =>
+              mark.name === 'right_wrist'
+                ? {
+                    ...mark,
+                    visibility:
+                      IMPORT_ADMISSION_LIMITS.minLandmarkVisibility - 0.01,
+                  }
+                : mark,
+            ),
+          }
+        : frame,
+    ),
+  };
+}
+
 /** The right wrist follows `speedAt` while the LEFT wrist follows `leftAt`. */
 function twoWristSpeedProfile(
   durationMs: number,
@@ -1636,6 +1663,326 @@ describe('W03-01 import admission — combined gate', () => {
     expect(a).toEqual(b);
     expect(JSON.stringify(clip)).toBe(clipSnapshot);
     expect(JSON.stringify(rally)).toBe(rallySnapshot);
+  });
+});
+
+/**
+ * Round 7 — the round-6 adversary (attack-42bf4c60) broke the candidate four
+ * ways. A1: four volleys whose valleys stayed at 64–75 % of the peaks fused
+ * into ONE admitted stroke (the absolute jitter floor swallowed the dips).
+ * A2: a slower opposite-direction burst that is a stroke on its own was
+ * folded into a harder neighbour as its wind-up or recovery, so ADDING a
+ * burst turned a refused two-stroke clip into an admitted one. A3: the
+ * clip-edge check looked at the stroke core only, so a clip starting
+ * mid-wind-up or ending mid-recovery was admitted. A4: a second stroke
+ * inside a wrist-tracking hole shorter than `maxUntrackedSpanMs` was
+ * invisible and the lone visible stroke was admitted. Each must be refused
+ * before any permit is reserved.
+ */
+describe('W03-01 regression — round 7: hand battles with shallow valleys', () => {
+  /** `count` volleys every `periodMs` from 1000 ms, speed oscillating valley→peak. */
+  function volleys(
+    peak: number,
+    valley: number,
+    count: number,
+    periodMs = 450,
+  ) {
+    const endMs = 1000 + count * periodMs;
+    return (tMs: number): number => {
+      if (tMs < 1000 || tMs > endMs) return 0;
+      const phase = ((tMs - 1000) % periodMs) / periodMs;
+      return (
+        valley + (peak - valley) * Math.max(0, 1 - Math.abs(phase - 0.5) * 2)
+      );
+    };
+  }
+
+  it('control: one lone volley of this shape is a stroke on its own', () => {
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(5000, 60, volleys(1.0, 0.72, 1)),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.event.peakTorsoPerSecond).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+    );
+  });
+
+  it('refuses four volleys in 1.8 s however shallow the valleys between them (60–75 % of the peaks)', () => {
+    // Each volley is a stroke on its own (control above); four of them in
+    // 1.8 s are four strokes however little the hand rests between them.
+    for (const valley of [0.6, 0.64, 0.66, 0.68, 0.7, 0.72, 0.75]) {
+      const decision = admitImportedStrokeEvents(
+        wristSpeedProfile(5000, 60, volleys(1.0, valley, 4)),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('refuses a drive followed by three volleys that never drop below 72 % of their own peaks', () => {
+    const rally = sumOf(hump(1000, 150, 2.0), volleys(1.0, 0.72, 3, 450));
+    expectMultipleStrokes(wristSpeedProfile(5000, 60, rally), 3);
+  });
+
+  it('refuses 1.8 s at stroke speed even when the valleys all but vanish: one stroke never keeps the wrist at speed that long', () => {
+    for (const valley of [0.85, 0.9, 0.95]) {
+      const decision = admitImportedStrokeEvents(
+        wristSpeedProfile(5000, 60, volleys(1.0, valley, 4)),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(['multiple_stroke_events', 'motion_not_stroke_like']).toContain(
+        decision.reason,
+      );
+    }
+  });
+
+  it('refuses two volleys 450 ms apart at 72 % and at 90 % valleys', () => {
+    for (const valley of [0.72, 0.9]) {
+      const decision = admitImportedStrokeEvents(
+        wristSpeedProfile(5000, 60, volleys(1.0, valley, 2)),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(['multiple_stroke_events', 'motion_not_stroke_like']).toContain(
+        decision.reason,
+      );
+    }
+  });
+});
+
+describe('W03-01 regression — round 7: a stroke-sized burst folds only as a backswing flowing straight into a far harder swing', () => {
+  const SOFT = 1.2;
+  const HARD = 3.0;
+
+  it('control: each soft backward burst is a stroke on its own', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(3000, 60, along(-1, hump(1000, 150, SOFT))),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.event.peakTorsoPerSecond).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+    );
+  });
+
+  it('control: two backward strokes 700 ms apart are refused as two events', () => {
+    expectMultipleStrokes(
+      wristTravelProfile(
+        3000,
+        60,
+        sumVelocities(
+          along(-1, hump(1000, 150, SOFT)),
+          along(-1, hump(1700, 150, SOFT)),
+        ),
+      ),
+      2,
+    );
+  });
+
+  it('adding a harder forward burst between the two refused strokes keeps the refusal', () => {
+    // Adding motion can only keep or raise the number of comparable events.
+    // The forward burst sits between the two backward strokes with a 50 ms
+    // pause on each side; the trailing burst is a stroke, not a recovery.
+    expectMultipleStrokes(
+      wristTravelProfile(
+        3000,
+        60,
+        sumVelocities(
+          along(-1, hump(1000, 150, SOFT)),
+          along(1, hump(1350, 150, HARD)),
+          along(-1, hump(1700, 150, SOFT)),
+        ),
+      ),
+      2,
+    );
+  });
+
+  it('a soft backward stroke resting 300 ms before a hard forward one stays two events', () => {
+    // A stroke-sized burst is a wind-up only when it flows straight into
+    // the swing; after a rest it was a stroke of its own.
+    expectMultipleStrokes(
+      wristTravelProfile(
+        3000,
+        60,
+        sumVelocities(
+          along(-1, hump(1200, 150, 1.0)),
+          along(1, hump(1800, 150, HARD)),
+        ),
+      ),
+      2,
+    );
+  });
+
+  it('still folds a stroke-sized backswing that flows straight into a far harder swing', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3000,
+        60,
+        sumVelocities(
+          along(-1, hump(1000, 150, SOFT)),
+          along(1, hump(1350, 150, HARD)),
+        ),
+      ),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.comparableEventCount).toBe(1);
+    expect(Math.abs(decision.event.peakMs - 1350)).toBeLessThanOrEqual(60);
+  });
+
+  it('a stroke-sized burst after the swing is a second stroke, never a recovery', () => {
+    expectMultipleStrokes(
+      wristTravelProfile(
+        3000,
+        60,
+        sumVelocities(
+          along(1, hump(1000, 150, HARD)),
+          along(-1, hump(1350, 150, SOFT)),
+        ),
+      ),
+      2,
+    );
+  });
+});
+
+describe('W03-01 regression — round 7: a stroke cut mid-wind-up or mid-recovery is truncated', () => {
+  const WIND_UP = 1.2;
+  const SWING = 3.0;
+
+  /** Backward wind-up peaking at `windUpMs`, forward swing 350 ms later. */
+  function windUpThenSwing(windUpMs: number, durationMs: number) {
+    return wristTravelProfile(
+      durationMs,
+      60,
+      sumVelocities(
+        along(-1, hump(windUpMs, 150, WIND_UP)),
+        along(1, hump(windUpMs + 350, 150, SWING)),
+      ),
+    );
+  }
+
+  /** A forward swing whose sub-stroke backward recovery decays to rest. */
+  function swingThenRecovery(durationMs: number) {
+    return wristTravelProfile(
+      durationMs,
+      60,
+      sumVelocities(
+        along(1, hump(1000, 150, SWING)),
+        along(-1, hump(1350, 150, 0.6)),
+      ),
+    );
+  }
+
+  it('control: the full wind-up + swing is admitted as ONE stroke', () => {
+    expect(
+      admitImportedStrokeEvents(windUpThenSwing(1000, 3000)).admitted,
+    ).toBe(true);
+  });
+
+  it('refuses the same stroke when the clip starts in the middle of its wind-up', () => {
+    // The first frame lands at the wind-up's peak: the backswing is half
+    // outside the video, exactly the moment of setup the copy asks for.
+    const decision = admitImportedStrokeEvents(
+      trimSequence(windUpThenSwing(1000, 3000), 1000, 3000),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('stroke_truncated_at_clip_edge');
+  });
+
+  it('refuses a stroke when the clip ends in the middle of its recovery', () => {
+    const full = swingThenRecovery(3000);
+    expect(admitImportedStrokeEvents(full).admitted).toBe(true);
+    const decision = admitImportedStrokeEvents(trimSequence(full, 0, 1350));
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('stroke_truncated_at_clip_edge');
+  });
+
+  it('refuses a wind-up that emerges from a tracking gap at full speed', () => {
+    const decision = admitImportedStrokeEvents(
+      occludeRightWrist(windUpThenSwing(1000, 3000), 700, 1000),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('stroke_truncated_at_clip_edge');
+  });
+
+  it('still admits a stroke whose recovery has decayed to rest by the last frame', () => {
+    // The recovery's span reaches the clip edge, but the wrist is at rest
+    // there: nothing of the movement is missing.
+    const decision = admitImportedStrokeEvents(swingThenRecovery(1650));
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.event.endMs).toBeGreaterThan(1350);
+  });
+});
+
+describe('W03-01 regression — round 7: a wrist-tracking hole could hide a stroke', () => {
+  function twoStrokes(secondMs: number, durationMs: number) {
+    return wristSpeedProfile(
+      durationMs,
+      60,
+      sumOf(hump(1000, 150, 1.0), hump(secondMs, 150, 1.0)),
+    );
+  }
+
+  it('control: two strokes 1.5 s apart are refused', () => {
+    expectMultipleStrokes(twoStrokes(2500, 4000), 2);
+  });
+
+  it('refuses the clip when the second stroke is exactly the untracked span', () => {
+    // Motion blur on the harder stroke loses the wrist for 400 ms: the
+    // second stroke is unmeasured, so the clip is NOT known to hold one
+    // stroke. Admission refuses rather than vouching for what it cannot see.
+    const hidden = occludeRightWrist(twoStrokes(2500, 4000), 2300, 2700);
+    const decision = admitImportedClip(importedClip(hidden), hidden);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('wrist_not_tracked');
+    expect(decision.detail).toContain('right_wrist');
+  });
+
+  it('refuses the clip when a 2.4 s hole (inside maxUntrackedSpanMs) swallows a stroke', () => {
+    const hidden = occludeRightWrist(twoStrokes(2500, 5000), 1400, 3800);
+    const decision = admitImportedClip(importedClip(hidden), hidden);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('wrist_not_tracked');
+  });
+
+  it('refuses the same hole with nothing inside it: the visible evidence is identical either way', () => {
+    // With the wrist below the visibility floor the two clips carry the
+    // SAME measurable evidence; a gate that admitted this one would admit
+    // the hidden stroke too.
+    const lone = wristSpeedProfile(4000, 60, hump(1000, 150, 1.0));
+    const holed = occludeRightWrist(lone, 2300, 2700);
+    const decision = admitImportedClip(importedClip(holed), holed);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('wrist_not_tracked');
+  });
+
+  it('a hole in the OTHER wrist does not refuse the striking wrist’s lone stroke', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(1000, 150, 1.0));
+    const holed: PoseSequence = {
+      ...lone,
+      frames: lone.frames.map(frame =>
+        frame.timestampMs >= 2300 && frame.timestampMs <= 2700
+          ? {
+              ...frame,
+              landmarks: frame.landmarks.map(mark =>
+                mark.name === 'left_wrist' ? { ...mark, visibility: 0 } : mark,
+              ),
+            }
+          : frame,
+      ),
+    };
+    expect(admitImportedClip(importedClip(holed), holed).admitted).toBe(true);
   });
 });
 

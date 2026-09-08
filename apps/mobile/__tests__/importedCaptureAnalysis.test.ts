@@ -16,7 +16,11 @@ import {
   verifyCapturedClipCurrentBytes,
   type CapturedClip,
 } from '../src/camera/capture';
-import { importAdmissionRejectionMessage } from '../src/camera/importAdmission';
+import {
+  IMPORT_ADMISSION_LIMITS,
+  importAdmissionRejectionMessage,
+  type ImportAdmissionReason,
+} from '../src/camera/importAdmission';
 import {
   prepareOriginalCaptureAnalysis,
   reconcileOriginalCaptureAnalysis,
@@ -297,6 +301,142 @@ function twoStrokes340msApart(): PoseSequence {
   return wristSpeedProfile(3000, 60, tMs => first(tMs) + second(tMs));
 }
 
+/**
+ * A still skeleton whose right wrist TRAVELS along the requested velocity
+ * (image heights per second along x and y), so the direction of motion —
+ * what tells a wind-up from a stroke — is exactly the requested one.
+ */
+function wristTravelProfile(
+  durationMs: number,
+  fps: number,
+  velocityAt: (tMs: number) => readonly [number, number],
+): PoseSequence {
+  const { sequence } = generateSwingSequence();
+  const body = sequence.frames[0];
+  if (!body) throw new Error('synthetic swing produced no frames');
+  const dtMs = 1000 / fps;
+  const frames: PoseSequence['frames'] = [];
+  let index = 0;
+  let x = 0.45;
+  let y = 0.55;
+  for (let tMs = 0; tMs <= durationMs; tMs += dtMs) {
+    const [vx, vy] = velocityAt(tMs);
+    x += (vx * dtMs) / 1000;
+    y += (vy * dtMs) / 1000;
+    frames.push({
+      frameIndex: index,
+      timestampMs: Math.round(tMs),
+      confidence: body.confidence,
+      landmarks: body.landmarks.map(mark =>
+        mark.name === 'right_wrist' ? { ...mark, x, y } : mark,
+      ),
+    });
+    index += 1;
+  }
+  return { ...sequence, video: { ...sequence.video, fps }, frames };
+}
+
+/** Keeps only the frames inside [fromMs, toMs] and rebases them to 0. */
+function trimSequence(
+  sequence: PoseSequence,
+  fromMs: number,
+  toMs: number,
+): PoseSequence {
+  const kept = sequence.frames.filter(
+    frame => frame.timestampMs >= fromMs && frame.timestampMs <= toMs,
+  );
+  const base = kept[0]?.timestampMs ?? 0;
+  return {
+    ...sequence,
+    frames: kept.map((frame, index) => ({
+      ...frame,
+      frameIndex: index,
+      timestampMs: frame.timestampMs - base,
+    })),
+  };
+}
+
+/** Drops the right wrist's visibility below the floor inside [fromMs, toMs]. */
+function occludeRightWrist(
+  sequence: PoseSequence,
+  fromMs: number,
+  toMs: number,
+): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames.map(frame =>
+      frame.timestampMs >= fromMs && frame.timestampMs <= toMs
+        ? {
+            ...frame,
+            landmarks: frame.landmarks.map(mark =>
+              mark.name === 'right_wrist'
+                ? {
+                    ...mark,
+                    visibility:
+                      IMPORT_ADMISSION_LIMITS.minLandmarkVisibility - 0.01,
+                  }
+                : mark,
+            ),
+          }
+        : frame,
+    ),
+  };
+}
+
+/**
+ * Round 7 adversary shapes (attack-42bf4c60). Four volleys every 450 ms whose
+ * valleys stay at 72 % of the peaks (the round-6 gate fused them into one
+ * stroke); two strokes 1.5 s apart with the wrist lost for the 400 ms of the
+ * second (the visible stroke was admitted alone); a backward wind-up flowing
+ * into a forward swing, trimmed to start at the wind-up's peak (the core of
+ * the swing was inside the clip, so the truncation went unnoticed). None
+ * proves exactly one complete stroke; none may reach a permit reservation.
+ */
+function handBattle72(): PoseSequence {
+  return wristSpeedProfile(5000, 60, tMs => {
+    if (tMs < 1000 || tMs > 2800) return 0;
+    const phase = ((tMs - 1000) % 450) / 450;
+    return 0.72 + 0.28 * Math.max(0, 1 - Math.abs(phase - 0.5) * 2);
+  });
+}
+
+function hiddenSecondStroke(): PoseSequence {
+  const two = wristSpeedProfile(
+    4000,
+    60,
+    tMs => hump(1000, 150, 1.0)(tMs) + hump(2500, 150, 1.0)(tMs),
+  );
+  return occludeRightWrist(two, 2300, 2700);
+}
+
+function clipStartingMidBackswing(): PoseSequence {
+  const full = wristTravelProfile(3000, 60, tMs => [
+    -hump(1000, 150, 1.2)(tMs) + hump(1350, 150, 3.0)(tMs),
+    0,
+  ]);
+  return trimSequence(full, 1000, 3000);
+}
+
+const ROUND_7_SHAPES: ReadonlyArray<
+  [string, () => PoseSequence, ImportAdmissionReason]
+> = [
+  [
+    'a four-volley hand battle whose valleys stay at 72 % of the peaks',
+    handBattle72,
+    'multiple_stroke_events',
+  ],
+  [
+    'a second stroke hidden in a 400 ms wrist-tracking hole',
+    hiddenSecondStroke,
+    'wrist_not_tracked',
+  ],
+  [
+    'a clip that starts in the middle of the backswing',
+    clipStartingMidBackswing,
+    'stroke_truncated_at_clip_edge',
+  ],
+];
+
 function concatSequences(
   first: PoseSequence,
   second: PoseSequence,
@@ -529,6 +669,46 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
       );
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(calls).toHaveLength(0);
+    },
+  );
+
+  it.each(ROUND_7_SHAPES)(
+    'round 7: %s is refused before any permit is reserved — a willing permit server is never asked, nothing is inferred or rated',
+    async (_title, build, reason) => {
+      const { db, calls } = recordingDb();
+      const { clip, sidecarJson } = importedClipWithSidecar(build());
+      mockReadArtifact = async () => sidecarJson;
+      // A server that WOULD grant the permit: the refusal has to come from
+      // admission, never from the network.
+      const { fetchMock, finalized } = permitServer();
+      (globalThis as { fetch?: unknown }).fetch = fetchMock;
+      const analyzeSpy = jest.mocked(pipeline.analyzeCapture);
+      analyzeSpy.mockClear();
+
+      const outcome = await runCaptureAnalysis(request(db, clip));
+
+      expect({
+        kind: outcome.kind,
+        reason: 'reason' in outcome ? outcome.reason : null,
+        permitReservations: fetchMock.mock.calls
+          .map(([url]) => String(url))
+          .filter(url => url.endsWith('/v1/analysis-permits')).length,
+        permitFinalizations: finalized,
+        inferenceRuns: analyzeSpy.mock.calls.length,
+        ratedShotWrites: calls.filter(call =>
+          call.sql.includes('INSERT OR REPLACE INTO local_shot'),
+        ).length,
+        durableRows: calls.length,
+      }).toEqual({
+        kind: 'quality_blocked',
+        reason: importAdmissionRejectionMessage(reason),
+        permitReservations: 0,
+        permitFinalizations: [],
+        inferenceRuns: 0,
+        ratedShotWrites: 0,
+        durableRows: 0,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
     },
   );
 
@@ -773,6 +953,21 @@ describe('W03-01 import admission — signed-in saved-original path', () => {
       expect(outcome.reason).toBe(
         importAdmissionRejectionMessage('multiple_stroke_events'),
       );
+      expect(saved.permitCalls()).toHaveLength(0);
+      expect(saved.fetchSpy).not.toHaveBeenCalled();
+      expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
+      expect(saved.attemptRows()).toEqual([]);
+    },
+  );
+
+  it.each(ROUND_7_SHAPES)(
+    'round 7: %s is refused on the saved path — no permit, no inference, no attempt',
+    async (_title, build, reason) => {
+      const saved = await savedImport(build());
+      const outcome = await saved.run();
+      expect(outcome.kind).toBe('quality_blocked');
+      if (outcome.kind !== 'quality_blocked') return;
+      expect(outcome.reason).toBe(importAdmissionRejectionMessage(reason));
       expect(saved.permitCalls()).toHaveLength(0);
       expect(saved.fetchSpy).not.toHaveBeenCalled();
       expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
