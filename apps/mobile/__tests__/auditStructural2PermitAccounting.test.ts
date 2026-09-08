@@ -1,25 +1,20 @@
+import { clearApiSession } from '../src/account/apiSession';
+import {
+  createCaptureAnalysisDb,
+  captureDbState,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../testSupport/captureAnalysisHarness';
 /**
- * STRUCTURAL AUDIT #2 (mobile-analyze-capture) — permit accounting under
- * exceptions thrown AFTER the reservation.
- *
- * runCaptureAnalysis reserves a server permit before inference and promises
- * ("Permit accounting: EVERY non-scored outcome releases the reservation").
- * The release paths cover `!result.ok` and non-scored records, but the calls
- * between the reservation and the return — analyzeCapture,
- * saveAnalysisRecord, markCaptureAnalyzed, saveAnalysis — are not wrapped:
- * an exception there escapes with the reservation still held.
- *
- * Every case below drives the REAL pipeline (real generated pose sequence,
- * real sidecar hash, real fusion providers) and injects the failure at the
- * exact seam the hotspot names. Expectation = the documented contract.
+ * Permit accounting through the real pipeline and migrated SQLite.
+ * Post-reservation inference or persistence faults must release once and
+ * preserve the journal evidence while committing no analysis products.
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { LocalDb } from '../src/data/db';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  setActiveDataOwner,
-} from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 
@@ -50,29 +45,11 @@ let mockAnalyzeCapture: ((...args: unknown[]) => Promise<unknown>) | null =
 
 const owner = '11111111-1111-4111-8111-111111111111';
 
-interface RecordedCall {
-  sql: string;
-  params: unknown[];
-}
-
-function recordingDb(failWhen?: (sql: string) => boolean): {
-  db: LocalDb;
-  calls: RecordedCall[];
-} {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      if (failWhen?.(sql)) {
-        throw new Error(
-          `SQLITE_FULL: database or disk is full (${sql.slice(0, 32)})`,
-        );
-      }
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb(failWhen?: (sql: string) => boolean) {
+  return createCaptureAnalysisDb(sql => {
+    if (failWhen?.(sql))
+      throw new Error('SQLITE_FULL: database or disk is full');
+  });
 }
 
 function permitServer(options?: { access?: unknown }): {
@@ -87,7 +64,7 @@ function permitServer(options?: { access?: unknown }): {
       state.reserved += 1;
       return jsonResponse({
         permit: {
-          id: `permit-${state.reserved}`,
+          id: fixtureUuid(`permit-${state.reserved}`),
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-08-27T20:00:00.000Z',
@@ -129,9 +106,9 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
   const clip: CapturedClip = {
     uri: 'file:///captures/stroke-audit.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-08-27T18:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -150,13 +127,13 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -183,7 +160,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -192,9 +169,10 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
 function request(db: LocalDb, clip: CapturedClip) {
   return {
     db,
-    captureId: 'capture-audit-1',
+    ...seedCaptureRequest(db, clip, 'capture-audit-1'),
     clip,
     declaredStroke: 'forehand_drive' as const,
+    declaredCanonical: 'FOREHAND_DRIVE' as const,
     handedness: 'right' as const,
     cameraView: 'side' as const,
     apiConfig: { baseUrl: 'https://api.test', token: 'token-1' },
@@ -204,11 +182,11 @@ function request(db: LocalDb, clip: CapturedClip) {
 
 describe('runCaptureAnalysis permit accounting after reservation (audit)', () => {
   beforeEach(() => {
-    setActiveDataOwner(owner);
+    signInCaptureOwner(owner);
     mockAnalyzeCapture = null;
   });
   afterEach(() => {
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeCaptureHarness();
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
 
@@ -243,7 +221,7 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
     // Contract: EVERY non-scored outcome releases the reservation.
     expect(server.finalized).toEqual([
       expect.objectContaining({
-        permitId: 'permit-1',
+        permitId: fixtureUuid('permit-1'),
         body: expect.objectContaining({ outcome: 'failed', ratingId: null }),
       }),
     ]);
@@ -276,7 +254,9 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
       calls.filter(c => c.sql.includes('INSERT INTO outbox')),
     ).toHaveLength(0);
     expect(calls.filter(c => c.sql.includes('local_shot'))).toHaveLength(0);
-    expect(server.finalized.map(f => f.permitId)).toEqual(['permit-1']);
+    expect(server.finalized.map(f => f.permitId)).toEqual([
+      fixtureUuid('permit-1'),
+    ]);
     expect(settled.ok).toBe(false);
   });
 
@@ -297,7 +277,9 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
     expect(
       calls.filter(c => c.sql.includes('INSERT INTO outbox')),
     ).toHaveLength(0);
-    expect(server.finalized.map(f => f.permitId)).toEqual(['permit-1']);
+    expect(server.finalized.map(f => f.permitId)).toEqual([
+      fixtureUuid('permit-1'),
+    ]);
     expect(settled.ok).toBe(false);
   });
 
@@ -339,14 +321,14 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
   });
 
   it('VERIFY: a reservation whose status is not "reserved" is a retryable unavailable — no inference, no record', async () => {
-    const { db, calls } = recordingDb();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const fetchMock = jest.fn(async (url: string) => {
       if (url.endsWith('/v1/analysis-permits')) {
         return jsonResponse({
           permit: {
-            id: 'permit-x',
+            id: fixtureUuid('permit-x'),
             accessSource: 'free',
             status: 'released',
             expiresAt: '2026-08-27T20:00:00.000Z',
@@ -361,11 +343,17 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.cause).toBeUndefined();
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
-  it('VERIFY: a signed-out apiConfig (token null) never reaches the network and stays a retryable unavailable', async () => {
-    const { db, calls } = recordingDb();
+  it('a missing current session never reaches the network even with a stale request bearer', async () => {
+    clearApiSession();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const fetchSpy = jest.fn();
@@ -373,12 +361,17 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
 
     const outcome = await runCaptureAnalysis({
       ...request(db, clip),
-      apiConfig: { baseUrl: '', token: null },
+      apiConfig: { baseUrl: 'https://api.test', token: 'stale-token' },
     });
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.cause).toBeUndefined();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 });

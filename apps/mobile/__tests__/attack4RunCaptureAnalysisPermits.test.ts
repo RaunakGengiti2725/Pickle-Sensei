@@ -1,3 +1,13 @@
+import { clearApiSession } from '../src/account/apiSession';
+import { createAnalysisPermitClient } from '../src/data/api';
+import {
+  createCaptureAnalysisDb,
+  captureDbState,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../testSupport/captureAnalysisHarness';
 /**
  * ADVERSARIAL PASS 3 / tester #4 — runCaptureAnalysis permit accounting and
  * artifact integrity attacks against 4d812e1a. REAL pipeline (fusion
@@ -16,10 +26,6 @@ import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../src/data/db';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  setActiveDataOwner,
-} from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 
@@ -50,16 +56,8 @@ interface RecordedCall {
   params: unknown[];
 }
 
-function recordingDb(): { db: LocalDb; calls: RecordedCall[] } {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb() {
+  return createCaptureAnalysisDb();
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -95,7 +93,7 @@ function permitServer(options: PermitServerOptions = {}) {
       return jsonResponse(
         options.reserveBody ?? {
           permit: {
-            id: options.permitId ?? 'permit-attack-1',
+            id: options.permitId ?? fixtureUuid('permit-attack-1'),
             accessSource: options.accessSource ?? 'free',
             status: 'reserved',
             expiresAt: '2026-09-04T20:00:00.000Z',
@@ -151,9 +149,9 @@ function swingClipWithSidecar(visibility: number | null = null): {
   const clip: CapturedClip = {
     uri: 'file:///captures/attack.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-04T12:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -172,13 +170,13 @@ function swingClipWithSidecar(visibility: number | null = null): {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -205,7 +203,7 @@ function swingClipWithSidecar(visibility: number | null = null): {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -221,9 +219,10 @@ function withRecordedHash(clip: CapturedClip, sha256: string): CapturedClip {
 function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-a4') {
   return {
     db,
-    captureId,
+    ...seedCaptureRequest(db, clip, captureId),
     clip,
     declaredStroke: 'forehand_drive' as const,
+    declaredCanonical: 'FOREHAND_DRIVE' as const,
     handedness: 'right' as const,
     cameraView: 'side' as const,
     apiConfig: { baseUrl: 'https://api.test', token: 'token-a4' },
@@ -240,9 +239,9 @@ const localShotInserts = (calls: RecordedCall[]) =>
 const outboxInserts = (calls: RecordedCall[]) =>
   calls.filter(call => call.sql.includes('INSERT INTO outbox'));
 
-beforeEach(() => setActiveDataOwner(owner));
+beforeEach(() => signInCaptureOwner(owner));
 afterEach(() => {
-  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  closeCaptureHarness();
   setFetch(undefined);
 });
 
@@ -273,7 +272,7 @@ describe('S2 — release rejection on a low-confidence outcome', () => {
         { outcome: 'low_confidence', ratingId: null },
       ]);
       expect(server.finalizeUrls[0]).toContain(
-        '/v1/analysis-permits/permit-attack-1/finalize',
+        `/v1/analysis-permits/${fixtureUuid('permit-attack-1')}/finalize`,
       );
       // saveLocalOnlyAnalysis executed: local_shot row with result_kind
       // low_confidence, and NOTHING queued for sync.
@@ -321,7 +320,7 @@ describe('S2 — release rejection on a low-confidence outcome', () => {
 // ─── S3: readCaptureArtifact resolves with an empty string ──────────────────
 
 describe('S3 — empty / degenerate sidecar bytes', () => {
-  it('[HELD] empty string → hash-mismatch path, no parse, no permit, no db write', async () => {
+  it('[HELD] empty string → hash-mismatch path, no parse, no permit, no analysis products; reservation evidence retained', async () => {
     const { db, calls } = recordingDb();
     const { clip } = swingClipWithSidecar();
     mockReadArtifact = async () => '';
@@ -503,8 +502,8 @@ describe('S4 — reserve-time access snapshot missing or malformed', () => {
 // ─── Extra: reserve failures never write anything ───────────────────────────
 
 describe('extra — reserve failures', () => {
-  it('[HELD] 402 access.paywall_required → unavailable with cause paywall_required, capture left pending, no db write', async () => {
-    const { db, calls } = recordingDb();
+  it('[HELD] 402 access.paywall_required → unavailable with cause paywall_required, capture left pending, no analysis products; reservation evidence retained', async () => {
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer({
@@ -523,11 +522,16 @@ describe('extra — reserve failures', () => {
       reason: 'Upgrade to keep rating.',
       cause: 'paywall_required',
     });
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
-  it('[HELD] 503 with an empty body → unavailable with the status text, no db write, no retry storm (one reserve call)', async () => {
-    const { db, calls } = recordingDb();
+  it('[HELD] 503 with an empty body → unavailable with the status text, no analysis products; reservation evidence retained, no retry storm (one reserve call)', async () => {
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer({ reserveStatus: 503, reserveBody: null });
@@ -538,11 +542,16 @@ describe('extra — reserve failures', () => {
     expect(outcome.cause).toBeUndefined();
     expect(outcome.reason).toBe('HTTP 503');
     expect(server.fetchMock).toHaveBeenCalledTimes(1);
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
-  it('[HELD] reserve network failure → generic "rating service could not be reached", no db write', async () => {
-    const { db, calls } = recordingDb();
+  it('[HELD] reserve network failure → generic "rating service could not be reached", no analysis products; reservation evidence retained', async () => {
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     setFetch(
@@ -554,17 +563,22 @@ describe('extra — reserve failures', () => {
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.reason).toContain('could not be reached');
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
   it('[HELD] a permit echoed back as status "released" is refused (409), nothing scored', async () => {
-    const { db, calls } = recordingDb();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer({
       reserveBody: {
         permit: {
-          id: 'permit-x',
+          id: fixtureUuid('permit-x'),
           accessSource: 'free',
           status: 'released',
           expiresAt: '2026-09-04T20:00:00.000Z',
@@ -576,11 +590,16 @@ describe('extra — reserve failures', () => {
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.reason).toContain('no longer reserved');
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
-  it('reserve 200 whose permit.id is "" is rejected before inference: no analyzeCapture call, no db write, no finalize, outcome unavailable', async () => {
-    const { db, calls } = recordingDb();
+  it('reserve 200 whose permit.id is "" is rejected before inference: no analyzeCapture call, no analysis products; reservation evidence retained, no finalize, outcome unavailable', async () => {
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer({ permitId: '' });
@@ -593,7 +612,12 @@ describe('extra — reserve failures', () => {
       expect(outcome.reason).toContain('invalid analysis permit');
       expect(outcome.cause).toBeUndefined();
       expect(analyzeSpy).not.toHaveBeenCalled();
-      expect(calls).toHaveLength(0);
+      expect(captureDbState(db)).toMatchObject({
+        shots: 0,
+        records: 0,
+        outbox: 0,
+        journal: [expect.objectContaining({ release_outcome: 'failed' })],
+      });
       // Nothing to finalize: an id-less permit cannot be addressed.
       expect(server.reserveBodies).toHaveLength(1);
       expect(server.finalizeUrls).toHaveLength(0);
@@ -604,7 +628,7 @@ describe('extra — reserve failures', () => {
   });
 
   it('reserve 200 whose permit.id is whitespace-only is rejected the same way', async () => {
-    const { db, calls } = recordingDb();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer({ permitId: '   ' });
@@ -614,46 +638,71 @@ describe('extra — reserve failures', () => {
       const outcome = await runCaptureAnalysis(request(db, clip));
       expect(outcome.kind).toBe('unavailable');
       expect(analyzeSpy).not.toHaveBeenCalled();
-      expect(calls).toHaveLength(0);
+      expect(captureDbState(db)).toMatchObject({
+        shots: 0,
+        records: 0,
+        outbox: 0,
+        journal: [expect.objectContaining({ release_outcome: 'failed' })],
+      });
       expect(server.finalizeUrls).toHaveLength(0);
     } finally {
       analyzeSpy.mockRestore();
     }
   });
 
-  it('[HELD] a signed-out apiConfig (token null) never reaches the network and leaves nothing behind', async () => {
-    const { db, calls } = recordingDb();
+  it('a cleared current session prevents reservation even when the request still carries an old token', async () => {
+    clearApiSession();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const fetchSpy = jest.fn();
     setFetch(fetchSpy);
     const outcome = await runCaptureAnalysis({
       ...request(db, clip),
-      apiConfig: { baseUrl: 'https://api.test', token: null },
+      apiConfig: { baseUrl: 'https://api.test', token: 'stale-token' },
     });
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.reason).toContain('Sign in');
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
-  it('[HELD] a hostile permit id (slashes, unicode, query chars) is URL-encoded on release — no path injection', async () => {
+  it('a hostile non-UUID permit is held before inference; the release client encodes every path character', async () => {
     const { db } = recordingDb();
-    const { clip, sidecarJson } = swingClipWithSidecar(
-      LOW_CONFIDENCE_VISIBILITY,
-    );
+    const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const hostile = '../../admin?x=1&y=2#frag/ünïcødé 🎾';
     const server = permitServer({ permitId: hostile });
     setFetch(server.fetchMock);
-    const outcome = await runCaptureAnalysis(request(db, clip));
-    expect(outcome.kind).toBe('low_confidence');
-    expect(server.finalizeUrls).toHaveLength(1);
-    expect(server.finalizeUrls[0]).toBe(
-      `https://api.test/v1/analysis-permits/${encodeURIComponent(hostile)}/finalize`,
+    const analyzeSpy = jest.spyOn(pipeline, 'analyzeCapture');
+    await expect(runCaptureAnalysis(request(db, clip))).rejects.toThrow(
+      'invalid_identity',
     );
+    expect(analyzeSpy).not.toHaveBeenCalled();
+    expect(server.finalizeUrls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [
+        expect.objectContaining({ state: 'release_pending', permit_id: null }),
+      ],
+    });
+    await createAnalysisPermitClient({
+      baseUrl: 'https://api.test',
+      token: 'current-token',
+    }).release(hostile, 'failed');
+    expect(server.finalizeUrls).toEqual([
+      `https://api.test/v1/analysis-permits/${encodeURIComponent(hostile)}/finalize`,
+    ]);
     expect(server.finalizeUrls[0]).not.toContain('/../');
     expect(server.finalizeUrls[0]).not.toContain('?x=1');
+    analyzeSpy.mockRestore();
   });
 });

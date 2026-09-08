@@ -1,3 +1,11 @@
+import {
+  createCaptureAnalysisDb,
+  captureDbState,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../testSupport/captureAnalysisHarness';
 /**
  * Structural audit #1 (mobile-analyze-capture) — permit lifecycle when the
  * post-reservation path THROWS instead of returning a typed failure.
@@ -13,10 +21,6 @@
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { LocalDb } from '../../src/data/db';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  setActiveDataOwner,
-} from '../../src/data/accountScope';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
 
@@ -46,27 +50,10 @@ let mockAnalyzeCapture: (() => Promise<unknown>) | null = null;
 
 const owner = '11111111-1111-4111-8111-111111111111';
 
-interface RecordedCall {
-  sql: string;
-  params: unknown[];
-}
-
-function throwingDb(failWhen: (sql: string) => boolean): {
-  db: LocalDb;
-  calls: RecordedCall[];
-} {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      if (failWhen(sql)) {
-        throw new Error('SQLITE_FULL: database or disk is full');
-      }
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function throwingDb(failWhen: (sql: string) => boolean) {
+  return createCaptureAnalysisDb(sql => {
+    if (failWhen(sql)) throw new Error('SQLITE_FULL: database or disk is full');
+  });
 }
 
 function permitServer(): {
@@ -78,7 +65,7 @@ function permitServer(): {
     if (url.endsWith('/v1/analysis-permits')) {
       return jsonResponse({
         permit: {
-          id: 'permit-leak-1',
+          id: fixtureUuid('permit-leak-1'),
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-08-27T20:00:00.000Z',
@@ -122,9 +109,9 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
   const clip: CapturedClip = {
     uri: 'file:///captures/stroke-leak.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-08-27T18:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -143,13 +130,13 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -176,7 +163,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -185,9 +172,10 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
 function request(db: LocalDb, clip: CapturedClip) {
   return {
     db,
-    captureId: 'capture-leak-1',
+    ...seedCaptureRequest(db, clip, 'capture-leak-1'),
     clip,
     declaredStroke: 'forehand_drive' as const,
+    declaredCanonical: 'FOREHAND_DRIVE' as const,
     handedness: 'right' as const,
     cameraView: 'side' as const,
     apiConfig: { baseUrl: 'https://api.test', token: 'token-1' },
@@ -197,11 +185,11 @@ function request(db: LocalDb, clip: CapturedClip) {
 
 describe('structural audit #1 — permit release when the post-reservation path throws', () => {
   beforeEach(() => {
-    setActiveDataOwner(owner);
+    signInCaptureOwner(owner);
     mockAnalyzeCapture = null;
   });
   afterEach(() => {
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeCaptureHarness();
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
 
@@ -221,7 +209,9 @@ describe('structural audit #1 — permit release when the post-reservation path 
     );
     expect(reserveCalls).toHaveLength(1);
     expect(finalized).toHaveLength(1);
-    expect(finalized[0]!.url).toContain('/permit-leak-1/finalize');
+    expect(finalized[0]!.url).toContain(
+      `/${fixtureUuid('permit-leak-1')}/finalize`,
+    );
     expect(finalized[0]!.body).toMatchObject({ outcome: 'failed' });
   });
 
@@ -256,7 +246,7 @@ describe('structural audit #1 — permit release when the post-reservation path 
   });
 
   it('releases the permit when analyzeCapture throws (not a typed !ok result)', async () => {
-    const { db, calls } = throwingDb(() => false);
+    const { db } = throwingDb(() => false);
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     mockAnalyzeCapture = async () => {
@@ -268,7 +258,17 @@ describe('structural audit #1 — permit release when the post-reservation path 
     await expect(runCaptureAnalysis(request(db, clip))).rejects.toThrow(
       'pose frame joints undefined',
     );
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     expect(finalized).toHaveLength(1);
     expect(finalized[0]!.body).toMatchObject({ outcome: 'failed' });
   });
