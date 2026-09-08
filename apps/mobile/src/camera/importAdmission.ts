@@ -42,15 +42,16 @@ export const IMPORT_ADMISSION_VERSION = 'import-admission-1';
 /**
  * The envelope admission enforces. Container limits mirror the native
  * `ProvisionalImportBudget` (60 s, 240 fps, 4096 px, 4096×2160 px) so the
- * JS gate and the Swift preflight never disagree about what is importable;
- * the frame-rate floor mirrors the capture envelope's degraded floor (15 fps)
- * that the pose-quality gate already refuses below.
+ * JS gate and the Swift preflight never disagree about what is importable.
+ * There is deliberately no declared-frame-rate floor: a low but measured
+ * frame rate belongs to the quantization-aware pose-quality floor
+ * (`insufficient_fps`), which judges the recorded timestamps rather than
+ * container metadata such as 23.976 fps.
  */
 export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   /** A stroke needs preparation and recovery around it to be measurable. */
   minDurationMs: 800,
   maxDurationMs: 60_000,
-  minFps: 15,
   maxFps: 240,
   maxFrameDimension: 4096,
   maxFramePixels: 4096 * 2160,
@@ -66,7 +67,13 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   minLandmarkVisibility: 0.3,
   /** Wrist samples further apart than this are a tracking gap, not motion. */
   maxSampleGapMs: 150,
-  smoothingWindow: 5,
+  /**
+   * Wrist speed is smoothed over this much time (a centred window), so the
+   * smoothing spans the same slice of the swing at 12 fps as at 240 fps —
+   * a sample-count window would flatten the valleys between a slow clip's
+   * strokes.
+   */
+  smoothingSpanMs: 85,
   /** A wrist has a distinct stroke only when its peak clears the idle baseline by this factor. */
   distinctPeakRatio: 2.5,
   /** An event's span is cut where the smoothed speed drops below this fraction of its peak. */
@@ -114,7 +121,6 @@ export const IMPORT_ADMISSION_REASONS = Object.freeze([
   'duration_too_short',
   'duration_too_long',
   'frame_rate_unknown',
-  'frame_rate_too_low',
   'frame_rate_too_high',
   'unsupported_dimensions',
   'unsupported_rotation',
@@ -302,12 +308,6 @@ export function admitImportedMedia(
       `fps ${String(clip.fps)} is not a measured frame rate.`,
     );
   }
-  if (clip.fps < limits.minFps) {
-    return reject(
-      'frame_rate_too_low',
-      `fps ${clip.fps} is below the ${limits.minFps} fps floor.`,
-    );
-  }
   if (clip.fps > limits.maxFps) {
     return reject(
       'frame_rate_too_high',
@@ -428,12 +428,22 @@ function wristSpeedSeries(
   return series;
 }
 
+/** Samples on each side of the centre that fit in `smoothingSpanMs`. */
+function smoothingHalfWindow(series: readonly SpeedSample[]): number {
+  const intervals: number[] = [];
+  for (let index = 1; index < series.length; index += 1) {
+    const current = series[index];
+    const previous = series[index - 1];
+    if (!current || !previous || current.gapBefore) continue;
+    intervals.push(current.timestampMs - previous.timestampMs);
+  }
+  const interval = median(intervals);
+  if (!(interval > 0)) return 0;
+  return Math.floor(IMPORT_ADMISSION_LIMITS.smoothingSpanMs / 2 / interval);
+}
+
 /** Centered moving average that never averages across a tracking gap. */
-function movingAverage(
-  series: readonly SpeedSample[],
-  window: number,
-): number[] {
-  const half = Math.floor(Math.max(1, window) / 2);
+function movingAverage(series: readonly SpeedSample[], half: number): number[] {
   return series.map((_, index) => {
     let start = index;
     while (start > index - half && start > 0 && !series[start]?.gapBefore)
@@ -521,7 +531,7 @@ function measureWrist(
   const limits = IMPORT_ADMISSION_LIMITS;
   const series = wristSpeedSeries(frames, wrist, aspectRatio);
   if (series.length < limits.minRunSamples) return null;
-  const smoothed = movingAverage(series, limits.smoothingWindow);
+  const smoothed = movingAverage(series, smoothingHalfWindow(series));
   let peak = 0;
   for (const value of smoothed) if (value > peak) peak = value;
   const baseline = median(smoothed);
@@ -1073,8 +1083,6 @@ export function importAdmissionRejectionMessage(
       return 'This video is too long to analyze. Trim it to 60 seconds or less — ideally a few seconds around one stroke — and import it again.';
     case 'frame_rate_unknown':
       return 'The frame rate of this video could not be read, so it cannot be analyzed. Try exporting it again from your library.';
-    case 'frame_rate_too_low':
-      return 'This video has too few frames per second to measure a stroke. Use a clip recorded at a standard frame rate, such as 30 or 60 fps.';
     case 'frame_rate_too_high':
       return 'This video has more frames per second than can be analyzed. Export it at 240 fps or lower and import it again.';
     case 'unsupported_dimensions':

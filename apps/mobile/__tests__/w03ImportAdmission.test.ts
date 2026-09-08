@@ -268,7 +268,6 @@ describe('W03-01 import admission — container envelope', () => {
     ['duration_too_short', { durationMs: 500 }, false],
     ['duration_too_long', { durationMs: 60_001 }, false],
     ['frame_rate_unknown', { fps: 0 }, false],
-    ['frame_rate_too_low', { fps: 12 }, false],
     ['frame_rate_too_high', { fps: 241 }, false],
     ['unsupported_dimensions', { width: 4097 }, false],
     ['unsupported_dimensions', { width: 4096, height: 4096 }, false],
@@ -303,6 +302,19 @@ describe('W03-01 import admission — container envelope', () => {
       expect(decision.detail.length).toBeGreaterThan(0);
     },
   );
+
+  it('leaves a low but measured frame rate to the pose-quality floor rather than the container metadata', () => {
+    // 23.976 fps ("24p") and 12 fps are both measured frame rates; whether
+    // the recorded timestamps are dense enough is the quantization-aware
+    // pose-quality gate's verdict (`insufficient_fps`), so container fps
+    // alone never refuses an import.
+    for (const fps of [12, 23.976, 24, 30, 60, 120, 240]) {
+      const { sequence } = singleSwing();
+      expect(admitImportedMedia(importedClip(sequence, { fps })).admitted).toBe(
+        true,
+      );
+    }
+  });
 
   it('rejects a non-quarter-turn rotation and an unsupported or unknown codec', () => {
     const { sequence } = singleSwing();
@@ -344,7 +356,7 @@ describe('W03-01 import admission — container envelope', () => {
     expect(IMPORT_ADMISSION_LIMITS.maxFps).toBe(240);
     expect(IMPORT_ADMISSION_LIMITS.maxFrameDimension).toBe(4096);
     expect(IMPORT_ADMISSION_LIMITS.maxFramePixels).toBe(4096 * 2160);
-    expect(IMPORT_ADMISSION_LIMITS.minFps).toBe(15);
+    expect('minFps' in IMPORT_ADMISSION_LIMITS).toBe(false);
     expect(IMPORT_ADMISSION_LIMITS.minDurationMs).toBeGreaterThan(0);
     // Conservative: a second event at well under half the peak still counts.
     expect(IMPORT_ADMISSION_LIMITS.comparablePeakRatio).toBeLessThanOrEqual(
@@ -389,6 +401,24 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
       100,
     );
   });
+
+  it.each([12, 24, 30, 120, 240])(
+    'measures the same single swing at %d fps as one stroke (smoothing spans time, not samples)',
+    fps => {
+      const { sequence, window } = generateSwingSequence({
+        handed: 'right',
+        fps,
+      });
+      const decision = admitImportedStrokeEvents(sequence);
+      expect(decision.admitted).toBe(true);
+      if (!decision.admitted) return;
+      expect(decision.comparableEventCount).toBe(1);
+      expect(
+        Math.abs(decision.event.peakMs - window.peakMs),
+      ).toBeLessThanOrEqual(Math.max(100, 1000 / fps));
+      expect(decision.event.endMs).toBeLessThan(window.endMs);
+    },
+  );
 
   it('treats both wrists moving through the same swing as ONE event', () => {
     const { sequence, window } = singleSwing();
