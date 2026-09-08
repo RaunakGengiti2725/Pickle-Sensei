@@ -28,7 +28,7 @@ import {
 } from "../../../../packages/shared-types/src/playerRank.ts";
 import { fakeGoogleIdToken, loadHarness, userRequest } from "./routesHarness.ts";
 
-const PG_URL = Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
+const PG_URL = Deno.env.get("XC_PG_URL") ?? Deno.env.get("PICKLE_AUDIT_PG_URL") ?? "";
 const ignore = PG_URL === "";
 
 const ALICE = "00000000-0000-4000-8000-00000000000a";

@@ -3009,6 +3009,33 @@ function parseBillingFulfilment(value: unknown): BillingFulfilmentRequest | null
   };
 }
 
+/** A provider transaction identifier in the form the mobile evidence carries
+ * (a string). RevenueCat's v1 customer info reports iOS `store_transaction_id`
+ * as a JSON number in places, so a non-negative safe integer is its decimal
+ * string; anything else (fractions, unsafe magnitudes, booleans, objects,
+ * empty strings) identifies nothing. */
+function providerTransactionIdentifier(value: unknown): string | null {
+  if (typeof value === "string") return value === "" ? null : value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return null;
+}
+
+/** The identity a RevenueCat transaction record proves. A reported store
+ * transaction id is the identity whenever present — a conflicting store id is
+ * never overridden by another field. A non-subscription (lifetime) record
+ * RevenueCat reports without any store transaction id is identified by
+ * RevenueCat's own purchase `id`, which the mobile evidence carries when Apple
+ * exposed no transaction id; recurring subscriptions never resolve that way.
+ * An unidentified record only ever leaves the purchase pending. */
+function providerTransactionIdentity(
+  row: Record<string, unknown>,
+  nonSubscription: boolean,
+): string | null {
+  if (row.store_transaction_id !== undefined && row.store_transaction_id !== null)
+    return providerTransactionIdentifier(row.store_transaction_id);
+  return nonSubscription ? providerTransactionIdentifier(row.id) : null;
+}
+
 function billingFulfilmentOf(
   request: BillingFulfilmentRequest,
   subscriber: Record<string, unknown>,
@@ -3031,8 +3058,7 @@ function billingFulfilmentOf(
   const matching = candidates.filter(
     (row): row is Record<string, unknown> =>
       isRecord(row) &&
-      typeof row.store_transaction_id === "string" &&
-      row.store_transaction_id === transactionId &&
+      providerTransactionIdentity(row, row !== subscriptions[productId]) === transactionId &&
       isoTimestamp(row.purchase_date) === purchasedAt,
   );
   // Ambiguous absence, product-only matches, RC's own non-subscription `id`, or
