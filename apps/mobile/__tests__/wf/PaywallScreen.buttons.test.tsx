@@ -580,7 +580,7 @@ describe('PaywallScreen buttons — plan podium', () => {
     ).toBe(true);
     expect(useAccessStore.getState().selectedPeriod).toBe('monthly');
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
-    expect(allText(renderer)).not.toContain('BEST VALUE');
+    expect(allText(renderer)).not.toContain('RECOMMENDED');
 
     act(() => renderer.unmount());
   });

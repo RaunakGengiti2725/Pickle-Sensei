@@ -471,7 +471,7 @@ describe('SettingsScreen button ledger', () => {
         expect(rowLabel(renderer, label)).toBeNull();
       }
       const copy = allText(renderer);
-      expect(copy).toContain('Guest · this device');
+      expect(copy).toContain('Local · this device');
       expect(copy).toContain(
         'Progress stays on this phone until you connect an account.',
       );

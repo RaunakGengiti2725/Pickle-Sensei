@@ -612,7 +612,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                         plan={plans.annual}
                         selected={selectedPeriod === 'annual'}
                         hero
-                        heroBadge="BEST VALUE"
+                        heroBadge="RECOMMENDED"
                         chip={annualSavings}
                         onPress={() => selectPeriod('annual')}
                       />

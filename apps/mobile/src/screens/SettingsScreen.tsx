@@ -248,7 +248,7 @@ export function SettingsScreen() {
     session === null
       ? '—'
       : session.provider === 'guest'
-        ? 'Guest · this device'
+        ? 'Local · this device'
         : (session.displayName ?? session.email ?? session.subject);
   // Guests with an onboarding first name are greeted by name; the guest
   // provider label moves down to the caption line.
@@ -257,7 +257,7 @@ export function SettingsScreen() {
     isGuest && profile?.firstName ? profile.firstName : accountLabel;
   const accountCaption = isGuest
     ? profile?.firstName
-      ? 'Guest · this device'
+      ? 'Local · this device'
       : 'Progress stays on this phone until you connect an account.'
     : `${session?.provider ?? ''} account`;
   const scoringStack = scoringStackStatus();
