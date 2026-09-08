@@ -694,11 +694,14 @@ export async function storeAccountAppleCredential(
 //
 // The reader is keyset (cursor) driven: each page is read strictly after the
 // last row of the previous one, so a row inserted or deleted mid-read shifts
-// nothing, and completion is proven by an EMPTY page after the last cursor
-// (a short page is not proof — the server may clamp pages below the request).
+// nothing. Completion is proven by a page SHORTER than requested after the
+// last cursor (empty when the inventory is an exact multiple of the page);
+// the page size must therefore stay <= the server's max_rows, or a clamped
+// page would look like the end.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Rows requested per page; must not exceed the server's max_rows. */
+/** Rows requested per page; must not exceed the server's max_rows (1000 on
+ * the hosted platform) — a shorter page is what proves the read complete. */
 export const INVENTORY_PAGE_ROWS = 1_000;
 
 export interface InventoryPage<Row> {
@@ -769,6 +772,7 @@ export async function readOwnerInventory<Row, Cursor>(
     if (seenCursors.has(key)) return incomplete("cursor_stalled");
     seenCursors.add(key);
     rows.push(...batch);
+    if (batch.length < limit) return { status: "COMPLETE", rows, pages };
     cursor = next;
   }
 }
