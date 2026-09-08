@@ -413,7 +413,10 @@ Deno.test(
       assertEquals(url.searchParams.get("limit"), String(PAGE));
       assertEquals(url.searchParams.get("offset"), null, "cursor-driven: no offset paging");
       if (index === 0) assertEquals(url.searchParams.get("or"), null);
-      else assertEquals(url.searchParams.get("or"), `(day.lt."${days[index * PAGE - 1].day}")`);
+      else {
+        const lastServed = days[Math.min(index * PAGE, total) - 1];
+        assertEquals(url.searchParams.get("or"), `(day.lt."${lastServed.day}")`);
+      }
     }
   },
 );
