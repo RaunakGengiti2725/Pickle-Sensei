@@ -5817,6 +5817,168 @@ begin
     raise exception 'T7: account deletion must cascade the receipt with the shot';
   end if;
 end $$;
+
+-- T8: account deletion cascades the receipt in WHICHEVER order PostgreSQL
+-- fires the two profiles cascades. settlement_receipts has two cascade
+-- parents (shot_id → shots, user_id → profiles) and shots cascades from
+-- profiles too; the same-event RI triggers on profiles fire in trigger-NAME
+-- order (RI_ConstraintTrigger_a_<oid>, compared as text), which depends on the
+-- oids the cluster allocated — a fresh install, production and any restore
+-- may each differ. T7 exercised the natural order of this database; here BOTH
+-- orders are forced by recreating the profiles-side foreign key that must
+-- fire later (same name, same definition, a newer oid; schema change rolled
+-- back with the section), asserted from pg_trigger before each deletion, and
+-- each order must remove the profile, the shot and the receipt without error.
+create function t_probe.profile_cascade_order()
+returns text[] language sql stable set search_path = '' as $$
+  select array_agg(t.tgconstrrelid::regclass::text order by t.tgname)
+  from pg_catalog.pg_trigger t
+  where t.tgrelid = 'public.profiles'::regclass
+    and t.tgfoid = 'pg_catalog."RI_FKey_cascade_del"'::regproc
+    and t.tgconstrrelid in ('public.shots'::regclass, 'public.settlement_receipts'::regclass)
+$$;
+create function t_probe.force_profile_cascade_first(p_first text)
+returns text[] language plpgsql set search_path = '' as $$
+declare
+  ordering text[];
+  attempts integer := 0;
+begin
+  loop
+    ordering := t_probe.profile_cascade_order();
+    if cardinality(ordering) <> 2 then
+      raise exception 'T8: expected exactly two profiles cascades to shots and settlement_receipts (got %)', ordering;
+    end if;
+    exit when ordering[1] = p_first;
+    attempts := attempts + 1;
+    if attempts > 6 then
+      raise exception 'T8: could not make the % cascade fire first (%)', p_first, ordering;
+    end if;
+    -- Recreate the OTHER foreign key so its RI trigger takes a newer oid.
+    if p_first = 'public.settlement_receipts' then
+      alter table public.shots drop constraint shots_user_id_fkey;
+      alter table public.shots add constraint shots_user_id_fkey
+        foreign key (user_id) references public.profiles (id) on delete cascade;
+    else
+      alter table public.settlement_receipts drop constraint settlement_receipts_user_id_fkey;
+      alter table public.settlement_receipts add constraint settlement_receipts_user_id_fkey
+        foreign key (user_id) references public.profiles (id) on delete cascade;
+    end if;
+  end loop;
+  return ordering;
+end $$;
+create function t_probe.settle_as(p_owner uuid, p_shot uuid, p_permit uuid)
+returns void language plpgsql set search_path = '' as $$
+declare v text;
+begin
+  perform pg_catalog.set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+  perform pg_catalog.set_config('request.jwt.claim.sub', p_owner::text, true);
+  set local role authenticated;
+  v := public.apply_synced_shot(t_probe.settle(p_owner, t_probe.shot(p_shot, p_permit, 6.8),
+                                                t_probe.claims(), t_probe.policy('policy-2026-09-08')));
+  reset role;
+  if v <> 'accepted' then
+    raise exception 'T8: the settlement must be accepted before the cascade is exercised (got %)', v;
+  end if;
+  if (select count(*) from public.settlement_receipts where shot_id = p_shot) <> 1 then
+    raise exception 'T8: the receipt must be durable before the cascade is exercised';
+  end if;
+end $$;
+create function t_probe.delete_account_expect_cascade(p_owner uuid, p_shot uuid, p_order text[])
+returns void language plpgsql set search_path = '' as $$
+declare
+  v_state text;
+  v_msg text;
+begin
+  begin
+    delete from auth.users where id = p_owner;
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+    raise exception 'T8 (% first): account deletion of a user with a settled shot must not raise, got % (%)',
+      p_order[1], v_state, v_msg;
+  end;
+  if exists (select 1 from public.profiles where id = p_owner)
+     or exists (select 1 from public.shots where id = p_shot)
+     or exists (select 1 from public.settlement_receipts where shot_id = p_shot) then
+    raise exception 'T8 (% first): account deletion must remove the profile, the shot and the receipt', p_order[1];
+  end if;
+end $$;
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000095', 'tara@example.test',
+   '{"full_name":"Tara"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000096', 'tobias@example.test',
+   '{"full_name":"Tobias"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-tara', '00000000-0000-4000-8000-000000000095',
+   '{"sub":"google-sub-tara","email":"tara@example.test"}'),
+  ('apple', 'apple-sub-tobias', '00000000-0000-4000-8000-000000000096',
+   '{"sub":"apple-sub-tobias","email":"tobias@example.test"}');
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values
+  ('00000000-0000-4000-8000-0000000000d4',
+   '00000000-0000-4000-8000-000000000095', 'w0103-t8-tara'),
+  ('00000000-0000-4000-8000-0000000000d5',
+   '00000000-0000-4000-8000-000000000096', 'w0103-t8-tobias');
+
+-- T8a: the settlement_receipts cascade fires BEFORE the shots cascade — the
+-- receipt is removed while its shot still exists; only the account cascade
+-- explains it, and the guard must recognise that.
+do $$
+declare
+  tara uuid := '00000000-0000-4000-8000-000000000095';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e4';
+  ordering text[];
+begin
+  ordering := t_probe.force_profile_cascade_first('public.settlement_receipts');
+  if ordering <> array['public.settlement_receipts', 'public.shots'] then
+    raise exception 'T8a: the receipts cascade must be ordered first (got %)', ordering;
+  end if;
+  perform t_probe.settle_as(tara, v_shot, '00000000-0000-4000-8000-0000000000d4');
+  perform t_probe.delete_account_expect_cascade(tara, v_shot, ordering);
+end $$;
+
+-- T8b: the shots cascade fires BEFORE the settlement_receipts cascade — the
+-- shot cascade removes the receipt, then the receipts cascade finds nothing.
+do $$
+declare
+  tobias uuid := '00000000-0000-4000-8000-000000000096';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e5';
+  ordering text[];
+begin
+  ordering := t_probe.force_profile_cascade_first('public.shots');
+  if ordering <> array['public.shots', 'public.settlement_receipts'] then
+    raise exception 'T8b: the shots cascade must be ordered first (got %)', ordering;
+  end if;
+  perform t_probe.settle_as(tobias, v_shot, '00000000-0000-4000-8000-0000000000d5');
+  perform t_probe.delete_account_expect_cascade(tobias, v_shot, ordering);
+end $$;
+
+-- T8c: outside both cascades the receipt still cannot be removed — the
+-- tolerance is for the parent rows being gone, not for a live owner.
+do $$
+declare
+  theo uuid := '00000000-0000-4000-8000-000000000094';
+  v_shot uuid := '00000000-0000-4000-8000-0000000000e6';
+begin
+  perform t_probe.settle_as(theo, v_shot, '00000000-0000-4000-8000-0000000000d3');
+  begin
+    delete from public.settlement_receipts where shot_id = v_shot;
+    raise exception 'T8c: a receipt whose shot and owner both exist must not be removable';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.settlement_receipts where user_id = theo;
+    raise exception 'T8c: a receipt whose shot and owner both exist must not be removable by owner';
+  exception when check_violation then null;
+  end;
+  if (select count(*) from public.settlement_receipts where shot_id = v_shot) <> 1 then
+    raise exception 'T8c: the refused deletes must leave the receipt intact';
+  end if;
+end $$;
 rollback;
 
 create schema w07_probe;
