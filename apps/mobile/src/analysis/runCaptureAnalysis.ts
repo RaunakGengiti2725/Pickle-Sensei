@@ -56,6 +56,7 @@ import {
   type ApiConfigState,
   type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
+import { recordClock } from '../util/recordClock';
 import { makeUuid } from '../util/uuid';
 import {
   recordEvaluationTrial,
@@ -1596,7 +1597,11 @@ async function runCaptureAnalysisCore(
         sessionId: request.sessionId ?? null,
         appVersion: request.appVersion,
         modelBundleVersion: MODEL_BUNDLE_VERSION,
-        nowIso: () => new Date().toISOString(),
+        nowIso: recordClock([
+          clip.capturedAtIso,
+          request.targetSeed?.selectedAtIso,
+          techniqueConfirmation?.confirmedAtIso,
+        ]),
         makeId: makeUuid,
         captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
         ...(request.focusCheckpoint
