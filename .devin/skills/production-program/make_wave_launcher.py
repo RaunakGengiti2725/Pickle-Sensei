@@ -80,6 +80,7 @@ def make(
     max_rounds: int = 2,
     mode: str | None = None,
     requeue: dict[str, str] | None = None,
+    requeue_blocked: dict[str, str] | None = None,
 ) -> str:
     sys.path.insert(0, HERE)
     import program_lib  # noqa: E402
@@ -92,9 +93,13 @@ def make(
     if not package_ids:
         raise SystemExit("at least one package id is required")
     requeue = requeue or {}
-    unknown = set(requeue) - set(package_ids)
+    requeue_blocked = requeue_blocked or {}
+    unknown = (set(requeue) | set(requeue_blocked)) - set(package_ids)
     if unknown:
         raise SystemExit(f"--requeue for packages not in --pkgs: {sorted(unknown)}")
+    both = set(requeue) & set(requeue_blocked)
+    if both:
+        raise SystemExit(f"package given both --requeue and --requeue-blocked: {sorted(both)}")
     packages: list[dict] = []
     held: dict[str, str] = {}
     for pid in package_ids:
@@ -113,6 +118,18 @@ def make(
                 raise SystemExit(f"record {requeue[pid]} is for {record.get('package_id')}, not {pid}")
             if record.get("status") != "REQUEUE":
                 raise SystemExit(f"{pid}: record status is {record.get('status')}; only REQUEUE records can be requeued")
+            entry["prior"], entry["start_round"] = program_lib.prior_from_record(record)
+        elif pid in requeue_blocked:
+            # A BLOCKED_EXTERNAL package may only re-enter after the coordinator amended its manifest entry
+            # (documented skips, serial-group grant, ...): the amendment must be visible as a manifest change.
+            with open(requeue_blocked[pid], encoding="utf8") as fh:
+                record = json.load(fh)
+            if record.get("package_id") != pid:
+                raise SystemExit(f"record {requeue_blocked[pid]} is for {record.get('package_id')}, not {pid}")
+            if record.get("status") != "BLOCKED_EXTERNAL":
+                raise SystemExit(f"{pid}: record status is {record.get('status')}; --requeue-blocked needs BLOCKED_EXTERNAL")
+            if record.get("manifest_sha256") == manifest["manifest_sha256"]:
+                raise SystemExit(f"{pid}: BLOCKED_EXTERNAL under the SAME manifest ({manifest['manifest_sha256'][:12]}); amend the manifest entry first")
             entry["prior"], entry["start_round"] = program_lib.prior_from_record(record)
         packages.append(entry)
     out_dir = os.path.join(ROOT, ".devin", "program", "runs")
@@ -144,7 +161,14 @@ if __name__ == "__main__":
     ap.add_argument("--mode", default=None)
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--requeue", action="append", default=[], metavar="PKG=RECORD_JSON")
+    ap.add_argument("--requeue-blocked", action="append", default=[], metavar="PKG=RECORD_JSON", help="BLOCKED_EXTERNAL record whose manifest entry was amended since")
     a = ap.parse_args()
+    rqb: dict[str, str] = {}
+    for item in a.requeue_blocked:
+        pid, _, path = item.partition("=")
+        if not pid or not path:
+            raise SystemExit(f"bad --requeue-blocked {item!r}")
+        rqb[pid] = path
     rq: dict[str, str] = {}
     for item in a.requeue:
         pid, _, rec = item.partition("=")
@@ -152,4 +176,4 @@ if __name__ == "__main__":
             raise SystemExit(f"--requeue expects PKG=RECORD_JSON, got {item!r}")
         rq[pid] = rec
     pkgs = [p.strip() for p in a.pkgs.split(",") if p.strip()]
-    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq))
+    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq, requeue_blocked=rqb))

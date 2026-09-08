@@ -1,8 +1,8 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
-  "manifest_version": "2026-09-08.2",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
   "packages": [
     {
       "acceptance": [
@@ -352,7 +352,10 @@
       "acceptance": [
         {
           "command": "cd apps/mobile && npx jest --ci --silent",
-          "criterion": "full mobile suite passes after retirement",
+          "criterion": "full mobile Jest suite: 0 failed; the only tolerated skip is the documented Mac-artifact suite",
+          "documented_skips": [
+            "importedRealFootageAnalysis.test.ts"
+          ],
           "id": "H09-01-AC1",
           "kind": "test"
         },
@@ -405,9 +408,12 @@
         },
         {
           "command": "cd apps/mobile && npx jest --ci --silent",
-          "criterion": "full mobile suite passes once cold with the fix, no suite skipped",
+          "criterion": "full mobile suite passes once COLD (rm -rf $TMPDIR/metro-* first) with the fix: 0 failed; the only tolerated skip is the documented Mac-artifact suite",
+          "documented_skips": [
+            "importedRealFootageAnalysis.test.ts"
+          ],
           "id": "P0-01-AC2",
-          "kind": "check"
+          "kind": "test"
         },
         {
           "command": "cd apps/mobile && npx tsc --noEmit",
@@ -452,7 +458,10 @@
       "acceptance": [
         {
           "command": "cd apps/mobile && npx jest --ci --silent",
-          "criterion": "full mobile Jest suite: 0 failed, 0 skipped suites",
+          "criterion": "full mobile Jest suite: 0 failed; the only tolerated skip is the documented Mac-artifact suite",
+          "documented_skips": [
+            "importedRealFootageAnalysis.test.ts"
+          ],
           "id": "P0-02-AC1",
           "kind": "test"
         },
@@ -584,8 +593,14 @@
           "kind": "check"
         },
         {
-          "command": "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
-          "criterion": "workspace tests pass",
+          "command": "docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+          "criterion": "workspace tests pass with the SQS tests executing (ElasticMQ up); the only tolerated skips are the 4 documented swing-lab Apple-Vision replay tests",
+          "documented_skips": [
+            "afn-sasebo-rally1: wrist-only batch",
+            "afn-sasebo-rally1: streaming the series",
+            "afn-sasebo-rally2: wrist-only batch",
+            "afn-sasebo-rally2: streaming the series"
+          ],
           "id": "P0-05-AC4",
           "kind": "test"
         }
@@ -937,10 +952,10 @@
           "kind": "test"
         },
         {
-          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
-          "criterion": "crash-injection scenario that reorders dependents fails on base",
+          "command": "reviewer: enumerate the outbox steps the suite kills at (>= 8, real node:sqlite); run ONLY the new suite on BASE_SHA and record its result in note — a defect fixed by the candidate must FAIL there; if it PASSES the candidate must contain no behavioural change to sync.ts/syncRuntime.ts (proof-only package)",
+          "criterion": "crash-at-every-step proof: either a reproduced+fixed ordering defect, or an honest proof-only result with no production change",
           "id": "W02-01-AC2",
-          "kind": "regress"
+          "kind": "check"
         },
         {
           "command": "cd apps/mobile && npx tsc --noEmit",
@@ -1040,15 +1055,21 @@
           "kind": "test"
         },
         {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "unverified non-JSON 2xx finalize acknowledgement recorded as released, and 3xx redirects followed by the transport, fail on base",
+          "id": "W02-03-AC2",
+          "kind": "regress"
+        },
+        {
           "command": "cd apps/mobile && npx tsc --noEmit",
           "criterion": "mobile TypeScript passes",
-          "id": "W02-03-AC2",
+          "id": "W02-03-AC3",
           "kind": "check"
         },
         {
           "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
           "criterion": "root ESLint + Prettier pass on every changed file",
-          "id": "W02-03-AC3",
+          "id": "W02-03-AC4",
           "kind": "check"
         }
       ],
@@ -1058,12 +1079,16 @@
       "estimate_minutes": 60,
       "external_blocker": null,
       "id": "W02-03",
-      "invariants": [],
+      "invariants": [
+        "request() never follows redirects and never treats a non-JSON 2xx body as an acknowledgement"
+      ],
       "mode": null,
       "objective": "Build a deterministic process-death harness that kills a child Node process between each journal step and asserts recovery on relaunch reproduces exactly one durable result and one outbox entry (no duplicates, no loss).",
       "parent": "W02",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-data"
+      ],
       "severity": "P0",
       "source_ids": [
         "W02"
@@ -1071,7 +1096,8 @@
       "title": "Process-death recovery harness for journal/result/outbox on Linux (node:sqlite)",
       "write_paths": [
         "apps/mobile/__harness__/processDeath/",
-        "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts",
+        "apps/mobile/src/data/api.ts"
       ]
     },
     {

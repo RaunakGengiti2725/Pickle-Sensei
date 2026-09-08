@@ -125,13 +125,46 @@ class JudgeTests(unittest.TestCase):
         d = pl.judge(self.pkg, impl, good_review(self.pkg), good_adv(self.pkg))
         self.assertIn("impl: " + self.pkg["acceptance"][-1]["id"] + " not covered", d.reasons)
 
-    def test_rejects_duplicate_and_unknown_ids(self):
+    def test_rejects_duplicate_ids_and_ignores_extra_ids(self):
         impl = good_impl(self.pkg)
         impl["acceptance_results"].append(copy.deepcopy(impl["acceptance_results"][0]))
-        impl["acceptance_results"].append({**impl["acceptance_results"][0], "id": "BOGUS"})
         d = pl.judge(self.pkg, impl, good_review(self.pkg), good_adv(self.pkg))
         self.assertTrue(any("duplicate" in r for r in d.reasons))
-        self.assertTrue(any("unknown" in r for r in d.reasons))
+        # extra evidence (e.g. "format-check") is ignored, never graded and never a rejection
+        impl = good_impl(self.pkg)
+        impl["acceptance_results"].append({**impl["acceptance_results"][0], "id": "format-check", "status": "FAIL", "exit_code": 1})
+        d = pl.judge(self.pkg, impl, good_review(self.pkg), good_adv(self.pkg))
+        self.assertTrue(d.accepted, d.reasons)
+        # ...but a required criterion can never be satisfied by an extra id
+        impl["acceptance_results"] = [r for r in impl["acceptance_results"] if r["id"] != self.pkg["acceptance"][0]["id"]]
+        d = pl.judge(self.pkg, impl, good_review(self.pkg), good_adv(self.pkg))
+        self.assertIn("impl: " + self.pkg["acceptance"][0]["id"] + " not covered", d.reasons)
+
+    def test_documented_skips_only_when_named_and_bounded(self):
+        pkg = copy.deepcopy(self.pkg)
+        test_crit = next(a for a in pkg["acceptance"] if a["kind"] == "test")
+        test_crit["documented_skips"] = ["alpha.test.ts", "beta.test.ts"]
+
+        def graded(skipped: int, note: str) -> list[str]:
+            recs = ok_records(pkg)
+            for r in recs:
+                if r["id"] == test_crit["id"]:
+                    r["skipped"] = skipped
+                    r["note"] = note
+            return pl.grade_acceptance(pkg, recs)
+
+        self.assertEqual(graded(0, ""), [])
+        self.assertEqual(graded(1, "skipped: alpha.test.ts (Mac artifact)"), [])
+        self.assertEqual(graded(2, "alpha.test.ts and beta.test.ts skipped"), [])
+        self.assertTrue(graded(1, "one unrelated skip"))  # unnamed skip => fail
+        self.assertTrue(graded(2, "alpha.test.ts"))  # two skips, one named => fail
+        self.assertTrue(graded(3, "alpha.test.ts beta.test.ts gamma"))  # more than documented => fail
+        # criteria without documented_skips keep the strict rule
+        undoc = copy.deepcopy(self.pkg)
+        recs = ok_records(undoc, skipped=1)
+        for r in recs:
+            r["note"] = "alpha.test.ts"
+        self.assertTrue(any("skipped" in r for r in pl.grade_acceptance(undoc, recs)))
 
     def test_zero_tests_skipped_and_failed_are_non_passing(self):
         for override, needle in (

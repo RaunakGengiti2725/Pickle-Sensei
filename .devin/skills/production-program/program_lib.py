@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.4"
+LIB_VERSION = "2026-09-08.5"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -54,7 +54,10 @@ ACCEPTANCE_ITEM_DOC = (
     "(use 0 for non-test checks). artifact is a repo-relative log path or uploaded attachment URL. "
     "For kind=regress: exit_code is the PROOF outcome (0 only when the new tests FAIL on BASE_SHA and PASS "
     "on the candidate; otherwise 1) and executed/passed/failed/skipped are the candidate (HEAD) run's counts; "
-    "put the base run's exit code, counts and log in `note`."
+    "put the base run's exit code, counts and log in `note`. Use EXACTLY the acceptance ids listed in the package; "
+    "extra ids are ignored. skipped must be 0 unless the criterion lists `documented_skips` (documented environmental "
+    "non-gates from docs/devin/TEST_MATRIX.md): then skipped may be at most that many and the note must name each skipped "
+    "suite/test exactly as listed."
 )
 
 IMPLEMENT_SCHEMA = {
@@ -156,6 +159,20 @@ def _int(v: Any) -> int | None:
     return None
 
 
+def _undocumented_skips(rid: str, crit: dict, skipped: int, note: str) -> list[str]:
+    """A skip is tolerated only when the manifest names it as a documented environmental non-gate
+    (docs/devin/TEST_MATRIX.md) AND the record's note names that exact skip. Anything else fails."""
+    documented = [str(s) for s in crit.get("documented_skips") or []]
+    if not documented:
+        return [f"{rid} {skipped} skipped/ignored"]
+    named = [s for s in documented if s in note]
+    if skipped > len(documented):
+        return [f"{rid} {skipped} skipped/ignored exceeds the {len(documented)} documented environmental skip(s)"]
+    if len(named) < skipped:
+        return [f"{rid} {skipped} skipped/ignored but the note names only {len(named)} of the documented skips {documented}"]
+    return []
+
+
 def grade_acceptance(package: dict, records: Any) -> list[str]:
     """Return a list of failure reasons (empty == every criterion proven)."""
     reasons: list[str] = []
@@ -169,7 +186,7 @@ def grade_acceptance(package: dict, records: Any) -> list[str]:
             continue
         rid = rec.get("id")
         if rid not in expected:
-            reasons.append(f"unknown acceptance id {rid!r}")
+            # Extra evidence beyond the manifest's criteria is ignored, never graded.
             continue
         if rid in seen:
             reasons.append(f"duplicate acceptance record {rid}")
@@ -207,7 +224,7 @@ def grade_acceptance(package: dict, records: Any) -> list[str]:
             if failed != 0:
                 reasons.append(f"{rid} {failed} failed")
             if skipped != 0:
-                reasons.append(f"{rid} {skipped} skipped/ignored")
+                reasons.extend(_undocumented_skips(rid, crit, skipped, str(rec.get("note", ""))))
         if kind == "manual" and not str(rec.get("artifact", "")).strip():
             reasons.append(f"{rid} manual criterion without artifact")
     return reasons
@@ -340,7 +357,7 @@ PROCEDURE:
 2. Re-run EVERY acceptance command yourself on the candidate; fill `acceptance_reverified` with YOUR counts and exit codes (one object per acceptance id: {ACCEPTANCE_ITEM_DOC}).
 3. Regression proof: check out BASE_SHA, copy ONLY the new/changed test files from the candidate over it, run them — they must FAIL; then run them on the candidate — they must PASS. Set `regression_fails_on_base`.
 4. Read the whole diff against REVIEW.md and the package invariants: security (RLS, grants, session checks), billing conservation, owner isolation, copy rules, no test weakening, no bypasses, no comment edits, no migration history edits. List each violation in `invariant_violations`.
-5. `verdict`: `approve` only if scope is clean, every criterion re-verified PASS with executed>0 and failed==skipped==0, regression proof holds, and there are zero blocking issues. Otherwise `request_changes` (fixable) or `reject` (wrong approach). Each blocking issue must be concrete: file:line, what is wrong, how to reproduce."""
+5. `verdict`: `approve` only if scope is clean, every criterion re-verified PASS with executed>0, failed==0 and skipped==0 (or, only for a criterion that lists `documented_skips`, skipped <= that many with each skipped item named in your note), regression proof holds, and there are zero blocking issues. Otherwise `request_changes` (fixable) or `reject` (wrong approach). Each blocking issue must be concrete: file:line, what is wrong, how to reproduce."""
 
 
 def adversary_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict) -> str:

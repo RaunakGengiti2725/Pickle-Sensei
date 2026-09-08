@@ -17,7 +17,7 @@ import hashlib
 import json
 import os
 
-MANIFEST_VERSION = "2026-09-08.2"
+MANIFEST_VERSION = "2026-09-08.3"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 CONTINUATION_BRANCH = "codex/production-continuation-20260907"
 HANDOFF_SHA = "c23d16013b9872cdba7541329c9151d23045090b"
@@ -64,6 +64,15 @@ assert set(SERIAL_GROUP_PATHS) == set(SERIAL_GROUPS)
 #   check   -> exit 0
 #   regress -> reviewer must confirm the new test FAILS on base and PASSES on head
 #   manual  -> reproducible manual procedure + artifact (screenshots etc.)
+# A 4th tuple element lists `documented_skips`: the ONLY skips the judge tolerates for that
+# criterion, each a documented Linux non-gate from docs/devin/TEST_MATRIX.md that needs
+# Mac-generated (gitignored) artifacts. The record's note must name each one.
+MAC_ARTIFACT_SKIP_MOBILE = ["importedRealFootageAnalysis.test.ts"]  # datasets/paddle-bench/runs/wm-volley-02 (Apple Vision, M4 only)
+MAC_ARTIFACT_SKIPS_SWING_LAB = [  # packages/swing-lab/test/sessionEngine.test.ts replay describes (Apple Vision report.json, M4 only)
+    "afn-sasebo-rally1: wrist-only batch", "afn-sasebo-rally1: streaming the series",
+    "afn-sasebo-rally2: wrist-only batch", "afn-sasebo-rally2: streaming the series",
+]
+MOBILE_FULL_JEST = ("test", "cd apps/mobile && npx jest --ci --silent", "full mobile Jest suite: 0 failed; the only tolerated skip is the documented Mac-artifact suite", MAC_ARTIFACT_SKIP_MOBILE)
 MOBILE_TSC = ("check", "cd apps/mobile && npx tsc --noEmit", "mobile TypeScript passes")
 MOBILE_LINT = (
     "check",
@@ -108,6 +117,16 @@ def manual(what: str, procedure: str) -> tuple[str, str, str]:
 P: list[dict] = []
 
 
+def _criterion(pkg_id: str, i: int, a: tuple) -> dict:
+    assert len(a) in (3, 4), a
+    kind, command, criterion = a[0], a[1], a[2]
+    out = {"id": f"{pkg_id}-AC{i + 1}", "kind": kind, "command": command, "criterion": criterion}
+    if len(a) == 4:
+        assert kind in ("test", "regress") and a[3] and all(isinstance(s, str) and s for s in a[3]), a
+        out["documented_skips"] = list(a[3])
+    return out
+
+
 def pkg(
     id: str,
     parent: str,
@@ -118,7 +137,7 @@ def pkg(
     source_ids: list[str],
     plane: str,
     write_paths: list[str],
-    acceptance: list[tuple[str, str, str]],
+    acceptance: list[tuple],
     deps: list[str] | None = None,
     serial_groups: list[str] | None = None,
     additive_shared_paths: list[str] | None = None,
@@ -144,10 +163,7 @@ def pkg(
             "serial_groups": serial_groups or [],
             "write_paths": write_paths,
             "additive_shared_paths": additive_shared_paths or [],
-            "acceptance": [
-                {"id": f"{id}-AC{i + 1}", "kind": k, "command": c, "criterion": w}
-                for i, (k, c, w) in enumerate(acceptance)
-            ],
+            "acceptance": [_criterion(id, i, a) for i, a in enumerate(acceptance)],
             "invariants": invariants or [],
             "mode": mode,
             "competing": competing,
@@ -167,7 +183,7 @@ pkg(
     write_paths=["apps/mobile/scripts/", "apps/mobile/__tests__/", "apps/mobile/metro.config.js", "apps/mobile/jest.config.js"],
     acceptance=[
         mobile_jest("<the ICNS/metro config suites>", "ICNS/metro suites pass 5 consecutive COLD runs (rm -rf $TMPDIR/metro-* between runs) with executed>0, failed=0, skipped=0"),
-        ("check", "cd apps/mobile && npx jest --ci --silent", "full mobile suite passes once cold with the fix, no suite skipped"),
+        ("test", "cd apps/mobile && npx jest --ci --silent", "full mobile suite passes once COLD (rm -rf $TMPDIR/metro-* first) with the fix: 0 failed; the only tolerated skip is the documented Mac-artifact suite", MAC_ARTIFACT_SKIP_MOBILE),
         MOBILE_TSC, MOBILE_LINT,
     ],
     invariants=["timeout, memory and output-size guards unchanged or stricter"], estimate_minutes=60,
@@ -177,7 +193,7 @@ pkg(
     "Run the full mobile Jest suite on BASE_SHA, list every failing/erroring suite with cause, and fix real defects (not tests) for each. If a failure is environmental, prove it (exact env difference) instead of skipping.",
     severity="P0", source_ids=["P0-MOBILE"], plane="cloud",
     write_paths=["apps/mobile/src/", "apps/mobile/__tests__/", "apps/mobile/__harness__/"],
-    acceptance=[("test", "cd apps/mobile && npx jest --ci --silent", "full mobile Jest suite: 0 failed, 0 skipped suites"), MOBILE_TSC, MOBILE_LINT],
+    acceptance=[MOBILE_FULL_JEST, MOBILE_TSC, MOBILE_LINT],
     estimate_minutes=60,
 )
 pkg(
@@ -199,7 +215,7 @@ pkg(
     "Run pnpm format:check, pnpm lint, pnpm typecheck and DATABASE_URL_TEST=… pnpm test (with docker postgres_test) and fix every failure at its root.",
     severity="P1", source_ids=["P0-HOUSEKEEPING"], plane="cloud",
     write_paths=["packages/", "services/", "tools/", "apps/admin-web/"],
-    acceptance=[ROOT_FMT, ("check", "pnpm lint", "root lint passes"), ("check", "pnpm typecheck", "workspace typecheck passes"), ("test", "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test", "workspace tests pass")],
+    acceptance=[ROOT_FMT, ("check", "pnpm lint", "root lint passes"), ("check", "pnpm typecheck", "workspace typecheck passes"), ("test", "docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test", "workspace tests pass with the SQS tests executing (ElasticMQ up); the only tolerated skips are the 4 documented swing-lab Apple-Vision replay tests", MAC_ARTIFACT_SKIPS_SWING_LAB)],
 )
 
 # ---------------------------------------------------------------------------
@@ -264,7 +280,7 @@ pkg(
     severity="P0", source_ids=["W02"], plane="cloud",
     write_paths=["apps/mobile/src/data/sync.ts", "apps/mobile/src/data/syncRuntime.ts", "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"],
     serial_groups=["mobile-data"],
-    acceptance=[mobile_jest("__tests__/w02OutboxDependencyOrder.test.ts __tests__/sync*.test.ts", "outbox ordering suites pass"), regress("crash-injection scenario that reorders dependents fails on base"), MOBILE_TSC, MOBILE_LINT],
+    acceptance=[mobile_jest("__tests__/w02OutboxDependencyOrder.test.ts __tests__/sync*.test.ts", "outbox ordering suites pass"), ("check", "reviewer: enumerate the outbox steps the suite kills at (>= 8, real node:sqlite); run ONLY the new suite on BASE_SHA and record its result in note — a defect fixed by the candidate must FAIL there; if it PASSES the candidate must contain no behavioural change to sync.ts/syncRuntime.ts (proof-only package)", "crash-at-every-step proof: either a reproduced+fixed ordering defect, or an honest proof-only result with no production change"), MOBILE_TSC, MOBILE_LINT],
 )
 pkg(
     "W02-02", "W02", "Owner-generation fencing adversarial matrix across account switch during in-flight analysis",
@@ -276,9 +292,10 @@ pkg(
 pkg(
     "W02-03", "W02", "Process-death recovery harness for journal/result/outbox on Linux (node:sqlite)",
     "Build a deterministic process-death harness that kills a child Node process between each journal step and asserts recovery on relaunch reproduces exactly one durable result and one outbox entry (no duplicates, no loss).",
-    severity="P0", source_ids=["W02"], plane="cloud",
-    write_paths=["apps/mobile/__harness__/processDeath/", "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"],
-    acceptance=[mobile_jest("__tests__/w02ProcessDeathRecovery.test.ts", "process-death recovery suite passes with >= 8 kill points"), MOBILE_TSC, MOBILE_LINT],
+    severity="P0", source_ids=["W02"], plane="cloud", serial_groups=["mobile-data"],
+    write_paths=["apps/mobile/__harness__/processDeath/", "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts", "apps/mobile/src/data/api.ts"],
+    acceptance=[mobile_jest("__tests__/w02ProcessDeathRecovery.test.ts", "process-death recovery suite passes with >= 8 kill points"), regress("unverified non-JSON 2xx finalize acknowledgement recorded as released, and 3xx redirects followed by the transport, fail on base"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["request() never follows redirects and never treats a non-JSON 2xx body as an acknowledgement"],
 )
 pkg(
     "W02-04", "W02", "Native force-quit recovery acceptance on the simulator (Mac plane)",
@@ -740,7 +757,7 @@ pkg("H09-01", "H09", "Dead/unreachable path resolution: liveCourt, 3D remnants, 
     "Enumerate unreachable paths (liveCourt.ts etc.), retire code that is out of v1 scope with tests migrated deliberately, and record the decision in docs/DECISIONS.md.",
     severity="P1", source_ids=["H09-DEAD-PATHS"], plane="cloud",
     write_paths=["apps/mobile/src/flow/liveCourt.ts", "apps/mobile/src/flow/liveSessionCoach.ts", "apps/mobile/src/flow/liveSessionSummary.ts", "apps/mobile/__tests__/liveCourt.test.ts", "apps/mobile/__tests__/liveSessionCoach.test.ts", "docs/DECISIONS.md"],
-    acceptance=[("test", "cd apps/mobile && npx jest --ci --silent", "full mobile suite passes after retirement"), MOBILE_TSC, MOBILE_LINT])
+    acceptance=[MOBILE_FULL_JEST, MOBILE_TSC, MOBILE_LINT])
 
 # ---------------------------------------------------------------------------
 # W12 — integration acceptance (integration writer)
