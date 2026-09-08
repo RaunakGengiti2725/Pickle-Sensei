@@ -13,6 +13,7 @@ import {
   AccessibilityInfo,
   AppState,
   LayoutChangeEvent,
+  Linking,
   Modal,
   View,
 } from 'react-native';
@@ -46,7 +47,9 @@ jest.mock('react-native-linear-gradient', () => {
  * that component instance rather than a native node. `findNodeHandle` here
  * follows the instance's fibre to the host element it rendered and hands
  * out one stable tag per host element, recorded with its accessibility
- * label so focus restoration is observable. */
+ * label so focus restoration is observable. React Native's real
+ * `findNodeHandle` runs FIRST so that an unmounted trigger throws exactly
+ * as it does on device (`Unable to find node on an unmounted component.`). */
 interface Fiber {
   tag: number;
   child: Fiber | null;
@@ -87,7 +90,7 @@ jest.mock('react-native/Libraries/ReactNative/RendererProxy', () => {
   return {
     ...actual,
     findNodeHandle: (instance: unknown) =>
-      mockHostTag(instance) ?? actual.findNodeHandle(instance),
+      actual.findNodeHandle(instance) ?? mockHostTag(instance),
   };
 });
 
@@ -179,9 +182,31 @@ let unregister: Array<() => void>;
 let announce: jest.SpyInstance;
 let setFocus: jest.SpyInstance;
 
+const LEGAL_TERMS_URL = 'https://example.invalid/terms';
+
+/** Mirrors RootNavigator.openLegalPage: the paywall's Terms/Privacy links
+ * report a failed `Linking.openURL` through `showBrandNotice`, the only
+ * feedback that tap has. */
+async function openLegalPage(label: string, url: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    showBrandNotice({
+      title: `${label} could not be opened`,
+      detail: `Your phone could not open the page. You can read it in a browser at ${url}`,
+      tone: 'danger',
+      eyebrow: 'LINK UNAVAILABLE',
+    });
+  }
+}
+
 /** The shipping composition (App.tsx): the global ceremony host with its
  * three stages beside the product-owned notice host. */
-function Shell(props: { paywall?: boolean; onClosePaywall?: () => void }) {
+function Shell(props: {
+  paywall?: boolean;
+  paywallLegalLinks?: boolean;
+  onClosePaywall?: () => void;
+}) {
   return (
     <>
       <CeremonyHost ownerKey={OWNER}>
@@ -191,7 +216,15 @@ function Shell(props: { paywall?: boolean; onClosePaywall?: () => void }) {
       </CeremonyHost>
       <BrandNoticeHost />
       {props.paywall ? (
-        <PaywallScreen onClose={props.onClosePaywall ?? (() => {})} />
+        <PaywallScreen
+          onClose={props.onClosePaywall ?? (() => {})}
+          {...(props.paywallLegalLinks
+            ? {
+                onOpenTerms: () =>
+                  void openLegalPage('Terms of use', LEGAL_TERMS_URL),
+              }
+            : {})}
+        />
       ) : null}
     </>
   );
@@ -243,6 +276,17 @@ function control(testID: string) {
 
 async function press(testID: string) {
   const target = control(testID);
+  await act(async () => target.props.onPress());
+}
+
+async function pressLabel(label: string) {
+  const target = renderer!.root.findAll(
+    node =>
+      typeof node.type !== 'string' &&
+      node.props.accessibilityLabel === label &&
+      typeof node.props.onPress === 'function',
+  )[0]!;
+  expect(target).toBeDefined();
   await act(async () => target.props.onPress());
 }
 
@@ -457,9 +501,10 @@ describe('one modal surface at a time', () => {
     expect(stageIds()).toEqual(['rank-up-celebration']);
   });
 
-  it('a notice raised during the paywall waits for the paywall, then the held ceremony follows the notice', async () => {
+  it('a notice raised while the paywall is on screen shows over the paywall at once; the held ceremony still waits for the paywall', async () => {
     await mount(<Shell paywall />);
     await raiseRank();
+    expect(overlays()).toHaveLength(0);
     await act(async () =>
       showBrandNotice({
         title: 'Terms of use could not be opened',
@@ -467,16 +512,35 @@ describe('one modal surface at a time', () => {
       }),
     );
     expect(overlays()).toHaveLength(0);
-    expect(noticeVisible()).toBe(false);
-
-    await update(<Shell />);
-    expect(overlays()).toHaveLength(0);
     expect(noticeVisible()).toBe(true);
 
     const dialog = renderer!.root.findByType(BrandDialog);
     await act(async () => dialog.props.onDismiss());
     expect(noticeVisible()).toBe(false);
+    expect(overlays()).toHaveLength(0);
+    expect(useRankCelebrationStore.getState().current).not.toBeNull();
+
+    await update(<Shell />);
     expect(overlays()).toHaveLength(1);
+    expect(stageIds()).toEqual(['rank-up-celebration']);
+  });
+
+  it('Paywall → Terms of use fails to open: the failure notice is presented while the paywall is still on screen', async () => {
+    jest
+      .spyOn(Linking, 'openURL')
+      .mockRejectedValue(new Error('No app can open this URL'));
+    await mount(<Shell paywall paywallLegalLinks />);
+    await press('paywall-see-plans');
+
+    await pressLabel('Terms of use');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(noticeVisible()).toBe(true);
+    expect(renderer!.root.findByType(BrandDialog).props.title).toBe(
+      'Terms of use could not be opened',
+    );
   });
 });
 
@@ -537,11 +601,17 @@ describe('announcements', () => {
 });
 
 describe('focus returns to the trigger', () => {
-  function SettingsWithCeremonies() {
+  /** App.tsx shape: the signed-in content (RootNavigator, which owns the
+   * Settings row) is swapped out when the session goes away and back when
+   * it returns; the global CeremonyHost outlives both. */
+  function SettingsWithCeremonies(props: {
+    ownerKey?: string;
+    signedIn?: boolean;
+  }) {
     return (
       <View>
-        <SettingsScreen />
-        <CeremonyHost ownerKey={OWNER}>
+        {(props.signedIn ?? true) ? <SettingsScreen /> : null}
+        <CeremonyHost ownerKey={props.ownerKey ?? OWNER}>
           <FirstRunWalkthrough />
         </CeremonyHost>
       </View>
@@ -580,6 +650,50 @@ describe('focus returns to the trigger', () => {
     await raiseRank();
     await press('rank-up-continue');
     expect(overlays()).toHaveLength(0);
+    expect(setFocus).not.toHaveBeenCalled();
+  });
+
+  it('the Settings row unmounts while the tour stays presented: Skip does not throw and focus is left alone', async () => {
+    seedSettingsStores();
+    await mount(<SettingsWithCeremonies />);
+    await act(async () => replayRow().props.onClick());
+    expect(overlays()).toHaveLength(1);
+
+    await update(<SettingsWithCeremonies signedIn={false} />);
+    expect(overlays()).toHaveLength(1);
+
+    await press('walkthrough-skip');
+    expect(overlays()).toHaveLength(0);
+    expect(useWalkthroughStore.getState().visible).toBe(false);
+    expect(setFocus).not.toHaveBeenCalled();
+  });
+
+  it('sign-out swaps the signed-in content away while the replayed tour is open; after sign-in the tour returns and Skip does not throw', async () => {
+    seedSettingsStores();
+    await mount(<SettingsWithCeremonies />);
+    await act(async () => replayRow().props.onClick());
+    expect(overlays()).toHaveLength(1);
+
+    // Refused refresh token / re-auth: the session is gone, RootNavigator
+    // (and the Settings row) unmounts, the device-level tour stays raised.
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    await update(
+      <SettingsWithCeremonies
+        ownerKey={SIGNED_OUT_DATA_OWNER}
+        signedIn={false}
+      />,
+    );
+    expect(overlays()).toHaveLength(0);
+    expect(useWalkthroughStore.getState().visible).toBe(true);
+
+    setActiveDataOwner(OWNER);
+    await update(<SettingsWithCeremonies />);
+    expect(overlays()).toHaveLength(1);
+    expect(stageIds()).toEqual(['first-run-walkthrough']);
+
+    await press('walkthrough-skip');
+    expect(overlays()).toHaveLength(0);
+    expect(useWalkthroughStore.getState().visible).toBe(false);
     expect(setFocus).not.toHaveBeenCalled();
   });
 });
