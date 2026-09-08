@@ -14,6 +14,7 @@
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import type { PoseFrame } from '@pickle/shared-types';
+import { toLegacyPoseFrames } from '@pickle/swing-domain';
 import { GeometricPhaseSegmenter } from '@pickle/vision-geometry';
 
 /** log2(cost ratio) per doubling of the input; 1 = linear, 2 = quadratic. */
@@ -38,7 +39,8 @@ function importedFrames(seconds: number): {
     recoverMs: padMs,
   });
   return {
-    frames: sequence.frames,
+    // The same conversion analyzeCapture.ts applies before segmentation.
+    frames: toLegacyPoseFrames(sequence),
     durationMs: window.endMs,
     fps: sequence.video.fps,
     width: sequence.video.width,
@@ -59,18 +61,14 @@ async function segmentTimed(seconds: number): Promise<{
   const result = await segmenter.segmentPhases(
     input.frames,
     [],
+    // The StrokeEvent analyzeCapture.ts builds from the imported full-clip
+    // trigger (startMs 0, endMs clip.durationMs, peakMotionMs null).
     {
       startMs: 0,
       endMs: input.durationMs,
-      peakMotionMs: null,
+      contactMs: null,
+      shotTypeHypothesis: null,
       confidence: 1,
-      producedBy: {
-        providerId: 'trigger.imported-full-clip',
-        modelVersion: 'imported-full-clip-1',
-        runtime: 'deterministic',
-        executionTarget: 'on_device',
-        artifactHash: null,
-      },
     },
     { width: input.width, height: input.height },
   );
