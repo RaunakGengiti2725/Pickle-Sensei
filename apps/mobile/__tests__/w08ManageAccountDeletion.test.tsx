@@ -132,9 +132,8 @@ function completionPayload(operation = 10) {
   };
 }
 
-function statusPayload(state: string, operation = 10) {
+function statusPayload(state: string) {
   return {
-    operationId: deletionId(operation),
     state,
     completionReceipt: state === 'completed' ? { completedAt: iso(0) } : null,
     appleAuthorizationRevocation: state === 'completed' ? 'revoked' : null,
@@ -269,11 +268,32 @@ function ownerId(index: number): string {
 
 async function press(
   renderer: TestRenderer.ReactTestRenderer,
-  target: { props: { onPress: () => void } },
+  target: TestRenderer.ReactTestInstance,
 ) {
+  const onPress: unknown = target.props.onPress;
+  if (typeof onPress !== 'function') throw new Error('target is not pressable');
   await act(async () => {
-    target.props.onPress();
+    onPress();
   });
+}
+
+/** Presses a paced button: while its label carries a countdown it must be
+ * disabled, and the clock is advanced to the moment it re-arms. */
+async function pressWhenArmed(
+  renderer: TestRenderer.ReactTestRenderer,
+  label: string,
+) {
+  const paced = /\((\d+)\)$/.exec(
+    String(sheetButton(renderer, label).props.label),
+  );
+  if (paced) {
+    expect(sheetButton(renderer, label).props.disabled).toBe(true);
+    await act(async () => {
+      jest.advanceTimersByTime(Number(paced[1]) * 1000);
+    });
+  }
+  expect(sheetButton(renderer, label).props.disabled).toBe(false);
+  await press(renderer, sheetButton(renderer, label));
 }
 
 async function openReview(renderer: TestRenderer.ReactTestRenderer) {
@@ -488,7 +508,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
       expectNotDeleted(renderer);
 
-      await press(renderer, sheetButton(renderer, 'Retry deletion'));
+      await pressWhenArmed(renderer, 'Retry deletion');
 
       const [status] = calls('delete-status');
       expect(status).toMatchObject({ redirect: 'error', credentials: 'omit' });
@@ -603,8 +623,13 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       expect(allText(second)).toContain('Deletion status unknown');
       expectNotDeleted(second);
 
-      await press(second, sheetButton(second, 'Retry deletion'));
+      await pressWhenArmed(second, 'Retry deletion');
+      expect(calls('delete-status')).toHaveLength(1);
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expect(allText(second)).toContain('Delete your account?');
+      expectNotDeleted(second);
 
+      await pressWhenArmed(second, 'Permanently delete');
       expect(calls('delete-request')).toHaveLength(1);
       expect(calls('delete-status')).toHaveLength(1);
       expect(calls('delete-confirm')).toHaveLength(2);
@@ -651,7 +676,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       expect(allText(renderer)).not.toContain('Nothing was deleted');
       expectNotDeleted(renderer);
 
-      await press(renderer, sheetButton(renderer, 'Retry deletion'));
+      await pressWhenArmed(renderer, 'Retry deletion');
       expect(calls('delete-status')).toHaveLength(1);
       expect(allText(renderer)).toContain('Nothing was deleted');
       expectNotDeleted(renderer);
