@@ -1635,7 +1635,7 @@ Deno.test(
     );
     ok(
       statements.includes(
-        "create trigger on_auth_identity_linked_offline_holds after insert on auth.identities for each row execute function public.inherit_offline_allocation_holds()",
+        "create trigger offline_holds_on_identity_link after insert on auth.identities for each row execute function public.inherit_offline_allocation_holds()",
       ),
       "the late-link trigger is wired on auth.identities",
     );
@@ -2069,7 +2069,7 @@ Deno.test(
         "offline_allocation_ledger_guard_event",
         `${OFFLINE_LINK_TABLE}_append_only`,
         `${OFFLINE_LINK_TABLE}_guard`,
-        "on_auth_identity_linked_offline_holds",
+        "offline_holds_on_identity_link",
       ]) {
         ok(!dropsTriggerWithoutRecreating(later, trigger), `${later.file} removes ${trigger}`);
       }

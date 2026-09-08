@@ -449,8 +449,8 @@ $$;
 
 revoke execute on function public.inherit_offline_allocation_holds() from public, anon, authenticated;
 
-drop trigger if exists on_auth_identity_linked_offline_holds on auth.identities;
-create trigger on_auth_identity_linked_offline_holds
+drop trigger if exists offline_holds_on_identity_link on auth.identities;
+create trigger offline_holds_on_identity_link
   after insert on auth.identities
   for each row execute function public.inherit_offline_allocation_holds();
 
