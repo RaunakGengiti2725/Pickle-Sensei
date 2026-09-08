@@ -16,7 +16,14 @@
 // INCOMPLETE inventory as the whole set.
 
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { fakeGoogleIdToken, loadHarness, type RecordedCall, userRequest } from "./routesHarness.ts";
+import { postgrestSelect, type StandInOptions } from "./postgrestStandIn.ts";
+import {
+  captureConsole,
+  fakeGoogleIdToken,
+  loadHarness,
+  type RecordedCall,
+  userRequest,
+} from "./routesHarness.ts";
 
 // Dynamic so this file still loads on BASE_SHA (where the exports do not exist):
 // the route pins below then fail on the truncation itself, not on a link error.
@@ -26,143 +33,7 @@ const h = await loadHarness();
 
 const PAGE = 1_000;
 
-// ─── A minimal PostgREST stand-in that honours keyset filters ─────────────────
-//
-// It applies `order`, `limit`, `offset` and the `or=(…)` logic tree PostgREST
-// accepts (comparisons + nested and/or, quoted values with backslash escapes),
-// clamps `limit` to a configurable `maxRows` exactly like PostgREST's
-// db-max-rows does (silently, with HTTP 200), and throws on any grammar it does
-// not understand so a malformed filter string produced by the edge fn fails the
-// test instead of being ignored.
-
 type Row = Record<string, string | number>;
-type Comparison = { kind: "cmp"; column: string; op: "lt" | "gt" | "eq"; value: string };
-type LogicNode =
-  Comparison | { kind: "and"; children: LogicNode[] } | { kind: "or"; children: LogicNode[] };
-
-class LogicParser {
-  private index = 0;
-  constructor(private readonly input: string) {}
-
-  static parse(input: string): LogicNode {
-    const parser = new LogicParser(input);
-    const node = parser.tree();
-    if (parser.index !== input.length) {
-      throw new Error(`trailing input in logic tree: ${input.slice(parser.index)}`);
-    }
-    return node;
-  }
-
-  private tree(): LogicNode {
-    const identifier = this.identifier();
-    if (identifier === "and" || identifier === "or") {
-      this.expect("(");
-      const children: LogicNode[] = [this.tree()];
-      while (this.peek() === ",") {
-        this.index += 1;
-        children.push(this.tree());
-      }
-      this.expect(")");
-      return identifier === "and" ? { kind: "and", children } : { kind: "or", children };
-    }
-    this.expect(".");
-    const op = this.identifier();
-    if (op !== "lt" && op !== "gt" && op !== "eq") throw new Error(`unsupported operator ${op}`);
-    this.expect(".");
-    return { kind: "cmp", column: identifier, op, value: this.value() };
-  }
-
-  private identifier(): string {
-    const match = /^[a-z_][a-z0-9_]*/.exec(this.input.slice(this.index));
-    if (!match) throw new Error(`identifier expected at ${this.index} in ${this.input}`);
-    this.index += match[0].length;
-    return match[0];
-  }
-
-  private value(): string {
-    if (this.peek() !== '"') {
-      const match = /^[^,)]*/.exec(this.input.slice(this.index));
-      this.index += match![0].length;
-      return match![0];
-    }
-    this.index += 1;
-    let out = "";
-    for (;;) {
-      const char = this.input[this.index];
-      if (char === undefined) throw new Error("unterminated quoted value");
-      this.index += 1;
-      if (char === '"') break;
-      if (char === "\\") {
-        out += this.input[this.index];
-        this.index += 1;
-        continue;
-      }
-      out += char;
-    }
-    const next = this.peek();
-    if (next !== undefined && next !== "," && next !== ")") {
-      throw new Error(`quoted value must be followed by , or ) at ${this.index}`);
-    }
-    return out;
-  }
-
-  private peek(): string | undefined {
-    return this.input[this.index];
-  }
-
-  private expect(char: string): void {
-    if (this.peek() !== char) {
-      throw new Error(`expected ${char} at ${this.index} in ${this.input}`);
-    }
-    this.index += 1;
-  }
-}
-
-function matches(row: Row, node: LogicNode): boolean {
-  if (node.kind === "and") return node.children.every((child) => matches(row, child));
-  if (node.kind === "or") return node.children.some((child) => matches(row, child));
-  const actual = String(row[node.column]);
-  if (node.op === "eq") return actual === node.value;
-  if (node.op === "lt") return actual < node.value;
-  return actual > node.value;
-}
-
-interface StandInOptions {
-  /** PostgREST `db-max-rows`: every page is clamped to it, silently, with 200. */
-  maxRows?: number;
-}
-
-function postgrestSelect(url: URL, table: Row[], options: StandInOptions = {}): Row[] {
-  let rows = table;
-  const logic = url.searchParams.get("or");
-  if (logic !== null) {
-    const node = LogicParser.parse(`or${logic}`);
-    rows = rows.filter((row) => matches(row, node));
-  }
-  const orderTerms = (url.searchParams.get("order") ?? "").split(",").filter(Boolean);
-  if (orderTerms.length > 0) {
-    const terms = orderTerms.map((term) => {
-      const [column, direction] = term.split(".");
-      if (direction !== "asc" && direction !== "desc") throw new Error(`bad order term ${term}`);
-      return { column, descending: direction === "desc" };
-    });
-    rows = [...rows].sort((a, b) => {
-      for (const term of terms) {
-        const left = String(a[term.column]);
-        const right = String(b[term.column]);
-        if (left === right) continue;
-        const cmp = left < right ? -1 : 1;
-        return term.descending ? -cmp : cmp;
-      }
-      return 0;
-    });
-  }
-  const offset = Number(url.searchParams.get("offset") ?? "0");
-  const limitParam = url.searchParams.get("limit");
-  const requested = limitParam === null ? Number.POSITIVE_INFINITY : Number(limitParam);
-  const limit = Math.min(requested, options.maxRows ?? Number.POSITIVE_INFINITY);
-  return rows.slice(offset, Number.isFinite(limit) ? offset + limit : undefined);
-}
 
 const jsonResponse = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), {
@@ -619,14 +490,19 @@ Deno.test(
       ops.postgrestKeysetBefore([{ column: "name", value: 'a,b.c)"d\\e' }]),
       'name.lt."a,b.c)\\"d\\\\e"',
     );
+    // …and a PostgREST-grammar reader recovers the exact value from the filter.
+    const escapedFilter = new URL("https://x.test/rest/v1/t");
+    escapedFilter.searchParams.set(
+      "or",
+      `(${ops.postgrestKeysetBefore([{ column: "name", value: 'a,b.c)"d\\e' }])})`,
+    );
     assertEquals(
-      LogicParser.parse(
-        `or(${ops.postgrestKeysetBefore([{ column: "name", value: 'a,b.c)"d\\e' }])})`,
-      ),
-      {
-        kind: "or",
-        children: [{ kind: "cmp", column: "name", op: "lt", value: 'a,b.c)"d\\e' }],
-      },
+      postgrestSelect(escapedFilter, [
+        { name: 'a,b.c)"d\\e' },
+        { name: 'a,b.c)"d\\d' },
+        { name: 'a,b.c)"d\\f' },
+      ]),
+      [{ name: 'a,b.c)"d\\d' }],
     );
     assertThrows(() => ops.postgrestKeysetBefore([]));
     assertThrows(() => ops.postgrestKeysetBefore([{ column: "day.desc", value: "x" }]));
@@ -786,9 +662,23 @@ Deno.test(
       return jsonResponse(200, firstPage);
     };
 
-    const res = await h.handler(userRequest("GET", "/v1/progress", { ...auth, ip }));
-    assertEquals(res.status, 503, await res.text());
+    const { result: res, logs } = await captureConsole(() =>
+      h.handler(userRequest("GET", "/v1/progress", { ...auth, ip })),
+    );
+    const text = await res.text();
+    assertEquals(res.status, 503, text);
     assertEquals(requests, 2, "the repeat is detected on the second page");
+    // The body stays generic; the bounded reason code is for the function log.
+    assert(!text.includes("INV0"), text);
+    const progressLog = logs.find(
+      (entry) => entry.level === "error" && entry.args[0] === "[api] Progress:",
+    );
+    assert(progressLog, JSON.stringify(logs));
+    assertEquals((progressLog.args[1] as { name: string; code: string }).name, "UnexpectedResult");
+    assertEquals(
+      (progressLog.args[1] as { name: string; code: string }).code,
+      ops.INVENTORY_INCOMPLETE_CODES.repeated_row,
+    );
   },
 );
 
