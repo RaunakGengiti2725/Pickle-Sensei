@@ -37,7 +37,8 @@ const PAGE = 1_000;
 
 type Row = Record<string, string | number>;
 type Comparison = { kind: "cmp"; column: string; op: "lt" | "gt" | "eq"; value: string };
-type LogicNode = Comparison | { kind: "and" | "or"; children: LogicNode[] };
+type LogicNode =
+  Comparison | { kind: "and"; children: LogicNode[] } | { kind: "or"; children: LogicNode[] };
 
 class LogicParser {
   private index = 0;
@@ -62,7 +63,7 @@ class LogicParser {
         children.push(this.tree());
       }
       this.expect(")");
-      return { kind: identifier, children };
+      return identifier === "and" ? { kind: "and", children } : { kind: "or", children };
     }
     this.expect(".");
     const op = this.identifier();
@@ -837,7 +838,10 @@ Deno.test(
       if (table !== "practice_days") return null;
       if (failOnce && url.searchParams.get("or") !== null) {
         failOnce = false;
-        return jsonResponse(503, { code: "PGRST001", message: "connection unavailable" });
+        return jsonResponse(500, {
+          code: "57014",
+          message: "canceling statement due to statement timeout",
+        });
       }
       return jsonResponse(200, postgrestSelect(url, days));
     };
