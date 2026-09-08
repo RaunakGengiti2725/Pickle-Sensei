@@ -939,9 +939,7 @@ describe('W02-02 owner fencing matrix: owner-change delivery', () => {
       expect(nativeOperation.signal.aborted).toBe(false);
 
       clearSyncRuntime();
-      expect(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER)).toThrow(
-        failure,
-      );
+      expect(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER)).toThrow(failure);
       expect(faulty).toHaveBeenCalledTimes(1);
       expect(getActiveDataOwner()).toBe(SIGNED_OUT_DATA_OWNER);
       expect(isDataOwnerContextCurrent(owner.ownerContext)).toBe(false);
