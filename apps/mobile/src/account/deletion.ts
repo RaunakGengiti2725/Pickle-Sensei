@@ -990,8 +990,12 @@ async function legacyConfirm(
     if (!retrying && e instanceof AccountDeletionError) {
       // A first confirmation is known not to have acted only when the
       // client never sent it (unavailable, not configured) or the server
-      // explicitly refused it; a dead bearer or a throttle proves nothing.
-      if (e.code === 'deletion.unavailable') {
+      // refused it before acting (a throttle, an explicit rejection); a
+      // dead bearer or a lost reply proves nothing.
+      if (
+        e.code === 'deletion.unavailable' ||
+        (e.code === 'deletion.rejected' && e.retryable)
+      ) {
         return {
           status: 'ready',
           attempt,
@@ -1001,7 +1005,7 @@ async function legacyConfirm(
       }
       if (
         e.code === 'deletion.not_configured' ||
-        (e.code === 'deletion.rejected' && !e.retryable)
+        e.code === 'deletion.rejected'
       ) {
         return {
           status: 'failed',
