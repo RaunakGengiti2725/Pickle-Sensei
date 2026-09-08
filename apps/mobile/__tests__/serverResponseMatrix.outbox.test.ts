@@ -48,6 +48,7 @@ import {
 } from '../__harness__/serverResponseMatrix/scenarioServer';
 import {
   DETERMINISTIC_SCENARIOS,
+  isClientErrorVerdict,
   type MatrixScenario,
   type ScenarioClass,
 } from '../__harness__/serverResponseMatrix/scenarios';
@@ -132,11 +133,54 @@ const kept = (rows: QueueRow[], attempts: number): Array<[QueueRow, number]> =>
 
 type OutboxClass = Exclude<ScenarioClass, 'hang' | 'fuzz' | 'duplicate'>;
 
-function expectationFor(judgedAs: OutboxClass): OutboxExpectation {
+const TRANSIENT: OutboxExpectation = {
+  deleted: [],
+  kept: kept(ALL_ROWS, 0),
+  receipts: [],
+};
+
+const SESSION_SITE: CallSite = (() => {
+  const site = CALL_SITES.find(
+    candidate => candidate.id === 'data.transport.createSession',
+  );
+  if (!site) throw new Error('no createSession call site');
+  return { ...site, good: { body: GOOD_BY_PATH['/v1/sessions'] } };
+})();
+
+/** Whether a 2xx scenario's body is a JSON object — the only 2xx the
+ * transport accepts as an acknowledgement, whatever the endpoint returns. */
+function bodyIsJsonObject(
+  scenario: Pick<MatrixScenario, 'build'>,
+  site: CallSite,
+): boolean {
+  const response = scenario.build(site);
+  let body: unknown;
+  switch (response.kind) {
+    case 'json':
+      body = response.body;
+      break;
+    case 'raw':
+      try {
+        body = JSON.parse(response.body) as unknown;
+      } catch {
+        return false;
+      }
+      break;
+    default:
+      return false;
+  }
+  return typeof body === 'object' && body !== null && !Array.isArray(body);
+}
+
+function expectationFor(
+  scenario: Pick<MatrixScenario, 'build' | 'bareStatus'>,
+  judgedAs: OutboxClass,
+): OutboxExpectation {
   switch (judgedAs) {
     case 'ok':
       return { deleted: ALL_ROWS, kept: [], receipts: [SHOT_A, SHOT_B] };
     case 'client_error':
+      if (!isClientErrorVerdict(SESSION_SITE, scenario)) return TRANSIENT;
       return {
         deleted: [],
         kept: [
@@ -153,14 +197,17 @@ function expectationFor(judgedAs: OutboxClass): OutboxExpectation {
     case 'rate_limited':
     case 'server_error':
     case 'reset':
-      return { deleted: [], kept: kept(ALL_ROWS, 0), receipts: [] };
+      return TRANSIENT;
     case 'malformed_2xx':
     case 'wrong_shape_2xx':
     case 'partial_2xx':
     case 'oversized_2xx':
-      // `createSession`/`finalizeSession` return void, so ANY 2xx completes
-      // them (the body is never consulted); the shot/trial batches must
-      // fall back to transient (no receipt, no attempt burned).
+      // `createSession`/`finalizeSession` return void, so a 2xx JSON object
+      // of any shape completes them; a 2xx the transport cannot read as a
+      // JSON object acknowledges nothing and leaves them queued. The
+      // shot/trial batches must fall back to transient either way (no
+      // receipt, no attempt burned).
+      if (!bodyIsJsonObject(scenario, SESSION_SITE)) return TRANSIENT;
       return { deleted: VOID_ROWS, kept: kept(BATCH_ROWS, 0), receipts: [] };
   }
 }
@@ -370,11 +417,14 @@ describe('drainOutbox × every deterministic response class (real transport, rea
         const row = await runScenario(
           scenario,
           request => scenario.build(siteFor(request)),
-          expectationFor(judgedAs),
+          expectationFor(scenario, judgedAs),
         );
         expect(row.violations).toEqual([]);
         expect(row.settlement).toBe('resolved');
-        if (judgedAs === 'client_error') {
+        if (
+          judgedAs === 'client_error' &&
+          isClientErrorVerdict(SESSION_SITE, scenario)
+        ) {
           // A rejected parent prevents futile child requests and exposes the
           // dependency repair state without spending the child's own budget.
           expect(row.requests).toHaveLength(2);

@@ -328,7 +328,19 @@ export const CALL_SITES: readonly CallSite[] = [
     source: 'apps/mobile/src/data/api.ts:176',
     consumer: 'apps/mobile/src/analysis/runCaptureAnalysis.ts:347',
     returns: 'void',
-    good: { body: { permit: { id: HARNESS_UUID, status: 'released' } } },
+    good: {
+      body: {
+        permit: {
+          id: HARNESS_UUID,
+          accessSource: 'free',
+          status: 'finalized',
+          outcome: 'failed',
+          reservedAt: ISO,
+          expiresAt: ISO,
+        },
+        access: GOOD_ACCESS,
+      },
+    },
     invoke: ctx =>
       createAnalysisPermitClient({
         baseUrl: ctx.baseUrl,

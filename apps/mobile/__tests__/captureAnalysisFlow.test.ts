@@ -17,6 +17,7 @@ import {
   createSqliteTestDb,
   seedSqliteCapture,
 } from '../testSupport/sqlite';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 /**
  * Capture → fusion analysis → durable records, with the entitlement system
@@ -61,8 +62,9 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       });
     }
     if (url.includes('/finalize')) {
-      finalized.push(JSON.parse(String(init?.body)));
-      return jsonResponse({ ok: true });
+      const body: unknown = JSON.parse(String(init?.body));
+      finalized.push(body);
+      return jsonResponse(finalizeAcknowledgement(url, body));
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });

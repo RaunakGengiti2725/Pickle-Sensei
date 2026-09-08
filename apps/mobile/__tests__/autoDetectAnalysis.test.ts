@@ -33,6 +33,7 @@ import {
 } from '../src/data/repository';
 import { createFusionProviders } from '../src/vision/providers';
 import { ENVELOPE_DIMENSIONS, type ShotTypeSlug } from '@pickle/shared-types';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 jest.mock('../src/vision/providers', () => ({
   ...jest.requireActual('../src/vision/providers'),
@@ -94,8 +95,9 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       });
     }
     if (url.includes('/finalize')) {
-      finalized.push(JSON.parse(String(init?.body)));
-      return jsonResponse({ ok: true });
+      const body: unknown = JSON.parse(String(init?.body));
+      finalized.push(body);
+      return jsonResponse(finalizeAcknowledgement(url, body));
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -389,7 +391,7 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
           } as Response;
         }
         original.released = true;
-        return jsonResponse({ ok: true });
+        return jsonResponse(finalizeAcknowledgement(url, body));
       });
       (globalThis as { fetch?: unknown }).fetch = server;
       const run = async (next: Parameters<typeof runCaptureAnalysis>[0]) => {
@@ -944,20 +946,24 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
           }),
       };
       if (boundary === 'recovery') {
-        http.fetchMock.mockImplementation(async (url: string) => {
-          if (!url.includes('/finalize'))
-            return jsonResponse({
-              permit: {
-                id: '66666666-6666-4666-8666-000000000002',
-                status: 'reserved',
-                accessSource: 'free',
-                expiresAt: '2099-01-01T00:00:00.000Z',
-              },
-            });
-          changed = true;
-          mutateOriginal();
-          return jsonResponse({ ok: true });
-        });
+        http.fetchMock.mockImplementation(
+          async (url: string, init?: RequestInit) => {
+            if (!url.includes('/finalize'))
+              return jsonResponse({
+                permit: {
+                  id: '66666666-6666-4666-8666-000000000002',
+                  status: 'reserved',
+                  accessSource: 'free',
+                  expiresAt: '2099-01-01T00:00:00.000Z',
+                },
+              });
+            changed = true;
+            mutateOriginal();
+            return jsonResponse(
+              finalizeAcknowledgement(url, JSON.parse(String(init?.body))),
+            );
+          },
+        );
       }
       const before = http.fetchMock.mock.calls.length;
       expect(
@@ -1142,7 +1148,9 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
             ratingId: null,
           });
           await pause('release_ack');
-          return jsonResponse({ ok: true });
+          return jsonResponse(
+            finalizeAcknowledgement(url, JSON.parse(String(init?.body))),
+          );
         },
       );
       const before = http.fetchMock.mock.calls.length;

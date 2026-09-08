@@ -19,6 +19,7 @@ import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../../src/data/db';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -85,11 +86,12 @@ function permitServer(): PermitServer {
       }
       const finalize = /\/v1\/analysis-permits\/([^/]+)\/finalize$/.exec(url);
       if (finalize) {
+        const body: unknown = JSON.parse(String(init?.body));
         server.finalized.push({
           permitId: decodeURIComponent(finalize[1]!),
-          body: JSON.parse(String(init?.body)),
+          body,
         });
-        return jsonResponse({ ok: true });
+        return jsonResponse(finalizeAcknowledgement(url, body));
       }
       throw new Error(`Unexpected fetch: ${url}`);
     },

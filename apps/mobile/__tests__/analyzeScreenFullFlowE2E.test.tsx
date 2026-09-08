@@ -141,6 +141,7 @@ import {
   clearApiSession,
   establishApiSession,
 } from '../src/account/apiSession';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 const owner = '22222222-2222-4222-8222-222222222222';
 
@@ -172,8 +173,9 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       });
     }
     if (url.includes('/finalize')) {
-      finalized.push(JSON.parse(String(init?.body)));
-      return jsonResponse({ ok: true });
+      const body: unknown = JSON.parse(String(init?.body));
+      finalized.push(body);
+      return jsonResponse(finalizeAcknowledgement(url, body));
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });

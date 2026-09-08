@@ -168,7 +168,7 @@ function server(store: ReturnType<typeof createSqliteTestDb>) {
           });
         if (!permit.outcome) releases += 1;
         permit.outcome = String(body.outcome);
-        return response(200, { permit });
+        return response(200, { permit: { ...permit, status: 'finalized' } });
       }
       if (url.endsWith('/v1/shots:sync')) {
         const shots = body.shots as Array<{

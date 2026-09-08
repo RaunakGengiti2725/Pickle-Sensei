@@ -231,6 +231,7 @@ import {
   armTryAgain,
   peekTryAgainHandoff,
 } from '../src/screens/tryAgainHandoff';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 const { mkdtempSync } = jest.requireActual<{
   mkdtempSync(prefix: string): string;
@@ -321,7 +322,8 @@ async function fixture(
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true }),
+      json: async () =>
+        finalizeAcknowledgement(url, JSON.parse(String(init?.body))),
     } as Response;
   });
   (globalThis as { fetch?: unknown }).fetch = http;

@@ -48,6 +48,9 @@ export interface MatrixScenario {
   judgeAs?: ScenarioClass;
   /** The body is the good shape with its top-level values nulled. */
   nullsKeys?: true;
+  /** A 4xx that carries no API error envelope (empty, HTML, plain text):
+   * the kind of page an intermediary writes, never the route. */
+  bareStatus?: true;
   /** How long the caller may take before the cell is recorded as hung. */
   deadlineMs: number;
   /** Invoke the call site this many times against the same programme. */
@@ -102,7 +105,10 @@ const scenario = (
   description: string,
   build: (site: CallSite) => ScenarioResponse,
   options: Partial<
-    Pick<MatrixScenario, 'deadlineMs' | 'invocations' | 'judgeAs' | 'nullsKeys'>
+    Pick<
+      MatrixScenario,
+      'deadlineMs' | 'invocations' | 'judgeAs' | 'nullsKeys' | 'bareStatus'
+    >
   > = {},
 ): MatrixScenario => ({
   id,
@@ -113,6 +119,7 @@ const scenario = (
   build,
   ...(options.judgeAs ? { judgeAs: options.judgeAs } : {}),
   ...(options.nullsKeys ? { nullsKeys: true } : {}),
+  ...(options.bareStatus ? { bareStatus: true } : {}),
 });
 
 export const DETERMINISTIC_SCENARIOS: readonly MatrixScenario[] = [
@@ -138,10 +145,16 @@ export const DETERMINISTIC_SCENARIOS: readonly MatrixScenario[] = [
       body: errorEnvelope('validation.invalid_body', 'Invalid request body.'),
     }),
   ),
-  scenario('status_400_empty', 'client_error', '400 with no body', () => ({
-    kind: 'status',
-    status: 400,
-  })),
+  scenario(
+    'status_400_empty',
+    'client_error',
+    '400 with no body',
+    () => ({
+      kind: 'status',
+      status: 400,
+    }),
+    { bareStatus: true },
+  ),
   scenario(
     'status_402_paywall',
     'client_error',
@@ -157,25 +170,43 @@ export const DETERMINISTIC_SCENARIOS: readonly MatrixScenario[] = [
     status: 403,
     body: errorEnvelope('auth.forbidden', 'Forbidden.'),
   })),
-  scenario('status_404_html', 'client_error', '404 with an HTML body', () => ({
-    kind: 'raw',
-    status: 404,
-    body: '<html><body>Not found</body></html>',
-    contentType: 'text/html',
-  })),
-  scenario('status_405', 'client_error', '405 method not allowed', () => ({
-    kind: 'status',
-    status: 405,
-  })),
+  scenario(
+    'status_404_html',
+    'client_error',
+    '404 with an HTML body',
+    () => ({
+      kind: 'raw',
+      status: 404,
+      body: '<html><body>Not found</body></html>',
+      contentType: 'text/html',
+    }),
+    { bareStatus: true },
+  ),
+  scenario(
+    'status_405',
+    'client_error',
+    '405 method not allowed',
+    () => ({
+      kind: 'status',
+      status: 405,
+    }),
+    { bareStatus: true },
+  ),
   scenario('status_409_envelope', 'client_error', '409 conflict', () => ({
     kind: 'status',
     status: 409,
     body: errorEnvelope('shot.duplicate', 'Already synced.'),
   })),
-  scenario('status_410', 'client_error', '410 gone', () => ({
-    kind: 'status',
-    status: 410,
-  })),
+  scenario(
+    'status_410',
+    'client_error',
+    '410 gone',
+    () => ({
+      kind: 'status',
+      status: 410,
+    }),
+    { bareStatus: true },
+  ),
   scenario('status_413', 'client_error', '413 payload too large', () => ({
     kind: 'status',
     status: 413,
@@ -898,11 +929,28 @@ const TRANSIENT_401: ReadonlySet<CallSite['family']> = new Set([
   'billing',
 ]);
 
+/** Families served by `data/api.ts request()`, where only a coded JSON error
+ * envelope is a verdict: a bare 4xx is a transport artifact and stays
+ * retryable (the request is repeated under the same operation id). */
+const ENVELOPE_VERDICT_ONLY: ReadonlySet<CallSite['family']> = new Set([
+  'outbox',
+  'permit',
+  'feedback',
+]);
+
+/** Whether a `client_error` cell is a verdict the site must record as permanent. */
+export function isClientErrorVerdict(
+  site: Pick<CallSite, 'family'>,
+  scenario?: Pick<MatrixScenario, 'bareStatus'>,
+): boolean {
+  return !(scenario?.bareStatus && ENVELOPE_VERDICT_ONLY.has(site.family));
+}
+
 export function judge(
   site: CallSite,
   cls: ScenarioClass,
   observed: ObservedOutcome,
-  scenario?: Pick<MatrixScenario, 'nullsKeys'>,
+  scenario?: Pick<MatrixScenario, 'nullsKeys' | 'bareStatus'>,
 ): Violation[] {
   const violations: Violation[] = [];
   if (observed.unhandledRejections > 0) violations.push('unhandled_rejection');
@@ -930,8 +978,13 @@ export function judge(
         violations.push('resolved_on_error_status');
         break;
       }
-      if (cls === 'client_error' && observed.retryable === true) {
-        violations.push('retry_class_permanent_expected');
+      if (cls === 'client_error') {
+        if (isClientErrorVerdict(site, scenario)) {
+          if (observed.retryable === true)
+            violations.push('retry_class_permanent_expected');
+        } else if (observed.retryable === false) {
+          violations.push('retry_class_transient_expected');
+        }
       }
       if (
         (cls === 'rate_limited' || cls === 'server_error' || cls === 'reset') &&

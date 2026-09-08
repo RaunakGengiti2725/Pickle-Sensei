@@ -161,6 +161,62 @@ export function parseTrialSyncAcknowledgement(
  * (which the capture flow would render as an unbounded spinner). */
 export const API_REQUEST_TIMEOUT_MS = 20_000;
 
+/** A redirect is never an API verdict. The request asks the runtime not to
+ * follow (`redirect: 'manual'`), so a compliant fetch hands back the 3xx (or
+ * an opaque redirect) itself; a runtime that follows anyway (React Native's
+ * XHR-backed fetch) reports it through `redirected` / a final URL that is
+ * not the one requested. Either way the answer came from wherever the
+ * redirect pointed (a captive portal, an intercepting proxy, a route the API
+ * does not have), never from the API origin: a transport artifact. */
+function answeredByAnotherUrl(response: Response, requestUrl: string): boolean {
+  if (response.type === 'opaqueredirect') return true;
+  if (response.status >= 300 && response.status < 400) return true;
+  if (response.redirected) return true;
+  const finalUrl: unknown = response.url;
+  if (typeof finalUrl !== 'string' || finalUrl === '') return false;
+  const canonical = (value: string): string | null => {
+    try {
+      return new URL(value).href;
+    } catch {
+      return null;
+    }
+  };
+  const answeredBy = canonical(finalUrl);
+  return answeredBy !== null && answeredBy !== canonical(requestUrl);
+}
+
+/** Every API route answers 2xx with a JSON object; anything else (an empty
+ * 204, a text/html page, a bare literal) was written by something that never
+ * reached the route and acknowledges nothing. */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Every API error is a JSON envelope `{ error: { code, message } }`. A 4xx
+ * WITHOUT a coded envelope (a captive portal's 403 page, a gateway's 404
+ * HTML, a proxy's plain-text 400) was written by an intermediary, not by the
+ * route: it is no verdict on the request and must not be recorded as one.
+ * 401, 408 and 429 keep their status — every caller already treats them as
+ * "sign in / try again later" rather than as a verdict, and a 401 must still
+ * reach the session keeper. */
+function isUnreadableClientError(status: number): boolean {
+  return (
+    status >= 400 &&
+    status < 500 &&
+    status !== 401 &&
+    status !== 408 &&
+    status !== 429
+  );
+}
+
+function unreadableAnswer(): ApiError {
+  return new ApiError(
+    502,
+    'network.invalid_response',
+    'The rating service answered without a readable result. Your work is saved on this device and will be retried.',
+  );
+}
+
 async function request<T>(
   config: ApiConfigState,
   method: string,
@@ -187,7 +243,8 @@ async function request<T>(
     }, API_REQUEST_TIMEOUT_MS);
   });
   const fetchAndRead = async (): Promise<T> => {
-    const response = await fetch(`${config.baseUrl}${path}`, {
+    const requestUrl = `${config.baseUrl}${path}`;
+    const response = await fetch(requestUrl, {
       method,
       headers: {
         'content-type': 'application/json',
@@ -195,22 +252,37 @@ async function request<T>(
         'x-client-version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      redirect: 'manual',
       signal: controller.signal,
     });
     if (timedOut) throw timeoutError();
-    const json = (await response.json().catch(() => null)) as
-      (T & { error?: { code: string; message: string } }) | null;
+    if (answeredByAnotherUrl(response, requestUrl)) {
+      throw new ApiError(
+        502,
+        'network.redirected',
+        'The connection was redirected away from the rating service. Your work is saved on this device and will be retried.',
+      );
+    }
+    const json: unknown = await response.json().catch(() => undefined);
     if (timedOut) throw timeoutError();
     if (!response.ok) {
       if (response.status === 401 && token) {
         reportApiUnauthorized(token);
       }
+      const failure = isJsonObject(json) ? json['error'] : undefined;
+      const code = isJsonObject(failure) ? failure['code'] : undefined;
+      const message = isJsonObject(failure) ? failure['message'] : undefined;
+      const verdictCode = typeof code === 'string' && code !== '' ? code : null;
+      if (verdictCode === null && isUnreadableClientError(response.status)) {
+        throw unreadableAnswer();
+      }
       throw new ApiError(
         response.status,
-        json?.error?.code ?? 'unknown',
-        json?.error?.message ?? response.statusText,
+        verdictCode ?? 'unknown',
+        typeof message === 'string' ? message : response.statusText,
       );
     }
+    if (!isJsonObject(json)) throw unreadableAnswer();
     return json as T;
   };
   try {
@@ -296,14 +368,44 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
       outcome: ReleasableAnalysisOutcome,
     ): Promise<void> {
       requireSignedIn();
-      await request(
+      const acknowledgement = await request<unknown>(
         config,
         'POST',
         `/v1/analysis-permits/${encodeURIComponent(permitId)}/finalize`,
         { outcome, ratingId: null },
       );
+      if (!acknowledgesRelease(acknowledgement, permitId, outcome)) {
+        throw new ApiError(
+          502,
+          'access.permit_release_unconfirmed',
+          'The rating service did not confirm the analysis permit was released. It stays reserved on this device until it does.',
+        );
+      }
     },
   };
+}
+
+/** The finalize route answers 2xx only with `{ permit, access }` where the
+ * permit view names the permit it settled. A body that names no permit
+ * (`{}`, `{ ok: true }`, an error envelope, a permit without id/status) was
+ * written by something that never reached the route and is no verdict on
+ * this permit. The named permit must be this one, no longer `reserved`, and
+ * settled as the requested outcome (any other outcome is a 409 verdict, not
+ * an acknowledgement). */
+function acknowledgesRelease(
+  body: unknown,
+  permitId: string,
+  outcome: ReleasableAnalysisOutcome,
+): boolean {
+  if (!isJsonObject(body)) return false;
+  const permit = body['permit'];
+  if (!isJsonObject(permit)) return false;
+  return (
+    permit['id'] === permitId &&
+    typeof permit['status'] === 'string' &&
+    permit['status'] !== 'reserved' &&
+    permit['outcome'] === outcome
+  );
 }
 
 /** The permit id gates inference and every durable write, and is the path
