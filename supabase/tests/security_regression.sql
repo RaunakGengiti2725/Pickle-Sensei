@@ -6708,7 +6708,22 @@ begin
   end;
   begin
     delete from api_private.billing_transfer_sides where transfer_id = tid;
-    raise exception 'W07-T52: transfer sides must not be deletable';
+    raise exception 'W07-T59: transfer sides must not be deletable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfer_audit;
+    raise exception 'W07-T60: the transfer audit must not be truncatable, even by the owner';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfer_sides;
+    raise exception 'W07-T61: transfer sides must not be truncatable, even by the owner';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfers cascade;
+    raise exception 'W07-T62: transfers must not be truncatable, even by the owner';
   exception when insufficient_privilege then null;
   end;
 end $$;
