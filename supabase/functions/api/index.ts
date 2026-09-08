@@ -132,6 +132,7 @@ import {
   accountDeletionStatusUnavailableResponse,
   beginAccountDeletionOperation,
   confirmAccountDeletionOperation,
+  INVENTORY_INCOMPLETE_CODES,
   isAccountDeletionStatusCapability,
   isIntendedAuthUserNotFound,
   isIntendedRevenueCatCustomerNotFound,
@@ -2008,14 +2009,11 @@ async function readAllRows(
     cursorKey: (cursor) => JSON.stringify(cursor.map((part) => part.value)),
   });
   if (result.status === "COMPLETE") return { rows: result.rows };
-  console.error("[api] owner inventory incomplete:", {
-    reason: result.reason,
-    pages: result.pages,
-    ...failureDetail(result.error, result.httpStatus ?? undefined),
-  });
   return {
     error: failureDetail(
-      result.reason === "page_error" ? result.error : { name: "UnexpectedResult" },
+      result.reason === "page_error"
+        ? result.error
+        : { name: "UnexpectedResult", code: INVENTORY_INCOMPLETE_CODES[result.reason] },
       result.httpStatus ?? undefined,
     ),
   };

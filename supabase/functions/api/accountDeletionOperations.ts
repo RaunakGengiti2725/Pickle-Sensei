@@ -738,6 +738,18 @@ export type InventoryIncompleteReason =
   | "invalid_page_size"
   | "page_budget";
 
+/** Five-character diagnostic codes (the shape `failureDetail` keeps in logs)
+ * for the INCOMPLETE reasons that have no upstream error to carry. */
+export const INVENTORY_INCOMPLETE_CODES: Readonly<
+  Record<Exclude<InventoryIncompleteReason, "page_error">, string>
+> = {
+  malformed_page: "INV01",
+  page_overflow: "INV02",
+  repeated_row: "INV03",
+  invalid_page_size: "INV04",
+  page_budget: "INV05",
+};
+
 export interface CompleteInventory<Row> {
   status: "COMPLETE";
   rows: Row[];
