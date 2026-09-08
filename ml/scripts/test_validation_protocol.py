@@ -7,6 +7,7 @@ measurement, and nothing is committed under datasets/.
 from __future__ import annotations
 
 import copy
+import hashlib
 import io
 import json
 import tempfile
@@ -15,15 +16,21 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from validation_protocol import (
+    CORPUS_REGISTRY_PATH,
     DEFAULT_INPUT_ROOT,
     EXTERNAL_INPUT_IDS,
     INPUT_KINDS,
     PROTECTED_HOLDOUT_IDS,
+    PROTECTED_MEDIA_SHA256,
+    PROTECTED_SESSION_IDS,
     PROTOCOL_SCHEMA_VERSION,
+    REPO_ROOT,
     SCHEMAS,
     build_report,
+    is_protected_identifier,
     load_inputs,
     main,
+    protected_identity,
     render_report,
     validate_record,
 )
@@ -78,7 +85,7 @@ def footage(
 ) -> dict:
     return {
         "clip_id": clip,
-        "media_sha256": "a" * 64,
+        "media_sha256": hashlib.sha256(clip.encode("utf-8")).hexdigest(),
         "athlete_id": athlete,
         "athlete_group_id": "group-test-0001",
         "session_id": "session-test-0001",
@@ -115,7 +122,7 @@ def reviewer(reviewer_id: str = "reviewer-test-0001", roles: list[str] | None = 
         "reviewer_id": reviewer_id,
         "roles": roles or ["reviewer"],
         "qualification_policy_version": "coach-qualification-policy-v1",
-        "credential_ref": "credential-ref-test-0001",
+        "credential_ref": f"credential-ref-{reviewer_id}",
         "qualification": {
             "verdict": "qualified",
             "satisfied_criteria": ["criterion.certification"],
@@ -149,7 +156,7 @@ def review(
         "quality_rating": rating,
         "cannot_evaluate_reason": None if rating is not None else "occluded contact",
         "confidence": 0.8,
-        "submitted_at": "2026-08-10T00:00:00Z",
+        "submitted_at": "2026-09-10T00:00:00Z",
     }
 
 
@@ -160,7 +167,7 @@ def adjudication(clip: str = "clip-test-0001", rating: int = 3) -> dict:
         "review_ids": [f"{clip}.reviewer-test-0001", f"{clip}.reviewer-test-0002"],
         "resolved_rating": rating,
         "rationale": "reviewers disagreed on follow-through; adjudicated from the blinded frames",
-        "submitted_at": "2026-08-11T00:00:00Z",
+        "submitted_at": "2026-09-11T00:00:00Z",
     }
 
 
@@ -577,6 +584,347 @@ class ReportTest(unittest.TestCase):
             first = build_report(load_inputs(root))
             second = build_report(load_inputs(root))
         self.assertEqual(copy.deepcopy(first), second)
+
+
+def report_for(root: Path) -> dict:
+    return build_report(load_inputs(root))
+
+
+def strict_json_loads(text: str) -> object:
+    def refuse(constant: str) -> object:
+        raise ValueError(f"non-finite JSON constant {constant}")
+
+    return json.loads(text, parse_constant=refuse)
+
+
+class ProtectedHoldoutIdentityTest(unittest.TestCase):
+    """Protected footage is refused by content identity and by id alias, as the
+    benchmark release gate (packages/evaluation/src/benchmarkRelease.ts) does."""
+
+    def test_protected_media_hash_under_fresh_ids_is_refused(self) -> None:
+        self.assertGreaterEqual(len(PROTECTED_MEDIA_SHA256), 7)
+        for digest in sorted(PROTECTED_MEDIA_SHA256):
+            with self.subTest(digest=digest[:12]):
+                doc = footage(clip="clip-recut-0001")
+                doc["session_id"] = "session-recut-0001"
+                doc["media_sha256"] = digest
+                errors = validate_record("footage", doc, "footage/clip-recut-0001")
+                self.assertTrue(any("protected" in e.lower() for e in errors), errors)
+
+    def test_protected_hashes_mirror_the_corpus_registry(self) -> None:
+        registry = REPO_ROOT / CORPUS_REGISTRY_PATH
+        self.assertTrue(registry.is_file(), registry)
+        recordings = json.loads(registry.read_text(encoding="utf-8"))
+        from_registry = {
+            record["sha256"]
+            for record in recordings
+            if record.get("sessionKey") in PROTECTED_SESSION_IDS
+        }
+        self.assertTrue(from_registry)
+        identity = protected_identity()
+        self.assertTrue(from_registry <= identity.media_sha256)
+        self.assertTrue(PROTECTED_MEDIA_SHA256 <= identity.media_sha256)
+        # The pinned constant and the registry must agree; drift in either
+        # direction means one of the two gates is out of date.
+        self.assertEqual(from_registry, set(PROTECTED_MEDIA_SHA256))
+        for alias in ("afn-vic-rally1", "afn-provic", "wm-dink-nearplayer", "wm-pickleball-game"):
+            self.assertIn(alias, identity.aliases, alias)
+
+    def test_protected_id_aliases_are_refused_case_and_prefix_insensitively(self) -> None:
+        aliases: list[str] = []
+        for protected in sorted(PROTECTED_HOLDOUT_IDS):
+            aliases.append(protected.upper())
+            aliases.append(protected + "-recut-0001")
+            aliases.append("copy-of-" + protected)
+        aliases.extend(["wm-dink-nearplayer", "AFN-PROVIC-crop-01", "rec-024decaeb66e"])
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                self.assertTrue(is_protected_identifier(alias), alias)
+                doc = footage(clip=alias)
+                errors = validate_record("footage", doc, f"footage/{alias}")
+                self.assertTrue(any("protected" in e.lower() for e in errors), errors)
+        for field_name in ("session_id", "athlete_id", "athlete_group_id"):
+            doc = footage()
+            doc[field_name] = "Session-WM-Tournament-2014-b"
+            errors = validate_record("footage", doc, "footage/x")
+            self.assertTrue(any("protected" in e.lower() for e in errors), field_name)
+        for fresh in ("clip-test-0001", "session-test-0001", "athlete-test-0001", "wm-2026-open"):
+            self.assertFalse(is_protected_identifier(fresh), fresh)
+        self.assertEqual(validate_record("footage", footage(), "footage/fresh"), [])
+
+
+class AdjudicatorIndependenceTest(unittest.TestCase):
+    def test_adjudicator_who_authored_any_review_of_the_clip_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            # The adjudicator also reviewed clip-test-0002 but the adjudication
+            # record omits their own review from review_ids.
+            write_json(
+                root / "reviews" / "clip-test-0002.adjudicator-test-0001.json",
+                review(clip="clip-test-0002", reviewer_id="adjudicator-test-0001", rating=5),
+            )
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report)
+        self.assertTrue(
+            any("adjudicator" in e and "review" in e for e in report["validation_errors"]),
+            report["validation_errors"],
+        )
+
+    def test_adjudication_must_cover_every_review_of_the_clip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            write_json(root / "reviewers" / "reviewer-test-0003.json", reviewer("reviewer-test-0003"))
+            write_json(
+                root / "reviews" / "clip-test-0002.reviewer-test-0003.json",
+                review(clip="clip-test-0002", reviewer_id="reviewer-test-0003", rating=1),
+            )
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report)
+        self.assertTrue(
+            any("clip-test-0002.reviewer-test-0003" in e for e in report["validation_errors"]),
+            report["validation_errors"],
+        )
+
+
+class CoachQualificationPolicyV1Test(unittest.TestCase):
+    def test_self_assessed_reviewer_is_refused(self) -> None:
+        doc = reviewer()
+        doc["qualification"]["assessed_by"] = doc["reviewer_id"]
+        errors = validate_record("reviewer", doc, "reviewers/self")
+        self.assertTrue(any("assessed_by" in e for e in errors), errors)
+
+    def test_synthetic_identities_are_refused_in_every_record(self) -> None:
+        doc = reviewer("SYNTHETIC-reviewer-0001")
+        doc["credential_ref"] = "SYNTHETIC-cred-0001"
+        errors = validate_record("reviewer", doc, "reviewers/synthetic")
+        self.assertTrue(any("reviewer_id" in e for e in errors), errors)
+        self.assertTrue(any("credential_ref" in e for e in errors), errors)
+        doc = reviewer()
+        doc["qualification"]["assessed_by"] = "synthetic-admin-0001"
+        errors = validate_record("reviewer", doc, "reviewers/assessor")
+        self.assertTrue(any("assessed_by" in e for e in errors), errors)
+        doc = footage()
+        doc["metadata_verification"]["verified_by"] = "Synthetic-verifier-0001"
+        self.assertTrue(validate_record("footage", doc, "footage/x"))
+        doc = adjudication()
+        doc["adjudicator_id"] = "SYNTHETIC-adjudicator-0001"
+        self.assertTrue(validate_record("adjudication", doc, "adjudications/x"))
+        doc = review()
+        doc["reviewer_id"] = "SYNTHETIC-reviewer-0001"
+        doc["review_id"] = f"{doc['clip_id']}.{doc['reviewer_id']}"
+        self.assertTrue(validate_record("review", doc, "reviews/x"))
+        doc = protocol()
+        doc["ratified_by"] = ["SYNTHETIC-owner-0001"]
+        self.assertTrue(validate_record("protocol", doc, "protocol.json"))
+
+    def test_synthetic_assessor_in_complete_inputs_never_computes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = reviewer("reviewer-test-0002")
+            doc["qualification"]["assessed_by"] = "SYNTHETIC-admin-0001"
+            write_json(root / "reviewers" / "reviewer-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertIsNone(report["results"])
+
+
+class BoundaryValueTest(unittest.TestCase):
+    def test_non_finite_numbers_are_invalid_and_json_output_is_strict(self) -> None:
+        doc = protocol()
+        doc["targets"]["player_weighted_mae_maximum"] = float("inf")
+        doc["targets"]["median_width_maximum"] = float("nan")
+        self.assertTrue(validate_record("protocol", doc, "protocol.json"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            (root / "protocol.json").write_text(json.dumps(doc), encoding="utf-8")
+            clip = footage()
+            clip["capture"]["fps"] = float("nan")
+            (root / "footage" / "clip-test-0001.json").write_text(json.dumps(clip), encoding="utf-8")
+            report = report_for(root)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["--report", "--json", "--inputs", str(root)])
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertIsNone(report["results"])
+        self.assertEqual(code, 1)
+        self.assertEqual(strict_json_loads(out.getvalue())["status"], "INVALID_INPUT")
+
+    def test_huge_integers_are_invalid_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = protocol()
+            doc["rating_scale"] = {"id": "scale-huge", "minimum": -(10**400), "maximum": 10**400}
+            (root / "protocol.json").write_text(json.dumps(doc), encoding="utf-8")
+            pred = prediction()
+            pred["prediction"]["lower"] = -(10**400)
+            pred["prediction"]["upper"] = 10**400
+            (root / "predictions" / "clip-test-0001.json").write_text(json.dumps(pred), encoding="utf-8")
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+
+    def test_null_and_deeply_nested_records_are_invalid_not_silently_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            (root / "footage" / "corrupt-null.json").write_text("null", encoding="utf-8")
+            (root / "predictions" / "clip-test-0001.json").write_text("null", encoding="utf-8")
+            report = report_for(root)
+            self.assertEqual(report["status"], "INVALID_INPUT", report)
+            self.assertTrue(any("corrupt-null.json" in e for e in report["validation_errors"]))
+            self.assertEqual(report["record_counts"]["footage"], 3)
+            write_complete_inputs(root)
+            (root / "footage" / "corrupt-null.json").unlink()
+            (root / "footage" / "deep.json").write_text(
+                "[" * 100_000 + "]" * 100_000, encoding="utf-8"
+            )
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("deep.json" in e for e in report["validation_errors"]))
+
+    def test_invalid_calendar_timestamps_are_refused(self) -> None:
+        doc = consent()
+        doc["signed_at"] = "9999-99-99T99:99:99Z"
+        self.assertTrue(any("signed_at" in e for e in validate_record("consent", doc, "c")))
+        doc = consent()
+        doc["signed_at"] = "2026-02-30T00:00:00Z"
+        self.assertTrue(any("signed_at" in e for e in validate_record("consent", doc, "c")))
+        doc = consent()
+        doc["signed_at"] = "2026-08-01T00:00:00+05:30"
+        self.assertEqual(validate_record("consent", doc, "c"), [])
+
+
+class IndependenceAndProvenanceTest(unittest.TestCase):
+    def test_reviewers_sharing_a_credential_are_not_independent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = reviewer("reviewer-test-0002")
+            doc["credential_ref"] = reviewer()["credential_ref"]
+            write_json(root / "reviewers" / "reviewer-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("credential_ref" in e for e in report["validation_errors"]))
+
+    def test_footage_sharing_media_bytes_is_one_clip_not_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = footage(clip="clip-test-0002", athlete="athlete-test-0002", release="release-test-0002")
+            doc["media_sha256"] = footage()["media_sha256"]
+            write_json(root / "footage" / "clip-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("media_sha256" in e for e in report["validation_errors"]))
+
+    def test_predictions_from_two_candidates_are_not_pooled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = prediction("clip-test-0002", 1.0, 2.0)
+            doc["subject"]["model_version"] = "model-test-v2"
+            write_json(root / "predictions" / "clip-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("subject" in e for e in report["validation_errors"]))
+
+    def test_adjudicator_only_reviewer_is_not_a_blinded_reviewer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            write_json(
+                root / "reviewers" / "reviewer-test-0002.json",
+                reviewer("reviewer-test-0002", ["adjudicator"]),
+            )
+            report = report_for(root)
+        self.assertNotEqual(report["status"], "COMPUTED", report["status"])
+        missing = {entry["input"]: entry for entry in report["missing_inputs"]}
+        self.assertIn("blinded_reviews", missing)
+        self.assertIn("reviewer-test-0002", missing["blinded_reviews"]["what_is_missing"])
+
+    def test_reviewer_with_a_conflict_of_interest_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = footage()
+            doc["metadata_verification"]["verified_by"] = "reviewer-test-0001"
+            doc["rights"]["verified_by"] = "reviewer-test-0001"
+            write_json(root / "footage" / "clip-test-0001.json", doc)
+            report = report_for(root)
+            self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+            self.assertTrue(any("reviewer-test-0001" in e for e in report["validation_errors"]))
+            write_complete_inputs(root)
+            write_json(
+                root / "footage" / "clip-test-0002.json",
+                footage(clip="clip-test-0002", athlete="reviewer-test-0002", release="release-test-0002"),
+            )
+            write_json(
+                root / "consent" / "release-test-0002.json",
+                consent(athlete="reviewer-test-0002", release="release-test-0002"),
+            )
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("reviewer-test-0002" in e for e in report["validation_errors"]))
+
+
+class TemporalAndConsentTest(unittest.TestCase):
+    def test_review_before_ratification_or_consent_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = review()
+            doc["submitted_at"] = "2020-01-01T00:00:00Z"
+            write_json(root / "reviews" / "clip-test-0001.reviewer-test-0001.json", doc)
+            report = report_for(root)
+            self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+            self.assertTrue(any("submitted_at" in e for e in report["validation_errors"]))
+            write_complete_inputs(root)
+            doc = adjudication("clip-test-0002", 4)
+            doc["submitted_at"] = "2026-09-09T00:00:00Z"  # before the reviews it adjudicates
+            write_json(root / "adjudications" / "clip-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+
+    def test_withdrawn_consent_is_not_bypassed_by_a_second_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            withdrawn = consent()
+            withdrawn["state"] = "withdrawn"
+            write_json(root / "consent" / "release-test-0001.json", withdrawn)
+            write_json(root / "consent" / "release-test-0009.json", consent(release="release-test-0009"))
+            write_json(root / "footage" / "clip-test-0001.json", footage(release="release-test-0009"))
+            report = report_for(root)
+        self.assertNotEqual(report["status"], "COMPUTED", report["status"])
+        missing = {entry["input"]: entry for entry in report["missing_inputs"]}
+        self.assertIn("consented_footage", missing)
+        self.assertIn("clip-test-0001", missing["consented_footage"]["what_is_missing"])
+
+    def test_clip_every_reviewer_could_not_evaluate_is_not_scored_from_the_adjudicator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            write_json(
+                root / "reviews" / "clip-test-0002.reviewer-test-0001.json",
+                review(clip="clip-test-0002", rating=None),
+            )
+            write_json(
+                root / "reviews" / "clip-test-0002.reviewer-test-0002.json",
+                review(clip="clip-test-0002", reviewer_id="reviewer-test-0002", rating=None),
+            )
+            report = report_for(root)
+            self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+            self.assertTrue(any("clip-test-0002" in e for e in report["validation_errors"]))
+            (root / "adjudications" / "clip-test-0002.json").unlink()
+            report = report_for(root)
+        self.assertEqual(report["status"], "COMPUTED", report)
+        self.assertEqual(report["results"]["clips"]["resolved"], 1)
+        self.assertEqual(report["results"]["clips"]["unevaluable"], 1)
+        self.assertEqual(report["results"]["reviewer_agreement"]["reviewer_abstentions"], 2)
 
 
 if __name__ == "__main__":
