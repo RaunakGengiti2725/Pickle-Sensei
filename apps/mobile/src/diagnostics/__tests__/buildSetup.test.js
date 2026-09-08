@@ -313,9 +313,14 @@ describe('matching local Hermes maps, with no uploads', () => {
             ? ''
             : path.join(directory, 'main.jsbundle.map'),
         ]);
-        expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(
-          identityRecord,
-        );
+        expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+          marketingVersion: '1.0',
+          buildNumber: 1,
+          bundleIdentifier: 'com.picklesensei',
+          gitSha: identityRecord.gitSha,
+          committed: true,
+        });
+        expect(fs.readFileSync(file, 'utf8')).not.toContain('identityFiles');
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });
       }

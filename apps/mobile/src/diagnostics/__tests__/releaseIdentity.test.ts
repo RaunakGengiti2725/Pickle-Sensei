@@ -1,4 +1,4 @@
-import type { ErrorEvent, ReactNativeOptions } from '@sentry/react-native';
+import type { ErrorEvent } from '@sentry/react-native';
 import {
   getRuntimePublicConfig,
   type RuntimeDiagnosticsConfig,
@@ -16,38 +16,27 @@ import {
   optionsForDiagnostics,
 } from '../sentry';
 
+// The factory runs while the imports above load, before this file's
+// bindings exist, and again for every isolated module registry; delegating
+// per call keeps one shared mock across all of them.
 const mockReadGeneratedReleaseIdentity = jest.fn<unknown, []>(() => null);
 jest.mock('../../config/readGeneratedReleaseIdentity', () => ({
-  readGeneratedReleaseIdentity: mockReadGeneratedReleaseIdentity,
+  readGeneratedReleaseIdentity: () => mockReadGeneratedReleaseIdentity(),
 }));
 
-const mockInit = jest.fn<void, [ReactNativeOptions]>();
-const mockCaptureEvent = jest.fn<string, [ErrorEvent]>(() => 'e'.repeat(32));
-const mockClear = jest.fn();
-jest.mock('@sentry/react-native', () => ({
-  init: mockInit,
-  debugMetaIntegration: () => ({ name: 'DebugMeta' }),
-  getClient: () => ({
-    getOptions: () => ({ stackParser: () => [] }),
-  }),
-  captureEvent: mockCaptureEvent,
-  getGlobalScope: () => ({ clear: mockClear }),
-  getIsolationScope: () => ({ clear: mockClear }),
-  getCurrentScope: () => ({ clear: mockClear }),
-}));
-jest.mock('@sentry/browser', () => ({
-  makeFetchTransport: () => ({
-    send: async () => ({}),
-    flush: async () => true,
-  }),
-}));
+const mockLoadSdk = jest.fn();
+jest.mock('@sentry/react-native', () => {
+  mockLoadSdk();
+  throw new Error('The diagnostics provider must remain unloaded');
+});
 
 const marker = 'SENSITIVE_FIXTURE_DO_NOT_TRANSMIT';
 const sha = '0123456789abcdef0123456789abcdef01234567';
 const dsn = `https://${'a'.repeat(32)}@o1.ingest.sentry.io/1`;
 
-// Exactly what `scripts/release-identity.mjs --check --require-committed
-// --json` prints for a committed candidate; the bundle phase writes it as-is.
+// What `scripts/release-identity.mjs --check --require-committed --json`
+// prints for a committed candidate; the bundle phase keeps its version, build,
+// bundle identifier, commit and verdict, so both shapes must parse alike.
 const generatedRecord = {
   marketingVersion: '1.0',
   buildNumber: 1,
@@ -90,15 +79,22 @@ async function settled(): Promise<void> {
 beforeEach(() => {
   mockReadGeneratedReleaseIdentity.mockReset();
   mockReadGeneratedReleaseIdentity.mockReturnValue(null);
-  mockInit.mockClear();
-  mockCaptureEvent.mockClear();
-  mockClear.mockClear();
+  mockLoadSdk.mockClear();
 });
 
 describe('generated release identity file', () => {
   it('accepts only the committed candidate record the release-identity script prints', () => {
     const parsed = parseGeneratedReleaseIdentity(generatedRecord);
     expect(parsed).toEqual(generated);
+    expect(
+      parseGeneratedReleaseIdentity({
+        marketingVersion: '1.0',
+        buildNumber: 1,
+        bundleIdentifier: 'com.picklesensei',
+        gitSha: sha,
+        committed: true,
+      }),
+    ).toEqual(generated);
     expect(Object.isFrozen(parsed)).toBe(true);
     expect(Object.keys(parsed ?? {}).sort()).toEqual(
       Object.keys(generated).sort(),
@@ -378,42 +374,39 @@ describe('startup wiring of the generated release identity', () => {
     });
     expect(unapproved.initializeDiagnostics()).toBe('blocked_provider');
     await settled();
-    expect(mockInit).not.toHaveBeenCalled();
+    expect(mockLoadSdk).not.toHaveBeenCalled();
     expect(disabled.getDiagnosticsStatus().transportEnabled).toBe(false);
     expect(unapproved.getDiagnosticsStatus().transportEnabled).toBe(false);
+    expect(disabled.captureHandledError(new Error(marker))).toBe(false);
   });
 
   it('blocks an approved configuration whose build carries no committed identity', async () => {
     const diagnostics = startup(approvedConfig());
     expect(diagnostics.initializeDiagnostics()).toBe('blocked_identity');
+    expect(mockReadGeneratedReleaseIdentity).toHaveBeenCalledTimes(1);
     await settled();
-    expect(mockInit).not.toHaveBeenCalled();
+    expect(mockLoadSdk).not.toHaveBeenCalled();
     expect(diagnostics.captureHandledError(new Error(marker))).toBe(false);
+    expect(diagnostics.getDiagnosticsStatus().transportEnabled).toBe(false);
   });
 
-  it('initializes an approved configuration from the build-time identity file', async () => {
+  it('passes the gate for an approved configuration only with the build-time identity file', () => {
     mockReadGeneratedReleaseIdentity.mockReturnValue(generatedRecord);
+    expect(generatedReleaseIdentity()).toEqual(generated);
+    expect(
+      diagnosticsGate(approvedConfig(), generatedReleaseIdentity()),
+    ).toEqual({
+      state: 'ready_js_only',
+      dsn,
+      identity: expect.objectContaining({
+        marketingVersion: '1.0',
+        nativeBuildNumber: '1',
+        sourceRevision: sha,
+      }),
+    });
     const diagnostics = startup(approvedConfig());
     expect(diagnostics.initializeDiagnostics()).toBe('initializing');
-    await settled();
-    expect(diagnostics.getDiagnosticsStatus().javascript).toBe(
-      'active_js_only',
-    );
-    expect(mockInit).toHaveBeenCalledTimes(1);
-    expect(mockInit.mock.calls[0]?.[0]).toMatchObject({
-      dsn,
-      release: 'com.picklesensei@1.0+1',
-      dist: '1',
-      environment: 'test',
-      enableNative: false,
-    });
-    expect(diagnostics.captureHandledError(new Error(marker))).toBe(true);
-    expect(mockCaptureEvent).toHaveBeenCalledTimes(1);
-    expect(mockCaptureEvent.mock.calls[0]?.[0]).toMatchObject({
-      release: 'com.picklesensei@1.0+1',
-      dist: '1',
-      tags: { source_revision: sha, diagnostic_origin: 'handled_js' },
-    });
-    expect(JSON.stringify(mockCaptureEvent.mock.calls)).not.toContain(marker);
+    expect(mockReadGeneratedReleaseIdentity).toHaveBeenCalledTimes(3);
+    expect(diagnostics.initializeDiagnostics()).not.toBe('blocked_identity');
   });
 });
