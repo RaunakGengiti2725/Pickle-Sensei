@@ -13,8 +13,13 @@ import {
   diagnosticsRelease,
   type DiagnosticOrigin,
   type DiagnosticsIdentity,
+  type DiagnosticTransport,
   type DiagnosticTransportFactory,
 } from './privacy';
+import {
+  createDiagnosticRetention,
+  type DiagnosticRetention,
+} from './retention';
 import { createScrubbedTransport, scrubDiagnosticEvent } from './scrub';
 
 export const NATIVE_DIAGNOSTICS_STATUS = 'blocked_unverified_native_filtering';
@@ -75,6 +80,7 @@ export function optionsForDiagnostics(
   debugMeta: ReturnType<
     (typeof import('@sentry/react-native'))['debugMetaIntegration']
   >,
+  retain?: (sink: DiagnosticTransport) => DiagnosticTransport,
 ): ReactNativeOptions {
   const releaseIdentity = diagnosticsIdentity(identity);
   const fetchOptions = {
@@ -156,9 +162,12 @@ export function optionsForDiagnostics(
     },
     transport: options => {
       try {
-        return releaseIdentity
-          ? createScrubbedTransport(makeTransport(options), releaseIdentity)
-          : disabledTransport;
+        if (!releaseIdentity) return disabledTransport;
+        const sink = makeTransport(options);
+        return createScrubbedTransport(
+          retain ? retain(sink) : sink,
+          releaseIdentity,
+        );
       } catch {
         return disabledTransport;
       }
@@ -247,6 +256,7 @@ export function createErrorReporter(
 
 let state: DiagnosticsState = 'uninitialized';
 let reporter: ReturnType<typeof createErrorReporter> | null = null;
+let retention: DiagnosticRetention | null = null;
 
 async function initializeSdk(
   gate: Extract<DiagnosticsGate, { state: 'ready_js_only' }>,
@@ -254,12 +264,14 @@ async function initializeSdk(
   try {
     const sdk = await import('@sentry/react-native');
     const browser = await import('@sentry/browser');
+    const nextRetention = createDiagnosticRetention(gate.identity);
     sdk.init(
       optionsForDiagnostics(
         gate.identity,
         gate.dsn,
         browser.makeFetchTransport,
         sdk.debugMetaIntegration(),
+        nextRetention.retain,
       ),
     );
     const client = sdk.getClient();
@@ -284,9 +296,11 @@ async function initializeSdk(
       return;
     }
     reporter = nextReporter;
+    retention = nextRetention;
     state = 'active_js_only';
   } catch {
     reporter = null;
+    retention = null;
     state = 'unavailable';
   }
 }
@@ -312,7 +326,7 @@ export function getDiagnosticsStatus() {
     javascript: state,
     native: NATIVE_DIAGNOSTICS_STATUS,
     transportEnabled: state === 'active_js_only',
-    persistentQueue: false,
+    persistentQueue: state === 'active_js_only' && retention !== null,
   } as const;
 }
 
