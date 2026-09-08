@@ -6,6 +6,7 @@ import type { BillingAccessDependencies } from './types';
 
 export * from './types';
 export * from './accessApi';
+export * from './membershipState';
 export * from './revenueCatClient';
 
 export interface BillingAccessConfig {

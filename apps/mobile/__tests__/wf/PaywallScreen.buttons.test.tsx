@@ -1328,7 +1328,11 @@ describe('PaywallScreen buttons — accessibility and hit targets', () => {
 
     const pressables = allPressables(renderer);
     expect(pressables.map(n => n.props.accessibilityLabel).sort()).toEqual(
-      ['Close membership', 'Continue coaching'].sort(),
+      [
+        'Close membership',
+        'Continue coaching',
+        'Manage subscription in the App Store',
+      ].sort(),
     );
     pressables.forEach(expectAccessibleTarget);
 
