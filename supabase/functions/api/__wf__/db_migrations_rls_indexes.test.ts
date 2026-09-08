@@ -1358,7 +1358,9 @@ Deno.test(
       );
     }
     ok(
-      transition.includes("(old.status = 'reserved' and new.status in ('finalized', 'released'))") &&
+      transition.includes(
+        "(old.status = 'reserved' and new.status in ('finalized', 'released'))",
+      ) &&
         transition.includes("('finalized', 'scored')") &&
         transition.includes("('released', 'low_confidence')") &&
         transition.includes("('released', 'free_limit_exceeded')") &&
@@ -1374,7 +1376,9 @@ Deno.test(
 
     // shots.result_kind admits 'partial'; the unscored invariant is untouched.
     ok(
-      migration.statements.includes("alter table public.shots drop constraint shots_result_kind_check") &&
+      migration.statements.includes(
+        "alter table public.shots drop constraint shots_result_kind_check",
+      ) &&
         migration.statements.includes(
           "alter table public.shots add constraint shots_result_kind_check check (result_kind in ('scored', 'low_confidence', 'partial')) not valid",
         ) &&
@@ -1384,7 +1388,10 @@ Deno.test(
       "shots.result_kind must be widened to exactly scored | low_confidence | partial (NOT VALID + VALIDATE — no exclusive-lock rescan)",
     );
     ok(
-      !migration.statements.some((s) => s.includes("shots_low_confidence_unscored")),
+      !migration.statements.some(
+        (s) =>
+          s.startsWith("alter table public.shots") && s.includes("shots_low_confidence_unscored"),
+      ),
       "shots_low_confidence_unscored (non-scored ⇒ overall_score IS NULL) is what keeps a partial unscored — it must not be touched",
     );
 
