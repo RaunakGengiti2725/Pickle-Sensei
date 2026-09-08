@@ -18,9 +18,13 @@
  *  - corrupt, missing or unavailable storage never becomes authorization —
  *    lease evaluation reports that reconciliation is required;
  *  - Pro leases are capped at OFFLINE_PRO_LEASE_MAX_SECONDS;
- *  - `src/data/api.ts` feeds every authenticated `Date` header into the module.
+ *  - `src/data/api.ts` feeds every authenticated `Date` header into the module,
+ *    and from then on every return to the foreground checkpoints the high-
+ *    water mark, so a wall clock seen ahead while the app was open is held
+ *    against a later rollback even though the monotonic clock slept.
  */
 
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Keychain from 'react-native-keychain';
 import { OFFLINE_PRO_LEASE_MAX_SECONDS } from '@pickle/shared-types';
 import { SESSION_VAULT_SERVICE } from '../src/account/sessionVault';
@@ -36,6 +40,7 @@ import {
   responseDateHeader,
   trustedTime,
   type TrustedTimeKeychain,
+  type TrustedTimeLifecycle,
 } from '../src/data/trustedTime';
 
 const { __keychainStore } = Keychain as unknown as {
@@ -60,12 +65,42 @@ interface Clocks {
   wallMs: number;
 }
 
-function harness(clocks: Clocks, keychain: TrustedTimeKeychain = Keychain) {
+function harness(
+  clocks: Clocks,
+  keychain: TrustedTimeKeychain = Keychain,
+  lifecycle: TrustedTimeLifecycle | null = null,
+) {
   return createTrustedTime({
     keychain,
     monotonicNowMs: () => clocks.monotonicMs,
     wallClockNowMs: () => clocks.wallMs,
+    lifecycle,
   });
+}
+
+/** A fake `AppState`: records subscriptions and delivers transitions. */
+function fakeLifecycle() {
+  const listeners = new Set<(state: AppStateStatus) => void>();
+  let subscriptions = 0;
+  const lifecycle: TrustedTimeLifecycle = {
+    addEventListener(type, listener) {
+      expect(type).toBe('change');
+      subscriptions += 1;
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+  };
+  return {
+    lifecycle,
+    get subscriptions() {
+      return subscriptions;
+    },
+    async transition(state: AppStateStatus): Promise<void> {
+      for (const listener of [...listeners]) listener(state);
+      // The listener fires and forgets a checkpoint; let it settle.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    },
+  };
 }
 
 function storedRecord(): Record<string, unknown> {
@@ -286,6 +321,122 @@ describe('W05-02 trusted time — anchored on an authenticated server response',
     expect(storedRecord().highWaterMs).toBe(
       SERVER_MS + TRUSTED_TIME_CHECKPOINT_INTERVAL_MS + 2 * DAY,
     );
+  });
+
+  it('checkpoints on every return to the foreground once the clock is in use, subscribing exactly once', async () => {
+    const clocks: Clocks = { monotonicMs: 0, wallMs: SERVER_MS };
+    const app = fakeLifecycle();
+    const time = harness(clocks, Keychain, app.lifecycle);
+    // Creating the clock has no side effect; using it arms the hook.
+    expect(app.subscriptions).toBe(0);
+    await time.observeServerTime({
+      dateHeader: serverHeader(SERVER_MS),
+      authenticated: true,
+    });
+    expect(app.subscriptions).toBe(1);
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS);
+
+    // Background and inactive transitions do nothing.
+    clocks.monotonicMs += HOUR;
+    clocks.wallMs += HOUR;
+    await app.transition('background');
+    await app.transition('inactive');
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS);
+
+    // Coming back to the foreground persists the high-water mark without
+    // any read() from the rest of the app.
+    await app.transition('active');
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS + HOUR);
+
+    clocks.monotonicMs += DAY;
+    clocks.wallMs += DAY;
+    await app.transition('active');
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS + HOUR + DAY);
+
+    await time.read();
+    await time.checkpoint();
+    expect(app.subscriptions).toBe(1);
+  });
+
+  it('a wall clock seen ahead while foregrounded is remembered: winding it back afterwards is a rollback even though the process slept', async () => {
+    // The process monotonic clock does not count while the device sleeps.
+    // Ten real days pass, one of them awake; the wall clock is honest until
+    // the user winds it back to just past what the monotonic clock counted.
+    const clocks: Clocks = { monotonicMs: 0, wallMs: SERVER_MS };
+    const app = fakeLifecycle();
+    const time = harness(clocks, Keychain, app.lifecycle);
+    await time.observeServerTime({
+      dateHeader: serverHeader(SERVER_MS),
+      authenticated: true,
+    });
+
+    clocks.monotonicMs += DAY;
+    clocks.wallMs += 10 * DAY;
+    await app.transition('active');
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS + 10 * DAY);
+
+    clocks.monotonicMs += 60_000;
+    clocks.wallMs = SERVER_MS + DAY + 60_000;
+    const reading = await time.read();
+    expect(reading.authority).toBe('anchored');
+    expect(reading.nowMs).toBe(SERVER_MS + 10 * DAY + 60_000);
+    expect(reading.rollbackDetected).toBe(true);
+    expect(evaluateLease(lease, reading)).toEqual({
+      kind: 'reconcile_required',
+      reason: 'clock_rollback',
+    });
+
+    // And a relaunch starts from the remembered floor: with the wall clock
+    // still wound back the rollback is reported; with it restored the lease
+    // is simply expired. Neither is ever active.
+    const woundBack = harness(
+      { monotonicMs: 1, wallMs: SERVER_MS + DAY + 2 * 60_000 },
+      Keychain,
+      app.lifecycle,
+    );
+    expect(evaluateLease(lease, await woundBack.read())).toEqual({
+      kind: 'reconcile_required',
+      reason: 'clock_rollback',
+    });
+    const restored = harness(
+      { monotonicMs: 1, wallMs: SERVER_MS + 10 * DAY + 3 * 60_000 },
+      Keychain,
+      app.lifecycle,
+    );
+    expect(evaluateLease(lease, await restored.read())).toEqual({
+      kind: 'expired',
+    });
+  });
+
+  it('the shared clock subscribes to the real AppState, and a lifecycle that cannot subscribe leaves the clock usable', async () => {
+    const addEventListener = AppState.addEventListener as jest.Mock;
+    addEventListener.mockClear();
+    const clocks: Clocks = { monotonicMs: 0, wallMs: SERVER_MS };
+    const defaulted = createTrustedTime({
+      keychain: Keychain,
+      monotonicNowMs: () => clocks.monotonicMs,
+      wallClockNowMs: () => clocks.wallMs,
+    });
+    await defaulted.read();
+    expect(addEventListener).toHaveBeenCalledTimes(1);
+    expect(addEventListener.mock.calls[0]?.[0]).toBe('change');
+
+    const throwing: TrustedTimeLifecycle = {
+      addEventListener() {
+        throw new Error('no lifecycle events here');
+      },
+    };
+    const time = harness(clocks, Keychain, throwing);
+    await time.observeServerTime({
+      dateHeader: serverHeader(SERVER_MS),
+      authenticated: true,
+    });
+    clocks.monotonicMs += HOUR;
+    clocks.wallMs += HOUR;
+    const reading = await time.read();
+    expect(reading.authority).toBe('anchored');
+    expect(reading.nowMs).toBe(SERVER_MS + HOUR);
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS + HOUR);
   });
 });
 
