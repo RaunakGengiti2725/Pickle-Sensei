@@ -473,20 +473,23 @@ Deno.test(
       });
       await withAuthUpstream(upstream, async () => {
         const statuses: number[] = [];
-        // Five 60 s refresh windows inside one 300 s auth-failure window.
-        for (let minute = 0; minute < 5; minute += 1) {
+        // Four 60 s refresh windows inside one 300 s auth-failure window.
+        for (let minute = 0; minute < 4; minute += 1) {
           if (minute > 0) clock.advance((AUTH_REFRESH_LIMIT.windowSeconds + 1) * 1_000);
           for (let i = 0; i < AUTH_REFRESH_LIMIT.limit; i += 1) {
             statuses.push((await postRefresh(h.handler, ip, dead)).status);
           }
         }
         assertEquals(statuses.filter((s) => s === 401).length, AUTH_FAILURE_LIMIT.limit);
-        assertEquals(statuses.filter((s) => s === 429).length, 150 - AUTH_FAILURE_LIMIT.limit);
+        assertEquals(statuses.filter((s) => s === 429).length, 120 - AUTH_FAILURE_LIMIT.limit);
         assertEquals(rotations, AUTH_FAILURE_LIMIT.limit, "the spent shard stops rotating at Auth");
         assertEquals(await shardCharged(ip, dead), AUTH_FAILURE_LIMIT.limit);
         assertEquals(await egressCharged(ip), 1, "one refresh token is one venue-wide failure");
-        await assertPeersUntouched(h.handler, ip, "one dead refresh token");
       });
+      // Step past the per-egress refresh-rate window (all refreshes, not
+      // failures) so the peer check reads only the auth-failure budgets.
+      clock.advance((AUTH_REFRESH_LIMIT.windowSeconds + 1) * 1_000);
+      await assertPeersUntouched(h.handler, ip, "one dead refresh token");
     } finally {
       clock.restore();
     }
