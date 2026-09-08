@@ -28,6 +28,73 @@ evidence.
 
 Plus the normal JS gates: `npm ci && npx tsc --noEmit && npm test`.
 
+## Release identity (version/build) is committed, never computed
+
+The identity a build ships with is decided in git BEFORE any verification
+runs, and it is the identity that ships — nothing between verification and
+upload may change it. `infra/release/release-manifest.json`
+(`versionScheme.marketingVersion` / `versionScheme.buildNumber`, validated by
+root `pnpm release:check`) is the committed source of that identity; the
+Xcode project (`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` set in EVERY
+configuration of the application target), the plist each configuration's
+`INFOPLIST_FILE` really points at (`CFBundleShortVersionString` /
+`CFBundleVersion` sourced from those build settings, never hardcoded),
+`app.json` (the module `AppDelegate.swift` starts and the display name),
+and `src/config/runtimeConfig.ts` (`APP_VERSION`) must agree with it.
+
+Linux proves the agreement without a Mac:
+
+```bash
+cd apps/mobile
+node scripts/release-identity.mjs --check
+```
+
+Exit 0 prints the identity; any drift is refused (exit 1, the differing file
+and values on stderr). `--json` emits the identity as one JSON object.
+`--require-committed` additionally refuses unless HEAD is readable and every
+identity file is tracked and byte-identical to the blob HEAD commits for it
+— a quiet `git status` is not proof (skip-worktree / assume-unchanged bits
+silence it and ignored files never appear in it), and a git that cannot run
+fails closed. Build numbers are compared exactly as decimal strings (the
+manifest build must be a positive integer JSON represents exactly), so two
+distinct builds can never round to the same value. Every flag may be given
+once; repeated, unknown or malformed flags are refused rather than resolved.
+`__tests__/w11ReleaseIdentity.test.ts` pins the refusals.
+
+The Mac lanes run the same script at two gates, so fastlane can only ship
+the verified identity or refuse:
+
+1. `release_identity` — before archiving: `--check --require-committed
+--json --latest-uploaded <n>`, where `<n>` is the newest build App Store
+   Connect already holds (`latest_testflight_build_number`). A committed
+   build that is not greater than `<n>` is refused; the lane never computes
+   `<n> + 1` and never passes a build number into the archive. The identity
+   JSON (version, build, HEAD sha) is captured here and carried through the
+   build.
+2. `verify_archive_identity` — after `build_app`, before any upload: reads
+   `CFBundleVersion` / `CFBundleShortVersionString` from the produced
+   `.xcarchive` and refuses unless both equal the identity captured at gate 1,
+   then re-runs the script with `--require-committed --assert-build
+--assert-version --assert-git-sha <captured sha> --latest-uploaded <n>` so
+   every pre-build refusal is re-applied to the tree as it stands after the
+   multi-minute archive. An archive whose `CURRENT_PROJECT_VERSION` differs
+   from the verified manifest, a checkout that moved to another commit, or a
+   build App Store Connect already holds is refused and nothing is uploaded.
+
+When a refusal fires, the owner commits a new coherent identity (manifest +
+`project.pbxproj` + every other identity file, in one commit) and re-runs
+the gates from the start against that commit. No lane, script or check
+increments, bumps or picks a version or build number.
+
+Historical uploads (App Store Connect read-only inspection, recorded in
+`docs/RELEASE_READINESS_2026-09-07.md`): builds 1, 2 and 3 of version 1.0
+are valid uploads, build 3 is the newest, and no further page of builds was
+found. The committed identity in this revision is still 1.0 (1), so the
+release lanes refuse to upload it. The next identity must be a build number
+greater than 3; choosing it is the owner's decision and has NOT been made
+here — this repository does not select it. No upload or submission was
+performed while introducing this gate.
+
 ## Signing model
 
 - **Team**: `H26U6W4K6V` in `project.pbxproj` + `ios/fastlane/Appfile`.
@@ -67,8 +134,10 @@ Plus the normal JS gates: `npm ci && npx tsc --noEmit && npm test`.
 
 ## App Store release lane
 
-`bundle exec fastlane ios release` (Mac-only) bumps the build number,
-archives, and uploads the binary to App Store Connect. It NEVER uploads
+`bundle exec fastlane ios release` (Mac-only) verifies the committed release
+identity (above), archives it, re-verifies the archive's bundle identity
+against what was captured before the build, and uploads the binary to App
+Store Connect. It NEVER uploads
 metadata/screenshots and NEVER submits for review — attaching the build to a
 version, the listing, and pressing "Submit for Review" stay manual,
 deliberate steps in App Store Connect.
@@ -82,7 +151,7 @@ bundle install                 # installs cocoapods + fastlane (Gemfile)
 cd ios
 bundle exec pod install
 bundle exec fastlane ios prep_signing  # optional explicit signing preflight
-bundle exec fastlane ios beta  # bump build number → archive → TestFlight internal
+bundle exec fastlane ios beta  # verify committed identity → archive → verify archive → TestFlight internal
 ```
 
 Signing model detail: every build lane runs `prep_signing` in the same lane
@@ -93,7 +162,8 @@ key passed via `-authenticationKey…` xcargs. The export step re-signs with the
 a replacement profile because an expired profile still owns the canonical
 name. Cloud-managed signing at export is deliberately not used because it
 requires an Admin ASC key, and this repo's key is App Manager on purpose.
-First upload (build 1.0/1) shipped 2026-08-30 this way.
+First upload (build 1.0/1) shipped 2026-08-30 this way; builds 2 and 3
+followed (see "Release identity" above — those numbers are taken).
 
 `beta` uploads to **internal testing only** (`distribute_external: false`);
 external TestFlight distribution requires App Review and a conscious
