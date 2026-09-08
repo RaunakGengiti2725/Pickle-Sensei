@@ -356,16 +356,16 @@ describe('release-identity.mjs refuses a drifted identity', () => {
     expectRefusal(result, 'app.json', 'PickleSense', 'PickleSensei');
   });
 
-  test('app.json displayName differing from the Info.plist display name', () => {
+  test('app.json displayName naming a different app than the Info.plist display name', () => {
     const mobileRoot = fixture({
       'app.json': content =>
         content.replace(
           '"displayName": "PickleSensei"',
-          '"displayName": "Pickle  Sensei"',
+          '"displayName": "Pickle Sensei Pro"',
         ),
     });
     const result = runScript(['--check', '--mobile-root', mobileRoot]);
-    expectRefusal(result, 'app.json', 'displayName');
+    expectRefusal(result, 'app.json', 'displayName', 'Pickle Sensei Pro');
   });
 
   test('runtimeConfig APP_VERSION differing from the manifest', () => {
@@ -451,7 +451,7 @@ describe('already-uploaded build numbers', () => {
       ]);
       expectRefusal(result, `greater than ${latest}`, String(build));
       // Refusal must not pick the next number for the owner.
-      expect(result.stderr).not.toContain(`${latest + 1}`);
+      expect(result.stderr).not.toMatch(new RegExp(`\\b${latest + 1}\\b`));
     }
   });
 
@@ -503,7 +503,9 @@ describe('Fastfile builds from the committed identity and cannot increment', () 
     expect(fastfile).not.toMatch(/increment_version_number/);
     expect(fastfile).not.toMatch(/CURRENT_PROJECT_VERSION=/);
     expect(fastfile).not.toMatch(/MARKETING_VERSION=/);
-    expect(fastfile).not.toMatch(/build_number:/);
+    // `build(build_number: …)` (the old override); `initial_build_number:` is
+    // the App Store Connect query's floor, not a build number we choose.
+    expect(fastfile).not.toMatch(/(?<!initial_)build_number:/);
     expect(fastfile).not.toMatch(/agvtool/);
   });
 

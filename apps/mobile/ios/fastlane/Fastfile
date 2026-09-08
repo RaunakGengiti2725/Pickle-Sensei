@@ -1,35 +1,21 @@
-# Fastfile — TestFlight internal distribution for PickleSensei.
-#
-# HONESTY BOUNDARY: every lane here requires a Mac with Xcode and Apple
-# credentials. None of it can run — or be claimed to have run — on Linux.
-# What IS validated on Linux: the static distribution preconditions
-# (`npm run check:distribution` in apps/mobile) and the JS/TS gates.
-#
-# Prerequisites on the Mac (see docs/DISTRIBUTION.md at the repo root):
-#   - Xcode installed, `bundle install` done in apps/mobile
-#   - `bundle exec pod install` done in apps/mobile/ios
-#   - App Store Connect API key exported as
-#     APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY (or fastlane's
-#     app_store_connect_api_key file); never committed.
+require "json"
 
 default_platform(:ios)
 
+# The release identity (MARKETING_VERSION / CURRENT_PROJECT_VERSION) is COMMITTED
+# in the Xcode project and mirrored by infra/release/release-manifest.json; it is
+# verified before anything is archived and re-read from the archive before
+# anything is uploaded. No lane here chooses, bumps or overrides a build number:
+# when the committed identity cannot ship, the lane refuses and the owner commits
+# a new identity (docs/DISTRIBUTION.md, "Release identity").
+
 platform :ios do
-  desc "Build a signed release archive (Mac-only)"
+  desc "Build a signed release archive (Mac-only) from the committed release identity"
   lane :build do |options|
-    # Keep profile acquisition and export in the same lane context. Fastlane
-    # then reads the exact profile returned by sigh and supplies its real name
-    # to ExportOptions. Apple may suffix a replacement profile name when an
-    # expired profile still owns the canonical name, so a hardcoded profile
-    # specifier eventually breaks release builds.
+    identity = release_identity(latest_uploaded: options[:latest_uploaded])
+
     prep_signing unless lane_context[SharedValues::SIGH_PROFILE_PATHS]&.any?
 
-    # With the ASC API key in the environment, let xcodebuild do automatic
-    # (cloud-managed) signing headlessly: it can mint/refresh the Apple
-    # Distribution certificate and App Store profile without an Apple ID
-    # signed into Xcode. gym forwards these auth flags to -exportArchive on
-    # its own — do NOT also pass export_xcargs or the flags duplicate and
-    # xcodebuild aborts with "may only be provided once".
     key_filepath = ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
     xcargs = []
     if key_filepath
@@ -40,22 +26,12 @@ platform :ios do
         "-authenticationKeyIssuerID #{ENV.fetch('APP_STORE_CONNECT_API_KEY_ISSUER_ID').shellescape}",
       ]
     end
-    # Build number arrives as a build-settings override so nothing rewrites
-    # project.pbxproj/Info.plist (agvtool would hardcode CFBundleVersion and
-    # break the $(CURRENT_PROJECT_VERSION) sourcing that check:distribution
-    # asserts).
-    xcargs << "CURRENT_PROJECT_VERSION=#{options[:build_number]}" if options[:build_number]
     build_app(
       workspace: "PickleSensei.xcworkspace",
       scheme: "PickleSensei",
       configuration: "Release",
       output_directory: "build",
       xcargs: xcargs.join(" "),
-      # The export re-signs with the Apple Distribution identity and exact
-      # profile that prep_signing installed. get_provisioning_profile records
-      # that profile in lane_context, and build_app adds the matching bundle-id
-      # mapping. Manual style avoids cloud-managed signing, which requires an
-      # Admin ASC key; the repo intentionally uses an App Manager key.
       export_options: {
         method: "app-store-connect",
         destination: "export",
@@ -63,11 +39,56 @@ platform :ios do
         signingCertificate: "Apple Distribution",
       },
     )
+
+    verify_archive_identity(identity: identity)
   end
 
-  # Reads the App Store Connect API key from the environment: either the raw
-  # key content (APP_STORE_CONNECT_API_KEY_KEY) or a path to the .p8 file
-  # (APP_STORE_CONNECT_API_KEY_KEY_FILEPATH). Never committed.
+  desc "Refuse unless the committed identity is coherent (and newer than the newest uploaded build)"
+  private_lane :release_identity do |options|
+    script = File.expand_path("../../scripts/release-identity.mjs", __dir__)
+    args = ["--check", "--require-committed", "--json"]
+    unless options[:latest_uploaded].nil?
+      args += ["--latest-uploaded", options[:latest_uploaded].to_s]
+    end
+    output = sh("node", script, *args, log: false)
+    identity = JSON.parse(output.lines.reverse.find { |line| line.start_with?("{") })
+    UI.success(
+      "release identity #{identity['marketingVersion']} (#{identity['buildNumber']}) " \
+      "#{identity['bundleIdentifier']} committed at #{identity['gitSha']}",
+    )
+    identity
+  end
+
+  desc "Refuse to continue unless the archive carries exactly the verified identity"
+  private_lane :verify_archive_identity do |options|
+    archive = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+    UI.user_error!("build_app produced no archive to verify") if archive.nil? || !File.directory?(archive)
+    app = Dir.glob(File.join(archive, "Products", "Applications", "*.app")).first
+    UI.user_error!("no .app inside #{archive}") if app.nil?
+    plist = File.join(app, "Info.plist")
+    bundle_version = sh("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleVersion", plist, log: false).strip
+    short_version = sh("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleShortVersionString", plist, log: false).strip
+
+    expected = options[:identity]
+    UI.message(
+      "archive #{File.basename(archive)}: CFBundleShortVersionString=#{short_version} " \
+      "CFBundleVersion=#{bundle_version}; verified manifest " \
+      "#{expected['marketingVersion']} (#{expected['buildNumber']})",
+    )
+    sh(
+      "node",
+      File.expand_path("../../scripts/release-identity.mjs", __dir__),
+      "--check",
+      "--require-committed",
+      "--assert-version",
+      short_version,
+      "--assert-build",
+      bundle_version,
+      log: false,
+    )
+    UI.success("archive identity matches the verified manifest; upload may proceed")
+  end
+
   private_lane :asc_api_key do
     key_filepath = ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
     app_store_connect_api_key(
@@ -77,14 +98,10 @@ platform :ios do
     )
   end
 
-  desc "Create/refresh the local Apple Distribution certificate + App Store
-    profile via the ASC API (Mac-only). Needed once per Mac: cloud-managed
-    signing certificates require an Admin API key, while classic cert+profile
-    creation works with the App Manager key this repo uses."
   lane :prep_signing do
     api_key = asc_api_key
     get_certificates(
-      development: false, # Apple Distribution
+      development: false,
       api_key: api_key,
       output_path: "build/signing",
     )
@@ -94,32 +111,28 @@ platform :ios do
     )
   end
 
-  desc "Bump build number, build, and upload to TestFlight internal testing (Mac-only)"
   lane :beta do
     api_key = asc_api_key
     # initial_build_number 0 → the very first upload becomes build 1.
-    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
-    build(build_number: number)
+    latest_uploaded = latest_testflight_build_number(api_key: api_key, initial_build_number: 0)
+    build(latest_uploaded: latest_uploaded)
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true,
-      distribute_external: false, # internal testers only; external needs App Review
+      distribute_external: false,
     )
   end
 
-  desc "Build and upload the App Store release binary (Mac-only). Uploads the
-    binary ONLY — metadata, screenshots, pricing, and the actual submission to
-    App Review stay deliberate manual steps in App Store Connect."
   lane :release do
     api_key = asc_api_key
-    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
-    build(build_number: number)
+    latest_uploaded = latest_testflight_build_number(api_key: api_key, initial_build_number: 0)
+    build(latest_uploaded: latest_uploaded)
     upload_to_app_store(
       api_key: api_key,
       skip_metadata: true,
       skip_screenshots: true,
-      precheck_include_in_app_purchases: false, # precheck cannot use API keys for IAP
-      submit_for_review: false, # review submission is a human decision
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,
     )
   end
 end
