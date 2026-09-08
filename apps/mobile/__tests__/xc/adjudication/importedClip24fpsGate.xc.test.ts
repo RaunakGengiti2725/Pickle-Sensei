@@ -218,22 +218,19 @@ describe('imported clip — 24 fps and the insufficient_fps gate', () => {
     expect(server.releases).toEqual([]);
   });
 
-  it('a 12 fps import — below the envelope DEGRADED floor — is refused as insufficient_fps, the permit released, no rating written', async () => {
+  it('a 12 fps import — below the envelope DEGRADED floor — is refused by import admission with the frame-rate reason BEFORE any permit is reserved, no rating written', async () => {
     const fps = 12;
     const { sequence } = generateSwingSequence({ handed: 'right', fps });
     const { clip, sidecarJson } = importedClip('12fps', sequence, fps);
 
     const { outcome, fake } = await run(clip, sidecarJson);
 
-    expect(outcome.kind).toBe('quality_blocked');
-    if (outcome.kind === 'quality_blocked') {
-      expect(outcome.poseQuality?.reasons).toContain('insufficient_fps');
-      expect(outcome.reason).toMatch(/frame rate was too low/);
+    expect(outcome.kind).toBe('unavailable');
+    if (outcome.kind === 'unavailable') {
+      expect(outcome.reason).toMatch(/too few frames per second/);
     }
     expect(fake.shots).toHaveLength(0);
-    expect(server.reserves).toBe(1);
-    expect(server.releases).toEqual([
-      { permitId: fixtureUuid('permit-1'), outcome: 'unsupported' },
-    ]);
+    expect(server.reserves).toBe(0);
+    expect(server.releases).toEqual([]);
   });
 });
