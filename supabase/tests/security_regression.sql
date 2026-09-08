@@ -4903,6 +4903,59 @@ end $$;
 
 rollback;
 
+begin;
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-000000000092', 'lease-proof@example.test', '{"provider":"google"}');
+set local role service_role;
+do $$
+declare
+  u uuid := '00000000-0000-4000-8000-000000000092';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object('id', 'lease-fencing-proof', 'app_user_id', u));
+  old_lease uuid;
+  new_lease uuid;
+  old_ticket uuid;
+  new_ticket uuid;
+  verdict jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+begin
+  old_lease := (public.claim_billing_webhook_delivery('lease-fencing-proof', payload)->>'lease_token')::uuid;
+  old_ticket := (public.begin_billing_verification(array[u], 'lease-fencing-proof', payload, old_lease)->0->>'ticket_id')::uuid;
+  perform public.release_billing_webhook_delivery('lease-fencing-proof', payload, old_lease);
+  new_lease := (public.claim_billing_webhook_delivery('lease-fencing-proof', payload)->>'lease_token')::uuid;
+  if new_lease is null or new_lease = old_lease then
+    raise exception 'M14: replacement delivery must receive a distinct lease';
+  end if;
+  begin
+    perform public.begin_billing_verification(array[u], 'lease-fencing-proof', payload, old_lease);
+    raise exception 'M15: replaced delivery must not issue verification tickets';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.persist_billing_verdict(u, old_ticket, verdict);
+    raise exception 'M16: stale worker must not persist a verdict';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.complete_billing_webhook('lease-fencing-proof', payload, jsonb_build_object(u::text, old_ticket), old_lease);
+    raise exception 'M17: stale worker must not complete the replacement delivery';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.complete_billing_webhook('lease-fencing-proof', payload, jsonb_build_object(u::text, old_ticket), new_lease);
+    raise exception 'M18: a fresh lease must not reuse another lease''s ticket';
+  exception when invalid_parameter_value then null;
+  end;
+  if exists (select 1 from public.webhook_events where id = 'lease-fencing-proof' and processed_at is not null) then
+    raise exception 'M19: rejected stale work must not write a completion marker';
+  end if;
+  new_ticket := (public.begin_billing_verification(array[u], 'lease-fencing-proof', payload, new_lease)->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(u, new_ticket, verdict);
+  perform public.complete_billing_webhook('lease-fencing-proof', payload, jsonb_build_object(u::text, new_ticket), new_lease);
+  if not exists (select 1 from public.webhook_events where id = 'lease-fencing-proof' and processed_at is not null) then
+    raise exception 'M20: replacement worker must complete with its own verified ticket';
+  end if;
+end $$;
+rollback;
+
 create schema w07_probe;
 create extension dblink with schema w07_probe;
 
@@ -4949,6 +5002,7 @@ declare
   a uuid := '00000000-0000-4000-8000-0000000000e1';
   deleted_user uuid := '00000000-0000-4000-8000-0000000000e2';
   profile_user uuid := '00000000-0000-4000-8000-0000000000e3';
+  lease uuid;
   older uuid;
   newer uuid;
   first_ticket uuid;
@@ -5037,15 +5091,18 @@ begin
   end loop;
 
   payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-concurrent-audit', 'app_user_id', a));
+  select (value->>'lease_token')::uuid into lease from w07_probe.dblink('w07_setup', format(
+    'select public.claim_billing_webhook_delivery(%L::text,%L::jsonb)', 'w07-concurrent-audit', payload
+  )) as result(value jsonb);
   select value into issued from w07_probe.dblink('w07_setup', format(
-    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, 'w07-concurrent-audit', payload
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)', array[a]::text, 'w07-concurrent-audit', payload, lease
   )) as result(value jsonb);
   older := (issued->0->>'ticket_id')::uuid;
   perform value from w07_probe.dblink('w07_setup', format(
     'select public.persist_billing_verdict(%L::uuid,%L::uuid,%L::jsonb)', a, older, inactive
   )) as result(value jsonb);
   proofs := jsonb_build_object(a::text, older);
-  query := format('select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-concurrent-audit', payload, proofs);
+  query := format('select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb,%L::uuid)', 'w07-concurrent-audit', payload, proofs, lease);
   perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
   perform value from w07_probe.dblink('w07_first', query) as result(value jsonb);
   perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
@@ -5064,14 +5121,17 @@ begin
     payload := jsonb_build_object('event', jsonb_build_object('id', event_id, 'app_user_id', a));
     conflicting_payload := case when conflicting then jsonb_set(payload, '{event,app_user_id}', to_jsonb(profile_user)) else payload end;
     perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
+    select (value->>'lease_token')::uuid into lease from w07_probe.dblink('w07_first', format(
+      'select public.claim_billing_webhook_delivery(%L::text,%L::jsonb)', event_id, payload
+    )) as result(value jsonb);
     select value into issued from w07_probe.dblink('w07_first', format(
-      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)', array[a]::text, event_id, payload, lease
     )) as result(value jsonb);
     older := (issued->0->>'ticket_id')::uuid;
     perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
     perform w07_probe.dblink_send_query('w07_second', format(
-      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)',
-      array[case when conflicting then profile_user else a end]::text, event_id, conflicting_payload
+      'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)',
+      array[case when conflicting then profile_user else a end]::text, event_id, conflicting_payload, lease
     ));
     perform w07_probe.await_lock('w07_second');
     perform w07_probe.dblink_exec('w07_first', 'commit');
@@ -5091,8 +5151,11 @@ begin
 
   event_id := 'w07-complete-before-admission';
   payload := jsonb_build_object('event', jsonb_build_object('id', event_id, 'app_user_id', a));
+  select (value->>'lease_token')::uuid into lease from w07_probe.dblink('w07_setup', format(
+    'select public.claim_billing_webhook_delivery(%L::text,%L::jsonb)', event_id, payload
+  )) as result(value jsonb);
   select value into issued from w07_probe.dblink('w07_setup', format(
-    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)', array[a]::text, event_id, payload, lease
   )) as result(value jsonb);
   older := (issued->0->>'ticket_id')::uuid;
   perform value from w07_probe.dblink('w07_setup', format(
@@ -5101,11 +5164,11 @@ begin
   select count(*) into ticket_count from api_private.billing_verification_tickets;
   perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
   perform value from w07_probe.dblink('w07_first', format(
-    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', event_id, payload, jsonb_build_object(a::text, older)
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb,%L::uuid)', event_id, payload, jsonb_build_object(a::text, older), lease
   )) as result(value jsonb);
   perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
   perform w07_probe.dblink_send_query('w07_second', format(
-    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, event_id, payload
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)', array[a]::text, event_id, payload, lease
   ));
   perform w07_probe.await_lock('w07_second');
   perform w07_probe.dblink_exec('w07_first', 'commit');
@@ -5119,8 +5182,11 @@ begin
 
   payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-conflicting-audit', 'app_user_id', a, 'type', 'RENEWAL'));
   conflicting_payload := jsonb_set(payload, '{event,type}', '"REFUND"');
+  select (value->>'lease_token')::uuid into lease from w07_probe.dblink('w07_setup', format(
+    'select public.claim_billing_webhook_delivery(%L::text,%L::jsonb)', 'w07-conflicting-audit', payload
+  )) as result(value jsonb);
   select value into issued from w07_probe.dblink('w07_setup', format(
-    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb)', array[a]::text, 'w07-conflicting-audit', payload
+    'select public.begin_billing_verification(%L::uuid[],%L::text,%L::jsonb,%L::uuid)', array[a]::text, 'w07-conflicting-audit', payload, lease
   )) as result(value jsonb);
   older := (issued->0->>'ticket_id')::uuid;
   perform value from w07_probe.dblink('w07_setup', format(
@@ -5128,11 +5194,11 @@ begin
   )) as result(value jsonb);
   perform w07_probe.dblink_exec('w07_first', 'begin; set local role service_role');
   perform value from w07_probe.dblink('w07_first', format(
-    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-conflicting-audit', payload, jsonb_build_object(a::text, older)
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb,%L::uuid)', 'w07-conflicting-audit', payload, jsonb_build_object(a::text, older), lease
   )) as result(value jsonb);
   perform w07_probe.dblink_exec('w07_second', 'begin; set local role service_role');
   perform w07_probe.dblink_send_query('w07_second', format(
-    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb)', 'w07-conflicting-audit', conflicting_payload, jsonb_build_object(a::text, older)
+    'select public.complete_billing_webhook(%L::text,%L::jsonb,%L::jsonb,%L::uuid)', 'w07-conflicting-audit', conflicting_payload, jsonb_build_object(a::text, older), lease
   ));
   perform w07_probe.await_lock('w07_second');
   perform w07_probe.dblink_exec('w07_first', 'commit');
