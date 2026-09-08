@@ -1,3 +1,4 @@
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Keychain from 'react-native-keychain';
 import { OFFLINE_PRO_LEASE_MAX_SECONDS } from '@pickle/shared-types';
 
@@ -22,8 +23,10 @@ import { OFFLINE_PRO_LEASE_MAX_SECONDS } from '@pickle/shared-types';
  * to the monotonic clock, so a wall clock that later reads lower than the
  * estimate is reported as `rollbackDetected` and `evaluateLease` requires
  * online reconciliation rather than granting the remaining time. The high-
- * water mark is checkpointed to the Keychain in every authority state, so a
- * relaunch never starts below where the previous process got to.
+ * water mark is checkpointed to the Keychain in every authority state — on
+ * reads, and whenever the app returns to the foreground — so a relaunch never
+ * starts below where the previous process got to, and a wall clock seen
+ * ahead while the app was open is remembered against a later rollback.
  *
  * Native elapsed time across process death is not available here. After a
  * relaunch the persisted floor is only a LOWER bound on the true time: the
@@ -105,10 +108,20 @@ export type TrustedTimeLeaseVerdict =
         | 'lease_ahead_of_clock';
     };
 
+/** The app lifecycle events a trusted clock checkpoints on (`AppState`).
+ * `null` disables the foreground checkpoint. */
+export interface TrustedTimeLifecycle {
+  addEventListener(
+    type: 'change',
+    listener: (state: AppStateStatus) => void,
+  ): { remove(): void };
+}
+
 export interface TrustedTimeDependencies {
   readonly keychain?: TrustedTimeKeychain;
   readonly monotonicNowMs?: () => number;
   readonly wallClockNowMs?: () => number;
+  readonly lifecycle?: TrustedTimeLifecycle | null;
 }
 
 export interface ServerTimeInput {
@@ -229,6 +242,8 @@ export function createTrustedTime(
   const keychain: TrustedTimeKeychain = dependencies.keychain ?? Keychain;
   const monotonicNowMs = dependencies.monotonicNowMs ?? defaultMonotonicNowMs;
   const wallClockNowMs = dependencies.wallClockNowMs ?? Date.now;
+  const lifecycle: TrustedTimeLifecycle | null =
+    dependencies.lifecycle === undefined ? AppState : dependencies.lifecycle;
 
   let anchor: Anchor | null = null;
   let mark: Mark | null = null;
@@ -236,7 +251,23 @@ export function createTrustedTime(
   let storage: TrustedTimeStorage = 'unavailable';
   let lastPersistAttemptMs: number | null = null;
   let hydrated = false;
+  let foregroundCheckpointArmed = false;
   let queue: Promise<void> = Promise.resolve();
+
+  /** Once the clock is in use, every return to the foreground reads the
+   * clocks and persists the high-water mark. Subscribing lazily keeps module
+   * import free of side effects. */
+  function armForegroundCheckpoint(): void {
+    if (foregroundCheckpointArmed || !lifecycle) return;
+    foregroundCheckpointArmed = true;
+    try {
+      lifecycle.addEventListener('change', state => {
+        if (state === 'active') void checkpoint();
+      });
+    } catch {
+      // Without lifecycle events the clock still checkpoints on reads.
+    }
+  }
 
   /** Every state change runs in call order, so a read issued after an
    * observation sees it. */
@@ -421,6 +452,21 @@ export function createTrustedTime(
     });
   }
 
+  function checkpoint(): Promise<void> {
+    armForegroundCheckpoint();
+    return serialized(async () => {
+      await hydrate();
+      const current = trustedNow();
+      if (current.authority === 'none') return;
+      if (
+        lastPersistAttemptMs !== null &&
+        current.nowMs <= lastPersistAttemptMs
+      )
+        return;
+      await persist(current.nowMs);
+    });
+  }
+
   return Object.freeze({
     async observeServerTime(
       input: ServerTimeInput,
@@ -434,6 +480,7 @@ export function createTrustedTime(
         return { accepted: false, reason: 'malformed' };
       if (!epochMs(serverEpochMs))
         return { accepted: false, reason: 'implausible' };
+      armForegroundCheckpoint();
       return serialized(async () => {
         await hydrate();
         const monotonic = finiteClock(monotonicNowMs);
@@ -462,6 +509,7 @@ export function createTrustedTime(
     },
 
     read(): Promise<TrustedTimeReading> {
+      armForegroundCheckpoint();
       return serialized(async () => {
         await hydrate();
         const current = reading();
@@ -478,19 +526,7 @@ export function createTrustedTime(
       });
     },
 
-    checkpoint(): Promise<void> {
-      return serialized(async () => {
-        await hydrate();
-        const current = trustedNow();
-        if (current.authority === 'none') return;
-        if (
-          lastPersistAttemptMs !== null &&
-          current.nowMs <= lastPersistAttemptMs
-        )
-          return;
-        await persist(current.nowMs);
-      });
-    },
+    checkpoint,
   });
 }
 
@@ -537,5 +573,6 @@ export function evaluateLease(
 }
 
 /** The app-wide trusted clock, anchored by `src/data/api.ts` on every
- * authenticated response. */
+ * authenticated response and checkpointed on every return to the
+ * foreground from then on. */
 export const trustedTime: TrustedTime = createTrustedTime();
