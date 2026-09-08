@@ -1,4 +1,5 @@
 import React from 'react';
+import { guidedClipFixture as guidedClip } from '../testSupport/guidedClipFixture';
 import { Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { generateSwingSequence } from '@pickle/evaluation';
@@ -189,94 +190,6 @@ function jsonResponse(body: unknown): Response {
 }
 
 // ─── Recorded-clip fixture (real generated pose sequence + real sidecar) ────
-
-function guidedClip(id: string): { clip: CapturedClip; sidecarJson: string } {
-  const { sequence, window } = generateSwingSequence();
-  const preRollMs = 2000;
-  const postRollMs = 1500;
-  const durationMs = window.endMs + preRollMs + postRollMs;
-  const sidecarJson = serializePoseSequence({
-    ...sequence,
-    frames: sequence.frames.map(frame => ({
-      ...frame,
-      timestampMs: frame.timestampMs + preRollMs,
-    })),
-  });
-  const clip: CapturedClip = {
-    uri: `file:///captures/${id}.mov`,
-    byteSize: 25,
-    nativeMediaIdentity: {
-      schemaVersion: 1,
-      format: 'pickle.native-media-identity.v1',
-      receiptId: '66666666-6666-4666-8666-666666666666',
-      operationId: '77777777-7777-4777-8777-777777777777',
-      origin: 'native_export',
-      algorithm: 'sha256',
-      videoFileName: `${id}.mov`,
-      byteSize: 25,
-      sha256: sha256Hex('synthetic test movie bytes'),
-    },
-    durationMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
-    capturedAtIso: '2026-08-29T18:00:00.000Z',
-    captureMode: 'automatic_pose_trigger',
-    recognition: {
-      status: 'unknown',
-      reason: 'validated_classifier_unavailable',
-    },
-    trigger: {
-      startMs: window.startMs + preRollMs,
-      endMs: window.endMs + preRollMs,
-      peakMotionMs: window.peakMs + preRollMs,
-      confidence: 0.86,
-      source: 'temporal_pose_motion',
-      modelVersion: 'temporal-stroke-heuristic-2',
-    },
-    targetSeed: { x: 0.5, y: 0.6, source: 'live_camera_tap' },
-    captureEvidence: {
-      schemaVersion: 1,
-      window: 'detected_motion',
-      poseSource: 'apple_vision_body_pose',
-      poseModelVersion: sequence.producedBy.modelVersion,
-      triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
-      motionUnit: 'normalized_image_units_per_second',
-      analysisInputFrameCount: sequence.frames.length,
-      poseFrameCount: sequence.frames.length,
-      poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
-      meanCanonicalJointVisibility: 0.9,
-      meanJointCoverage: 0.9,
-      minimumJointCoverage: 0.8,
-      fullBodyVisibleFrameCount: sequence.frames.length,
-      jointMotion: [
-        {
-          joint: 'right_wrist',
-          sampleCount: 4,
-          meanNormalizedPerSecond: 0.6,
-          peakNormalizedPerSecond: 1.4,
-        },
-      ],
-    },
-    ballSpeed: {
-      status: 'unavailable',
-      reason: 'calibrated_ball_tracker_unavailable',
-    },
-    preRollMs,
-    postRollMs,
-    poseSequence: {
-      schemaVersion: 1,
-      format: 'pickle.pose-sequence.v1',
-      uri: `file:///captures/${id}.pose.json`,
-      frameCount: sequence.frames.length,
-      sha256: sha256Hex(sidecarJson),
-      coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: sequence.producedBy.modelVersion,
-    },
-  };
-  return { clip, sidecarJson };
-}
 
 // ─── Render / driving helpers ────────────────────────────────────────────────
 
@@ -641,6 +554,7 @@ describe('capture feedback stays on the first completed swing', () => {
     emit(readinessEvent('no_person', 0));
     emit(processingEvent());
     expect(textOf(renderer)).toContain('Measuring your swing');
+    mockReadArtifact = async () => sidecarJson;
     act(() => finishRead(sidecarJson));
     await waitFor(
       () => mockNavigation.replace.mock.calls.length === 1,
@@ -948,7 +862,7 @@ describe('interrupted and cancelled attempts', () => {
     const { clip, sidecarJson } = guidedClip('close-during-analysis');
     mockReadArtifact = async () => sidecarJson;
     mockCaptureImpl = async () => clip;
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await waitFor(() => reserveStarted, 'permit reservation');
     pressByLabel(renderer, 'Close');
     await act(async () => renderer.unmount());
@@ -988,7 +902,7 @@ describe('interrupted and cancelled attempts', () => {
     const renderer = await renderScreen();
     pressByLabel(renderer, 'Forehand Drive');
     const capture = deferredCapture();
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await act(async () =>
       setActiveDataOwner('33333333-3333-4333-8333-333333333333'),
@@ -1230,7 +1144,7 @@ describe('W03 original saved-analysis retry UI', () => {
     mockCaptureImpl = async () => data.clip;
     const renderer = await renderScreen();
     pressByLabel(renderer, options.auto ? 'Auto detect' : 'Forehand Drive');
-    pressButton(renderer, 'Open automatic camera');
+    pressByLabel(renderer, 'Open automatic camera');
     if (options.settle !== false) await settled();
     else await flush();
     return { renderer, ...data };
@@ -1954,7 +1868,7 @@ describe('W03 original saved-analysis retry UI', () => {
       const captureB = deferredCapture();
       const bData = guidedClip(`new-b-${change}`);
       mockReadArtifact = async () => bData.sidecarJson;
-      pressButton(b, 'Open automatic camera');
+      pressByLabel(b, 'Open automatic camera');
       await flush();
       const bNative = jest.mocked(captureStrokeVideo).mock.calls.at(-1)![0]!;
       const cancelsBefore = mockCancelSpy.mock.calls.length;

@@ -9,14 +9,10 @@
  * BLOCKED_EXTERNAL on Linux). runCaptureAnalysis is replaced; everything
  * above it runs for real.
  */
-jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
-jest.mock('../src/data/repository', () => ({
-  savePendingCapture: jest.fn(async () => {}),
-  setDeclaredStroke: jest.fn(async () => {}),
-  setCaptureTargetSeed: jest.fn(async () => {}),
-  updateCaptureClipPayload: jest.fn(async () => {}),
-}));
+jest.mock('../src/data/db', () => ({ getDb: () => mockCurrentDb() }));
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
+  ...jest.requireActual('../src/analysis/runCaptureAnalysis'),
+  runOriginalCaptureAnalysis: jest.fn(),
   runCaptureAnalysis: jest.fn(),
 }));
 
@@ -84,6 +80,19 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
+import { createPendingFulfilmentStorage } from '../src/billing/pendingFulfilment';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../testSupport/sqlite';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
+let sqlite: ReturnType<typeof createSqliteTestDb>;
+function mockCurrentDb() {
+  return sqlite.db;
+}
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import {
@@ -91,7 +100,7 @@ import {
   type CameraEvent,
   type CapturedClip,
 } from '../src/camera/capture';
-import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import { runOriginalCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 import {
   clearApiSession,
   establishApiSession,
@@ -140,7 +149,7 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 120,
       poseFrameCount: 120,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 2700,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -188,6 +197,8 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
   act(() => node.props.onPress());
 }
 
+const mountedScreens = new Set<ReactTestRenderer>();
+
 async function renderScreen(
   source: 'library' | 'camera',
 ): Promise<ReactTestRenderer> {
@@ -196,6 +207,7 @@ async function renderScreen(
   await act(async () => {
     renderer = TestRenderer.create(<AnalyzeScreen />);
   });
+  mountedScreens.add(renderer);
   if (source === 'library') {
     await act(async () => {
       jest.advanceTimersByTime(200);
@@ -270,14 +282,27 @@ function accessBackend(
 const owner = '22222222-2222-4222-8222-222222222222';
 
 beforeEach(() => {
+  sqlite = createSqliteTestDb();
+  setActiveDataOwner(owner);
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockCameraListeners.clear();
   clearAccessStoreConfiguration();
-  clearApiSession();
+  establishApiSession({
+    apiBaseUrl: 'https://api.test',
+    bearerToken: 'token-1',
+    canonicalAppUserId: owner,
+    provider: 'apple',
+  });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    for (const renderer of mountedScreens) renderer.unmount();
+  });
+  mountedScreens.clear();
+  closeSqliteTestDatabases();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   jest.useRealTimers();
   clearAccessStoreConfiguration();
   clearApiSession();
@@ -328,20 +353,23 @@ describe('unmount access re-read timing', () => {
       provider: 'apple',
     });
     const clients = accessBackend(async () => freeAccess(1, 0));
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(0),
     });
 
-    const analysis = deferred<unknown>(runCaptureAnalysis as jest.Mock);
+    const analysis = deferred<unknown>(runOriginalCaptureAnalysis as jest.Mock);
     (captureStrokeVideo as jest.Mock).mockResolvedValue(guidedClip());
     const renderer = await renderScreen('camera');
     pressByLabel(renderer, 'Forehand Drive');
     pressByLabel(renderer, 'Open automatic camera');
     await act(async () => {});
     await act(async () => {});
-    expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+    expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
 
     // The screen is torn down with runCaptureAnalysis still in flight (the
     // permit reservation/consumption has NOT settled yet).

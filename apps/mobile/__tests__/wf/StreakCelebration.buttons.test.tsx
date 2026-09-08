@@ -1,6 +1,6 @@
 import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
-import { AccessibilityInfo, Modal, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 

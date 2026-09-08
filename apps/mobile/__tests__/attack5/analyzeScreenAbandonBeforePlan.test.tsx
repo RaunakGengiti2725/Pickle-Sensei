@@ -16,6 +16,12 @@
  */
 jest.mock('../../src/data/db', () => ({ getDb: () => mockCurrentDb() }));
 jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
+  ...jest.requireActual('../../src/analysis/runCaptureAnalysis'),
+  prepareOriginalCaptureAnalysis: jest.fn(
+    jest.requireActual('../../src/analysis/runCaptureAnalysis')
+      .prepareOriginalCaptureAnalysis,
+  ),
+  runOriginalCaptureAnalysis: jest.fn(),
   runCaptureAnalysis: jest.fn(),
 }));
 jest.mock('../../src/data/syncRuntime', () => ({
@@ -78,6 +84,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
+import { createPendingFulfilmentStorage } from '../../src/billing/pendingFulfilment';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
 import {
@@ -85,10 +92,15 @@ import {
   type CapturedClip,
 } from '../../src/camera/capture';
 import {
-  runCaptureAnalysis,
+  runOriginalCaptureAnalysis,
+  prepareOriginalCaptureAnalysis,
   type CaptureAnalysisOutcome,
 } from '../../src/analysis/runCaptureAnalysis';
 import type { LocalDb } from '../../src/data/db';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
 import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
@@ -116,7 +128,9 @@ let releasePlanRead: (() => void) | null = null;
 let planReadStarted: Promise<void> = Promise.resolve();
 let gatePlanRead = false;
 
+let sqlite: ReturnType<typeof createSqliteTestDb>;
 const recordingDb: LocalDb = {
+  transaction: operation => sqlite.db.transaction!(operation),
   async execute(sql: string, params: unknown[] = []) {
     if (
       gatePlanRead &&
@@ -128,7 +142,7 @@ const recordingDb: LocalDb = {
         releasePlanRead = resolve;
       });
     }
-    return { rows: [] };
+    return sqlite.db.execute(sql, params);
   },
   close() {},
 };
@@ -182,7 +196,7 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 120,
       poseFrameCount: 120,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 4200,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -275,7 +289,7 @@ function deferredRun(): {
   resolve: (value: CaptureAnalysisOutcome) => Promise<void>;
 } {
   let resolveFn!: (value: CaptureAnalysisOutcome) => void;
-  (runCaptureAnalysis as jest.Mock).mockImplementation(
+  (runOriginalCaptureAnalysis as jest.Mock).mockImplementation(
     () =>
       new Promise<CaptureAnalysisOutcome>(resolve => {
         resolveFn = resolve;
@@ -294,6 +308,7 @@ function deferredRun(): {
 let clients: BillingAccessDependencies;
 
 beforeEach(() => {
+  sqlite = createSqliteTestDb();
   jest.clearAllMocks();
   gatePlanRead = false;
   releasePlanRead = null;
@@ -308,6 +323,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeSqliteTestDatabases();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
@@ -320,13 +336,16 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     clients = backendReturning(async () =>
       serverLedger === 'consumed' ? freeAccess(2, 0) : freeAccess(1, 0),
     );
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),
     });
 
-    (runCaptureAnalysis as jest.Mock).mockImplementation(() => {
+    (runOriginalCaptureAnalysis as jest.Mock).mockImplementation(() => {
       serverLedger = 'reserved';
       return new Promise<CaptureAnalysisOutcome>(() => undefined);
     });
@@ -344,7 +363,9 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     await act(async () => {
       await planReadStarted;
     });
-    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    expect(runOriginalCaptureAnalysis).not.toHaveBeenCalled();
+    expect(prepareOriginalCaptureAnalysis).not.toHaveBeenCalled();
+    expect(sqlite.count('analysis_logical_operations', owner)).toBe(0);
 
     // The player leaves (tab switch / back) while the planner read is
     // pending. The unmount cleanup runs NOW, with the ledger untouched.
@@ -359,7 +380,9 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     });
     await flush();
     await flush();
-    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    expect(runOriginalCaptureAnalysis).not.toHaveBeenCalled();
+    expect(prepareOriginalCaptureAnalysis).not.toHaveBeenCalled();
+    expect(sqlite.count('analysis_logical_operations', owner)).toBe(0);
     expect(serverLedger).toBe('idle');
     expect(clients.backend.getAccess).not.toHaveBeenCalled();
     expect(useAccessStore.getState().canonicalAccess).toEqual(freeAccess(1));
@@ -373,7 +396,10 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     clients = backendReturning(async () =>
       serverLedger === 'consumed' ? freeAccess(2, 0) : freeAccess(1, 1),
     );
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),
@@ -389,7 +415,7 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
-    expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+    expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
 
     await act(async () => renderer.unmount());
     await flush();
@@ -407,13 +433,16 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     clients = backendReturning(async () =>
       serverLedger === 'released' ? freeAccess(1, 0) : freeAccess(1, 1),
     );
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),
     });
     let rejectRun!: (error: Error) => void;
-    (runCaptureAnalysis as jest.Mock).mockImplementation(
+    (runOriginalCaptureAnalysis as jest.Mock).mockImplementation(
       () =>
         new Promise<CaptureAnalysisOutcome>((_resolve, reject) => {
           rejectRun = reject;
@@ -428,7 +457,7 @@ describe('A2 — leaving AnalyzeScreen during the practice-set planning read (be
     pressByLabel(renderer, 'Open automatic camera');
     await flush();
     await flush();
-    expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+    expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
 
     // The X on the working screen: abandoned + goBack, then the host
     // navigator unmounts the screen.
