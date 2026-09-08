@@ -4503,6 +4503,18 @@ set local request.jwt.claim.sub = '';
 --     client cannot close it as support; support closes it through the table
 --     only in the identity's name; one delivered rating is charged exactly
 --     once (no dead hold, no lost rating)
+-- T11 (adversary, round 2: R1/R2) conservation against LATE-SYNCABLE permits:
+--     a permit apply_synced_shot() would still honour — reserved at ANY age,
+--     or already swept to released/expired — is a reservation to the
+--     allocator; a permit that can no longer back a sync (released/cancelled,
+--     finalized) is not. Stale reserved: 1 ticket, not 2; the late sync then
+--     lands within the budget. Swept pair: no ticket at all, both late syncs
+--     still land. Budget used never exceeds 2.
+-- T12 (adversary, round 2: R7b) service_role can never pass as a user through
+--     the definer RPCs: with the API header, a user sub and a live session
+--     claim, every one of the four RPCs (and the hold reader) is 42501 for
+--     the service connection — no result row, no device, no ledger row —
+--     and the EXECUTE grant itself is absent
 -- ============================================================================
 
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
@@ -4558,8 +4570,18 @@ $$;
 grant execute on function pg_temp.t_events(uuid) to authenticated;
 -- Conservation as the reviewer reads it: every ticket ever allocated is in
 -- exactly one of {outstanding, consumed, released}; tickets not consumed plus
--- the scored ratings plus live online reservations never exceed the 2
+-- the scored ratings plus every online permit that can still back a sync
+-- (public.permit_backs_sync — reserved at any age, or swept to
+-- released/expired — and not yet linked to a shot) never exceed the 2
 -- lifetime free ratings.
+create function pg_temp.t_syncable_permits(p_uid uuid) returns integer
+language sql security definer as $$
+  select count(*)::int from public.analysis_permits p
+  where p.user_id = p_uid
+    and public.permit_backs_sync(p.status, p.outcome)
+    and not exists (select 1 from public.shots s where s.analysis_permit_id = p.id);
+$$;
+grant execute on function pg_temp.t_syncable_permits(uuid) to authenticated;
 create function pg_temp.t_conserved(p_uid uuid) returns boolean
 language sql security definer as $$
   select
@@ -4579,8 +4601,7 @@ language sql security definer as $$
        and not exists (select 1 from public.offline_allocation_ledger t
                        where t.ticket_id = a.ticket_id and t.event = 'consumed'))
     + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
-    + (select count(*) from public.analysis_permits
-       where user_id = p_uid and status = 'reserved' and created_at > now() - interval '24 hours')
+    + pg_temp.t_syncable_permits(p_uid)
     <= 2;
 $$;
 grant execute on function pg_temp.t_conserved(uuid) to authenticated;
@@ -5397,8 +5418,7 @@ language sql security definer as $$
        and not exists (select 1 from public.offline_allocation_ledger t
                        where t.ticket_id = a.ticket_id and t.event = 'consumed'))
     + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
-    + (select count(*) from public.analysis_permits
-       where user_id = p_uid and status = 'reserved' and created_at > now() - interval '24 hours')
+    + pg_temp.t_syncable_permits(p_uid)
     <= 2;
 $$;
 grant execute on function pg_temp.t_identity_conserved(uuid, text, text) to authenticated;
@@ -5616,6 +5636,256 @@ begin
   end if;
   if not pg_temp.t_identity_conserved((select auth.uid()), 'apple', 'apple-sub-tim') then
     raise exception 'T10: conservation violated after support review';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T11: conservation against late-syncable permits (adversary round 2, R1/R2).
+-- Tobias (free, Google) holds a permit still 'reserved' 25 h after it was
+-- issued — the hourly sweep is best-effort — and a permit his client settled
+-- as cancelled. Tina (free, Apple) reserved both ratings online and let them
+-- age past the sweep. apply_synced_shot() honours a reserved permit at ANY
+-- age and a swept released/expired one (permit_backs_sync; section N), so the
+-- allocator must treat both as reservations.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000059', 'tobias@example.com',
+   '{"full_name":"Tobias"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-00000000005a', 'tina@example.com',
+   '{"full_name":"Tina"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-tobias', '00000000-0000-4000-8000-000000000059',
+   '{"sub":"google-sub-tobias","email":"tobias@example.com"}'),
+  ('apple', 'apple-sub-tina', '00000000-0000-4000-8000-00000000005a',
+   '{"sub":"apple-sub-tina","email":"tina@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005901', '00000000-0000-4000-8000-000000000059'),
+  ('00000000-0000-4000-8000-000000005a01', '00000000-0000-4000-8000-00000000005a');
+-- the clock: a reservation Tobias made 25 h ago that nothing has settled
+insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+values ('00000000-0000-4000-8000-000000000591', '00000000-0000-4000-8000-000000000059', 'tobias-stale', now() - interval '25 hours');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000059';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005901"}';
+do $$
+declare g record; g2 record; p record; rec record; v text;
+begin
+  -- a permit the client settled as cancelled can never back a sync: not a reservation
+  select * into p from public.reserve_analysis_permit('tobias-cancelled');
+  if p.result <> 'accepted' then
+    raise exception 'T11 precondition: one live reservation beside the stale one (got %)', p.result;
+  end if;
+  update public.analysis_permits set status = 'released', outcome = 'cancelled' where id = p.permit_id;
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 1 then
+    raise exception 'T11 precondition: exactly the stale reserved permit can still back a sync (got %)',
+      pg_temp.t_syncable_permits((select auth.uid()));
+  end if;
+  select * into g from public.register_offline_device('tobias-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T11 precondition: registration (got %)', g.result;
+  end if;
+  -- R2: the stale reserved permit occupies one of the two ratings
+  select * into g from public.issue_offline_grant('tobias-key', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T11: a still-reserved permit older than 24 h is a reservation to the allocator — 1 ticket, not 2 (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+  insert into t_state values ('tobias-t', g.ticket_ids[1]);
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T11: exactly one allocation is recorded (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated by the allocation beside a stale reservation';
+  end if;
+  -- the late sync the stale permit was kept for still lands (section N), inside the budget
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000592', '00000000-0000-4000-8000-000000000591', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the stale permit''s late sync is still honoured (got %)', v;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T11: 1 scored + 1 outstanding ticket after the late sync (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated after the late sync';
+  end if;
+  -- nothing is left to allocate or reserve: the refresh re-issues the one ticket
+  select * into g2 from public.issue_offline_grant('tobias-key', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> g.ticket_ids then
+    raise exception 'T11: a refresh re-issues the single outstanding ticket and allocates nothing (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  select * into p from public.reserve_analysis_permit('tobias-third');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T11: no third rating online (got %)', p.result;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' or not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- R1: Tina reserves both ratings online, then goes offline.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005a';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005a01"}';
+do $$
+declare p1 record; p2 record; g record;
+begin
+  select * into p1 from public.reserve_analysis_permit('tina-online-1');
+  select * into p2 from public.reserve_analysis_permit('tina-online-2');
+  if p1.result <> 'accepted' or p2.result <> 'accepted' then
+    raise exception 'T11 precondition: two online reservations (got %, %)', p1.result, p2.result;
+  end if;
+  insert into t_state values ('tina-p1', p1.permit_id), ('tina-p2', p2.permit_id);
+  select * into g from public.register_offline_device('tina-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T11 precondition: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T11 precondition: two live reservations leave no offline capacity (got %, %)', g.result, g.ticket_ids;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- 24 h pass; the hourly sweep (expire-stale-analysis-permits) ages both
+-- permits out — created_at cannot be moved after the fact, so the owner row
+-- applies the sweep's transition to Tina's reservations.
+update public.analysis_permits set status = 'released', outcome = 'expired'
+where status = 'reserved' and user_id = '00000000-0000-4000-8000-00000000005a';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005a';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005a01"}';
+do $$
+declare g record; rec record; v text;
+        p1 uuid := (select id from t_state where key = 'tina-p1');
+        p2 uuid := (select id from t_state where key = 'tina-p2');
+begin
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 2 then
+    raise exception 'T11 precondition: both swept permits can still back a sync (got %)',
+      pg_temp.t_syncable_permits((select auth.uid()));
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T11: swept permits that can still back a sync are reservations to the allocator — no ticket (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T11: a refused allocation writes nothing (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  -- the late syncs the sweep promised to honour
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a2', p1, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the first swept permit''s late sync is honoured (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a3', p2, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the second swept permit''s late sync is honoured (got %)', v;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
+    raise exception 'T11: both ratings scored, nothing outstanding (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated after the late syncs';
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T11: no offline ticket after both ratings were scored (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T12: service_role can never pass as a user through the definer RPCs
+-- (adversary round 2, R7b). The service connection carries everything the
+-- Edge Function's per-user connection carries — API header, user sub, live
+-- session claim — and is still refused before any read or write.
+do $$
+declare f regprocedure;
+begin
+  foreach f in array array[
+    'public.register_offline_device(text,text,boolean)'::regprocedure,
+    'public.issue_offline_grant(text,integer)'::regprocedure,
+    'public.consume_offline_ticket(uuid,uuid)'::regprocedure,
+    'public.release_offline_ticket(uuid,text)'::regprocedure,
+    'public.offline_hold_count()'::regprocedure
+  ] loop
+    if has_function_privilege('service_role', f, 'EXECUTE') then
+      raise exception 'T12: service_role must hold no EXECUTE on %', f;
+    end if;
+    if has_function_privilege('anon', f, 'EXECUTE') then
+      raise exception 'T12: anon must hold no EXECUTE on %', f;
+    end if;
+    if not has_function_privilege('authenticated', f, 'EXECUTE') then
+      raise exception 'T12: authenticated keeps EXECUTE on %', f;
+    end if;
+    if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+      where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+      raise exception 'T12: PUBLIC must not execute %', f;
+    end if;
+  end loop;
+end $$;
+create function pg_temp.t_service_probe(p_uid uuid) returns text
+language sql security definer as $$
+  select format('devices:%s ledger:%s grants:%s',
+    (select count(*) from public.offline_devices where user_id = p_uid),
+    (select count(*) from public.offline_allocation_ledger where user_id = p_uid),
+    (select count(*) from public.offline_grants where user_id = p_uid));
+$$;
+grant execute on function pg_temp.t_service_probe(uuid) to service_role;
+set local role service_role;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000059';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005901"}';
+do $$
+declare before text := pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059');
+        tobias_ticket uuid := (select id from t_state where key = 'tobias-t');
+begin
+  if before <> 'devices:1 ledger:1 grants:2' then
+    raise exception 'T12 precondition: Tobias holds one device, one allocation, two grants (got %)', before;
+  end if;
+  begin
+    perform public.register_offline_device('service-key', 'production', true);
+    raise exception 'T12: service_role must not register a device as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.issue_offline_grant('tobias-key', 2);
+    raise exception 'T12: service_role must not issue a grant as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.consume_offline_ticket(tobias_ticket, '00000000-0000-4000-8000-000000000592');
+    raise exception 'T12: service_role must not consume a ticket as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.release_offline_ticket(tobias_ticket, 'unused_ticket_returned');
+    raise exception 'T12: service_role must not release a ticket as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.offline_hold_count();
+    raise exception 'T12: service_role must not read holds as the user';
+  exception when insufficient_privilege then null;
+  end;
+  if pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059') <> before then
+    raise exception 'T12: refused service calls must write nothing (got %)',
+      pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059');
   end if;
 end $$;
 reset role;

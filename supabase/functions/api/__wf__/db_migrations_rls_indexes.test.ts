@@ -1771,11 +1771,13 @@ Deno.test(
       "offline_hold_count() counts outstanding + released tickets across the caller's identities behind the API gate",
     );
     ok(
-      statements.includes("revoke all on function public.offline_hold_count() from public, anon") &&
+      statements.includes(
+        "revoke all on function public.offline_hold_count() from public, anon, service_role",
+      ) &&
         statements.includes(
           "grant execute on function public.offline_hold_count() to authenticated",
         ),
-      "offline_hold_count() is granted to authenticated only",
+      "offline_hold_count() is granted to authenticated only — the service connection never reads as a user",
     );
 
     // Conservation: both online decision points count the offline holds
@@ -1820,18 +1822,29 @@ Deno.test(
         `public.${name} binds to a live API session and fails closed`,
       );
       ok(body.includes("(select auth.uid())"), `public.${name} scopes to the caller`);
+      // R7b: the hosted default leaves service_role EXECUTE on every new
+      // function; a definer that trusts the session claims would then let
+      // the service connection act as any user. Revoke it explicitly.
       ok(
         statements.some(
           (s) =>
             s.startsWith(`revoke all on function public.${name}(`) &&
-            s.endsWith(" from public, anon"),
+            s.endsWith(" from public, anon, service_role"),
         ) &&
           statements.some(
             (s) =>
               s.startsWith(`grant execute on function public.${name}(`) &&
               s.endsWith(" to authenticated"),
           ),
-        `public.${name} is executable by authenticated only`,
+        `public.${name} is executable by authenticated only (never service_role)`,
+      );
+      ok(
+        !statements.some(
+          (s) =>
+            s.startsWith(`grant execute on function public.${name}(`) &&
+            /\b(service_role|anon|public)\b/.test(s.split(" to ").pop() ?? ""),
+        ),
+        `public.${name} is never granted back to a non-user role`,
       );
     }
     const [issue] = functionBodies(raw, "issue_offline_grant");
@@ -1844,6 +1857,15 @@ Deno.test(
         issue.includes("public.offline_hold_count()") &&
         !/count\(\*\)[^;]*from public\.shots/.test(issue),
       "issue_offline_grant budgets through lifetime_scored_count() + offline holds + live reservations",
+    );
+    // R1/R2: a reservation is every permit apply_synced_shot() would still
+    // honour — the canonical predicate, not a 24 h window that the sweep and
+    // the clock both walk permits out of while they stay syncable.
+    ok(
+      issue.includes("public.permit_backs_sync(p.status, p.outcome)") &&
+        !issue.includes("interval '24 hours'") &&
+        !/p\.status\s*=\s*'reserved'/.test(issue),
+      "issue_offline_grant counts every permit permit_backs_sync() still honours, at any age",
     );
     ok(
       issue.includes("interval '7 days'") &&
