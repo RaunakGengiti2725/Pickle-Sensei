@@ -13,8 +13,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+GOLDEN_FIXTURE_DIR=../packages/shared-types/fixtures/scoring
+GOLDEN_FIXTURE_NAME=player-rank.golden.json
+
 run_matrices() {
-  local migration_root="$1" test_root="$2" history database phase file name version applied
+  local migration_root="$1" test_root="$2" golden_fixture="$3" history database phase file name version applied
   for history in fresh production_20260906 upstream_20260906 ordered_20260907; do
     database="pickle_rls_$history"
     printf '\nSecurity migration history: %s\n' "$history"
@@ -51,6 +54,7 @@ run_matrices() {
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/security_regression.sql"
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/account_deletion_operations.sql"
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/analysis_release_policy.sql"
+    run_psql -d "$database" -v ON_ERROR_STOP=1 -v golden_fixture="$golden_fixture" -f "$test_root/scoring_parity.sql"
   done
 }
 
@@ -80,9 +84,10 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 
   docker cp tests "$CONTAINER":/tests
   docker cp migrations "$CONTAINER":/migrations
+  docker cp "$GOLDEN_FIXTURE_DIR" "$CONTAINER":/fixtures
 
   run_psql() { docker exec "$CONTAINER" psql -U postgres "$@"; }
-  run_matrices /migrations /tests
+  run_matrices /migrations /tests "/fixtures/$GOLDEN_FIXTURE_NAME"
   exit 0
 fi
 
@@ -104,4 +109,4 @@ initdb -D "$PGDATA" -U postgres --auth=trust >/dev/null
 pg_ctl -D "$PGDATA" -o "-k $WORK -c listen_addresses=''" -l "$WORK/pg.log" start >/dev/null
 
 run_psql() { psql -h "$WORK" -U postgres "$@"; }
-run_matrices migrations tests
+run_matrices migrations tests "$(cd "$GOLDEN_FIXTURE_DIR" && pwd)/$GOLDEN_FIXTURE_NAME"
