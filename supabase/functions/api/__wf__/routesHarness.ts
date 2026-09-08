@@ -843,9 +843,11 @@ export async function loadHarness(): Promise<Harness> {
       });
     }
     if (request.method === "DELETE" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
-      state.deletion.observeAuthDeletion(
-        decodeURIComponent(new URL(url).pathname.slice("/auth/v1/admin/users/".length)),
+      const ownerId = decodeURIComponent(
+        new URL(url).pathname.slice("/auth/v1/admin/users/".length),
       );
+      state.deletion.observeAuthDeletion(ownerId);
+      cascadeOwnerRows(state.tables, ownerId);
       return jsonResponse(200, {});
     }
     if (request.method === "GET" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
@@ -917,6 +919,9 @@ export async function loadHarness(): Promise<Harness> {
             rows = rows.filter((row) => isRecord(row) && row[key] === filter.slice(3));
           }
         }
+        if (headers.authorization === "Bearer service-role-test-key") {
+          rows = ownerFilteredRows(new URL(url), rows.filter(isRecord));
+        }
         if (isPagedSelect(new URL(url))) {
           rows = postgrestSelect(new URL(url), rows.filter(isRecord));
         }
@@ -974,6 +979,29 @@ export async function loadHarness(): Promise<Harness> {
   await import("../index.ts");
   harness = state;
   return state;
+}
+
+/** Model `auth.users` → `profiles` → owner-row cascades for the stub tables:
+ * a deleted owner's rows (matched STRICTLY on the owner column) disappear,
+ * while fixture rows without an owner column are left untouched. */
+function cascadeOwnerRows(tables: Record<string, unknown[]>, ownerId: string): void {
+  for (const [table, rows] of Object.entries(tables)) {
+    const ownerColumn = table === "profiles" ? "id" : "user_id";
+    tables[table] = rows.filter((row) => !isRecord(row) || row[ownerColumn] !== ownerId);
+  }
+}
+
+/** Service-role reads honour every `column=eq.value` filter strictly, the way
+ * PostgREST does — a fixture row without the column is NOT a match. */
+function ownerFilteredRows(url: URL, rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  let filtered = rows;
+  for (const [column, filter] of url.searchParams) {
+    if (["select", "order", "limit", "offset", "or", "and"].includes(column)) continue;
+    if (!filter.startsWith("eq.")) continue;
+    const value = filter.slice(3);
+    filtered = filtered.filter((row) => String(row[column]) === value);
+  }
+  return filtered;
 }
 
 export function webhookRequest(
