@@ -24,6 +24,8 @@ const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
 const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
 const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
 const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
+const ANALYSIS_RELEASE_AUTHORITY = "20260908020000_analysis_release_authority.sql";
+const PERMIT_PARTIAL_OUTCOME = "20260908100000_permit_partial_terminal_outcome.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -1252,6 +1254,173 @@ Deno.test(
     }
     for (const outcome of ["scored", "low_confidence", "free_limit_exceeded"]) {
       ok(integration.raw.includes(`'${outcome}'`), `late sync must retain ${outcome} settlement`);
+    }
+  },
+);
+
+// ─── W01-01: an honest PARTIAL terminal outcome — released, never charged ────
+
+/** Every `create or replace function api_private.<name>(` … `$$;` body. */
+function privateFunctionBodies(raw: string, name: string): string[] {
+  const bodies: string[] = [];
+  const re = new RegExp(
+    `create(?: or replace)? function api_private\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
+    "gi",
+  );
+  for (const match of raw.matchAll(re)) bodies.push(match[0].toLowerCase());
+  return bodies;
+}
+
+const PERMIT_OUTCOMES_BEFORE_PARTIAL = [
+  "scored",
+  "low_confidence",
+  "cancelled",
+  "failed",
+  "unsupported",
+  "incorrect_recognition",
+  "expired",
+  "free_limit_exceeded",
+] as const;
+
+/** The free-rating accounting path. A partial outcome is admitted beside it,
+ * never by rewriting it: none of these may be redefined by the partial
+ * migration, and the latest definition of each keeps its scored-only rule. */
+const COUNTING_PATH_FUNCTIONS = [
+  "lifetime_scored_count",
+  "identity_scored_count",
+  "record_scored_shot_in_ledger",
+  "permit_backs_sync",
+  "apply_synced_shot",
+  "enforce_scored_shot_permit",
+  "reserve_analysis_permit",
+  "access_state",
+] as const;
+
+Deno.test(
+  "W01-01: partial is an explicit released terminal outcome for permits and shots, admitted beside the counting path without touching it",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_PARTIAL_OUTCOME);
+    ok(migration, `${PERMIT_PARTIAL_OUTCOME} must exist in the migration chain`);
+    ok(
+      migration.file > ANALYSIS_RELEASE_AUTHORITY,
+      "the partial outcome is a forward migration after the release-authority migration",
+    );
+    const raw = stripSqlComments(migration.raw);
+
+    // The lifecycle guard learns exactly one new word and one new shape rule.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_lifecycle");
+    ok(guard, `${PERMIT_PARTIAL_OUTCOME} must redefine public.guard_analysis_permit_lifecycle`);
+    for (const outcome of PERMIT_OUTCOMES_BEFORE_PARTIAL) {
+      ok(guard.includes(`'${outcome}'`), `the guard must keep the ${outcome} outcome`);
+    }
+    ok(
+      /new\.outcome not in \(\s*'scored', 'low_confidence', 'partial',/.test(guard),
+      "the guard vocabulary must admit 'partial' as its own outcome (never relabelled as low_confidence)",
+    );
+    ok(
+      guard.includes("(new.status = 'reserved') <> (new.outcome is null)") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the guard must keep released ⇒ outcome IS NOT NULL and answer 23514 + the contract hint",
+    );
+    ok(
+      guard.includes("(new.outcome = 'partial' and new.status <> 'released')"),
+      "a partial outcome must only ever be released — finalized/partial is not a permit state",
+    );
+    ok(
+      guard.includes("if old.status = 'reserved' then") &&
+        guard.includes("if old.status = 'released' and old.outcome = 'expired'") &&
+        guard.includes("('finalized', 'scored')") &&
+        guard.includes("('released', 'low_confidence')") &&
+        guard.includes("('released', 'free_limit_exceeded')") &&
+        guard.includes("('released', 'partial')"),
+      "the guard must allow reserved → settled and released/expired → the late-sync outcomes including released/partial",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke execute on function public.guard_analysis_permit_lifecycle() from public, anon, authenticated",
+      ),
+      "the redefined guard must stay non-executable by clients",
+    );
+    ok(
+      !dropsTriggerWithoutRecreating(migration, "analysis_permits_guard_lifecycle"),
+      "the lifecycle trigger must survive the redefinition",
+    );
+
+    // The API-plane transition guard admits the same late transition.
+    const [transition] = privateFunctionBodies(raw, "enforce_permit_transition");
+    ok(transition, `${PERMIT_PARTIAL_OUTCOME} must redefine api_private.enforce_permit_transition`);
+    for (const column of ["id", "user_id", "idempotency_key", "created_at"]) {
+      ok(
+        transition.includes(`new.${column} is distinct from old.${column}`),
+        `permit ${column} must stay immutable`,
+      );
+    }
+    ok(
+      transition.includes("(old.status = 'reserved' and new.status in ('finalized', 'released'))") &&
+        transition.includes("('finalized', 'scored')") &&
+        transition.includes("('released', 'low_confidence')") &&
+        transition.includes("('released', 'free_limit_exceeded')") &&
+        transition.includes("('released', 'partial')"),
+      "enforce_permit_transition must keep every prior transition and add released/expired → released/partial",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke all on function api_private.enforce_permit_transition() from public, anon, authenticated, service_role",
+      ),
+      "the redefined transition guard must stay non-executable",
+    );
+
+    // shots.result_kind admits 'partial'; the unscored invariant is untouched.
+    ok(
+      migration.statements.includes("alter table public.shots drop constraint shots_result_kind_check") &&
+        migration.statements.includes(
+          "alter table public.shots add constraint shots_result_kind_check check (result_kind in ('scored', 'low_confidence', 'partial')) not valid",
+        ) &&
+        migration.statements.includes(
+          "alter table public.shots validate constraint shots_result_kind_check",
+        ),
+      "shots.result_kind must be widened to exactly scored | low_confidence | partial (NOT VALID + VALIDATE — no exclusive-lock rescan)",
+    );
+    ok(
+      !migration.statements.some((s) => s.includes("shots_low_confidence_unscored")),
+      "shots_low_confidence_unscored (non-scored ⇒ overall_score IS NULL) is what keeps a partial unscored — it must not be touched",
+    );
+
+    // The counting path is not rewritten, and its latest definitions still
+    // count scored rows only.
+    for (const name of COUNTING_PATH_FUNCTIONS) {
+      ok(
+        functionBodies(raw, name).length === 0,
+        `${PERMIT_PARTIAL_OUTCOME} must not redefine public.${name}`,
+      );
+    }
+    const backing = chain.flatMap((m) => functionBodies(m.raw, "permit_backs_sync")).at(-1);
+    ok(backing && NULL_SAFE_BACKING_RULE.test(backing), "released/partial is never permit backing");
+    const ledger = chain
+      .flatMap((m) => functionBodies(stripSqlComments(m.raw), "record_scored_shot_in_ledger"))
+      .at(-1);
+    ok(
+      ledger && ledger.includes("if new.result_kind <> 'scored'"),
+      "the identity ledger must record scored shots only",
+    );
+    const lifetime = chain
+      .flatMap((m) => functionBodies(stripSqlComments(m.raw), "lifetime_scored_count"))
+      .at(-1);
+    ok(
+      lifetime && lifetime.includes("s.result_kind = 'scored'"),
+      "lifetime_scored_count must count scored shots only",
+    );
+
+    // No grant or policy surface changes ride along.
+    for (const statement of migration.statements) {
+      ok(
+        !statement.startsWith("grant ") &&
+          !/^(create|alter|drop) policy\b/.test(statement) &&
+          !statement.includes("disable row level security"),
+        `${PERMIT_PARTIAL_OUTCOME} must not change grants or policies: ${statement}`,
+      );
     }
   },
 );

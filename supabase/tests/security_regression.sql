@@ -3976,6 +3976,481 @@ begin
   end loop;
 end $$;
 
+-- ============================================================================
+-- S. W01-01 (20260908100000_permit_partial_terminal_outcome): an honest
+--    PARTIAL terminal outcome — mechanics-only output without a validated
+--    benchmark — releases the permit, is never a charge, and is never
+--    re-labelled as low_confidence or upgraded into a scored rating. Two fresh
+--    users: Uma (free, Google identity) and Yun (member).
+-- S1  the sync RPC accepts resultKind='partial': the shot persists with
+--     result_kind='partial' (not low_confidence) and no score, the permit ends
+--     released/partial, lifetime_scored_count() / access_state().scored_count
+--     stay 0 and the identity ledger is untouched; the replay is idempotent;
+--     a second shot on the partial permit is access.permit_not_reserved;
+--     permit_backs_sync(released, partial) is false
+-- S2  a partial result may not carry a score: the write is refused at the
+--     table, no shot persists and the permit stays reserved (clean retry)
+-- S3  with both free ratings spent, a partial is still accepted and free —
+--     the count and the ledger stay at 2 — and the scored backstop still
+--     refuses a third rating (access.paywall_required)
+-- S4  a permit swept to released/expired while offline settles a late partial
+--     into released/partial (both permit guards allow the late transition)
+-- S5  the client role cannot forge a scored result out of a partial: the
+--     released/partial permit is terminal (→ finalized/scored, → reserved,
+--     → released/expired, → released/low_confidence are all 23514), partial
+--     is never finalized (reserved → finalized/partial is 23514), a partial
+--     shot row cannot be re-labelled scored (no UPDATE grant), a direct scored
+--     INSERT backed only by a released/partial permit is 42501, and the RPC
+--     naming a released/partial permit for a scored shot is
+--     access.permit_not_reserved — for a free account and for a member
+-- S6  tombstone: an owner DELETE of a released/partial permit (linked or
+--     unlinked) leaves a released/partial tombstone; the id cannot be reopened
+--     as reserved or in any other shape (23514); only the byte-identical
+--     restore is allowed; the RPC answers access.permit_not_reserved for the
+--     tombstoned id and writes nothing
+-- S7  anti-reset: after Uma deletes her account the identity ledger still
+--     reads exactly 2 (partials neither inflate nor reset it) and a re-created
+--     account under the same identity inherits 2 and is refused a reservation
+-- ============================================================================
+
+reset role;
+set local request.jwt.claim.sub = '';
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000041', 'uma@example.com',
+   '{"full_name":"Uma"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000042', 'yun@example.com',
+   '{"full_name":"Yun"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-uma', '00000000-0000-4000-8000-000000000041',
+   '{"sub":"google-sub-uma","email":"uma@example.com"}'),
+  ('apple', 'apple-sub-yun', '00000000-0000-4000-8000-000000000042',
+   '{"sub":"apple-sub-yun","email":"yun@example.com"}');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000042', true, null);
+-- Permits seeded by the owner (the client cannot name an id — Q2).
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000041', 'uma-partial-1', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000402', '00000000-0000-4000-8000-000000000041', 'uma-scored-1', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000403', '00000000-0000-4000-8000-000000000041', 'uma-scored-2', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000404', '00000000-0000-4000-8000-000000000041', 'uma-partial-at-limit', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000405', '00000000-0000-4000-8000-000000000041', 'uma-late-partial', 'reserved', null, now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-000000000406', '00000000-0000-4000-8000-000000000041', 'uma-partial-scored', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000407', '00000000-0000-4000-8000-000000000041', 'uma-client-release', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000408', '00000000-0000-4000-8000-000000000041', 'uma-third-rating', 'reserved', null, now()),
+  ('00000000-0000-4000-8000-000000000411', '00000000-0000-4000-8000-000000000042', 'yun-partial-1', 'reserved', null, now());
+-- the pg_cron sweep (expire-stale-analysis-permits) — the exact statement
+update public.analysis_permits set status = 'released', outcome = 'expired' where status = 'reserved' and created_at < now() - interval '24 hours';
+
+create function pg_temp.s_ledger(p_provider text, p_sub text) returns integer
+language sql as $$
+  select coalesce((select scored_count from public.free_rating_ledger
+                   where identity_hash = public.free_rating_identity_hash(p_provider, p_sub)), -1);
+$$;
+create function pg_temp.s_shot(p_id uuid) returns text
+language sql as $$
+  select coalesce((select result_kind || '/' || coalesce(overall_score::text, 'NULL')
+                          || '/' || coalesce(analysis_permit_id::text, 'NULL')
+                   from public.shots where id = p_id), 'MISSING');
+$$;
+grant execute on function pg_temp.s_shot(uuid) to authenticated;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000041';
+
+-- S1: the partial result is an explicit, honest terminal state — and free.
+do $$
+declare v text; rec record;
+begin
+  if public.lifetime_scored_count() <> 0 then
+    raise exception 'S1 precondition: Uma starts at zero (got %)', public.lifetime_scored_count();
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000431',
+    '00000000-0000-4000-8000-000000000401', 'partial'));
+  if v <> 'accepted' then
+    raise exception 'S1: a partial (mechanics-only) result must be accepted by the sync RPC (got %)', v;
+  end if;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000431')
+     <> 'partial/NULL/00000000-0000-4000-8000-000000000401' then
+    raise exception 'S1: the shot must persist as result_kind=partial, unscored, linked to its permit (got %)',
+      pg_temp.s_shot('00000000-0000-4000-8000-000000000431');
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000401') <> 'released/partial' then
+    raise exception 'S1: the permit must end released/partial — never low_confidence, never finalized (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000401');
+  end if;
+  if public.lifetime_scored_count() <> 0 then
+    raise exception 'S1: a partial must not count toward lifetime_scored_count() (got %)', public.lifetime_scored_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 6 then
+    raise exception 'S1: access_state must report 0 scored and the 6 live reservations (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if public.permit_backs_sync('released', 'partial') then
+    raise exception 'S1: a released/partial permit is never acceptable backing';
+  end if;
+  -- idempotent replay: accepted, still one row
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000431',
+    '00000000-0000-4000-8000-000000000401', 'partial'));
+  if v <> 'accepted' then
+    raise exception 'S1: replaying the partial sync must stay accepted (got %)', v;
+  end if;
+  -- one-permit-one-shot: a different shot on the partial permit is refused
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000432',
+    '00000000-0000-4000-8000-000000000401', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'S1: a released/partial permit must not back a second shot (got %)', v;
+  end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid())) <> 1 then
+    raise exception 'S1: exactly one shot may exist (got %)',
+      (select count(*) from public.shots where user_id = (select auth.uid()));
+  end if;
+end $$;
+
+-- S2: a partial may not carry a score.
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000433',
+    '00000000-0000-4000-8000-000000000406', 'partial')
+    || jsonb_build_object('overallScore', 6.0));
+  if v = 'accepted' then
+    raise exception 'S2: a partial result carrying a score must be refused';
+  end if;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000433') <> 'MISSING' then
+    raise exception 'S2: the refused shot must not persist';
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000406') <> 'reserved/NULL' then
+    raise exception 'S2: the permit must stay reserved for a clean retry (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000406');
+  end if;
+end $$;
+
+-- S3: both free ratings spent; a partial is still free and unlocks nothing.
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000434',
+    '00000000-0000-4000-8000-000000000402', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'S3 precondition: first rating (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000435',
+    '00000000-0000-4000-8000-000000000403', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'S3 precondition: second rating (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'S3 precondition: both ratings count (got %)', public.lifetime_scored_count();
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000436',
+    '00000000-0000-4000-8000-000000000404', 'partial'));
+  if v <> 'accepted' then
+    raise exception 'S3: a partial past the free limit is still free (got %)', v;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000404') <> 'released/partial' then
+    raise exception 'S3: the permit must end released/partial (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000404');
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'S3: the partial must leave the lifetime count at 2 (got %)', public.lifetime_scored_count();
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000437',
+    '00000000-0000-4000-8000-000000000408', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'S3: the scored backstop must still refuse a third rating (got %)', v;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000408') <> 'released/free_limit_exceeded' then
+    raise exception 'S3: the refused permit ends released/free_limit_exceeded (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000408');
+  end if;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000437') <> 'MISSING' then
+    raise exception 'S3: the refused rating must not persist';
+  end if;
+end $$;
+
+-- S4: a late partial on a swept permit.
+do $$
+declare v text;
+begin
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000405') <> 'released/expired' then
+    raise exception 'S4 precondition: the stale permit was swept (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000405');
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000438',
+    '00000000-0000-4000-8000-000000000405', 'partial'));
+  if v <> 'accepted' then
+    raise exception 'S4: a swept permit must settle a late partial (got %)', v;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000405') <> 'released/partial' then
+    raise exception 'S4: the late permit must end released/partial (got %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000405');
+  end if;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000438')
+     <> 'partial/NULL/00000000-0000-4000-8000-000000000405' then
+    raise exception 'S4: the late partial shot persists unscored and linked (got %)',
+      pg_temp.s_shot('00000000-0000-4000-8000-000000000438');
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'S4: the late partial must not count (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- S5: the client role cannot forge a scored result out of a partial (Uma).
+do $$
+declare r text;
+begin
+  foreach r in array array[
+    pg_temp.p_move('00000000-0000-4000-8000-000000000401', 'finalized', 'scored'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000401', 'reserved', null),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000401', 'released', 'expired'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000401', 'released', 'low_confidence'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000401', 'finalized', 'partial'),
+    pg_temp.p_move('00000000-0000-4000-8000-000000000407', 'finalized', 'partial')]
+  loop
+    if r <> '23514:access.permit_transition_rejected' then
+      raise exception 'S5: a partial permit is terminal and partial is never finalized (got %)', r;
+    end if;
+  end loop;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000401') <> 'released/partial'
+     or pg_temp.r_permit('00000000-0000-4000-8000-000000000407') <> 'reserved/NULL' then
+    raise exception 'S5: refused moves must leave both permits untouched (got % / %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000401'),
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000407');
+  end if;
+  -- releasing an own reservation as partial without a shot (edge release
+  -- path) is a legal, free settlement
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000407', 'released', 'partial');
+  if r <> '' then
+    raise exception 'S5: reserved → released/partial must be allowed (got %)', r;
+  end if;
+  -- the partial shot row cannot be re-labelled scored by the client
+  r := pg_temp.q_try($q$update public.shots set result_kind = 'scored', overall_score = 9.5
+                        where id = '00000000-0000-4000-8000-000000000431'$q$);
+  if r <> '42501:' then
+    raise exception 'S5: a partial shot must not be client-upgradable to scored (got %)', r;
+  end if;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000431')
+     <> 'partial/NULL/00000000-0000-4000-8000-000000000401' then
+    raise exception 'S5: the partial shot must be unchanged (got %)', pg_temp.s_shot('00000000-0000-4000-8000-000000000431');
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'S5: the lifetime count must be unchanged (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- S5, member: a released/partial permit is not live backing for a direct
+-- scored INSERT (42501 + verdict) nor for the RPC (permit_not_reserved).
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000042';
+do $$
+declare v text; r text; v_hint text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000441',
+    '00000000-0000-4000-8000-000000000411', 'partial'));
+  if v <> 'accepted' then
+    raise exception 'S5: a member''s partial must be accepted (got %)', v;
+  end if;
+  if pg_temp.r_permit('00000000-0000-4000-8000-000000000411') <> 'released/partial'
+     or pg_temp.s_shot('00000000-0000-4000-8000-000000000441')
+        <> 'partial/NULL/00000000-0000-4000-8000-000000000411' then
+    raise exception 'S5: the member''s partial settles the same way (got % / %)',
+      pg_temp.r_permit('00000000-0000-4000-8000-000000000411'),
+      pg_temp.s_shot('00000000-0000-4000-8000-000000000441');
+  end if;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version,
+      paddle_model_version, stroke_detector_version, phase_model_version,
+      scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-000000000442',
+      '00000000-0000-4000-8000-000000000042',
+      'drive', now(), 0, 1000, 8.0, 0.9, 'scored',
+      '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+      'scoring-1', 'config-1'
+    );
+    raise exception 'S5: a direct scored INSERT backed only by a released/partial permit must be refused';
+  exception when insufficient_privilege then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    if v_hint <> 'access.permit_not_reserved' then
+      raise exception 'S5: the gate refusal must carry the permit verdict (got hint %)', v_hint;
+    end if;
+  end;
+  if pg_temp.s_shot('00000000-0000-4000-8000-000000000442') <> 'MISSING' then
+    raise exception 'S5: the refused direct row must not persist';
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000443',
+    '00000000-0000-4000-8000-000000000411', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'S5: the RPC must refuse a scored shot on a released/partial permit (got %)', v;
+  end if;
+  r := pg_temp.p_move('00000000-0000-4000-8000-000000000411', 'finalized', 'scored');
+  if r <> '23514:access.permit_transition_rejected' then
+    raise exception 'S5: the member cannot re-label a partial permit as scored (got %)', r;
+  end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid())) <> 1 then
+    raise exception 'S5: the member holds exactly the one partial shot';
+  end if;
+end $$;
+
+-- S6: tombstone — as the owner role.
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+declare saved record; r text; p_linked uuid := '00000000-0000-4000-8000-000000000401';
+        p_unlinked uuid := '00000000-0000-4000-8000-000000000407';
+begin
+  select * into saved from public.analysis_permits where id = p_linked;
+  r := pg_temp.q_try(format('delete from public.analysis_permits where id = %L', p_linked));
+  if r <> 'allowed 1' then
+    raise exception 'S6: the owner may remove the linked partial row (got %)', r;
+  end if;
+  if pg_temp.r_tomb(p_linked) <> '00000000-0000-4000-8000-000000000041:released/partial' then
+    raise exception 'S6: the released/partial row must leave its tombstone (got %)', pg_temp.r_tomb(p_linked);
+  end if;
+  if (select analysis_permit_id from public.shots
+      where id = '00000000-0000-4000-8000-000000000431') is distinct from p_linked then
+    raise exception 'S6: the partial shot keeps its link';
+  end if;
+  foreach r in array array[
+    pg_temp.q_try(format(
+      $q$insert into public.analysis_permits (id, user_id, idempotency_key)
+         values (%L, '00000000-0000-4000-8000-000000000041', 'uma-reopen')$q$, p_linked)),
+    pg_temp.q_try(format(
+      $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+         values (%L, '00000000-0000-4000-8000-000000000041', %L, 'finalized', 'scored')$q$,
+      p_linked, saved.idempotency_key)),
+    pg_temp.q_try(format(
+      $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+         values (%L, '00000000-0000-4000-8000-000000000041', %L, 'released', 'low_confidence')$q$,
+      p_linked, saved.idempotency_key)),
+    pg_temp.q_try(format(
+      $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+         values (%L, '00000000-0000-4000-8000-000000000042', %L, 'released', 'partial')$q$,
+      p_linked, saved.idempotency_key))]
+  loop
+    if r <> '23514:access.permit_transition_rejected' then
+      raise exception 'S6: a tombstoned partial id can only be restored, never reopened or re-shaped (got %)', r;
+    end if;
+  end loop;
+  if pg_temp.r_permit(p_linked) <> 'MISSING' or pg_temp.r_tomb(p_linked) = 'NONE' then
+    raise exception 'S6: refused inserts must leave the id gone and remembered';
+  end if;
+  r := pg_temp.q_try(format(
+    $q$insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at, updated_at)
+       values (%L, %L, %L, %L, %L, %L, %L)$q$,
+    saved.id, saved.user_id, saved.idempotency_key, saved.status, saved.outcome,
+    saved.created_at, saved.updated_at));
+  if r <> 'allowed 1' then
+    raise exception 'S6: the identical released/partial row must be restorable (got %)', r;
+  end if;
+  if pg_temp.r_permit(p_linked) <> 'released/partial' or pg_temp.r_tomb(p_linked) <> 'NONE' then
+    raise exception 'S6: the restore is released/partial and consumes the tombstone (got % / %)',
+      pg_temp.r_permit(p_linked), pg_temp.r_tomb(p_linked);
+  end if;
+  -- the unlinked released/partial permit (client release, S5) is remembered too
+  r := pg_temp.q_try(format('delete from public.analysis_permits where id = %L', p_unlinked));
+  if r <> 'allowed 1' then
+    raise exception 'S6: the owner may remove the unlinked partial row (got %)', r;
+  end if;
+  if pg_temp.r_tomb(p_unlinked) <> '00000000-0000-4000-8000-000000000041:released/partial' then
+    raise exception 'S6: the unlinked released/partial row must leave its tombstone (got %)', pg_temp.r_tomb(p_unlinked);
+  end if;
+end $$;
+
+-- S6: as Uma, the tombstoned id is consumed, not unknown, and backs nothing.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000041';
+do $$
+declare v text;
+begin
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000444',
+    '00000000-0000-4000-8000-000000000407', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'S6: a tombstoned partial id must answer access.permit_not_reserved (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000445',
+    '00000000-0000-4000-8000-000000000407', 'partial'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'S6: a tombstoned partial id must not back a partial either (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot(
+    '00000000-0000-4000-8000-000000000446',
+    '00000000-0000-4000-8000-000000000401', 'scored'));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'S6: the restored released/partial permit stays consumed (got %)', v;
+  end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid())) <> 5 then
+    raise exception 'S6: refused writes must leave no row (got % shots)',
+      (select count(*) from public.shots where user_id = (select auth.uid()));
+  end if;
+  if public.lifetime_scored_count() <> 2 then
+    raise exception 'S6: the lifetime count must still be 2 (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- S7: anti-reset — partials neither inflate nor reset the identity ledger.
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+begin
+  if pg_temp.s_ledger('google', 'google-sub-uma') <> 2 then
+    raise exception 'S7 precondition: the identity ledger reads exactly the 2 scored ratings (got %)',
+      pg_temp.s_ledger('google', 'google-sub-uma');
+  end if;
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000041';
+  if exists (select 1 from public.analysis_permits where user_id = '00000000-0000-4000-8000-000000000041')
+     or exists (select 1 from public.shots where user_id = '00000000-0000-4000-8000-000000000041')
+     or exists (select 1 from public.analysis_permit_tombstones where user_id = '00000000-0000-4000-8000-000000000041') then
+    raise exception 'S7: account deletion must cascade permits, shots and tombstones';
+  end if;
+  if pg_temp.s_ledger('google', 'google-sub-uma') <> 2 then
+    raise exception 'S7: the identity ledger must survive deletion at exactly 2 (got %)',
+      pg_temp.s_ledger('google', 'google-sub-uma');
+  end if;
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000043', 'uma@example.com',
+        '{"full_name":"Uma"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-uma', '00000000-0000-4000-8000-000000000043',
+        '{"sub":"google-sub-uma","email":"uma@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000043';
+do $$
+declare rec record; r record;
+begin
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
+    raise exception 'S7: the re-created account inherits exactly 2 (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('uma-second-life-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'S7: reserve must refuse the re-created account (got %)', r.result;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
 do $$
 declare t record; f record;
 begin
