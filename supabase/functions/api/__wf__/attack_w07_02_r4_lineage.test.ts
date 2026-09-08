@@ -106,13 +106,16 @@ function subscriberOf(
   const row = entitledProduct === null ? undefined : subscriptions[entitledProduct];
   const entitledRow = isRecord(row) ? row : undefined;
   return {
-    entitlements: entitledProduct === null ? {} : {
-      pickle_sensei_pro: {
-        expires_date: entitledRow ? entitledRow.expires_date : at(25 * DAY),
-        purchase_date: entitledRow ? entitledRow.purchase_date : RENEWAL_AT,
-        product_identifier: entitledProduct,
-      },
-    },
+    entitlements:
+      entitledProduct === null
+        ? {}
+        : {
+            pickle_sensei_pro: {
+              expires_date: entitledRow ? entitledRow.expires_date : at(25 * DAY),
+              purchase_date: entitledRow ? entitledRow.purchase_date : RENEWAL_AT,
+              product_identifier: entitledProduct,
+            },
+          },
     subscriptions,
     non_subscriptions: options.nonSubscriptions ?? {},
   };
@@ -240,9 +243,8 @@ Deno.test(
         // its access state (expired), never as the refund itself. Every other
         // cell is contradictory or unprovable and stays pending.
         const provableRefund = refundLabel === "valid past refund";
-        const expected = horizonLabel === "lapsed yesterday" && provableRefund
-          ? "expired"
-          : "pending";
+        const expected =
+          horizonLabel === "lapsed yesterday" && provableRefund ? "expired" : "pending";
         assertEquals(outcome(lineage), expected, label);
         if (horizonLabel === "entitlement active") {
           assertEquals(
@@ -333,18 +335,24 @@ Deno.test(
         { [ANNUAL]: lineageRow({ store_transaction_id: Number(JOURNALED_ID) }) },
         {},
       ],
-      ["unknown product key", {
-        "com.other.product": lineageRow({ store_transaction_id: JOURNALED_ID }),
-      }, {}],
+      [
+        "unknown product key",
+        {
+          "com.other.product": lineageRow({ store_transaction_id: JOURNALED_ID }),
+        },
+        {},
+      ],
       [
         "lifetime purchase store id",
         {},
         {
-          [LIFETIME]: [{
-            id: "rc-own-id",
-            store_transaction_id: JOURNALED_ID,
-            purchase_date: at(-3 * DAY),
-          }],
+          [LIFETIME]: [
+            {
+              id: "rc-own-id",
+              store_transaction_id: JOURNALED_ID,
+              purchase_date: at(-3 * DAY),
+            },
+          ],
         },
       ],
       [
@@ -361,11 +369,13 @@ Deno.test(
         "lifetime purchase store id (number)",
         {},
         {
-          [LIFETIME]: [{
-            id: "x",
-            store_transaction_id: Number(JOURNALED_ID),
-            purchase_date: at(-3 * DAY),
-          }],
+          [LIFETIME]: [
+            {
+              id: "x",
+              store_transaction_id: Number(JOURNALED_ID),
+              purchase_date: at(-3 * DAY),
+            },
+          ],
         },
       ],
     ];
@@ -397,11 +407,13 @@ Deno.test(
         "lifetime row: store id authoritative, RC own id coincides",
         {},
         {
-          [LIFETIME]: [{
-            id: JOURNALED_ID,
-            store_transaction_id: "9",
-            purchase_date: at(-3 * DAY),
-          }],
+          [LIFETIME]: [
+            {
+              id: JOURNALED_ID,
+              store_transaction_id: "9",
+              purchase_date: at(-3 * DAY),
+            },
+          ],
         },
       ],
       ["non_subscriptions is not an object", {}, "garbage"],
@@ -725,13 +737,11 @@ Deno.test(
 Deno.test(
   "ATTACK C9: extreme purchase instants (year 0001, year 9999, the epoch) and a lineage whose three dates coincide never crash, never settle, and are echoed bit for bit",
   async () => {
-    for (
-      const purchasedAt of [
-        "0001-01-01T00:00:00.000Z",
-        "1970-01-01T00:00:00.000Z",
-        "9999-12-31T23:59:59.999Z",
-      ]
-    ) {
+    for (const purchasedAt of [
+      "0001-01-01T00:00:00.000Z",
+      "1970-01-01T00:00:00.000Z",
+      "9999-12-31T23:59:59.999Z",
+    ]) {
       const journaled = evidence({ purchasedAt });
       const result = await sync(subscriberOf({ [MONTHLY]: lineageRow() }), {
         fulfilment: journaled,
