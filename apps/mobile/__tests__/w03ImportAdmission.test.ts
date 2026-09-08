@@ -229,6 +229,108 @@ describe('W03-01 regression — ambiguous clip admitted on base', () => {
   });
 });
 
+/**
+ * Round 5 — a stroke that is admitted on its own evidence is never demoted
+ * to a wind-up by a louder stroke that follows it. Two complete strokes
+ * separated by a full stop are two events whatever their relative speed and
+ * whatever their spacing, so adding speed to the later stroke, or shifting
+ * it by a frame, can never turn a refusal into an admission.
+ */
+describe('W03-01 regression — a complete stroke is never demoted by a later, harder stroke', () => {
+  // Both humps are 300 ms wide and separated by 300 ms of exactly zero wrist
+  // speed: a finished soft stroke, then a harder one 600 ms later.
+  const SOFT = 1.0;
+  const HARD = 3.0;
+
+  /** Peak torso lengths/s of a lone hump of `peak` image heights/s, admitted alone. */
+  function admittedAlone(peak: number): number {
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(3000, 60, hump(1500, 150, peak)),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return 0;
+    return decision.event.peakTorsoPerSecond;
+  }
+
+  function softThenHard(hard: number, hardMs = 1800): PoseSequence {
+    return wristSpeedProfile(
+      3000,
+      60,
+      sumOf(hump(1200, 150, SOFT), hump(hardMs, 150, hard)),
+    );
+  }
+
+  it('each stroke alone clears the absolute stroke floor and is admitted', () => {
+    expect(admittedAlone(SOFT)).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+    );
+    expect(admittedAlone(HARD)).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+    );
+  });
+
+  it('two complete strokes 600 ms apart are two events even when the second is 3× harder', () => {
+    const decision = admitImportedStrokeEvents(softThenHard(HARD));
+    expect(decision.candidates).toHaveLength(2);
+    for (const candidate of decision.candidates) {
+      expect(candidate.peakTorsoPerSecond).toBeGreaterThanOrEqual(
+        IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+      );
+      expect(candidate.comparable).toBe(true);
+    }
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+
+  it('is monotonic in the second stroke: making it harder never turns the refusal into an admission', () => {
+    for (const hard of [1.0, 1.5, 2.0, 2.4, 2.6, 3.0, 5.0, 8.0]) {
+      const decision = admitImportedStrokeEvents(softThenHard(hard));
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBe(2);
+    }
+  });
+
+  it('refuses an escalating three-stroke rally whose every stroke is admitted alone', () => {
+    for (const peak of [1.0, 2.6, 7.0]) admittedAlone(peak);
+    const rally = wristSpeedProfile(
+      4000,
+      60,
+      sumOf(hump(1200, 150, 1.0), hump(1800, 150, 2.6), hump(2400, 150, 7.0)),
+    );
+    const decision = admitImportedStrokeEvents(rally);
+    expect(decision.candidates).toHaveLength(3);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(3);
+  });
+
+  it('gives the same verdict whether the peaks are 500, 600, 700, 717, 900 or 1200 ms apart', () => {
+    for (const spacingMs of [500, 600, 700, 717, 900, 1200]) {
+      const decision = admitImportedStrokeEvents(
+        softThenHard(HARD, 1200 + spacingMs),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBe(2);
+    }
+  });
+
+  it('refuses the soft-then-hard rally through the combined clip gate with the precise reason', () => {
+    const rally = softThenHard(HARD);
+    const decision = admitImportedClip(importedClip(rally), rally);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+});
+
 describe('W03-01 import admission — container envelope', () => {
   it('admits a supported single-track import inside the published envelope', () => {
     const { sequence } = singleSwing();
@@ -660,18 +762,27 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
         expect(decision.admitted).toBe(false);
         if (decision.admitted) return;
         expect(decision.reason).toBe('multiple_stroke_events');
-        expect(decision.comparableEventCount).toBe(3);
+        // At least the three swings; a variant whose own wind-up clears the
+        // absolute stroke floor against the rally's body scale adds a fourth.
+        expect(decision.comparableEventCount).toBeGreaterThanOrEqual(3);
       }
     }
   });
 
-  it('keeps a brisk backswing shortly before a much harder forward swing as ONE stroke', () => {
-    // Wind-up peaks 500 ms before contact at ~25% of the forward speed: fast
-    // enough to be stroke-sized on its own, yet it prepares the stroke.
+  it('keeps a sub-stroke wind-up shortly before a much harder forward swing as ONE stroke', () => {
+    // Wind-up peaks 500 ms before contact at ~12% of the forward speed and
+    // below the absolute stroke floor: alone it is not a stroke, so it
+    // cannot be a second one here.
+    const windUp = wristSpeedProfile(3000, 60, hump(1200, 150, 0.6));
+    const alone = admitImportedStrokeEvents(windUp);
+    expect(alone.admitted).toBe(false);
+    if (alone.admitted) return;
+    expect(alone.reason).toBe('motion_not_stroke_like');
+
     const stroke = wristSpeedProfile(
       3000,
       60,
-      sumOf(hump(1200, 150, 1.2), hump(1700, 150, 5)),
+      sumOf(hump(1200, 150, 0.6), hump(1700, 150, 5)),
     );
     const decision = admitImportedStrokeEvents(stroke);
     expect(decision.admitted).toBe(true);
@@ -679,14 +790,35 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     expect(decision.comparableEventCount).toBe(1);
     expect(Math.abs(decision.event.peakMs - 1700)).toBeLessThanOrEqual(60);
     expect(decision.candidates.filter(c => !c.comparable)).toHaveLength(1);
+  });
 
-    // The same wind-up a full second earlier is a separate stroke.
-    const apart = wristSpeedProfile(
-      3000,
-      60,
-      sumOf(hump(700, 150, 1.2), hump(1700, 150, 5)),
+  it('never demotes a stroke-sized wind-up: a burst admitted alone stays a stroke however hard the next one is', () => {
+    // The same wind-up at 1.2 image heights/s clears the absolute stroke
+    // floor on its own. A stroke-sized burst 500 ms before a 4× harder one
+    // is indistinguishable from a soft stroke followed by a hard stroke, so
+    // the clip is ambiguous and refused — at 500 ms and a second apart alike.
+    const alone = admitImportedStrokeEvents(
+      wristSpeedProfile(3000, 60, hump(1200, 150, 1.2)),
     );
-    expectMultipleStrokes(apart);
+    expect(alone.admitted).toBe(true);
+    if (!alone.admitted) return;
+    expect(alone.event.peakTorsoPerSecond).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond,
+    );
+    for (const windUpMs of [700, 1200]) {
+      const decision = admitImportedStrokeEvents(
+        wristSpeedProfile(
+          3000,
+          60,
+          sumOf(hump(windUpMs, 150, 1.2), hump(1700, 150, 5)),
+        ),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBe(2);
+      expect(decision.candidates.filter(c => c.comparable)).toHaveLength(2);
+    }
   });
 
   it('refuses a lone wrist movement too slow to be a stroke, in body-scale units', () => {

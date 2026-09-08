@@ -191,6 +191,57 @@ function hardDrive(): PoseSequence {
   }).sequence;
 }
 
+/**
+ * A still skeleton whose right wrist alternates between two points so its
+ * measured frame-to-frame speed (image heights per second) follows `speedAt`.
+ */
+function wristSpeedProfile(
+  durationMs: number,
+  fps: number,
+  speedAt: (tMs: number) => number,
+): PoseSequence {
+  const { sequence } = generateSwingSequence();
+  const body = sequence.frames[0];
+  if (!body) throw new Error('synthetic swing produced no frames');
+  const dtMs = 1000 / fps;
+  const frames: PoseSequence['frames'] = [];
+  let index = 0;
+  for (let tMs = 0; tMs <= durationMs; tMs += dtMs) {
+    const stepImageHeights = (speedAt(tMs) * dtMs) / 1000;
+    frames.push({
+      frameIndex: index,
+      timestampMs: Math.round(tMs),
+      confidence: body.confidence,
+      landmarks: body.landmarks.map(mark =>
+        mark.name === 'right_wrist'
+          ? { ...mark, x: 0.55 + (index % 2 === 0 ? 0 : stepImageHeights) }
+          : mark,
+      ),
+    });
+    index += 1;
+  }
+  return { ...sequence, video: { ...sequence.video, fps }, frames };
+}
+
+function hump(centerMs: number, halfWidthMs: number, peak: number) {
+  return (tMs: number): number => {
+    const distance = Math.abs(tMs - centerMs);
+    if (distance >= halfWidthMs) return 0;
+    return peak * (1 - distance / halfWidthMs);
+  };
+}
+
+/**
+ * A soft stroke (1.0 image heights/s, admitted alone) then, after 300 ms of
+ * complete stillness, a stroke three times harder 600 ms later. Two finished
+ * strokes: the soft one is never the hard one's wind-up.
+ */
+function softThenHardRally(): PoseSequence {
+  const soft = hump(1200, 150, 1.0);
+  const hard = hump(1800, 150, 3.0);
+  return wristSpeedProfile(3000, 60, tMs => soft(tMs) + hard(tMs));
+}
+
 function concatSequences(
   first: PoseSequence,
   second: PoseSequence,
@@ -368,6 +419,23 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
     const { clip, sidecarJson } = importedClipWithSidecar(
       concatSequences(twoStrokeRally(), hardDrive(), 1000),
     );
+    mockReadArtifact = async () => sidecarJson;
+    const fetchSpy = jest.fn();
+    (globalThis as { fetch?: unknown }).fetch = fetchSpy;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+    expect(outcome.kind).toBe('quality_blocked');
+    if (outcome.kind !== 'quality_blocked') return;
+    expect(outcome.reason).toBe(
+      importAdmissionRejectionMessage('multiple_stroke_events'),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a soft stroke followed 600 ms later by a 3× harder stroke before any permit is reserved', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = importedClipWithSidecar(softThenHardRally());
     mockReadArtifact = async () => sidecarJson;
     const fetchSpy = jest.fn();
     (globalThis as { fetch?: unknown }).fetch = fetchSpy;
@@ -580,6 +648,20 @@ describe('W03-01 import admission — signed-in saved-original path', () => {
 
   it('a refused rally returns the precise reason, reserves nothing, infers nothing and mints no attempt', async () => {
     const saved = await savedImport(twoStrokeRally());
+    const outcome = await saved.run();
+    expect(outcome.kind).toBe('quality_blocked');
+    if (outcome.kind !== 'quality_blocked') return;
+    expect(outcome.reason).toBe(
+      importAdmissionRejectionMessage('multiple_stroke_events'),
+    );
+    expect(saved.permitCalls()).toHaveLength(0);
+    expect(saved.fetchSpy).not.toHaveBeenCalled();
+    expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
+    expect(saved.attemptRows()).toEqual([]);
+  });
+
+  it('a soft-then-hard rally is refused on the saved path: no permit, no inference, no attempt', async () => {
+    const saved = await savedImport(softThenHardRally());
     const outcome = await saved.run();
     expect(outcome.kind).toBe('quality_blocked');
     if (outcome.kind !== 'quality_blocked') return;
