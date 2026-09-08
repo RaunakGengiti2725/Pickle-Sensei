@@ -30,7 +30,8 @@ import { formatReminderMinutes } from '../notifications/types';
 import { useConsistencyStore } from '../consistency/store';
 import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
-import { useAccessStore } from '../state/accessStore';
+import { selectMembershipState, useAccessStore } from '../state/accessStore';
+import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
@@ -46,6 +47,20 @@ async function openLegalPage(label: string, url: string): Promise<void> {
       detail: `Your phone could not open the page. You can read it in a browser at ${url}`,
       tone: 'danger',
       eyebrow: 'LINK UNAVAILABLE',
+    });
+  }
+}
+
+async function openSubscriptionManagement(): Promise<void> {
+  try {
+    await Linking.openURL(APP_STORE_SUBSCRIPTIONS_URL);
+  } catch {
+    showBrandNotice({
+      title: 'Could not open subscriptions',
+      detail:
+        'Open App Store account settings to manage or cancel your subscription.',
+      tone: 'danger',
+      eyebrow: 'STORE UNAVAILABLE',
     });
   }
 }
@@ -198,7 +213,7 @@ export function SettingsScreen() {
   const session = useAuthStore(s => s.session);
   const signOut = useAuthStore(s => s.signOut);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
-  const access = useAccessStore(s => s.canonicalAccess);
+  const membership = selectMembershipState(useAccessStore());
   const refreshAccess = useAccessStore(s => s.refreshAccess);
   const consentAvailability = useConsentStore(s => s.availability);
   const modelTrainingActive = useConsentStore(s => s.modelTrainingActive);
@@ -258,16 +273,7 @@ export function SettingsScreen() {
   // still syncing has already spent its rating even though `remaining`
   // only drops once the shot lands. This keeps the row in agreement with
   // the rating gate (canStartRating).
-  const membershipLabel = access?.premium
-    ? 'Pro active'
-    : access
-      ? access.canStartRating
-        ? `${access.freeRatings.availableToReserve} free ${plural(
-            access.freeRatings.availableToReserve,
-            'rating',
-          )} left`
-        : 'Upgrade required'
-      : 'Verify access';
+  const membershipLabel = membership.label;
   const notificationsValue = !notificationPrefs.enabled
     ? 'Off'
     : notificationPermission === 'denied'
@@ -338,13 +344,24 @@ export function SettingsScreen() {
             icon="crown"
             label="Pickle Sensei Pro"
             value={session?.localOnly ? 'Sign in first' : membershipLabel}
+            preserveCase
             onPress={() =>
               session?.localOnly
                 ? navigation.navigate('ConnectAccount')
                 : navigation.navigate('Paywall', { source: 'settings' })
             }
-            last
+            last={session?.localOnly || !membership.manageSubscription}
           />
+          {!session?.localOnly && membership.manageSubscription ? (
+            <SettingRow
+              icon="shield"
+              label="Manage subscription"
+              value="App Store"
+              preserveCase
+              onPress={() => void openSubscriptionManagement()}
+              last
+            />
+          ) : null}
         </Card>
 
         <SectionTitle title="Player" />

@@ -267,12 +267,19 @@ function pressableWithLabel(
   renderer: TestRenderer.ReactTestRenderer,
   predicate: (label: string) => boolean,
 ) {
-  return renderer.root.findAll(
-    node =>
-      typeof node.props.accessibilityLabel === 'string' &&
-      predicate(node.props.accessibilityLabel) &&
-      typeof node.props.onPress === 'function',
-  );
+  // PressableScale forwards its props to the inner Pressable, so keep only
+  // the outermost node per row.
+  const matches = (node: TestRenderer.ReactTestInstance) =>
+    typeof node.props.accessibilityLabel === 'string' &&
+    predicate(node.props.accessibilityLabel) &&
+    typeof node.props.onPress === 'function';
+  return renderer.root.findAll(node => {
+    if (!matches(node)) return false;
+    for (let up = node.parent; up; up = up.parent) {
+      if (matches(up)) return false;
+    }
+    return true;
+  });
 }
 
 function membershipValue(renderer: TestRenderer.ReactTestRenderer): string {
@@ -348,7 +355,7 @@ function expectNoInventedPrice(text: string) {
 
 beforeEach(() => {
   mockNavigate.mockClear();
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+  jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   jest
     .spyOn(Dimensions, 'get')
     .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });

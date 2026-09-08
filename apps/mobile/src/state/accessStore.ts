@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { BILLING_REQUEST_TIMEOUT_MS } from '../billing/accessApi';
 import {
+  describeMembershipState,
+  type MembershipState,
+} from '../billing/membershipState';
+import {
   createPendingFulfilment,
   createPendingFulfilmentStorage,
   parsePendingFulfilment,
@@ -15,8 +19,10 @@ import {
   type BillingErrorCode,
   type BillingErrorState,
   type BillingFulfilmentRequest,
+  type BillingFulfilmentVerdict,
   type BillingPeriod,
   type CanonicalAccessState,
+  type CanonicalBillingState,
   type CanonicalBillingSync,
   type StoreEntitlementState,
   type StorePlans,
@@ -55,8 +61,12 @@ export interface AccessStoreState {
   selectedPeriod: BillingPeriod;
   /** Server-authoritative. Null means fail closed. */
   canonicalAccess: CanonicalAccessState | null;
+  /** Last `/v1/billing/sync` billing verdict; only ever read beside `canonicalAccess`. */
+  canonicalBilling: CanonicalBillingState | null;
   pendingFulfilment: PendingFulfilment | null;
   fulfilmentStatus: FulfilmentStatus;
+  /** Last server disposition bound to this device's own pending record. */
+  fulfilmentVerdict: BillingFulfilmentVerdict | null;
   reconciliation: BillingReconciliationState;
   error: BillingErrorState | null;
   initialize(): Promise<void>;
@@ -159,8 +169,10 @@ const dataDefaults = () => ({
   plans: null as StorePlans | null,
   selectedPeriod: 'annual' as BillingPeriod,
   canonicalAccess: null as CanonicalAccessState | null,
+  canonicalBilling: null as CanonicalBillingState | null,
   pendingFulfilment: null as PendingFulfilment | null,
   fulfilmentStatus: 'unchecked' as FulfilmentStatus,
+  fulfilmentVerdict: null as BillingFulfilmentVerdict | null,
   reconciliation: reconciliationDefaults(),
   error: null as BillingErrorState | null,
 });
@@ -324,6 +336,21 @@ export const selectNeedsFulfilmentRecovery = (
 ): boolean =>
   state.pendingFulfilment !== null || state.fulfilmentStatus === 'unavailable';
 
+export const selectMembershipState = (
+  state: AccessStoreState,
+  now = Date.now(),
+): MembershipState =>
+  describeMembershipState({
+    access: state.canonicalAccess,
+    billing: state.canonicalBilling,
+    pendingFulfilment: state.pendingFulfilment,
+    fulfilmentStatus: state.fulfilmentStatus,
+    reconciliationStatus: state.reconciliation.status,
+    fulfilmentVerdict: state.fulfilmentVerdict,
+    error: state.error ?? state.reconciliation.error,
+    nowMs: now,
+  });
+
 export function selectBillingReconciliationRetryAtMs(
   state: AccessStoreState,
   now = Date.now(),
@@ -470,7 +497,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
         nextAttemptAtMs: Date.now() + BILLING_RECONCILIATION_INTERVAL_MS,
         error: null,
       };
-      set({ reconciliation: tracker.state });
+      set({ reconciliation: tracker.state, canonicalBilling: result.billing });
       return result;
     } catch (cause) {
       if (isCurrent(scope)) {
@@ -543,6 +570,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
       (disposition.outcome === 'expired' || disposition.outcome === 'refunded');
     const fulfilled =
       bound && disposition.outcome === 'fulfilled' && synced.access.premium;
+    set({ fulfilmentVerdict: bound && disposition ? disposition : null });
     if (
       (fulfilmentRequest && !terminal && !fulfilled) ||
       (!fulfilmentRequest &&
@@ -616,6 +644,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
     set({
       status: statusFor(error),
       canonicalAccess: null,
+      canonicalBilling: null,
       error: error.toState(),
     });
   };
