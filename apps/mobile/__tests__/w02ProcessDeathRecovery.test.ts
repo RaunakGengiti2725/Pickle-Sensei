@@ -36,7 +36,11 @@ import {
   type LaunchResult,
   type LaunchSpec,
 } from '../__harness__/processDeath/harness';
-import type { Fault, FaultRule } from '../__harness__/processDeath/faultProxy';
+import {
+  REDIRECT_TARGET_PATH,
+  type Fault,
+  type FaultRule,
+} from '../__harness__/processDeath/faultProxy';
 import {
   KILL_POINTS,
   type KillPoint,
@@ -209,6 +213,16 @@ function serverPaths(server: ServerSnapshot, pathIncludes: string): string[] {
   return server.requests
     .map(request => request.path)
     .filter(path => path.includes(pathIncludes));
+}
+
+/** The shipping transport never follows a 3xx: the redirect target (the
+ * captive portal, the missing route) is never requested by the child. */
+function expectRedirectNeverFollowed(launch: LaunchOutcome): void {
+  expect(
+    launch.proxied
+      .map(request => request.path)
+      .filter(path => path.startsWith(REDIRECT_TARGET_PATH)),
+  ).toEqual([]);
 }
 
 /** Answers the network can give that are not a verdict from the API. */
@@ -423,6 +437,7 @@ describe('W02-03 process-death recovery (child Node process, node:sqlite)', () =
         );
         expect(finalizes.length).toBeGreaterThanOrEqual(1);
         for (const request of finalizes) expect(request.faulted).toEqual(fault);
+        expectRedirectNeverFollowed(faulted);
         expect(serverPaths(faulted.serverAfter, '/finalize')).toEqual([]);
         expect(faulted.serverAfter.permits).toEqual([
           expect.objectContaining({ id: permitId, status: 'reserved' }),
@@ -480,6 +495,7 @@ describe('W02-03 process-death recovery (child Node process, node:sqlite)', () =
       );
       expect(syncs.length).toBeGreaterThanOrEqual(1);
       for (const request of syncs) expect(request.faulted).toEqual(fault);
+      expectRedirectNeverFollowed(launch);
       expect(serverPaths(launch.serverAfter, SYNC_ROUTE)).toEqual([]);
       expect(launch.serverAfter.shots).toEqual([]);
       expect(launch.serverAfter.permits).toEqual([
