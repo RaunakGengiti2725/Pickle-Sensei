@@ -210,6 +210,17 @@ function journalRows() {
     .all();
 }
 
+/** True when the journal table was never even created on this database. */
+function journalAbsent() {
+  return (
+    mockDatabase.native
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'device_account_deletion_journal'",
+      )
+      .all().length === 0
+  );
+}
+
 function renderScreen() {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
@@ -1417,7 +1428,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
           challenge: deletionId(11),
           operationId: deletionId(10),
         });
-        expect(journalRows()).toEqual([]);
+        expect(journalAbsent() || journalRows().length === 0).toBe(true);
         expectDeleted(renderer);
       } finally {
         act(() => renderer.unmount());
@@ -1442,9 +1453,10 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
           operationId: deletionId(10),
         });
         expectDeleted(renderer);
-        expect(journalRows()).toMatchObject([
-          { phase: 'receipt_verified', serverState: 'completed' },
-        ]);
+        expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+        expect(String(journalRows()[0]!.document)).toContain(
+          '"serverState":"completed"',
+        );
       } finally {
         act(() => renderer.unmount());
       }
