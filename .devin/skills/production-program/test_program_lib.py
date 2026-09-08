@@ -265,7 +265,7 @@ class FakeRuntime:
     async def agent(self, prompt, **kw):
         label = kw["label"]
         self.calls.append(label)
-        assert kw["phase"] in ("implement", "review", "adversary")
+        assert kw["phase"] in ("implement", "review", "adversary", "attack")
         assert isinstance(kw["schema"], dict) and kw["schema"]["type"] == "object"
         assert 1 <= kw["soft_time_limit_minutes"] <= 60
         assert BASE in prompt and "never push to `main`" in prompt.lower() or "Never push to `main`" in prompt
@@ -561,6 +561,44 @@ class WaveTests(unittest.TestCase):
         self.assertEqual(summary["packages"][p["id"]]["status"], "ACCEPTED")
         self.assertEqual(summary["packages"][p["id"]]["candidate"]["round"], 3)
         self.assertEqual(rt.calls[0], f"implement-{p['id']}-r3")
+
+
+class AdversaryFanoutTests(unittest.TestCase):
+    def _run(self, rt: FakeRuntime, areas, tmp):
+        return asyncio.run(pl.run_adversary_fanout(fanout_id="adv-1", head_sha=BASE, integration_branch="codex/x", out_root=tmp, runtime=rt.runtime(), areas=areas))
+
+    def test_one_agent_per_area_records_breaks_and_untrusted_sha(self):
+        lbl = lambda a: f"int-adversary-{a}-{BASE[:8]}"  # noqa: E731
+        ok = {"package_id": "INT-auth-session", "attacked_sha": BASE, "attacks_tried": 9, "breaks": [{"severity": "P0", "title": "x", "repro": "cmd", "observed": "o", "expected": "e", "test_file": "t"}, {"severity": "P3", "title": "y", "repro": "c", "observed": "o", "expected": "e", "test_file": "t"}], "summary": "s"}
+        wrong = dict(ok, attacked_sha=HEAD, package_id="INT-offline-lease")
+        rt = FakeRuntime({lbl("auth-session"): ok, lbl("offline-lease"): wrong, lbl("e2e-journeys"): FakeRuntime.Err})
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self._run(rt, ["auth-session", "offline-lease", "e2e-journeys"], tmp)
+            with open(os.path.join(tmp, "_adversary", "adv-1", "auth-session.json"), encoding="utf8") as fh:
+                self.assertEqual(len(json.load(fh)["breaks"]), 2)
+            with open(os.path.join(tmp, "_adversary", "adv-1", "summary.json"), encoding="utf8") as fh:
+                self.assertEqual(json.load(fh)["head_sha"], BASE)
+        self.assertEqual(s["areas"]["auth-session"], {"status": "DONE", "breaks": 2, "blocking": 1})
+        self.assertEqual(s["areas"]["offline-lease"]["status"], "SHA_MISMATCH")
+        self.assertEqual(s["areas"]["offline-lease"]["breaks"], 0)
+        self.assertEqual(s["areas"]["e2e-journeys"]["status"], "FAILED")
+        self.assertEqual(rt.registered["phases"][0]["count"], 3)
+        self.assertEqual(len(rt.calls), 3)
+        self.assertEqual(sum(1 for a in s["agents"] if a["status"] == "failed"), 1)
+
+    def test_rejects_unknown_area_bad_sha_and_defaults_to_all_areas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                self._run(FakeRuntime({}), ["nope"], tmp)
+            with self.assertRaises(ValueError):
+                self._run(FakeRuntime({}), ["auth-session", "auth-session"], tmp)
+            with self.assertRaises(ValueError):
+                asyncio.run(pl.run_adversary_fanout(fanout_id="x", head_sha="abc", integration_branch="b", out_root=tmp, runtime=FakeRuntime({}).runtime()))
+            rt = FakeRuntime({f"int-adversary-{a}-{BASE[:8]}": FakeRuntime.Err for a in pl.INTEGRATION_AREAS})
+            s = self._run(rt, None, tmp)
+        self.assertEqual(set(s["areas"]), set(pl.INTEGRATION_AREAS))
+        for a in pl.INTEGRATION_AREAS:
+            self.assertIn(a, pl.integration_adversary_prompt(a, pl.INTEGRATION_AREAS[a], BASE, "codex/x"))
 
 
 if __name__ == "__main__":

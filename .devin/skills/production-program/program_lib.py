@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.6"
+LIB_VERSION = "2026-09-08.7"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -531,6 +531,182 @@ async def run_wave(
         "packages": {r["package_id"]: {k: r.get(k) for k in ("status", "candidate", "agent_counts")} for r in records},
     }
     _save(os.path.join(out_root, "_waves"), f"{wave_id}.json", summary)
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Integration adversary fan-out: independent attackers per production area
+# against ONE integration head (not tied to a package candidate)
+# ---------------------------------------------------------------------------
+
+INTEGRATION_AREAS: dict[str, dict] = {
+    "auth-session": {
+        "title": "Authentication & durable session",
+        "paths": ["apps/mobile/src/account", "supabase/functions/api/index.ts (authenticate, /v1/account/bootstrap, /v1/auth/*)", "supabase/functions/api/cache.ts"],
+        "surface": "refresh rotation races, expiresAt skew/rollback, 401 vs transient failures (must NOT sign out on transient), vault corruption, account switch mid-refresh, bearer capture at construction, token persistence anywhere (SQLite kv, logs, analytics)",
+    },
+    "backend-sql-rls": {
+        "title": "Supabase SQL / RLS / grants",
+        "paths": ["supabase/migrations", "supabase/tests", "supabase/functions/api/index.ts"],
+        "surface": "allowed AND denied paths for every table/RPC touched since the handoff, anon/other-user/service roles, column-grant exactness, append-only ledgers, lifetime_scored_count/access_lock_key usage, upgrade from both historical migration states",
+    },
+    "billing-entitlement": {
+        "title": "Billing reconciliation & entitlement truth",
+        "paths": ["apps/mobile/src/billing", "supabase/functions/api/index.ts (billing, /webhooks/revenuecat)", "public.billing_entitlements"],
+        "surface": "numeric transaction ids, lifetime purchase without matching transaction, renewal replacing latest transaction, provider clock skew, stale verdict ordering, expired premium row, webhook replay/forged body, missing data treated as refund/expiry",
+    },
+    "sync-outbox-persistence": {
+        "title": "Durable sync, outbox, journal and result persistence",
+        "paths": ["apps/mobile/src/sync", "apps/mobile/src/data", "apps/mobile/src/flow"],
+        "surface": "process death between journal/result/outbox steps, dependency ordering, ack validation, owner fencing across account switch, duplicate ack, corrupt rows (must not become empty history), 429/5xx/timeout mid-flush, replay after restart",
+    },
+    "charging-permits": {
+        "title": "Joint chargeability & analysis permits",
+        "paths": ["apps/mobile/src/flow", "apps/mobile/src/analysis", "supabase/functions/api/index.ts (permits, sync)", "packages/shared-types/src/chargeability.ts"],
+        "surface": "partial output, withheld output, replayed result, crash after one of two outputs, HOLD vs refund, permit resurrection, second credit consumed on valid replay, premium bypass boundaries, abstention never charged",
+    },
+    "offline-lease": {
+        "title": "Offline authorization / lease conservation",
+        "paths": ["apps/mobile/src/offline", "apps/mobile/src/access", "packages/shared-types/src/offlineAuthorization.ts", "supabase/functions/api/index.ts (device registration/grants)"],
+        "surface": "allocation vs consumption, disconnected-device reclaim, lease > 7 days or > entitlement expiry (incl. lifetime), clock rollback, signature/rotation failures, receipts, delayed reconciliation with conflicting server state",
+    },
+    "deletion-managed-media": {
+        "title": "Account deletion & managed media",
+        "paths": ["apps/mobile/src/account", "apps/mobile/src/media", "supabase/functions/api/index.ts (deletion)", "services/media-worker"],
+        "surface": "delete only the intended owner's assets, restart mid-deletion, per-clip deletion vs referenced originals, pagination past a page cap, unknown state reported as successful deletion, revocation failure paths",
+    },
+    "import-media-capture": {
+        "title": "Video import, capture and media handling",
+        "paths": ["apps/mobile/src/import", "apps/mobile/src/capture", "apps/mobile/src/media", "packages/capture-envelope"],
+        "surface": "malformed/oversized/zero-length media, missing permissions, byte identity, versioned time mapping, resource bounds, cancelled import, original-clip retry, missing media at replay",
+    },
+    "analysis-scoring": {
+        "title": "Swing/form analysis, scoring definition and release authority",
+        "paths": ["packages/vision-geometry", "packages/analysis-pipeline", "packages/shared-types/src/scoringDefinition.ts", "packages/shared-types/src/playerRank.ts", "supabase/functions/api/index.ts (release policy)"],
+        "surface": "mobile/Edge/SQL scoring parity on golden fixtures, NaN/empty/short inputs, low_confidence => no score, missing/withdrawn release authority blocks numeric output, historical results never reinterpreted, no benchmark rescale",
+    },
+    "ui-flows-a11y": {
+        "title": "Screen/interaction matrix and accessibility",
+        "paths": ["apps/mobile/src/screens", "apps/mobile/src/components", "apps/mobile/src/navigation"],
+        "surface": "ResultDetails routing, early notification taps, playback seeking accessibility, empty/loading/error/recovery/offline/account-switch states, large Dynamic Type, reduced motion, copy rules (APP_STORE_SUBMISSION.md)",
+    },
+    "networking-recovery": {
+        "title": "Networking, retries and error recovery",
+        "paths": ["apps/mobile/src/api", "apps/mobile/src/sync", "supabase/functions/api/http.ts", "supabase/functions/api/rateLimit.ts"],
+        "surface": "429 + Retry-After honoured, 5xx generic bodies, redirects on signed uploads rejected, slow responses/timeouts, bounded retries and queues, degraded Redis, offline->online transitions, cancellation",
+    },
+    "state-consistency": {
+        "title": "Store/state management consistency",
+        "paths": ["apps/mobile/src/state", "apps/mobile/src/store", "apps/mobile/src/access"],
+        "surface": "stale access snapshot after scoring, store reconfigure resets, hydrate ordering, concurrent updates, account switch races, derived state from corrupt persisted values",
+    },
+    "security-privacy": {
+        "title": "Security, privacy, diagnostics and logs",
+        "paths": ["apps/mobile/src/diagnostics", "packages/analytics", "supabase/functions/api", ".gitleaks.toml", "scripts/security-scan.sh"],
+        "surface": "PII/media/token leakage into logs, analytics, artifacts or error bodies; diagnostics transport must stay disabled; scrubbing and bounded retention; secrets in repo; input sanitisation",
+    },
+    "release-config": {
+        "title": "Production configuration, versioning and release identity",
+        "paths": ["apps/mobile/src/config", "apps/mobile/ios (Info.plist, project.pbxproj, ExportOptions)", "packages/release-ops", "scripts/release*", "APP_STORE_SUBMISSION.md"],
+        "surface": "version/build/manifest/document agreement, build increment after verification, bundle id/App Store id/entitlement ids, RevenueCat key selection per build, iOS-only scope (no Android/Google Play copy), third-party notices inputs",
+    },
+    "performance-bounds": {
+        "title": "Performance and resource bounds",
+        "paths": ["apps/mobile/src/analysis", "apps/mobile/src/import", "supabase/functions/api", "tools/loadtest"],
+        "surface": "unbounded buffers/queues/retries, quadratic paths on large libraries, cold-start and served-bundle size, memory growth across repeated capture/replay cycles, long-running imports without cancellation",
+    },
+    "native-bridge-contract": {
+        "title": "Native Swift/Vision bridge contract (TS side; Mac runtime is NOT verifiable on Linux)",
+        "paths": ["apps/mobile/src/native", "apps/mobile/ios/PickleSensei (Swift)", "native/vision-core"],
+        "surface": "TS<->Swift message shape mismatches, missing/undefined fields from native, error propagation, event ordering, permission denial results, simulator vs device differences; anything requiring Xcode/simulator MUST be reported as NOT_YET_VERIFIABLE with the exact Mac command, never as pass/fail",
+    },
+    "e2e-journeys": {
+        "title": "End-to-end user journeys (Jest-level, Linux)",
+        "paths": ["apps/mobile/__tests__", "apps/mobile/src"],
+        "surface": "sign-in -> capture/import -> analysis -> result -> sync -> relaunch -> history; account switch mid-journey; offline start; paywall -> purchase pending -> fulfilment; deletion -> re-sign-in; repeated actions and double taps",
+    },
+}
+
+
+def integration_adversary_prompt(area_id: str, area: dict, head_sha: str, integration_branch: str) -> str:
+    return f"""{common_rules(head_sha, integration_branch)}
+
+ROLE: INDEPENDENT INTEGRATION ADVERSARY for production area `{area_id}` — {area['title']}. You attack the CURRENT INTEGRATION HEAD, not a single package candidate. Nobody else covers this area in this fan-out; other areas are covered by other agents, so stay inside yours.
+HEAD_SHA: {head_sha} (branch `{integration_branch}`; `git fetch origin {integration_branch} && git checkout {head_sha}`; record `attacked_sha` = `git rev-parse HEAD`).
+AREA PATHS (starting points, not limits): {dump(area['paths'])}
+ATTACK SURFACE: {area['surface']}
+GENERAL CONDITIONS TO EXERCISE: happy path, malformed inputs, network loss at each step, interrupted sessions/process death, slow responses, relaunch, missing permissions, missing media, corrupted persisted state, repeated/double actions, account switch.
+
+PROCEDURE:
+1. Read the area's code and its existing tests first; list the concrete failure boundaries you will probe (at least 8 distinct attacks).
+2. Write each attack as a REAL test (Jest in apps/mobile/__tests__/adv/, Deno test in supabase/functions/api/__wf__/, or SQL in supabase/tests/) on branch `devin/pp/adv/{area_id}-{head_sha[:8]}`; run it against HEAD_SHA; commit and push the branch; record `attack_branch_sha`.
+3. Report every CONFIRMED break as {{severity, title, repro, observed, expected, test_file}} in `breaks` with exact commands and counts. Severity: P0 = money/data loss/leak/security/crash on a supported path; P1 = incorrect behaviour on a supported path; P2/P3 = minor. Also note in `summary` each attack that did NOT break anything (with the command) — a passing attack is evidence too.
+4. Anything that needs Xcode, a simulator, a physical device, StoreKit sandbox, real RevenueCat/Apple credentials or production Supabase is NOT_YET_VERIFIABLE: record the exact command a Mac/device run would need in `summary`; never guess a verdict for it.
+5. Do NOT modify production code or existing tests; do not fix what you find — the coordinator turns confirmed breaks into work packages. Package id to report: `INT-{area_id}`."""
+
+
+async def run_adversary_fanout(
+    *,
+    fanout_id: str,
+    head_sha: str,
+    integration_branch: str,
+    out_root: str,
+    runtime: Runtime,
+    areas: list[str] | None = None,
+    mode: str | None = None,
+    minutes: int = 60,
+) -> dict:
+    """One independent adversary per production area against a frozen integration head.
+
+    Records `<out_root>/_adversary/<fanout_id>/<area>.json` per agent and a
+    summary with every break; nothing here mutates the integration branch.
+    """
+    if not SHA_RE.match(head_sha):
+        raise ValueError("head_sha must be 40 hex")
+    chosen = list(areas) if areas is not None else list(INTEGRATION_AREAS)
+    unknown = [a for a in chosen if a not in INTEGRATION_AREAS]
+    if unknown or len(set(chosen)) != len(chosen):
+        raise ValueError(f"unknown or duplicate areas: {unknown or chosen}")
+    out_dir = os.path.join(out_root, "_adversary", fanout_id)
+    await runtime.register_workflow(
+        {
+            "name": f"pickle-sensei-integration-adversary-{fanout_id}",
+            "description": f"{len(chosen)} independent adversaries attack integration head {head_sha[:12]} ({', '.join(chosen)})",
+            "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
+            "soft_time_limit_minutes": minutes,
+            "phases": [{"title": "attack", "detail": "one adversary per production area writes reproducing tests against the frozen head", "count": len(chosen)}],
+        }
+    )
+    ledger: list[dict] = []
+
+    async def one(area_id: str) -> dict:
+        area = INTEGRATION_AREAS[area_id]
+        label = f"int-adversary-{area_id}-{head_sha[:8]}"
+        result = await _call(runtime, ledger, "integration-adversary", integration_adversary_prompt(area_id, area, head_sha, integration_branch), ADVERSARY_SCHEMA, label, "attack", minutes, mode)
+        record: dict = {"area": area_id, "head_sha": head_sha, "label": label, "result": result}
+        if result is None:
+            record["status"] = "FAILED"
+            record["breaks"] = []
+        elif result.get("attacked_sha") != head_sha:
+            record["status"] = "SHA_MISMATCH"
+            record["breaks"] = []
+            runtime.log(f"[{label}] attacked {result.get('attacked_sha')} != head {head_sha}; findings not trusted")
+        else:
+            record["status"] = "DONE"
+            record["breaks"] = list(result.get("breaks") or [])
+            runtime.log(f"[{label}] {len(record['breaks'])} confirmed breaks / {result.get('attacks_tried')} attacks")
+        _save(out_dir, f"{area_id}.json", record)
+        return record
+
+    records = await asyncio.gather(*(one(a) for a in chosen))
+    summary = {
+        "fanout_id": fanout_id,
+        "head_sha": head_sha,
+        "lib_version": LIB_VERSION,
+        "areas": {r["area"]: {"status": r["status"], "breaks": len(r["breaks"]), "blocking": len([b for b in r["breaks"] if str(b.get("severity", "")).upper() in ("P0", "P1")])} for r in records},
+        "agents": ledger,
+    }
+    _save(out_dir, "summary.json", summary)
     return summary
 
 
