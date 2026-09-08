@@ -139,7 +139,7 @@ revoke all on function api_private.billing_transfer_party_ids(jsonb, text)
 create function api_private.billing_verdict_active(p_verdict jsonb, p_at timestamptz)
 returns boolean
 language sql
-immutable
+stable
 security invoker
 set search_path = ''
 as $$
@@ -640,25 +640,23 @@ begin
     where public.billing_entitlements.verification_order < excluded.verification_order;
     get diagnostics v_changed = row_count;
   end if;
-  if not v_withheld then
-    for v_side in
-      select s.* from api_private.billing_transfer_sides s
-      join api_private.billing_transfers t on t.id = s.transfer_id
-      where s.user_id = p_user_id and s.role = 'source' and t.state <> 'confirmed'
-        and (s.verification_order is null or s.verification_order < v_ticket.verification_order)
-      order by t.enqueued_at, t.id for update of s
-    loop
-      select * into strict v_transfer from api_private.billing_transfers where id = v_side.transfer_id;
-      update api_private.billing_transfer_sides
-        set ticket_id = v_ticket.id, verification_order = v_ticket.verification_order,
-            verdict = p_verdict, verified_at = v_ticket.verified_at
-        where transfer_id = v_side.transfer_id and user_id = p_user_id;
-      perform api_private.note_billing_transfer(v_transfer, p_user_id, 'source_verified',
-        jsonb_build_object('verification_order', v_ticket.verification_order,
-          'active', api_private.billing_verdict_active(p_verdict, clock_timestamp())));
-      perform api_private.settle_billing_transfer(v_side.transfer_id);
-    end loop;
-  end if;
+  for v_side in
+    select s.* from api_private.billing_transfer_sides s
+    join api_private.billing_transfers t on t.id = s.transfer_id
+    where s.user_id = p_user_id and s.role = 'source' and t.state <> 'confirmed'
+      and (s.verification_order is null or s.verification_order < v_ticket.verification_order)
+    order by t.enqueued_at, t.id for update of s
+  loop
+    select * into strict v_transfer from api_private.billing_transfers where id = v_side.transfer_id;
+    update api_private.billing_transfer_sides
+      set ticket_id = v_ticket.id, verification_order = v_ticket.verification_order,
+          verdict = p_verdict, verified_at = v_ticket.verified_at
+      where transfer_id = v_side.transfer_id and user_id = p_user_id;
+    perform api_private.note_billing_transfer(v_transfer, p_user_id, 'source_verified',
+      jsonb_build_object('verification_order', v_ticket.verification_order,
+        'active', api_private.billing_verdict_active(p_verdict, clock_timestamp())));
+    perform api_private.settle_billing_transfer(v_side.transfer_id);
+  end loop;
   select * into v_billing from public.billing_entitlements where user_id = p_user_id for share;
   if not found then
     if not v_withheld and not v_side_applied then
