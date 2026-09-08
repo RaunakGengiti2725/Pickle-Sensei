@@ -52,7 +52,7 @@ function importedClip(
   const last = sequence.frames[sequence.frames.length - 1];
   const clip: ImportedClip = {
     uri: 'file:///imports/w03-clip.mov',
-    durationMs: (last?.timestampMs ?? 0) + 200,
+    durationMs: (last?.timestampMs ?? 0) + 100,
     fps: sequence.video.fps,
     width: sequence.video.width,
     height: sequence.video.height,
@@ -1609,7 +1609,7 @@ describe('W03-01 import admission — combined gate', () => {
     expect(decision.reason).toBe('wrist_not_tracked');
     expect(decision.detail).toContain('without either wrist tracked');
 
-    const brief = hideWrists(wristSpeedProfile(1000, 60, () => 0));
+    const brief = hideWrists(wristSpeedProfile(100, 60, () => 0));
     const okSequence = concatSequences(
       concatSequences(brief, swing.sequence, 17),
       brief,
@@ -1626,18 +1626,18 @@ describe('W03-01 import admission — combined gate', () => {
       ...sequence,
       frames: sequence.frames.map(frame => ({
         ...frame,
-        timestampMs: frame.timestampMs + 1000,
+        timestampMs: frame.timestampMs + 100,
       })),
     };
     const clip = importedClip(shifted, {
       durationMs:
-        (shifted.frames[shifted.frames.length - 1]?.timestampMs ?? 0) + 1000,
+        (shifted.frames[shifted.frames.length - 1]?.timestampMs ?? 0) + 100,
     });
     const decision = admitImportedClip(clip, shifted);
     expect(decision.admitted).toBe(true);
     if (!decision.admitted) return;
     expect(
-      Math.abs(decision.event.peakMs - (window.peakMs + 1000)),
+      Math.abs(decision.event.peakMs - (window.peakMs + 100)),
     ).toBeLessThanOrEqual(100);
   });
 
@@ -2084,5 +2084,341 @@ describe('W03-01 import admission — user-facing copy', () => {
     expect(importAdmissionRejectionMessage('duration_too_long')).toContain(
       '60 seconds',
     );
+  });
+});
+
+/**
+ * Round 8 — adversary shapes against the round-7 candidate (attack-da6ff3c7).
+ *
+ * (1) A rally whose peaks decay (or rise) 10 % per volley: the valley between
+ *     two neighbours sits above 80 % of the LESSER peak, so round 7 fused the
+ *     whole rally into one event, while the plateau guard — measured against
+ *     the cluster's HIGHEST peak — saw the deeper valleys leave the near-peak
+ *     band. One movement never drops more than a jitter below its own
+ *     highest peak between its first and last maximum.
+ * (2) Two volleys closer together than `sameEventPeakDistanceMs` with a
+ *     45-55 % valley were one "contact dip". A contact dip is shallow; a
+ *     valley that deep is a reversal between two strokes.
+ * (3) A whole-pose gap (the native extractor emits nothing where Vision finds
+ *     no person) of up to `maxUntrackedSpanMs` could hide any number of
+ *     strokes: a stroke's motion core fits in 150 ms, so no unobserved
+ *     stretch — lead-in, tail or interior — may be longer than that.
+ * (4) The hitting wrist unobserved before its first / after its last
+ *     measurement while the body is tracked was not a "hole" at all.
+ * (5) A sidecar that begins 2.4 s into the clip (bounded only by
+ *     `maxUntrackedSpanMs`) was admitted with half the clip unobserved.
+ * Every shape must be refused with a precise reason; controls pin that a
+ * lone volley, a ≤ 150 ms gap and a short lead-in are still admitted.
+ */
+function rally(
+  startMs: number,
+  periodMs: number,
+  peaks: readonly number[],
+  valleys: readonly number[],
+): (tMs: number) => number {
+  return (tMs: number): number => {
+    const endMs = startMs + peaks.length * periodMs;
+    if (tMs < startMs || tMs >= endMs) return 0;
+    const index = Math.min(
+      Math.floor((tMs - startMs) / periodMs),
+      peaks.length - 1,
+    );
+    const phase = ((tMs - startMs) % periodMs) / periodMs;
+    const peak = peaks[index] ?? 0;
+    const before = index === 0 ? 0 : (valleys[index - 1] ?? 0);
+    const after = index === peaks.length - 1 ? 0 : (valleys[index] ?? 0);
+    return phase < 0.5
+      ? before + (peak - before) * (phase * 2)
+      : peak - (peak - after) * ((phase - 0.5) * 2);
+  };
+}
+
+/** Removes EVERY frame inside [fromMs, toMs]: Vision found no person there. */
+function dropPoseFrames(
+  sequence: PoseSequence,
+  fromMs: number,
+  toMs: number,
+): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames
+      .filter(frame => frame.timestampMs < fromMs || frame.timestampMs > toMs)
+      .map((frame, index) => ({ ...frame, frameIndex: index })),
+  };
+}
+
+/** Delays the whole sidecar by `offsetMs`: the clip starts before the first pose. */
+function shiftFrames(sequence: PoseSequence, offsetMs: number): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames.map(frame => ({
+      ...frame,
+      timestampMs: frame.timestampMs + offsetMs,
+    })),
+  };
+}
+
+function occludeLeftWrist(
+  sequence: PoseSequence,
+  fromMs: number,
+  toMs: number,
+): PoseSequence {
+  return {
+    ...sequence,
+    frames: sequence.frames.map(frame =>
+      frame.timestampMs >= fromMs && frame.timestampMs <= toMs
+        ? {
+            ...frame,
+            landmarks: frame.landmarks.map(mark =>
+              mark.name === 'left_wrist'
+                ? {
+                    ...mark,
+                    visibility:
+                      IMPORT_ADMISSION_LIMITS.minLandmarkVisibility - 0.01,
+                  }
+                : mark,
+            ),
+          }
+        : frame,
+    ),
+  };
+}
+
+function clipReasonOf(
+  sequence: PoseSequence,
+): ImportAdmissionReason | 'ADMITTED' {
+  const decision = admitImportedClip(importedClip(sequence), sequence);
+  return decision.admitted ? 'ADMITTED' : decision.reason;
+}
+
+describe('W03-01 regression — round 8: decaying and rising rallies are several strokes', () => {
+  const DECAYING = [1.0, 0.9, 0.81, 0.73] as const;
+  const DECAY_VALLEYS = [0.73, 0.66, 0.6] as const;
+
+  it('refuses four volleys every 450 ms whose peaks decay 10 % each', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(4000, 60, rally(1000, 450, DECAYING, DECAY_VALLEYS)),
+      3,
+    );
+  });
+
+  it('refuses the mirror image: four volleys whose peaks rise 10 % each', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(
+        4000,
+        60,
+        rally(1000, 450, [...DECAYING].reverse(), [...DECAY_VALLEYS].reverse()),
+      ),
+      3,
+    );
+  });
+
+  it('refuses a decaying rally even at contact-dip cadence (300 ms)', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(4000, 60, rally(1000, 300, DECAYING, DECAY_VALLEYS)),
+      2,
+    );
+  });
+
+  it('refuses two volleys whose valley sits at 81 % of the softer but 73 % of the harder peak', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(3000, 60, rally(1000, 450, [1.0, 0.9], [0.73])),
+      2,
+    );
+  });
+
+  it('control: the hardest volley of the decaying rally is admitted alone', () => {
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(3000, 60, rally(1000, 450, [DECAYING[0]], [])),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.candidates).toHaveLength(1);
+  });
+
+  it('publishes the event floor it enforces: never below the shared-valley ratio of the highest peak', () => {
+    expect(IMPORT_ADMISSION_LIMITS.minEventFloorRatio).toBeGreaterThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.maxSharedValleyRatio,
+    );
+    expect(IMPORT_ADMISSION_LIMITS.minEventFloorRatio).toBeLessThan(1);
+  });
+});
+
+describe('W03-01 regression — round 8: two volleys inside the contact-dip window', () => {
+  it('refuses two equal volleys 330 ms apart with a 55 % valley', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(3000, 60, rally(1000, 330, [1.0, 1.0], [0.55])),
+      2,
+    );
+  });
+
+  it('refuses a hard then a softer volley 330 ms apart with a 45 % valley', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(3000, 60, rally(1000, 330, [1.2, 0.8], [0.45])),
+      2,
+    );
+  });
+
+  it('control: the same two peaks with a dead stop between them are refused too', () => {
+    expectMultipleStrokes(
+      wristSpeedProfile(3000, 60, rally(1000, 330, [1.0, 1.0], [0])),
+      2,
+    );
+  });
+
+  it('control: a genuine contact dip (90 % of the peak, 150 ms between maxima) is still one stroke', () => {
+    const dipped = wristSpeedProfile(3000, 60, tMs =>
+      Math.max(hump(1500, 400, 2.5)(tMs) - hump(1500, 60, 0.9)(tMs), 0),
+    );
+    const decision = admitImportedStrokeEvents(dipped);
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.candidates).toHaveLength(1);
+  });
+});
+
+describe('W03-01 regression — round 8: a whole-pose gap could hide a stroke', () => {
+  function twoStrokes(durationMs: number, secondMs: number): PoseSequence {
+    return wristSpeedProfile(
+      durationMs,
+      60,
+      sumOf(hump(1000, 150, 1.0), hump(secondMs, 150, 1.0)),
+    );
+  }
+
+  it('control: the two visible strokes are refused', () => {
+    expectMultipleStrokes(twoStrokes(4000, 2500), 2);
+  });
+
+  it('refuses the clip when the second stroke sits inside a 400 ms stretch with no pose at all', () => {
+    const gapped = dropPoseFrames(twoStrokes(4000, 2500), 2300, 2700);
+    expect(clipReasonOf(gapped)).toBe('pose_coverage_incomplete');
+  });
+
+  it('refuses a 2.4 s whole-pose gap between two visible strokes', () => {
+    const gapped = dropPoseFrames(twoStrokes(6000, 4500), 1400, 3800);
+    expect(clipReasonOf(gapped)).toBe('pose_coverage_incomplete');
+  });
+
+  it('refuses the same 400 ms gap with nothing inside it: the evidence is identical', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(1000, 150, 1.0));
+    expect(clipReasonOf(dropPoseFrames(lone, 2300, 2700))).toBe(
+      'pose_coverage_incomplete',
+    );
+  });
+
+  it('refuses a whole-pose gap barely longer than a stroke’s motion core', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(1000, 150, 1.0));
+    const gapMs = IMPORT_ADMISSION_LIMITS.maxUnobservedSpanMs + 50;
+    expect(clipReasonOf(dropPoseFrames(lone, 2300, 2300 + gapMs))).toBe(
+      'pose_coverage_incomplete',
+    );
+  });
+
+  it('control: a gap of a few frames (≤ 100 ms) does not refuse the lone stroke', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(1000, 150, 1.0));
+    expect(clipReasonOf(dropPoseFrames(lone, 2300, 2380))).toBe('ADMITTED');
+  });
+
+  it('bounds every unobserved stretch by a stroke’s motion core', () => {
+    expect(IMPORT_ADMISSION_LIMITS.maxUnobservedSpanMs).toBeLessThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokeMotionMs,
+    );
+    expect(IMPORT_ADMISSION_LIMITS.maxUnobservedSpanMs).toBeGreaterThan(0);
+  });
+});
+
+describe('W03-01 regression — round 8: the hitting wrist unobserved at the clip’s edges', () => {
+  function threeStrokes(): PoseSequence {
+    return wristSpeedProfile(
+      7000,
+      60,
+      sumOf(hump(1000, 150, 1.0), hump(2500, 150, 1.0), hump(6000, 150, 1.0)),
+    );
+  }
+
+  it('control: the three strokes are refused when the wrist is tracked throughout', () => {
+    expectMultipleStrokes(threeStrokes(), 3);
+  });
+
+  it('refuses the clip when the hitting wrist is untracked for the first 4.5 s (two strokes hidden)', () => {
+    const decision = admitImportedClip(
+      importedClip(occludeRightWrist(threeStrokes(), 0, 4500)),
+      occludeRightWrist(threeStrokes(), 0, 4500),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('wrist_not_tracked');
+    expect(decision.detail).toContain('right_wrist');
+  });
+
+  it('refuses the clip when the hitting wrist is untracked after its last measurement (2.5-7 s)', () => {
+    expect(clipReasonOf(occludeRightWrist(threeStrokes(), 2500, 7000))).toBe(
+      'wrist_not_tracked',
+    );
+  });
+
+  it('refuses an untracked lead-in with nothing inside it: the visible evidence is identical', () => {
+    const lone = wristSpeedProfile(7000, 60, hump(6000, 150, 1.0));
+    expect(clipReasonOf(occludeRightWrist(lone, 0, 4500))).toBe(
+      'wrist_not_tracked',
+    );
+  });
+
+  it('refuses a wrist lead-in barely longer than a stroke’s motion core', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(2000, 150, 1.0));
+    const leadMs = IMPORT_ADMISSION_LIMITS.maxUnobservedSpanMs + 50;
+    expect(clipReasonOf(occludeRightWrist(lone, 0, leadMs))).toBe(
+      'wrist_not_tracked',
+    );
+  });
+
+  it('control: the hitting wrist found a few frames late (≤ 100 ms) is still admitted', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(2000, 150, 1.0));
+    expect(clipReasonOf(occludeRightWrist(lone, 0, 80))).toBe('ADMITTED');
+  });
+
+  it('control: the OTHER wrist unobserved at the edges does not refuse the striking wrist’s stroke', () => {
+    const lone = wristSpeedProfile(4000, 60, hump(2000, 150, 1.0));
+    expect(clipReasonOf(occludeLeftWrist(lone, 0, 1200))).toBe('ADMITTED');
+    expect(clipReasonOf(occludeLeftWrist(lone, 2800, 4000))).toBe('ADMITTED');
+  });
+});
+
+describe('W03-01 regression — round 8: an unobserved lead-in or tail longer than a stroke', () => {
+  it('refuses a sidecar that begins 2.4 s into the clip', () => {
+    const lone = wristSpeedProfile(1800, 60, hump(800, 150, 1.0));
+    expect(clipReasonOf(shiftFrames(lone, 2400))).toBe(
+      'pose_coverage_incomplete',
+    );
+  });
+
+  it('refuses a sidecar that begins 400 ms into the clip', () => {
+    const lone = wristSpeedProfile(3000, 60, hump(1000, 150, 1.0));
+    expect(clipReasonOf(shiftFrames(lone, 400))).toBe(
+      'pose_coverage_incomplete',
+    );
+  });
+
+  it('refuses a clip that runs 400 ms past the last pose', () => {
+    const lone = wristSpeedProfile(3000, 60, hump(1000, 150, 1.0));
+    const last = lone.frames[lone.frames.length - 1]?.timestampMs ?? 0;
+    const decision = admitImportedClip(
+      importedClip(lone, { durationMs: last + 400 }),
+      lone,
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('pose_coverage_incomplete');
+  });
+
+  it('control: a sidecar that begins 100 ms into the clip is admitted', () => {
+    const lone = wristSpeedProfile(3000, 60, hump(1000, 150, 1.0));
+    expect(clipReasonOf(shiftFrames(lone, 100))).toBe('ADMITTED');
+  });
+
+  it('the generated single swing still passes the combined gate', () => {
+    const { sequence } = singleSwing();
+    expect(clipReasonOf(sequence)).toBe('ADMITTED');
   });
 });

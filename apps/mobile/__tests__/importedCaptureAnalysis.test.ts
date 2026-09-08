@@ -130,7 +130,7 @@ function importedClipWithSidecar(
   const durationMs =
     durationOverrideMs ??
     (sequenceOverride
-      ? (lastFrame?.timestampMs ?? 0) + 200
+      ? (lastFrame?.timestampMs ?? 0) + 100
       : generated.window.endMs);
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
@@ -437,6 +437,118 @@ const ROUND_7_SHAPES: ReadonlyArray<
   ],
 ];
 
+/**
+ * Round 8 adversary shapes (attack-da6ff3c7), each of which reached a permit
+ * reservation, an inference run and a rated-shot write on the round-7
+ * candidate: four volleys whose peaks decay 10 % each (the valley cleared
+ * 80 % of the LESSER peak, so the rally was one "jittery" event); two volleys
+ * 330 ms apart with a 55 % valley (inside the contact-dip window); a second
+ * stroke inside a 400 ms stretch with no pose at all; the hitting wrist
+ * untracked for the first 4.5 s while the body is; a sidecar that begins
+ * 2.4 s into the clip. None proves exactly one complete stroke.
+ */
+function rally(
+  startMs: number,
+  periodMs: number,
+  peaks: readonly number[],
+  valleys: readonly number[],
+): (tMs: number) => number {
+  return (tMs: number): number => {
+    const endMs = startMs + peaks.length * periodMs;
+    if (tMs < startMs || tMs >= endMs) return 0;
+    const index = Math.min(
+      Math.floor((tMs - startMs) / periodMs),
+      peaks.length - 1,
+    );
+    const phase = ((tMs - startMs) % periodMs) / periodMs;
+    const peak = peaks[index] ?? 0;
+    const before = index === 0 ? 0 : (valleys[index - 1] ?? 0);
+    const after = index === peaks.length - 1 ? 0 : (valleys[index] ?? 0);
+    return phase < 0.5
+      ? before + (peak - before) * (phase * 2)
+      : peak - (peak - after) * ((phase - 0.5) * 2);
+  };
+}
+
+function decayingRally(): PoseSequence {
+  return wristSpeedProfile(
+    4000,
+    60,
+    rally(1000, 450, [1.0, 0.9, 0.81, 0.73], [0.73, 0.66, 0.6]),
+  );
+}
+
+function twoVolleys330msApart(): PoseSequence {
+  return wristSpeedProfile(3000, 60, rally(1000, 330, [1.0, 1.0], [0.55]));
+}
+
+function strokeInsideWholePoseGap(): PoseSequence {
+  const two = wristSpeedProfile(
+    4000,
+    60,
+    tMs => hump(1000, 150, 1.0)(tMs) + hump(2500, 150, 1.0)(tMs),
+  );
+  return {
+    ...two,
+    frames: two.frames
+      .filter(frame => frame.timestampMs < 2300 || frame.timestampMs > 2700)
+      .map((frame, index) => ({ ...frame, frameIndex: index })),
+  };
+}
+
+function wristUntrackedLeadIn(): PoseSequence {
+  const three = wristSpeedProfile(
+    7000,
+    60,
+    tMs =>
+      hump(1000, 150, 1.0)(tMs) +
+      hump(2500, 150, 1.0)(tMs) +
+      hump(6000, 150, 1.0)(tMs),
+  );
+  return occludeRightWrist(three, 0, 4500);
+}
+
+function sidecarStarting2400msLate(): PoseSequence {
+  const lone = wristSpeedProfile(1800, 60, hump(800, 150, 1.0));
+  return {
+    ...lone,
+    frames: lone.frames.map(frame => ({
+      ...frame,
+      timestampMs: frame.timestampMs + 2400,
+    })),
+  };
+}
+
+const ROUND_8_SHAPES: ReadonlyArray<
+  [string, () => PoseSequence, ImportAdmissionReason]
+> = [
+  [
+    'four volleys whose peaks decay 10 % each',
+    decayingRally,
+    'multiple_stroke_events',
+  ],
+  [
+    'two volleys 330 ms apart with a 55 % valley',
+    twoVolleys330msApart,
+    'multiple_stroke_events',
+  ],
+  [
+    'a second stroke inside a 400 ms whole-pose gap',
+    strokeInsideWholePoseGap,
+    'pose_coverage_incomplete',
+  ],
+  [
+    'the hitting wrist untracked for the first 4.5 s',
+    wristUntrackedLeadIn,
+    'wrist_not_tracked',
+  ],
+  [
+    'a sidecar that begins 2.4 s into the clip',
+    sidecarStarting2400msLate,
+    'pose_coverage_incomplete',
+  ],
+];
+
 function concatSequences(
   first: PoseSequence,
   second: PoseSequence,
@@ -680,6 +792,44 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
       mockReadArtifact = async () => sidecarJson;
       // A server that WOULD grant the permit: the refusal has to come from
       // admission, never from the network.
+      const { fetchMock, finalized } = permitServer();
+      (globalThis as { fetch?: unknown }).fetch = fetchMock;
+      const analyzeSpy = jest.mocked(pipeline.analyzeCapture);
+      analyzeSpy.mockClear();
+
+      const outcome = await runCaptureAnalysis(request(db, clip));
+
+      expect({
+        kind: outcome.kind,
+        reason: 'reason' in outcome ? outcome.reason : null,
+        permitReservations: fetchMock.mock.calls
+          .map(([url]) => String(url))
+          .filter(url => url.endsWith('/v1/analysis-permits')).length,
+        permitFinalizations: finalized,
+        inferenceRuns: analyzeSpy.mock.calls.length,
+        ratedShotWrites: calls.filter(call =>
+          call.sql.includes('INSERT OR REPLACE INTO local_shot'),
+        ).length,
+        durableRows: calls.length,
+      }).toEqual({
+        kind: 'quality_blocked',
+        reason: importAdmissionRejectionMessage(reason),
+        permitReservations: 0,
+        permitFinalizations: [],
+        inferenceRuns: 0,
+        ratedShotWrites: 0,
+        durableRows: 0,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(ROUND_8_SHAPES)(
+    'round 8: %s is refused before any permit is reserved — a willing permit server is never asked, nothing is inferred or rated',
+    async (_title, build, reason) => {
+      const { db, calls } = recordingDb();
+      const { clip, sidecarJson } = importedClipWithSidecar(build());
+      mockReadArtifact = async () => sidecarJson;
       const { fetchMock, finalized } = permitServer();
       (globalThis as { fetch?: unknown }).fetch = fetchMock;
       const analyzeSpy = jest.mocked(pipeline.analyzeCapture);
@@ -962,6 +1112,21 @@ describe('W03-01 import admission — signed-in saved-original path', () => {
 
   it.each(ROUND_7_SHAPES)(
     'round 7: %s is refused on the saved path — no permit, no inference, no attempt',
+    async (_title, build, reason) => {
+      const saved = await savedImport(build());
+      const outcome = await saved.run();
+      expect(outcome.kind).toBe('quality_blocked');
+      if (outcome.kind !== 'quality_blocked') return;
+      expect(outcome.reason).toBe(importAdmissionRejectionMessage(reason));
+      expect(saved.permitCalls()).toHaveLength(0);
+      expect(saved.fetchSpy).not.toHaveBeenCalled();
+      expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
+      expect(saved.attemptRows()).toEqual([]);
+    },
+  );
+
+  it.each(ROUND_8_SHAPES)(
+    'round 8: %s is refused on the saved path — no permit, no inference, no attempt',
     async (_title, build, reason) => {
       const saved = await savedImport(build());
       const outcome = await saved.run();
