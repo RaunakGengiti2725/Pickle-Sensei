@@ -4515,6 +4515,21 @@ set local request.jwt.claim.sub = '';
 --     claim, every one of the four RPCs (and the hold reader) is 42501 for
 --     the service connection — no result row, no device, no ledger row —
 --     and the EXECUTE grant itself is absent
+-- T13 (adversary, round 4: A01) a ticket settles only a rating that was NOT
+--     already counted before the ticket was allocated: a scored shot that
+--     predates the allocation is 'offline.shot_not_chargeable' through the
+--     RPC and check_violation at the table; the hold stays, the refresh
+--     re-issues the same ticket, the online path stays closed; a rating
+--     delivered after the allocation consumes the ticket exactly once and
+--     lifetime scored + tickets ever allocated never exceed the budget
+-- T14 (adversary, round 4: A02) an identity linked AFTER the allocation
+--     inherits the outstanding holds exactly as it inherits the free-rating
+--     ledger: delete the account, sign in with ONLY the late-linked identity
+--     → hold = 2, paywall online and offline, 0 new tickets; the original
+--     installation recovers its tickets and consumes one; a stranger on the
+--     same key or a fresh identity never inherits; the link record is
+--     append-only, closed to every client role, and refuses a ticket the
+--     linking account does not own
 -- ============================================================================
 
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
@@ -5892,6 +5907,378 @@ end $$;
 reset role;
 set local request.jwt.claim.sub = '';
 set local request.jwt.claims = '';
+
+-- T13: a ticket settles only a rating that was not already counted before the
+-- ticket was allocated (adversary round 4, A01). Una (free, Google) has one
+-- scored rating from a month ago — already in lifetime_scored_count() when
+-- her device asks for tickets, so she receives exactly one. Attaching that
+-- old rating to the ticket would turn the hold into free capacity: the
+-- consume must be refused, the hold must stay, and the next refresh must
+-- re-issue the same ticket rather than a new one.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000061', 'una@example.com',
+        '{"full_name":"Una"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-una', '00000000-0000-4000-8000-000000000061',
+        '{"sub":"google-sub-una","email":"una@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000006101', '00000000-0000-4000-8000-000000000061');
+-- the pre-counted rating: a server settlement write from a month ago, no
+-- online permit (the shape a late-synced offline result has)
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version, created_at
+) values
+  ('00000000-0000-4000-8000-000000000611', '00000000-0000-4000-8000-000000000061', 'drive',
+   now() - interval '30 days', 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', now() - interval '30 days');
+create function pg_temp.t_tickets_ever(p_uid uuid) returns integer
+language sql security definer as $$
+  select count(*)::int from public.offline_allocation_ledger
+  where user_id = p_uid and event = 'allocated';
+$$;
+grant execute on function pg_temp.t_tickets_ever(uuid) to authenticated;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000061';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006101"}';
+do $$
+declare g record; g2 record; rec record; p record; v text; t1 uuid;
+        old_shot uuid := '00000000-0000-4000-8000-000000000611';
+begin
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'T13 precondition: the old rating is already counted (got %)', public.lifetime_scored_count();
+  end if;
+  select * into g from public.register_offline_device('una-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T13: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('una-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T13: one counted rating leaves exactly one ticket to allocate (got %, %)', g.result, g.ticket_ids;
+  end if;
+  t1 := g.ticket_ids[1];
+  insert into t_state values ('una-t1', t1);
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T13: the ticket is held (got %)', public.offline_hold_count();
+  end if;
+  -- the attack: settle the ticket with the rating that was counted before it
+  v := public.consume_offline_ticket(t1, old_shot);
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T13: a rating counted before the allocation never settles the ticket (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 1 or pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T13: the refused consume leaves the hold in place (hold %, events %)',
+      public.offline_hold_count(), pg_temp.t_events((select auth.uid()));
+  end if;
+  select * into g2 from public.issue_offline_grant('una-key-1', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> array[t1] then
+    raise exception 'T13: the refresh re-issues the same held ticket, never a new one (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  if pg_temp.t_tickets_ever((select auth.uid())) <> 1 then
+    raise exception 'T13: tickets ever allocated stays 1 (got %)', pg_temp.t_tickets_ever((select auth.uid()));
+  end if;
+  select * into p from public.reserve_analysis_permit('una-online-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T13: 1 counted + 1 held exhaust the entitlement online (got %)', p.result;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T13: access_state reads 1 scored + 1 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T13: conservation violated after the refused consume';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the table refuses the same settlement from any writer (support / owner)
+do $$
+declare a record; t1 uuid := (select id from t_state where key = 'una-t1');
+begin
+  select * into a from public.offline_allocation_ledger where ticket_id = t1 and event = 'allocated';
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id, identity_hashes)
+    values (a.user_id, a.device_id, a.grant_id, a.generation, t1, 'consumed', '00000000-0000-4000-8000-000000000611', a.identity_hashes);
+    raise exception 'T13: the table never records a consumption for a rating counted before the allocation';
+  exception when check_violation then null;
+  end;
+  if exists (select 1 from public.offline_allocation_ledger where ticket_id = t1 and event <> 'allocated') then
+    raise exception 'T13: the refused table write persisted';
+  end if;
+end $$;
+-- the rating delivered AFTER the allocation (server settlement write, no
+-- online permit) settles the ticket exactly once
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version
+) values
+  ('00000000-0000-4000-8000-000000000612', '00000000-0000-4000-8000-000000000061', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000061';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006101"}';
+do $$
+declare g record; rec record; p record; v text; t1 uuid := (select id from t_state where key = 'una-t1');
+begin
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000612');
+  if v <> 'accepted' then
+    raise exception 'T13: the rating delivered after the allocation settles the ticket (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 0 or public.lifetime_scored_count() <> 2 then
+    raise exception 'T13: consumption closes the hold and the rating counts once (hold %, scored %)',
+      public.offline_hold_count(), public.lifetime_scored_count();
+  end if;
+  select * into g from public.issue_offline_grant('una-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T13: two counted ratings leave nothing to allocate (got %, %)', g.result, g.ticket_ids;
+  end if;
+  select * into p from public.reserve_analysis_permit('una-online-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T13: two counted ratings leave nothing to reserve (got %)', p.result;
+  end if;
+  if pg_temp.t_tickets_ever((select auth.uid())) <> 1 or pg_temp.t_events((select auth.uid())) <> 'allocated:1,consumed:1' then
+    raise exception 'T13: one ticket ever, one consumption (got %, %)',
+      pg_temp.t_tickets_ever((select auth.uid())), pg_temp.t_events((select auth.uid()));
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T13: conservation violated after settlement';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T14: an identity linked AFTER the allocation inherits the outstanding holds
+-- (adversary round 4, A02). Ulla (free, Google) holds two tickets on
+-- ulla-key-1; an Apple identity is linked afterwards (GoTrue auto-link or
+-- linkIdentity()); the account is deleted and re-created with ONLY the Apple
+-- identity. The holds must follow that identity exactly as the free-rating
+-- ledger does (20260905000100): hold = 2, paywall everywhere, 0 new tickets.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000062', 'ulla@example.com',
+   '{"full_name":"Ulla"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000064', 'ursula@example.com',
+   '{"full_name":"Ursula"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-ulla', '00000000-0000-4000-8000-000000000062',
+   '{"sub":"google-sub-ulla","email":"ulla@example.com"}'),
+  ('google', 'google-sub-ursula', '00000000-0000-4000-8000-000000000064',
+   '{"sub":"google-sub-ursula","email":"ursula@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000006201', '00000000-0000-4000-8000-000000000062'),
+  ('00000000-0000-4000-8000-000000006401', '00000000-0000-4000-8000-000000000064');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000062';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006201"}';
+do $$
+declare g record;
+begin
+  select * into g from public.register_offline_device('ulla-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('ulla-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T14: two tickets are allocated to the first life (got %, %)', g.result, g.ticket_ids;
+  end if;
+  insert into t_state values ('ulla-t1', g.ticket_ids[1]), ('ulla-t2', g.ticket_ids[2]);
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the late link, then deletion, then re-creation with ONLY the late identity
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-ulla', '00000000-0000-4000-8000-000000000062',
+        '{"sub":"apple-sub-ulla","email":"ulla@example.com"}');
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000062';
+  if (select count(*) from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000062' and event = 'allocated') <> 2
+     or exists (select 1 from public.offline_devices where user_id = '00000000-0000-4000-8000-000000000062') then
+    raise exception 'T14 precondition: the deleted account leaves exactly its two outstanding allocations behind';
+  end if;
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000063', 'ulla@example.com',
+        '{"full_name":"Ulla"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-ulla', '00000000-0000-4000-8000-000000000063',
+        '{"sub":"apple-sub-ulla","email":"ulla@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000006301', '00000000-0000-4000-8000-000000000063');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000063';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006301"}';
+do $$
+declare g record; rec record; p record;
+        t1 uuid := (select id from t_state where key = 'ulla-t1');
+        t2 uuid := (select id from t_state where key = 'ulla-t2');
+begin
+  if public.offline_hold_count() <> 2 then
+    raise exception 'T14: the late-linked identity inherits both outstanding holds (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 2 then
+    raise exception 'T14: access_state reads 0 scored + 2 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('ulla-second-life-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T14: the inherited holds exhaust the entitlement online (got %)', p.result;
+  end if;
+  -- a new installation of the re-created account allocates nothing
+  select * into g from public.register_offline_device('ulla-key-2', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: the re-created account registers a new installation (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('ulla-key-2', 2);
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T14: a new installation receives no ticket while two are held (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_tickets_ever((select auth.uid())) <> 0 or public.offline_hold_count() <> 2 then
+    raise exception 'T14: nothing was allocated to the second life (ever %, hold %)',
+      pg_temp.t_tickets_ever((select auth.uid())), public.offline_hold_count();
+  end if;
+  -- the ORIGINAL installation recovers exactly its two tickets
+  select * into g from public.register_offline_device('ulla-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: the original installation re-registers (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('ulla-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 1
+     or (select array_agg(t order by t) from unnest(g.ticket_ids) t)
+        <> (select array_agg(t order by t) from unnest(array[t1, t2]) t) then
+    raise exception 'T14: the original installation recovers exactly its outstanding tickets (got %, %, %)',
+      g.result, g.generation, g.ticket_ids;
+  end if;
+  if pg_temp.t_tickets_ever((select auth.uid())) <> 0 or public.offline_hold_count() <> 2 then
+    raise exception 'T14: recovery allocates nothing (ever %, hold %)',
+      pg_temp.t_tickets_ever((select auth.uid())), public.offline_hold_count();
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'google', 'google-sub-ulla') then
+    raise exception 'T14: conservation violated after recovery';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- a stranger on the original key, and a fresh identity, inherit nothing
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000064';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006401"}';
+do $$
+declare g record; t1 uuid := (select id from t_state where key = 'ulla-t1');
+begin
+  if public.offline_hold_count() <> 0 then
+    raise exception 'T14: a fresh identity holds nothing (got %)', public.offline_hold_count();
+  end if;
+  if public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000612') <> 'offline.ticket_not_found'
+     or public.release_offline_ticket(t1, 'unused_ticket_returned') <> 'offline.ticket_not_found' then
+    raise exception 'T14: a stranger cannot address the inherited tickets';
+  end if;
+  select * into g from public.register_offline_device('ulla-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: a stranger registers the same key as its own device (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('ulla-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2
+     or t1 = any(g.ticket_ids) then
+    raise exception 'T14: a stranger on the original key allocates its own tickets, never the inherited ones (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the delivered rating of the second life settles one recovered ticket
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version
+) values
+  ('00000000-0000-4000-8000-000000000631', '00000000-0000-4000-8000-000000000063', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000063';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000006301"}';
+do $$
+declare rec record; g record; v text;
+        t1 uuid := (select id from t_state where key = 'ulla-t1');
+begin
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000631');
+  if v <> 'accepted' then
+    raise exception 'T14: the late-linked identity settles its recovered ticket (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 1 or public.lifetime_scored_count() <> 1 then
+    raise exception 'T14: 1 held + 1 scored after settlement (hold %, scored %)',
+      public.offline_hold_count(), public.lifetime_scored_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T14: access_state reads 1 scored + 1 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into g from public.issue_offline_grant('ulla-key-2', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T14: no third rating after settlement (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'google', 'google-sub-ulla') then
+    raise exception 'T14: conservation violated after settlement';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the link record is closed to every client role, append-only, and refuses a
+-- ticket the linking account does not own
+do $$
+declare t1 uuid := (select id from t_state where key = 'ulla-t1');
+        r regclass := to_regclass('public.offline_allocation_identity_links');
+begin
+  if r is null then
+    raise exception 'T14: the late-link record public.offline_allocation_identity_links must exist';
+  end if;
+  if has_table_privilege('authenticated', r, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE')
+     or has_table_privilege('anon', r, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE')
+     or has_table_privilege('service_role', r, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE') then
+    raise exception 'T14: no client or service role may touch the link record';
+  end if;
+  if (select count(*) from public.offline_allocation_identity_links
+      where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-ulla')) <> 2 then
+    raise exception 'T14: the late link recorded both outstanding tickets for the linked identity (got %)',
+      (select count(*) from public.offline_allocation_identity_links
+       where identity_hash = public.free_rating_identity_hash('apple', 'apple-sub-ulla'));
+  end if;
+  begin
+    update public.offline_allocation_identity_links set identity_hash = 'x' where ticket_id = t1;
+    raise exception 'T14: the link record is append-only (update)';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.offline_allocation_identity_links where ticket_id = t1;
+    raise exception 'T14: the link record is append-only (delete)';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_identity_links (ticket_id, identity_hash, user_id)
+    values (t1, public.free_rating_identity_hash('google', 'google-sub-ursula'), '00000000-0000-4000-8000-000000000064');
+    raise exception 'T14: a link is never recorded for an account that does not own the ticket';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_identity_links (ticket_id, identity_hash, user_id)
+    values (gen_random_uuid(), public.free_rating_identity_hash('apple', 'apple-sub-ulla'), '00000000-0000-4000-8000-000000000063');
+    raise exception 'T14: a link is never recorded for a ticket that was never allocated';
+  exception when check_violation then null;
+  end;
+  if (select count(*) from public.offline_allocation_identity_links where ticket_id = t1) <> 1 then
+    raise exception 'T14: refused link writes persisted nothing';
+  end if;
+end $$;
 
 do $$
 declare t record; f record;

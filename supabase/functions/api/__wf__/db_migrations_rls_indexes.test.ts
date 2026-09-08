@@ -1437,6 +1437,13 @@ Deno.test(
 
 const OFFLINE_TABLES = ["offline_devices", "offline_grants", "offline_allocation_ledger"] as const;
 
+/** The late-link record: which sign-in identities a ticket became reachable
+ * through AFTER it was allocated (an identity linked to the holder's account
+ * later). Append-only, no client or service grant at all — only the definers
+ * read it. Without it a late-linked identity escapes the hold after account
+ * deletion + re-creation (adversary round 4, A02). */
+const OFFLINE_LINK_TABLE = "offline_allocation_identity_links";
+
 /** Every `public.<name>` user RPC the offline routes call: session-bound
  * definers that never read or write outside the caller's own rows. */
 const OFFLINE_MUTATING_RPCS = [
@@ -1448,8 +1455,9 @@ const OFFLINE_MUTATING_RPCS = [
 
 /** The one ownership test every ticket path shares: the allocation's account
  * OR any current sign-in identity of the caller that the allocation was made
- * under — so the original installation of a deleted-and-recreated account can
- * still recover, consume and release its ticket, and nobody else can. */
+ * under OR that was linked to the holder afterwards — so the original
+ * installation of a deleted-and-recreated account can still recover, consume
+ * and release its ticket, and nobody else can. */
 const OFFLINE_OWNER_PREDICATE = "api_private.offline_ticket_owned_by(";
 
 /** `functionBodies` for `api_private.<name>` definers. */
@@ -1534,6 +1542,106 @@ Deno.test(
         );
       }
     }
+
+    // The late-link record: RLS on, NOT readable or writable by any client or
+    // service role (no grant, no policy), append-only, and every link passes
+    // an ownership guard. Written only by the auth.identities trigger.
+    ok(
+      statements.some((s) =>
+        s.startsWith(`create table if not exists public.${OFFLINE_LINK_TABLE} (`),
+      ),
+      `${OFFLINE_DEVICE_GRANTS} must create public.${OFFLINE_LINK_TABLE}`,
+    );
+    ok(
+      raw.includes("unique (ticket_id, identity_hash)"),
+      "a (ticket, identity) link is recorded once",
+    );
+    ok(
+      statements.includes(`alter table public.${OFFLINE_LINK_TABLE} enable row level security`),
+      `public.${OFFLINE_LINK_TABLE} must enable RLS`,
+    );
+    ok(
+      statements.includes(
+        `revoke all on public.${OFFLINE_LINK_TABLE} from public, anon, authenticated, service_role`,
+      ) &&
+        statements.includes(
+          `revoke all on sequence public.${OFFLINE_LINK_TABLE}_id_seq from public, anon, authenticated, service_role`,
+        ),
+      `public.${OFFLINE_LINK_TABLE} drops every default client AND service grant`,
+    );
+    for (const statement of statements) {
+      ok(
+        !(
+          statement.startsWith("grant ") &&
+          new RegExp(`\\bpublic\\.${OFFLINE_LINK_TABLE}\\b`).test(statement)
+        ),
+        `public.${OFFLINE_LINK_TABLE} is never granted to any role: ${statement}`,
+      );
+      ok(
+        !(/^create policy\b/.test(statement) && statement.includes(`on public.${OFFLINE_LINK_TABLE}`)),
+        `public.${OFFLINE_LINK_TABLE} carries no client policy: ${statement}`,
+      );
+    }
+    const linkTable = raw.slice(
+      raw.search(new RegExp(`create table if not exists public\\.${OFFLINE_LINK_TABLE} \\(`)),
+    );
+    ok(
+      !/\breferences\b/.test(linkTable.slice(0, linkTable.search(/\n\);/))),
+      "the link record carries no foreign key — it outlives the account exactly like the ledger",
+    );
+    ok(
+      statements.includes(
+        `create trigger ${OFFLINE_LINK_TABLE}_append_only before update or delete on public.${OFFLINE_LINK_TABLE} for each row execute function public.guard_offline_ledger_append_only()`,
+      ),
+      "the link record is append-only for every role",
+    );
+    const [linkGuard] = functionBodies(raw, "guard_offline_identity_link");
+    ok(linkGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_identity_link`);
+    ok(
+      linkGuard.includes("security definer") &&
+        linkGuard.includes("set search_path = ''") &&
+        linkGuard.includes("a.event = 'allocated'") &&
+        linkGuard.includes(
+          `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id)`,
+        ) &&
+        linkGuard.includes("errcode = 'check_violation'"),
+      "a link needs an allocated ticket that the linking account owns",
+    );
+    ok(
+      statements.includes(
+        `create trigger ${OFFLINE_LINK_TABLE}_guard before insert on public.${OFFLINE_LINK_TABLE} for each row execute function public.guard_offline_identity_link()`,
+      ),
+      "every link write passes the guard",
+    );
+    // The late-link event itself: AFTER INSERT on auth.identities (definer,
+    // like inherit_free_rating_ledger) records every outstanding ticket the
+    // account owns for every identity the account now holds.
+    const [inheritHolds] = functionBodies(raw, "inherit_offline_allocation_holds");
+    ok(inheritHolds, `${OFFLINE_DEVICE_GRANTS} must define public.inherit_offline_allocation_holds`);
+    ok(
+      inheritHolds.includes("security definer") &&
+        inheritHolds.includes("set search_path = ''") &&
+        inheritHolds.includes(`insert into public.${OFFLINE_LINK_TABLE}`) &&
+        inheritHolds.includes("api_private.offline_owned_allocations(new.user_id)") &&
+        inheritHolds.includes("api_private.offline_identity_hashes(new.user_id)") &&
+        inheritHolds.includes("on conflict (ticket_id, identity_hash) do nothing"),
+      "linking an identity extends every outstanding ticket the account owns to every identity it holds",
+    );
+    ok(
+      statements.includes(
+        "create trigger on_auth_identity_linked_offline_holds after insert on auth.identities for each row execute function public.inherit_offline_allocation_holds()",
+      ),
+      "the late-link trigger is wired on auth.identities",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.inherit_offline_allocation_holds() from public, anon, authenticated",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_offline_identity_link() from public, anon, authenticated",
+        ),
+      "the link trigger functions are not executable by clients",
+    );
 
     // Device registry: one row per (owner, installation key); attestation is
     // an explicit state, never inferred from a nullable timestamp alone.
@@ -1668,9 +1776,16 @@ Deno.test(
         eventGuard.includes("reason in ('unused_ticket_returned', 'support_review')"),
       "consumption and release require a prior allocation with no terminal event; consumption names a scored, permit-free shot of the same owner; release names an explicit reason",
     );
+    // A01: a rating that was already counted toward lifetime_scored_count()
+    // before the ticket existed never settles the ticket — the shot must have
+    // been written at or after the allocation, at the table and in the RPC.
+    ok(
+      eventGuard.includes("s.created_at >= v_allocation.created_at"),
+      "the table refuses a consumption naming a shot that predates the allocation",
+    );
     ok(
       eventGuard.includes(
-        `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, new.user_id)`,
+        `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id)`,
       ) &&
         !eventGuard.includes("new.user_id is distinct from v_allocation.user_id") &&
         eventGuard.includes(
@@ -1689,7 +1804,8 @@ Deno.test(
     // pinned definers no client role can call.
     for (const helper of [
       "offline_identity_hashes(uuid)",
-      "offline_ticket_owned_by(uuid, text[], uuid)",
+      "offline_ticket_owned_by(uuid, text[], uuid, uuid)",
+      "offline_owned_allocations(uuid)",
     ]) {
       const [body] = apiPrivateFunctionBodies(raw, helper.split("(")[0]);
       ok(body, `${OFFLINE_DEVICE_GRANTS} must define api_private.${helper}`);
@@ -1713,8 +1829,20 @@ Deno.test(
     const [ownedBy] = apiPrivateFunctionBodies(raw, "offline_ticket_owned_by");
     ok(
       ownedBy.includes("p_allocation_user_id = p_uid") &&
-        ownedBy.includes("p_identity_hashes && api_private.offline_identity_hashes(p_uid)"),
-      "ownership = same account OR overlapping sign-in identity",
+        ownedBy.includes("p_identity_hashes && api_private.offline_identity_hashes(p_uid)") &&
+        ownedBy.includes(`from public.${OFFLINE_LINK_TABLE} l`) &&
+        ownedBy.includes("l.ticket_id = p_ticket_id") &&
+        ownedBy.includes("l.identity_hash = any(api_private.offline_identity_hashes(p_uid))"),
+      "ownership = same account OR overlapping sign-in identity at allocation OR an identity linked to the holder afterwards",
+    );
+    const [ownedAllocations] = apiPrivateFunctionBodies(raw, "offline_owned_allocations");
+    ok(
+      ownedAllocations.includes("a.event = 'allocated'") &&
+        ownedAllocations.includes("a.user_id = p_uid") &&
+        ownedAllocations.includes("a.identity_hashes &&") &&
+        ownedAllocations.includes(`from public.${OFFLINE_LINK_TABLE} l`) &&
+        /\bunion\b/.test(ownedAllocations),
+      "the caller's allocations are the union of account, allocation-time identity and late-linked identity matches",
     );
     ok(
       statements.includes(
@@ -1764,11 +1892,10 @@ Deno.test(
         hold.includes("set search_path = ''") &&
         hold.includes("api_private.is_api_request()") &&
         hold.includes("(select auth.uid())") &&
-        hold.includes("a.event = 'allocated'") &&
+        hold.includes("api_private.offline_owned_allocations((select auth.uid()))") &&
         hold.includes("c.event = 'consumed'") &&
-        hold.includes("public.free_rating_identity_hash(i.provider, i.provider_id)") &&
         !hold.includes("'released'"),
-      "offline_hold_count() counts outstanding + released tickets across the caller's identities behind the API gate",
+      "offline_hold_count() counts outstanding + released tickets across the caller's account, allocation-time and late-linked identities behind the API gate",
     );
     ok(
       statements.includes(
@@ -1886,7 +2013,7 @@ Deno.test(
     // identity), not by the device row that account deletion cascades away.
     ok(
       issue.includes("a.installation_key_id = v_device.installation_key_id") &&
-        issue.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, v_uid)`) &&
+        issue.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`) &&
         !issue.includes("a.device_id = v_device.id"),
       "issue_offline_grant recovers the same installation's outstanding tickets across account re-creation",
     );
@@ -1897,6 +2024,11 @@ Deno.test(
         consume.includes("'offline.shot_not_chargeable'") &&
         consume.includes("'offline.ticket_not_found'"),
       "consume_offline_ticket answers every terminal state distinctly",
+    );
+    ok(
+      consume.includes("s.created_at >= v_allocation.created_at") &&
+        consume.includes("s.analysis_permit_id is null"),
+      "consume_offline_ticket settles only a shot written at or after the allocation that no online permit paid for",
     );
     const [release] = functionBodies(raw, "release_offline_ticket");
     ok(
@@ -1909,9 +2041,9 @@ Deno.test(
       ["release_offline_ticket", release],
     ] as const) {
       ok(
-        body.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, v_uid)`) &&
+        body.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`) &&
           !body.includes("a.user_id = v_uid"),
-        `public.${name} addresses the caller's tickets by account OR identity`,
+        `public.${name} addresses the caller's tickets by account OR identity (allocation-time or late-linked)`,
       );
     }
     ok(
@@ -1926,11 +2058,14 @@ Deno.test(
         "offline_grants_guard",
         "offline_allocation_ledger_append_only",
         "offline_allocation_ledger_guard_event",
+        `${OFFLINE_LINK_TABLE}_append_only`,
+        `${OFFLINE_LINK_TABLE}_guard`,
+        "on_auth_identity_linked_offline_holds",
       ]) {
         ok(!dropsTriggerWithoutRecreating(later, trigger), `${later.file} removes ${trigger}`);
       }
       for (const statement of later.statements) {
-        for (const table of OFFLINE_TABLES) {
+        for (const table of [...OFFLINE_TABLES, OFFLINE_LINK_TABLE]) {
           ok(
             !(
               statement.startsWith("drop table") &&
