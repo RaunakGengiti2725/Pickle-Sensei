@@ -12,5 +12,20 @@ metroRequire('image-size').disableTypes(['icns', 'jxl', 'heif']);
 
 // Metro's config process and each fresh transform worker must both run this.
 // Preserve the upstream worker interface and Sentry's separate Babel pipeline.
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- Delegate the CommonJS worker interface unchanged.
-module.exports = require('metro-transform-worker');
+let upstreamWorker;
+function worker() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Delegate the CommonJS worker interface unchanged.
+  upstreamWorker ??= require('metro-transform-worker');
+  return upstreamWorker;
+}
+
+// Only the decoder guard above belongs in the config process; the transform
+// toolchain (Babel, source maps, minifier) loads on first use in a worker.
+module.exports = {
+  get transform() {
+    return worker().transform;
+  },
+  get getCacheKey() {
+    return worker().getCacheKey;
+  },
+};
