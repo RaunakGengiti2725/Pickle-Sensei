@@ -88,28 +88,28 @@ jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 
 const mockRefNavigate = jest.fn();
 const mockRefReady = jest.fn(() => false);
-const mockContainerProps: { current: { onReady?: () => void } | null } = {
-  current: null,
-};
+/** Listeners for the container's `ready` event, as the mounted container holds them. */
+const mockReadyListeners: Array<() => void> = [];
 
 jest.mock('@react-navigation/native', () => {
   const ReactActual = require('react');
   return {
-    NavigationContainer: (props: {
-      children?: React.ReactNode;
-      onReady?: () => void;
-    }) => {
-      mockContainerProps.current = props;
-      return ReactActual.createElement(
-        'NavigationContainer',
-        null,
-        props.children,
-      );
-    },
+    NavigationContainer: (props: { children?: React.ReactNode }) =>
+      ReactActual.createElement('NavigationContainer', null, props.children),
     DefaultTheme: { dark: false, colors: {}, fonts: {} },
     createNavigationContainerRef: () => ({
       isReady: () => mockRefReady(),
       navigate: (...args: unknown[]) => mockRefNavigate(...args),
+      current: {
+        addListener: (event: string, listener: () => void) => {
+          if (event !== 'ready') throw new Error(`unexpected event ${event}`);
+          mockReadyListeners.push(listener);
+          return () => {
+            const index = mockReadyListeners.indexOf(listener);
+            if (index >= 0) mockReadyListeners.splice(index, 1);
+          };
+        },
+      },
     }),
   };
 });
@@ -162,11 +162,12 @@ function renderRoot(): ReactTestRenderer {
   return renderer;
 }
 
-/** Simulates NavigationContainer finishing its mount. */
+/** Simulates the root navigator registering: `isReady()` flips, `ready` fires. */
 function containerBecomesReady(): void {
   mockRefReady.mockReturnValue(true);
-  const onReady = mockContainerProps.current?.onReady;
-  if (onReady) act(() => onReady());
+  act(() => {
+    for (const listener of [...mockReadyListeners]) listener();
+  });
 }
 
 function foregroundHandler(): (event: PressEvent) => void {
@@ -199,7 +200,7 @@ async function flushMicrotasks(): Promise<void> {
 beforeEach(() => {
   mockRefNavigate.mockClear();
   mockRefReady.mockReturnValue(false);
-  mockContainerProps.current = null;
+  mockReadyListeners.length = 0;
   mocked.getInitialNotification.mockClear();
   mocked.getInitialNotification.mockResolvedValue(null);
   mocked.onForegroundEvent.mockClear();

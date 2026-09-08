@@ -571,14 +571,27 @@ function useNotificationPressRouting(): () => void {
   }, []);
 }
 
+/**
+ * Rendered inside the container after the navigator, so its effect runs in
+ * the commit that registers the root navigator (`navigationRef.isReady()`
+ * turns true there). If the tree is not ready yet at that point, the
+ * container's own `ready` event finishes the hand-off.
+ */
+function NotificationPressReplay({ onReady }: { onReady: () => void }) {
+  useEffect(() => {
+    if (navigationRef.isReady()) {
+      onReady();
+      return undefined;
+    }
+    return navigationRef.current?.addListener('ready', onReady);
+  }, [onReady]);
+  return null;
+}
+
 export function RootNavigator() {
   const onNavigationReady = useNotificationPressRouting();
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      theme={theme}
-      onReady={onNavigationReady}
-    >
+    <NavigationContainer ref={navigationRef} theme={theme}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -664,6 +677,7 @@ export function RootNavigator() {
           }}
         />
       </Stack.Navigator>
+      <NotificationPressReplay onReady={onNavigationReady} />
     </NavigationContainer>
   );
 }
