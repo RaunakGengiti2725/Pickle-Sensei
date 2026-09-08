@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrandDialog } from './components';
+import { useSurfaceSlot } from '../flow/ceremonyRequest';
 
 export interface BrandNotice {
   title: string;
@@ -37,10 +38,11 @@ export function BrandNoticeHost() {
     };
   }, []);
 
+  const presented = useSurfaceSlot('notice', notice !== null);
   const dismiss = () => setNotice(null);
   return (
     <BrandDialog
-      visible={notice !== null}
+      visible={notice !== null && presented}
       title={notice?.title ?? ''}
       detail={notice?.detail ?? ''}
       tone={notice?.tone}

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   BackHandler,
@@ -29,6 +35,7 @@ import {
   freeRatingAllowanceCopy,
   RATING_CONSUMPTION_RULE,
 } from './paywallCopy';
+import { claimSurface } from '../flow/ceremonyRequest';
 
 export interface PaywallScreenProps {
   onClose: () => void;
@@ -288,6 +295,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
       mounted.current = false;
     };
   }, []);
+
+  useLayoutEffect(() => claimSurface('paywall').release, []);
 
   // Two-step flow: page 1 sells the value, page 2 (one deliberate tap later)
   // shows store-verified pricing. Entering content slides/fades in 220ms
