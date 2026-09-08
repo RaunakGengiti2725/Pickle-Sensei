@@ -1,0 +1,15 @@
+== oid counter before candidate migration: 17139, after burn: 17139
+== RI cascade triggers on public.profiles, in the order Postgres fires them (name order):
+RI_ConstraintTrigger_a_16499 -> shots
+RI_ConstraintTrigger_a_17171 -> settlement_receipts
+== settle one scored shot through apply_synced_shot, then delete the account:
+CREATE EXTENSION
+DO
+             attack_user              |             attack_shot              |            attack_permit             
+--------------------------------------+--------------------------------------+--------------------------------------
+ f32bfcc7-8151-43cc-a873-6437b950047e | de1f44c2-f6a1-4bc8-8799-2b01f3132d29 | 1f43deaf-dfdf-4fa0-a2ac-b6f607212751
+(1 row)
+
+psql:/tests/attack_w01_03/cascade_order_attack.sql:29: NOTICE:  account deletion cascaded shot de1f44c2-f6a1-4bc8-8799-2b01f3132d29 and its receipt
+DO
+== psql exit code: 0

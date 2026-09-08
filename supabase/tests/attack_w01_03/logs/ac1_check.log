@@ -1,0 +1,10 @@
+Warning "lock" field can only be specified in the workspace root deno.json file.
+    at file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/deno.json
+Warning "nodeModulesDir" field can only be specified in the workspace root deno.json file.
+    at file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/deno.json
+Download https://registry.npmjs.org/@types%2fnode
+Download https://registry.npmjs.org/jose/-/jose-6.2.10.tgz
+Download https://registry.npmjs.org/undici-types/-/undici-types-7.10.0.tgz
+Download https://registry.npmjs.org/@types/node/-/node-24.2.0.tgz
+Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts
+EXIT=0

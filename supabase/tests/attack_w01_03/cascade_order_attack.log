@@ -1,0 +1,15 @@
+== oid counter before candidate migration: 17139, after burn: 101161
+== RI cascade triggers on public.profiles, in the order Postgres fires them (name order):
+RI_ConstraintTrigger_a_101193 -> settlement_receipts
+RI_ConstraintTrigger_a_16499 -> shots
+== settle one scored shot through apply_synced_shot, then delete the account:
+CREATE EXTENSION
+DO
+             attack_user              |             attack_shot              |            attack_permit             
+--------------------------------------+--------------------------------------+--------------------------------------
+ 62b9ef20-69ce-4f17-b0a3-e09f65e062d8 | fdc0159d-d0b6-45e3-a595-a13f7eea9cdd | bde51725-eeea-4b79-a209-97fcf7b98ac0
+(1 row)
+
+psql:/tests/attack_w01_03/cascade_order_attack.sql:29: ERROR:  ATTACK CONFIRMED: account deletion of a user with one settled shot raised 23514 (settlement_receipts: a receipt outlives every path but the shot cascade)
+CONTEXT:  PL/pgSQL function inline_code_block line 12 at RAISE
+== psql exit code: 3

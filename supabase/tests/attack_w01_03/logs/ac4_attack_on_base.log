@@ -1,0 +1,194 @@
+running 15 tests from ./attack_w01_03_settlement.test.ts
+W01-03 attack · network: a failed owner receipt read (500, then 429+Retry-After) fails the whole batch retryably — no RPC, no authority read, no fabricated acceptance ... FAILED (24ms)
+W01-03 attack · network: an RPC transport failure (5xx) or an unexpected RPC verdict after the receipt was built is a retryable per-shot rejection with NO receipt handed out ... ok (9ms)
+W01-03 attack · duplicate identities: the same shot id twice in one batch (identical, then mutated) yields one verdict per id, one receipt, one charge ... FAILED (3ms)
+W01-03 attack · boundaries: claim values at and beyond every edge (max ids, generation limits, floats, negative zero, unicode, wrong containers) are either bound exactly or rejected before any RPC — never coerced ... FAILED (3ms)
+W01-03 attack · corrupt state: a stored receipt with a valid digest but non-canonical bytes, a foreign schema, or a binding for another owner is never a replay match and never a fabricated acceptance ... FAILED (2ms)
+W01-03 attack · conservation: a replayed abstention (partial / low_confidence) spends nothing and an abstention 'upgraded' to scored under its id is refused before the authority and the RPC ... FAILED (2ms)
+W01-03 attack · replay after a policy rotation (edge path): the identical client payload is answered with the ORIGINAL receipt, no re-admission, no RPC ... FAILED (3ms)
+W01-03 attack · copy: the new rejection messages carry no store-forbidden claims and no internal detail ... FAILED (2ms)
+W01-03 attack · replay after a policy rotation (RPC path): the identical binding presented under the rotated lineage must get the same verdict the edge gives (accepted, original receipt stands) ... FAILED (57ms)
+W01-03 attack · account switch: the second account on the same device replaying the first account's settlement (its receipt, or its own) is refused with nothing of its own consumed and no receipt visible across owners ... FAILED (57ms)
+W01-03 attack · legacy row: a shot settled before receipts existed accepts any replay under its id without a receipt (disclosed limitation) — but it must never consume a credit or a sequence, and must never grow a receipt after the fact ... FAILED (45ms)
+W01-03 attack · RPC boundaries: receipts at the byte/shape limits (65536 vs 65537 bytes, uppercase digest, generation 1e9 / 1.0 / '3', 129-char ids, ticket without generation, policy without sha256) are refused as shot.receipt_invalid with the permit untouched ... FAILED (47ms)
+W01-03 attack · conservation at the RPC: an identical replay after the account hit its free limit is still the original acceptance (not a paywall), and a mismatched replay naming a released / foreign / missing permit is still refused as a mismatch before any permit verdict ... FAILED (68ms)
+W01-03 attack · roles: anon cannot settle or read receipts, clients cannot execute the receipt trigger functions, an owner without the API gate reads nothing, the owner through the gate reads only its own rows, and the service owner may read but never rewrite a receipt ... FAILED (49ms)
+W01-03 attack · crash window: the settlement committed but the acknowledgement never arrived — five identical retries under two policy rotations settle once, return the one receipt and consume nothing more ... FAILED (54ms)
+
+ ERRORS 
+
+W01-03 attack · network: a failed owner receipt read (500, then 429+Retry-After) fails the whole batch retryably — no RPC, no authority read, no fabricated acceptance => ./attack_w01_03_settlement.test.ts:220:6
+error: AssertionError: Values are not equal: 500: {"acceptedIds":["f2e9ba4b-32c4-4c8f-be38-dc065eb41aa9","a0416a28-3ba2-4a06-9563-f1ee0491e4ce"],"rejected":[]}
+
+
+    [Diff] Actual / Expected
+
+
+-   200
++   503
+
+  throw new AssertionError(message);
+        ^
+    at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
+    at file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:238:7
+
+W01-03 attack · duplicate identities: the same shot id twice in one batch (identical, then mutated) yields one verdict per id, one receipt, one charge => ./attack_w01_03_settlement.test.ts:291:6
+error: AssertionError: Values are not equal: acceptedIds must not repeat an id: {"acceptedIds":["20bcce0b-6e0f-49f4-9c7b-b1be4e8fa104","20bcce0b-6e0f-49f4-9c7b-b1be4e8fa104"],"rejected":[]}
+
+
+    [Diff] Actual / Expected
+
+
+-   1
++   2
+
+  throw new AssertionError(message);
+        ^
+    at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
+    at file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:299:5
+
+W01-03 attack · boundaries: claim values at and beyond every edge (max ids, generation limits, floats, negative zero, unicode, wrong containers) are either bound exactly or rejected before any RPC — never coerced => ./attack_w01_03_settlement.test.ts:340:6
+error: AssertionError: settlementReceipt must be an object
+    throw new AssertionError(msg);
+          ^
+    at assert (https://jsr.io/@std/assert/1.0.19/assert.ts:22:11)
+    at transportOf (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:178:3)
+    at file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:364:25
+
+W01-03 attack · corrupt state: a stored receipt with a valid digest but non-canonical bytes, a foreign schema, or a binding for another owner is never a replay match and never a fabricated acceptance => ./attack_w01_03_settlement.test.ts:418:6
+error: AssertionError: response carries receipts
+    throw new AssertionError(msg);
+          ^
+    at assert (https://jsr.io/@std/assert/1.0.19/assert.ts:22:11)
+    at receiptFor (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:185:3)
+    at settleOnce (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:207:20)
+    at async file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:424:22
+
+W01-03 attack · conservation: a replayed abstention (partial / low_confidence) spends nothing and an abstention 'upgraded' to scored under its id is refused before the authority and the RPC => ./attack_w01_03_settlement.test.ts:479:6
+error: AssertionError: response carries receipts
+    throw new AssertionError(msg);
+          ^
+    at assert (https://jsr.io/@std/assert/1.0.19/assert.ts:22:11)
+    at receiptFor (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:185:3)
+    at settleOnce (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:207:20)
+    at async file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:486:24
+
+W01-03 attack · replay after a policy rotation (edge path): the identical client payload is answered with the ORIGINAL receipt, no re-admission, no RPC => ./attack_w01_03_settlement.test.ts:521:6
+error: AssertionError: response carries receipts
+    throw new AssertionError(msg);
+          ^
+    at assert (https://jsr.io/@std/assert/1.0.19/assert.ts:22:11)
+    at receiptFor (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:185:3)
+    at settleOnce (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:207:20)
+    at async file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:527:22
+
+W01-03 attack · copy: the new rejection messages carry no store-forbidden claims and no internal detail => ./attack_w01_03_settlement.test.ts:540:6
+error: AssertionError: response carries receipts
+    throw new AssertionError(msg);
+          ^
+    at assert (https://jsr.io/@std/assert/1.0.19/assert.ts:22:11)
+    at receiptFor (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:185:3)
+    at settleOnce (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:207:20)
+    at async file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:546:5
+
+W01-03 attack · replay after a policy rotation (RPC path): the identical binding presented under the rotated lineage must get the same verdict the edge gives (accepted, original receipt stands) => ./attack_w01_03_settlement.test.ts:718:6
+error: PostgresError: relation "public.settlement_receipts" does not exist
+    const error = Errors.postgres(parseError(x))
+                         ^
+    at ErrorResponse (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:788:26)
+    at handle (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:474:6)
+    at Socket.data (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:315:9)
+
+W01-03 attack · account switch: the second account on the same device replaying the first account's settlement (its receipt, or its own) is refused with nothing of its own consumed and no receipt visible across owners => ./attack_w01_03_settlement.test.ts:759:6
+error: AssertionError: Values are not equal.
+
+
+    [Diff] Actual / Expected
+
+
+-   access.permit_not_found
++   shot.receipt_invalid
+
+
+  throw new AssertionError(message);
+        ^
+    at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
+    at fn (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:775:7)
+
+W01-03 attack · legacy row: a shot settled before receipts existed accepts any replay under its id without a receipt (disclosed limitation) — but it must never consume a credit or a sequence, and must never grow a receipt after the fact => ./attack_w01_03_settlement.test.ts:812:6
+error: PostgresError: relation "public.settlement_receipts" does not exist
+    const error = Errors.postgres(parseError(x))
+                         ^
+    at ErrorResponse (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:788:26)
+    at handle (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:474:6)
+    at Socket.data (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:315:9)
+
+W01-03 attack · RPC boundaries: receipts at the byte/shape limits (65536 vs 65537 bytes, uppercase digest, generation 1e9 / 1.0 / '3', 129-char ids, ticket without generation, policy without sha256) are refused as shot.receipt_invalid with the permit untouched => ./attack_w01_03_settlement.test.ts:862:6
+error: AssertionError: Values are not equal: uppercase transport digest
+
+
+    [Diff] Actual / Expected
+
+
+-   accepted
++   shot.receipt_invalid
+
+
+  throw new AssertionError(message);
+        ^
+    at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
+    at fn (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:978:9)
+
+W01-03 attack · conservation at the RPC: an identical replay after the account hit its free limit is still the original acceptance (not a paywall), and a mismatched replay naming a released / foreign / missing permit is still refused as a mismatch before any permit verdict => ./attack_w01_03_settlement.test.ts:1012:6
+error: PostgresError: relation "public.settlement_receipts" does not exist
+    const error = Errors.postgres(parseError(x))
+                         ^
+    at ErrorResponse (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:788:26)
+    at handle (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:474:6)
+    at Socket.data (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:315:9)
+
+W01-03 attack · roles: anon cannot settle or read receipts, clients cannot execute the receipt trigger functions, an owner without the API gate reads nothing, the owner through the gate reads only its own rows, and the service owner may read but never rewrite a receipt => ./attack_w01_03_settlement.test.ts:1085:6
+error: AssertionError: Values are not equal: anon cannot read receipts
+
+
+    [Diff] Actual / Expected
+
+
+-   42P01
++   42501
+
+
+  throw new AssertionError(message);
+        ^
+    at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
+    at fn (file:///home/ubuntu/repos/ps-base/supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts:1128:7)
+
+W01-03 attack · crash window: the settlement committed but the acknowledgement never arrived — five identical retries under two policy rotations settle once, return the one receipt and consume nothing more => ./attack_w01_03_settlement.test.ts:1198:6
+error: PostgresError: relation "public.settlement_receipts" does not exist
+    const error = Errors.postgres(parseError(x))
+                         ^
+    at ErrorResponse (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:788:26)
+    at handle (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:474:6)
+    at Socket.data (file:///home/ubuntu/.cache/deno/npm/registry.npmjs.org/postgres/3.4.5/src/connection.js:315:9)
+
+ FAILURES 
+
+W01-03 attack · network: a failed owner receipt read (500, then 429+Retry-After) fails the whole batch retryably — no RPC, no authority read, no fabricated acceptance => ./attack_w01_03_settlement.test.ts:220:6
+W01-03 attack · duplicate identities: the same shot id twice in one batch (identical, then mutated) yields one verdict per id, one receipt, one charge => ./attack_w01_03_settlement.test.ts:291:6
+W01-03 attack · boundaries: claim values at and beyond every edge (max ids, generation limits, floats, negative zero, unicode, wrong containers) are either bound exactly or rejected before any RPC — never coerced => ./attack_w01_03_settlement.test.ts:340:6
+W01-03 attack · corrupt state: a stored receipt with a valid digest but non-canonical bytes, a foreign schema, or a binding for another owner is never a replay match and never a fabricated acceptance => ./attack_w01_03_settlement.test.ts:418:6
+W01-03 attack · conservation: a replayed abstention (partial / low_confidence) spends nothing and an abstention 'upgraded' to scored under its id is refused before the authority and the RPC => ./attack_w01_03_settlement.test.ts:479:6
+W01-03 attack · replay after a policy rotation (edge path): the identical client payload is answered with the ORIGINAL receipt, no re-admission, no RPC => ./attack_w01_03_settlement.test.ts:521:6
+W01-03 attack · copy: the new rejection messages carry no store-forbidden claims and no internal detail => ./attack_w01_03_settlement.test.ts:540:6
+W01-03 attack · replay after a policy rotation (RPC path): the identical binding presented under the rotated lineage must get the same verdict the edge gives (accepted, original receipt stands) => ./attack_w01_03_settlement.test.ts:718:6
+W01-03 attack · account switch: the second account on the same device replaying the first account's settlement (its receipt, or its own) is refused with nothing of its own consumed and no receipt visible across owners => ./attack_w01_03_settlement.test.ts:759:6
+W01-03 attack · legacy row: a shot settled before receipts existed accepts any replay under its id without a receipt (disclosed limitation) — but it must never consume a credit or a sequence, and must never grow a receipt after the fact => ./attack_w01_03_settlement.test.ts:812:6
+W01-03 attack · RPC boundaries: receipts at the byte/shape limits (65536 vs 65537 bytes, uppercase digest, generation 1e9 / 1.0 / '3', 129-char ids, ticket without generation, policy without sha256) are refused as shot.receipt_invalid with the permit untouched => ./attack_w01_03_settlement.test.ts:862:6
+W01-03 attack · conservation at the RPC: an identical replay after the account hit its free limit is still the original acceptance (not a paywall), and a mismatched replay naming a released / foreign / missing permit is still refused as a mismatch before any permit verdict => ./attack_w01_03_settlement.test.ts:1012:6
+W01-03 attack · roles: anon cannot settle or read receipts, clients cannot execute the receipt trigger functions, an owner without the API gate reads nothing, the owner through the gate reads only its own rows, and the service owner may read but never rewrite a receipt => ./attack_w01_03_settlement.test.ts:1085:6
+W01-03 attack · crash window: the settlement committed but the acknowledgement never arrived — five identical retries under two policy rotations settle once, return the one receipt and consume nothing more => ./attack_w01_03_settlement.test.ts:1198:6
+
+FAILED | 1 passed | 14 failed (439ms)
+
+error: Test failed
+EXIT=1

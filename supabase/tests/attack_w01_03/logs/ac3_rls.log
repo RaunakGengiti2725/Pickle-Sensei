@@ -1,0 +1,2501 @@
+
+Security migration history: fresh
+fresh pending 20260829000000_google_auth_bootstrap.sql
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:75: NOTICE:  trigger "on_auth_user_created" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:96: NOTICE:  trigger "on_auth_user_email_updated" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:116: NOTICE:  trigger "profiles_set_updated_at" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:127: NOTICE:  policy "profiles_select_own" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:133: NOTICE:  policy "profiles_update_own" for relation "public.profiles" does not exist, skipping
+fresh pending 20260829120000_progress_data.sql
+psql:/migrations/20260829120000_progress_data.sql:244: NOTICE:  trigger "sessions_set_updated_at" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:249: NOTICE:  trigger "shots_set_updated_at" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:254: NOTICE:  trigger "captures_set_updated_at" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_select_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_insert_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_update_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_delete_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_select_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_insert_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_update_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_delete_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_select_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_insert_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_update_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_delete_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_select_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_insert_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_update_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_delete_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_select_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_insert_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_update_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_delete_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_select_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+fresh pending 20260829130000_onboarding_profile_fields.sql
+fresh pending 20260829140000_permits_sync_consent.sql
+psql:/migrations/20260829140000_permits_sync_consent.sql:119: NOTICE:  trigger "analysis_permits_set_updated_at" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_select_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_insert_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_update_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_select_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_insert_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_update_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_delete_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_select_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_insert_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_select_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_insert_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_select_own" for relation "public.analysis_feedback" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_insert_own" for relation "public.analysis_feedback" does not exist, skipping
+fresh pending 20260829150000_player_rank.sql
+psql:/migrations/20260829150000_player_rank.sql:183: NOTICE:  trigger "shots_player_rank_refresh" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829150000_player_rank.sql:211: NOTICE:  policy "player_rank_state_select_own" for relation "public.player_rank_state" does not exist, skipping
+fresh pending 20260830120000_production_launch.sql
+psql:/migrations/20260830120000_production_launch.sql:171: NOTICE:  policy "billing_entitlements_select_own" for relation "public.billing_entitlements" does not exist, skipping
+fresh pending 20260831000000_scale_and_security.sql
+psql:/migrations/20260831000000_scale_and_security.sql:259: NOTICE:  policy "deletion_requests_select_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:264: NOTICE:  policy "deletion_requests_insert_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:269: NOTICE:  policy "deletion_requests_update_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:276: NOTICE:  policy "deletion_requests_delete_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:379: NOTICE:  pg_cron unavailable (extension "pg_cron" is not available). Skipping maintenance schedules.
+fresh pending 20260831130000_form_weighted_rank.sql
+fresh pending 20260831160000_defense_in_depth.sql
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "consent_records_append_only" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "evaluation_trials_append_only" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "analysis_feedback_append_only" for relation "public.analysis_feedback" does not exist, skipping
+fresh pending 20260901000000_permit_reservation_race.sql
+fresh pending 20260902000000_account_deletion_feedback.sql
+psql:/migrations/20260902000000_account_deletion_feedback.sql:60: NOTICE:  policy "deletion_feedback_insert_own" for relation "public.account_deletion_feedback" does not exist, skipping
+psql:/migrations/20260902000000_account_deletion_feedback.sql:90: NOTICE:  trigger "account_deletion_feedback_append_only" for relation "public.account_deletion_feedback" does not exist, skipping
+fresh pending 20260902120000_account_deletion_feedback_wanted.sql
+fresh pending 20260902130000_shots_delete_revoke.sql
+fresh pending 20260902130100_cascade_user_indexes.sql
+fresh pending 20260902130200_permits_reserved_sweep_index.sql
+fresh pending 20260902140000_external_account_cleanup.sql
+fresh pending 20260902150000_free_rating_identity_ledger.sql
+psql:/migrations/20260902150000_free_rating_identity_ledger.sql:184: NOTICE:  trigger "shots_record_free_rating_ledger" for relation "public.shots" does not exist, skipping
+fresh pending 20260904000000_apply_synced_shot_error_hygiene.sql
+fresh pending 20260905000000_scored_shot_write_gate.sql
+psql:/migrations/20260905000000_scored_shot_write_gate.sql:106: NOTICE:  trigger "shots_enforce_scored_permit" for relation "public.shots" does not exist, skipping
+fresh pending 20260905000100_late_linked_identity_ledger.sql
+psql:/migrations/20260905000100_late_linked_identity_ledger.sql:76: NOTICE:  trigger "on_auth_identity_linked" for relation "auth.identities" does not exist, skipping
+fresh pending 20260905190106_api_only_database_access.sql
+psql:/migrations/20260905190106_api_only_database_access.sql:51: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260905190106_api_only_database_access.sql:52: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260905190106_api_only_database_access.sql:53: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+fresh pending 20260906000000_apply_synced_shot_replay_after_lock.sql
+fresh pending 20260906120000_webhook_reservation_and_monotonic_verified_at.sql
+psql:/migrations/20260906120000_webhook_reservation_and_monotonic_verified_at.sql:71: NOTICE:  trigger "billing_entitlements_keep_newest_verdict" for relation "public.billing_entitlements" does not exist, skipping
+fresh pending 20260906130000_late_permit_sync_durability.sql
+fresh pending 20260906140000_permit_lifecycle_null_safe.sql
+psql:/migrations/20260906140000_permit_lifecycle_null_safe.sql:172: NOTICE:  trigger "analysis_permits_guard_lifecycle" for relation "public.analysis_permits" does not exist, skipping
+fresh pending 20260906233000_ordered_billing_verification.sql
+fresh pending 20260907000000_permit_terminal_client_role.sql
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:81: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:132: NOTICE:  trigger "analysis_permits_guard_resurrection" for relation "public.analysis_permits" does not exist, skipping
+fresh pending 20260907001500_account_deletion_operations.sql
+fresh pending 20260907100000_permit_settled_no_delete.sql
+psql:/migrations/20260907100000_permit_settled_no_delete.sql:164: NOTICE:  trigger "analysis_permits_guard_delete" for relation "public.analysis_permits" does not exist, skipping
+fresh pending 20260907110000_api_audit_integration.sql
+fresh pending 20260907120000_preserve_permit_predicate_grant.sql
+fresh pending 20260907133000_ordered_api_merge_integration.sql
+fresh pending 20260908020000_analysis_release_authority.sql
+fresh pending 20260908100000_permit_partial_terminal_outcome.sql
+fresh pending 20260908110000_settlement_receipt_lineage.sql
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:110: NOTICE:  policy "settlement_receipts_select_own" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:115: NOTICE:  policy "api_requests_only" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:146: NOTICE:  trigger "settlement_receipts_guard_lifecycle" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:220: NOTICE:  trigger "shots_record_settlement_receipt" for relation "public.shots" does not exist, skipping
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting verification ticket verdict
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Billing profile is unavailable
+psql:/tests/security_regression.sql:6143: NOTICE:  W07 concurrent billing scenarios passed: 14
+W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
+SECURITY REGRESSION MATRIX: ALL CASES PASSED
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.586794+00:00", "operationId": "08080000-0000-4000-8000-000000001003", "statusExpiresAt": "2026-09-09T21:24:23.586794+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.592162+00:00", "operationId": "08080000-0000-4000-8000-000000001004", "statusExpiresAt": "2026-09-09T21:24:23.592162+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.592654+00:00", "operationId": "08080000-0000-4000-8000-000000001005", "statusExpiresAt": "2026-09-09T21:24:23.592654+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.593107+00:00", "operationId": "08080000-0000-4000-8000-000000001006", "statusExpiresAt": "2026-09-09T21:24:23.593107+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.593582+00:00", "operationId": "08080000-0000-4000-8000-000000001007", "statusExpiresAt": "2026-09-09T21:24:23.593582+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:23.610878+00:00", "operationId": "08080000-0000-4000-8000-000000001008", "statusExpiresAt": "2026-09-09T21:24:23.610878+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+            ?column?            
+--------------------------------
+ W08 SQL assertions passed: 111
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:348: NOTICE:  extension "dblink" already exists, skipping
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:473: NOTICE:  W08 concurrent deletion scenarios passed: 5
+W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED
+BEGIN
+DO
+SET
+DO
+RESET
+DO
+ROLLBACK
+Analysis release policy authority: PASS
+
+Security migration history: production_20260906
+production_20260906 base 20260829000000_google_auth_bootstrap.sql
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:75: NOTICE:  trigger "on_auth_user_created" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:96: NOTICE:  trigger "on_auth_user_email_updated" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:116: NOTICE:  trigger "profiles_set_updated_at" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:127: NOTICE:  policy "profiles_select_own" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:133: NOTICE:  policy "profiles_update_own" for relation "public.profiles" does not exist, skipping
+production_20260906 base 20260829120000_progress_data.sql
+psql:/migrations/20260829120000_progress_data.sql:244: NOTICE:  trigger "sessions_set_updated_at" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:249: NOTICE:  trigger "shots_set_updated_at" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:254: NOTICE:  trigger "captures_set_updated_at" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_select_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_insert_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_update_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_delete_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_select_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_insert_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_update_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_delete_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_select_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_insert_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_update_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_delete_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_select_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_insert_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_update_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_delete_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_select_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_insert_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_update_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_delete_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_select_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+production_20260906 base 20260829130000_onboarding_profile_fields.sql
+production_20260906 base 20260829140000_permits_sync_consent.sql
+psql:/migrations/20260829140000_permits_sync_consent.sql:119: NOTICE:  trigger "analysis_permits_set_updated_at" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_select_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_insert_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_update_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_select_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_insert_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_update_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_delete_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_select_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_insert_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_select_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_insert_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_select_own" for relation "public.analysis_feedback" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_insert_own" for relation "public.analysis_feedback" does not exist, skipping
+production_20260906 base 20260829150000_player_rank.sql
+psql:/migrations/20260829150000_player_rank.sql:183: NOTICE:  trigger "shots_player_rank_refresh" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829150000_player_rank.sql:211: NOTICE:  policy "player_rank_state_select_own" for relation "public.player_rank_state" does not exist, skipping
+production_20260906 base 20260830120000_production_launch.sql
+psql:/migrations/20260830120000_production_launch.sql:171: NOTICE:  policy "billing_entitlements_select_own" for relation "public.billing_entitlements" does not exist, skipping
+production_20260906 base 20260831000000_scale_and_security.sql
+psql:/migrations/20260831000000_scale_and_security.sql:259: NOTICE:  policy "deletion_requests_select_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:264: NOTICE:  policy "deletion_requests_insert_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:269: NOTICE:  policy "deletion_requests_update_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:276: NOTICE:  policy "deletion_requests_delete_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:379: NOTICE:  pg_cron unavailable (extension "pg_cron" is not available). Skipping maintenance schedules.
+production_20260906 base 20260831130000_form_weighted_rank.sql
+production_20260906 base 20260831160000_defense_in_depth.sql
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "consent_records_append_only" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "evaluation_trials_append_only" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "analysis_feedback_append_only" for relation "public.analysis_feedback" does not exist, skipping
+production_20260906 base 20260901000000_permit_reservation_race.sql
+production_20260906 base 20260902000000_account_deletion_feedback.sql
+psql:/migrations/20260902000000_account_deletion_feedback.sql:60: NOTICE:  policy "deletion_feedback_insert_own" for relation "public.account_deletion_feedback" does not exist, skipping
+psql:/migrations/20260902000000_account_deletion_feedback.sql:90: NOTICE:  trigger "account_deletion_feedback_append_only" for relation "public.account_deletion_feedback" does not exist, skipping
+production_20260906 base 20260902120000_account_deletion_feedback_wanted.sql
+production_20260906 base 20260902130000_shots_delete_revoke.sql
+production_20260906 base 20260902130100_cascade_user_indexes.sql
+production_20260906 base 20260902130200_permits_reserved_sweep_index.sql
+production_20260906 base 20260902140000_external_account_cleanup.sql
+production_20260906 base 20260902150000_free_rating_identity_ledger.sql
+psql:/migrations/20260902150000_free_rating_identity_ledger.sql:184: NOTICE:  trigger "shots_record_free_rating_ledger" for relation "public.shots" does not exist, skipping
+production_20260906 base 20260905190106_api_only_database_access.sql
+production_20260906 pending 20260904000000_apply_synced_shot_error_hygiene.sql
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:74: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:75: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:76: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+production_20260906 pending 20260905000000_scored_shot_write_gate.sql
+psql:/migrations/20260905000000_scored_shot_write_gate.sql:106: NOTICE:  trigger "shots_enforce_scored_permit" for relation "public.shots" does not exist, skipping
+production_20260906 pending 20260905000100_late_linked_identity_ledger.sql
+psql:/migrations/20260905000100_late_linked_identity_ledger.sql:76: NOTICE:  trigger "on_auth_identity_linked" for relation "auth.identities" does not exist, skipping
+production_20260906 pending 20260906000000_apply_synced_shot_replay_after_lock.sql
+production_20260906 pending 20260906120000_webhook_reservation_and_monotonic_verified_at.sql
+psql:/migrations/20260906120000_webhook_reservation_and_monotonic_verified_at.sql:71: NOTICE:  trigger "billing_entitlements_keep_newest_verdict" for relation "public.billing_entitlements" does not exist, skipping
+production_20260906 pending 20260906130000_late_permit_sync_durability.sql
+production_20260906 pending 20260906140000_permit_lifecycle_null_safe.sql
+psql:/migrations/20260906140000_permit_lifecycle_null_safe.sql:172: NOTICE:  trigger "analysis_permits_guard_lifecycle" for relation "public.analysis_permits" does not exist, skipping
+production_20260906 pending 20260906233000_ordered_billing_verification.sql
+production_20260906 pending 20260907000000_permit_terminal_client_role.sql
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:81: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:132: NOTICE:  trigger "analysis_permits_guard_resurrection" for relation "public.analysis_permits" does not exist, skipping
+production_20260906 pending 20260907001500_account_deletion_operations.sql
+production_20260906 pending 20260907100000_permit_settled_no_delete.sql
+psql:/migrations/20260907100000_permit_settled_no_delete.sql:164: NOTICE:  trigger "analysis_permits_guard_delete" for relation "public.analysis_permits" does not exist, skipping
+production_20260906 pending 20260907110000_api_audit_integration.sql
+production_20260906 pending 20260907120000_preserve_permit_predicate_grant.sql
+production_20260906 pending 20260907133000_ordered_api_merge_integration.sql
+production_20260906 pending 20260908020000_analysis_release_authority.sql
+production_20260906 pending 20260908100000_permit_partial_terminal_outcome.sql
+production_20260906 pending 20260908110000_settlement_receipt_lineage.sql
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:110: NOTICE:  policy "settlement_receipts_select_own" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:115: NOTICE:  policy "api_requests_only" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:146: NOTICE:  trigger "settlement_receipts_guard_lifecycle" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:220: NOTICE:  trigger "shots_record_settlement_receipt" for relation "public.shots" does not exist, skipping
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting verification ticket verdict
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Billing profile is unavailable
+psql:/tests/security_regression.sql:6143: NOTICE:  W07 concurrent billing scenarios passed: 14
+W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
+SECURITY REGRESSION MATRIX: ALL CASES PASSED
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.501322+00:00", "operationId": "08080000-0000-4000-8000-000000001003", "statusExpiresAt": "2026-09-09T21:24:29.501322+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.506754+00:00", "operationId": "08080000-0000-4000-8000-000000001004", "statusExpiresAt": "2026-09-09T21:24:29.506754+00:00"}
+(1 row)
+
+                                                                           begin_account_deletion_operation                                                                            
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.50715+00:00", "operationId": "08080000-0000-4000-8000-000000001005", "statusExpiresAt": "2026-09-09T21:24:29.50715+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.507489+00:00", "operationId": "08080000-0000-4000-8000-000000001006", "statusExpiresAt": "2026-09-09T21:24:29.507489+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.507891+00:00", "operationId": "08080000-0000-4000-8000-000000001007", "statusExpiresAt": "2026-09-09T21:24:29.507891+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:29.523357+00:00", "operationId": "08080000-0000-4000-8000-000000001008", "statusExpiresAt": "2026-09-09T21:24:29.523357+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+            ?column?            
+--------------------------------
+ W08 SQL assertions passed: 111
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:348: NOTICE:  extension "dblink" already exists, skipping
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:473: NOTICE:  W08 concurrent deletion scenarios passed: 5
+W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED
+BEGIN
+DO
+SET
+DO
+RESET
+DO
+ROLLBACK
+Analysis release policy authority: PASS
+
+Security migration history: upstream_20260906
+upstream_20260906 base 20260829000000_google_auth_bootstrap.sql
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:75: NOTICE:  trigger "on_auth_user_created" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:96: NOTICE:  trigger "on_auth_user_email_updated" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:116: NOTICE:  trigger "profiles_set_updated_at" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:127: NOTICE:  policy "profiles_select_own" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:133: NOTICE:  policy "profiles_update_own" for relation "public.profiles" does not exist, skipping
+upstream_20260906 base 20260829120000_progress_data.sql
+psql:/migrations/20260829120000_progress_data.sql:244: NOTICE:  trigger "sessions_set_updated_at" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:249: NOTICE:  trigger "shots_set_updated_at" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:254: NOTICE:  trigger "captures_set_updated_at" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_select_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_insert_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_update_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_delete_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_select_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_insert_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_update_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_delete_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_select_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_insert_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_update_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_delete_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_select_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_insert_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_update_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_delete_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_select_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_insert_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_update_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_delete_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_select_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+upstream_20260906 base 20260829130000_onboarding_profile_fields.sql
+upstream_20260906 base 20260829140000_permits_sync_consent.sql
+psql:/migrations/20260829140000_permits_sync_consent.sql:119: NOTICE:  trigger "analysis_permits_set_updated_at" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_select_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_insert_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_update_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_select_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_insert_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_update_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_delete_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_select_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_insert_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_select_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_insert_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_select_own" for relation "public.analysis_feedback" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_insert_own" for relation "public.analysis_feedback" does not exist, skipping
+upstream_20260906 base 20260829150000_player_rank.sql
+psql:/migrations/20260829150000_player_rank.sql:183: NOTICE:  trigger "shots_player_rank_refresh" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829150000_player_rank.sql:211: NOTICE:  policy "player_rank_state_select_own" for relation "public.player_rank_state" does not exist, skipping
+upstream_20260906 base 20260830120000_production_launch.sql
+psql:/migrations/20260830120000_production_launch.sql:171: NOTICE:  policy "billing_entitlements_select_own" for relation "public.billing_entitlements" does not exist, skipping
+upstream_20260906 base 20260831000000_scale_and_security.sql
+psql:/migrations/20260831000000_scale_and_security.sql:259: NOTICE:  policy "deletion_requests_select_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:264: NOTICE:  policy "deletion_requests_insert_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:269: NOTICE:  policy "deletion_requests_update_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:276: NOTICE:  policy "deletion_requests_delete_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:379: NOTICE:  pg_cron unavailable (extension "pg_cron" is not available). Skipping maintenance schedules.
+upstream_20260906 base 20260831130000_form_weighted_rank.sql
+upstream_20260906 base 20260831160000_defense_in_depth.sql
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "consent_records_append_only" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "evaluation_trials_append_only" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "analysis_feedback_append_only" for relation "public.analysis_feedback" does not exist, skipping
+upstream_20260906 base 20260901000000_permit_reservation_race.sql
+upstream_20260906 base 20260902000000_account_deletion_feedback.sql
+psql:/migrations/20260902000000_account_deletion_feedback.sql:60: NOTICE:  policy "deletion_feedback_insert_own" for relation "public.account_deletion_feedback" does not exist, skipping
+psql:/migrations/20260902000000_account_deletion_feedback.sql:90: NOTICE:  trigger "account_deletion_feedback_append_only" for relation "public.account_deletion_feedback" does not exist, skipping
+upstream_20260906 base 20260902120000_account_deletion_feedback_wanted.sql
+upstream_20260906 base 20260902130000_shots_delete_revoke.sql
+upstream_20260906 base 20260902130100_cascade_user_indexes.sql
+upstream_20260906 base 20260902130200_permits_reserved_sweep_index.sql
+upstream_20260906 base 20260902140000_external_account_cleanup.sql
+upstream_20260906 base 20260902150000_free_rating_identity_ledger.sql
+psql:/migrations/20260902150000_free_rating_identity_ledger.sql:184: NOTICE:  trigger "shots_record_free_rating_ledger" for relation "public.shots" does not exist, skipping
+upstream_20260906 base 20260904000000_apply_synced_shot_error_hygiene.sql
+upstream_20260906 base 20260905000000_scored_shot_write_gate.sql
+psql:/migrations/20260905000000_scored_shot_write_gate.sql:106: NOTICE:  trigger "shots_enforce_scored_permit" for relation "public.shots" does not exist, skipping
+upstream_20260906 base 20260905000100_late_linked_identity_ledger.sql
+psql:/migrations/20260905000100_late_linked_identity_ledger.sql:76: NOTICE:  trigger "on_auth_identity_linked" for relation "auth.identities" does not exist, skipping
+upstream_20260906 base 20260906000000_apply_synced_shot_replay_after_lock.sql
+upstream_20260906 base 20260906120000_webhook_reservation_and_monotonic_verified_at.sql
+psql:/migrations/20260906120000_webhook_reservation_and_monotonic_verified_at.sql:71: NOTICE:  trigger "billing_entitlements_keep_newest_verdict" for relation "public.billing_entitlements" does not exist, skipping
+upstream_20260906 base 20260906130000_late_permit_sync_durability.sql
+upstream_20260906 base 20260906140000_permit_lifecycle_null_safe.sql
+psql:/migrations/20260906140000_permit_lifecycle_null_safe.sql:172: NOTICE:  trigger "analysis_permits_guard_lifecycle" for relation "public.analysis_permits" does not exist, skipping
+upstream_20260906 base 20260907000000_permit_terminal_client_role.sql
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:132: NOTICE:  trigger "analysis_permits_guard_resurrection" for relation "public.analysis_permits" does not exist, skipping
+upstream_20260906 base 20260907100000_permit_settled_no_delete.sql
+psql:/migrations/20260907100000_permit_settled_no_delete.sql:164: NOTICE:  trigger "analysis_permits_guard_delete" for relation "public.analysis_permits" does not exist, skipping
+upstream_20260906 pending 20260905190106_api_only_database_access.sql
+psql:/migrations/20260905190106_api_only_database_access.sql:49: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260905190106_api_only_database_access.sql:51: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260905190106_api_only_database_access.sql:52: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260905190106_api_only_database_access.sql:53: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+upstream_20260906 pending 20260906233000_ordered_billing_verification.sql
+upstream_20260906 pending 20260907001500_account_deletion_operations.sql
+upstream_20260906 pending 20260907110000_api_audit_integration.sql
+upstream_20260906 pending 20260907120000_preserve_permit_predicate_grant.sql
+upstream_20260906 pending 20260907133000_ordered_api_merge_integration.sql
+upstream_20260906 pending 20260908020000_analysis_release_authority.sql
+upstream_20260906 pending 20260908100000_permit_partial_terminal_outcome.sql
+upstream_20260906 pending 20260908110000_settlement_receipt_lineage.sql
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:110: NOTICE:  policy "settlement_receipts_select_own" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:115: NOTICE:  policy "api_requests_only" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:146: NOTICE:  trigger "settlement_receipts_guard_lifecycle" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:220: NOTICE:  trigger "shots_record_settlement_receipt" for relation "public.shots" does not exist, skipping
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting verification ticket verdict
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Billing profile is unavailable
+psql:/tests/security_regression.sql:6143: NOTICE:  W07 concurrent billing scenarios passed: 14
+W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
+SECURITY REGRESSION MATRIX: ALL CASES PASSED
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.259178+00:00", "operationId": "08080000-0000-4000-8000-000000001003", "statusExpiresAt": "2026-09-09T21:24:35.259178+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.264159+00:00", "operationId": "08080000-0000-4000-8000-000000001004", "statusExpiresAt": "2026-09-09T21:24:35.264159+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.264745+00:00", "operationId": "08080000-0000-4000-8000-000000001005", "statusExpiresAt": "2026-09-09T21:24:35.264745+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.265161+00:00", "operationId": "08080000-0000-4000-8000-000000001006", "statusExpiresAt": "2026-09-09T21:24:35.265161+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.265507+00:00", "operationId": "08080000-0000-4000-8000-000000001007", "statusExpiresAt": "2026-09-09T21:24:35.265507+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:35.280992+00:00", "operationId": "08080000-0000-4000-8000-000000001008", "statusExpiresAt": "2026-09-09T21:24:35.280992+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+            ?column?            
+--------------------------------
+ W08 SQL assertions passed: 111
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:348: NOTICE:  extension "dblink" already exists, skipping
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:473: NOTICE:  W08 concurrent deletion scenarios passed: 5
+W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED
+BEGIN
+DO
+SET
+DO
+RESET
+DO
+ROLLBACK
+Analysis release policy authority: PASS
+
+Security migration history: ordered_20260907
+ordered_20260907 base 20260829000000_google_auth_bootstrap.sql
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:75: NOTICE:  trigger "on_auth_user_created" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:96: NOTICE:  trigger "on_auth_user_email_updated" for relation "auth.users" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:116: NOTICE:  trigger "profiles_set_updated_at" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:127: NOTICE:  policy "profiles_select_own" for relation "public.profiles" does not exist, skipping
+psql:/migrations/20260829000000_google_auth_bootstrap.sql:133: NOTICE:  policy "profiles_update_own" for relation "public.profiles" does not exist, skipping
+ordered_20260907 base 20260829120000_progress_data.sql
+psql:/migrations/20260829120000_progress_data.sql:244: NOTICE:  trigger "sessions_set_updated_at" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:249: NOTICE:  trigger "shots_set_updated_at" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:254: NOTICE:  trigger "captures_set_updated_at" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_select_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_insert_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_update_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "sessions_delete_own" for relation "public.sessions" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_select_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_insert_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_update_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shots_delete_own" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_select_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_insert_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_update_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_phases_delete_own" for relation "public.shot_phases" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_select_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_insert_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_update_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_measurements_delete_own" for relation "public.shot_measurements" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_select_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_insert_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_update_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "shot_checkpoints_delete_own" for relation "public.shot_checkpoints" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_select_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260829120000_progress_data.sql:298: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+ordered_20260907 base 20260829130000_onboarding_profile_fields.sql
+ordered_20260907 base 20260829140000_permits_sync_consent.sql
+psql:/migrations/20260829140000_permits_sync_consent.sql:119: NOTICE:  trigger "analysis_permits_set_updated_at" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_select_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_insert_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_update_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_select_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_insert_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_update_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "user_saved_drills_delete_own" for relation "public.user_saved_drills" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_select_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "consent_records_insert_own" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_select_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "evaluation_trials_insert_own" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_select_own" for relation "public.analysis_feedback" does not exist, skipping
+psql:/migrations/20260829140000_permits_sync_consent.sql:176: NOTICE:  policy "analysis_feedback_insert_own" for relation "public.analysis_feedback" does not exist, skipping
+ordered_20260907 base 20260829150000_player_rank.sql
+psql:/migrations/20260829150000_player_rank.sql:183: NOTICE:  trigger "shots_player_rank_refresh" for relation "public.shots" does not exist, skipping
+psql:/migrations/20260829150000_player_rank.sql:211: NOTICE:  policy "player_rank_state_select_own" for relation "public.player_rank_state" does not exist, skipping
+ordered_20260907 base 20260830120000_production_launch.sql
+psql:/migrations/20260830120000_production_launch.sql:171: NOTICE:  policy "billing_entitlements_select_own" for relation "public.billing_entitlements" does not exist, skipping
+ordered_20260907 base 20260831000000_scale_and_security.sql
+psql:/migrations/20260831000000_scale_and_security.sql:259: NOTICE:  policy "deletion_requests_select_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:264: NOTICE:  policy "deletion_requests_insert_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:269: NOTICE:  policy "deletion_requests_update_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:276: NOTICE:  policy "deletion_requests_delete_own" for relation "public.account_deletion_requests" does not exist, skipping
+psql:/migrations/20260831000000_scale_and_security.sql:379: NOTICE:  pg_cron unavailable (extension "pg_cron" is not available). Skipping maintenance schedules.
+ordered_20260907 base 20260831130000_form_weighted_rank.sql
+ordered_20260907 base 20260831160000_defense_in_depth.sql
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "consent_records_append_only" for relation "public.consent_records" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "evaluation_trials_append_only" for relation "public.evaluation_trials" does not exist, skipping
+psql:/migrations/20260831160000_defense_in_depth.sql:143: NOTICE:  trigger "analysis_feedback_append_only" for relation "public.analysis_feedback" does not exist, skipping
+ordered_20260907 base 20260901000000_permit_reservation_race.sql
+ordered_20260907 base 20260902000000_account_deletion_feedback.sql
+psql:/migrations/20260902000000_account_deletion_feedback.sql:60: NOTICE:  policy "deletion_feedback_insert_own" for relation "public.account_deletion_feedback" does not exist, skipping
+psql:/migrations/20260902000000_account_deletion_feedback.sql:90: NOTICE:  trigger "account_deletion_feedback_append_only" for relation "public.account_deletion_feedback" does not exist, skipping
+ordered_20260907 base 20260902120000_account_deletion_feedback_wanted.sql
+ordered_20260907 base 20260902130000_shots_delete_revoke.sql
+ordered_20260907 base 20260902130100_cascade_user_indexes.sql
+ordered_20260907 base 20260902130200_permits_reserved_sweep_index.sql
+ordered_20260907 base 20260902140000_external_account_cleanup.sql
+ordered_20260907 base 20260902150000_free_rating_identity_ledger.sql
+psql:/migrations/20260902150000_free_rating_identity_ledger.sql:184: NOTICE:  trigger "shots_record_free_rating_ledger" for relation "public.shots" does not exist, skipping
+ordered_20260907 base 20260905190106_api_only_database_access.sql
+ordered_20260907 base 20260906233000_ordered_billing_verification.sql
+ordered_20260907 base 20260907001500_account_deletion_operations.sql
+ordered_20260907 pending 20260904000000_apply_synced_shot_error_hygiene.sql
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:74: NOTICE:  policy "captures_insert_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:75: NOTICE:  policy "captures_update_own" for relation "public.captures" does not exist, skipping
+psql:/migrations/20260904000000_apply_synced_shot_error_hygiene.sql:76: NOTICE:  policy "captures_delete_own" for relation "public.captures" does not exist, skipping
+ordered_20260907 pending 20260905000000_scored_shot_write_gate.sql
+psql:/migrations/20260905000000_scored_shot_write_gate.sql:106: NOTICE:  trigger "shots_enforce_scored_permit" for relation "public.shots" does not exist, skipping
+ordered_20260907 pending 20260905000100_late_linked_identity_ledger.sql
+psql:/migrations/20260905000100_late_linked_identity_ledger.sql:76: NOTICE:  trigger "on_auth_identity_linked" for relation "auth.identities" does not exist, skipping
+ordered_20260907 pending 20260906000000_apply_synced_shot_replay_after_lock.sql
+ordered_20260907 pending 20260906120000_webhook_reservation_and_monotonic_verified_at.sql
+psql:/migrations/20260906120000_webhook_reservation_and_monotonic_verified_at.sql:71: NOTICE:  trigger "billing_entitlements_keep_newest_verdict" for relation "public.billing_entitlements" does not exist, skipping
+ordered_20260907 pending 20260906130000_late_permit_sync_durability.sql
+ordered_20260907 pending 20260906140000_permit_lifecycle_null_safe.sql
+psql:/migrations/20260906140000_permit_lifecycle_null_safe.sql:172: NOTICE:  trigger "analysis_permits_guard_lifecycle" for relation "public.analysis_permits" does not exist, skipping
+ordered_20260907 pending 20260907000000_permit_terminal_client_role.sql
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:81: NOTICE:  policy "analysis_permits_delete_own" for relation "public.analysis_permits" does not exist, skipping
+psql:/migrations/20260907000000_permit_terminal_client_role.sql:132: NOTICE:  trigger "analysis_permits_guard_resurrection" for relation "public.analysis_permits" does not exist, skipping
+ordered_20260907 pending 20260907100000_permit_settled_no_delete.sql
+psql:/migrations/20260907100000_permit_settled_no_delete.sql:164: NOTICE:  trigger "analysis_permits_guard_delete" for relation "public.analysis_permits" does not exist, skipping
+ordered_20260907 pending 20260907110000_api_audit_integration.sql
+ordered_20260907 pending 20260907120000_preserve_permit_predicate_grant.sql
+ordered_20260907 pending 20260907133000_ordered_api_merge_integration.sql
+ordered_20260907 pending 20260908020000_analysis_release_authority.sql
+ordered_20260907 pending 20260908100000_permit_partial_terminal_outcome.sql
+ordered_20260907 pending 20260908110000_settlement_receipt_lineage.sql
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:110: NOTICE:  policy "settlement_receipts_select_own" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:115: NOTICE:  policy "api_requests_only" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:146: NOTICE:  trigger "settlement_receipts_guard_lifecycle" for relation "public.settlement_receipts" does not exist, skipping
+psql:/migrations/20260908110000_settlement_receipt_lineage.sql:220: NOTICE:  trigger "shots_record_settlement_receipt" for relation "public.shots" does not exist, skipping
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting verification ticket verdict
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Conflicting webhook verification payload
+psql:/tests/security_regression.sql:6143: NOTICE:  Billing profile is unavailable
+psql:/tests/security_regression.sql:6143: NOTICE:  W07 concurrent billing scenarios passed: 14
+W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
+SECURITY REGRESSION MATRIX: ALL CASES PASSED
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.018314+00:00", "operationId": "08080000-0000-4000-8000-000000001003", "statusExpiresAt": "2026-09-09T21:24:41.018314+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.022727+00:00", "operationId": "08080000-0000-4000-8000-000000001004", "statusExpiresAt": "2026-09-09T21:24:41.022727+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.023129+00:00", "operationId": "08080000-0000-4000-8000-000000001005", "statusExpiresAt": "2026-09-09T21:24:41.023129+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.023481+00:00", "operationId": "08080000-0000-4000-8000-000000001006", "statusExpiresAt": "2026-09-09T21:24:41.023481+00:00"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.023828+00:00", "operationId": "08080000-0000-4000-8000-000000001007", "statusExpiresAt": "2026-09-09T21:24:41.023828+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ checkpoint_account_deletion_operation 
+---------------------------------------
+ {"outcome": "checkpointed"}
+(1 row)
+
+ set_account_deletion_auth_intent 
+----------------------------------
+ {"outcome": "intent_recorded"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+                                                                            begin_account_deletion_operation                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"outcome": "requested", "expiresAt": "2026-09-08T21:39:41.038826+00:00", "operationId": "08080000-0000-4000-8000-000000001008", "statusExpiresAt": "2026-09-09T21:24:41.038826+00:00"}
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_assert 
+------------
+ 
+(1 row)
+
+ w08_throws 
+------------
+ 
+(1 row)
+
+            ?column?            
+--------------------------------
+ W08 SQL assertions passed: 111
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:348: NOTICE:  extension "dblink" already exists, skipping
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+ store_account_apple_credential 
+--------------------------------
+ {"outcome": "stored"}
+(1 row)
+
+psql:/tests/account_deletion_operations.sql:473: NOTICE:  W08 concurrent deletion scenarios passed: 5
+W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED
+BEGIN
+DO
+SET
+DO
+RESET
+DO
+ROLLBACK
+Analysis release policy authority: PASS
+EXIT=0
