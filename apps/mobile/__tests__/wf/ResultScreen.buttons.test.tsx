@@ -844,6 +844,26 @@ describe('Result guide buttons — Close / Next / Back / Done', () => {
     await unmount(renderer);
   });
 
+  it('Full breakdown (SCORE page only) pushes ResultDetails for this analysis', async () => {
+    const renderer = await render();
+    expect(stepLabel(renderer)).toBe('1 OF 2 · SCORE');
+    const details = byTestID(renderer, 'result-guide-breakdown-link');
+    expect(details.props.accessibilityLabel).toBe('Full breakdown');
+    expect(details.props.accessibilityRole).toBe('button');
+    await press(details);
+    expect(mockNavigation.navigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('ResultDetails', {
+      analysisId: 'a1',
+    });
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    expect(mockNavigation.popToTop).not.toHaveBeenCalled();
+
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('2 OF 2 · NEXT');
+    expect(hasTestID(renderer, 'result-guide-breakdown-link')).toBe(false);
+    await unmount(renderer);
+  });
+
   it('a faulted read walks SCORE → THE PROBLEM → DRILLS → NEXT with descriptive Next labels', async () => {
     mockLoadEvidence.mockResolvedValue(
       evidenceFixture({ analysis: faultedAnalysis() }),
@@ -1786,7 +1806,7 @@ describe('Result buttons — ledger', () => {
   it('every rendered pressable on the guide has a button role and a label, page by page', async () => {
     mockGetApiSession.mockReturnValue(session);
     const renderer = await render();
-    expect(ledger(renderer)).toEqual(['Close', 'Continue']);
+    expect(ledger(renderer)).toEqual(['Close', 'Continue', 'Full breakdown']);
     await press(byTestID(renderer, 'result-guide-next'));
     expect(ledger(renderer)).toEqual(['Back', 'Close', 'Done', 'Try it again']);
     await unmount(renderer);

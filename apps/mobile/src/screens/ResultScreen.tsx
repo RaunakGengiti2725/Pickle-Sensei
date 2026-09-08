@@ -421,6 +421,7 @@ export function ResultScreen() {
         })
       }
       onOpenLibrary={() => navigation.navigate('DrillLibrary')}
+      onOpenDetails={() => navigation.navigate('ResultDetails', { analysisId })}
     />
   );
 }
@@ -445,6 +446,8 @@ interface ResultGuideProps {
   onOpenAttempt: (analysisId: string) => void;
   onOpenFormReview: (phase?: PhaseKey) => void;
   onOpenLibrary: () => void;
+  /** Push the `ResultDetails` route (the full breakdown) for this analysis. */
+  onOpenDetails: () => void;
 }
 
 function ResultGuide(props: ResultGuideProps) {
@@ -588,6 +591,11 @@ function ResultGuide(props: ResultGuideProps) {
           }
           {...(stepIndex > 0 ? { back: goBack } : {})}
           {...(isLast ? { done: props.onClose } : {})}
+          // W09-02 routing decision (2026-09-08): the SCORE page — where
+          // every entry lands, a fresh run or a Library history row — is the
+          // ONE way into the full breakdown; later pages and the recap stay
+          // link-free.
+          {...(step === 'score' ? { details: props.onOpenDetails } : {})}
         />
       }
     >
@@ -989,6 +997,7 @@ function GuideFooter(props: {
   };
   back?: () => void;
   done?: () => void;
+  details?: () => void;
 }) {
   return (
     <>
@@ -1022,6 +1031,19 @@ function GuideFooter(props: {
             testID="result-guide-done"
           >
             <Text style={[type.bodyBold, styles.footerLinkText]}>Done</Text>
+          </PressableScale>
+        ) : null}
+        {props.details ? (
+          <PressableScale
+            accessibilityLabel="Full breakdown"
+            onPress={props.details}
+            containerStyle={styles.footerLinkContainer}
+            style={styles.footerLink}
+            testID="result-guide-breakdown-link"
+          >
+            <Text style={[type.bodyBold, styles.footerLinkText]}>
+              Full breakdown
+            </Text>
           </PressableScale>
         ) : null}
       </View>
