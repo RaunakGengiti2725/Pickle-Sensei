@@ -131,7 +131,7 @@ describe.skipIf(!hasFfmpeg)(
         base,
         "-vf",
         "setpts=PTS+(mod(N\\,2)/40)/TB",
-        "-fps_mode",
+        "-vsync",
         "passthrough",
         "-enc_time_base",
         "1/90000",
