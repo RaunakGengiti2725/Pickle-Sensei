@@ -526,7 +526,7 @@ describe('PaywallScreen podium', () => {
     expect(copy).toContain('$39.99');
     expect(copy).toContain('$159.99');
     // Podium badges and qualifiers.
-    expect(copy).toContain('BEST VALUE');
+    expect(copy).toContain('RECOMMENDED');
     expect(copy).toContain('PAY ONCE');
     expect(copy).toContain('SAVE 33%');
     expect(copy).toContain('/month · billed monthly');
