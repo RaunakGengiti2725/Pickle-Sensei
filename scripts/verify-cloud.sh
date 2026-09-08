@@ -18,11 +18,11 @@
 #   db         @pickle/database migrate + seed against DATABASE_URL (idempotent)
 #   mobile     apps/mobile: npx tsc --noEmit && npx jest --ci --silent
 #   ml         python3 -m unittest discover -s ml/scripts -p 'test_*.py'
-#   scripts    self-tests of the verification tooling: scripts/tests/test_verify_cloud.sh,
+#   scripts    self-tests of the verification tooling: verdict, runtime/worker wiring,
 #              test_select_simulator.sh, test_verify_cloud_bash32.sh (macOS /bin/bash 3.2
 #              contract; needs a bash 3.2 via $BASH32 or the bash:3.2 Docker image)
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
-#              standalone modules (index.ts has known pre-existing type errors)
+#              standalone modules, frozen index typecheck and crypto vectors
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
 #   security   scripts/tests/security-scan-scope.sh (scanner scope regression)
 #              then scripts/security-scan.sh (secret scan) when present
@@ -52,6 +52,10 @@
 #   DATABASE_URL       postgres://pickle:pickle_dev_password@localhost:5432/pickle_dev
 #   SQS_ENDPOINT_TEST  http://localhost:9324 (docker compose elasticmq; CI service)
 #   VERIFY_ARTIFACTS   artifacts/verify-cloud/<UTC timestamp>  (logs + summary.json)
+#   VERIFY_MAX_WORKERS 2 (positive integer; workspace types/tests and mobile Jest)
+#   VERIFY_MOBILE_NODE_BIN optional directory containing mobile Node; npm/npx
+#                          run on that Node; root stages keep the original PATH (CI: Node20
+#                          workspace, Node22 mobile). Omit in split CI jobs.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -66,9 +70,14 @@ ONLY=""
 SKIP=""
 START_SERVICES=0
 FRESH_DEPS=0
+VERIFY_MAX_WORKERS="${VERIFY_MAX_WORKERS:-2}"
+if ! [[ "$VERIFY_MAX_WORKERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "VERIFY_MAX_WORKERS must be a positive integer" >&2
+  exit 2
+fi
 
 usage() {
-  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^set -uo pipefail/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -166,6 +175,21 @@ c.connect().then(() => c.query("select 1")).then(() => c.end()).then(() => proce
 # ---------------------------------------------------------------- stages ----
 selected() { [[ " ${STAGES[*]} " == *" $1 "* ]]; }
 
+# Runtime selection is scoped to a subshell: mobile tools inherit its Node,
+# while pnpm workspace stages retain the caller's Node20 environment.
+with_mobile_runtime() (
+  if [ -n "${VERIFY_MOBILE_NODE_BIN:-}" ]; then
+    if [ ! -x "$VERIFY_MOBILE_NODE_BIN/node" ]; then
+      echo "VERIFY_MOBILE_NODE_BIN must contain an executable node: $VERIFY_MOBILE_NODE_BIN"
+      exit 75
+    fi
+    export PATH="$VERIFY_MOBILE_NODE_BIN:$PATH"
+  fi
+  need node
+  echo "mobile runtime: $(node --version) at $(command -v node)"
+  "$@"
+)
+
 stage_deps() {
   need node
   local root_needed=0 s
@@ -181,7 +205,7 @@ stage_deps() {
   if selected mobile || [ "${#STAGES[@]}" -eq 1 ]; then
     need npm
     if [ "$FRESH_DEPS" = 1 ] || [ ! -d apps/mobile/node_modules ]; then
-      (cd apps/mobile && npm ci --no-audit --no-fund)
+      (cd apps/mobile && with_mobile_runtime npm ci --no-audit --no-fund)
     else
       echo "apps/mobile/node_modules present; skipping npm ci (use --fresh-deps to force)"
     fi
@@ -190,7 +214,7 @@ stage_deps() {
 
 stage_format() { pnpm format:check; }
 stage_lint() { pnpm lint; }
-stage_typecheck() { pnpm typecheck; }
+stage_typecheck() { pnpm -r --workspace-concurrency="$VERIFY_MAX_WORKERS" typecheck; }
 
 stage_test() {
   if ! pg_ready "$DATABASE_URL_TEST"; then
@@ -206,6 +230,8 @@ stage_test() {
     echo "SQS_ENDPOINT_TEST=$sqs unreachable — @pickle/queue skips its 3 SQS tests (docker compose up -d elasticmq, or --start-services)"
     unset SQS_ENDPOINT_TEST
   fi
+  export VITEST_MAX_THREADS="$VERIFY_MAX_WORKERS" VITEST_MIN_THREADS=1
+  export VITEST_MAX_FORKS="$VERIFY_MAX_WORKERS" VITEST_MIN_FORKS=1
   pnpm test
 }
 
@@ -218,15 +244,19 @@ stage_db() {
   pnpm --filter @pickle/database seed
 }
 
-stage_mobile() {
+mobile_checks() {
   need npm
+  npx tsc --noEmit
+  npx jest --ci --silent --maxWorkers="$VERIFY_MAX_WORKERS"
+  node --test scripts/generate-third-party-notices.test.mjs
+  node scripts/generate-third-party-notices.mjs --check
+}
+
+stage_mobile() {
   [ -d apps/mobile/node_modules ] || { echo "apps/mobile/node_modules missing — run the deps stage"; exit 75; }
   (
     cd apps/mobile
-    npx tsc --noEmit
-    npx jest --ci --silent
-    node --test scripts/generate-third-party-notices.test.mjs
-    node scripts/generate-third-party-notices.mjs --check
+    with_mobile_runtime mobile_checks
   )
 }
 
@@ -239,6 +269,8 @@ stage_scripts() {
   need jq
   need python3
   scripts/tests/test_verify_cloud.sh
+  scripts/tests/test_verify_cloud_runtime.sh
+  scripts/tests/test_mac_full_verify_runtime.sh
   scripts/tests/test_select_simulator.sh
   scripts/tests/test_verify_cloud_bash32.sh
 }

@@ -96,9 +96,11 @@ case "$ver" in
   *) echo "[test_verify_cloud_bash32] runner is not bash 3.2 (got '$ver')" >&2; exit 75 ;;
 esac
 
-# 2a. all stages skipped under bash 3.2: same contract as Linux.
+# 2a. all stages skipped under bash 3.2: same contract as Linux. Invoke the
+# selected interpreter explicitly: the script shebang may resolve a different
+# bash from PATH (for example Homebrew bash 5 on a Mac with stock bash 3.2).
 out="$WORK/skipall"; mkdir -p "$out"
-"${BASH32_RUN[@]}" -c 'VERIFY_ARTIFACTS="$1" "$2" --only ml --skip ml' _ "$out" "$SCRIPT" >"$out/run.out" 2>&1
+"${BASH32_RUN[@]}" -c 'VERIFY_ARTIFACTS="$1" "$BASH" "$2" --only ml --skip ml' _ "$out" "$SCRIPT" >"$out/run.out" 2>&1
 code=$?
 if [ $code -eq 0 ]; then
   RC=1; flunk "bash 3.2: --only ml --skip ml exited 0 (expected non-zero); output:"$'\n'"$(cat "$out/run.out")"
