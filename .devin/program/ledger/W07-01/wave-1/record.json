@@ -1,0 +1,324 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W07-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "4a1d27e77b191a983634b625931368f7a252c3ff4cc2e9a43d7dc998b16a4bfa",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W07-01-r2",
+      "phase": "implement",
+      "prompt_sha256": "0c75842ad669bb6d58a62349c978cd287cdd9817b1a91c81f61beebe3c062c06",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-01-r2",
+      "phase": "review",
+      "prompt_sha256": "a7899b3950db493b3279dd99c2e5970b215c94b0540ce9ff1110ed02a94c16fa",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-01-r2",
+      "phase": "adversary",
+      "prompt_sha256": "400d915557f469d01291f5cff4229299d04e9276c74d258f6513f215e6a40633",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+  "candidate": {
+    "branch": "devin/pp/w07-01/impl-r2",
+    "head_sha": "4defd4dd58ea8f23ec4047b3912e4f8c3f16e713",
+    "round": 2
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.3",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W07-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W07-01-AC2 status FAIL"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dfdb99d2-dbc5-4efc-9b29-04474dd30d48/ac1-head.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC1",
+            "note": "VERIFIED on HEAD 97059adf. Ran from repo root with Deno 2.5.6 via npx; deno.lock unchanged.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aeee9b47-90ed-4309-9ada-f4ded9df149b/ac2-head-pristine.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 555,
+            "exit_code": 1,
+            "failed": 336,
+            "id": "W07-01-AC2",
+            "note": "VERIFIED. Exact command on pristine HEAD fails for ONE pre-existing cause that is identical on BASE_SHA (210 passed / 311 failed / 8 ignored, exit 1, https://la-hacks-rttothemoon.devinenterprise.com/attachments/a117dc54-da86-4179-8222-1990625f65b2/ac2-base-pristine.log): every harness-based test throws `TypeError: Module not found file:///.../packages/shared-types/src/domain.js` because __wf__/deno.json lacks the shared-types .js->.ts import-map entries added to supabase/functions/api/deno.json in c23d1601 (owned by P0-03, write_paths supabase/functions/api/__wf__/; not edited here). The 8 ignored tests are gated on PICKLE_AUDIT_PG_URL, not XC_PG_URL. SUPPLEMENTARY (VERIFIED, uncommitted 4-line import-map shim in __wf__/deno.json, restored before push): same command on HEAD -> exit 0, 772 passed / 0 failed / 8 ignored (https://la-hacks-rttothemoon.devinenterprise.com/attachments/fc8055eb-c6bb-460f-9ff4-58a11c7a46ae/ac2-head-shimmed.log); with PICKLE_AUDIT_PG_URL additionally set to the same disposable DB -> exit 0, 780 passed / 0 failed / 0 ignored (https://la-hacks-rttothemoon.devinenterprise.com/attachments/372e1428-b8c3-4403-9485-18d2380bab3c/ac2-head-shimmed-audit-pg.log). Disposable DB from supabase/functions/api/__wf__/xc_pg_up.sh (postgres:16, shim_auth + all migrations).",
+            "passed": 211,
+            "skipped": 8,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1d5f0b0-08be-4a53-b713-0c25eca067a9/ac3-head-shimmed.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json ./billing_provider_shapes.test.ts  (run on BASE_SHA 42291369 with only the new test file copied over, then on HEAD 97059adf)",
+            "executed": 26,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC3",
+            "note": "PROOF exit 0 = new tests FAIL on BASE and PASS on HEAD. Both sides need the same uncommitted __wf__/deno.json import-map shim (see AC2) for the harness to load index.ts at all; pristine runs fail on both BASE and HEAD with the baseline Module-not-found error (BASE: exit 1, 0 passed / 26 failed, https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd9af3e4-2875-4ec5-8a80-df207e277d01/ac3-base-pristine.log; HEAD: exit 1, 0 passed / 26 failed, https://la-hacks-rttothemoon.devinenterprise.com/attachments/49ddf81c-85fc-4ed4-9c0c-5965a6c6f29f/ac3-head-pristine.log). BASE shimmed run: exit 1, 26 executed / 19 passed / 7 failed / 0 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/e281f72b-d940-48d3-960f-e5b71b24d02e/ac3-base-shimmed.log) — the 7 failures are the numeric-id fulfil/lifetime/expired/refunded cases and the three RevenueCat-only lifetime cases all returning 'pending'; the 19 passing on base are the safety cases (absence, conflicting/duplicate/malformed ids, product-only records, subscription-with-id-only) that must stay pending on both sides. HEAD shimmed run: exit 0, 26 passed / 0 failed. The HEAD counts above are from the shimmed candidate run.",
+            "passed": 26,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: wrote billing_provider_shapes.test.ts through the existing routesHarness/webhookSim (real Edge handler, RC subscriber returned via JSON so numbers stay numbers), proved 7/26 fail on BASE_SHA, committed separately, then made the minimal general change inside billingFulfilmentOf's match predicate via two small pure helpers wired into the shipping path. Kept all existing comments untouched. Did not fix the P0-03-owned __wf__/deno.json import-map gap; recorded it as a baseline failure and provided shimmed supplementary runs, clearly labelled, alongside the pristine acceptance runs.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b1799d7e-9453-4287-9fe1-6f203485dbad/README.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dfdb99d2-dbc5-4efc-9b29-04474dd30d48/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a117dc54-da86-4179-8222-1990625f65b2/ac2-base-pristine.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aeee9b47-90ed-4309-9ada-f4ded9df149b/ac2-head-pristine.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fc8055eb-c6bb-460f-9ff4-58a11c7a46ae/ac2-head-shimmed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/372e1428-b8c3-4403-9485-18d2380bab3c/ac2-head-shimmed-audit-pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd9af3e4-2875-4ec5-8a80-df207e277d01/ac3-base-pristine.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e281f72b-d940-48d3-960f-e5b71b24d02e/ac3-base-shimmed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/49ddf81c-85fc-4ed4-9c0c-5965a6c6f29f/ac3-head-pristine.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1d5f0b0-08be-4a53-b713-0c25eca067a9/ac3-head-shimmed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8963d3fe-811e-4215-94c1-2998378926a6/format-check.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test  (on BASE_SHA 42291369): exit 1, 210 passed / 311 failed / 8 ignored. All 311 failures: `TypeError: Module not found \"file:///.../packages/shared-types/src/domain.js\"` raised while routesHarness loadHarness() imports ../index.ts -> releasePolicy.ts -> packages/shared-types/src/analysisReleasePolicy.ts. Cause: c23d1601 added `../../../packages/shared-types/src/{analysisOutcome,domain,errors,techniqueBenchmark}.js` -> `.ts` import-map entries to supabase/functions/api/deno.json but not to supabase/functions/api/__wf__/deno.json, which `deno task test` uses via --config. Owner: P0-03 (write_paths supabase/functions/api/__wf__/). Log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/a117dc54-da86-4179-8222-1990625f65b2/ac2-base-pristine.log",
+          "Same command on BASE_SHA: 8 ignored tests (be-edge-routes-shots-rank.test.ts and other PICKLE_AUDIT_PG_URL-gated cases) remain ignored when only XC_PG_URL is set; they execute and pass when PICKLE_AUDIT_PG_URL points at the same disposable DB (780/0/0 on shimmed HEAD). Owner: P0-03."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w07-01/impl-r1",
+        "files_changed": [
+          "supabase/functions/api/__wf__/billing_provider_shapes.test.ts",
+          "supabase/functions/api/index.ts"
+        ],
+        "head_sha": "97059adf1a891f5322508462ebdd300647fe2a32",
+        "out_of_scope_files": [],
+        "package_id": "W07-01",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/billing_provider_shapes.test.ts"
+        ],
+        "residual_risks": [
+          "AC2/AC3 as literally written cannot pass on any candidate off this BASE_SHA until P0-03 lands the __wf__/deno.json import-map fix (or the reviewer applies the same 4-line uncommitted shim used here); the candidate itself is proven green under that shim.",
+          "The RevenueCat-only fallback compares the mobile `transactionId` (react-native-purchases `transactionIdentifier`) with RevenueCat's non_subscriptions `id`; whether RevenueCat's `id` equals that value for App Store lifetime purchases when `store_transaction_id` is omitted is INFERRED from the v1 customer-info model, not verified against a live RevenueCat account (no production access by rule). Failure mode is the pre-existing one (stays pending), never a wrong terminal verdict.",
+          "Numeric ids above Number.MAX_SAFE_INTEGER lose precision in JSON.parse and are treated as unidentified (pending) by design; Apple transaction ids (~1e15-2e15) are well within the safe range.",
+          "The existing comment at index.ts:3060-3061 ('RC's own non-subscription `id` ... never authorize another purchase') predates this change and was left untouched per the no-comment-edit rule; the fallback only accepts an `id` equal to the evidence with exact product and purchase_date, so it still never authorizes a different purchase."
+        ],
+        "summary": "DEFECT (VERIFIED on BASE_SHA): supabase/functions/api/index.ts:3031-3037 billingFulfilmentOf() only matched a provider record when `typeof row.store_transaction_id === \"string\" && row.store_transaction_id === transactionId`. RevenueCat's v1 customer-info model (https://www.revenuecat.com/docs/api-v1/customer-info-model) shows iOS `store_transaction_id` as a JSON number (example 1000000652379790) and a non_subscriptions record carrying only RevenueCat's own `id` with no Apple transaction id, so numeric ids and lifetime records with no store id never matched and the ticket stayed pending forever (shimmed base run of the new file: 7/26 fail, all 'fulfilled/expired/refunded' expectations came back 'pending'). FIX (commit 97059adf, index.ts:3012-3033 + 3055-3059): providerIdentifier() renders a string or a non-negative safe-integer number as its decimal string (anything else -> null); providerTransactionIdentity(row, lifetimePurchase) returns the store id whenever store_transaction_id is present (never overridden by `id`), falls back to the RevenueCat `id` only for non_subscriptions rows with no store id at all, and null for subscriptions without a store id. Exact product + purchase_date match, matching.length === 1, activeEntitlement check and explicit refund/expiry semantics are unchanged, so absence/conflict/duplicate/malformed identity stays pending. Test-first: 1d448f08 adds billing_provider_shapes.test.ts (26 tests) before the fix. BASELINE (VERIFIED, not fixed, outside write_paths, owned by P0-03): `__wf__/deno.json` lacks the shared-types `.js`->`.ts` import-map entries that `supabase/functions/api/deno.json` gained in c23d1601, so every harness-based Edge test fails on BASE_SHA with `Module not found .../packages/shared-types/src/domain.js` (210 passed / 311 failed / 8 ignored); the 8 ignored tests are gated on PICKLE_AUDIT_PG_URL, not XC_PG_URL. Because of this the acceptance commands AC2/AC3 as written cannot pass on any candidate off this base; I additionally ran them with an UNCOMMITTED local shim of `__wf__/deno.json` (4 import-map lines, restored before push) to prove the candidate: full suite 772 passed / 0 failed / 8 ignored (exit 0), and 780/0/0 with PICKLE_AUDIT_PG_URL also pointed at the disposable DB; new file 7 failed on base -> 26 passed on HEAD. AC1 (frozen Deno 2.5.6 check) exit 0, pnpm format:check exit 0, git diff --check exit 0. No PR opened; branch pushed without force."
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a2af69fd-5b11-4abf-9d9f-67247253cba8/attack_run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f16fb19a-a953-4c37-a578-7ffd5f1f8a48/attack_on_base_plus_harness.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5c2fdfb-92ac-4ed1-824f-e52dee3e2df5/ac2_head_plus_attack_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0844c048-5cb0-41a2-a2ef-5961dfe7ba74/ac1_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a5860736-0663-41aa-a62d-7201717341e3/ac2_head_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee6a4daa-faaa-4dd4-9e29-8c5f02d0e071/ac3_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d27fdead-f130-41d2-8739-99285e671e51/ac3_base_plus_harness.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/76aec07b-91e6-421a-83a6-f54682758b04/ac3_base_pure.log"
+        ],
+        "attack_branch": "devin/pp/w07-01/attack-4defd4dd",
+        "attack_branch_sha": "687a6f2b4ce48c049666e9d79567402fb335f0f3",
+        "attacked_sha": "4defd4dd58ea8f23ec4047b3912e4f8c3f16e713",
+        "attacks_tried": 90,
+        "breaks": [],
+        "package_id": "W07-01",
+        "summary": "ADVERSARIAL RESULT: 0 confirmed breaks in candidate 4defd4dd (W07-01). 90 attack tests (9 families, all real Deno tests driving the real POST /v1/billing/sync handler through webhookSim/routesHarness) pass on the candidate; 24 of them fail on BASE_SHA+harness, proving they exercise the changed behaviour rather than the harness.\n\nATTACK FILE: supabase/functions/api/__wf__/attack_w07_01_provider_ids.test.ts on branch devin/pp/w07-01/attack-4defd4dd @ 687a6f2b (one commit over 4defd4dd; +1072 lines; only file touched — no candidate production code or candidate tests modified; no PR opened; nothing pushed to main or ci/mac-*).\n\nVERIFIED RUNS (all Linux, Deno 2.5.6 pinned via deno.json tasks / npx):\n- Attack file alone on candidate: `cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json attack_w07_01_provider_ids.test.ts` → exit 0, 90 passed / 0 failed / 0 ignored (artifacts/w07-01-attack/attack_run2.log). `deno check --config deno.json attack_w07_01_provider_ids.test.ts` exit 0; `deno lint` exit 0; `pnpm exec prettier --check <file>` exit 0; `git diff --check 4defd4dd HEAD` exit 0.\n- Attack file on BASE_SHA 42291369 + candidate harness wiring (commit 4cea0e17 deno.json/rank-test gating, worktree /home/ubuntu/repos/ps-base): same command → exit 1, 66 passed / 24 failed (attack_on_base_plus_harness.log). The 24 base failures are the numeric-id fulfil/expire/refund cases, lifetime RevenueCat-id fallback cases, duplicate-identity ambiguity, replay/concurrency with numeric rows, and foreign-account numeric-receipt cases — i.e. exactly the W07-01 surface.\n- Full Edge suite WITH the attack file on candidate: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` → exit 0, 871 passed (31 steps) / 0 failed / 0 ignored (ac2_head_plus_attack_suite.log). 871 = 781 candidate + 90 attack.\n- Acceptance reproduction on candidate: AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1_check.log). AC2 `deno task test` with disposable PG (xc_pg_up.sh, port 55433) exit 0, 781 passed / 0 failed / 0 ignored (ac2_head_suite.log). AC3: candidate regression billing_provider_shapes.test.ts on pure BASE exit 1, 0 passed / 27 failed at module resolution (ac3_base_pure.log); on BASE+harness exit 1, 20 passed / 7 failed (ac3_base_plus_harness.log); on candidate exit 0, 27 passed / 0 failed (ac3_head.log). Implementer's AC1–AC3 claims reproduce exactly.\n\nATTACK FAMILIES (all tried; none broke the candidate):\n1. Numeric wire boundaries (16 raw-JSON store_transaction_id shapes served as RevenueCat bytes): safe integer, MAX_SAFE_INTEGER, 1e15 exponent literal, -0, sub-resolution fraction 1000000652379790.0000001 → fulfilled (evidence string equals the normalised decimal); 2^53, 2^53+1, negatives, .5 fractions, zero-padded/whitespace/boolean/array/object/1e400(Infinity) → pending, premium stays true from the active entitlement, never terminal. Note: -0 and sub-resolution fractions normalise to the integer string (IEEE-754 identical value) — documented, not a defect.\n2. Clock/terminal boundaries: expiry exactly at provider request_date_ms → expired; +1ms → pending; provider clock 25h behind / far-future → isolate clock fallback, still correct; grace_period future → pending, past/malformed/numeric/empty → expired; refunded_at future/before-purchase/exactly-at-purchase → refunded, malformed/numeric/boolean → pending; purchase after verifiedAt → pending. Never a terminal outcome from absence.\n3. Duplicates/collisions: same id as numeric subscription row + string lifetime row → pending (ambiguous); lifetime Apple id colliding with another lifetime row's RevenueCat id → pending; numeric id under the wrong product → pending; 5000 lifetime rows with one exact match → fulfilled; 5000 identical → pending.\n4. Lifetime RevenueCat-id fallback: \"\"/false/0 store_transaction_id block fallback (pending), null/absent/NaN→null allow it (fulfilled); empty/missing/object/case-changed id → pending; wrong date → pending; offset-equal and fractional-second date → fulfilled; numeric RC id normalises; lifetime without active entitlement or refund → pending (never expired); explicit refund honoured only when inactive (legacy `premium` alias too); recurring subscription with only an RC id → pending, never resolves via id.\n5. Hostile evidence/provider keys: __proto__/constructor/hasOwnProperty/toString/valueOf/prototype product ids and subscription keys → 200 pending or 400, no crash, no prototype pollution; 257-char / whitespace / plus / fullwidth-digit ids → 400 invalid_request; offset timestamps normalise.\n6. Provider/network/persistence failures: RC 500, 429+Retry-After, 302 redirect, malformed JSON, subscriptions-as-array, missing entitlements, string/empty body, thrown fetch (timeout) → 502/503 with no entitlement write; persistence 503 after RC proved a refund → 503, zero terminal, retry then reports refunded; begin-verification RPC failure → 503.\n7. Replay/concurrency: identical evidence twice → fulfilled both times, one verdict per attempt, one entitlement row; refunded replay → refunded every time, never fulfilled; two concurrent syncs → both 200, agree with stored row; slow superseded verification (its row proves refunded) → reports pending because its verdict was not applied.\n8. Auth/foreign evidence: anonymous and garbage bearer → 401, RC never called; another account replaying the victim's numeric receipt is verified against ITS OWN RevenueCat subscriber (pending, premium=false) — no cross-account grant; request-body app_user_id/outcome/billing.premium ignored.\n9. Exact purchase_date key (pre-existing design kept by W07-01): sub-second skew (…00Z vs …00.437Z) → pending with premium true; a renewal that moved the row's id/date → pending, never expired.\n\nOBSERVATIONS (not breaks, no test asserts otherwise):\n- INFERRED (apps/mobile/src/billing/revenueCatClient.ts:417-420): mobile evidence transactionId is always the RC SDK StoreTransaction.transactionIdentifier (Apple's id). The new lifetime `id` fallback therefore only helps if RevenueCat's REST non_subscriptions `id` equals Apple's transaction id when store_transaction_id is absent — UNKNOWN offline; the fallback is otherwise unreachable from the shipping client but harmless (pending).\n- INFERRED: sub-second purchase_date skew between StoreKit and RevenueCat leaves a receipt pending forever (never terminal, access still granted). Pre-existing on BASE, unchanged by W07-01; flag for a follow-up package if RC rounds dates.\n\nSEVERITY: none assigned — no P0–P3 break confirmed. Recommendation: ACCEPT candidate 4defd4dd on its W07-01 objective and invariants."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d4944ce8-9ab6-46d9-bd6c-2cb833943a1e/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC1",
+            "note": "VERIFIED on HEAD 4defd4dd (repo root). Local copy: artifacts/w07-01-r2/ac1-deno-check.log (untracked).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e9ab37ab-f442-4a92-b2fa-5943028ee33e/ac2-edge-head.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 781,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC2",
+            "note": "VERIFIED on HEAD 4defd4dd: 'ok | 781 passed (31 steps) | 0 failed' with no 'ignored' in the summary line (deno 2.9.6 local; deno.json task is `deno test -A --no-check --config deno.json .`). Disposable Postgres from supabase/functions/api/__wf__/xc_pg_up.sh (postgres:16 image, all migrations applied; Docker Hub returned 429 so the locally cached postgres:16-alpine was retagged postgres:16). Local copy: artifacts/w07-01-r2/ac2-edge-head.log.",
+            "passed": 781,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d9bdf17-9d49-4786-a325-fd5b373328e6/ac3-head.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_provider_shapes.test.ts (run in a BASE_SHA worktree with only the new test file copied over, then on HEAD)",
+            "executed": 27,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC3",
+            "note": "VERIFIED. BASE_SHA (pure 42291369 worktree + only the new test file): exit 1, 0 passed / 27 failed — every test fails at `Module not found .../packages/shared-types/src/domain.js` because BASE's __wf__/deno.json lacks the mapping; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/50c161ca-b677-4f0f-847b-338161629d08/ac3-base.log. BASE_SHA + only the harness-wiring commit 4cea0e17 (so the behaviour, not module resolution, is what fails): exit 1, 20 passed / 7 failed — the 7 are the numeric-id fulfil/expire/refund cases and the RevenueCat-only lifetime fulfil/refund cases; the 20 'stays pending' cases already hold on BASE; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d8b33e8-f830-4950-8942-d1c97311c328/ac3-base-plus-harness.log. HEAD 4defd4dd: exit 0, 27 passed / 0 failed.",
+            "passed": 27,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA; ran the AC2 command on BASE to reproduce the r1 failure (module-resolution failures + 8 ignored) before writing code. Reused r1's regression test (reviewed each fixture against the invariants; added one 'numeric evidence with no provider record stays pending, never expired' case) and r1's identity-normalisation design, re-implemented in index.ts with only the two helpers plus a one-expression change to the matcher so refund/expiry/ambiguity logic is untouched. Existing code comments were left unmodified per the hard rule (the comment at index.ts:3065-3066 still says RC's own non-subscription `id` never authorises 'another purchase' — still true in the sense that a conflicting or absent-identity record never fulfils, but note it predates the RC-id fallback).",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d4944ce8-9ab6-46d9-bd6c-2cb833943a1e/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e9ab37ab-f442-4a92-b2fa-5943028ee33e/ac2-edge-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/50c161ca-b677-4f0f-847b-338161629d08/ac3-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d8b33e8-f830-4950-8942-d1c97311c328/ac3-base-plus-harness.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d9bdf17-9d49-4786-a325-fd5b373328e6/ac3-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d6cd3e8-206a-4be8-a659-9e98ddd98aa0/edge-base-xc-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7e573165-348b-442e-a6aa-5f44e864b584/format-check.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test — on BASE_SHA 42291369: exit 1, 210 passed / 311 failed / 8 ignored. Every suite importing ../index.ts fails with `Module not found file:///.../packages/shared-types/src/domain.js` (imported by packages/shared-types/src/analysisReleasePolicy.ts via releasePolicy.ts) because __wf__/deno.json lacks the .js->.ts import-map entries the function-local deno.json has; the 8 ignored are be-edge-routes-shots-rank.test.ts, which gates on PICKLE_AUDIT_PG_URL only. Log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d6cd3e8-206a-4be8-a659-9e98ddd98aa0/edge-base-xc-only.log. This is the root cause of the r1 'W07-01-AC2 status FAIL' finding; it is fixed on this branch (commit 4cea0e17) rather than waived because the package's AC2 is unattainable otherwise — recorded here so the reviewer can judge the out-of-scope wiring.",
+          "pnpm format:check on BASE_SHA: exit 0 (clean) — no baseline formatting failure."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w07-01/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/billing_provider_shapes.test.ts",
+          "supabase/functions/api/__wf__/deno.json",
+          "supabase/functions/api/__wf__/be-edge-routes-shots-rank.test.ts"
+        ],
+        "head_sha": "4defd4dd58ea8f23ec4047b3912e4f8c3f16e713",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/deno.json — additive import-map entries only (the four shared-types .js->.ts mappings already present in the function-local supabase/functions/api/deno.json); without them every __wf__ suite importing ../index.ts fails at module resolution on BASE_SHA (311 failures), so AC2 cannot be met. Not under any serial_group_paths prefix.",
+          "supabase/functions/api/__wf__/be-edge-routes-shots-rank.test.ts — one-line env alias: PG_URL now reads XC_PG_URL ?? PICKLE_AUDIT_PG_URL (the pattern every other xc_pg_*.test.ts already uses); otherwise the AC2 command as written leaves its 8 gated live-DB tests ignored (ignored != 0). No assertion changed. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W07-01",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/billing_provider_shapes.test.ts"
+        ],
+        "residual_risks": [
+          "INFERRED: the mobile evidence path (apps/mobile/src/billing/revenueCatClient.ts, out of this package's scope under mobile-billing) sends `result.transaction.transactionIdentifier` as transactionId; whether react-native-purchases populates that with RevenueCat's purchase `id` when Apple exposes no transaction id was not verified against the SDK. The Edge side now accepts that shape as the objective specifies.",
+          "The existing comment at supabase/functions/api/index.ts:3065-3066 ('RC's own non-subscription `id` ... never authorize another purchase') was intentionally not edited (hard rule: do not modify existing comments) and now reads narrower than the behaviour; the new helper doc comments describe the actual identity rules.",
+          "AC2 was run with local deno 2.9.6 (the __wf__ task has no pinned Deno version); AC1 used the frozen npx deno@2.5.6 as written. A single-file run of be-edge-routes-shots-rank.test.ts with the alias was also green (12 passed) before the full run.",
+          "The regression-test commit message (803ea405) states '7 of 29' failing on BASE; the correct figure is 7 of 27 (history was not rewritten; corrected in the fix commit message and here)."
+        ],
+        "summary": "Defect on BASE_SHA (supabase/functions/api/index.ts:3031-3037, billingFulfilmentOf): the provider-record matcher required `typeof row.store_transaction_id === \"string\" && row.store_transaction_id === transactionId`, so (a) a RevenueCat v1 subscription/non-subscription row carrying the iOS store_transaction_id as a JSON number never matched the mobile's string evidence — the purchase stayed pending forever even with an active entitlement, and an explicit refund/expiry on that row could not be recognised either; (b) a lifetime (non_subscriptions) row RevenueCat reports with no store_transaction_id at all could never be identified, so a lifetime purchase whose evidence carries RevenueCat's purchase `id` never fulfilled. Fix (index.ts:3012-3038, 3059-3064): `providerTransactionIdentifier()` normalises a non-empty string as-is and a non-negative safe integer to String(value) (fractions, unsafe magnitudes, booleans, objects, empty strings -> null); `providerTransactionIdentity(row, nonSubscription)` returns the store_transaction_id identity whenever one is present (a conflicting store id is never overridden by `id`) and falls back to RevenueCat's `id` only for non-subscription rows with store_transaction_id absent/null; subscriptions never resolve via `id`. The matcher now compares that identity plus the exact purchase_date, and the existing `matching.length !== 1 -> pending` plus explicit-refund/explicit-expiry logic is unchanged, so absence, product-only rows, duplicate ids, wrong date/product and malformed values remain pending and nothing is refunded/expired from absence. Regression test billing_provider_shapes.test.ts (27 tests, committed first as 803ea405; commit message says '7 of 29' — actual count is 7 of 27, corrected in the fix commit message) drives the real POST /v1/billing/sync handler through the webhookSim/routesHarness. Separately, r1's AC2 FAIL traced to BASE_SHA harness defects outside write_paths: __wf__/deno.json lacked the shared-types .js->.ts mappings (311 failures) and be-edge-routes-shots-rank.test.ts gated only on PICKLE_AUDIT_PG_URL (8 ignored); both fixed minimally in commit 4cea0e17 and listed in out_of_scope_files. Commits on devin/pp/w07-01/impl-r2 over BASE: 4cea0e17 (harness wiring), 803ea405 (regression test), 4defd4dd (fix). VERIFIED: AC1 exit 0; AC2 781 passed / 0 failed / 0 ignored, exit 0; AC3 base fails (0/27 pure BASE at module resolution; 7/27 fail on BASE+harness) and HEAD passes 27/27; pnpm format:check exit 0; git diff --check exit 0. No PR opened, nothing pushed to main or ci/mac-*, no production resources touched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dccb8a7c-5f71-4560-af94-e0509e0eca70/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC1",
+            "note": "VERIFIED by reviewer on HEAD 4defd4dd from repo root; output ends 'Check file:///.../supabase/functions/api/index.ts', EXIT=0. Local copy artifacts/review-w07-01/ac1-deno-check.log (untracked).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d7455d6-5b33-41a5-b97a-9860c2cc17af/ac2-edge-head.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 781,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC2",
+            "note": "VERIFIED by reviewer on HEAD 4defd4dd: 'ok | 781 passed (31 steps) | 0 failed (1m36s)', EXIT=0, zero '... ignored' test lines (grep count 0), 44 test files, be-edge-routes-shots-rank.test.ts ran its 12 live-DB tests. Disposable Postgres: supabase/functions/api/__wf__/xc_pg_up.sh (fresh docker pull postgres:16, shim_auth.sql + every migration applied). Deno 2.9.6 local. Baseline cross-check on pure BASE_SHA 42291369 worktree with the same command: 'FAILED | 210 passed (7 steps) | 311 failed | 8 ignored', EXIT=1 — 310 failures are `Module not found .../packages/shared-types/src/domain.js` (missing __wf__/deno.json import-map entries) and the 8 ignored are be-edge-routes-shots-rank.test.ts gating on PICKLE_AUDIT_PG_URL only; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/164c87f5-5a1a-4a1e-8aa1-bced19100fc7/ac2-edge-base.log. This confirms the implementer's baseline_failures_observed and justifies the two out_of_scope wiring edits.",
+            "passed": 781,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bb3f7300-2000-44c1-ac9e-c8f78f88def1/ac3-head.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_provider_shapes.test.ts (BASE_SHA worktree /home/ubuntu/w07-base with ONLY the new test file copied over; then on HEAD 4defd4dd)",
+            "executed": 27,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-01-AC3",
+            "note": "VERIFIED by reviewer. HEAD: 'ok | 27 passed | 0 failed', EXIT=0. BASE (pure 42291369 worktree + only billing_provider_shapes.test.ts): EXIT=1, 'FAILED | 0 passed | 27 failed' — every test errors at module resolution (Module not found packages/shared-types/src/domain.js); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/74b76f4e-106f-4b08-9501-20f5bbe9970f/ac3-base-pure.log. To prove the BEHAVIOUR (not resolution) fails on base, also ran BASE + only the __wf__/deno.json import-map from 4cea0e17 + the new test file: EXIT=1, 'FAILED | 20 passed | 7 failed' — failing: numeric store_transaction_id fulfils (subscription + lifetime), numeric id proves expired, numeric id proves refunded, RC-id lifetime fulfils, explicit-null store id falls back to RC id, RC-id lifetime explicit refund; the 20 'stays pending / never terminal' cases already hold on BASE; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/486e23ad-7a0f-4014-aaf6-db190dc344e3/ac3-base-plus-denojson.log. Proof outcome exit_code=0 (fails on base, passes on head).",
+            "passed": 27,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dccb8a7c-5f71-4560-af94-e0509e0eca70/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d7455d6-5b33-41a5-b97a-9860c2cc17af/ac2-edge-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/164c87f5-5a1a-4a1e-8aa1-bced19100fc7/ac2-edge-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/74b76f4e-106f-4b08-9501-20f5bbe9970f/ac3-base-pure.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/486e23ad-7a0f-4014-aaf6-db190dc344e3/ac3-base-plus-denojson.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bb3f7300-2000-44c1-ac9e-c8f78f88def1/ac3-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "supabase/functions/api/index.ts:3064-3065 — the pre-existing comment ('RC's own non-subscription `id` ... never authorize another purchase') is now narrower than the behaviour: a non-subscription row with store_transaction_id absent/null IS identified by RevenueCat's `id` (providerTransactionIdentity). Left untouched by the implementer under the do-not-modify-existing-comments hard rule; coordinator should schedule a comment refresh in an owner-approved edit.",
+          "INFERRED (not verified against the SDK): apps/mobile/src/billing/revenueCatClient.ts:419 sends react-native-purchases `PurchasesStoreTransaction.transactionIdentifier` (typed only as 'Id of the transaction' in @revenuecat/purchases-typescript-internal customerInfo.d.ts:225-227). Whether that field carries RevenueCat's purchase `id` for lifetime purchases where Apple exposes no transaction id is the assumption the objective encodes; if it instead carries the Apple id, the RC-id fallback is simply never exercised (purchase stays pending, never terminal) — safe either way.",
+          "Commit message of 803ea405 says '7 of 29' failing on BASE; measured figure is 7 of 27 (cosmetic; history not rewritten).",
+          "AC2 executed with local deno 2.9.6 (the __wf__ task pins no Deno version); AC1 used the frozen npx deno@2.5.6 exactly as written."
+        ],
+        "package_id": "W07-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4defd4dd58ea8f23ec4047b3912e4f8c3f16e713",
+        "scope_violation": false,
+        "summary": "APPROVE W07-01 candidate 4defd4dd58ea8f23ec4047b3912e4f8c3f16e713 (3 commits over BASE 42291369: 4cea0e17 harness wiring, 803ea405 regression test, 4defd4dd fix). SCOPE (VERIFIED via git diff --stat): 4 files. index.ts and __wf__/billing_provider_shapes.test.ts are write_paths (edge-index group held). __wf__/deno.json (+4 additive import-map entries mirroring the function-local deno.json) and __wf__/be-edge-routes-shots-rank.test.ts (one line: PG_URL reads XC_PG_URL ?? PICKLE_AUDIT_PG_URL, the pattern of the three xc_pg_*.test.ts files) are listed in out_of_scope_files, are under no serial_group_paths prefix, and are minimal: I reproduced on a pure BASE worktree that the AC2 command yields 311 failures (module resolution) + 8 ignored, so AC2 is unattainable without them; no assertion changed → scope_violation=false. BEHAVIOUR (VERIFIED by reading the whole diff): only two new helpers plus one matcher expression in billingFulfilmentOf. providerTransactionIdentifier maps non-empty string as-is, non-negative safe integer → String(n), everything else → null. providerTransactionIdentity returns the store_transaction_id identity whenever that key is present and non-null (a malformed/conflicting store id yields null and is never overridden by `id`), and falls back to RC `id` only for non-subscription rows with store_transaction_id absent/null; subscription rows never resolve via `id`. Exact purchase_date match and the unchanged `matching.length !== 1 → pending`, explicit-refund and explicit-expiry (subscriptions only) logic are intact, so absence/ambiguity/product-only/duplicate/wrong-date rows stay pending and nothing is refunded or expired from absence — consistent with the product invariants (ambiguous ⇒ HOLD; unknown state never becomes a terminal outcome). No RLS/grant/session/migration/copy changes; no removed comment lines (only the two replaced predicate lines); no test weakened or reordered; no forbidden patterns (|| true, passWithNoTests, ts-ignore, any, eslint-disable) in added lines; git diff --check exit 0; prettier --check on the 4 files exit 0. ACCEPTANCE (all re-executed by me): AC1 exit 0; AC2 781 passed / 0 failed / 0 ignored, exit 0 with a fresh postgres:16 disposable DB; AC3 fails on BASE (0/27 pure BASE at module resolution; 7/27 behavioural failures on BASE + import-map only) and passes 27/27 on HEAD → regression_fails_on_base=true. Non-blocking: the pre-existing comment at index.ts:3064-3065 now under-describes the RC-id fallback (left per hard rule); the mobile-side transactionIdentifier semantics for lifetime purchases are INFERRED, not SDK-verified (safe either way — fallback simply never matches). No PR opened, nothing pushed, no production resources touched; BASE worktree /home/ubuntu/w07-base restored clean.",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-1"
+}

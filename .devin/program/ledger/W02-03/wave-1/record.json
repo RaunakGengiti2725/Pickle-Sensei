@@ -1,0 +1,497 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W02-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "54a111f1a8914164ea95a6a51cffd32c6c5863b86fdd4dde55a64fbfacc4ad3d",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W02-03-r1",
+      "phase": "review",
+      "prompt_sha256": "7d600acd3469e2d648faa76bad4c3adce32dee7b182920ba4877d7013a098d4f",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W02-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "6e48dc9d8df765b36e9c3879638d88f4ae31abe8edbe27e46913f6a3fbfbde96",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W02-03-r2",
+      "phase": "implement",
+      "prompt_sha256": "0a38971fbca20150795fc460674a9bf68c762dc8a63bebce2bfd7400d65cc3ed",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W02-03-r2",
+      "phase": "review",
+      "prompt_sha256": "362c59f40407b77250f040cf6a66341bd577a910ef1336051c29fc606cabb096",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W02-03-r2",
+      "phase": "adversary",
+      "prompt_sha256": "3699942666acf9181c96ed50f5539f02b42ad3cff07eaaaaaccadd63661dead8",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.3",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W02-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d19842a-504a-48ce-a539-4ee6fb155ab3/ac1-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7b0c2fec-d3d9-4adc-b056-9061dd0382ba/attack-full-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/66880f5c-443f-4de8-9578-25710fe7c6a7/attack-full-node24-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b69d8e90-7e55-4870-b8c1-fd2908ca0f16/candidate-node24-run1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8b68421e-ea0b-455c-a877-3cdcaafbe410/tsc.log"
+        ],
+        "attack_branch": "devin/pp/w02-03/attack-8fb2d82d",
+        "attack_branch_sha": "a869685b3d906d7d544d513444ae6749be753222",
+        "attacked_sha": "8fb2d82dfd5230dd7f9d994356779d816f4b1dfb",
+        "attacks_tried": 33,
+        "breaks": [
+          {
+            "expected": "AC1 passes on the declared runtime (Node 22+) — either spawn the child with --no-warnings / --disable-warning=ExperimentalWarning or filter the known warning before asserting stderr is empty.",
+            "observed": "Every launched child prints '(node:PID) ExperimentalWarning: SQLite is an experimental feature and might change at any time' on stderr under Node 22; candidate suite asserts `expect(launch.stderr).toBe('')` and fails before any recovery assertion runs. .github/workflows/ci.yml mobile job pins setup-node 22 and runs scripts/verify-cloud.sh --only deps,mobile (= npx jest --ci --silent over all suites), so merging the candidate turns the mobile CI job red. Evidence: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d19842a-504a-48ce-a539-4ee6fb155ab3/ac1-node22.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/7b0c2fec-d3d9-4adc-b056-9061dd0382ba/attack-full-node22.log",
+            "repro": "source ~/.nvm/nvm.sh && nvm use 22 && cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts   # node v22.23.2 -> exit 1, 13 failed / 1 passed. Attack reproducer: nvm use 22 && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t 'writes nothing to stderr' (fails); same command on Node 24.19.0 passes 14/14 and 30/30.",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'F. candidate harness robustness' -> 'a control launch writes nothing to stderr on the CI runtime'); also reproduced by the candidate's own apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts",
+            "title": "AC1 fails on the CI runtime (Node 22): node:sqlite ExperimentalWarning on stderr breaks the candidate's `stderr === ''` assertion in 13/14 tests"
+          },
+          {
+            "expected": "The snapshot should tolerate malformed rows (report the raw payload / null fields) so the harness can still exercise and assert the shipping recovery path on corrupt persisted state.",
+            "observed": "Launch 2 exits 1 with a SyntaxError raised by the harness's own snapshot code (apps/mobile/__harness__/processDeath/child.ts:78-83), before configureSyncRuntime/triggerOutboxSync execute; the server permit stays 'reserved' and no shot exists. The failure is in the harness, not in shipping code, so the harness gives no verdict on how src/ recovers from a corrupt outbox row (UNKNOWN).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t 'non-JSON outbox payload'  (passes: asserts the crash). Sequence: launch 1 killed at result_committed_before_sync_request; UPDATE outbox SET payload='{' on the durable file; launch 2 -> exit 1, no PD_REPORT, stderr SyntaxError at payloadField.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'F. candidate harness robustness' -> 'a non-JSON outbox payload on disk makes the candidate child crash in its own snapshot')",
+            "title": "Harness cannot observe recovery from a corrupt outbox payload: the candidate child's as-found snapshot (child.ts payloadField -> bare JSON.parse) throws before shipping recovery runs"
+          }
+        ],
+        "package_id": "W02-03",
+        "summary": "Attacked candidate 8fb2d82d (branch devin/pp/w02-03/impl-r1) with 33 attacks on branch devin/pp/w02-03/attack-8fb2d82d @ a869685b (2 commits, attack-only files: apps/mobile/__tests__/w02ProcessDeathAttack.test.ts, apps/mobile/__harness__/processDeathAttack/{attackHarness,attackChild}.ts; no candidate test or src/ file modified; no PR). Attack categories: (A) 6 extra SQL kill points inside shipping transactions (record insert, capture marked analyzed, attempt committed, operation finalized, current_attempt pointer, outbox delete) — all reconcile to one outcome; (B) 9 double-crash attacks (launch 2 killed mid-recovery at release_pending write / attempt_count bump / reserve-replay response lost / permit update mid-tx / finalize unsent / finalize response lost / released write, from both reserve_pending and reserved seeds) — launch 3 always HOLDs with one operation, one attempt, one permit cancelled under the same reservation key, zero results/shots/receipts; (C) 6 network faults through a same-origin fault proxy (429+Retry-After, 500 on reserve replay, dropped finalize socket, hung finalize -> shipping 20s deadline/408, 409 permit_already_finalized, 503 on shots:sync) — no second permit, no duplicate shot, outbox delivered exactly once; (D) 6 corrupt/partial-state attacks (vanished local_shot, non-JSON record, wrong-shape outbox payload, permit unknown to server, +10y clock skew, vanished capture) — never re-rated, never re-created under a new id; (E) account switch on the same durable file — owner B cannot continue/release/consume owner A's attempt, isolation and per-owner permits preserved; (F) harness robustness + runtime; plus candidate-suite determinism (3/3 runs 14/14 on Node 24) and AC1 on Node 22. VERIFIED results: attack suite 30/30 pass on Node 24.19.0 (exit 0); 29/30 on Node 22.23.2 (the single failure is the Node 22 stderr reproducer); candidate AC1 on Node 22: exit 1, 13 failed/1 passed; on Node 24: exit 0, 14/14 x3. AC2 `npx tsc --noEmit` exit 0 (after `npm ci` — the VM's node_modules predated @sentry/react-native; unrelated to the candidate). AC3 eslint + prettier --check exit 0 on all attack files. Confirmed breaks: P1 — AC1 fails on the CI runtime (Node 22 mobile job) because node:sqlite's ExperimentalWarning lands on stderr and the candidate asserts stderr === ''; P3 — the candidate child's snapshot crashes on a non-JSON outbox payload (bare JSON.parse in child.ts payloadField), so the harness cannot observe shipping recovery from corrupt outbox state. No P0: no attack produced duplicate charging, fabricated scoring, duplicate operations/attempts/permits, data loss, or cross-owner leakage in the shipping journal/result/outbox chain. Logs: /home/ubuntu/attack-logs/*.log (also uploaded)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "review: W02-03-AC1 status FAIL",
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c8960bbd-4d03-4573-baed-d6a812d1780e/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC1",
+            "kind": "regress",
+            "note": "VERIFIED. PROOF exit 0: on BASE_SHA (working tree == 42291369 + the test file, commit d72f3345, harness dir absent) the same command exits 1 — 'Test suite failed to run: Cannot find module ../__harness__/processDeath/harness', Test Suites 1 failed, Tests 0 total; base log: artifacts/w02-03/ac1-base.log = https://la-hacks-rttothemoon.devinenterprise.com/attachments/c64e2db8-2f33-4e0c-b834-5712f7abbcbf/ac1-base.log. Candidate (HEAD 8fb2d82d): exit 0, 14/14 passed = 1 kill-point-count assertion (>= 8; actual 12 distinct ids) + 1 uninterrupted control (launch scores once, relaunch replays the same analysisId with zero further server requests) + 12 SIGKILL cases, each proving launch 1 died by SIGKILL at the configured step (PD_KILL marker), the as-found durable state before recovery matches the kill point, and the relaunch ends with exactly one durable outcome. Verbose per-case log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2705107-a27e-490f-adcb-aadc71dade9a/ac1-candidate-verbose.log. Mutation check (temporary, reverted, not committed): removing the shipping `DELETE FROM outbox` from the shot.sync acknowledgement in src/data/sync.ts made 2/2 selected cases fail (outbox rows 10 vs expected 1) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c36229b-f1dd-4c9e-b366-b865838f74a7/mutation-check.log. Full mobile suite on HEAD after `npm ci`: `cd apps/mobile && npx jest --ci --silent` exit 0, 308 suites passed / 1 skipped (pre-existing skip, not this package), 5903 passed / 1 skipped tests — https://la-hacks-rttothemoon.devinenterprise.com/attachments/2a25a96b-9b82-4ca2-ad96-bb641fdf918d/full-mobile-jest.log.",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/56311e84-2f40-44be-a7ae-a2c83b17af33/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "kind": "check",
+            "note": "VERIFIED exit 0, no diagnostics. The first run exited 2 with 11 errors all in src/diagnostics/* ('Cannot find module @sentry/react-native') because the pre-provisioned apps/mobile/node_modules predated package-lock.json (node_modules/.package-lock.json lacked @sentry/react-native); the repo's sanctioned `cd apps/mobile && npm ci` fixed it (environment staleness, not a code defect, no files changed). tsconfig.json only includes src/ and __tests__/, so the child-only harness modules were additionally typechecked with a temporary (deleted, uncommitted) tsconfig that adds __harness__/processDeath/**/*.ts: exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b77c70b1-7319-40a3-aafb-504eb058cd9b/tsc-harness-explicit.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8e5d2539-6c4e-4834-8707-4e263ebaf810/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts && npx prettier --check <same 10 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "kind": "check",
+            "note": "VERIFIED from repo root: eslint exit 0 (0 errors; 1 informational warning that register.js is ignored by the root config's global `**/*.js` ignore pattern, same as every other .js in the repo — no eslint-disable used); prettier --check exit 0 'All matched files use Prettier code style!' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/f530c0c2-db33-4261-b1d9-d52f746be188/ac3-prettier.log. Root `pnpm format:check` exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/c3e579ca-acd8-4cc4-a6d3-38b64eea8ef1/format-check.log. `git diff --check` (with the new files intent-added) exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/718a6e94-b526-44b0-af02-488f0a116f84/git-diff-check.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: wrote the Jest suite, proved it fails on BASE_SHA with the harness directory absent (module not found), committed it alone; then built the harness under __harness__/processDeath/ so the suite drives the unmodified shipping modules in a real child Node process on a file-backed node:sqlite database, with SIGKILL triggers in the sqlite adapter and fetch wrapper and a loopback server mirroring the edge function's idempotency. Verified with the manifest's AC commands, root pnpm format:check, git diff --check, an explicit typecheck of the child-only harness modules, a temporary mutation of sync.ts (reverted) proving the suite detects an outbox/receipt defect, and the full mobile Jest suite.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c64e2db8-2f33-4e0c-b834-5712f7abbcbf/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c8960bbd-4d03-4573-baed-d6a812d1780e/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2705107-a27e-490f-adcb-aadc71dade9a/ac1-candidate-verbose.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/56311e84-2f40-44be-a7ae-a2c83b17af33/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8e5d2539-6c4e-4834-8707-4e263ebaf810/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f530c0c2-db33-4261-b1d9-d52f746be188/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c3e579ca-acd8-4cc4-a6d3-38b64eea8ef1/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/718a6e94-b526-44b0-af02-488f0a116f84/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c36229b-f1dd-4c9e-b366-b865838f74a7/mutation-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2a25a96b-9b82-4ca2-ad96-bb641fdf918d/full-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b77c70b1-7319-40a3-aafb-504eb058cd9b/tsc-harness-explicit.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [
+          "`cd apps/mobile && npx tsc --noEmit` on the pre-provisioned VM node_modules exited 2 with 11 TS errors in src/diagnostics/{sentry,privacy}.ts and their tests (missing @sentry/react-native types). Cause was a stale node_modules (installed before the lockfile added @sentry/react-native), not the checked-in code: after `cd apps/mobile && npm ci` the same command exits 0 on BASE_SHA-equivalent sources. Recorded as environment staleness; nothing in the repo was changed for it.",
+          "`cd apps/mobile && npx jest --ci --silent` (full suite) reports 1 skipped suite / 1 skipped test that pre-exists this package (308 of 309 suites run, all passing)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w02-03/impl-r1",
+        "files_changed": [
+          "apps/mobile/__harness__/processDeath/child.ts",
+          "apps/mobile/__harness__/processDeath/durableSqlite.ts",
+          "apps/mobile/__harness__/processDeath/harness.ts",
+          "apps/mobile/__harness__/processDeath/killPoints.ts",
+          "apps/mobile/__harness__/processDeath/killSwitch.ts",
+          "apps/mobile/__harness__/processDeath/ratingService.ts",
+          "apps/mobile/__harness__/processDeath/reactNativeStub.ts",
+          "apps/mobile/__harness__/processDeath/register.js",
+          "apps/mobile/__harness__/processDeath/report.ts",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        ],
+        "head_sha": "8fb2d82dfd5230dd7f9d994356779d816f4b1dfb",
+        "out_of_scope_files": [],
+        "package_id": "W02-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        ],
+        "residual_risks": [
+          "Held kill points (attempt admitted, no committed result) end with the permit released `cancelled` and the operation reconcile-only; AnalyzeScreen.showOriginalRecovery offers only 'reconcile_saved' (not retry) for a `cancelled` release, so a user who is killed mid-rating must start again — that is the documented shipping behaviour (no fabricated result, nothing consumed), asserted as-is, not changed. If the program wants those kills to finish with a scored result, that is a separate mobile-analysis package.",
+          "The harness's sqlite adapter is node:sqlite (DatabaseSync) standing in for op-sqlite; both are SQLite with the same transactional semantics, but iOS-specific op-sqlite behaviour (WAL config, native binding quirks) is not exercised on Linux — Mac/device verification remains an Apple-plane task.",
+          "The loopback rating service mirrors the edge function's permit/finalize/shots:sync idempotency from reading supabase/functions/api/index.ts (INFERRED); a divergence in the real edge behaviour would not be caught by this Linux harness.",
+          "Kill triggers match shipping SQL text fragments (e.g. 'INSERT INTO analysis_logical_operations', \"THEN 'reserved'\"); a future rewording of those statements in src/ would make the corresponding point fail loudly (no silent pass) and would need the fragment updated in killPoints.ts.",
+          "register.js is ignored by the root ESLint config's global `**/*.js` pattern (like every other .js in the repo), so it is only checked by Prettier and by executing it.",
+          "Each kill case runs two real child processes with real inference (~3.2 s each, 14 tests ≈ 41-43 s in a single suite) under the default 30 s per-test timeout; no timeout was raised."
+        ],
+        "summary": "Gap on BASE_SHA (42291369): no process-death coverage exists for the saved-analysis journal/result/outbox chain. The shipping modules already promise crash-safety — runJournal.ts recovery (`recoverRuns`/attempt release), originalAnalysisOperations.ts (same-operation replay via `final_record_id`, hold instead of fabricate), repository.ts `saveAnalysis` (record + local_shot + shot.sync outbox + journal commit in ONE transaction), sync.ts:495-505 (receipt insert + outbox delete in one transaction) — but every existing test runs in-process with mocked/in-memory sqlite, so a real kill between statements/requests was never exercised; `apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts` did not exist and `apps/mobile/__harness__/` had no processDeath harness. Result: on base the new suite fails (module not found). Implemented, only under write_paths: (1) `__harness__/processDeath/register.js` — a Node `-r` hook that compiles the shipping TypeScript with the app's own Babel config and maps `react-native` → `reactNativeStub.ts` (Platform/NativeModules.PickleVideoCapture/AppState only; the media stub re-reads the fixture file and returns the real SHA-256/byte verification shape) and `@op-engineering/op-sqlite` → `durableSqlite.ts` (file-backed `node:sqlite` DatabaseSync behind the op-sqlite `execute/executeSync/transaction` interface, `BEGIN IMMEDIATE`/`COMMIT`, with a PD_KILL trigger that SIGKILLs the process before/after the Nth statement matching given SQL fragments); (2) `child.ts` — runs the SHIPPING code path unchanged: setActiveDataOwner → api session → getDb() schema open → snapshot as-found → savePendingCapture (launch 1) → configureSyncRuntime/triggerOutboxSync (journal recovery) → snapshot after-recovery → prepareOriginalCaptureAnalysis → runOriginalCaptureAnalysis (real @pickle/evaluation inference on a synthetic swing) → triggerOutboxSync drain → final snapshot, printed as a `PD_REPORT` JSON line; fetch is wrapped only to add the http kill trigger (before send / after the server committed and answered); (3) `ratingService.ts` — loopback HTTP server mirroring supabase/functions/api idempotency (permit reserve by idempotencyKey, same-outcome finalize replay, shots:sync replay-accept, permit consumption) and recording every request; (4) `harness.ts` — spawns launch 1 (with kill) and launch 2 (same DB file, same server, proposed new operation id) and parses exit code/signal/PD_KILL marker/report; (5) `killPoints.ts` — 12 deterministic points: capture_saved, operation_insert_mid_transaction, seal_update_mid_transaction, attempt_insert_mid_transaction, attempt_admitted_before_reserve_request, permit_reserved_response_lost (server has the permit, client never saw the response), permit_update_mid_transaction, commit_shot_inserted_mid_transaction, commit_outbox_inserted_mid_transaction, result_committed_before_sync_request, sync_accepted_response_lost (server has the shot, client never saw the ack), receipt_inserted_mid_transaction. The Jest suite asserts per point: launch 1 really died by SIGKILL at that step; as-found durable state matches (statements inside an uncommitted transaction are rolled back — e.g. the record/shot/outbox commit is all-or-nothing); after relaunch every row is owner-scoped, there is exactly ONE logical operation (a surviving operation is continued under its original id, never re-created) and exactly ONE attempt; for pre-admission and post-commit kills the end state is exactly one analysis record = one local_shot = one server shot, zero outbox rows, exactly one shot.sync receipt, exactly one server permit (finalized scored) and, when the result was already on disk, `replayed: true` with the same analysisId; for kills after an attempt was admitted but before the result committed the shipping journal HOLDS: the same permit is released `cancelled` under the same reservation key (every reserve request the relaunch made reused it), zero results/outbox/receipts/server shots, no second permit, outcome `unavailable`/`recovery_pending` — no fabricated score and nothing consumed. Note on the manifest wording 'exactly one durable result and one outbox entry': that is asserted for every point where a result can legitimately exist; for the five held points the product invariant 'ambiguous commitment ⇒ HOLD/recover' means the correct durable outcome is zero results and zero outbox rows with the permit reconciled, which the suite asserts explicitly instead of forcing a score. Commits: d72f3345 (test only, fails on base) then 8fb2d82d (harness). Pushed to origin devin/pp/w02-03/impl-r1 only; no PR opened; nothing under src/ or any serial-group path touched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ec1dae1-960f-45ea-9f85-db9f429ca59b/ac1-candidate-node22.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 14,
+            "exit_code": 1,
+            "failed": 13,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED, runtime-dependent. On the VM default Node v24.19.0 the candidate passes: exit 0, Tests 14 passed / 14 total, 0 failed, 0 skipped (12 SIGKILL points + count assertion + uninterrupted control) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/84e592b2-9d6f-4e2b-b9ca-272983e5e196/ac1-candidate.log (verbose per-case: https://la-hacks-rttothemoon.devinenterprise.com/attachments/b91c60f1-c3d8-4591-ba22-c041d8e19695/ac1-candidate-verbose.log). On Node v22.23.2 — what .github/workflows/ci.yml `mobile` job `node-version: \"22\"` resolves to and inside apps/mobile/package.json engines `^22.13.0 || ^24.3.0` — the SAME command exits 1: Tests 13 failed / 1 passed / 14 total, 0 skipped. Every launch that reaches PD_REPORT fails `expect(launch.stderr).toBe('')` (__tests__/w02ProcessDeathRecovery.test.ts:40) because `require('node:sqlite')` on Node 22 prints `ExperimentalWarning: SQLite is an experimental feature and might change at any time` to stderr and harness.ts:108-119 spawns process.execPath with no `--disable-warning=ExperimentalWarning`/`--no-warnings` (reproduce: `npm i node@22` in a scratch dir, prepend its .bin to PATH, run the AC1 command). Hence the reported exit_code=1: the PROOF holds only on Node 24. BASE run (BASE_SHA 42291369 + only the test file copied over, harness dir absent): exit 1, Test Suites 1 failed, Tests 0 total — 'Cannot find module ../__harness__/processDeath/harness' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca34a7b-a077-411d-97d4-1da724ade3eb/ac1-base.log. Independent mutation check (temporary sed on src/analysis/runJournal.ts:707 making recovery reserve under `${reservationKey}-dup`, reverted, tree clean): 3 of 4 selected cases fail (server.permits length 2 vs 1) — the suite does detect a shipping-recovery regression: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a43ad36-7fa3-4d90-afc1-372b601fcf6a/mutation-check-reviewer.log.",
+            "passed": 1,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/94b7b1a5-56ca-437a-8cb3-f9f3147ad762/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "VERIFIED exit 0, no diagnostics, after `cd apps/mobile && npm ci` (pre-provisioned node_modules lacked @sentry/react-native; environment staleness, no repo change). tsconfig.json includes only src/ and __tests__/, so child.ts, durableSqlite.ts and reactNativeStub.ts are not reached by AC2; I additionally typechecked __harness__/processDeath/**/*.ts with a temporary (deleted) tsconfig extending tsconfig.json: exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/7882fdc1-f939-4fb1-9308-b62a0cee5cbd/tsc-harness-explicit.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/507537b0-ec67-4240-8418-288ddae75c1e/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts && npx prettier --check <same 10 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED from repo root: eslint exit 0, 0 errors, 1 warning (register.js ignored by the root config's `**/*.js` ignore pattern — no eslint-disable in the diff); prettier --check exit 0 'All matched files use Prettier code style!' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/327c5c9d-8836-40c5-9e96-3e3030166f22/ac3-prettier.log. Diff grep for `any`/@ts-ignore/eslint-disable/`|| true`/passWithNoTests/.skip/.only/jest.setTimeout/testTimeout/forceExit: no matches.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84e592b2-9d6f-4e2b-b9ca-272983e5e196/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b91c60f1-c3d8-4591-ba22-c041d8e19695/ac1-candidate-verbose.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca34a7b-a077-411d-97d4-1da724ade3eb/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ec1dae1-960f-45ea-9f85-db9f429ca59b/ac1-candidate-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/94b7b1a5-56ca-437a-8cb3-f9f3147ad762/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/507537b0-ec67-4240-8418-288ddae75c1e/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/327c5c9d-8836-40c5-9e96-3e3030166f22/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a43ad36-7fa3-4d90-afc1-372b601fcf6a/mutation-check-reviewer.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7882fdc1-f939-4fb1-9308-b62a0cee5cbd/tsc-harness-explicit.log"
+        ],
+        "blocking_issues": [
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts:40 (`expect(launch.stderr).toBe('')`) together with apps/mobile/__harness__/processDeath/harness.ts:108-119 (spawn(process.execPath, ['-r', register.js, child.ts]) with no warning suppression): on Node 22 — the runtime of the repo's CI `mobile` job (.github/workflows/ci.yml line 79 `node-version: \"22\"`, which runs `scripts/verify-cloud.sh --only deps,mobile` = the full mobile Jest suite) and an engine apps/mobile/package.json declares supported (`^22.13.0`) — `node:sqlite` emits `ExperimentalWarning: SQLite is an experimental feature and might change at any time` on the child's stderr, so every successful launch fails the empty-stderr assertion. Reproduced: with Node v22.23.2 first on PATH, `cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` exits 1, 13 failed / 1 passed / 14 (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ec1dae1-960f-45ea-9f85-db9f429ca59b/ac1-candidate-node22.log); the same command on Node v24.19.0 passes 14/14. Merging as-is turns the CI mobile job red (REVIEW.md: mergeable requires green CI). Fix is small and inside write_paths: pass `--disable-warning=ExperimentalWarning` (Node >= 22 flag) in the spawn args in harness.ts, or assert stderr after filtering out Node warning lines, and re-verify under Node 22."
+        ],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AC2 (`tsc --noEmit`) does not typecheck child.ts, durableSqlite.ts or reactNativeStub.ts (tsconfig.json includes only src/ and __tests__/); they are only Babel-stripped at child launch. I typechecked them explicitly (exit 0), but consider adding `__harness__/**/*.ts` to tsconfig.json `include` (outside write_paths — a coordinator decision) so future edits stay type-checked.",
+          "register.js is excluded by the root ESLint `**/*.js` ignore, so it is covered only by Prettier and by execution.",
+          "node:sqlite does not exist on Node 20 (the root workspace engine `>=20 <21`); the suite is therefore only meaningful under the apps/mobile engines (22.13+/24.3+). Not a CI problem today (mobile job is Node 22) but worth a one-line note in the harness for anyone running mobile Jest under the root Node.",
+          "Each case runs two real child processes with real inference (3.3-4.5 s per test here, ~48 s for the suite on this VM); still well under the default 30 s per-test timeout, and no timeout was raised."
+        ],
+        "package_id": "W02-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "8fb2d82dfd5230dd7f9d994356779d816f4b1dfb",
+        "scope_violation": false,
+        "summary": "Independent review of W02-03 candidate 8fb2d82dfd5230dd7f9d994356779d816f4b1dfb vs base 42291369. SCOPE clean: `git diff --stat` shows 10 files / +1671 / -0, all under the two write_paths, nothing under src/ or any serial-group path; out_of_scope_files empty and correct. OBJECTIVE met as behaviour: child.ts drives the unmodified shipping modules (setActiveDataOwner, establishApiSession, getDb, savePendingCapture, configureSyncRuntime/triggerOutboxSync -> recoverAnalysisJournals + drainOutbox, prepareOriginalCaptureAnalysis/runOriginalCaptureAnalysis) in a real spawned Node process on a file-backed node:sqlite DB behind the op-sqlite interface, SIGKILLs at 12 deterministic SQL/HTTP points (>= 8 required), relaunches on the same DB, and the suite asserts owner-scoped rows, exactly one logical operation and attempt, and either exactly one record/local_shot/server shot/receipt with zero outbox rows (recoverable points) or the HOLD outcome (zero results, same permit released `cancelled` under the same reservation key, no second permit) for the five post-admission/pre-commit points — consistent with the 'ambiguous commitment => HOLD/recover' invariant. My own mutation of src/analysis/runJournal.ts recovery (reserve under a new key; reverted) made 3/4 selected cases fail, so the suite detects real shipping regressions. INVARIANTS: no src/, migration, RLS/grant, billing, copy or comment edits; no any/@ts-ignore/eslint-disable/|| true/skip/only/timeout changes; no tokens persisted (fixed loopback bearer only); invariant_violations empty. REGRESSION PROOF: base + test file only -> exit 1, 0 tests ('Cannot find module ../__harness__/processDeath/harness'); candidate on Node 24.19 -> exit 0, 14/14. AC2 exit 0 (plus explicit typecheck of the child-only harness files, exit 0); AC3 eslint exit 0 (0 errors, 1 ignored-file warning for register.js) and prettier exit 0. BLOCKING: the suite is Node-major dependent — on Node v22.23.2 (CI `mobile` job runtime per .github/workflows/ci.yml:79 and an apps/mobile engines-declared version) `node:sqlite` prints an ExperimentalWarning to the child's stderr and test.ts:40 `expect(launch.stderr).toBe('')` fails in 13/14 tests (exit 1; log attached). This would turn the CI mobile job red, so the candidate is not mergeable as-is. It is a small fix inside write_paths (suppress the warning in the spawn args in harness.ts, e.g. `--disable-warning=ExperimentalWarning`, or filter Node warning lines before the stderr assertion) followed by re-running AC1 under Node 22 -> request_changes, not reject. No PR opened, nothing pushed, working tree left clean at the candidate SHA.",
+        "verdict": "request_changes"
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/264d7623-7935-446a-b506-6824aabe9cfa/final-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/57fe9ca7-80b7-4534-b3ac-d023367cb607/final-ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cddb44c9-d45a-4edc-bd4c-8758a8af7fd9/final-ac2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1050f920-825e-42f1-9e9c-8e22fe581f40/final-ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac7df068-6b7f-4163-82a0-0d40f0fe6590/final-ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c4fe484-cff6-4e58-b3bb-28608577b684/ac1-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/88765b01-ec60-4d2b-8031-78ca8c965af0/npm-ci.log"
+        ],
+        "attack_branch": "devin/pp/w02-03/attack-5a4bb26e",
+        "attack_branch_sha": "8d62cfaabf45b413c0853964a1e05b05528baaff",
+        "attacked_sha": "5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10",
+        "attacks_tried": 53,
+        "breaks": [
+          {
+            "expected": "A finalize whose acknowledgement cannot be parsed as the server's permit verdict is ambiguous: the attempt must stay `release_pending` (HOLD/recover on the same permit id) until a parseable verdict arrives, so the server-side reservation is actually released and the free-rating slot is not left reserved. Product invariant: ambiguous commitment => HOLD/recover, never fabricated completion.",
+            "observed": "Kill at commit_shot_inserted_mid_transaction leaves a RESERVED attempt. On relaunch the recovery POSTs /finalize; the fault proxy answers 200 text/html, 204 with no body, or 302 -> 200 HTML and NEVER forwards to the rating service. Local analysis_execution_attempts row ends state='released' (terminalReason null); server permit for the same id is still status='reserved'; a third clean launch does nothing (fixed point). src/data/api.ts request() returns null for any 2xx body that is not JSON (response.json().catch(() => null)) and release() never inspects the response, so runJournal.recoverOne treats the resolved promise as a settled permit. VERIFIED. Pre-existing on BASE_SHA: `git diff --stat 42291369..5a4bb26e -- apps/mobile/src` is empty; the candidate harness makes it reachable/observable but did not introduce it.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"finalize answered with a 200 text/html|finalize answered with a 204|302 to a captive-portal\"  (Node 22.23.2; 3 failed / 0 passed of the 3 selected)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A3 network faults on the relaunch' -> unverifiableAcks + redirects[portal_html])",
+            "title": "Unverified 2xx finalize answer (200 text/html, 204 empty, or 302 -> captive-portal page) is recorded as `released` while the server permit stays `reserved`"
+          },
+          {
+            "expected": "A 4xx that is not a recognised permit verdict on the finalize route (or any response reached through a redirect off the API route) should leave the attempt recoverable (release_pending) so the same permit is released on the next honest network; only an explicit permit_not_found/consumed verdict should be terminal.",
+            "observed": "302 or 307 on POST /finalize -> fetch follows to GET <origin>/attack-redirect-target -> 404 {error:{code:'not_found'}}. Local attempt: state='terminal', terminalReason='release_rejected', permit_id kept. Server permit: still status='reserved'. Third clean launch: no further finalize attempt (server saw 0 finalize requests). runJournal failure() treats every 4xx other than 401/408/429 as a permanent rejection even when the response is not a permit verdict. VERIFIED; pre-existing on BASE_SHA (no apps/mobile/src change in the candidate).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"finalize answered with a 30. to a route the API does not have\"  (Node 22.23.2; 2 failed / 0 passed of the 2 selected)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A3 network faults on the relaunch' -> redirects[not_found] on /finalize)",
+            "title": "Redirect of the finalize call to a route answering 404 (unknown code) makes the RESERVED attempt terminal `release_rejected`; the permit is never released and never retried"
+          },
+          {
+            "expected": "Transport artifacts (redirect off the API route, a 404 from a route that is not the sync endpoint) must not consume the retry budget; the committed result must eventually drain exactly once when the network is honest. No durable result may be stranded.",
+            "observed": "Kill at result_committed_before_sync_request (one scored shot + one outbox row committed). Relaunch with POST /v1/shots:sync answered 302/307 -> GET -> 404: outbox.attempts goes 0 -> 2 in ONE launch (both triggerOutboxSync passes count it as permanent). After OUTBOX_MAX_ATTEMPTS(8) redirected launches (4 are enough) a clean relaunch leaves outbox=[{attempts:8,...}], receipts=[], server shots=[] and the server permit stays status='reserved' -- the user holds a validated score that the server never receives and the permit is never finalized `scored`. VERIFIED; pre-existing on BASE_SHA (sync.ts isPermanentSyncFailure treats every 4xx except 401/408/429 as permanent).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"relaunch sync answered 30. to a route the API does not have|every relaunch sync redirected\"  (Node 22.23.2; 3 failed / 0 passed of the 3 selected)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A3 network faults on the relaunch' -> syncFaults[redirect not_found] and 'every relaunch sync redirected')",
+            "title": "shot.sync redirected to a 404 burns the bounded outbox budget (2 attempts per launch); after OUTBOX_MAX_ATTEMPTS the durable scored result is stranded and never delivered even when the network is honest again"
+          },
+          {
+            "expected": "A deterministic harness must set every PD_* variable explicitly (PD_KILL/PD_KILL_ID cleared for control and relaunch) so the outcome cannot depend on the parent shell's environment.",
+            "observed": "With process.env.PD_KILL set to a valid trigger and PD_KILL_ID='ambient_environment', runScenario(null) (the control run) returns first.killMarker = 'ambient_environment INSERT INTO analysis_logical_operations ...' -- the child was SIGKILLed. apps/mobile/__harness__/processDeath/harness.ts launchChild() spreads process.env and only overrides PD_KILL/PD_KILL_ID when a kill point is given, so the 'null' control and the '2' relaunch inherit stray values. VERIFIED. This is inside the candidate's write_paths.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"ambient PD_KILL\"  (Node 22.23.2; 1 failed / 0 passed of the 1 selected)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A7 harness hermeticity')",
+            "title": "Candidate harness is not hermetic: ambient PD_KILL / PD_KILL_ID in the parent environment are inherited by the control launch and kill it"
+          }
+        ],
+        "package_id": "W02-03",
+        "summary": "W02-03 adversary against 5a4bb26e (branch devin/pp/w02-03/impl-r2), Node 22.23.2, Linux. Baseline VERIFIED after `cd apps/mobile && npm ci` (exit 0): AC1 `npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` exit 0, 14 passed/0 failed/0 skipped (12 kill points >= 8); AC2 `npx tsc --noEmit` exit 0; AC3 eslint+prettier exit 0 on the changed files. Attack suite apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (53 tests, 7 classes) with driver apps/mobile/__harness__/processDeathAttack/{scenario,attackChild,faultProxy,attackReport}.ts, pushed to devin/pp/w02-03/attack-5a4bb26e @ 8d62cfaabf45b413c0853964a1e05b05528baaff (candidate production code and its acceptance test untouched; no PR; no main/ci/mac-* pushes). Final run `cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts`: exit 1, 44 passed / 9 failed / 0 skipped (final-attack.log). Attacks that did NOT break the candidate (44 VERIFIED passes): A1 fixed point -- a third clean launch after each of the 12 kill/relaunch pairs is a durable no-op with zero new server requests, plus same-operation-id replay (13); A2 crash INSIDE recovery at 7 further points (reserve/finalize/sync response lost, release_pending marked, released-update, receipt mid-txn) -> third launch converges to exactly one result/permit (7); A3 5xx/429+Retry-After/500 on finalize and 503/429/502/302->HTML on shots:sync keep HOLD or the outbox row with attempts=0 and drain exactly once, 20s stall on finalize released once (9); A4 clip tamper (no permit/no request), clip deletion after commit (replays), corrupt outbox payload (no crash, no fabricated sync), garbage DB file (never re-scores) (4); A5 account B relaunching over A's RESERVED/COMMITTED rows touches nothing, A later converges, B in full mode cannot score A's capture (3); A6 clock -10y/+10y/+80y on RESERVED/COMMITTED/capture-only relaunches (9). Confirmed breaks (9 failing tests -> 4 findings): [P1] a 2xx non-JSON finalize answer (200 HTML, 204, or 302 -> portal page) is recorded `released` while the server permit stays `reserved` (api.ts request() returns null for non-JSON 2xx; release() ignores the body); [P2] finalize redirected to a 404 -> attempt terminal `release_rejected`, permit never released; [P1] shots:sync redirected to a 404 burns 2 outbox attempts per launch and strands the committed scored result after 4 launches (server never receives the shot, permit never finalized scored); [P3] candidate harness inherits ambient PD_KILL/PD_KILL_ID into the control launch. The three shipping-path breaks are pre-existing on BASE_SHA (VERIFIED: `git diff --stat 42291369..5a4bb26e -- apps/mobile/src` is empty) -- the candidate harness exposes them but did not introduce them; only the P3 hermeticity defect is inside the candidate's write_paths. Threat-model caveat (INFERRED): the 2xx-non-JSON path needs a non-JSON 2xx to reach the client over the API origin (captive portal / intercepting proxy / gateway error page); the redirect->404 paths need a redirecting gateway or route deployment gap. Not tested: Apple-side runtime (Linux only), production Supabase, real network conditions."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aec44ed6-8c5a-49e6-bcff-641865db1d85/ac1-node22.log",
+            "command": "source ~/.nvm/nvm.sh && nvm use 22 && cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED on Node v22.23.2 (the CI mobile runtime): 14/14 (1 kill-point-count test asserting KILL_POINTS.length >= 8 — actual 12 —, 1 control pair, 12 kill points). Also VERIFIED on Node v24.19.0: exit 0, 14/14 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b335df04-6358-4ba8-ad56-108ea4c7d6a4/ac1-node24.log . Test-first proof: at the test-only commit 93bb2606 (BASE_SHA + test) the same command exits 1, 0 tests executed ('Cannot find module ../__harness__/processDeath/harness') — https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c8fd6b7-f079-4820-87a1-0fba9a6438ee/ac1-test-only-on-base-node22.log . Round-1 defect reproduced before the fix: r1 head 8fb2d82d on Node v22.23.2 exits 1, 13 failed / 1 passed / 14 (ExperimentalWarning on child stderr) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/0eee9445-3835-46f5-b577-4beea8e3b388/repro-r1-node22.log . Round-1 adversary suite (attack-8fb2d82d files copied into the working tree, NOT committed) run against this candidate on Node v22.23.2: exit 0, 30 passed / 30, including 'F. a control launch writes nothing to stderr on the CI runtime' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/604c2372-f5ee-4640-89bc-e585bf450b05/attack-suite-node22.log",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6dcb664f-f120-4152-9add-23271167f8b8/ac2-tsc-node22.log",
+            "command": "source ~/.nvm/nvm.sh && nvm use 22 && cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "VERIFIED after `cd apps/mobile && npm ci` (the pre-installed node_modules on this box lacked @sentry/react-native, which made a first tsc run fail with TS2307 in src/diagnostics/sentry.ts — an environment staleness issue, not a code defect; npm ci left the git tree clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee2f2fd7-6b6e-4afc-84b2-92da329b981c/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts && npx prettier --check <same 10 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED from the repo root on Node v22.23.2: eslint exit 0 (0 errors; 1 warning that register.js is ignored by the pre-existing root eslint.config.mjs `**/*.js` ignore pattern — not a lint failure); prettier --check exit 0 'All matched files use Prettier code style!' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f3dfcae-9d19-4e0f-8897-1903d1c35add/ac3-prettier.log . Additionally root `pnpm format:check` exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/5aeb318c-6249-4b10-9758-847a8c2a6f0f/format-check.log ; `git diff --check 42291369 HEAD` exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/7711f821-1d69-4d0a-a5a6-ec2257a05411/git-diff-check.log ; full mobile suite `cd apps/mobile && npx jest --ci --silent` on Node v22.23.2 (what CI's mobile job runs): exit 0, 308 suites passed / 1 skipped (pre-existing Mac-artifact suite), 5903 tests passed / 1 skipped — https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ce6fee2-2cb2-42f5-86a8-e46a63292d5b/full-mobile-jest-node22.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA 42291369 on a fresh branch devin/pp/w02-03/impl-r2. Commit 1 (93bb2606) cherry-picks the round-1 regression suite unchanged (test-first; it fails on BASE_SHA because the harness does not exist). Commit 2 (5a4bb26e) cherry-picks the round-1 harness (child.ts, durableSqlite.ts, killPoints.ts, killSwitch.ts, ratingService.ts, reactNativeStub.ts, register.js, report.ts — all sound per the round-1 review) with ONE change in harness.ts launchChild(): the child is spawned with `--disable-warning=ExperimentalWarning` ahead of `-r register.js child.ts`. VERIFIED (node -e) that on Node 22.23.2 this silences exactly the node:sqlite ExperimentalWarning while a DeprecationWarning (and any error) still reaches stderr, so the suite's strict `expect(launch.stderr).toBe('')` on every successful launch keeps its full strength; the flag is a no-op on Node 24 (no warning emitted there). No test was weakened, no assertion filtered, no shipping src/ file touched.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0eee9445-3835-46f5-b577-4beea8e3b388/repro-r1-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c8fd6b7-f079-4820-87a1-0fba9a6438ee/ac1-test-only-on-base-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aec44ed6-8c5a-49e6-bcff-641865db1d85/ac1-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b335df04-6358-4ba8-ad56-108ea4c7d6a4/ac1-node24.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/604c2372-f5ee-4640-89bc-e585bf450b05/attack-suite-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6dcb664f-f120-4152-9add-23271167f8b8/ac2-tsc-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee2f2fd7-6b6e-4afc-84b2-92da329b981c/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f3dfcae-9d19-4e0f-8897-1903d1c35add/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5aeb318c-6249-4b10-9758-847a8c2a6f0f/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7711f821-1d69-4d0a-a5a6-ec2257a05411/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ce6fee2-2cb2-42f5-86a8-e46a63292d5b/full-mobile-jest-node22.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w02-03/impl-r2",
+        "files_changed": [
+          "apps/mobile/__harness__/processDeath/child.ts",
+          "apps/mobile/__harness__/processDeath/durableSqlite.ts",
+          "apps/mobile/__harness__/processDeath/harness.ts",
+          "apps/mobile/__harness__/processDeath/killPoints.ts",
+          "apps/mobile/__harness__/processDeath/killSwitch.ts",
+          "apps/mobile/__harness__/processDeath/ratingService.ts",
+          "apps/mobile/__harness__/processDeath/reactNativeStub.ts",
+          "apps/mobile/__harness__/processDeath/register.js",
+          "apps/mobile/__harness__/processDeath/report.ts",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        ],
+        "head_sha": "5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10",
+        "out_of_scope_files": [],
+        "package_id": "W02-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        ],
+        "residual_risks": [
+          "durableSqlite.ts uses StatementSync.columns() (node:sqlite, added in Node 22.15.0 / 23.11.0). apps/mobile/package.json engines allows ^22.13.0, so Node 22.13/22.14 would fail the child launch with a TypeError; CI pins setup-node '22' (latest 22.x, currently 22.23.2) and this box's 22.23.2 and 24.19.0 both pass. UNVERIFIED on 22.13/22.14.",
+          "The harness proves recovery on Linux/node:sqlite against the shipping TypeScript modules; it is a proxy for iOS process death (op-sqlite on device is not exercised). Physical force-quit evidence still needs the Mac/device plane, as docs/RELEASE_READINESS_2026-09-07.md already records for W02.",
+          "register.js is excluded from root ESLint by the pre-existing `**/*.js` ignore in eslint.config.mjs (Prettier still checks it)."
+        ],
+        "summary": "Gap on BASE_SHA 42291369: no process-death harness exists (apps/mobile/__harness__/ has only serverResponseMatrix; no __tests__/w02ProcessDeathRecovery.test.ts), so the W02-03 objective was unmet. Round-1 defect (VERIFIED reproduced): r1 head 8fb2d82d's apps/mobile/__harness__/processDeath/harness.ts:108-119 spawned the child as `node -r register.js child.ts` with no warning suppression, while apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts:40 asserts `expect(launch.stderr).toBe('')`; on Node v22.23.2 (CI mobile job runtime, .github/workflows/ci.yml:79) node:sqlite prints `ExperimentalWarning: SQLite is an experimental feature...` on the child's stderr → 13 failed / 1 passed. Fix (round 2, inside write_paths): harness.ts launchChild() now passes `--disable-warning=ExperimentalWarning` as the first node argument (harness.ts:111-113). Everything else from r1 is reused unchanged: 12 deterministic kill points (>= 8 required) across the shipping savePendingCapture → prepareOriginalCaptureAnalysis → runOriginalCaptureAnalysis → drainOutbox path, each SIGKILLing a real child Node process on a file-backed node:sqlite DB and relaunching on the same file; the suite asserts exactly one durable scored result + one outbox entry drained into one receipt/one server shot/one permit for kills before admission or after commit, and HELD (same permit released cancelled, zero results/outbox/shots, no second operation/permit) for kills between admission and commit. VERIFIED: AC1 14/14 on Node 22.23.2 and 24.19.0; AC2 tsc exit 0; AC3 eslint+prettier exit 0; pnpm format:check exit 0; git diff --check exit 0; full mobile Jest suite on Node 22 exit 0 (308 suites passed, 1 pre-existing skip); round-1 adversary suite 30/30 on Node 22 against this candidate (not committed). Branch devin/pp/w02-03/impl-r2 pushed, head 5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10; no PR opened; no pushes to main or ci/mac-*."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34658a79-8db1-4fdb-9ef6-2725dd3bd481/ac1-node22.log",
+            "command": "source ~/.nvm/nvm.sh && nvm use 22 && cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED on Node v22.23.2 (fresh `nvm install 22` + `cd apps/mobile && npm ci`, tree clean): 1 suite passed, 14/14 tests (1 kill-point-count test asserting KILL_POINTS.length >= 8 — actual 12 unique ids —, 1 control pair, 12 kill-point scenarios). Also VERIFIED on Node v24.19.0 with verbose output listing every kill point: exit 0, 14/14 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/0bfc684c-6664-4b6c-b2eb-f7a06133a0fb/ac1-node24-verbose.log . Each scenario asserts SIGKILL of a real child Node process at the configured step (killMarker), then relaunch on the same file-backed node:sqlite DB; 'scored' points assert exactly one durable record/shot/outbox-drained receipt/server shot/server permit, 'held' points assert same permit released cancelled with zero results/outbox/shots and no second operation/permit. Full mobile suite on Node 22 also VERIFIED: `cd apps/mobile && npx jest --ci --silent` exit 0, 308 suites passed / 1 skipped (pre-existing Mac-artifact suite), 5903 passed / 1 skipped — https://la-hacks-rttothemoon.devinenterprise.com/attachments/f90577c6-4016-43a0-9672-644313b46ec2/full-mobile-jest-node22.log",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3739f1bc-f4d0-48d6-9af2-c74c0d25fe8a/ac2-tsc-node22.log",
+            "command": "source ~/.nvm/nvm.sh && nvm use 22 && cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "VERIFIED on Node v22.23.2 after `npm ci` in apps/mobile: no diagnostics, exit 0. tsconfig include covers __tests__/**, so the __harness__/processDeath modules are type-checked transitively through the test's imports.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f3471af-efec-40f1-85b6-4bffb5eca25c/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts && npx prettier --check <same 10 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED from repo root on Node v22.23.2: eslint exit 0 (0 errors, 1 warning: register.js ignored by the pre-existing root `**/*.js` ignore pattern); prettier --check exit 0 'All matched files use Prettier code style!' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/17361eae-c77d-423d-bbad-6495c20d73d3/ac3-prettier.log ; `git diff --check 42291369 HEAD` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34658a79-8db1-4fdb-9ef6-2725dd3bd481/ac1-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0bfc684c-6664-4b6c-b2eb-f7a06133a0fb/ac1-node24-verbose.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3739f1bc-f4d0-48d6-9af2-c74c0d25fe8a/ac2-tsc-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f3471af-efec-40f1-85b6-4bffb5eca25c/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/17361eae-c77d-423d-bbad-6495c20d73d3/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da425bdb-b7db-41ad-a699-146039b50aa6/regress-test-only-on-base-node22.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f90577c6-4016-43a0-9672-644313b46ec2/full-mobile-jest-node22.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/__harness__/processDeath/harness.ts:113 spawns the child with `--disable-warning=ExperimentalWarning`. VERIFIED (node -e on v22.23.2) that DeprecationWarnings and stderr errors still surface, so `expect(launch.stderr).toBe('')` keeps its strength for errors; but any future ExperimentalWarning emitted by a shipping src/ module inside the child would also be silenced. Acceptable for a harness; a stricter alternative would be filtering only the exact node:sqlite line.",
+          "apps/mobile/__harness__/processDeath/register.js is excluded from root ESLint by the pre-existing `**/*.js` ignore in eslint.config.mjs (eslint reports 'File ignored', 0 errors); Prettier still checks it.",
+          "durableSqlite.ts uses StatementSync.columns() (node:sqlite >= 22.15); apps/mobile engines allows ^22.13.0. CI pins setup-node '22' (latest 22.x), so this is a documentation/engines-range mismatch only. UNVERIFIED on 22.13/22.14.",
+          "The harness is a Linux/node:sqlite proxy for iOS process death (op-sqlite is replaced by durableSqlite.ts, react-native by reactNativeStub.ts); physical force-quit evidence still needs the Mac/device plane."
+        ],
+        "package_id": "W02-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10",
+        "scope_violation": false,
+        "summary": "APPROVE W02-03 candidate 5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10 (2 commits on top of BASE_SHA 42291369, base is an ancestor). SCOPE (VERIFIED, `git diff --stat 42291369..5a4bb26e`): 10 files, 1674 insertions, 0 deletions, all under write_paths (9 under apps/mobile/__harness__/processDeath/, plus apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts); no src/, migration, CI, docs or serial-group path touched; no existing comment edited (only new files). OBJECTIVE: the deliverable is a test harness, and it exercises the SHIPPING modules unchanged (child.ts imports src/data/repository savePendingCapture, src/analysis/runCaptureAnalysis prepare/runOriginalCaptureAnalysis, src/data/syncRuntime configureSyncRuntime/triggerOutboxSync, src/data/db getDb); only react-native and @op-engineering/op-sqlite are swapped via register.js for a headless stub and a real file-backed node:sqlite adapter, so the 1b 'module nothing calls' concern does not apply. 12 deterministic kill points (>= 8 required): SIGKILL via process.kill(pid,'SIGKILL') + Atomics.wait spin in the child, before/after specific SQL statements (inside open transactions → rolled back on reopen) and before/after specific HTTP requests (lost-acknowledgement cases), each followed by a relaunch on the same DB file and assertions of exactly one durable result + one outbox entry drained into one receipt/one server shot/one server permit ('scored'), or HELD with the same permit released cancelled and zero results/outbox/shots/no second permit ('held'). ACCEPTANCE RE-RUN (all VERIFIED by me on Node v22.23.2 = CI mobile runtime): AC1 exit 0, 14 executed/14 passed/0 failed/0 skipped (also 14/14 on Node v24.19.0); AC2 tsc exit 0; AC3 eslint exit 0 (0 errors) + prettier --check exit 0; full mobile jest suite exit 0 (308 suites passed, 1 pre-existing skip, 5903 tests passed). REGRESSION PROOF (VERIFIED): on BASE_SHA with only the test file copied over, `npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` exits 1 with 0 tests executed ('Cannot find module ../__harness__/processDeath/harness'); on the candidate it exits 0 with 14/14 → regression_fails_on_base=true. INVARIANTS: no test weakened/skipped/reordered; no `|| true`, `--passWithNoTests`, `@ts-ignore`, `any`, `eslint-disable`, inflated timeouts or force-exit (child's process.exit is the harness's own report protocol, not a Jest force-exit); no grants/RLS/session/billing code changed; no user-facing copy; no secrets. The one round-2 change vs round 1 (`--disable-warning=ExperimentalWarning` on the child spawn) was VERIFIED to leave DeprecationWarnings and errors on stderr, so the strict empty-stderr assertion retains its strength for failures. Non-blocking notes: register.js is ESLint-ignored by the pre-existing root `**/*.js` pattern; StatementSync.columns() needs node:sqlite >= 22.15 while engines allows ^22.13 (CI uses latest 22.x); the harness is a Linux proxy for iOS process death, not device evidence.",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "REQUEUE",
+  "wave_id": "wave-1"
+}
