@@ -24,6 +24,7 @@ import {
   DIAGNOSTIC_RETENTION_LIMITS,
   DIAGNOSTIC_RETENTION_TABLE,
   DIAGNOSTIC_RETRY_DELAYS,
+  openDiagnosticRetentionDatabase,
   planDiagnosticRetention,
   type DiagnosticRetentionDatabase,
   type DiagnosticRetentionLimits,
@@ -991,96 +992,89 @@ describe('shipping wiring', () => {
     expect(memory.sequences()).toEqual([]);
   });
 
-  it('initializeDiagnostics wires the SQLite-backed bounded queue into the SDK transport', async () => {
-    jest.useFakeTimers();
+  it('opens the dedicated diagnostics database through op-sqlite openAsync', async () => {
     const sqlite = nodeSqlite();
-    const mockOpenAsync = jest.fn(async (options: { name: string }) => {
+    const openAsync = jest.fn(async (options: { name: string }) => {
       expect(options).toEqual({ name: DIAGNOSTIC_RETENTION_DATABASE });
       return sqlite.database;
     });
+    await expect(
+      openDiagnosticRetentionDatabase(async () => ({ openAsync })),
+    ).resolves.toBe(sqlite.database);
+    expect(openAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the default SQLite-backed queue behind real timers with capped backoff', async () => {
+    jest.useFakeTimers();
+    const sqlite = nodeSqlite();
+    const openAsync = jest.fn(async (options: { name: string }) => {
+      expect(options).toEqual({ name: DIAGNOSTIC_RETENTION_DATABASE });
+      return sqlite.database;
+    });
+    const retention = createDiagnosticRetention(identity, {
+      loadSqlite: async () => ({ openAsync }),
+    });
     const mode = { fail: true };
     const { sink, send } = sinkWith(mode);
-    const mockInit = jest.fn();
-    const client = {
-      getOptions: () => ({ stackParser: () => [] }),
-    };
-    const scope = { clear: jest.fn() };
-    const dsn = `https://${'a'.repeat(32)}@o1.ingest.sentry.io/1`;
-    jest.doMock('../../config/runtimeConfig', () => ({
-      getRuntimePublicConfig: () => ({
-        diagnostics: {
-          ...identity,
-          transportEnabled: true,
-          providerApproved: true,
-          disclosuresApproved: true,
-          nativePrivacyApproved: true,
-          dsn,
-        },
-      }),
-    }));
-    jest.doMock('@sentry/react-native', () => ({
-      init: mockInit,
-      getClient: () => client,
-      captureEvent: jest.fn(),
-      getGlobalScope: () => scope,
-      getIsolationScope: () => scope,
-      getCurrentScope: () => scope,
-      debugMetaIntegration: () => ({ name: 'DebugMeta' }),
-    }));
-    jest.doMock('@sentry/browser', () => ({ makeFetchTransport: () => sink }));
-    jest.doMock('@op-engineering/op-sqlite', () => ({
-      openAsync: mockOpenAsync,
-    }));
-    try {
-      let diagnostics!: typeof import('../sentry');
-      jest.isolateModules(() => {
-        diagnostics =
-          jest.requireActual<typeof import('../sentry')>('../sentry');
-      });
-      expect(diagnostics.initializeDiagnostics()).toBe('initializing');
-      expect(mockOpenAsync).not.toHaveBeenCalled();
-      await settle();
-      expect(diagnostics.getDiagnosticsStatus()).toEqual({
-        javascript: 'active_js_only',
-        native: diagnostics.NATIVE_DIAGNOSTICS_STATUS,
-        transportEnabled: true,
-        persistentQueue: true,
-      });
-      expect(mockInit).toHaveBeenCalledTimes(1);
-      const options = mockInit.mock.calls[0]![0] as ReturnType<
-        typeof optionsForDiagnostics
-      >;
-      expect(options).toMatchObject({ enabled: true, dsn, maxCacheItems: 0 });
-      const transport = options.transport!({
-        url: '',
-        recordDroppedEvent: () => {},
-      });
-      expect(mockOpenAsync).not.toHaveBeenCalled();
-      await expect(transport.send(envelope(1))).resolves.toEqual({});
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(mockOpenAsync).toHaveBeenCalledTimes(1);
-      expect(sqlite.count()).toBe(1);
-      expectNoMarker(sqlite.payloads());
-      expect(JSON.parse(sqlite.payloads()[0]!)).toEqual(clean(1));
+    const transport = optionsForDiagnostics(
+      identity,
+      null,
+      () => sink,
+      { name: 'DebugMeta' },
+      retention.retain,
+    ).transport!({ url: '', recordDroppedEvent: () => {} });
+    expect(openAsync).not.toHaveBeenCalled();
+    await expect(transport.send(envelope(1))).resolves.toEqual({});
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(openAsync).toHaveBeenCalledTimes(1);
+    expect(sqlite.count()).toBe(1);
+    expectNoMarker(sqlite.payloads());
+    expect(JSON.parse(sqlite.payloads()[0]!)).toEqual(clean(1));
 
-      mode.fail = false;
-      await jest.advanceTimersByTimeAsync(
-        DIAGNOSTIC_RETRY_DELAYS.initialMs - 1,
-      );
-      expect(send).toHaveBeenCalledTimes(1);
-      await jest.advanceTimersByTimeAsync(1);
-      await settle();
-      expect(send).toHaveBeenCalledTimes(2);
-      expect(send).toHaveBeenLastCalledWith(clean(1));
-      expect(sqlite.count()).toBe(0);
-      await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.maxMs);
-      expect(send).toHaveBeenCalledTimes(2);
-      expect(mockOpenAsync).toHaveBeenCalledTimes(1);
-    } finally {
-      jest.dontMock('../../config/runtimeConfig');
-      jest.dontMock('@sentry/react-native');
-      jest.dontMock('@sentry/browser');
-      jest.dontMock('@op-engineering/op-sqlite');
-    }
+    await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.initialMs - 1);
+    expect(send).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(sqlite.count()).toBe(1);
+    await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.initialMs * 2);
+    await settle();
+    expect(send).toHaveBeenCalledTimes(3);
+
+    mode.fail = false;
+    await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.initialMs * 4);
+    await settle();
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(send).toHaveBeenLastCalledWith(clean(1));
+    expect(sqlite.count()).toBe(0);
+    await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.maxMs);
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(openAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays inert and never rejects when the SQLite module cannot be loaded', async () => {
+    jest.useFakeTimers();
+    const retention = createDiagnosticRetention(identity, {
+      loadSqlite: async () => {
+        throw new Error(marker);
+      },
+    });
+    const mode = { fail: true };
+    const { sink, send } = sinkWith(mode);
+    const transport = retention.retain(sink);
+    await expect(transport.send(clean(1))).resolves.toEqual({});
+    await expect(transport.flush(10)).resolves.toBe(true);
+    await jest.advanceTimersByTimeAsync(DIAGNOSTIC_RETRY_DELAYS.maxMs * 2);
+    await settle();
+    expect(send).toHaveBeenCalledTimes(1);
+    await expect(retention.store.shift()).resolves.toBeUndefined();
+  });
+
+  it('uses the op-sqlite module by default and degrades to inert when it is absent here', async () => {
+    const retention = createDiagnosticRetention(identity, {
+      schedule: () => undefined,
+    });
+    await expect(retention.store.push(clean(1))).resolves.toBeUndefined();
+    await expect(retention.store.shift()).resolves.toBeUndefined();
   });
 });
