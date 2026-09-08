@@ -601,12 +601,13 @@ describe('scored result controls', () => {
       expect(labels.sort()).toEqual(expected.sort());
     };
     // SCORE: Close + the descriptive Next; no Back on the first page.
-    audit(['Close', 'Continue']);
+    // Plus the ONE "Full breakdown" entry into ResultDetails (W09-02).
+    audit(['Close', 'Continue', 'Full breakdown']);
     await press(renderer, 'Continue');
     // NEXT: Try it again with Back and Done beside it.
     audit(['Close', 'Try it again', 'Back', 'Done']);
     await press(renderer, 'Back');
-    audit(['Close', 'Continue']);
+    audit(['Close', 'Continue', 'Full breakdown']);
     await act(async () => renderer.unmount());
   });
 });
