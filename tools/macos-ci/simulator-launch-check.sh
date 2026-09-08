@@ -18,6 +18,8 @@ APP_PATH="${1:?path to .app required}"
 BUNDLE_ID="${2:?bundle id required}"
 OUT_DIR="${3:?artifact dir required}"
 SETTLE_SECONDS="${4:-25}"
+# The default remains the real macOS tool; direct host tests provide a fake.
+PLIST_BUDDY="${PICKLE_CI_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT_DIR"
@@ -28,9 +30,9 @@ if [ ! -d "$APP_PATH" ]; then
   exit 1
 fi
 
-APP_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
-APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null || echo '?')"
-APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" 2>/dev/null || echo '?')"
+APP_NAME="$("$PLIST_BUDDY" -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
+APP_VERSION="$("$PLIST_BUDDY" -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null || echo '?')"
+APP_BUILD="$("$PLIST_BUDDY" -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" 2>/dev/null || echo '?')"
 echo "app: $APP_NAME ($BUNDLE_ID) version $APP_VERSION ($APP_BUILD)"
 if [ -f "$APP_PATH/main.jsbundle" ]; then
   echo "js bundle: $(du -h "$APP_PATH/main.jsbundle" | cut -f1) main.jsbundle present (release bundle embedded)"
@@ -46,11 +48,47 @@ xcrun simctl list devices | grep "$UDID" || true
 MARKER="$(mktemp)"
 touch "$MARKER"
 
+require_log_stream_alive() {
+  if kill -0 "$LOG_PID" 2>/dev/null; then return 0; fi
+  local status=0
+  wait "$LOG_PID" 2>/dev/null || status=$?
+  LOG_PID=""
+  echo "::error::app log stream exited before requested termination (status $status); launch evidence is incomplete"
+  return 1
+}
+
+stop_log_stream() {
+  require_log_stream_alive || return 1
+  if ! kill "$LOG_PID" 2>/dev/null; then
+    echo "::error::app log stream vanished before requested termination"
+    return 1
+  fi
+  local step forced=0
+  # Bound both normal shutdown and EXIT cleanup: three seconds of grace, then
+  # SIGKILL only this helper's recorded log child. Forced shutdown is failure.
+  for step in $(seq 1 30); do
+    if ! kill -0 "$LOG_PID" 2>/dev/null; then break; fi
+    sleep 0.1
+  done
+  if kill -0 "$LOG_PID" 2>/dev/null; then
+    forced=1
+    echo "::error::app log stream did not stop within 3s; forced termination"
+    kill -KILL "$LOG_PID" 2>/dev/null || return 1
+  fi
+  LOG_STOP_STATUS=0
+  wait "$LOG_PID" 2>/dev/null || LOG_STOP_STATUS=$?
+  LOG_PID=""
+  if [ "$forced" = 1 ]; then return 1; fi
+  if [ "$LOG_STOP_STATUS" != 0 ] && [ "$LOG_STOP_STATUS" != 143 ]; then
+    echo "::error::app log stream failed during requested termination (status $LOG_STOP_STATUS)"
+    return 1
+  fi
+}
+
 cleanup() {
   set +e
   if [ -n "${LOG_PID:-}" ]; then
-    kill "$LOG_PID" 2>/dev/null
-    wait "$LOG_PID" 2>/dev/null
+    stop_log_stream
   fi
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
   rm -f "$MARKER"
@@ -69,6 +107,7 @@ xcrun simctl spawn "$UDID" log stream --style compact --level debug \
   --predicate "process == \"$APP_NAME\"" >"$OUT_DIR/app-log-stream.txt" 2>&1 &
 LOG_PID=$!
 sleep 2
+require_log_stream_alive
 
 echo "launching $BUNDLE_ID"
 LAUNCH_OUTPUT="$(xcrun simctl launch "$UDID" "$BUNDLE_ID")"
@@ -84,6 +123,7 @@ sleep 5
 xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-05s.png" >/dev/null
 ALIVE=1
 for _ in $(seq 1 "$((SETTLE_SECONDS - 5))"); do
+  require_log_stream_alive
   if ! kill -0 "$PID" 2>/dev/null; then
     ALIVE=0
     break
@@ -94,9 +134,11 @@ xcrun simctl io "$UDID" screenshot "$OUT_DIR/launch-settled.png" >/dev/null
 
 # Give the log stream a moment to flush, then stop it.
 sleep 2
-kill "$LOG_PID" 2>/dev/null || true
-wait "$LOG_PID" 2>/dev/null || true
-LOG_PID=""
+require_log_stream_alive
+stop_log_stream
+# The last loop check preceded a sleep and both screenshot/flush work. Check
+# again before claiming survival through the complete observation interval.
+if ! kill -0 "$PID" 2>/dev/null; then ALIVE=0; fi
 
 # Crash reports written during this check.
 CRASHES=0
@@ -120,6 +162,7 @@ KEYCHAIN_LINES="$(grep -E 'Code=-34018|error:\[-34018\]|neither application-iden
   echo "pid=$PID"
   echo "alive_after_${SETTLE_SECONDS}s=$ALIVE"
   echo "crash_reports=$CRASHES"
+  echo "log_stream_stop_status=$LOG_STOP_STATUS"
   echo "fatal_log_lines=$(printf '%s' "$FATAL_LINES" | grep -c . || true)"
   echo "keychain_entitlement_errors=$(printf '%s' "$KEYCHAIN_LINES" | grep -c . || true)"
 } | tee "$OUT_DIR/launch-summary.txt"

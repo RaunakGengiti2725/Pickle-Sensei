@@ -272,6 +272,7 @@ stage_scripts() {
   scripts/tests/test_verify_cloud_runtime.sh
   scripts/tests/test_mac_full_verify_runtime.sh
   scripts/tests/test_select_simulator.sh
+  scripts/tests/test_simulator_launch_check.sh
   scripts/tests/test_verify_cloud_bash32.sh
 }
 
