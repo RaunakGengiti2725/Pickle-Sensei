@@ -103,6 +103,7 @@ const childProcess = require('child_process') as {
       timeout: number;
       killSignal: 'SIGKILL';
       maxBuffer: number;
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'];
     },
   ) => {
     status: number | null;
@@ -110,6 +111,7 @@ const childProcess = require('child_process') as {
     error?: { code?: string };
     stdout: string;
     stderr: string;
+    output: (string | null)[] | null;
   };
 };
 
@@ -487,17 +489,44 @@ afterEach(() => {
 
 function buildProbe(source: string, args: string[] = [], timeout = 5000) {
   const { execPath } = require('node:process') as { execPath: string };
-  return childProcess.spawnSync(
+  const { performance } = require('node:perf_hooks') as {
+    performance: { now(): number };
+  };
+  // A separate pipe preserves the exact stdout/stderr assertions. Synchronous
+  // markers survive SIGKILL and distinguish startup, parsing and exit stalls.
+  // Keep spawnSync's original TOTAL deadline, heap, output cap and kill signal.
+  const instrumentedSource = `
+    const __pickleProbeFs = require('node:fs');
+    const __pickleProbeStart = process.hrtime.bigint();
+    const __pickleProbeCpu = process.cpuUsage();
+    let __pickleProbeRecords = 0;
+    const __pickleProbeMark = phase => {
+      if (__pickleProbeRecords++ >= 32) return;
+      __pickleProbeFs.writeSync(3, JSON.stringify({
+        phase,
+        elapsedMs: Number(process.hrtime.bigint() - __pickleProbeStart) / 1e6,
+        cpu: process.cpuUsage(__pickleProbeCpu),
+      }) + '\\n');
+    };
+    __pickleProbeMark('node-ready');
+    process.on('beforeExit', () => __pickleProbeMark('beforeExit'));
+    process.on('exit', () => __pickleProbeMark('exit'));
+    ${source}
+  `;
+  const started = performance.now();
+  const result = childProcess.spawnSync(
     execPath,
-    ['--max-old-space-size=192', '-e', source, ...args],
+    ['--max-old-space-size=192', '-e', instrumentedSource, ...args],
     {
       cwd: MOBILE_ROOT,
       encoding: 'utf8',
       timeout,
       killSignal: 'SIGKILL',
       maxBuffer: 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     },
   );
+  return { ...result, elapsedMs: performance.now() - started };
 }
 
 function loopProbe(source: string, args: string[] = []) {
@@ -569,15 +598,32 @@ function loopProbe(source: string, args: string[] = []) {
   });
 }
 
-function successfulProbe(source: string, args: string[] = []): string {
-  const result = buildProbe(source, args);
+function requireSuccessfulProbe(result: ReturnType<typeof buildProbe>): string {
+  const failed =
+    result.status !== 0 ||
+    result.signal !== null ||
+    result.error?.code !== undefined ||
+    result.stderr !== '';
   expect({
     status: result.status,
     signal: result.signal,
     error: result.error?.code,
     stderr: result.stderr,
+    ...(failed
+      ? {
+          probeDiagnostics: {
+            elapsedMs: result.elapsedMs,
+            phases: result.output?.[3] ?? '(no node-ready marker received)',
+            stdout: result.stdout,
+          },
+        }
+      : {}),
   }).toEqual({ status: 0, signal: null, error: undefined, stderr: '' });
   return result.stdout.trim();
+}
+
+function successfulProbe(source: string, args: string[] = []): string {
+  return requireSuccessfulProbe(buildProbe(source, args));
 }
 
 const unsafeImageFixtures = [
@@ -624,6 +670,7 @@ const assetInventoryProbe = `
   }
   inspect('assets');
   console.log(JSON.stringify(assets));
+  __pickleProbeMark('source-complete');
 `;
 
 const workerProbe = `
@@ -646,12 +693,15 @@ const workerProbe = `
       }
     }
     console.log(JSON.stringify(results));
+    __pickleProbeMark('source-complete');
   })().catch(error => { console.error(error); process.exitCode = 1; });
 `;
 
 function workerConfig(guardedWorker = true): string {
   return successfulProbe(`
+    __pickleProbeMark('config-start');
     const config = require('./metro.config.js');
+    __pickleProbeMark('config-ready');
     console.log(JSON.stringify({
       projectRoot: config.projectRoot,
       worker: {
@@ -659,10 +709,36 @@ function workerConfig(guardedWorker = true): string {
         transformerConfig: config.transformer,
       },
     }));
+    __pickleProbeMark('source-complete');
   `);
 }
 
 describe('GUARD build dependency security', () => {
+  it('reports the failed config phase without hiding its stderr', () => {
+    const result = buildProbe(`
+      __pickleProbeMark('config-start');
+      throw new Error('intentional config failure');
+    `);
+    expect(result.stderr).toContain('intentional config failure');
+    expect(result.output?.[3]).not.toContain('config-ready');
+    expect(() => requireSuccessfulProbe(result)).toThrow(/config-start/);
+  });
+
+  it('rejects a process exit stall even after the exact success output', () => {
+    const result = buildProbe(`
+      __pickleProbeMark('parser-rejected');
+      console.log('rejected-before-decoding');
+      __pickleProbeMark('source-complete');
+      setInterval(() => {}, 1000);
+    `);
+    expect(result.stdout.trim()).toBe('rejected-before-decoding');
+    expect(result.stderr).toBe('');
+    expect(result.error?.code).toBe('ETIMEDOUT');
+    expect(result.signal).toBe('SIGKILL');
+    expect(result.output?.[3]).not.toContain('beforeExit');
+    expect(() => requireSuccessfulProbe(result)).toThrow(/source-complete/);
+  });
+
   it('qs 6.16.0 closes GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx through the locked body-parser path', () => {
     successfulProbe(`
       const assert = require('node:assert/strict');
@@ -735,14 +811,19 @@ describe('GUARD build dependency security', () => {
       expect(
         successfulProbe(
           `
+        __pickleProbeMark('config-start');
         require('./metro.config.js');
+        __pickleProbeMark('config-ready');
         const assert = require('node:assert/strict');
         const { getAssetSize } = require('metro/private/Assets');
+        __pickleProbeMark('parser-start');
         assert.throws(
           () => getAssetSize('png', Buffer.from(process.argv[1], 'hex'), 'disguised.png'),
           { name: 'TypeError', message: 'disabled file type: ${type}' },
         );
+        __pickleProbeMark('parser-rejected');
         console.log('rejected-before-decoding');
+        __pickleProbeMark('source-complete');
       `,
           [hex],
         ),
@@ -776,7 +857,12 @@ describe('GUARD build dependency security', () => {
       string,
     ][];
     const protectedAssets = JSON.parse(
-      successfulProbe(`require('./metro.config.js'); ${assetInventoryProbe}`),
+      successfulProbe(`
+        __pickleProbeMark('config-start');
+        require('./metro.config.js');
+        __pickleProbeMark('config-ready');
+        ${assetInventoryProbe}
+      `),
     );
     expect(original.some(([, size]) => size !== null)).toBe(true);
     expect(protectedAssets).toEqual(original);
@@ -805,7 +891,9 @@ describe('GUARD build dependency security', () => {
       const assert = require('node:assert/strict');
       const { createRequire } = require('node:module');
       const { readFileSync } = require('node:fs');
+      __pickleProbeMark('config-start');
       const config = require('./metro.config.js');
+      __pickleProbeMark('config-ready');
       const metroRequire = createRequire(require.resolve('metro/package.json'));
       const imageSize = metroRequire('image-size');
       const wrapped = require(config.transformerPath);
@@ -835,6 +923,7 @@ describe('GUARD build dependency security', () => {
       assert.ok(config.resolver.assetExts.includes('mov'));
       assert.equal(getAssetSize('mp4', readFileSync('assets/brand/splash.mp4'), 'splash.mp4'), null);
       assert.equal(getAssetSize('mov', Buffer.from(process.argv[1], 'hex'), 'native-import.mov'), null);
+      __pickleProbeMark('source-complete');
     `,
       [unsafeImageFixtures[0]!.hex],
     );
