@@ -502,10 +502,16 @@ function buildProbe(source: string, args: string[] = [], timeout = 5000) {
     let __pickleProbeRecords = 0;
     const __pickleProbeMark = phase => {
       if (__pickleProbeRecords++ >= 32) return;
+      const usage = process.resourceUsage();
       __pickleProbeFs.writeSync(3, JSON.stringify({
         phase,
         elapsedMs: Number(process.hrtime.bigint() - __pickleProbeStart) / 1e6,
         cpu: process.cpuUsage(__pickleProbeCpu),
+        modules: Object.keys(require.cache).length,
+        majorPageFault: usage.majorPageFault,
+        fsRead: usage.fsRead,
+        involuntaryContextSwitches: usage.involuntaryContextSwitches,
+        voluntaryContextSwitches: usage.voluntaryContextSwitches,
       }) + '\\n');
     };
     __pickleProbeMark('node-ready');
@@ -864,6 +870,49 @@ describe('GUARD build dependency security', () => {
       ).toBe('rejected-before-decoding');
     },
   );
+
+  it('guards the config process without loading the transform-worker toolchain, then hands workers the upstream interface', () => {
+    const counts = JSON.parse(
+      successfulProbe(
+        `
+        const assert = require('node:assert/strict');
+        __pickleProbeMark('config-start');
+        const config = require('./metro.config.js');
+        __pickleProbeMark('config-ready');
+        const loadedFiles = () => Object.keys(require.cache);
+        const loaded = id => require.cache[require.resolve(id)] !== undefined;
+        assert.ok(loaded(config.transformerPath));
+        assert.equal(loaded('metro-transform-worker'), false);
+        assert.equal(loaded('@babel/core'), false);
+        assert.deepEqual(
+          loadedFiles().filter(file => /[\\/]node_modules[\\/](metro-transform-worker|metro-source-map|metro-minify-terser|@babel[\\/](core|traverse|generator|types))[\\/]/.test(file)),
+          [],
+        );
+        const { getAssetSize } = require('metro/private/Assets');
+        __pickleProbeMark('parser-start');
+        assert.throws(
+          () => getAssetSize('png', Buffer.from(process.argv[1], 'hex'), 'disguised.png'),
+          { name: 'TypeError', message: 'disabled file type: icns' },
+        );
+        __pickleProbeMark('parser-rejected');
+        const configModules = loadedFiles().length;
+        const wrapped = require(config.transformerPath);
+        const upstream = require('metro-transform-worker');
+        assert.equal(wrapped.transform, upstream.transform);
+        assert.equal(wrapped.getCacheKey, upstream.getCacheKey);
+        assert.ok(loaded('@babel/core'));
+        console.log(JSON.stringify({
+          configModules,
+          workerModules: loadedFiles().length,
+        }));
+        __pickleProbeMark('source-complete');
+      `,
+        [unsafeImageFixtures[0]!.hex],
+      ),
+    ) as { configModules: number; workerModules: number };
+    expect(counts.configModules).toBeGreaterThan(0);
+    expect(counts.configModules).toBeLessThan(counts.workerModules);
+  });
 
   it('fresh Metro workers fail fast on disguised files without loading the app config', () => {
     const config = workerConfig();
