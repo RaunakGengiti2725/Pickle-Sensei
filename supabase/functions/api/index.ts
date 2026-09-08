@@ -3060,10 +3060,13 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
   if (!subscriber || !isRecord(subscriber.entitlements)) return null;
 
   // entitlements is an object map keyed by entitlement identifier. An
-  // entitlement is ACTIVE when expires_date is null (lifetime) or parses
-  // to a future timestamp. Malformed provider state is unavailable, never a
-  // negative verification that could revoke an existing membership.
+  // entitlement is ACTIVE through its paid or verified grace horizon, or
+  // indefinitely for a lifetime grant. Malformed provider state is unavailable,
+  // never a negative verification that could revoke an existing membership.
   const entitlementMap = subscriber.entitlements;
+  if (subscriber.subscriptions !== undefined && !isRecord(subscriber.subscriptions)) return null;
+  const subscriptions = isRecord(subscriber.subscriptions) ? subscriber.subscriptions : {};
+  const nowMs = Date.now();
   const verdict: BillingVerdict = {
     premium: false,
     productKey: null,
@@ -3082,16 +3085,34 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
     ) {
       return null;
     }
-    const active = expires === null || Date.parse(expires) > Date.now();
+    const product = entitlement.product_identifier;
+    const subscription =
+      typeof product === "string" && Object.hasOwn(subscriptions, product)
+        ? subscriptions[product]
+        : undefined;
+    if (subscription !== undefined && !isRecord(subscription)) return null;
+    let horizon = typeof expires === "string" ? expires : null;
+    for (const grace of [
+      entitlement.grace_period_expires_date,
+      isRecord(subscription) ? subscription.grace_period_expires_date : undefined,
+    ]) {
+      if (grace === undefined || grace === null) continue;
+      if (typeof grace !== "string" || !Number.isFinite(Date.parse(grace))) return null;
+      if (horizon !== null && Date.parse(grace) > Date.parse(horizon)) horizon = grace;
+    }
+    const active = horizon === null || Date.parse(horizon) > nowMs;
     if (!active) continue;
     verdict.activeEntitlements.push(name);
-    if (!verdict.premium) {
-      // First active entitlement (pickle_sensei_pro preferred) carries
-      // the product/expiry the client displays.
+    if (
+      !verdict.premium ||
+      (verdict.expiresAt !== null &&
+        (horizon === null || Date.parse(horizon) > Date.parse(verdict.expiresAt)))
+    ) {
+      // Recognized aliases grant a union of access. Keep its longest horizon
+      // and the matching product; equal horizons retain the canonical alias.
       verdict.premium = true;
-      verdict.productKey =
-        typeof entitlement.product_identifier === "string" ? entitlement.product_identifier : null;
-      verdict.expiresAt = typeof expires === "string" ? expires : null;
+      verdict.productKey = typeof product === "string" ? product : null;
+      verdict.expiresAt = horizon;
     }
   }
   return verdict;
