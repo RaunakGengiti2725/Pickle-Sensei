@@ -7,6 +7,10 @@ import {
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { StrokeResultEvidenceRecord } from '../components/strokeResultModel';
 import { stabilitySlo } from '../analysis/stabilityTelemetry';
+import {
+  getDataOwnerSnapshot,
+  type DataOwnerContext,
+} from '../data/accountScope';
 
 /**
  * TRY AGAIN loop (MOBBIN brief §2): from a Stroke Result, one tap re-arms
@@ -47,46 +51,114 @@ export interface TryAgainHandoff {
  */
 export const TRY_AGAIN_HANDOFF_TTL_MS = 30_000;
 
-let pendingHandoff: TryAgainHandoff | null = null;
-let pendingArmedAtMs = 0;
+/**
+ * Result → TRY AGAIN → Analyze → Result → TRY AGAIN … is one chain of hops.
+ * The chain is kept as a bounded stack: the bottom entry is the retry armed
+ * from the original clip, the top is the most recent hop, and older
+ * intermediate hops are evicted so repeated cycles never grow the stack.
+ */
+export const TRY_AGAIN_STACK_LIMIT = 3;
 
-export function armTryAgain(handoff: TryAgainHandoff): void {
-  pendingHandoff = handoff;
-  pendingArmedAtMs = Date.now();
+interface TryAgainHop {
+  readonly handoff: TryAgainHandoff;
+  readonly armedAtMs: number;
+  /** Owner generation the tap happened in; a later generation never consumes it. */
+  readonly owner: DataOwnerContext;
+  consumed: boolean;
 }
 
-function expired(): boolean {
-  return Date.now() - pendingArmedAtMs > TRY_AGAIN_HANDOFF_TTL_MS;
+let hops: TryAgainHop[] = [];
+
+function top(): TryAgainHop | null {
+  return hops.length > 0 ? hops[hops.length - 1]! : null;
+}
+
+function ownerCurrent(owner: DataOwnerContext): boolean {
+  const current = getDataOwnerSnapshot();
+  return (
+    owner.ownerKey === current.ownerKey &&
+    owner.generation === current.generation
+  );
+}
+
+function chainCurrent(): boolean {
+  const origin = hops[0];
+  return origin !== undefined && ownerCurrent(origin.owner);
+}
+
+export function armTryAgain(handoff: TryAgainHandoff): void {
+  if (!chainCurrent()) hops = [];
+  const pending = top();
+  if (pending !== null && !pending.consumed) hops.pop();
+  hops.push({
+    handoff,
+    armedAtMs: Date.now(),
+    owner: getDataOwnerSnapshot(),
+    consumed: false,
+  });
+  while (hops.length > TRY_AGAIN_STACK_LIMIT) hops.splice(1, 1);
+}
+
+function expired(hop: TryAgainHop): boolean {
+  return Date.now() - hop.armedAtMs > TRY_AGAIN_HANDOFF_TTL_MS;
+}
+
+function pendingHop(): TryAgainHop | null {
+  const hop = top();
+  return hop !== null && !hop.consumed ? hop : null;
 }
 
 /** Single-shot and time-bounded: the first prompt consumer takes it, a late
  * one gets nothing. Either way the handoff is cleared. */
 export function consumeTryAgainHandoff(): TryAgainHandoff | null {
-  const handoff = expired() ? null : pendingHandoff;
-  if (handoff !== null) {
-    stabilitySlo.record({ kind: 'try_again_rearmed' });
-  } else if (pendingHandoff !== null) {
+  const pending = pendingHop();
+  if (pending === null) return null;
+  if (!ownerCurrent(pending.owner)) {
+    stabilitySlo.record({
+      kind: 'try_again_failed',
+      reason: 'owner_changed',
+    });
+    clearTryAgainHandoff();
+    return null;
+  }
+  if (expired(pending)) {
     // A handoff WAS armed but its navigation never landed inside the TTL:
     // the re-arm the user asked for did not happen.
     stabilitySlo.record({
       kind: 'try_again_failed',
       reason: 'handoff_expired',
     });
+    clearTryAgainHandoff();
+    return null;
   }
-  clearTryAgainHandoff();
-  return handoff;
+  pending.consumed = true;
+  stabilitySlo.record({ kind: 'try_again_rearmed' });
+  return pending.handoff;
 }
 
 /** Drops any armed handoff — used when capture starts from another entry
  * point, so nothing stale can survive into the next re-arm window. */
 export function clearTryAgainHandoff(): void {
-  pendingHandoff = null;
-  pendingArmedAtMs = 0;
+  hops = [];
 }
 
 /** Test hook — inspect without consuming. */
 export function peekTryAgainHandoff(): TryAgainHandoff | null {
-  return expired() ? null : pendingHandoff;
+  const pending = pendingHop();
+  return pending !== null && ownerCurrent(pending.owner) && !expired(pending)
+    ? pending.handoff
+    : null;
+}
+
+/** Test hook — the retry entry armed from the original clip of the current
+ * chain; null once the chain belongs to a previous owner generation. */
+export function peekTryAgainOrigin(): TryAgainHandoff | null {
+  return chainCurrent() ? hops[0]!.handoff : null;
+}
+
+/** Test hook — number of hops currently kept (never above the limit). */
+export function tryAgainStackDepth(): number {
+  return hops.length;
 }
 
 /** True when the registry maps this canonical to this exact legacy slug —
