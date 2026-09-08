@@ -431,5 +431,79 @@ class OrchestrationTests(unittest.TestCase):
                 self.assertEqual(json.load(fh)["status"], "ACCEPTED")
 
 
+class WaveTests(unittest.TestCase):
+    def setUp(self):
+        self.m = pl.load_manifest(MANIFEST)
+        self.a = pl.find_package(self.m, "W01-05")
+        self.b = pl.find_package(self.m, "H07-01")
+
+    def _script(self, *pkgs):
+        s = {}
+        for p in pkgs:
+            s[f"implement-{p['id']}-r1"] = good_impl(p)
+            s[f"review-{p['id']}-r1"] = good_review(p)
+            s[f"adversary-{p['id']}-r1"] = good_adv(p)
+        return s
+
+    def _wave(self, rt: FakeRuntime, packages: list[dict], tmp: str) -> dict:
+        return asyncio.run(pl.run_wave(wave_id="wave-9", packages=packages, base_sha=BASE, integration_branch="codex/x", manifest_path=MANIFEST, out_root=tmp, runtime=rt.runtime()))
+
+    def test_packages_run_concurrently_with_one_registration_and_own_records(self):
+        started: list[str] = []
+        release = asyncio.Event()
+
+        class Rt(FakeRuntime):
+            async def agent(self, prompt, **kw):
+                if kw["phase"] == "implement":
+                    started.append(kw["label"])
+                    if len(started) == 2:
+                        release.set()
+                    await asyncio.wait_for(release.wait(), 2)
+                return await super().agent(prompt, **kw)
+
+        rt = Rt(self._script(self.a, self.b))
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = self._wave(rt, [{"package_id": self.a["id"]}, {"package_id": self.b["id"]}], tmp)
+            self.assertEqual(summary["packages"][self.a["id"]]["status"], "ACCEPTED")
+            self.assertEqual(summary["packages"][self.b["id"]]["status"], "ACCEPTED")
+            self.assertEqual(sorted(started), sorted([f"implement-{self.a['id']}-r1", f"implement-{self.b['id']}-r1"]))
+            for pid in (self.a["id"], self.b["id"]):
+                with open(os.path.join(tmp, pid, "wave-9", "record.json"), encoding="utf8") as fh:
+                    self.assertEqual(json.load(fh)["status"], "ACCEPTED")
+            with open(os.path.join(tmp, "_waves", "wave-9.json"), encoding="utf8") as fh:
+                self.assertEqual(set(json.load(fh)["packages"]), {self.a["id"], self.b["id"]})
+        self.assertEqual(rt.registered["name"], "pickle-sensei-program-wave-9")
+        self.assertEqual(rt.registered["phases"][0]["count"], 4)
+        self.assertEqual(len(rt.calls), 6)
+
+    def test_one_failing_package_does_not_sink_the_wave(self):
+        script = self._script(self.a, self.b)
+        script[f"implement-{self.b['id']}-r1"] = FakeRuntime.Err
+        script[f"implement-{self.b['id']}-r2"] = FakeRuntime.Err
+        rt = FakeRuntime(script)
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = self._wave(rt, [{"package_id": self.a["id"]}, {"package_id": self.b["id"], "max_rounds": 2}], tmp)
+        self.assertEqual(summary["packages"][self.a["id"]]["status"], "ACCEPTED")
+        self.assertEqual(summary["packages"][self.b["id"]]["status"], "REQUEUE")
+
+    def test_wave_refuses_shared_serial_group(self):
+        other = next(p for p in self.m["packages"] if p["id"] != self.a["id"] and set(p.get("serial_groups", [])) & set(self.a["serial_groups"]))
+        rt = FakeRuntime({})
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                self._wave(rt, [{"package_id": self.a["id"]}, {"package_id": other["id"]}], tmp)
+        self.assertIsNone(rt.registered)
+
+    def test_requeue_entry_continues_round_numbering(self):
+        p = self.a
+        rt = FakeRuntime({f"implement-{p['id']}-r3": good_impl(p), f"review-{p['id']}-r3": good_review(p), f"adversary-{p['id']}-r3": good_adv(p)})
+        prior = {"branch": "devin/pp/x", "head_sha": HEAD, "findings": {"judge": ["adversarial P0/P1 breaks: 1"]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = self._wave(rt, [{"package_id": p["id"], "max_rounds": 1, "start_round": 3, "prior": prior}], tmp)
+        self.assertEqual(summary["packages"][p["id"]]["status"], "ACCEPTED")
+        self.assertEqual(summary["packages"][p["id"]]["candidate"]["round"], 3)
+        self.assertEqual(rt.calls[0], f"implement-{p['id']}-r3")
+
+
 if __name__ == "__main__":
     unittest.main()

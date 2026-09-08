@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.3"
+LIB_VERSION = "2026-09-08.4"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -422,6 +422,86 @@ def prior_from_record(record: dict) -> tuple[dict | None, int]:
     return None, next_round
 
 
+def wave_phases(agent_slots: int) -> list[dict]:
+    """Phase table for register_workflow: `agent_slots` implementer/reviewer/adversary calls each."""
+    return [
+        {"title": "implement", "detail": "one implementer per package round; regression test first", "count": agent_slots},
+        {"title": "review", "detail": "independent reviewer re-executes every acceptance criterion", "count": agent_slots},
+        {"title": "adversary", "detail": "adversarial tester attacks failure boundaries with real tests", "count": agent_slots},
+    ]
+
+
+async def run_wave(
+    *,
+    wave_id: str,
+    packages: list[dict],
+    base_sha: str,
+    integration_branch: str,
+    manifest_path: str,
+    out_root: str,
+    runtime: Runtime,
+    mode: str | None = None,
+) -> dict:
+    """Run many packages concurrently inside ONE workflow run.
+
+    `packages` is a frozen list of {package_id, max_rounds, start_round, prior};
+    each package gets its own implementer → (reviewer ‖ adversary) → judge
+    pipeline and its own ledger record. The wave is registered once; a
+    package whose pipeline raises is recorded as FAILED rather than taking the
+    wave down. Serial-group exclusivity is the scheduler's job (schedule.py
+    plan) — this function refuses a wave that violates it.
+    """
+    manifest = load_manifest(manifest_path)
+    ids = [p["package_id"] for p in packages]
+    if len(set(ids)) != len(ids):
+        raise ValueError("duplicate package ids in wave")
+    held: dict[str, str] = {}
+    for pid in ids:
+        for group in find_package(manifest, pid).get("serial_groups", []):
+            if group in held:
+                raise ValueError(f"{pid} and {held[group]} both hold serial group {group}")
+            held[group] = pid
+    slots = sum(int(p.get("max_rounds", MAX_ROUNDS_DEFAULT)) for p in packages)
+    await runtime.register_workflow(
+        {
+            "name": f"pickle-sensei-program-{wave_id}",
+            "description": f"{wave_id}: {len(ids)} packages ({', '.join(ids)}) each implement → independent review ‖ adversary → deterministic judge (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
+            "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
+            "soft_time_limit_minutes": 60,
+            "phases": wave_phases(slots),
+        }
+    )
+
+    async def one(p: dict) -> dict:
+        try:
+            return await run_package(
+                package_id=p["package_id"],
+                base_sha=base_sha,
+                integration_branch=integration_branch,
+                manifest_path=manifest_path,
+                out_root=out_root,
+                runtime=runtime,
+                max_rounds=int(p.get("max_rounds", MAX_ROUNDS_DEFAULT)),
+                mode=mode,
+                wave_id=wave_id,
+                start_round=int(p.get("start_round", 1)),
+                prior=p.get("prior"),
+                register=False,
+            )
+        except Exception as exc:  # noqa: BLE001 — one package must not sink the wave
+            runtime.log(f"{p['package_id']} FAILED: {type(exc).__name__}: {exc}")
+            return {"package_id": p["package_id"], "status": "FAILED", "error": f"{type(exc).__name__}: {exc}", "candidate": None, "agent_counts": {}}
+
+    records = list(await asyncio.gather(*(one(p) for p in packages)))
+    summary = {
+        "wave_id": wave_id,
+        "base_sha": base_sha,
+        "packages": {r["package_id"]: {k: r.get(k) for k in ("status", "candidate", "agent_counts")} for r in records},
+    }
+    _save(os.path.join(out_root, "_waves"), f"{wave_id}.json", summary)
+    return summary
+
+
 async def run_package(
     *,
     package_id: str,
@@ -435,6 +515,7 @@ async def run_package(
     wave_id: str = "",
     start_round: int = 1,
     prior: dict | None = None,
+    register: bool = True,
 ) -> dict:
     if not SHA_RE.match(base_sha):
         raise ValueError(f"base_sha must be a full 40-hex sha, got {base_sha!r}")
@@ -464,19 +545,16 @@ async def run_package(
     _save(out_dir, "record.json", record)
 
     minutes = max(1, min(60, int(pkg.get("estimate_minutes", 60))))
-    await runtime.register_workflow(
-        {
-            "name": f"pickle-sensei-program-{package_id.lower()}",
-            "description": f"{package_id}: {pkg['title']} — implement → independent review → adversary → deterministic judge (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
-            "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
-            "soft_time_limit_minutes": minutes,
-            "phases": [
-                {"title": "implement", "detail": "one implementer per round; regression test first", "count": max_rounds},
-                {"title": "review", "detail": "independent reviewer re-executes every acceptance criterion", "count": max_rounds},
-                {"title": "adversary", "detail": "adversarial tester attacks failure boundaries with real tests", "count": max_rounds},
-            ],
-        }
-    )
+    if register:
+        await runtime.register_workflow(
+            {
+                "name": f"pickle-sensei-program-{package_id.lower()}",
+                "description": f"{package_id}: {pkg['title']} — implement → independent review → adversary → deterministic judge (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
+                "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
+                "soft_time_limit_minutes": minutes,
+                "phases": wave_phases(max_rounds),
+            }
+        )
 
     final_status = "REQUEUE"
     for round_no in range(start_round, start_round + max_rounds):
