@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { createServer } from "node:http";
-import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -23,8 +22,7 @@ async function listenOnEphemeralPort(): Promise<{ url: string; close: () => Prom
     res.statusCode = 400;
     res.end("Bad Request");
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (address === null || typeof address === "string") {
     throw new Error("expected a TCP address");
