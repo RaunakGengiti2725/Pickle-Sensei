@@ -171,8 +171,6 @@ export interface AuthRefusal {
 
 const AUTH_FAILURE_EGRESS_SCOPE = "authfail";
 const AUTH_FAILURE_SHARD_SCOPE = "authfail_id";
-/** Shard for requests that presented no credential at all. */
-const ABSENT_CREDENTIAL_SHARD = "absent";
 const CREDENTIAL_REFUSAL: AuthRefusal = { kind: "credential" };
 
 const refusals = new WeakMap<Response, AuthRefusal>();
@@ -195,13 +193,13 @@ export async function authFailureIdentity(credential: string): Promise<string | 
   return (await sha256Hex(credential)).slice(0, 32);
 }
 
-const shardId = (ip: string, identity: string | null) =>
-  `${ip}:${identity ?? ABSENT_CREDENTIAL_SHARD}`;
+const shardId = (ip: string, identity: string) => `${ip}:${identity}`;
 
 /**
  * Gate a request up front WITHOUT charging: closed once the egress has spent
- * its budget on distinct credentials, or once the presented credential's own
- * shard is spent. The closed window's Retry-After is reported.
+ * its budget (distinct refused credentials plus credential-less refusals), or
+ * once the presented credential's own shard is spent. The closed window's
+ * Retry-After is reported.
  */
 export async function peekAuthFailureBudget(
   ip: string,
@@ -227,7 +225,9 @@ export async function peekAuthFailureBudget(
 /**
  * Charge one 401. Atomic INCRs only (never a read-then-write): the shard's
  * INCR ordinal decides whether this credential is new to the window, and only
- * a NEW credential failure charges the egress.
+ * a NEW credential failure charges the egress. A refusal with no credential
+ * to shard on (no bearer at all) has nothing a peer could be sharing and
+ * charges the egress directly, as every auth failure did before sharding.
  */
 export async function chargeAuthFailure(
   ip: string,
@@ -235,6 +235,12 @@ export async function chargeAuthFailure(
   kind: AuthFailureKind,
   budget: AuthFailureBudget,
 ): Promise<void> {
+  if (identity === null) {
+    if (kind === "credential") {
+      await countHit(AUTH_FAILURE_EGRESS_SCOPE, ip, budget.windowSeconds);
+    }
+    return;
+  }
   const shard = await countHit(
     AUTH_FAILURE_SHARD_SCOPE,
     shardId(ip, identity),
