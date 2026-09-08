@@ -199,49 +199,6 @@ export function validateAnalysisOutcome(raw: unknown): Result<AnalysisOutcome> {
   return ok(raw as unknown as AnalysisOutcome);
 }
 
-export function isChargeableAnalysis(
-  raw: unknown,
-  independentlyVerifiedEligibility: IndependentlyVerifiedAnalysisEligibility | null | undefined,
-): boolean {
-  const parsed = validateAnalysisOutcome(raw);
-  if (
-    !parsed.ok ||
-    parsed.value.status !== "complete" ||
-    parsed.value.source !== "real" ||
-    parsed.value.publication.status !== "durably_published" ||
-    !isVerifiedEligibilityInput(independentlyVerifiedEligibility)
-  ) {
-    return false;
-  }
-  const outcome = parsed.value;
-  const verified = independentlyVerifiedEligibility;
-  const publication = parsed.value.publication;
-  if (
-    verified.binding.analysisId !== outcome.analysisId ||
-    verified.binding.operationId !== outcome.operationId ||
-    verified.binding.ownerId !== outcome.ownerId ||
-    verified.binding.captureId !== outcome.captureId ||
-    verified.binding.inputSha256 !== outcome.inputSha256 ||
-    verified.binding.publicationId !== publication.publicationId ||
-    verified.publicationState !== "both_outputs_durably_published_once" ||
-    verified.creditState !== "unconsumed" ||
-    verified.releaseEligibility.status !== "eligible"
-  ) {
-    return false;
-  }
-  const release = verified.releaseEligibility;
-  const mechanicsLineage = outcome.mechanics.lineage;
-  const benchmarkLineage = outcome.benchmark.lineage;
-  return (
-    numericalOutputLineagesEqual(mechanicsLineage, release.mechanics.lineage) &&
-    mechanicsLineage.pipeline.version === benchmarkLineage.pipeline.version &&
-    mechanicsLineage.pipeline.sha256 === benchmarkLineage.pipeline.sha256 &&
-    mechanicsLineage.policy.version === benchmarkLineage.policy.version &&
-    mechanicsLineage.policy.sha256 === benchmarkLineage.policy.sha256 &&
-    isReleasedTechniqueBenchmark(outcome.benchmark, release)
-  );
-}
-
 /** Publication uses the same approved boundaries and lineage as charging.
  * Release eligibility must come from verified authority, never client status. */
 export function isReleasedTechniqueBenchmark(
@@ -291,7 +248,7 @@ function intervalUsesApprovedBoundaries(
   );
 }
 
-function isVerifiedEligibilityInput(
+export function isVerifiedEligibilityInput(
   value: unknown,
 ): value is IndependentlyVerifiedAnalysisEligibility {
   if (

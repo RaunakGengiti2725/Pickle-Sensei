@@ -1,8 +1,8 @@
 import {
-  isChargeableAnalysis,
   validateAnalysisOutcome,
   type IndependentlyVerifiedAnalysisEligibility,
 } from "./analysisOutcome.js";
+import { isChargeableAnalysis } from "./chargeability.js";
 import { fail, failure, ok, type Result } from "./errors.js";
 import {
   isVersionedArtifactReference,
