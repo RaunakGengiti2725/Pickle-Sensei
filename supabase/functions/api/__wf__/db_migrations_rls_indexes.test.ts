@@ -1578,7 +1578,10 @@ Deno.test(
         `public.${OFFLINE_LINK_TABLE} is never granted to any role: ${statement}`,
       );
       ok(
-        !(/^create policy\b/.test(statement) && statement.includes(`on public.${OFFLINE_LINK_TABLE}`)),
+        !(
+          /^create policy\b/.test(statement) &&
+          statement.includes(`on public.${OFFLINE_LINK_TABLE}`)
+        ),
         `public.${OFFLINE_LINK_TABLE} carries no client policy: ${statement}`,
       );
     }
@@ -1617,7 +1620,10 @@ Deno.test(
     // like inherit_free_rating_ledger) records every outstanding ticket the
     // account owns for every identity the account now holds.
     const [inheritHolds] = functionBodies(raw, "inherit_offline_allocation_holds");
-    ok(inheritHolds, `${OFFLINE_DEVICE_GRANTS} must define public.inherit_offline_allocation_holds`);
+    ok(
+      inheritHolds,
+      `${OFFLINE_DEVICE_GRANTS} must define public.inherit_offline_allocation_holds`,
+    );
     ok(
       inheritHolds.includes("security definer") &&
         inheritHolds.includes("set search_path = ''") &&
@@ -2013,7 +2019,9 @@ Deno.test(
     // identity), not by the device row that account deletion cascades away.
     ok(
       issue.includes("a.installation_key_id = v_device.installation_key_id") &&
-        issue.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`) &&
+        issue.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) &&
         !issue.includes("a.device_id = v_device.id"),
       "issue_offline_grant recovers the same installation's outstanding tickets across account re-creation",
     );
@@ -2041,8 +2049,9 @@ Deno.test(
       ["release_offline_ticket", release],
     ] as const) {
       ok(
-        body.includes(`${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`) &&
-          !body.includes("a.user_id = v_uid"),
+        body.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) && !body.includes("a.user_id = v_uid"),
         `public.${name} addresses the caller's tickets by account OR identity (allocation-time or late-linked)`,
       );
     }
