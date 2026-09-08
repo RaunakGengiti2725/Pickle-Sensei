@@ -682,3 +682,132 @@ export async function storeAccountAppleCredential(
   }
   throw new Error("Apple credential storage is unavailable.");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner inventory pagination
+//
+// PostgREST truncates unpaged reads at its max_rows (1000 on the hosted
+// platform). Every owner-wide read (progress history today; deletion/cleanup
+// inventories next) therefore pages, and paging must either PROVE it reached
+// the end or say so: a fixed page budget that returns what it has is a silent
+// truncation, and a cleanup that treats it as the whole set leaves data behind.
+//
+// The reader is keyset (cursor) driven: each page is read strictly after the
+// last row of the previous one, so a row inserted or deleted mid-read shifts
+// nothing, and completion is proven by an EMPTY page after the last cursor
+// (a short page is not proof — the server may clamp pages below the request).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Rows requested per page; must not exceed the server's max_rows. */
+export const INVENTORY_PAGE_ROWS = 1_000;
+
+export interface InventoryPage<Row> {
+  data: Row[] | null;
+  error: { message: string; code?: string } | null;
+  status?: number;
+}
+
+export interface InventoryCursorReader<Row, Cursor> {
+  /** Reads at most `limit` rows strictly after `cursor` (`null` = first page). */
+  readPage(cursor: Cursor | null, limit: number): PromiseLike<InventoryPage<Row>>;
+  /** Cursor positioned after `row` (the last row of a page). */
+  cursorAfter(row: Row): Cursor;
+  /** Stable identity of a cursor; a repeat means the source ignored it. */
+  cursorKey(cursor: Cursor): string;
+  pageRows?: number;
+}
+
+export type InventoryIncompleteReason = "page_error" | "cursor_stalled" | "page_overflow";
+
+export interface CompleteInventory<Row> {
+  status: "COMPLETE";
+  rows: Row[];
+  pages: number;
+}
+
+export interface IncompleteInventory<Row> {
+  status: "INCOMPLETE";
+  /** Rows read before the read stopped — diagnostics only, never the set. */
+  rows: Row[];
+  pages: number;
+  reason: InventoryIncompleteReason;
+  error: { message: string; code?: string };
+  httpStatus: number | null;
+}
+
+export type InventoryReadResult<Row> = CompleteInventory<Row> | IncompleteInventory<Row>;
+
+export async function readOwnerInventory<Row, Cursor>(
+  reader: InventoryCursorReader<Row, Cursor>,
+): Promise<InventoryReadResult<Row>> {
+  const limit = reader.pageRows ?? INVENTORY_PAGE_ROWS;
+  const rows: Row[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: Cursor | null = null;
+  let pages = 0;
+  const incomplete = (
+    reason: InventoryIncompleteReason,
+    error: { message: string; code?: string } = { message: reason },
+    httpStatus: number | null = null,
+  ): IncompleteInventory<Row> => ({ status: "INCOMPLETE", rows, pages, reason, error, httpStatus });
+
+  for (;;) {
+    const page = await reader.readPage(cursor, limit);
+    pages += 1;
+    if (page.error) {
+      return incomplete(
+        "page_error",
+        page.error,
+        typeof page.status === "number" ? page.status : null,
+      );
+    }
+    const batch = page.data ?? [];
+    if (batch.length === 0) return { status: "COMPLETE", rows, pages };
+    if (batch.length > limit) return incomplete("page_overflow");
+    const next = reader.cursorAfter(batch[batch.length - 1]);
+    const key = reader.cursorKey(next);
+    if (seenCursors.has(key)) return incomplete("cursor_stalled");
+    seenCursors.add(key);
+    rows.push(...batch);
+    cursor = next;
+  }
+}
+
+/** The inventory rows, or `null` when the read did not prove completion —
+ * deletion/cleanup consumers must not act on a partial set as if it were whole. */
+export function completedInventoryRows<Row>(result: InventoryReadResult<Row>): Row[] | null {
+  return result.status === "COMPLETE" ? result.rows : null;
+}
+
+export interface KeysetColumn {
+  column: string;
+  value: string;
+}
+
+const POSTGREST_COLUMN = /^[a-z_][a-z0-9_]*$/;
+
+/** A value inside a PostgREST logic tree (`or=(…)`): double-quoted, with the
+ * backslash escapes PostgREST's parser unescapes. */
+export function postgrestFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** PostgREST `or` filter body selecting the rows strictly BEFORE `key` under a
+ * descending order over its columns — the next page of a newest-first read. */
+export function postgrestKeysetBefore(key: ReadonlyArray<KeysetColumn>): string {
+  if (key.length === 0) throw new Error("keyset cursor needs at least one column");
+  for (const { column } of key) {
+    if (!POSTGREST_COLUMN.test(column)) throw new Error(`invalid keyset column: ${column}`);
+  }
+  return keysetBeforeDisjuncts(key).join(",");
+}
+
+function keysetBeforeDisjuncts(key: ReadonlyArray<KeysetColumn>): string[] {
+  const [head, ...rest] = key;
+  const value = postgrestFilterValue(head.value);
+  const before = `${head.column}.lt.${value}`;
+  if (rest.length === 0) return [before];
+  const tail = keysetBeforeDisjuncts(rest);
+  const tailExpr = tail.length === 1 ? tail[0] : `or(${tail.join(",")})`;
+  return [before, `and(${head.column}.eq.${value},${tailExpr})`];
+}
