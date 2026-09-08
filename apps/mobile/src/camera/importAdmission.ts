@@ -120,8 +120,9 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   sameEventPeakDistanceMs: 350,
   /**
    * A wind-up or recovery peaks at most at this fraction of its stroke's
-   * peak speed (and always below `minStrokePeakTorsoPerSecond`). A burst
-   * faster than that is a stroke in its own right.
+   * peak speed. A burst faster than that is a stroke in its own right; a
+   * hard drive's backswing can itself run above the lone-stroke floor, so
+   * the bound is relative to the stroke it prepares.
    */
   maxWindUpPeakRatio: 0.5,
   /**
@@ -829,11 +830,10 @@ function hasGapBetween(
 
 /**
  * Whether `phase` is the wind-up (before) or recovery (after) of `stroke`:
- * a slower burst — at most `maxWindUpPeakRatio` of the stroke's peak and
- * below the absolute `minStrokePeakTorsoPerSecond`, since a stroke-sized
- * burst is a stroke wherever it sits — continuous with the stroke's span
- * within `maxWindUpPauseMs` and with no tracking gap between, whose net
- * travel runs AGAINST the stroke's net travel. Both travels must cover `minDirectedTravelTorso`: motion without
+ * a slower burst — at most `maxWindUpPeakRatio` of the stroke's peak —
+ * continuous with the stroke's span within `maxWindUpPauseMs` and with no
+ * tracking gap between, whose net travel runs AGAINST the stroke's net
+ * travel. Both travels must cover `minDirectedTravelTorso`: motion without
  * net displacement has no direction, and a burst in the stroke's own
  * direction is another stroke.
  */
@@ -846,8 +846,6 @@ function isStrokePhase(
 ): boolean {
   const limits = IMPORT_ADMISSION_LIMITS;
   if (phase.peakSpeed > stroke.peakSpeed * limits.maxWindUpPeakRatio)
-    return false;
-  if (phase.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond)
     return false;
   const pauseMs =
     side === 'wind_up'
