@@ -7,9 +7,10 @@
 // declare a partial inventory "done").
 //
 // Pinned behaviour: every unbounded owner read goes through the cursor-driven
-// reader in accountDeletionOperations.ts, which either proves completion (an
-// empty page after the cursor) or returns `status: "INCOMPLETE"` with a reason;
-// consumers never treat an INCOMPLETE inventory as the whole set.
+// reader in accountDeletionOperations.ts, which either proves completion (a page
+// shorter than requested after the cursor — an empty one when the inventory is
+// an exact multiple of the page) or returns `status: "INCOMPLETE"` with a
+// reason; consumers never treat an INCOMPLETE inventory as the whole set.
 
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
 import { fakeGoogleIdToken, loadHarness, type RecordedCall, userRequest } from "./routesHarness.ts";
@@ -215,8 +216,8 @@ Deno.test("W07-06 reader: 17+ full pages are read to completion (no page cap)", 
     assertEquals(result.rows.length, total);
     assertEquals(new Set(result.rows.map((row) => row.id)).size, total, "no duplicates");
     assertEquals(result.rows[total - 1].id, total - 1, "oldest row retained");
-    // ceil(total / PAGE) data pages + the empty page that proves completion.
-    assertEquals(result.pages, Math.ceil(total / PAGE) + 1);
+    // The trailing 3-row page is short of the limit and so proves completion.
+    assertEquals(result.pages, Math.ceil(total / PAGE));
     assertEquals(calls.length, result.pages);
     assertEquals(calls[0].cursor, null);
     assertEquals(calls[1].cursor, PAGE - 1, "second page starts after the first page's last row");
@@ -234,26 +235,18 @@ Deno.test("W07-06 reader: an empty inventory is COMPLETE after one page", async 
 });
 
 Deno.test(
-  "W07-06 reader: a short page is not proof — completion needs the empty page",
+  "W07-06 reader: an inventory that is an exact multiple of the page needs the empty page as proof",
   async () => {
-    // A server clamping pages below the requested size (PostgREST max_rows) must
-    // not be mistaken for the end of the inventory.
-    const total = 2_500;
-    let pages = 0;
-    const result = await ops.readOwnerInventory<Item, number>({
-      readPage(cursor, _limit) {
-        pages += 1;
-        const start = cursor === null ? 0 : cursor + 1;
-        const data: Item[] = [];
-        for (let id = start; id < Math.min(total, start + 400); id += 1) data.push({ id });
-        return Promise.resolve({ data, error: null });
-      },
-      cursorAfter: (row) => row.id,
-      cursorKey: (cursor) => String(cursor),
-    });
+    // 17 full pages carry no evidence of the end on their own: the reader must
+    // ask once more and see the empty page rather than stop on a full one.
+    const total = 17 * PAGE;
+    const { reader, calls } = honestSource(total);
+    const result = await ops.readOwnerInventory<Item, number>(reader);
     assertEquals(result.status, "COMPLETE");
     assertEquals(result.rows.length, total);
-    assertEquals(pages, Math.ceil(total / 400) + 1);
+    assertEquals(result.pages, 17 + 1);
+    assertEquals(calls.length, 18);
+    assertEquals(calls[17].cursor, total - 1, "the proof page starts after the last row");
   },
 );
 
@@ -402,11 +395,7 @@ Deno.test(
     assertEquals(body.streak.currentDays, total, "every practice day counts — nothing truncated");
 
     const requests = served.filter((call) => progressTable(new URL(call.url)) === "practice_days");
-    assertEquals(
-      requests.length,
-      Math.ceil(total / PAGE) + 1,
-      "22 data pages + the empty proof page",
-    );
+    assertEquals(requests.length, Math.ceil(total / PAGE), "21 full pages + the short last page");
     for (const [index, call] of requests.entries()) {
       const url = new URL(call.url);
       assertEquals(url.searchParams.get("order"), "day.desc");
@@ -467,7 +456,8 @@ Deno.test(
     assertEquals(body.series[body.series.length - 1].day, isoDay(today), "today last");
 
     const requests = served.filter((call) => progressTable(new URL(call.url)) === "progress_daily");
-    assertEquals(requests.length, Math.ceil(series.length / PAGE) + 1);
+    // 21 full pages + the empty page that proves the exact multiple is complete.
+    assertEquals(requests.length, series.length / PAGE + 1);
     for (const call of requests.slice(1)) {
       const url = new URL(call.url);
       assertEquals(url.searchParams.get("offset"), null);
