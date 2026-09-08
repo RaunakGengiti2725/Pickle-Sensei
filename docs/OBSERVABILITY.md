@@ -139,6 +139,147 @@ not incident resolution.
    There is no independent missed-heartbeat alert, guaranteed 15-minute detection,
    or automatic alert for crashes/user-specific backend failures in this lean setup.
 
+### Edge served-bundle size and cold start (local measurement, H07-COLD-START)
+
+`supabase/functions/api/index.ts` is the shipping backend and grew by ~1.5k
+lines in the 2026-09-07 integration. The reproducible local measurement is
+`tools/diagnostics/edge_cold_start.ts`, run from the repo root:
+
+```bash
+deno run -A tools/diagnostics/edge_cold_start.ts            # 3 cycles × (1 cold + 10 warm)
+deno run -A tools/diagnostics/edge_cold_start.ts --cycles 5 --warm-requests 20 --out /tmp/ecs
+deno test -A tools/diagnostics/edge_cold_start.ts           # self-tests + regressions (no Docker)
+```
+
+Scope: everything runs on the local machine. The hosted project
+`ucqnaiwqwjtgvlduiuib` is never contacted; these numbers are NOT hosted-latency
+evidence. Prerequisites: Deno 2.x, Node/npx (the pinned Supabase CLI is fetched
+as `npx --yes supabase@2.117.0`; override with
+`EDGE_COLD_START_SUPABASE_CLI_VERSION`), Docker, and network access for the
+first image pull. Options: `--cycles N`, `--warm-requests N`, `--out DIR`
+(default `artifacts/edge-cold-start/<UTC>`, git-ignored), `--startup-timeout-ms N`;
+malformed values are usage errors (exit 2).
+
+Method — three steps, each persisted to `report.json` as soon as it completes:
+
+1. **Served bundle** — `deno bundle --config supabase/functions/api/deno.json
+--platform deno -o <out>/supabase/functions/api/index.js supabase/functions/api/index.ts`
+   (Deno's esbuild-backed bundler, honouring the function's import map and
+   `deno.lock`; `npm:` dependencies are inlined; the lockfile is not rewritten).
+   The bundler labels every inlined npm module with its path **relative to the
+   cwd** — `// ../../.cache/deno/npm/registry.npmjs.org/tslib/2.8.1/tslib.js`
+   comments and the matching `__commonJS({ "…"(exports, module) {` keys — so the
+   raw output is a property of where the checkout sits relative to `$DENO_DIR`
+   (VERIFIED: the same commit bundled from `/home/ubuntu/repos/Pickle-Sensei`
+   and from a `/tmp` copy gives 1,033,186 B vs 1,033,690 B and different
+   sha256). The script therefore resolves `DENO_DIR` (`deno info --json`), rewrites
+   the cwd→`DENO_DIR` prefix to the literal `$DENO_DIR/` in the bundle text, and
+   counts both the rewrites and any remaining outside-cwd label it could not
+   attribute (`unresolved`; 0 on the recorded run — a non-zero count is printed
+   as a WARNING and means that run's raw bytes/sha256 are not path-independent,
+   while gzip bytes and module count stay comparable). Raw bytes, gzip bytes (Web
+   `CompressionStream("gzip")`), module count and sha256 are computed over the
+   **normalised** bytes, which identify (commit, `deno.lock`, Deno version) on any
+   checkout path; the pre-rewrite byte count is recorded for reference only. This
+   normalised file is also what the `bundle` serve target runs. Pinned by the
+   self-test "bundle identity does not depend on the checkout path", which
+   bundles the same sources from two directories and asserts equal size/sha256.
+2. **Source graph** — `deno info --json --config supabase/functions/api/deno.json
+supabase/functions/api/index.ts`: first-party (`file:`) module count/bytes and
+   the npm packages in the graph, i.e. what `supabase functions deploy` uploads
+   before the platform bundles it. `@types/node`/`undici-types` appear because
+   `deno.json` `compilerOptions.types` pulls them in for type-checking; they are
+   not runtime code.
+3. **Cold start** — `npx --yes supabase@2.117.0 functions serve --no-verify-jwt`
+   against the local stack. If `supabase_db_<project_id>` and
+   `supabase_kong_<project_id>` are not both running the script starts the
+   minimal stack it needs (`npx --yes supabase@2.117.0 start -x
+gotrue,realtime,storage-api,imgproxy,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor`;
+   the exact command is printed and recorded in `report.json`
+   `environment.stack`) and leaves it running — `npx --yes supabase@2.117.0 stop`
+   tears it down. Each cycle removes
+   `supabase_edge_runtime_<project_id>` (only if its
+   `com.supabase.cli.project` label matches this project; a foreign container
+   with that name aborts the run instead of being destroyed), spawns the CLI
+   fresh, waits for the runtime main service (`GET
+/functions/v1/_internal/health` → 200 through Kong on `[api] port` from
+   `supabase/config.toml`), then times the FIRST `GET /functions/v1/api/healthz`
+   — user-worker creation + module evaluation + handler — followed by N warm
+   requests to the same worker. Two serve targets are attempted, `bundle` first:
+   - `bundle` — a generated workdir (`<out>/workdir`) whose
+     `[functions.api] entrypoint` is the normalised bundle from step 1. This is
+     the target the exit code depends on.
+   - `source-tree` — the repo checkout itself (what `supabase functions serve`
+     from the repo root does). Comparison only.
+
+Result semantics: exit 0 (`RESULT: measured`, `ok: true`) only when the bundle
+was measured AND the `bundle` target produced a cold-start sample for every
+requested cycle. A target whose CLI exits before the runtime is healthy is
+`UNAVAILABLE` (0 cycles, the CLI's own message as `reason`); a target whose later
+cycle fails is `PARTIAL` with every completed cycle kept. Neither counts as a
+sample. `report.json` is written atomically (tmp + rename) after the bundle
+step, the source-graph step, stack start and every completed cycle, so a run
+that fails part-way still leaves the bundle metrics and every measured cycle
+on disk with `ok: false` — only the exit code (1) signals failure. SIGINT,
+SIGTERM and SIGHUP interrupt the whole spawned CLI tree (npx → sh → node) plus
+its edge-runtime container, persist the report as `interrupted`, and exit
+128+signal. A per-project lock in the OS temp dir refuses concurrent runs, an
+existing `supabase functions serve` on the same port/container name aborts
+the run instead of being measured, and the CLI's checkout side effects (the
+tracked marker `supabase/.temp/cli-latest`, the `supabase/.branches/` directory)
+are restored/removed on every exit path so a measurement never dirties the
+checkout. Artifacts per run: `report.json`, the normalised bundle, the
+generated workdir and one CLI log per serve cycle.
+
+Recorded run (VERIFIED, `deno run -A tools/diagnostics/edge_cold_start.ts`,
+exit 0, 2026-09-08, sources at `55d80326`, Linux x86_64, Deno 2.9.6, Supabase
+CLI 2.117.0, Docker 29.7.2, `supabase-edge-runtime-1.74.3` (compatible with
+Deno v2.1.4); report `artifacts/edge-cold-start/20260908T193622Z/report.json`;
+two earlier runs of the same commit, `…/20260908T192141Z` and
+`…/20260908T193247Z`, reproduced every bundle metric byte-for-byte and cold
+medians of 58.06 / 55.42 ms):
+
+| Measurement                                      | Value                                                                                                                                                                |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Served bundle (normalised raw)                   | 1,032,850 B (1008.6 KiB), 62 modules, sha256 `4d6cb2a82a12b8f31356699e5aa6ce3f50d1c883c1706b685caa93f76d4e6ce3`                                                      |
+| Served bundle (gzip of normalised)               | 218,821 B (213.7 KiB)                                                                                                                                                |
+| Path labels rewritten / unresolved               | 42 × `../../.cache/deno` → `$DENO_DIR/` / 0; pre-rewrite 1,033,186 B on this checkout                                                                                |
+| Bundle time                                      | 80.78 ms                                                                                                                                                             |
+| First-party source graph                         | 17 `file:` modules, 438,144 B (427.9 KiB)                                                                                                                            |
+| npm packages in graph                            | 13 (`@supabase/supabase-js@2.112.4` + 6 transitive `@supabase/*`/`iceberg-js`/`tslib`, `jose@6.2.10`, `canonicalize@4.0.0`, type-only `@types/node`, `undici-types`) |
+| Cold `GET /healthz` (`bundle` target, 3 cycles)  | min 55.79 / median 60.25 / max 93.99 ms                                                                                                                              |
+| Warm `GET /healthz` (same worker, n=30)          | median 2.57 ms                                                                                                                                                       |
+| CLI spawn → runtime healthy (container bring-up) | median 2065.95 ms (1753.52–2068.00)                                                                                                                                  |
+| `source-tree` target                             | UNAVAILABLE — see below                                                                                                                                              |
+
+Reading the numbers: the ~1 MiB bundle evaluates in well under 100 ms on this
+machine once the container is up, so the 2026-09-07 growth of `index.ts` has
+not made local cold start material; the dominant local cost is container
+bring-up, a CLI/Docker cost that is not part of a hosted cold start. Hosted
+cold start additionally includes the platform's eszip load and isolate
+scheduling, which this method cannot observe — treat hosted latency as UNKNOWN
+until measured from the hosted project's own logs (`api_request.durationMs`
+covers only the handler, not the worker boot). Cold/warm samples are wall-clock
+`fetch` timings through Kong on one machine; run more cycles before comparing
+two commits, and compare medians.
+
+Known limitation surfaced by the measurement (VERIFIED with CLI 2.117.0, present
+on `55d80326` before this script existed): `supabase functions serve` on the
+repo checkout exits before creating the runtime container with
+`failed to read file: open packages/shared-types/src/techniqueBenchmark.js: no such file or directory`.
+INFERRED from the CLI's behaviour: its import scanner matches import-map keys
+against the raw specifier, so the relative `./techniqueBenchmark.js` /
+`./errors.js` / `./domain.js` imports inside `packages/shared-types/src/*.ts`
+are resolved literally instead of through the
+`../../../packages/shared-types/src/*.js → *.ts` entries in
+`supabase/functions/api/deno.json` that Deno itself applies (which is why
+`deno bundle`, `deno info` and the in-process `__wf__` harness resolve the same
+graph). Whether `supabase functions deploy` is affected has NOT been verified
+here (UNKNOWN); making the source tree servable (e.g. `.ts` specifiers in
+shared-types or relative keys in the function's import map) is a
+`shared-types` / `edge-index` decision outside this measurement. The `bundle`
+target is unaffected because the bundle has no unresolved imports.
+
 ## Event taxonomy
 
 All telemetry flows through the typed `AnalyticsEvent` union in
