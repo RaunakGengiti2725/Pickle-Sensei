@@ -1,9 +1,29 @@
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
-import type { HostInstance } from 'react-native';
+import {
+  AccessibilityInfo,
+  findNodeHandle,
+  type HostInstance,
+} from 'react-native';
 
 /** The control whose activation opened a ceremony; VoiceOver focus returns
  * to it once the ceremony is dismissed. */
 export type CeremonyTrigger = HostInstance | number;
+
+/** Hands VoiceOver focus back to `trigger` once its ceremony is gone. The
+ * control may have unmounted meanwhile (the screen that opened the ceremony
+ * was swapped out while it stayed up); React Native then refuses to resolve
+ * its node, and there is nothing left to focus, so the trigger is ignored. */
+export function restoreFocusToTrigger(trigger: CeremonyTrigger): boolean {
+  let handle: number | null | undefined;
+  try {
+    handle = findNodeHandle(trigger);
+  } catch {
+    return false;
+  }
+  if (handle == null) return false;
+  AccessibilityInfo.setAccessibilityFocus(handle);
+  return true;
+}
 
 interface CeremonyIdentity {
   order: number;
@@ -45,21 +65,35 @@ export function openCeremonyFrom<T>(
 
 /** Modal surfaces competing for the one presentation slot. `permission`
  * (the system sheet) and `paywall` (a navigation route) are already on
- * screen when they register; the product-owned `notice` and `ceremony`
- * surfaces wait for the slot and are withdrawn beneath them. */
-export type SurfaceKind = 'ceremony' | 'notice' | 'paywall' | 'permission';
+ * screen when they register and never take the slot themselves: they
+ * withdraw the product-owned surfaces listed in `WITHDRAWS` beneath them.
+ * The system sheet covers everything; the paywall withdraws only
+ * ceremonies — a notice raised while it is up is the paywall's own error
+ * feedback (a Terms/Privacy link that could not be opened) and is shown
+ * over it at once. `notice` and `ceremony` wait for the slot. */
+type SlotKind = 'ceremony' | 'notice';
+type BlockerKind = 'paywall' | 'permission';
+export type SurfaceKind = SlotKind | BlockerKind;
 
-const PREEMPTING: ReadonlySet<SurfaceKind> = new Set(['permission', 'paywall']);
-const PRIORITY: Record<SurfaceKind, number> = {
-  permission: 0,
-  paywall: 1,
-  notice: 2,
-  ceremony: 3,
+const WITHDRAWS: Record<BlockerKind, readonly SlotKind[]> = {
+  permission: ['notice', 'ceremony'],
+  paywall: ['ceremony'],
 };
+const PRIORITY: Record<SlotKind, number> = {
+  notice: 0,
+  ceremony: 1,
+};
+
+function isSlotKind(kind: SurfaceKind): kind is SlotKind {
+  return kind in PRIORITY;
+}
 
 interface Surface {
   id: number;
   kind: SurfaceKind;
+}
+interface SlotSurface extends Surface {
+  kind: SlotKind;
 }
 
 export interface SurfaceClaim {
@@ -68,20 +102,27 @@ export interface SurfaceClaim {
 }
 
 const surfaces: Surface[] = [];
-let presented: Surface | null = null;
+let presented: SlotSurface | null = null;
 let nextSurfaceId = 0;
 const surfaceListeners = new Set<() => void>();
 
 function settleSurfaces() {
-  const preempting = surfaces.filter(surface => PREEMPTING.has(surface.kind));
-  let next: Surface | null;
-  if (preempting.length > 0) {
-    next = preempting[preempting.length - 1]!;
-  } else if (presented && surfaces.includes(presented)) {
+  const withdrawn = new Set<SlotKind>();
+  for (const surface of surfaces) {
+    if (!isSlotKind(surface.kind)) {
+      WITHDRAWS[surface.kind].forEach(kind => withdrawn.add(kind));
+    }
+  }
+  const candidates = surfaces.filter(
+    (surface): surface is SlotSurface =>
+      isSlotKind(surface.kind) && !withdrawn.has(surface.kind),
+  );
+  let next: SlotSurface | null;
+  if (presented && candidates.includes(presented)) {
     next = presented;
   } else {
     next =
-      [...surfaces].sort(
+      candidates.sort(
         (a, b) => PRIORITY[a.kind] - PRIORITY[b.kind] || a.id - b.id,
       )[0] ?? null;
   }
@@ -120,7 +161,7 @@ export function subscribeToSurfaces(listener: () => void): () => void {
  * owns it. A new `generation` releases and re-claims so that a waiting
  * higher-priority surface (an error notice) goes before the next ceremony. */
 export function useSurfaceSlot(
-  kind: SurfaceKind,
+  kind: SlotKind,
   wanted: boolean,
   generation = 0,
 ): boolean {
