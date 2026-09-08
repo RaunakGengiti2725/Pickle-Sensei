@@ -62,6 +62,22 @@ individual severity/refinement is recorded in the dated entries below.
 
 ### Evidence entries (append-only)
 
+- **W06(E) public rescale removal, P1, FIXED / AUTOMATED_LOGIC:** Removed
+  `duprEstimate.ts` and every public consumer, including accessibility labels.
+  Historical mechanics and rank numbers no longer synthesize a benchmark.
+  Result explicitly shows that a benchmark is unavailable; the replacement
+  formatter permits only a validated interval matching independently supplied
+  release lineage, uncertainty, width, support and boundary granularity. This
+  predicate is shared with `isChargeableAnalysis`, not another numeric map.
+  Superseded rescale assertions now reject scalar and unapproved output while
+  preserving approved interval precision and native text-scaling assertions.
+  Evidence: `w06-public-benchmark.json`, 10 mounted/pure suites, 237 tests,
+  zero skipped; shared regression suite 302 tests passes. Residual: no approved
+  scientific policy or benchmark model exists, and positive saved-outcome
+  publication, release-authority integration, full comparability and native UI
+  evidence remain open. This removes an invalid public number; it does not
+  certify a replacement model.
+
 - **Sequencing update, owner instruction:** Independent Phase 1 implementation
   proceeds while remaining Phase 0 failures are investigated. Acceptance gates,
   scientific requirements and human release boundaries are unchanged.

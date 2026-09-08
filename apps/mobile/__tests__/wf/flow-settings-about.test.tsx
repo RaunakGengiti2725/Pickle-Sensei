@@ -766,11 +766,12 @@ describe('AGENTS.md invariants for settings-about', () => {
     act(() => renderer.unmount());
   });
 
-  it('the Technique Score disclaimer is present (not a verified DUPR)', () => {
+  it('separates stroke form from benchmark validation and match results', () => {
     const renderer = renderScreen();
     expect(allText(renderer)).toContain(
-      'Technique Score is coaching feedback—not a verified DUPR or player rating.',
+      'Technique Score describes stroke form. A technique benchmark requires separate validation and does not measure match results.',
     );
+    expect(allText(renderer)).not.toMatch(/DUPR|≈/);
     act(() => renderer.unmount());
   });
 

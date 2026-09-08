@@ -192,7 +192,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
     },
   );
 
-  it('keeps the reflowing 7.02 / 10 numeral distinct from uncapped DUPR and remaining-points copy', async () => {
+  it('keeps the reflowing 7.02 / 10 numeral and uncapped remaining-points copy without an invented benchmark', async () => {
     const previous = {
       window: Dimensions.get('window'),
       screen: Dimensions.get('screen'),
@@ -252,9 +252,9 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
       });
       const scroll = renderer.root.findByType(ScrollView);
       const texts = scroll.findAllByType(Text);
-      expect(texts.some(node => node.props.children === '(≈ DUPR 5.2)')).toBe(
-        true,
-      );
+      expect(
+        texts.some(node => /DUPR|≈/.test(String(node.props.children))),
+      ).toBe(false);
       expect(
         texts.some(
           node =>

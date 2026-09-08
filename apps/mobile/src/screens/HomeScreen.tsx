@@ -52,7 +52,6 @@ import { NotificationPrimingCard } from '../notifications/NotificationPrimingCar
 import { flameIntensityForStreak } from '../consistency/engine';
 import { FlameIcon } from '../consistency/FlameIcon';
 import { useConsistencyStore } from '../consistency/store';
-import { formatDuprEstimate } from '../progress/duprEstimate';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import { plural } from '../util/plural';
 
@@ -532,11 +531,6 @@ export function HomeScreen() {
             <Text style={styles.techniqueSummaryScore}>
               {displayedScore === null ? '—' : displayedScore.toFixed(1)}
             </Text>
-            {displayedScore !== null ? (
-              <Text style={[type.micro, styles.techniqueSummaryDupr]}>
-                {formatDuprEstimate(displayedScore)}
-              </Text>
-            ) : null}
           </View>
         </Card>
 
@@ -871,7 +865,6 @@ const styles = StyleSheet.create({
     ...type.score,
     color: color.ink,
   },
-  techniqueSummaryDupr: { color: color.graphite, marginTop: 2 },
   scoreCard: { padding: space.lg, minHeight: 358 },
   scoreCardTop: {
     flexDirection: 'row',

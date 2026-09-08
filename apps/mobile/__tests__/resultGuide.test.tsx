@@ -142,7 +142,7 @@ import {
   configureTrainingStore,
 } from '../src/training/store';
 import type { TrainingApi } from '../src/training/types';
-import { DUPR_ESTIMATE_NOTE } from '../src/progress/duprEstimate';
+import { TECHNIQUE_BENCHMARK_UNAVAILABLE } from '../src/progress/techniqueBenchmarkDisplay';
 
 // ─── Fixtures (same shapes as the form review + stroke result suites) ───────
 
@@ -599,7 +599,7 @@ describe('Result guide — saved read recovery', () => {
 // ─── Scored: the four pages ─────────────────────────────────────────────────
 
 describe('Result guide — scored analysis', () => {
-  it('opens on the SCORE page: ring, DUPR estimate, ONE measured insight — and no drills, replay or plan', async () => {
+  it('opens on the SCORE page: ring, withheld benchmark, ONE measured insight — and no drills, replay or plan', async () => {
     const renderer = await renderScreen();
     expect(mockLoadEvidence).toHaveBeenCalledWith({}, 'analysis-1');
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
@@ -613,8 +613,8 @@ describe('Result guide — scored analysis', () => {
           node.props.accessibilityLabel === 'Technique score 7.1 out of 10',
       ).length,
     ).toBeGreaterThan(0);
-    expect(copy).toContain('(≈ DUPR 5.3)');
-    expect(copy).toContain(DUPR_ESTIMATE_NOTE);
+    expect(copy).not.toMatch(/DUPR|≈/);
+    expect(copy).toContain(TECHNIQUE_BENCHMARK_UNAVAILABLE);
     // The ONE insight is the engine's worst measured checkpoint + its cue.
     expect(copy).toContain('WHAT THE CAMERA MEASURED');
     expect(copy).toContain('Contact position scored 48 — contact came late.');

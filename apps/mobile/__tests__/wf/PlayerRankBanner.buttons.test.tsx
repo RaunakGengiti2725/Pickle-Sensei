@@ -174,7 +174,7 @@ beforeEach(() => {
 });
 
 describe('PlayerRankBanner button ledger', () => {
-  it('keeps the rating compact and preserves the approximate DUPR and progress detail below it', async () => {
+  it('keeps the rating compact with progress detail and no invented benchmark in text or accessibility', async () => {
     mockGetApiSession.mockReturnValue(SESSION);
     mockFetchPlayerRank.mockResolvedValue({
       ...SERVER_RANK,
@@ -214,12 +214,10 @@ describe('PlayerRankBanner button ledger', () => {
           typeof node.props.children === 'string' &&
           node.props.children.includes('Best: dink 7.2'),
       );
-      expect(detail?.props.children).toMatch(
-        /^\(≈ DUPR 5\.2\) · Best: dink 7\.2/,
-      );
+      expect(detail?.props.children).toMatch(/^Best: dink 7\.2/);
       expect(detail?.props.numberOfLines).toBeUndefined();
-      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).toContain(
-        '(≈ DUPR 5.2)',
+      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).not.toMatch(
+        /DUPR|≈/,
       );
       expect(pressable(renderer, TOGGLE).props.accessibilityLabel).toContain(
         '7.02 out of 10',

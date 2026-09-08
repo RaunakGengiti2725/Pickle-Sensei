@@ -165,7 +165,7 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
           ...type.bodyBold,
           maxWidth: '100%',
         });
-        expect(allText(renderer)).toContain('(≈ DUPR 5.2)');
+        expect(allText(renderer)).not.toMatch(/DUPR|≈/);
         expect(allText(renderer)).toContain('0.48 to Diamond');
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(

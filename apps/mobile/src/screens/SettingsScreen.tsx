@@ -32,7 +32,6 @@ import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
 import { useAccessStore } from '../state/accessStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
-import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
@@ -516,8 +515,8 @@ export function SettingsScreen() {
         <View style={styles.ratingNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
           <Text style={[type.caption, { color: color.inkSoft, flex: 1 }]}>
-            Technique Score is coaching feedback—not a verified DUPR or player
-            rating. {DUPR_ESTIMATE_NOTE}
+            Technique Score describes stroke form. A technique benchmark
+            requires separate validation and does not measure match results.
           </Text>
         </View>
 

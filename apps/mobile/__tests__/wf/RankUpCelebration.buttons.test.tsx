@@ -274,7 +274,7 @@ describe('RankUpCelebration button ledger', () => {
         );
         expect(rendered(renderer)).toContain('Diamond unlocked');
         expect(rendered(renderer)).toContain('7.62');
-        expect(rendered(renderer)).toContain('DUPR');
+        expect(rendered(renderer)).not.toMatch(/DUPR|≈/);
         const dismiss = overlay(renderer).props.onAccessibilityEscape;
         expect(typeof dismiss).toBe('function');
         expect(backdrop(renderer).props.onPress).toBe(dismiss);

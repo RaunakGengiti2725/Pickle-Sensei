@@ -232,16 +232,36 @@ export function isChargeableAnalysis(
   const release = verified.releaseEligibility;
   const mechanicsLineage = outcome.mechanics.lineage;
   const benchmarkLineage = outcome.benchmark.lineage;
-  const uncertainty = outcome.benchmark.uncertainty;
-  const approvedUncertainty = release.benchmark.uncertainty;
-  const interval = outcome.benchmark.interval;
   return (
     numericalOutputLineagesEqual(mechanicsLineage, release.mechanics.lineage) &&
-    numericalOutputLineagesEqual(benchmarkLineage, release.benchmark.lineage) &&
     mechanicsLineage.pipeline.version === benchmarkLineage.pipeline.version &&
     mechanicsLineage.pipeline.sha256 === benchmarkLineage.pipeline.sha256 &&
     mechanicsLineage.policy.version === benchmarkLineage.policy.version &&
     mechanicsLineage.policy.sha256 === benchmarkLineage.policy.sha256 &&
+    isReleasedTechniqueBenchmark(outcome.benchmark, release)
+  );
+}
+
+/** Publication uses the same approved boundaries and lineage as charging.
+ * Release eligibility must come from verified authority, never client status. */
+export function isReleasedTechniqueBenchmark(
+  raw: unknown,
+  release: AnalysisReleaseEligibility | null | undefined,
+): raw is ValidatedTechniqueBenchmark {
+  const parsed = validateTechniqueBenchmark(raw);
+  if (
+    !parsed.ok ||
+    parsed.value.status !== "validated_range" ||
+    !isAnalysisReleaseEligibility(release) ||
+    release.status !== "eligible"
+  )
+    return false;
+  const benchmark = parsed.value;
+  const uncertainty = benchmark.uncertainty;
+  const approvedUncertainty = release.benchmark.uncertainty;
+  const interval = benchmark.interval;
+  return (
+    numericalOutputLineagesEqual(benchmark.lineage, release.benchmark.lineage) &&
     uncertainty.nominalCoverage === approvedUncertainty.nominalCoverage &&
     uncertainty.coverageScope === approvedUncertainty.coverageScope &&
     intervalUsesApprovedBoundaries(interval, release.benchmark.boundaryStep) &&
@@ -304,7 +324,12 @@ function isVerifiedEligibilityInput(
   ) {
     return false;
   }
-  const release = value.releaseEligibility;
+  return isAnalysisReleaseEligibility(value.releaseEligibility);
+}
+
+export function isAnalysisReleaseEligibility(
+  release: unknown,
+): release is AnalysisReleaseEligibility {
   if (!isRecord(release)) return false;
   if (release.status === "ineligible") {
     return (

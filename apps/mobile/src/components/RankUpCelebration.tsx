@@ -19,7 +19,6 @@ import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, space, type } from '../design/tokens';
-import { formatDuprEstimate } from '../progress/duprEstimate';
 import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
@@ -126,9 +125,6 @@ function CelebrationStage(props: {
           >
             {summary.rating.toFixed(2)}
             <Text style={[type.caption, styles.ratingScale]}>{' / 10'}</Text>
-          </Text>
-          <Text style={[type.caption, styles.ratingDupr]}>
-            {formatDuprEstimate(summary.rating)}
           </Text>
         </View>
       </View>
@@ -285,11 +281,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   ratingScale: { color: color.onDarkSubtle },
-  ratingDupr: {
-    color: color.onDarkFaint,
-    textAlign: 'center',
-    maxWidth: '100%',
-  },
   ladder: {
     flexDirection: 'row',
     gap: 5,

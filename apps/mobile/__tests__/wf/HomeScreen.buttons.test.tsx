@@ -469,7 +469,7 @@ describe('HomeScreen button ledger', () => {
         expect(allText(renderer)).toContain('Platinum III');
         expect(allText(renderer)).toContain('6.81');
         expect(allText(renderer)).toContain('/10');
-        expect(allText(renderer)).toContain('DUPR');
+        expect(allText(renderer)).not.toMatch(/DUPR|≈/);
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(toggle.props.accessibilityLabel).toContain(
           'rating 6.81 out of 10.',

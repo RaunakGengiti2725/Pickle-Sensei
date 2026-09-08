@@ -21,7 +21,6 @@ import { useReducedMotion } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
-import { formatDuprEstimate } from '../progress/duprEstimate';
 import {
   fetchPlayerRank,
   resolvePlayerRank,
@@ -168,7 +167,7 @@ export function PlayerRankBanner(props: {
 
   const best = summary?.techniques[0] ?? null;
   const detailLine = summary
-    ? `${formatDuprEstimate(summary.rating)} · Best: ${
+    ? `Best: ${
         best
           ? `${best.shotType.replace(/_/g, ' ')} ${best.score.toFixed(1)}`
           : '—'
