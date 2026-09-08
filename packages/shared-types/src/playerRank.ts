@@ -51,22 +51,27 @@
  *   - Only source='real' analyses count; fixtures cannot rank a player.
  */
 
-export const PLAYER_RANK_TIERS = [
-  { key: "bronze", label: "Bronze", minRating: 0 },
-  { key: "silver", label: "Silver", minRating: 3.5 },
-  { key: "gold", label: "Gold", minRating: 5 },
-  { key: "platinum", label: "Platinum", minRating: 6.5 },
-  { key: "diamond", label: "Diamond", minRating: 7.5 },
-] as const;
+import { SCORING_DEFINITION, SCORING_DEFINITION_VERSION } from "./scoringDefinition.js";
+
+const DEFINITION = SCORING_DEFINITION.components;
+
+export const PLAYER_RANK_TIERS = DEFINITION.tiers.thresholds;
 
 /** Top of the 0-10 rating scale (the ceiling of the last tier's band). */
-const TOP_OF_SCALE = 10;
+const TOP_OF_SCALE = DEFINITION.tiers.topOfScale;
 
 /** Per technique, only the most recent N scored analyses define its score. */
-export const RANK_FORM_WINDOW = 8;
+export const RANK_FORM_WINDOW = DEFINITION.formWindow.size;
 
 /** A technique's rating weight grows with evidence, capped here. */
-export const RANK_CONFIDENCE_CAP = 5;
+export const RANK_CONFIDENCE_CAP = DEFINITION.confidenceWeight.cap;
+
+const RANK_RECENCY_WEIGHTS = DEFINITION.recencyWeights.weights;
+
+const HUNDREDTHS_PER_POINT = DEFINITION.scoreQuantization.perPoint;
+
+const CAPTURED_AT_MIN = Date.parse(DEFINITION.countability.capturedAt.min);
+const CAPTURED_AT_MAX_EXCLUSIVE = Date.parse(DEFINITION.countability.capturedAt.maxExclusive);
 
 export type PlayerRankTierKey = (typeof PLAYER_RANK_TIERS)[number]["key"];
 
@@ -112,6 +117,9 @@ export interface PlayerRankTechnique {
 }
 
 export interface PlayerRankSummary {
+  /** `SCORING_DEFINITION_VERSION` the summary was computed under. Absent when
+   * rebuilt from a server payload that predates definition tagging. */
+  definitionVersion?: string;
   /** Confidence-weighted average of per-technique scores, 0-10, 2 decimals. */
   rating: number;
   tier: PlayerRankTierKey;
@@ -171,16 +179,39 @@ function parseTimestamp(value: string): number {
 }
 
 function isCountable(input: PlayerRankAnalysisInput): boolean {
+  const rule = DEFINITION.countability;
+  const at = Date.parse(input.capturedAt);
   return (
-    input.resultKind === "scored" &&
+    input.resultKind === rule.resultKind &&
     typeof input.overallScore === "number" &&
     Number.isFinite(input.overallScore) &&
-    input.overallScore >= 0 &&
-    input.overallScore <= 10 &&
+    input.overallScore >= rule.overallScore.min &&
+    input.overallScore <= rule.overallScore.max &&
     typeof input.shotType === "string" &&
-    input.shotType.length > 0 &&
-    (input.source === undefined || input.source === "real")
+    input.shotType.trim().length > 0 &&
+    input.shotType.length <= rule.shotType.maxLength &&
+    (input.source ?? rule.absentSourceCountsAs) === rule.source &&
+    at >= CAPTURED_AT_MIN &&
+    at < CAPTURED_AT_MAX_EXCLUSIVE
   );
+}
+
+/**
+ * Quantizes a 0-10 score to integer hundredths on its shortest round-trip
+ * decimal text — the text JSON carries to the server and `numeric(4,2)`
+ * rounds half away from zero on storage. `Math.round(score * 100)` would
+ * read the binary float instead (6.005 * 100 = 600.4999… → 600, SQL → 601).
+ */
+function toHundredths(score: number): number {
+  const text = String(score);
+  if (text.includes("e")) {
+    // Only sub-1e-6 magnitudes print exponentially inside the 0-10 domain.
+    return Math.round(score * HUNDREDTHS_PER_POINT);
+  }
+  const [whole = "0", fraction = ""] = text.split(".");
+  const kept = fraction.slice(0, 2).padEnd(2, "0");
+  const roundUp = fraction.charCodeAt(2) >= 53; // '5'
+  return Number(whole) * HUNDREDTHS_PER_POINT + Number(kept) + (roundUp ? 1 : 0);
 }
 
 interface CountableAnalysis {
@@ -209,17 +240,25 @@ export function computePlayerRank(
   analyses: readonly PlayerRankAnalysisInput[],
 ): PlayerRankSummary | null {
   const byTechnique = new Map<string, CountableAnalysis[]>();
+  const seenIds = new Set<string>();
   let scoredAnalysisCount = 0;
   for (const input of analyses) {
     if (!isCountable(input)) continue;
+    // One analysis per id, like the SQL primary key: a replayed row is the
+    // same evidence, not more of it. Lowercase so text order == uuid byte order.
+    const id = input.id === undefined ? "" : input.id.toLowerCase();
+    if (id !== "") {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+    }
     scoredAnalysisCount += 1;
     const entry: CountableAnalysis = {
       // Integer hundredths keep one/two-decimal scores exact so the result
       // matches Postgres numeric math bit for bit.
-      hundredths: Math.round((input.overallScore as number) * 100),
+      hundredths: toHundredths(input.overallScore as number),
       at: parseTimestamp(input.capturedAt),
       capturedAt: input.capturedAt,
-      id: input.id ?? "",
+      id,
     };
     const bucket = byTechnique.get(input.shotType);
     if (bucket) bucket.push(entry);
@@ -235,7 +274,10 @@ export function computePlayerRank(
     let weightedSum = 0;
     let weightTotal = 0;
     window.forEach((analysis, index) => {
-      const weight = RANK_FORM_WINDOW - index;
+      const weight = RANK_RECENCY_WEIGHTS[index];
+      if (weight === undefined) {
+        throw new Error(`Recency weight missing for window index ${index}.`);
+      }
       weightedSum += weight * analysis.hundredths;
       weightTotal += weight;
     });
@@ -254,7 +296,7 @@ export function computePlayerRank(
     techniques.push({
       shotType,
       // Rounded half away from zero to 2 decimals — Postgres round(numeric).
-      score: Math.round(weightedSum / weightTotal) / 100,
+      score: Math.round(weightedSum / weightTotal) / HUNDREDTHS_PER_POINT,
       capturedAt: latest.capturedAt,
       sampledCount: window.length,
       confidence: Math.min(bucket.length, RANK_CONFIDENCE_CAP),
@@ -269,15 +311,16 @@ export function computePlayerRank(
   let weightedScoreSum = 0;
   for (const technique of techniques) {
     confidenceSum += technique.confidence;
-    weightedScoreSum += technique.confidence * Math.round(technique.score * 100);
+    weightedScoreSum += technique.confidence * Math.round(technique.score * HUNDREDTHS_PER_POINT);
   }
-  const rating = Math.round(weightedScoreSum / confidenceSum) / 100;
+  const rating = Math.round(weightedScoreSum / confidenceSum) / HUNDREDTHS_PER_POINT;
   const tier = playerRankTierForRating(rating);
   const tierIndex = PLAYER_RANK_TIERS.findIndex((t) => t.key === tier.key);
   const next = PLAYER_RANK_TIERS[tierIndex + 1] ?? null;
   const { division, label: divisionLabel } = playerRankDivisionForRating(rating);
 
   return {
+    definitionVersion: SCORING_DEFINITION_VERSION,
     rating,
     tier: tier.key,
     tierLabel: tier.label,
@@ -291,7 +334,9 @@ export function computePlayerRank(
           key: next.key,
           label: next.label,
           minRating: next.minRating,
-          pointsNeeded: Math.round(next.minRating * 100 - rating * 100) / 100,
+          pointsNeeded:
+            Math.round(next.minRating * HUNDREDTHS_PER_POINT - rating * HUNDREDTHS_PER_POINT) /
+            HUNDREDTHS_PER_POINT,
         }
       : null,
   };
