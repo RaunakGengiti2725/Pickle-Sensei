@@ -748,8 +748,8 @@ Deno.test(
         assertEquals(after.status, 200);
         assertEquals(
           h.callsTo("/rest/v1/progress_daily").length,
-          readsBefore + 1,
-          "post-sync GET /v1/progress was served from the re-cached pre-sync payload",
+          readsBefore + 2,
+          "post-sync GET /v1/progress was served from the re-cached pre-sync payload (a DB-backed build reads the one-row page and the empty page that proves the end)",
         );
         const payload = (await after.json()) as {
           series: unknown[];

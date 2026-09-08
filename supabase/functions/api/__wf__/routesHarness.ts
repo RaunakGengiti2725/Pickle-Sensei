@@ -4,6 +4,7 @@
 // the REAL handler (auth → rate limits → routing → billing/webhook/drills).
 
 import { deletionChallengeHash, type AppleDeletionOutcome } from "../accountDeletionOperations.ts";
+import { isPagedSelect, postgrestSelect } from "./postgrestStandIn.ts";
 import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
 
 interface StubDeletionOperation {
@@ -915,6 +916,9 @@ export async function loadHarness(): Promise<Harness> {
           if (filter?.startsWith("eq.")) {
             rows = rows.filter((row) => isRecord(row) && row[key] === filter.slice(3));
           }
+        }
+        if (isPagedSelect(new URL(url))) {
+          rows = postgrestSelect(new URL(url), rows.filter(isRecord));
         }
         const accept = headers["accept"] ?? "";
         if (accept.includes("application/vnd.pgrst.object+json")) {

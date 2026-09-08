@@ -132,12 +132,18 @@ import {
   accountDeletionStatusUnavailableResponse,
   beginAccountDeletionOperation,
   confirmAccountDeletionOperation,
+  INVENTORY_INCOMPLETE_CODES,
   isAccountDeletionStatusCapability,
   isIntendedAuthUserNotFound,
   isIntendedRevenueCatCustomerNotFound,
+  postgrestKeysetAfter,
+  postgrestKeysetBefore,
   readAccountDeletionResponseBody,
+  readOwnerInventory,
   storeAccountAppleCredential,
   type DeletionOperationRpc,
+  type InventoryPage,
+  type KeysetColumn,
 } from "./accountDeletionOperations.ts";
 
 // Publishable key (sb_publishable_…) set via `supabase secrets set
@@ -1981,32 +1987,36 @@ function coalesce(key: string, build: () => Promise<Response>): Promise<Response
   return pending.response.then((response) => response.clone());
 }
 
-/** PostgREST silently truncates unpaged reads at its max_rows (1000 on the
- * hosted platform); page in that unit until a short page arrives. Callers
- * order newest-first so that the MAX_PAGES bound, if ever reached, drops the
- * oldest history rather than today's rows. */
-const PAGE_ROWS = 1_000;
-const MAX_PAGES = 20;
+/** Owner-wide reads page by keyset over `keyColumns` (the caller's DESCENDING
+ * order, unique per owner): `page(before, limit)` reads at most `limit` rows,
+ * restricted to the PostgREST `or` filter `before` when it is non-null. The
+ * read either proves it reached the end (an empty page after the last row) or
+ * fails — a truncated history is never returned as the whole, whatever
+ * max_rows the server clamps pages to (see readOwnerInventory). */
 async function readAllRows(
-  page: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{
-    data: unknown[] | null;
-    error: { message: string; code?: string } | null;
-    status?: number;
-  }>,
+  keyColumns: readonly string[],
+  page: (before: string | null, limit: number) => PromiseLike<InventoryPage<unknown>>,
 ): Promise<{ rows: Array<Record<string, unknown>> } | { error: ReturnType<typeof failureDetail> }> {
-  const rows: Array<Record<string, unknown>> = [];
-  for (let index = 0; index < MAX_PAGES; index += 1) {
-    const from = index * PAGE_ROWS;
-    const result = await page(from, from + PAGE_ROWS - 1);
-    if (result.error) return { error: failureDetail(result.error, result.status) };
-    const batch = (result.data ?? []) as Array<Record<string, unknown>>;
-    rows.push(...batch);
-    if (batch.length < PAGE_ROWS) break;
-  }
-  return { rows };
+  const result = await readOwnerInventory<Record<string, unknown>, KeysetColumn[]>({
+    readPage: async (cursor, limit) => {
+      const { data, error, status } = await page(
+        cursor === null ? null : postgrestKeysetBefore(cursor),
+        limit,
+      );
+      return { data: data as Array<Record<string, unknown>> | null, error, status };
+    },
+    cursorAfter: (row) => postgrestKeysetAfter(row, keyColumns),
+    cursorKey: (cursor) => JSON.stringify(cursor.map((part) => part.value)),
+  });
+  if (result.status === "COMPLETE") return { rows: result.rows };
+  return {
+    error: failureDetail(
+      result.reason === "page_error"
+        ? result.error
+        : { name: "UnexpectedResult", code: INVENTORY_INCOMPLETE_CODES[result.reason] },
+      result.httpStatus ?? undefined,
+    ),
+  };
 }
 
 /** Rejection copy per apply_synced_shot status. Statuses map verbatim to the
@@ -2649,24 +2659,23 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
   // re-caching the pre-sync payload.
   const fence = await cacheFence(cacheKey);
   const [seriesQ, daysQ] = await Promise.all([
-    readAllRows((from, to) =>
-      authed.db
+    readAllRows(["day", "shot_type", "scoring_model_version"], (before, limit) => {
+      const query = authed.db
         .from("progress_daily")
         .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
-        .eq("user_id", authed.id)
+        .eq("user_id", authed.id);
+      return (before === null ? query : query.or(before))
         .order("day", { ascending: false })
         .order("shot_type", { ascending: false })
         .order("scoring_model_version", { ascending: false })
-        .range(from, to),
-    ),
-    readAllRows((from, to) =>
-      authed.db
-        .from("practice_days")
-        .select("day")
-        .eq("user_id", authed.id)
+        .limit(limit);
+    }),
+    readAllRows(["day"], (before, limit) => {
+      const query = authed.db.from("practice_days").select("day").eq("user_id", authed.id);
+      return (before === null ? query : query.or(before))
         .order("day", { ascending: false })
-        .range(from, to),
-    ),
+        .limit(limit);
+    }),
   ]);
   if ("error" in seriesQ) {
     return serviceUnavailable("Progress", seriesQ.error);
