@@ -437,7 +437,7 @@ $$;
 comment on function public.offline_hold_count() is
   'Outstanding offline tickets of the caller (allocated, not consumed; a released ticket still counts — returning a ticket is not a re-credit), across the caller''s account and sign-in identities. Counted by access_state(), reserve_analysis_permit() and issue_offline_grant().';
 
-revoke all on function public.offline_hold_count() from public, anon;
+revoke all on function public.offline_hold_count() from public, anon, service_role;
 grant execute on function public.offline_hold_count() to authenticated;
 
 create or replace function public.access_state()
@@ -662,7 +662,7 @@ $$;
 comment on function public.register_offline_device(text, text, boolean) is
   'Idempotent device registration for the caller (live API session required). Records the installation key and its attestation environment/state; never downgrades an attested device; refuses an environment change for a known key. Returns accepted | offline.invalid_input | offline.device_environment_mismatch.';
 
-revoke all on function public.register_offline_device(text, text, boolean) from public, anon;
+revoke all on function public.register_offline_device(text, text, boolean) from public, anon, service_role;
 grant execute on function public.register_offline_device(text, text, boolean) to authenticated;
 
 create or replace function public.issue_offline_grant(
@@ -768,8 +768,12 @@ begin
   -- or one of its sign-in identities are re-issued (the original installation
   -- of a deleted-and-re-created account recovers its ticket here — the
   -- device row is gone, the ledger's installation key is not); new tickets
-  -- come only out of what lifetime scored + live online reservations + every
-  -- outstanding offline hold leave of the 2 lifetime free ratings.
+  -- come only out of what lifetime scored + online reservations + every
+  -- outstanding offline hold leave of the 2 lifetime free ratings. An online
+  -- reservation is every permit apply_synced_shot() would still honour
+  -- (permit_backs_sync: reserved at any age, or swept to released/expired)
+  -- that no shot has settled yet — the sweep and the clock walk a permit out
+  -- of a time window while its late sync stays acceptable.
   select coalesce(array_agg(a.ticket_id order by a.created_at, a.id), '{}'::uuid[])
   into v_outstanding
   from public.offline_allocation_ledger a
@@ -784,10 +788,12 @@ begin
   select
     public.lifetime_scored_count(),
     (
-      select count(*)::int from public.analysis_permits p
+      select count(*)::int
+      from public.analysis_permits p
+      left join public.shots s on s.analysis_permit_id = p.id
       where p.user_id = v_uid
-        and p.status = 'reserved'
-        and p.created_at > now() - interval '24 hours'
+        and public.permit_backs_sync(p.status, p.outcome)
+        and s.id is null
     ),
     public.offline_hold_count()
   into v_scored, v_reserved, v_held;
@@ -838,9 +844,9 @@ end;
 $$;
 
 comment on function public.issue_offline_grant(text, integer) is
-  'Issues the next-generation offline grant for one attested device of the caller (live API session required), under access_lock_key(uid). Pro: a lease ending at min(now + 7 days, verified entitlement expiry), no tickets. Free: re-issues the installation''s outstanding tickets owned by the caller''s account or sign-in identities (original-installation recovery across account re-creation) and allocates new ones only within lifetime_scored_count() + live reservations + offline holds ≤ 2. Returns accepted | access.paywall_required | offline.device_not_registered | offline.device_not_attested | offline.invalid_input.';
+  'Issues the next-generation offline grant for one attested device of the caller (live API session required), under access_lock_key(uid). Pro: a lease ending at min(now + 7 days, verified entitlement expiry), no tickets. Free: re-issues the installation''s outstanding tickets owned by the caller''s account or sign-in identities (original-installation recovery across account re-creation) and allocates new ones only within lifetime_scored_count() + reservations (every permit permit_backs_sync() still honours, at any age, not yet settled by a shot) + offline holds ≤ 2. Returns accepted | access.paywall_required | offline.device_not_registered | offline.device_not_attested | offline.invalid_input.';
 
-revoke all on function public.issue_offline_grant(text, integer) from public, anon;
+revoke all on function public.issue_offline_grant(text, integer) from public, anon, service_role;
 grant execute on function public.issue_offline_grant(text, integer) to authenticated;
 
 create or replace function public.consume_offline_ticket(p_ticket_id uuid, p_shot_id uuid)
@@ -913,7 +919,7 @@ $$;
 comment on function public.consume_offline_ticket(uuid, uuid) is
   'Binds one outstanding ticket owned by the caller''s account or sign-in identities to one durably delivered scored shot of the caller that no online permit and no other ticket paid for (live API session required). Idempotent for the same (ticket, shot). Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.ticket_released | offline.shot_not_chargeable | offline.invalid_input.';
 
-revoke all on function public.consume_offline_ticket(uuid, uuid) from public, anon;
+revoke all on function public.consume_offline_ticket(uuid, uuid) from public, anon, service_role;
 grant execute on function public.consume_offline_ticket(uuid, uuid) to authenticated;
 
 create or replace function public.release_offline_ticket(p_ticket_id uuid, p_reason text)
@@ -966,5 +972,5 @@ $$;
 comment on function public.release_offline_ticket(uuid, text) is
   'Explicit, terminal return of one outstanding ticket owned by the caller''s account or sign-in identities (live API session required); the only client reason is unused_ticket_returned — support_review is written by support through the table, never self-asserted here. A released ticket still counts against the entitlement and can never be consumed; a consumed ticket cannot be released. Idempotent. Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.invalid_input.';
 
-revoke all on function public.release_offline_ticket(uuid, text) from public, anon;
+revoke all on function public.release_offline_ticket(uuid, text) from public, anon, service_role;
 grant execute on function public.release_offline_ticket(uuid, text) to authenticated;
