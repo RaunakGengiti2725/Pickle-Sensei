@@ -3,6 +3,7 @@ export * from "./analysisOutcome.js";
 export * from "./analysisReleasePolicy.js";
 export * from "./binomialBounds.js";
 export * from "./captureEnvelope.js";
+export * from "./chargeability.js";
 export * from "./consent.js";
 export * from "./domain.js";
 export * from "./errors.js";
