@@ -177,10 +177,7 @@ export function describeMembershipState(
     // Only a horizon the server attached to a PREMIUM verdict describes this
     // membership; a non-premium billing answer beside premium access is an
     // older snapshot and states nothing about the current period.
-    const horizon =
-      billing !== null && billing.premium
-        ? parsedHorizon(billing.expiresAt)
-        : null;
+    const horizon = billing?.premium ? parsedHorizon(billing.expiresAt) : null;
     if (horizon !== null && Date.parse(horizon) <= nowMs) {
       const date = formatMembershipDate(horizon);
       return {
