@@ -1105,6 +1105,7 @@ describe('Settings membership row states', () => {
       await useAccessStore.getState().syncBilling();
     });
     let answer!: (value: CanonicalAccessState) => void;
+    clients.backend.getAccess.mockClear();
     clients.backend.getAccess.mockImplementation(
       () =>
         new Promise<CanonicalAccessState>(resolve => {
