@@ -981,7 +981,7 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     const swing = singleSwing();
     // ~1.75 torso lengths/s: measurable motion, below the comparable floor.
     const idleFidget = wristSpeedProfile(2000, 60, hump(1000, 400, 0.35));
-    const clip = concatSequences(swing.sequence, idleFidget, 600);
+    const clip = concatSequences(swing.sequence, idleFidget, 100);
     const decision = admitImportedStrokeEvents(clip);
     expect(decision.admitted).toBe(true);
     if (!decision.admitted) return;
@@ -1609,7 +1609,7 @@ describe('W03-01 import admission — combined gate', () => {
     expect(decision.reason).toBe('wrist_not_tracked');
     expect(decision.detail).toContain('without either wrist tracked');
 
-    const brief = hideWrists(wristSpeedProfile(100, 60, () => 0));
+    const brief = hideWrists(wristSpeedProfile(17, 60, () => 0));
     const okSequence = concatSequences(
       concatSequences(brief, swing.sequence, 17),
       brief,
@@ -2236,11 +2236,11 @@ describe('W03-01 regression — round 8: decaying and rising rallies are several
     expect(decision.candidates).toHaveLength(1);
   });
 
-  it('publishes the event floor it enforces: never below the shared-valley ratio of the highest peak', () => {
-    expect(IMPORT_ADMISSION_LIMITS.minEventFloorRatio).toBeGreaterThanOrEqual(
-      IMPORT_ADMISSION_LIMITS.maxSharedValleyRatio,
+  it('publishes the jitter rise it tolerates: tighter than the shared-valley wobble of the lesser peak', () => {
+    expect(IMPORT_ADMISSION_LIMITS.maxJitterRiseRatio).toBeGreaterThan(0);
+    expect(IMPORT_ADMISSION_LIMITS.maxJitterRiseRatio).toBeLessThan(
+      1 - IMPORT_ADMISSION_LIMITS.maxSharedValleyRatio,
     );
-    expect(IMPORT_ADMISSION_LIMITS.minEventFloorRatio).toBeLessThan(1);
   });
 });
 
@@ -2295,9 +2295,14 @@ describe('W03-01 regression — round 8: a whole-pose gap could hide a stroke', 
     expect(clipReasonOf(gapped)).toBe('pose_coverage_incomplete');
   });
 
+  it('refuses a 2.4 s whole-pose gap that swallows the second stroke, leaving one visible', () => {
+    const gapped = dropPoseFrames(twoStrokes(4000, 2500), 1500, 3900);
+    expect(clipReasonOf(gapped)).toBe('pose_coverage_incomplete');
+  });
+
   it('refuses a 2.4 s whole-pose gap between two visible strokes', () => {
     const gapped = dropPoseFrames(twoStrokes(6000, 4500), 1400, 3800);
-    expect(clipReasonOf(gapped)).toBe('pose_coverage_incomplete');
+    expect(clipReasonOf(gapped)).toBe('multiple_stroke_events');
   });
 
   it('refuses the same 400 ms gap with nothing inside it: the evidence is identical', () => {
@@ -2354,6 +2359,10 @@ describe('W03-01 regression — round 8: the hitting wrist unobserved at the cli
 
   it('refuses the clip when the hitting wrist is untracked after its last measurement (2.5-7 s)', () => {
     expect(clipReasonOf(occludeRightWrist(threeStrokes(), 2500, 7000))).toBe(
+      'multiple_stroke_events',
+    );
+    const lone = wristSpeedProfile(7000, 60, hump(1000, 150, 1.0));
+    expect(clipReasonOf(occludeRightWrist(lone, 2500, 7000))).toBe(
       'wrist_not_tracked',
     );
   });
