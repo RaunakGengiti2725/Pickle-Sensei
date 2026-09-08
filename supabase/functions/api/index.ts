@@ -80,7 +80,12 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
-import { readVerifiedReleasePolicy } from "./releasePolicy.ts";
+import {
+  readChargeableReleaseAdmission,
+  readVerifiedReleasePolicy,
+  type ChargeableReleaseAdmission,
+  type ReleaseIneligibilityReason,
+} from "./releasePolicy.ts";
 import {
   cacheDel,
   cacheFence,
@@ -1491,6 +1496,36 @@ async function accessPayload(
   };
 }
 
+/** Release-authority admission for the two chargeable paths — reserving a
+ * permit and settling a `scored` shot. Read uncached through the service-role
+ * client (read_analysis_release_policy() is EXECUTE-granted to service_role
+ * only) so a withdrawal is honoured on the very next request. Without the
+ * service-role configuration the authority is unknown, which is never
+ * authorization. */
+async function chargeableReleaseAdmission(): Promise<ChargeableReleaseAdmission> {
+  const admin = billingAdminDb();
+  if (!admin) return { status: "unavailable", error: { name: "MissingConfiguration" } };
+  return readChargeableReleaseAdmission(
+    () => admin.rpc("read_analysis_release_policy"),
+    Math.floor(Date.now() / 1000),
+  );
+}
+
+const RELEASE_NOT_AUTHORIZED_CODE = "access.release_not_authorized";
+
+/** Typed, final, non-chargeable verdict: no active release policy authorizes
+ * a validated rating right now. 409 (not 5xx) so the client treats it as a
+ * settled answer rather than an outage; `release` carries the shared
+ * AnalysisReleaseEligibility shape. */
+const releaseNotAuthorized = (reasonCode: ReleaseIneligibilityReason): Response =>
+  json(409, {
+    error: {
+      code: RELEASE_NOT_AUTHORIZED_CODE,
+      message: "Validated ratings are not available right now. No rating was counted.",
+    },
+    release: { status: "ineligible", reasonCode },
+  });
+
 /** POST /v1/analysis-permits — mirrors apps/mobile/src/data/api.ts:121-134
  * (reserve): upsert-by-idempotency-key, respond { permit } (+ access, as
  * services/api does; the client only reads permit). */
@@ -1510,6 +1545,16 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     if (access instanceof Response) return access;
     return json(200, { permit: permitView(row), access });
   };
+
+  // A permit is the admission of a chargeable scored run: without an ACTIVE,
+  // non-withdrawn release policy nothing is reserved and nothing is counted.
+  const release = await chargeableReleaseAdmission();
+  if (release.status === "unavailable") {
+    return serviceUnavailable("Rating reservation", release.error);
+  }
+  if (release.status === "ineligible") {
+    return releaseNotAuthorized(release.reasonCode);
+  }
 
   // ONE atomic reserve_analysis_permit RPC (idempotent lookup + lifetime
   // free-limit check + insert, under a per-user advisory lock — migration
@@ -1712,7 +1757,7 @@ interface SyncShot {
   endMs: number;
   overallScore: number | null;
   confidence: number;
-  resultKind: "scored" | "low_confidence";
+  resultKind: "scored" | "low_confidence" | "partial";
   phases: Array<{
     key: string;
     startMs: number;
@@ -1782,8 +1827,12 @@ function parseSyncShot(
   ) {
     return invalid("timestamps { startMs, contactMs|null, endMs } are required.");
   }
-  if (value.resultKind !== "scored" && value.resultKind !== "low_confidence") {
-    return invalid("resultKind must be scored|low_confidence.");
+  if (
+    value.resultKind !== "scored" &&
+    value.resultKind !== "low_confidence" &&
+    value.resultKind !== "partial"
+  ) {
+    return invalid("resultKind must be scored|low_confidence|partial.");
   }
   const overallScore = value.overallScore;
   if (value.resultKind === "scored") {
@@ -1796,7 +1845,7 @@ function parseSyncShot(
       return invalid("overallScore (0..10) is required when resultKind=scored.");
     }
   } else if (overallScore !== null) {
-    return invalid("overallScore must be null when resultKind=low_confidence.");
+    return invalid("overallScore must be null unless resultKind=scored.");
   }
   if (!isUnit(value.confidence)) return invalid("confidence must be 0..1.");
   if (!Array.isArray(value.phases)) return invalid("phases must be an array.");
@@ -1977,6 +2026,8 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
     "Both lifetime free ratings have been used. Membership is required for another rating.",
   "shot.session_not_found": "Session not found or not yours.",
   "shot.id_conflict": "Shot id is already bound to a different user.",
+  [RELEASE_NOT_AUTHORIZED_CODE]:
+    "This rating could not be validated for release. It stays on this device and was not counted.",
 };
 
 /** POST /v1/shots:sync — mirrors apps/mobile/src/data/sync.ts drainOutbox
@@ -2030,10 +2081,33 @@ async function syncShots(authed: AuthedUser, request: Request): Promise<Response
     replayIds = new Set(((existing.data ?? []) as Array<{ id: string }>).map((row) => row.id));
   }
 
+  // Scored settlement is the charge (finalized/scored spends a free rating),
+  // so it needs the release authority; abstentions and mechanics-only
+  // partials are never chargeable and settle regardless. One uncached read
+  // per batch, taken only when a non-replayed scored shot is present. An
+  // unreadable authority is retryable for the whole batch (the outbox keeps
+  // every row), exactly like the replay lookup above; an ineligible one is a
+  // typed per-shot verdict.
+  let release: ChargeableReleaseAdmission | null = null;
+  if (parsedShots.some((shot) => shot.resultKind === "scored" && !replayIds.has(shot.id))) {
+    release = await chargeableReleaseAdmission();
+    if (release.status === "unavailable") {
+      return serviceUnavailable("Shot sync", release.error);
+    }
+  }
+
   let wroteEvidence = false;
   for (const shot of parsedShots) {
     if (replayIds.has(shot.id)) {
       acceptedIds.push(shot.id);
+      continue;
+    }
+    if (shot.resultKind === "scored" && release?.status === "ineligible") {
+      reject(
+        shot.id,
+        RELEASE_NOT_AUTHORIZED_CODE,
+        SYNC_STATUS_MESSAGES[RELEASE_NOT_AUTHORIZED_CODE],
+      );
       continue;
     }
     const applied = await authed.db.rpc("apply_synced_shot", {
