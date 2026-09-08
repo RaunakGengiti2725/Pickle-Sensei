@@ -242,6 +242,61 @@ function softThenHardRally(): PoseSequence {
   return wristSpeedProfile(3000, 60, tMs => soft(tMs) + hard(tMs));
 }
 
+/** The right wrist follows `speedAt` while the LEFT wrist follows `leftAt`. */
+function twoWristSpeedProfile(
+  durationMs: number,
+  fps: number,
+  speedAt: (tMs: number) => number,
+  leftAt: (tMs: number) => number,
+): PoseSequence {
+  const base = wristSpeedProfile(durationMs, fps, speedAt);
+  const dtMs = 1000 / fps;
+  return {
+    ...base,
+    frames: base.frames.map((frame, index) => {
+      const stepImageHeights = (leftAt(index * dtMs) * dtMs) / 1000;
+      return {
+        ...frame,
+        landmarks: frame.landmarks.map(mark =>
+          mark.name === 'left_wrist'
+            ? { ...mark, x: 0.3 + (index % 2 === 0 ? 0 : stepImageHeights) }
+            : mark,
+        ),
+      };
+    }),
+  };
+}
+
+/**
+ * Round 6 adversary shapes. A continuous six-stroke paddle-hand rally that
+ * never rests (1.5–5 torso lengths/s) plus one off-hand gesture; four
+ * volleys in 1.85 s whose valleys stay at 60 % of the peaks; two complete
+ * strokes 340 ms apart with a dead stop between them. Each is several
+ * strokes and must never reach a permit reservation.
+ */
+function continuousRallyWithGesture(): PoseSequence {
+  const rally = (tMs: number) => {
+    if (tMs < 500 || tMs > 3500) return 0;
+    const phase = ((tMs - 500) % 500) / 500;
+    return 0.35 + 0.85 * Math.max(0, 1 - Math.abs(phase - 0.5) * 2);
+  };
+  return twoWristSpeedProfile(4000, 60, rally, hump(2000, 200, 0.8));
+}
+
+function fourVolleys(): PoseSequence {
+  return wristSpeedProfile(5000, 60, tMs => {
+    if (tMs < 1000 || tMs > 2800) return 0;
+    const phase = ((tMs - 1000) % 450) / 450;
+    return 0.6 + 0.4 * Math.max(0, 1 - Math.abs(phase - 0.5) * 2);
+  });
+}
+
+function twoStrokes340msApart(): PoseSequence {
+  const first = hump(1200, 100, 1.4);
+  const second = hump(1540, 100, 1.4);
+  return wristSpeedProfile(3000, 60, tMs => first(tMs) + second(tMs));
+}
+
 function concatSequences(
   first: PoseSequence,
   second: PoseSequence,
@@ -449,6 +504,33 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
+
+  it.each([
+    [
+      'a continuous six-stroke rally with an off-hand gesture',
+      continuousRallyWithGesture,
+    ],
+    ['four volleys with 60 % valleys', fourVolleys],
+    ['two complete strokes 340 ms apart', twoStrokes340msApart],
+  ])(
+    'round 6: refuses %s before any permit is reserved — fetch is never called',
+    async (_title, build) => {
+      const { db, calls } = recordingDb();
+      const { clip, sidecarJson } = importedClipWithSidecar(build());
+      mockReadArtifact = async () => sidecarJson;
+      const fetchSpy = jest.fn();
+      (globalThis as { fetch?: unknown }).fetch = fetchSpy;
+
+      const outcome = await runCaptureAnalysis(request(db, clip));
+      expect(outcome.kind).toBe('quality_blocked');
+      if (outcome.kind !== 'quality_blocked') return;
+      expect(outcome.reason).toBe(
+        importAdmissionRejectionMessage('multiple_stroke_events'),
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   it('refuses a too-short import before the sidecar is even read', async () => {
     const { db, calls } = recordingDb();
@@ -673,6 +755,30 @@ describe('W03-01 import admission — signed-in saved-original path', () => {
     expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
     expect(saved.attemptRows()).toEqual([]);
   });
+
+  it.each([
+    [
+      'a continuous six-stroke rally with an off-hand gesture',
+      continuousRallyWithGesture,
+    ],
+    ['four volleys with 60 % valleys', fourVolleys],
+    ['two complete strokes 340 ms apart', twoStrokes340msApart],
+  ])(
+    'round 6: %s is refused on the saved path — no permit, no inference, no attempt',
+    async (_title, build) => {
+      const saved = await savedImport(build());
+      const outcome = await saved.run();
+      expect(outcome.kind).toBe('quality_blocked');
+      if (outcome.kind !== 'quality_blocked') return;
+      expect(outcome.reason).toBe(
+        importAdmissionRejectionMessage('multiple_stroke_events'),
+      );
+      expect(saved.permitCalls()).toHaveLength(0);
+      expect(saved.fetchSpy).not.toHaveBeenCalled();
+      expect(pipeline.analyzeCapture).not.toHaveBeenCalled();
+      expect(saved.attemptRows()).toEqual([]);
+    },
+  );
 
   it('a too-short import is refused before extraction, before the sidecar is read and before any attempt exists', async () => {
     const saved = await savedImport(undefined, 500, { withSidecar: false });
