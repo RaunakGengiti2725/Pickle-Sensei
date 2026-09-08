@@ -257,42 +257,58 @@ pnpm audit --json > artifacts/advisories/pnpm.json; (cd apps/mobile && npm audit
 const fs = require("fs");
 const out = [];
 const log = (s) => { out.push(s); console.log(s); };
-const finish = (code) => { fs.writeFileSync("artifacts/advisories/disposition-coverage.log", out.join("\n") + "\nexit " + code + "\n"); process.exit(code); };
-const read = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+const finish = (code) => { fs.mkdirSync("artifacts/advisories", { recursive: true }); fs.writeFileSync("artifacts/advisories/disposition-coverage.log", out.join("\n") + "\nexit " + code + "\n"); process.exit(code); };
+const read = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { log(f + ": " + (e.code || e.name) + " (audit did not execute)"); return null; } };
 const mobile = read("artifacts/advisories/mobile.json");
 const pnpm = read("artifacts/advisories/pnpm.json");
-const wellFormed = (r) => Boolean(r && !r.error && r.metadata && r.metadata.vulnerabilities);
+const wellFormed = (r) => Boolean(r && typeof r === "object" && !r.error && r.metadata && r.metadata.vulnerabilities && r.metadata.dependencies);
 if (!wellFormed(mobile) || !wellFormed(pnpm)) { log("audit report malformed (audit did not execute)"); finish(1); }
 const ids = new Set();
-for (const v of Object.values(mobile.vulnerabilities)) for (const via of v.via) if (via && via.url) { const m = via.url.match(/GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/); if (m) ids.add(m[0]); }
+for (const v of Object.values(mobile.vulnerabilities || {})) for (const via of v.via || []) if (via && via.url) { const m = via.url.match(/GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/); if (m) ids.add(m[0]); }
 for (const a of Object.values(pnpm.advisories || {})) if (a.github_advisory_id) ids.add(a.github_advisory_id);
 const doc = fs.readFileSync("docs/security/ADVISORIES_2026-09-08.md", "utf8");
+const lines = doc.split("\n");
+const cells = (line) => line.split("|").map((c) => c.trim());
+const rows = (section, label) => section.filter((l) => /^\|/.test(l)).map(cells).filter((c) => c[1] === label).map((c) => c[2] || "");
+const section = (id) => { const start = lines.findIndex((l) => new RegExp("^### [0-9.]+ " + id + "(\\s|$)").test(l)); if (start < 0) return null; let end = lines.findIndex((l, i) => i > start && /^##(#)? /.test(l)); if (end < 0) end = lines.length; return lines.slice(start + 1, end); };
+const finalRe = /^\*\*(UPGRADED|ACCEPTED RISK|NOT APPLICABLE)\*\*(\s|$)/;
 let missing = 0;
 for (const id of [...ids].sort()) {
-  const re = new RegExp("^### [0-9.]+ " + id + "[^\\n]*\\n(?:(?!\\n### )[\\s\\S])*?\\| Disposition[^\\n]*\\*\\*(UPGRADED|ACCEPTED RISK|NOT APPLICABLE)\\*\\*", "m");
-  const hit = re.test(doc);
-  log(id + ": " + (hit ? "dispositioned" : "MISSING disposition"));
-  if (!hit) missing++;
+  const sec = section(id);
+  const disp = sec ? rows(sec, "Disposition") : [];
+  const ok = disp.length === 1 && finalRe.test(disp[0]);
+  log(id + ": " + (ok ? "dispositioned " + disp[0].match(finalRe)[1] : "MISSING disposition (" + (sec ? disp.length + " Disposition row(s)" + (disp.length ? ": " + JSON.stringify(disp) : "") : "no ### heading") + ")"));
+  if (!ok) missing++;
 }
-const semver = require("./apps/mobile/node_modules/semver");
-let badFloors = 0;
-const floorRe = /^\| Remediation floor +\| `([^`@\s]+(?:\/[^`@\s]+)?)@(\d+\.\d+\.\d+)`/gm;
-for (const m of doc.matchAll(floorRe)) {
+let stale = 0;
+for (const l of lines) { const m = l.match(/^### [0-9.]+ (GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})(\s|$)/); if (m && !ids.has(m[1])) { log(m[1] + ": STALE (dispositioned here but no longer reported by the audits)"); stale++; } }
+let semver; try { semver = require(require("path").resolve("apps/mobile/node_modules/semver")); } catch (e) { log("apps/mobile/node_modules/semver unavailable (run npm ci in apps/mobile first): " + e.code); finish(1); }
+let floors = 0, badFloors = 0;
+const floorRe = /^`((?:@[^\s/`@]+\/)?[^\s/`@]+)@([^\s`]+)`/;
+for (const cell of rows(lines, "Remediation floor")) {
+  floors++;
+  const m = cell.match(floorRe);
+  if (!m) { log("floor " + JSON.stringify(cell.slice(0, 60)) + ": no leading `pkg@version` token"); badFloors++; continue; }
   const [, pkg, ver] = m;
   const v = mobile.vulnerabilities[pkg];
   const range = v && v.range;
-  const inside = range ? semver.satisfies(ver, range) : false;
-  log("floor " + pkg + "@" + ver + " vs audited range " + JSON.stringify(range) + ": " + (range ? (inside ? "INSIDE vulnerable range" : "outside vulnerable range") : "package not in audit report"));
-  if (!range || inside) badFloors++;
+  const valid = semver.valid(ver) === ver;
+  const inside = range && valid ? semver.satisfies(ver, range) : null;
+  const verdict = !valid ? "version is not a full semver" : !range ? "package not in audit report" : inside ? "INSIDE vulnerable range" : "outside vulnerable range";
+  log("floor " + pkg + "@" + ver + " vs audited range " + JSON.stringify(range) + ": " + verdict);
+  if (!valid || !range || inside) badFloors++;
 }
 log("mobile: " + JSON.stringify(mobile.metadata.vulnerabilities) + " pnpm: " + JSON.stringify(pnpm.metadata.vulnerabilities));
-log("advisories=" + ids.size + " missing=" + missing + " floors=" + [...doc.matchAll(floorRe)].length + " badFloors=" + badFloors);
-finish(missing || badFloors ? 1 : 0);
+log("advisories=" + ids.size + " missing=" + missing + " stale=" + stale + " floors=" + floors + " badFloors=" + badFloors);
+finish(missing || stale || badFloors ? 1 : 0);
 '
 ```
 
-Result (VERIFIED, round-3 script): exit 0 — `advisories=3 missing=0 floors=1 badFloors=0` on the
-real reports. This script is the round-3 check; §8.3 shows which of its acceptances are false.
+Result (VERIFIED): exit 0 — `advisories=3 missing=0 stale=0 floors=1 badFloors=0`;
+`GHSA-5p2g-fcmc-qvqq`, `GHSA-vcc3-ghjq-m6fr`, `GHSA-w3rx-r6r6-pgpr` each `dispositioned ACCEPTED
+RISK`; `floor query-string@9.5.0 vs audited range "5.0.0 - 9.4.1": outside vulnerable range`;
+mobile `{info:0, low:0, moderate:7, high:9, critical:0, total:16}`, pnpm all zero. Artifact:
+`artifacts/advisories/disposition-coverage.log`.
 
 ### 8.3 Negative controls for the check (VERIFIED, §2 #20)
 
@@ -430,13 +446,10 @@ process.exit(failures ? 1 : 0);
 EOF
 ````
 
-Result (VERIFIED, against the round-3 script above): exit 1 — `controls=21 failed=15`. Wrong
-exit code (the false passes): N04 and N05 (the adversary's two cases), N06, N08, N13, N14 and N16
-exit 0 where 1 is required. Wrong evidence (exit code right, expected log line absent): N01, N07,
-N09 and N10 print no `stale=`/row-count/heading diagnostics; N17, N18 and N21 die in an uncaught
-`ENOENT`/`SyntaxError` with nothing on stdout and no `disposition-coverage.log` written; N20 does
-not report the stale sections. Artifact:
-`artifacts/advisories/disposition-coverage.negative-controls.r3-script.log`.
+Result (VERIFIED): exit 0 — `controls=21 failed=0`, every case `ok`. Artifact:
+`artifacts/advisories/disposition-coverage.negative-controls.log`. Each case ran in a fresh
+temporary directory that was deleted afterwards; the committed document and the real reports were
+not modified.
 
 ### 8.4 Summary
 
