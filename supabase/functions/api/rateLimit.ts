@@ -6,7 +6,7 @@
 // means at most 60 requests inside each clock minute per key. Limits fail
 // OPEN on backend errors: a Redis outage must never lock users out.
 
-import { redisConfigured, redisWindowGet, redisWindowIncr } from "./cache.ts";
+import { redisConfigured, redisWindowGet, redisWindowIncr, sha256Hex } from "./cache.ts";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -91,6 +91,16 @@ export async function enforceRateLimit(
   limit: number,
   windowSeconds: number,
 ): Promise<RateLimitResult> {
+  const { bucket, count } = await countHit(scope, id, windowSeconds);
+  return toResult(count, limit, bucket, windowSeconds, count <= limit);
+}
+
+/** Atomic INCR of the aligned window; `count` is the hit's ordinal in it. */
+async function countHit(
+  scope: string,
+  id: string,
+  windowSeconds: number,
+): Promise<{ bucket: number; count: number }> {
   const { bucket, key } = windowKey(scope, id, windowSeconds);
   let count: number | null = null;
   if (redisConfigured()) {
@@ -99,7 +109,7 @@ export async function enforceRateLimit(
   if (count === null) {
     count = memoryIncr(key, (bucket + 1) * windowSeconds * 1_000);
   }
-  return toResult(count, limit, bucket, windowSeconds, count <= limit);
+  return { bucket, count };
 }
 
 /**
@@ -123,6 +133,116 @@ export async function peekRateLimit(
     count = memoryGet(key);
   }
   return toResult(count, limit, bucket, windowSeconds, count < limit);
+}
+
+/**
+ * Auth-failure budget behind a shared egress (club Wi-Fi, carrier-grade NAT).
+ *
+ * Two aligned windows share one `budget`:
+ *   authfail    — per egress IP; counts DISTINCT failing credentials, so it
+ *                 trips on token stuffing (many bad bearers) but one handset
+ *                 replaying a dead bearer spends exactly one of the venue's
+ *                 failures per window.
+ *   authfail_id — per (egress IP, credential shard); counts every refusal of
+ *                 that credential, so the replaying handset alone is throttled.
+ *
+ * `kind` says what the 401 meant:
+ *   credential — the credential itself was refused (bad/expired/forged token,
+ *                refused refresh token). The attack signal: charges the shard
+ *                and, on the shard's first failure, the egress.
+ *   liveness   — a credential that verified but whose session is no longer
+ *                live (fenced at this edge after logout, gone/banned upstream).
+ *                The holder learning the truth is not an attack on the venue:
+ *                charges only the shard, never the egress.
+ */
+export type AuthFailureKind = "credential" | "liveness";
+
+export interface AuthFailureBudget {
+  limit: number;
+  windowSeconds: number;
+}
+
+/** What a 401 meant, attached to the response by whoever refused it. `identity`
+ * is set when the refused credential was not the bearer (a refresh token). */
+export interface AuthRefusal {
+  kind: AuthFailureKind;
+  identity?: string | null;
+}
+
+const AUTH_FAILURE_EGRESS_SCOPE = "authfail";
+const AUTH_FAILURE_SHARD_SCOPE = "authfail_id";
+/** Shard for requests that presented no credential at all. */
+const ABSENT_CREDENTIAL_SHARD = "absent";
+const CREDENTIAL_REFUSAL: AuthRefusal = { kind: "credential" };
+
+const refusals = new WeakMap<Response, AuthRefusal>();
+
+/** Tags a 401 so the dispatcher charges it for what it meant. An untagged
+ * 401 is a credential refusal of the presented bearer. */
+export function authRefusal(response: Response, refusal: AuthRefusal): Response {
+  refusals.set(response, refusal);
+  return response;
+}
+
+export function authRefusalOf(response: Response): AuthRefusal {
+  return refusals.get(response) ?? CREDENTIAL_REFUSAL;
+}
+
+/** Opaque shard id for the credential a request presented (a hash prefix —
+ * the credential itself never becomes a cache key); null when none. */
+export async function authFailureIdentity(credential: string): Promise<string | null> {
+  if (!credential) return null;
+  return (await sha256Hex(credential)).slice(0, 32);
+}
+
+const shardId = (ip: string, identity: string | null) =>
+  `${ip}:${identity ?? ABSENT_CREDENTIAL_SHARD}`;
+
+/**
+ * Gate a request up front WITHOUT charging: closed once the egress has spent
+ * its budget on distinct credentials, or once the presented credential's own
+ * shard is spent. The closed window's Retry-After is reported.
+ */
+export async function peekAuthFailureBudget(
+  ip: string,
+  identity: string | null,
+  budget: AuthFailureBudget,
+): Promise<RateLimitResult> {
+  const egress = await peekRateLimit(
+    AUTH_FAILURE_EGRESS_SCOPE,
+    ip,
+    budget.limit,
+    budget.windowSeconds,
+  );
+  if (!egress.allowed || identity === null) return egress;
+  const shard = await peekRateLimit(
+    AUTH_FAILURE_SHARD_SCOPE,
+    shardId(ip, identity),
+    budget.limit,
+    budget.windowSeconds,
+  );
+  return shard.allowed ? egress : shard;
+}
+
+/**
+ * Charge one 401. Atomic INCRs only (never a read-then-write): the shard's
+ * INCR ordinal decides whether this credential is new to the window, and only
+ * a NEW credential failure charges the egress.
+ */
+export async function chargeAuthFailure(
+  ip: string,
+  identity: string | null,
+  kind: AuthFailureKind,
+  budget: AuthFailureBudget,
+): Promise<void> {
+  const shard = await countHit(
+    AUTH_FAILURE_SHARD_SCOPE,
+    shardId(ip, identity),
+    budget.windowSeconds,
+  );
+  if (kind === "credential" && shard.count === 1) {
+    await countHit(AUTH_FAILURE_EGRESS_SCOPE, ip, budget.windowSeconds);
+  }
 }
 
 /** 429 body + headers shared by every limited route. */
