@@ -4451,6 +4451,1801 @@ end $$;
 reset role;
 set local request.jwt.claim.sub = '';
 
+-- ============================================================================
+-- T. W04-01 (20260908120000_offline_device_grants): device registry, per-device
+--    offline grants with expiry and an append-only allocation ledger where
+--    allocation ≠ consumption. Conservation: outstanding + consumed + released
+--    offline tickets + live online reservations + lifetime scored ≤ 2 for a
+--    free identity; a disconnected device's allocation is never reclaimed by
+--    time, sweep, reinstall, key replacement or account deletion. Pro leases
+--    are ≤ 7 days and ≤ the verified entitlement expiry. Every mutation goes
+--    through API-gated, session-bound RPCs; the client role holds no write.
+--    Users: Tara (free, Google), Theo (Pro, expires in 3 days), Tomas (Pro,
+--    lifetime), Tess (stale premium=true past expires_at), Tim (free, Apple),
+--    Tobias/Tina (T11), Tyler (T13, free, Google), Tahlia (T14, free, Apple
+--    then Google).
+-- T1  registration: attested vs unattested devices, idempotent re-registration
+--     never downgrades, environment mismatch is refused, grants need an
+--     attested registration
+-- T2  free allocation: two tickets, generation 1, 7-day execution window; the
+--     online reservation path counts the outstanding tickets (conservation
+--     across online + offline), a refresh re-issues the SAME outstanding
+--     tickets under a new generation without allocating more
+-- T3  allocation ≠ consumption: lifetime_scored_count() and the identity ledger
+--     are untouched by allocation; consumption binds one ticket to one durably
+--     delivered scored shot of the owner (idempotent replay, no double charge)
+-- T4  release: an unused ticket is returned explicitly and stays terminal; a
+--     consumed ticket cannot be released and a released one cannot be consumed;
+--     allocated + consumed + released ≤ entitlement holds after every step;
+--     the client can only say unused_ticket_returned — support_review is an
+--     audit reason it can never self-assert
+-- T5  no automatic reclaim: an expired grant on a device that never came back,
+--     the pg_cron permit sweep, device deletion (reinstall / key replacement)
+--     — the allocation stays outstanding and keeps counting
+-- T6  account deletion does not reclaim: the ledger survives (no FK), the
+--     re-created account under the same identity inherits the hold
+-- T7  Pro leases: min(issued + 7d, verified expiry); lifetime → exactly 7 days;
+--     a stale premium row is NOT premium (free path); the table refuses > 7d,
+--     > entitlement, an unverified Pro lease, and any lease mutation
+-- T8  denied client writes: no INSERT/UPDATE/DELETE on any of the four tables
+--     for the client role even with the API key; the ticket↔identity bindings
+--     are not readable at all; cross-user reads are empty; without the API key
+--     nothing is readable and every RPC fails closed; without a live session
+--     every mutating RPC fails closed and writes nothing; service_role holds
+--     no TRUNCATE/write on any of the four tables (row triggers do not fire
+--     on TRUNCATE — the grant itself must be absent)
+-- T9  the ledger is append-only for every role and closed at the table:
+--     duplicate allocation, consumption after release, release after
+--     consumption, consumption without a scored owner shot, and a shot that
+--     already backs an online permit are all refused
+-- T10 original-installation recovery after account deletion + re-creation:
+--     the hold follows the identity (T6) AND the same installation key under
+--     the same identity re-obtains and consumes its outstanding ticket; a
+--     different installation allocates only what conservation leaves; a
+--     different identity on the same key never inherits the ticket; the
+--     client cannot close it as support; support closes it through the table
+--     only in the identity's name; one delivered rating is charged exactly
+--     once (no dead hold, no lost rating)
+-- T11 (adversary, round 2: R1/R2) conservation against LATE-SYNCABLE permits:
+--     a permit apply_synced_shot() would still honour — reserved at ANY age,
+--     or already swept to released/expired — is a reservation to the
+--     allocator; a permit that can no longer back a sync (released/cancelled,
+--     finalized) is not. Stale reserved: 1 ticket, not 2; the late sync then
+--     lands within the budget. Swept pair: no ticket at all, both late syncs
+--     still land. Budget used never exceeds 2.
+-- T12 (adversary, round 2: R7b) service_role can never pass as a user through
+--     the definer RPCs: with the API header, a user sub and a live session
+--     claim, every one of the four RPCs (and the hold reader) is 42501 for
+--     the service connection — no result row, no device, no ledger row —
+--     and the EXECUTE grant itself is absent
+-- T13 (adversary, round 3: a01) a shot that lifetime_scored_count() already
+--     counted BEFORE the ticket was allocated can never consume the ticket —
+--     through the RPC ('offline.shot_not_chargeable') or through the table
+--     (check_violation) — so a hold can never be turned back into capacity by
+--     paying it with an old rating: hold stays 1, the refresh re-issues the
+--     same ticket, online is paywall_required; a shot delivered AFTER the
+--     allocation consumes it once and the budget closes at 2
+-- T14 (adversary, round 3: a02) an identity linked AFTER the allocation joins
+--     the tickets' bindings (public.offline_ticket_identities, written by the
+--     auth.identities trigger): the account is deleted and re-created through
+--     ONLY the late-linked identity → hold 2, online + a new installation are
+--     paywall_required, no new allocation; the original installation under
+--     the re-created account recovers exactly its two tickets; a later link
+--     of the original identity adds nothing twice; the bindings are
+--     append-only and never client-readable
+-- ============================================================================
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000051', 'tara@example.com',
+   '{"full_name":"Tara"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000052', 'theo@example.com',
+   '{"full_name":"Theo"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000053', 'tomas@example.com',
+   '{"full_name":"Tomas"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000054', 'tess@example.com',
+   '{"full_name":"Tess"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000055', 'tim@example.com',
+   '{"full_name":"Tim"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-tara', '00000000-0000-4000-8000-000000000051',
+   '{"sub":"google-sub-tara","email":"tara@example.com"}'),
+  ('apple', 'apple-sub-theo', '00000000-0000-4000-8000-000000000052',
+   '{"sub":"apple-sub-theo","email":"theo@example.com"}'),
+  ('apple', 'apple-sub-tomas', '00000000-0000-4000-8000-000000000053',
+   '{"sub":"apple-sub-tomas","email":"tomas@example.com"}'),
+  ('google', 'google-sub-tess', '00000000-0000-4000-8000-000000000054',
+   '{"sub":"google-sub-tess","email":"tess@example.com"}'),
+  ('apple', 'apple-sub-tim', '00000000-0000-4000-8000-000000000055',
+   '{"sub":"apple-sub-tim","email":"tim@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005101', '00000000-0000-4000-8000-000000000051'),
+  ('00000000-0000-4000-8000-000000005201', '00000000-0000-4000-8000-000000000052'),
+  ('00000000-0000-4000-8000-000000005301', '00000000-0000-4000-8000-000000000053'),
+  ('00000000-0000-4000-8000-000000005401', '00000000-0000-4000-8000-000000000054'),
+  ('00000000-0000-4000-8000-000000005501', '00000000-0000-4000-8000-000000000055');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values
+  ('00000000-0000-4000-8000-000000000052', true, now() + interval '3 days'),
+  ('00000000-0000-4000-8000-000000000053', true, null),
+  ('00000000-0000-4000-8000-000000000054', true, now() - interval '1 day');
+
+create temporary table t_state (key text primary key, id uuid);
+grant select, insert, update on t_state to authenticated;
+create function pg_temp.t_ledger(p_provider text, p_sub text) returns integer
+language sql as $$
+  select coalesce((select scored_count from public.free_rating_ledger
+                   where identity_hash = public.free_rating_identity_hash(p_provider, p_sub)), -1);
+$$;
+create function pg_temp.t_events(p_uid uuid) returns text
+language sql security definer as $$
+  select coalesce(
+    (select string_agg(e.event || ':' || e.n, ',' order by e.event)
+     from (select event, count(*) n from public.offline_allocation_ledger
+           where user_id = p_uid group by event) e), '');
+$$;
+grant execute on function pg_temp.t_events(uuid) to authenticated;
+-- Conservation as the reviewer reads it: every ticket ever allocated is in
+-- exactly one of {outstanding, consumed, released}; tickets not consumed plus
+-- the scored ratings plus every online permit that can still back a sync
+-- (public.permit_backs_sync — reserved at any age, or swept to
+-- released/expired — and not yet linked to a shot) never exceed the 2
+-- lifetime free ratings.
+create function pg_temp.t_syncable_permits(p_uid uuid) returns integer
+language sql security definer as $$
+  select count(*)::int from public.analysis_permits p
+  where p.user_id = p_uid
+    and public.permit_backs_sync(p.status, p.outcome)
+    and not exists (select 1 from public.shots s where s.analysis_permit_id = p.id);
+$$;
+grant execute on function pg_temp.t_syncable_permits(uuid) to authenticated;
+create function pg_temp.t_conserved(p_uid uuid) returns boolean
+language sql security definer as $$
+  select
+    (select count(*) from public.offline_allocation_ledger
+     where user_id = p_uid and event = 'allocated')
+    = (select count(*) from public.offline_allocation_ledger a
+       where a.user_id = p_uid and a.event = 'allocated'
+         and not exists (select 1 from public.offline_allocation_ledger t
+                         where t.ticket_id = a.ticket_id and t.event in ('consumed', 'released')))
+      + (select count(*) from public.offline_allocation_ledger
+         where user_id = p_uid and event = 'consumed')
+      + (select count(*) from public.offline_allocation_ledger
+         where user_id = p_uid and event = 'released')
+    and
+    (select count(*) from public.offline_allocation_ledger a
+     where a.user_id = p_uid and a.event = 'allocated'
+       and not exists (select 1 from public.offline_allocation_ledger t
+                       where t.ticket_id = a.ticket_id and t.event = 'consumed'))
+    + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
+    + pg_temp.t_syncable_permits(p_uid)
+    <= 2;
+$$;
+grant execute on function pg_temp.t_conserved(uuid) to authenticated;
+
+-- T1: registration.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000051';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005101"}';
+do $$
+declare r record; g record; first_seen timestamptz;
+begin
+  select * into r from public.register_offline_device('tara-key-1', 'production', true);
+  if r.result <> 'accepted' or r.device_id is null or r.attestation_state <> 'attested' then
+    raise exception 'T1: an attested production registration must be accepted (got %, %, %)',
+      r.result, r.device_id, r.attestation_state;
+  end if;
+  insert into t_state values ('tara-device', r.device_id);
+  select last_registered_at into first_seen from public.offline_devices where id = r.device_id;
+  select * into g from public.register_offline_device('tara-key-1', 'production', false);
+  if g.result <> 'accepted' or g.device_id <> r.device_id or g.attestation_state <> 'attested' then
+    raise exception 'T1: re-registration is idempotent and never downgrades an attested device (got %, %, %)',
+      g.result, g.device_id, g.attestation_state;
+  end if;
+  if (select count(*) from public.offline_devices where user_id = (select auth.uid())) <> 1 then
+    raise exception 'T1: re-registration must not create a second device row';
+  end if;
+  select * into g from public.register_offline_device('tara-key-1', 'development', true);
+  if g.result <> 'offline.device_environment_mismatch' then
+    raise exception 'T1: a registered key cannot change attestation environment (got %)', g.result;
+  end if;
+  select * into g from public.register_offline_device('tara-sim', 'development', false);
+  if g.result <> 'accepted' or g.attestation_state <> 'unattested' then
+    raise exception 'T1: an unverified registration is recorded as unattested, never attested (got %, %)',
+      g.result, g.attestation_state;
+  end if;
+  select * into g from public.register_offline_device('tara-sim', 'development', false);
+  if g.result <> 'accepted' or g.attestation_state <> 'unattested' then
+    raise exception 'T1: repeating an unverified registration keeps it unattested (got %, %)',
+      g.result, g.attestation_state;
+  end if;
+  select * into g from public.register_offline_device('bad key with spaces', 'production', true);
+  if g.result <> 'offline.invalid_input' then
+    raise exception 'T1: a malformed installation key is refused without a write (got %)', g.result;
+  end if;
+  select * into g from public.register_offline_device('tara-key-2', 'staging', true);
+  if g.result <> 'offline.invalid_input' then
+    raise exception 'T1: an unknown attestation environment is refused (got %)', g.result;
+  end if;
+  if (select count(*) from public.offline_devices where user_id = (select auth.uid())) <> 2 then
+    raise exception 'T1: refused registrations must not persist';
+  end if;
+  select * into g from public.issue_offline_grant('tara-sim', 2);
+  if g.result <> 'offline.device_not_attested' then
+    raise exception 'T1: an unattested device never receives a grant (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('never-registered', 2);
+  if g.result <> 'offline.device_not_registered' then
+    raise exception 'T1: an unregistered key never receives a grant (got %)', g.result;
+  end if;
+  if exists (select 1 from public.offline_grants where user_id = (select auth.uid())) then
+    raise exception 'T1: refused grant requests must not persist';
+  end if;
+end $$;
+
+-- T2: free allocation and conservation across the online path.
+do $$
+declare g record; g2 record; rec record; p record;
+begin
+  select * into g from public.issue_offline_grant('tara-key-1', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'identity_lifetime_free'
+     or g.generation <> 1 or coalesce(array_length(g.ticket_ids, 1), 0) <> 2
+     or g.entitlement_expires_at is not null then
+    raise exception 'T2: a free attested device receives two tickets in generation 1 (got %, %, %, %, %)',
+      g.result, g.entitlement_source, g.generation, g.ticket_ids, g.entitlement_expires_at;
+  end if;
+  if g.expires_at <> g.issued_at + interval '7 days' then
+    raise exception 'T2: the free execution window is exactly 7 days (got % → %)', g.issued_at, g.expires_at;
+  end if;
+  insert into t_state values ('tara-grant-1', g.grant_id), ('tara-t1', g.ticket_ids[1]), ('tara-t2', g.ticket_ids[2]);
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' then
+    raise exception 'T2: the ledger records exactly two allocation events (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'T2: two outstanding tickets are held (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 2 then
+    raise exception 'T2: access_state reports the offline holds as reservations (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tara-online-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T2: an online reservation must count the outstanding offline tickets (got %)', p.result;
+  end if;
+  -- refresh: same outstanding tickets, next generation, nothing new allocated
+  select * into g2 from public.issue_offline_grant('tara-key-1', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.grant_id = g.grant_id
+     or (select array_agg(t order by t) from unnest(g2.ticket_ids) t)
+        <> (select array_agg(t order by t) from unnest(g.ticket_ids) t) then
+    raise exception 'T2: a refresh re-issues the same outstanding tickets under generation 2 (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' or public.offline_hold_count() <> 2 then
+    raise exception 'T2: a refresh allocates nothing (got %, hold %)',
+      pg_temp.t_events((select auth.uid())), public.offline_hold_count();
+  end if;
+  if (select count(*) from public.offline_grants where user_id = (select auth.uid())) <> 2 then
+    raise exception 'T2: both grants are recorded';
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T2: conservation violated after allocation';
+  end if;
+end $$;
+
+-- T3: allocation ≠ consumption.
+do $$
+begin
+  if public.lifetime_scored_count() <> 0 then
+    raise exception 'T3: allocation must not count as a rating (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+begin
+  if pg_temp.t_ledger('google', 'google-sub-tara') <> -1 then
+    raise exception 'T3: allocation must not write the identity ledger (got %)', pg_temp.t_ledger('google', 'google-sub-tara');
+  end if;
+end $$;
+-- The delivered offline result: a scored shot durably written by the server
+-- (owner role — the reconcile route's settlement write), no online permit.
+-- The settlement is a later transaction than the allocation; this file runs
+-- as one, so the row carries the wall clock the settlement would have.
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version, created_at
+) values
+  ('00000000-0000-4000-8000-000000000511', '00000000-0000-4000-8000-000000000051', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', clock_timestamp()),
+  ('00000000-0000-4000-8000-000000000512', '00000000-0000-4000-8000-000000000051', 'drive', now(), 0, 1000, null, 0.2, 'low_confidence',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', clock_timestamp()),
+  ('00000000-0000-4000-8000-000000000521', '00000000-0000-4000-8000-000000000052', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', clock_timestamp());
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000051';
+do $$
+declare v text; rec record; t1 uuid := (select id from t_state where key = 'tara-t1'); t2 uuid := (select id from t_state where key = 'tara-t2');
+begin
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'T3 precondition: the delivered result is one rating (got %)', public.lifetime_scored_count();
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000512');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T3: an unscored result never consumes a ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000521');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T3: another user''s shot never consumes this user''s ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000599');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T3: a shot that was never delivered never consumes a ticket (got %)', v;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' then
+    raise exception 'T3: refused consumption writes nothing (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000511');
+  if v <> 'accepted' then
+    raise exception 'T3: consuming a ticket for the delivered scored shot is accepted (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000511');
+  if v <> 'accepted' then
+    raise exception 'T3: the replay is idempotent (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t2, '00000000-0000-4000-8000-000000000511');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T3: one delivered shot consumes at most one ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '00000000-0000-4000-8000-000000000512');
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'T3: a consumed ticket is terminal (got %)', v;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2,consumed:1' then
+    raise exception 'T3: exactly one consumption event (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T3: the consumed ticket is no longer a hold; the other still is (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T3: access_state reads 1 scored + 1 outstanding (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T3: conservation violated after consumption';
+  end if;
+end $$;
+
+-- T4: explicit release — terminal, auditable, never a free re-credit by itself.
+do $$
+declare v text; rec record; p record; t1 uuid := (select id from t_state where key = 'tara-t1'); t2 uuid := (select id from t_state where key = 'tara-t2');
+begin
+  v := public.release_offline_ticket(t1, 'unused_ticket_returned');
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'T4: a consumed ticket cannot be released (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t2, 'because');
+  if v <> 'offline.invalid_input' then
+    raise exception 'T4: a release needs a known reason (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t2, 'support_review');
+  if v <> 'offline.invalid_input' then
+    raise exception 'T4: a client never self-asserts a support_review release (got %)', v;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2,consumed:1'
+     or exists (select 1 from public.offline_allocation_ledger where user_id = (select auth.uid()) and reason = 'support_review') then
+    raise exception 'T4: refused release reasons write nothing (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  v := public.release_offline_ticket(t2, 'unused_ticket_returned');
+  if v <> 'accepted' then
+    raise exception 'T4: returning an unused ticket is accepted (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t2, 'unused_ticket_returned');
+  if v <> 'accepted' then
+    raise exception 'T4: the release replay is idempotent (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t2, '00000000-0000-4000-8000-000000000511');
+  if v <> 'offline.ticket_released' then
+    raise exception 'T4: a released ticket can never be consumed (got %)', v;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2,consumed:1,released:1' then
+    raise exception 'T4: the ledger holds exactly one release (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  -- allocated + consumed + released ≤ entitlement: the returned ticket is
+  -- terminal and still part of the identity's accounting.
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T4: a released ticket still counts against the entitlement (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T4: access_state reads 1 scored + 1 released (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tara-online-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T4: the released ticket is not a free third rating online (got %)', p.result;
+  end if;
+  select * into p from public.issue_offline_grant('tara-key-1', 2);
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T4: the released ticket is not a free third rating offline (got %)', p.result;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T4: conservation violated after release';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- T5: no automatic reclaim. Tim's device took one ticket 40 days ago and never
+-- came back; the grant expired 33 days ago.
+insert into public.offline_devices (id, user_id, installation_key_id, attestation_environment, attestation_state, attested_at)
+values ('00000000-0000-4000-8000-000000000550', '00000000-0000-4000-8000-000000000055', 'tim-key-1', 'production', 'attested', now() - interval '40 days');
+insert into public.offline_grants (id, user_id, device_id, entitlement_source, generation, issued_at, expires_at)
+values ('00000000-0000-4000-8000-000000000551', '00000000-0000-4000-8000-000000000055', '00000000-0000-4000-8000-000000000550',
+        'identity_lifetime_free', 1, now() - interval '40 days', now() - interval '33 days');
+insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, created_at)
+values ('00000000-0000-4000-8000-000000000055', '00000000-0000-4000-8000-000000000550', '00000000-0000-4000-8000-000000000551', 1,
+        '00000000-0000-4000-8000-000000000555', 'allocated', now() - interval '40 days');
+do $$
+begin
+  if (select array_agg(identity_hash) from public.offline_ticket_identities where ticket_id = '00000000-0000-4000-8000-000000000555')
+     <> array[public.free_rating_identity_hash('apple', 'apple-sub-tim')] then
+    raise exception 'T5: an allocation binds the ticket to every sign-in identity of its owner';
+  end if;
+end $$;
+-- the pg_cron sweep (expire-stale-analysis-permits) — the exact statement
+update public.analysis_permits set status = 'released', outcome = 'expired' where status = 'reserved' and created_at < now() - interval '24 hours';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000055';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005501"}';
+do $$
+declare rec record; p record; g record;
+begin
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' or public.offline_hold_count() <> 1 then
+    raise exception 'T5: an expired grant does not release its allocation (got %, hold %)',
+      pg_temp.t_events((select auth.uid())), public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 1 then
+    raise exception 'T5: the stale allocation still counts (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tim-online-1');
+  if p.result <> 'accepted' then
+    raise exception 'T5: one rating remains for the online path (got %)', p.result;
+  end if;
+  select * into p from public.reserve_analysis_permit('tim-online-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T5: hold + reservation exhaust the entitlement (got %)', p.result;
+  end if;
+  -- the same device comes back: the grant is refreshed with the same ticket
+  select * into g from public.issue_offline_grant('tim-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 2 or g.ticket_ids <> array['00000000-0000-4000-8000-000000000555']::uuid[] then
+    raise exception 'T5: the returning device gets its outstanding ticket back, nothing more (got %, %, %)',
+      g.result, g.generation, g.ticket_ids;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T5: conservation violated with a stale allocation';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+-- reinstall / key replacement: the device row goes away, the allocation does not
+delete from public.offline_devices where id = '00000000-0000-4000-8000-000000000550';
+do $$
+begin
+  if exists (select 1 from public.offline_grants where device_id = '00000000-0000-4000-8000-000000000550') then
+    raise exception 'T5: grants follow their device';
+  end if;
+  if (select count(*) from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000055' and event = 'allocated') <> 1
+     or exists (select 1 from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000055' and event <> 'allocated') then
+    raise exception 'T5: deleting the device must not touch the ledger';
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000055';
+do $$
+declare g record;
+begin
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T5: key replacement never reclaims the allocation (got %)', public.offline_hold_count();
+  end if;
+  select * into g from public.register_offline_device('tim-key-2', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T5: the new key registers (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-2', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T5: the new installation cannot re-take the ticket the old one holds (got %)', g.result;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T5: nothing was allocated or released (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- T6: account deletion does not reclaim.
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000051';
+  if exists (select 1 from public.offline_devices where user_id = '00000000-0000-4000-8000-000000000051')
+     or exists (select 1 from public.offline_grants where user_id = '00000000-0000-4000-8000-000000000051') then
+    raise exception 'T6: devices and grants cascade with the account';
+  end if;
+  if pg_temp.t_events('00000000-0000-4000-8000-000000000051') <> 'allocated:2,consumed:1,released:1' then
+    raise exception 'T6: the allocation ledger survives account deletion (got %)',
+      pg_temp.t_events('00000000-0000-4000-8000-000000000051');
+  end if;
+  if pg_temp.t_ledger('google', 'google-sub-tara') <> 1 then
+    raise exception 'T6: the identity ledger keeps the consumed rating (got %)', pg_temp.t_ledger('google', 'google-sub-tara');
+  end if;
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000056', 'tara@example.com',
+        '{"full_name":"Tara"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-tara', '00000000-0000-4000-8000-000000000056',
+        '{"sub":"google-sub-tara","email":"tara@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005601', '00000000-0000-4000-8000-000000000056');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000056';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005601"}';
+do $$
+declare rec record; p record; g record;
+begin
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T6: the re-created account inherits the identity''s outstanding hold (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T6: 1 scored + 1 held survive deletion (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tara-second-life-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T6: delete-and-recreate is not a third rating online (got %)', p.result;
+  end if;
+  select * into g from public.register_offline_device('tara-key-3', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T6: the re-created account registers (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tara-key-3', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T6: delete-and-recreate is not a third rating offline (got %)', g.result;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T6: nothing was allocated to the new account (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- T7: Pro leases.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000052';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005201"}';
+do $$
+declare g record; verified timestamptz;
+begin
+  perform public.register_offline_device('theo-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('theo-key-1', 2);
+  select expires_at into verified from public.billing_entitlements where user_id = (select auth.uid());
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T7: a verified subscriber receives a lease, never tickets (got %, %, %)',
+      g.result, g.entitlement_source, g.ticket_ids;
+  end if;
+  if g.expires_at <> verified or g.entitlement_expires_at <> verified then
+    raise exception 'T7: the lease ends at the verified entitlement expiry when that is sooner than 7 days (got % vs %)',
+      g.expires_at, verified;
+  end if;
+  if g.expires_at > g.issued_at + interval '7 days' then
+    raise exception 'T7: a Pro lease is never longer than 7 days';
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T7: a lease allocates no tickets (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000053';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005301"}';
+do $$
+declare g record;
+begin
+  perform public.register_offline_device('tomas-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('tomas-key-1', 0);
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store'
+     or g.expires_at <> g.issued_at + interval '7 days' or g.entitlement_expires_at is not null then
+    raise exception 'T7: a lifetime purchase leases exactly 7 days (got %, %, % → %, %)',
+      g.result, g.entitlement_source, g.issued_at, g.expires_at, g.entitlement_expires_at;
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000054';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005401"}';
+do $$
+declare g record;
+begin
+  perform public.register_offline_device('tess-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('tess-key-1', 1);
+  if g.result <> 'accepted' or g.entitlement_source <> 'identity_lifetime_free'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T7: a stale premium row past expires_at is NOT premium — the free path applies (got %, %, %)',
+      g.result, g.entitlement_source, g.ticket_ids;
+  end if;
+  if exists (select 1 from public.offline_grants where user_id = (select auth.uid()) and entitlement_source = 'verified_store') then
+    raise exception 'T7: no Pro lease exists for a stale entitlement';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+do $$
+declare theo_device uuid := (select id from public.offline_devices where installation_key_id = 'theo-key-1');
+        tomas_device uuid := (select id from public.offline_devices where installation_key_id = 'tomas-key-1');
+        tess_device uuid := (select id from public.offline_devices where installation_key_id = 'tess-key-1');
+        theo_expiry timestamptz := (select expires_at from public.billing_entitlements where user_id = '00000000-0000-4000-8000-000000000052');
+begin
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ('00000000-0000-4000-8000-000000000053', tomas_device, 'verified_store', 9, now(), now() + interval '7 days 1 second', null);
+    raise exception 'T7: a lease longer than 7 days must be refused at the table';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ('00000000-0000-4000-8000-000000000052', theo_device, 'verified_store', 9, now(), theo_expiry + interval '1 second', theo_expiry);
+    raise exception 'T7: a lease past the verified entitlement expiry must be refused at the table';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ('00000000-0000-4000-8000-000000000052', theo_device, 'verified_store', 9, now(), now() + interval '5 days', now() + interval '30 days');
+    raise exception 'T7: a lease must record the verified entitlement expiry, not a longer one';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, 'verified_store', 9, now(), now() + interval '1 day', null);
+    raise exception 'T7: a Pro lease without a verified, unexpired entitlement must be refused at the table';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, 'identity_lifetime_free', 9, now(), now() + interval '1 day', now() + interval '1 day');
+    raise exception 'T7: a free grant carries no entitlement expiry';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.offline_grants set expires_at = expires_at + interval '1 day' where device_id = theo_device;
+    raise exception 'T7: an issued lease is immutable for every role';
+  exception when check_violation then null;
+  end;
+  if (select count(*) from public.offline_grants where generation = 9) <> 0 then
+    raise exception 'T7: refused leases must not persist';
+  end if;
+end $$;
+
+-- T8: denied client writes.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000052';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005201"}';
+do $$
+declare changed integer; header text := current_setting('request.headers'); claims text := current_setting('request.jwt.claims');
+        theo_device uuid := (select id from public.offline_devices where user_id = (select auth.uid()));
+        theo_grant uuid := (select id from public.offline_grants where user_id = (select auth.uid()));
+        r record;
+begin
+  if theo_device is null or theo_grant is null then
+    raise exception 'T8 precondition: the owner reads its own device and grant through the API';
+  end if;
+  if exists (select 1 from public.offline_devices where user_id <> (select auth.uid()))
+     or exists (select 1 from public.offline_grants where user_id <> (select auth.uid()))
+     or exists (select 1 from public.offline_allocation_ledger where user_id <> (select auth.uid())) then
+    raise exception 'T8: cross-user rows are invisible';
+  end if;
+  begin
+    perform 1 from public.offline_ticket_identities;
+    raise exception 'T8: the ticket bindings are never client-readable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.offline_ticket_identities (ticket_id, identity_hash) values (gen_random_uuid(), 'x');
+    raise exception 'T8: direct clients must not bind tickets';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_ticket_identities;
+    raise exception 'T8: direct clients must not unbind tickets';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.offline_devices (user_id, installation_key_id, attestation_environment, attestation_state, attested_at)
+    values ((select auth.uid()), 'forged-key', 'production', 'attested', now());
+    raise exception 'T8: direct clients must not register devices';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.offline_devices set attestation_state = 'attested', attested_at = now() where id = theo_device;
+    raise exception 'T8: direct clients must not attest devices';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_devices where id = theo_device;
+    raise exception 'T8: direct clients must not delete devices';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values ((select auth.uid()), theo_device, 'verified_store', 7, now(), now() + interval '1 day', now() + interval '3 days');
+    raise exception 'T8: direct clients must not mint leases';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.offline_grants set expires_at = now() + interval '1 hour' where id = theo_grant;
+    raise exception 'T8: direct clients must not alter leases';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_grants where id = theo_grant;
+    raise exception 'T8: direct clients must not delete leases';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event)
+    values ((select auth.uid()), theo_device, theo_grant, 1, gen_random_uuid(), 'allocated');
+    raise exception 'T8: direct clients must not allocate tickets';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.offline_allocation_ledger set event = 'consumed' where user_id = (select auth.uid());
+    raise exception 'T8: direct clients must not rewrite the ledger';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_allocation_ledger where user_id = (select auth.uid());
+    raise exception 'T8: direct clients must not erase the ledger';
+  exception when insufficient_privilege then null;
+  end;
+  -- another user's ticket is not addressable
+  if public.consume_offline_ticket('00000000-0000-4000-8000-000000000555', '00000000-0000-4000-8000-000000000521') <> 'offline.ticket_not_found'
+     or public.release_offline_ticket('00000000-0000-4000-8000-000000000555', 'unused_ticket_returned') <> 'offline.ticket_not_found' then
+    raise exception 'T8: another user''s ticket is not addressable';
+  end if;
+  if exists (select 1 from public.offline_allocation_ledger where ticket_id = '00000000-0000-4000-8000-000000000555') then
+    raise exception 'T8: another user''s ledger rows stay invisible';
+  end if;
+  -- no live session: every mutating RPC fails closed and writes nothing
+  perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000005301"}', true);
+  begin
+    perform public.register_offline_device('theo-key-9', 'production', true);
+    raise exception 'T8: registration binds to a live session of the caller';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.issue_offline_grant('theo-key-1', 0);
+    raise exception 'T8: a grant binds to a live session of the caller';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.consume_offline_ticket(gen_random_uuid(), gen_random_uuid());
+    raise exception 'T8: consumption binds to a live session of the caller';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.release_offline_ticket(gen_random_uuid(), 'unused_ticket_returned');
+    raise exception 'T8: release binds to a live session of the caller';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', '{}', true);
+  begin
+    perform public.issue_offline_grant('theo-key-1', 0);
+    raise exception 'T8: a missing session fails closed';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', claims, true);
+  if (select count(*) from public.offline_devices where user_id = (select auth.uid())) <> 1
+     or (select count(*) from public.offline_grants where user_id = (select auth.uid())) <> 1 then
+    raise exception 'T8: refused calls must not persist anything';
+  end if;
+  -- no API key: nothing is readable, every RPC fails closed
+  perform set_config('request.headers', '{}', true);
+  if exists (select 1 from public.offline_devices) or exists (select 1 from public.offline_grants)
+     or exists (select 1 from public.offline_allocation_ledger) then
+    raise exception 'T8: a user token alone must not read offline tables';
+  end if;
+  if public.offline_hold_count() <> 0 then
+    raise exception 'T8: the definer hold reader must not bypass the API gate';
+  end if;
+  begin
+    perform public.register_offline_device('theo-key-9', 'production', true);
+    raise exception 'T8: registration requires the API gate';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.issue_offline_grant('theo-key-1', 0);
+    raise exception 'T8: grants require the API gate';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.consume_offline_ticket(gen_random_uuid(), gen_random_uuid());
+    raise exception 'T8: consumption requires the API gate';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.release_offline_ticket(gen_random_uuid(), 'unused_ticket_returned');
+    raise exception 'T8: release requires the API gate';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.headers', header, true);
+  if (select count(*) from public.offline_devices where user_id = (select auth.uid())) <> 1
+     or (select count(*) from public.offline_grants where user_id = (select auth.uid())) <> 1 then
+    raise exception 'T8: gated refusals must not persist anything';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local role anon;
+do $$
+begin
+  begin
+    perform public.offline_hold_count();
+    raise exception 'T8: anon must not execute the hold reader';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.issue_offline_grant('x', 0);
+    raise exception 'T8: anon must not execute the grant RPC';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform 1 from public.offline_allocation_ledger;
+    raise exception 'T8: anon must not read the ledger';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+-- service_role: no TRUNCATE (row triggers never see it), no write at all.
+do $$
+declare t text;
+begin
+  foreach t in array array['offline_devices', 'offline_grants', 'offline_allocation_ledger', 'offline_ticket_identities'] loop
+    if has_table_privilege('service_role', format('public.%I', t), 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'T8: service_role must hold no write or TRUNCATE on public.%', t;
+    end if;
+    if has_table_privilege('anon', format('public.%I', t), 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_table_privilege('authenticated', format('public.%I', t), 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'T8: client roles must hold no write on public.%', t;
+    end if;
+  end loop;
+  if has_table_privilege('authenticated', 'public.offline_ticket_identities', 'SELECT')
+     or has_table_privilege('service_role', 'public.offline_ticket_identities', 'SELECT') then
+    raise exception 'T8: the ticket bindings are readable by no client or service role';
+  end if;
+end $$;
+create function pg_temp.t_ledger_rows() returns integer
+language sql security definer as $$
+  select count(*)::int from public.offline_allocation_ledger;
+$$;
+grant execute on function pg_temp.t_ledger_rows() to service_role;
+set local role service_role;
+do $$
+declare n integer := pg_temp.t_ledger_rows();
+begin
+  begin
+    truncate public.offline_allocation_ledger;
+    raise exception 'T8: service_role must not TRUNCATE the allocation ledger';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate public.offline_grants;
+    raise exception 'T8: service_role must not TRUNCATE the grants';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate public.offline_devices cascade;
+    raise exception 'T8: service_role must not TRUNCATE the device registry';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate public.offline_ticket_identities;
+    raise exception 'T8: service_role must not TRUNCATE the ticket bindings';
+  exception when insufficient_privilege then null;
+  end;
+  if pg_temp.t_ledger_rows() <> n then
+    raise exception 'T8: a refused TRUNCATE must leave every allocation in place';
+  end if;
+end $$;
+reset role;
+
+-- T9: the ledger is append-only and closed at the table for every role.
+do $$
+declare tess_device uuid := (select id from public.offline_devices where installation_key_id = 'tess-key-1');
+        tess_grant uuid := (select id from public.offline_grants where device_id = (select id from public.offline_devices where installation_key_id = 'tess-key-1'));
+        tess_ticket uuid := (select ticket_id from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000054' and event = 'allocated');
+        tara_t1 uuid := (select id from t_state where key = 'tara-t1');
+        tara_t2 uuid := (select id from t_state where key = 'tara-t2');
+        n integer;
+begin
+  select count(*) into n from public.offline_allocation_ledger;
+  begin
+    update public.offline_allocation_ledger set event = 'released', reason = 'support_review' where ticket_id = tess_ticket;
+    raise exception 'T9: the ledger must refuse UPDATE for the owner role';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.offline_allocation_ledger where ticket_id = tess_ticket;
+    raise exception 'T9: the ledger must refuse DELETE for the owner role';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, tess_ticket, 'allocated');
+    raise exception 'T9: a ticket is allocated once';
+  exception when unique_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id)
+    values ('00000000-0000-4000-8000-000000000051', tess_device, tess_grant, 1, tara_t2, 'consumed', '00000000-0000-4000-8000-000000000511');
+    raise exception 'T9: a released ticket cannot be consumed by any role';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
+    values ('00000000-0000-4000-8000-000000000051', tess_device, tess_grant, 1, tara_t1, 'released', 'support_review');
+    raise exception 'T9: a consumed ticket cannot be released by any role';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, gen_random_uuid(), 'released', 'support_review');
+    raise exception 'T9: a ticket that was never allocated cannot be released';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, tess_ticket, 'consumed', '00000000-0000-4000-8000-000000000521');
+    raise exception 'T9: consumption requires a scored shot of the same owner';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, tess_ticket, 'consumed', null);
+    raise exception 'T9: a consumption names its shot';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
+    values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, tess_ticket, 'allocated', 'support_review');
+    raise exception 'T9: an allocation carries no release reason';
+  exception when check_violation or unique_violation then null;
+  end;
+  if (select count(*) from public.offline_allocation_ledger) <> n then
+    raise exception 'T9: refused writes must not persist';
+  end if;
+end $$;
+-- a shot that already backs an online permit is never charged twice
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000054';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005401"}';
+do $$
+declare p record; v text; tess_ticket uuid := (select ticket_id from public.offline_allocation_ledger where user_id = (select auth.uid()) and event = 'allocated');
+begin
+  select * into p from public.reserve_analysis_permit('tess-online-1');
+  if p.result <> 'accepted' then
+    raise exception 'T9 precondition: one online rating remains beside the offline ticket (got %)', p.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000541', p.permit_id, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T9 precondition: the online rating syncs (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(tess_ticket, '00000000-0000-4000-8000-000000000541');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T9: a shot charged to an online permit never also consumes a ticket (got %)', v;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T9: nothing was consumed (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T9: conservation violated across online + offline';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T10: original-installation recovery after account deletion + re-creation.
+-- Tim (T5) still holds ticket ...555 on installation key tim-key-1; his
+-- account is deleted and the same Apple identity signs in again as a new
+-- account. The identity keeps the hold; the original installation must be
+-- able to re-obtain and consume the ticket, and nothing else may.
+create function pg_temp.t_identity_conserved(p_uid uuid, p_provider text, p_sub text) returns boolean
+language sql security definer as $$
+  select
+    (select count(*) from public.offline_allocation_ledger a
+     where a.event = 'allocated'
+       and exists (select 1 from public.offline_ticket_identities ti
+                   where ti.ticket_id = a.ticket_id
+                     and ti.identity_hash = public.free_rating_identity_hash(p_provider, p_sub))
+       and not exists (select 1 from public.offline_allocation_ledger t
+                       where t.ticket_id = a.ticket_id and t.event = 'consumed'))
+    + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
+    + pg_temp.t_syncable_permits(p_uid)
+    <= 2;
+$$;
+grant execute on function pg_temp.t_identity_conserved(uuid, text, text) to authenticated;
+-- the bindings are not client-readable; the assertions read them as the owner
+create function pg_temp.t_bound(p_ticket uuid, p_provider text, p_sub text) returns boolean
+language sql security definer as $$
+  select exists (select 1 from public.offline_ticket_identities
+                 where ticket_id = p_ticket
+                   and identity_hash = public.free_rating_identity_hash(p_provider, p_sub));
+$$;
+grant execute on function pg_temp.t_bound(uuid, text, text) to authenticated;
+create function pg_temp.t_bindings(p_ticket uuid) returns integer
+language sql security definer as $$
+  select count(*)::int from public.offline_ticket_identities where ticket_id = p_ticket;
+$$;
+grant execute on function pg_temp.t_bindings(uuid) to authenticated;
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000055';
+  if (select count(*) from public.offline_allocation_ledger where ticket_id = '00000000-0000-4000-8000-000000000555') <> 1
+     or exists (select 1 from public.offline_devices where user_id = '00000000-0000-4000-8000-000000000055')
+     or exists (select 1 from public.analysis_permits where user_id = '00000000-0000-4000-8000-000000000055') then
+    raise exception 'T10 precondition: the deleted account leaves exactly its outstanding allocation behind';
+  end if;
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000058', 'tim@example.com',
+        '{"full_name":"Tim"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-tim', '00000000-0000-4000-8000-000000000058',
+        '{"sub":"apple-sub-tim","email":"tim@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005801', '00000000-0000-4000-8000-000000000058');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000058';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005801"}';
+do $$
+declare rec record; p record; g record; t_new uuid;
+        t_old uuid := '00000000-0000-4000-8000-000000000555';
+begin
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T10: the re-created account inherits the identity''s outstanding hold (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 1 then
+    raise exception 'T10: 0 scored + 1 held survive deletion (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  -- a DIFFERENT installation of the re-created account: nothing to recover;
+  -- it allocates exactly what conservation leaves (one), never the old ticket
+  select * into g from public.register_offline_device('tim-key-2', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T10: the re-created account registers a new installation (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-2', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 or g.ticket_ids[1] = t_old then
+    raise exception 'T10: a new installation allocates only the one remaining rating and never inherits the old ticket (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+  t_new := g.ticket_ids[1];
+  insert into t_state values ('tim-t-new', t_new);
+  if public.offline_hold_count() <> 2 then
+    raise exception 'T10: old + new tickets are both held (got %)', public.offline_hold_count();
+  end if;
+  select * into p from public.reserve_analysis_permit('tim-second-life-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T10: two holds exhaust the entitlement online (got %)', p.result;
+  end if;
+  -- the ORIGINAL installation (same key, same identity) re-obtains its ticket
+  -- even though conservation leaves nothing new to allocate
+  select * into g from public.register_offline_device('tim-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T10: the original installation re-registers (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 1 or g.entitlement_source <> 'identity_lifetime_free'
+     or g.ticket_ids <> array[t_old] then
+    raise exception 'T10: the original installation recovers exactly its outstanding ticket (got %, %, %)',
+      g.result, g.generation, g.ticket_ids;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 2 or g.ticket_ids <> array[t_old] then
+    raise exception 'T10: the refresh re-issues the same recovered ticket (got %, %, %)', g.result, g.generation, g.ticket_ids;
+  end if;
+  if public.offline_hold_count() <> 2
+     or (select count(*) from public.offline_allocation_ledger where user_id = (select auth.uid()) and event = 'allocated') <> 1 then
+    raise exception 'T10: recovery allocates nothing (hold %, own allocations %)', public.offline_hold_count(),
+      (select count(*) from public.offline_allocation_ledger where user_id = (select auth.uid()) and event = 'allocated');
+  end if;
+  -- the client cannot close the recovered ticket in support's name
+  if public.release_offline_ticket(t_old, 'support_review') <> 'offline.invalid_input' then
+    raise exception 'T10: a client never self-asserts a support_review release';
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'apple', 'apple-sub-tim') then
+    raise exception 'T10: conservation violated after recovery';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+-- a DIFFERENT identity on the same installation key never inherits the ticket
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000054';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005401"}';
+do $$
+declare g record; t_old uuid := '00000000-0000-4000-8000-000000000555';
+        t_new uuid := (select id from t_state where key = 'tim-t-new');
+begin
+  if public.consume_offline_ticket(t_old, '00000000-0000-4000-8000-000000000541') <> 'offline.ticket_not_found'
+     or public.release_offline_ticket(t_old, 'unused_ticket_returned') <> 'offline.ticket_not_found'
+     or public.consume_offline_ticket(t_new, '00000000-0000-4000-8000-000000000541') <> 'offline.ticket_not_found'
+     or public.release_offline_ticket(t_new, 'unused_ticket_returned') <> 'offline.ticket_not_found' then
+    raise exception 'T10: another identity cannot address the recovered or the new ticket';
+  end if;
+  select * into g from public.register_offline_device('tim-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T10: another identity registers the same key as its own device (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T10: another identity on the original key never inherits the ticket (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T10: the other identity''s own hold is unchanged (got %)', public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+-- the delivered offline result of the re-created account (server settlement
+-- write, no online permit) consumes the recovered ticket exactly once
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version, created_at
+) values
+  ('00000000-0000-4000-8000-000000000581', '00000000-0000-4000-8000-000000000058', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', clock_timestamp());
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000058';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005801"}';
+do $$
+declare rec record; p record; v text; t_old uuid := '00000000-0000-4000-8000-000000000555';
+        t_new uuid := (select id from t_state where key = 'tim-t-new');
+begin
+  v := public.consume_offline_ticket(t_old, '00000000-0000-4000-8000-000000000581');
+  if v <> 'accepted' then
+    raise exception 'T10: the original installation consumes its recovered ticket for the delivered rating (got %)', v;
+  end if;
+  if public.consume_offline_ticket(t_old, '00000000-0000-4000-8000-000000000581') <> 'accepted' then
+    raise exception 'T10: the consume replay is idempotent';
+  end if;
+  v := public.consume_offline_ticket(t_new, '00000000-0000-4000-8000-000000000581');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T10: one delivered rating consumes exactly one ticket (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 1 or public.lifetime_scored_count() <> 1 then
+    raise exception 'T10: consumption closes the recovered hold and the rating counts once (hold %, scored %)',
+      public.offline_hold_count(), public.lifetime_scored_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T10: access_state reads 1 scored + 1 held, never 1 + 2 (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if (select count(*) from public.offline_allocation_ledger
+      where ticket_id = t_old and event = 'consumed' and user_id = (select auth.uid())
+        and shot_id = '00000000-0000-4000-8000-000000000581'
+        and installation_key_id = 'tim-key-1') <> 1
+     or not pg_temp.t_bound(t_old, 'apple', 'apple-sub-tim') then
+    raise exception 'T10: the consumption is recorded in the re-created account''s name on the original installation';
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'apple', 'apple-sub-tim') then
+    raise exception 'T10: conservation violated after the recovered consumption';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+-- support closes the remaining ticket through the table only in the
+-- identity's name; a foreign owner is refused; the closed ticket still counts
+do $$
+declare a record; t_new uuid := (select id from t_state where key = 'tim-t-new');
+begin
+  select * into a from public.offline_allocation_ledger where ticket_id = t_new and event = 'allocated';
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
+    values ('00000000-0000-4000-8000-000000000052', a.device_id, a.grant_id, a.generation, t_new, 'released', 'support_review');
+    raise exception 'T10: support cannot close a ticket in a foreign owner''s name';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, installation_key_id)
+    values ('00000000-0000-4000-8000-000000000058', a.device_id, a.grant_id, a.generation, t_new, 'released', 'support_review', 'tim-key-1');
+    raise exception 'T10: a terminal event names the installation that holds the ticket';
+  exception when check_violation then null;
+  end;
+  insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
+  values ('00000000-0000-4000-8000-000000000058', a.device_id, a.grant_id, a.generation, t_new, 'released', 'support_review');
+  if (select installation_key_id from public.offline_allocation_ledger where ticket_id = t_new and event = 'released') <> 'tim-key-2' then
+    raise exception 'T10: the support release inherits the allocation''s installation key';
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000058';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005801"}';
+do $$
+declare rec record; p record; g record;
+begin
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T10: a support-released ticket still counts (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T10: 1 scored + 1 released after support review (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tim-second-life-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T10: no third rating online after recovery (got %)', p.result;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T10: no third rating offline after recovery (got %, %)', g.result, g.ticket_ids;
+  end if;
+  select * into g from public.issue_offline_grant('tim-key-2', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T10: a released ticket is never re-issued (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'apple', 'apple-sub-tim') then
+    raise exception 'T10: conservation violated after support review';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T11: conservation against late-syncable permits (adversary round 2, R1/R2).
+-- Tobias (free, Google) holds a permit still 'reserved' 25 h after it was
+-- issued — the hourly sweep is best-effort — and a permit his client settled
+-- as cancelled. Tina (free, Apple) reserved both ratings online and let them
+-- age past the sweep. apply_synced_shot() honours a reserved permit at ANY
+-- age and a swept released/expired one (permit_backs_sync; section N), so the
+-- allocator must treat both as reservations.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000059', 'tobias@example.com',
+   '{"full_name":"Tobias"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-00000000005a', 'tina@example.com',
+   '{"full_name":"Tina"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-tobias', '00000000-0000-4000-8000-000000000059',
+   '{"sub":"google-sub-tobias","email":"tobias@example.com"}'),
+  ('apple', 'apple-sub-tina', '00000000-0000-4000-8000-00000000005a',
+   '{"sub":"apple-sub-tina","email":"tina@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005901', '00000000-0000-4000-8000-000000000059'),
+  ('00000000-0000-4000-8000-000000005a01', '00000000-0000-4000-8000-00000000005a');
+-- the clock: a reservation Tobias made 25 h ago that nothing has settled
+insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+values ('00000000-0000-4000-8000-000000000591', '00000000-0000-4000-8000-000000000059', 'tobias-stale', now() - interval '25 hours');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000059';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005901"}';
+do $$
+declare g record; g2 record; p record; rec record; v text;
+begin
+  -- a permit the client settled as cancelled can never back a sync: not a reservation
+  select * into p from public.reserve_analysis_permit('tobias-cancelled');
+  if p.result <> 'accepted' then
+    raise exception 'T11 precondition: one live reservation beside the stale one (got %)', p.result;
+  end if;
+  update public.analysis_permits set status = 'released', outcome = 'cancelled' where id = p.permit_id;
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 1 then
+    raise exception 'T11 precondition: exactly the stale reserved permit can still back a sync (got %)',
+      pg_temp.t_syncable_permits((select auth.uid()));
+  end if;
+  select * into g from public.register_offline_device('tobias-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T11 precondition: registration (got %)', g.result;
+  end if;
+  -- R2: the stale reserved permit occupies one of the two ratings
+  select * into g from public.issue_offline_grant('tobias-key', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T11: a still-reserved permit older than 24 h is a reservation to the allocator — 1 ticket, not 2 (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+  insert into t_state values ('tobias-t', g.ticket_ids[1]);
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T11: exactly one allocation is recorded (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated by the allocation beside a stale reservation';
+  end if;
+  -- the late sync the stale permit was kept for still lands (section N), inside the budget
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000592', '00000000-0000-4000-8000-000000000591', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the stale permit''s late sync is still honoured (got %)', v;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T11: 1 scored + 1 outstanding ticket after the late sync (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated after the late sync';
+  end if;
+  -- nothing is left to allocate or reserve: the refresh re-issues the one ticket
+  select * into g2 from public.issue_offline_grant('tobias-key', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> g.ticket_ids then
+    raise exception 'T11: a refresh re-issues the single outstanding ticket and allocates nothing (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  select * into p from public.reserve_analysis_permit('tobias-third');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T11: no third rating online (got %)', p.result;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' or not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- R1: Tina reserves both ratings online, then goes offline.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005a';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005a01"}';
+do $$
+declare p1 record; p2 record; g record;
+begin
+  select * into p1 from public.reserve_analysis_permit('tina-online-1');
+  select * into p2 from public.reserve_analysis_permit('tina-online-2');
+  if p1.result <> 'accepted' or p2.result <> 'accepted' then
+    raise exception 'T11 precondition: two online reservations (got %, %)', p1.result, p2.result;
+  end if;
+  insert into t_state values ('tina-p1', p1.permit_id), ('tina-p2', p2.permit_id);
+  select * into g from public.register_offline_device('tina-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T11 precondition: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T11 precondition: two live reservations leave no offline capacity (got %, %)', g.result, g.ticket_ids;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- 24 h pass; the hourly sweep (expire-stale-analysis-permits) ages both
+-- permits out — created_at cannot be moved after the fact, so the owner row
+-- applies the sweep's transition to Tina's reservations.
+update public.analysis_permits set status = 'released', outcome = 'expired'
+where status = 'reserved' and user_id = '00000000-0000-4000-8000-00000000005a';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005a';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005a01"}';
+do $$
+declare g record; rec record; v text;
+        p1 uuid := (select id from t_state where key = 'tina-p1');
+        p2 uuid := (select id from t_state where key = 'tina-p2');
+begin
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 2 then
+    raise exception 'T11 precondition: both swept permits can still back a sync (got %)',
+      pg_temp.t_syncable_permits((select auth.uid()));
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T11: swept permits that can still back a sync are reservations to the allocator — no ticket (got %, %)',
+      g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T11: a refused allocation writes nothing (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  -- the late syncs the sweep promised to honour
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a2', p1, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the first swept permit''s late sync is honoured (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a3', p2, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T11: the second swept permit''s late sync is honoured (got %)', v;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
+    raise exception 'T11: both ratings scored, nothing outstanding (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: conservation violated after the late syncs';
+  end if;
+  select * into g from public.issue_offline_grant('tina-key', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'T11: no offline ticket after both ratings were scored (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T12: service_role can never pass as a user through the definer RPCs
+-- (adversary round 2, R7b). The service connection carries everything the
+-- Edge Function's per-user connection carries — API header, user sub, live
+-- session claim — and is still refused before any read or write.
+do $$
+declare f regprocedure;
+begin
+  foreach f in array array[
+    'public.register_offline_device(text,text,boolean)'::regprocedure,
+    'public.issue_offline_grant(text,integer)'::regprocedure,
+    'public.consume_offline_ticket(uuid,uuid)'::regprocedure,
+    'public.release_offline_ticket(uuid,text)'::regprocedure,
+    'public.offline_hold_count()'::regprocedure
+  ] loop
+    if has_function_privilege('service_role', f, 'EXECUTE') then
+      raise exception 'T12: service_role must hold no EXECUTE on %', f;
+    end if;
+    if has_function_privilege('anon', f, 'EXECUTE') then
+      raise exception 'T12: anon must hold no EXECUTE on %', f;
+    end if;
+    if not has_function_privilege('authenticated', f, 'EXECUTE') then
+      raise exception 'T12: authenticated keeps EXECUTE on %', f;
+    end if;
+    if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+      where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+      raise exception 'T12: PUBLIC must not execute %', f;
+    end if;
+  end loop;
+end $$;
+create function pg_temp.t_service_probe(p_uid uuid) returns text
+language sql security definer as $$
+  select format('devices:%s ledger:%s grants:%s',
+    (select count(*) from public.offline_devices where user_id = p_uid),
+    (select count(*) from public.offline_allocation_ledger where user_id = p_uid),
+    (select count(*) from public.offline_grants where user_id = p_uid));
+$$;
+grant execute on function pg_temp.t_service_probe(uuid) to service_role;
+grant select on t_state to service_role;
+set local role service_role;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000059';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005901"}';
+do $$
+declare before text := pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059');
+        tobias_ticket uuid := (select id from t_state where key = 'tobias-t');
+begin
+  if before <> 'devices:1 ledger:1 grants:2' then
+    raise exception 'T12 precondition: Tobias holds one device, one allocation, two grants (got %)', before;
+  end if;
+  begin
+    perform public.register_offline_device('service-key', 'production', true);
+    raise exception 'T12: service_role must not register a device as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.issue_offline_grant('tobias-key', 2);
+    raise exception 'T12: service_role must not issue a grant as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.consume_offline_ticket(tobias_ticket, '00000000-0000-4000-8000-000000000592');
+    raise exception 'T12: service_role must not consume a ticket as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.release_offline_ticket(tobias_ticket, 'unused_ticket_returned');
+    raise exception 'T12: service_role must not release a ticket as the user';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.offline_hold_count();
+    raise exception 'T12: service_role must not read holds as the user';
+  exception when insufficient_privilege then null;
+  end;
+  if pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059') <> before then
+    raise exception 'T12: refused service calls must write nothing (got %)',
+      pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059');
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T13: a shot counted BEFORE the allocation never consumes a later ticket
+-- (adversary round 3, a01). Tyler (free, Google) scored one rating a month
+-- ago — the shot IS the rating lifetime_scored_count() sees — then goes
+-- offline with one rating left. Paying the ticket with the old shot would
+-- close the hold without a new rating and hand out a third ticket.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000005b', 'tyler@example.com',
+        '{"full_name":"Tyler"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-tyler', '00000000-0000-4000-8000-00000000005b',
+        '{"sub":"google-sub-tyler","email":"tyler@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005b01', '00000000-0000-4000-8000-00000000005b');
+-- the rating already spent: a scored shot from 30 days ago, no online permit
+-- left behind (the exact shape the adversary consumed), counted by
+-- lifetime_scored_count() through the identity ledger
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version, created_at
+) values
+  ('00000000-0000-4000-8000-0000000005b1', '00000000-0000-4000-8000-00000000005b', 'drive', now() - interval '30 days', 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', now() - interval '30 days');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005b';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005b01"}';
+do $$
+declare g record; g2 record; p record; rec record; v text; t uuid;
+begin
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'T13 precondition: one rating is already spent (got %)', public.lifetime_scored_count();
+  end if;
+  select * into g from public.register_offline_device('tyler-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T13 precondition: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tyler-key', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T13 precondition: one spent rating leaves exactly one ticket (got %, %)', g.result, g.ticket_ids;
+  end if;
+  t := g.ticket_ids[1];
+  insert into t_state values ('tyler-t', t);
+  v := public.consume_offline_ticket(t, '00000000-0000-4000-8000-0000000005b1');
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'T13: a shot counted before the ticket was allocated never consumes it (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 1 or pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
+    raise exception 'T13: the refused consumption leaves the hold in place (hold %, events %)',
+      public.offline_hold_count(), pg_temp.t_events((select auth.uid()));
+  end if;
+  select * into g2 from public.issue_offline_grant('tyler-key', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> array[t] then
+    raise exception 'T13: the refresh re-issues the same ticket and allocates nothing (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  select * into p from public.reserve_analysis_permit('tyler-online-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T13: 1 scored + 1 held leave nothing online (got %)', p.result;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'T13: access_state reads 1 scored + 1 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T13: conservation violated after the refused consumption';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- closed at the table for every role: the owner cannot record the old shot
+-- as the ticket's consumption either
+do $$
+declare a record; t uuid := (select id from t_state where key = 'tyler-t');
+begin
+  select * into a from public.offline_allocation_ledger where ticket_id = t and event = 'allocated';
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id)
+    values ('00000000-0000-4000-8000-00000000005b', a.device_id, a.grant_id, a.generation, t, 'consumed', '00000000-0000-4000-8000-0000000005b1');
+    raise exception 'T13: a shot counted before the allocation is refused at the table for every role';
+  exception when check_violation then null;
+  end;
+  if exists (select 1 from public.offline_allocation_ledger where ticket_id = t and event <> 'allocated') then
+    raise exception 'T13: the refused write must not persist';
+  end if;
+end $$;
+-- the rating the ticket was allocated for, delivered after the allocation
+-- (server settlement write, no online permit) consumes it exactly once
+insert into public.shots (
+  id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
+  app_version, model_bundle_version, pose_model_version, paddle_model_version,
+  stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version, created_at
+) values
+  ('00000000-0000-4000-8000-0000000005b2', '00000000-0000-4000-8000-00000000005b', 'drive', now(), 0, 1000, 7, 1, 'scored',
+   'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', clock_timestamp());
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005b';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005b01"}';
+do $$
+declare g record; p record; rec record; v text; t uuid := (select id from t_state where key = 'tyler-t');
+begin
+  v := public.consume_offline_ticket(t, '00000000-0000-4000-8000-0000000005b2');
+  if v <> 'accepted' then
+    raise exception 'T13: the shot delivered after the allocation consumes the ticket (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 0 or public.lifetime_scored_count() <> 2 then
+    raise exception 'T13: the hold closes and both ratings count (hold %, scored %)',
+      public.offline_hold_count(), public.lifetime_scored_count();
+  end if;
+  select * into g from public.issue_offline_grant('tyler-key', 2);
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T13: two scored ratings leave no ticket — never a third (got %, %)', g.result, g.ticket_ids;
+  end if;
+  select * into p from public.reserve_analysis_permit('tyler-online-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T13: no third rating online (got %)', p.result;
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
+    raise exception 'T13: access_state reads 2 scored + 0 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:1,consumed:1' or not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T13: one ticket ever allocated, one consumed, budget 2 (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+-- T14: an identity linked AFTER the allocation carries the hold (adversary
+-- round 3, a02). Tahlia (free, Apple) takes both tickets offline, then links
+-- Google to her account, deletes it and signs in again with ONLY Google.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000005c', 'tahlia@example.com',
+        '{"full_name":"Tahlia"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-tahlia', '00000000-0000-4000-8000-00000000005c',
+        '{"sub":"apple-sub-tahlia","email":"tahlia@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005c01', '00000000-0000-4000-8000-00000000005c');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005c';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005c01"}';
+do $$
+declare g record;
+begin
+  select * into g from public.register_offline_device('tahlia-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14 precondition: registration (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tahlia-key', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T14 precondition: two tickets (got %, %)', g.result, g.ticket_ids;
+  end if;
+  insert into t_state values ('tahlia-t1', g.ticket_ids[1]), ('tahlia-t2', g.ticket_ids[2]);
+  if pg_temp.t_bindings(g.ticket_ids[1]) <> 1 or pg_temp.t_bindings(g.ticket_ids[2]) <> 1
+     or not pg_temp.t_bound(g.ticket_ids[1], 'apple', 'apple-sub-tahlia')
+     or not pg_temp.t_bound(g.ticket_ids[2], 'apple', 'apple-sub-tahlia') then
+    raise exception 'T14: the allocation binds each ticket to the identity present at allocation (got %, %)',
+      pg_temp.t_bindings(g.ticket_ids[1]), pg_temp.t_bindings(g.ticket_ids[2]);
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the late link, after the allocation
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-tahlia', '00000000-0000-4000-8000-00000000005c',
+        '{"sub":"google-sub-tahlia","email":"tahlia@example.com"}');
+do $$
+declare t1 uuid := (select id from t_state where key = 'tahlia-t1');
+        t2 uuid := (select id from t_state where key = 'tahlia-t2');
+begin
+  if pg_temp.t_bindings(t1) <> 2 or pg_temp.t_bindings(t2) <> 2
+     or not pg_temp.t_bound(t1, 'google', 'google-sub-tahlia')
+     or not pg_temp.t_bound(t2, 'google', 'google-sub-tahlia') then
+    raise exception 'T14: an identity linked after the allocation joins every outstanding ticket of the account (got %, %)',
+      pg_temp.t_bindings(t1), pg_temp.t_bindings(t2);
+  end if;
+  begin
+    update public.offline_ticket_identities set identity_hash = 'x' where ticket_id = t1;
+    raise exception 'T14: the bindings refuse UPDATE for the owner role';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.offline_ticket_identities where ticket_id = t1;
+    raise exception 'T14: the bindings refuse DELETE for the owner role';
+  exception when check_violation then null;
+  end;
+  if pg_temp.t_bindings(t1) <> 2 then
+    raise exception 'T14: refused binding writes change nothing';
+  end if;
+  delete from auth.users where id = '00000000-0000-4000-8000-00000000005c';
+  if pg_temp.t_bindings(t1) <> 2 or pg_temp.t_bindings(t2) <> 2
+     or (select count(*) from public.offline_allocation_ledger
+         where user_id = '00000000-0000-4000-8000-00000000005c' and event = 'allocated') <> 2 then
+    raise exception 'T14: account deletion leaves the tickets and their bindings in place';
+  end if;
+end $$;
+-- re-created through ONLY the late-linked identity
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000005d', 'tahlia@example.com',
+        '{"full_name":"Tahlia"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-tahlia', '00000000-0000-4000-8000-00000000005d',
+        '{"sub":"google-sub-tahlia","email":"tahlia@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000005d01', '00000000-0000-4000-8000-00000000005d');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005d';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005d01"}';
+do $$
+declare rec record; p record; g record;
+        t1 uuid := (select id from t_state where key = 'tahlia-t1');
+        t2 uuid := (select id from t_state where key = 'tahlia-t2');
+begin
+  if public.offline_hold_count() <> 2 then
+    raise exception 'T14: the re-created account sees the hold through the late-linked identity (got %)', public.offline_hold_count();
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 2 then
+    raise exception 'T14: access_state reads 0 scored + 2 held (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('tahlia-second-life-1');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T14: two holds leave nothing online (got %)', p.result;
+  end if;
+  select * into g from public.register_offline_device('tahlia-key-2', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: the re-created account registers a new installation (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tahlia-key-2', 2);
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T14: a new installation of the re-created account receives no ticket (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T14: nothing is allocated to the re-created account (got %)', pg_temp.t_events((select auth.uid()));
+  end if;
+  -- the ORIGINAL installation recovers exactly its two tickets
+  select * into g from public.register_offline_device('tahlia-key', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T14: the original installation re-registers (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('tahlia-key', 2);
+  if g.result <> 'accepted' or g.generation <> 1
+     or (select array_agg(t order by t) from unnest(g.ticket_ids) t)
+        <> (select array_agg(t order by t) from unnest(array[t1, t2]) t) then
+    raise exception 'T14: the original installation recovers exactly its outstanding tickets (got %, %, %)',
+      g.result, g.generation, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' or public.offline_hold_count() <> 2 then
+    raise exception 'T14: recovery allocates nothing (events %, hold %)',
+      pg_temp.t_events((select auth.uid())), public.offline_hold_count();
+  end if;
+  if not pg_temp.t_identity_conserved((select auth.uid()), 'google', 'google-sub-tahlia') then
+    raise exception 'T14: conservation violated after recovery through the late-linked identity';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- the original identity linked back later adds nothing twice
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-tahlia', '00000000-0000-4000-8000-00000000005d',
+        '{"sub":"apple-sub-tahlia","email":"tahlia@example.com"}');
+do $$
+declare t1 uuid := (select id from t_state where key = 'tahlia-t1');
+        t2 uuid := (select id from t_state where key = 'tahlia-t2');
+begin
+  if pg_temp.t_bindings(t1) <> 2 or pg_temp.t_bindings(t2) <> 2 then
+    raise exception 'T14: re-linking an already-bound identity changes nothing (got %, %)',
+      pg_temp.t_bindings(t1), pg_temp.t_bindings(t2);
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005d';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005d01"}';
+do $$
+declare p record;
+begin
+  if public.offline_hold_count() <> 2 then
+    raise exception 'T14: the hold is counted once across both identities (got %)', public.offline_hold_count();
+  end if;
+  select * into p from public.reserve_analysis_permit('tahlia-second-life-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T14: still nothing online with both identities linked (got %)', p.result;
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+
+
 do $$
 declare t record; f record;
 begin
@@ -4559,7 +6354,11 @@ begin
     ('free_rating_ledger', false, false, false, array[]::text[]),
     ('progress_daily', true, false, false, array[]::text[]),
     ('practice_days', true, false, false, array[]::text[]),
-    ('player_technique_rating', true, false, false, array[]::text[])
+    ('player_technique_rating', true, false, false, array[]::text[]),
+    ('offline_devices', true, false, false, array[]::text[]),
+    ('offline_grants', true, false, false, array[]::text[]),
+    ('offline_allocation_ledger', true, false, false, array[]::text[]),
+    ('offline_ticket_identities', false, false, false, array[]::text[])
   ) as expected(name, can_select, can_insert, can_delete, updatable)
   loop
     relation := format('public.%I', r.name)::regclass;
@@ -4593,8 +6392,10 @@ begin
   where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
   if functions <> array[
     'access_lock_key','access_state','apply_synced_shot','complete_onboarding',
-    'identity_scored_count','is_api_session_active','lifetime_scored_count',
-    'permit_backs_sync','permit_tombstoned','reserve_analysis_permit'
+    'consume_offline_ticket','identity_scored_count','is_api_session_active',
+    'issue_offline_grant','lifetime_scored_count','offline_hold_count',
+    'permit_backs_sync','permit_tombstoned','register_offline_device',
+    'release_offline_ticket','reserve_analysis_permit'
   ] then
     raise exception 'K27: authenticated RPC allowlist drifted (got %)', functions;
   end if;
