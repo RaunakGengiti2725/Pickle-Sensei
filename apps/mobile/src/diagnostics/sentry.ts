@@ -4,6 +4,11 @@ import type {
   StackFrame,
 } from '@sentry/react-native';
 import {
+  applyGeneratedReleaseIdentity,
+  generatedReleaseIdentity,
+  type GeneratedReleaseIdentity,
+} from '../config/releaseIdentity';
+import {
   getRuntimePublicConfig,
   type RuntimeDiagnosticsConfig,
 } from '../config/runtimeConfig';
@@ -41,8 +46,17 @@ export interface DiagnosticsReporterPort {
   clearScopes(): unknown;
 }
 
+/**
+ * Decides whether diagnostics may initialize. Every approval flag is checked
+ * before the identity; the identity itself is formed from the runtime
+ * configuration completed with the release identity the build wrote
+ * (`generated`, see config/releaseIdentity.ts) — a binary whose bundle phase
+ * wrote none, or whose configuration drifts from it, is `blocked_identity`
+ * no matter what the flags say.
+ */
 export function diagnosticsGate(
   config: RuntimeDiagnosticsConfig | undefined,
+  generated: GeneratedReleaseIdentity | null = null,
 ): DiagnosticsGate {
   try {
     if (config?.transportEnabled !== true) return { state: 'disabled' };
@@ -60,7 +74,9 @@ export function diagnosticsGate(
     }
     if (config.nativePrivacyApproved !== true)
       return { state: NATIVE_DIAGNOSTICS_STATUS };
-    const identity = diagnosticsIdentity(config);
+    const released = applyGeneratedReleaseIdentity(config, generated);
+    if (!released) return { state: 'blocked_identity' };
+    const identity = diagnosticsIdentity(released);
     if (!identity) return { state: 'blocked_identity' };
     return { state: 'ready_js_only', identity, dsn };
   } catch {
@@ -295,7 +311,10 @@ export function initializeDiagnostics(): DiagnosticsState {
   if (state !== 'uninitialized') return state;
   state = 'initializing';
   try {
-    const gate = diagnosticsGate(getRuntimePublicConfig().diagnostics);
+    const gate = diagnosticsGate(
+      getRuntimePublicConfig().diagnostics,
+      generatedReleaseIdentity(),
+    );
     if (gate.state !== 'ready_js_only') {
       state = gate.state;
       return state;
