@@ -5257,9 +5257,14 @@ begin
     end if;
   end loop;
 end $$;
+create function pg_temp.t_ledger_rows() returns integer
+language sql security definer as $$
+  select count(*)::int from public.offline_allocation_ledger;
+$$;
+grant execute on function pg_temp.t_ledger_rows() to service_role;
 set local role service_role;
 do $$
-declare n integer := (select count(*) from public.offline_allocation_ledger);
+declare n integer := pg_temp.t_ledger_rows();
 begin
   begin
     truncate public.offline_allocation_ledger;
@@ -5276,7 +5281,7 @@ begin
     raise exception 'T8: service_role must not TRUNCATE the device registry';
   exception when insufficient_privilege then null;
   end;
-  if (select count(*) from public.offline_allocation_ledger) <> n then
+  if pg_temp.t_ledger_rows() <> n then
     raise exception 'T8: a refused TRUNCATE must leave every allocation in place';
   end if;
 end $$;
@@ -5397,6 +5402,11 @@ language sql security definer as $$
     <= 2;
 $$;
 grant execute on function pg_temp.t_identity_conserved(uuid, text, text) to authenticated;
+create function pg_temp.t_identity_hash(p_provider text, p_sub text) returns text
+language sql security definer as $$
+  select public.free_rating_identity_hash(p_provider, p_sub);
+$$;
+grant execute on function pg_temp.t_identity_hash(text, text) to authenticated;
 do $$
 begin
   delete from auth.users where id = '00000000-0000-4000-8000-000000000055';
@@ -5546,7 +5556,7 @@ begin
       where ticket_id = t_old and event = 'consumed' and user_id = (select auth.uid())
         and shot_id = '00000000-0000-4000-8000-000000000581'
         and installation_key_id = 'tim-key-1'
-        and identity_hashes && array[public.free_rating_identity_hash('apple', 'apple-sub-tim')]) <> 1 then
+        and identity_hashes && array[pg_temp.t_identity_hash('apple', 'apple-sub-tim')]) <> 1 then
     raise exception 'T10: the consumption is recorded in the re-created account''s name on the original installation';
   end if;
   if not pg_temp.t_identity_conserved((select auth.uid()), 'apple', 'apple-sub-tim') then

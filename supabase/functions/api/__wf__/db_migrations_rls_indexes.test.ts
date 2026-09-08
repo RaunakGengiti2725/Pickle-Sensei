@@ -1520,9 +1520,7 @@ Deno.test(
             /\b(insert|update|delete|truncate|references|trigger|all)\b/.test(
               statement.split(" on ")[0],
             ) &&
-            /\b(anon|authenticated|public|service_role)\b/.test(
-              statement.split(" to ").pop() ?? "",
-            )
+            /\b(anon|authenticated|public|service_role)\b/.test(statement.split(" to ").pop() ?? "")
           ),
           `public.${table} must never be writable or truncatable outside the RPCs: ${statement}`,
         );
@@ -1675,7 +1673,9 @@ Deno.test(
         `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, new.user_id)`,
       ) &&
         !eventGuard.includes("new.user_id is distinct from v_allocation.user_id") &&
-        eventGuard.includes("new.installation_key_id is distinct from v_allocation.installation_key_id"),
+        eventGuard.includes(
+          "new.installation_key_id is distinct from v_allocation.installation_key_id",
+        ),
       "a terminal event may be written by the allocation's account OR the same sign-in identity (original-owner recovery after account re-creation), never by another owner, and always on the allocation's installation key",
     );
     ok(
