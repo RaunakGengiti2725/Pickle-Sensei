@@ -1,0 +1,771 @@
+FAIL __tests__/adv/importBridgeLifecycle.adv.test.ts
+  ADV import bridge lifecycle
+    ✓ ATTACK F1: user cancels the picker, native later fails with import_too_long -> caller sees ONLY camera.cancelled and the next import can start (8 ms)
+    ✓ ATTACK F2: native import returns a GUIDED-mode clip through the import path -> refused (23 ms)
+    ✕ ATTACK F3: native import returns the ORIGINAL Photos-library path instead of a private copy -> refused (2 ms)
+    ✕ ATTACK F4: extraction receipt names a sidecar belonging to a DIFFERENT clip -> not attached to this clip (1 ms)
+    ✕ ATTACK F5: extraction receipt claims a poster OUTSIDE the private captures directory -> refused
+    ✓ ATTACK F6: a permission-denied import rejection keeps its code and a real message for the error surface (1 ms)
+
+  ● ADV import bridge lifecycle › ATTACK F3: native import returns the ORIGINAL Photos-library path instead of a private copy -> refused
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"ballSpeed": {"reason": "analysis_not_run", "status": "unavailable"}, "captureMode": "imported_video", "capturedAtIso": "2026-08-29T18:00:00.000Z", "durationMs": 4200, "fps": 30, "height": 1080, "recognition": {"reason": "analysis_not_run", "status": "unknown"}, "uri": "file:///var/mobile/Media/DCIM/100APPLE/img_0001.mov", "width": 1920}
+
+      133 |       uri: 'file:///var/mobile/Media/DCIM/100APPLE/img_0001.mov',
+      134 |     });
+    > 135 |     await expect(
+          |           ^
+      136 |       importStrokeVideo({ operationId: 'photos-path' }),
+      137 |     ).rejects.toThrow();
+      138 |   });
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.expect (__tests__/adv/importBridgeLifecycle.adv.test.ts:135:11)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at Object.<anonymous> (node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12)
+
+  ● ADV import bridge lifecycle › ATTACK F4: extraction receipt names a sidecar belonging to a DIFFERENT clip -> not attached to this clip
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"framesTotal": 126, "framesWithPose": 126, "poseSequence": {"coordinateSystem": "normalized_image_top_left", "format": "pickle.pose-sequence.v1", "frameCount": 126, "poseModelVersion": "apple-vision-bodypose-1", "schemaVersion": 1, "sha256": "abababababababababababababababababababababababababababababababab", "uri": "file:///private/var/mobile/Containers/Data/Application/APP/Library/Application%20Support/PickleSensei/Captures/import-OTHER-pose-1.pose.json"}}
+
+      156 |       framesTotal: 126,
+      157 |     });
+    > 158 |     await expect(
+          |           ^
+      159 |       extractImportedPoseSequence(clip, null, {
+      160 |         operationId: 'foreign-sidecar',
+      161 |       }),
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.expect (__tests__/adv/importBridgeLifecycle.adv.test.ts:158:11)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at Object.<anonymous> (node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12)
+
+  ● ADV import bridge lifecycle › ATTACK F5: extraction receipt claims a poster OUTSIDE the private captures directory -> refused
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"framesTotal": 126, "framesWithPose": 126, "poseSequence": {"coordinateSystem": "normalized_image_top_left", "format": "pickle.pose-sequence.v1", "frameCount": 126, "poseModelVersion": "apple-vision-bodypose-1", "schemaVersion": 1, "sha256": "abababababababababababababababababababababababababababababababab", "uri": "file:///private/var/mobile/Containers/Data/Application/APP/Library/Application%20Support/PickleSensei/Captures/import-abc-pose-1.pose.json"}, "posterUri": "file:///var/mobile/Media/DCIM/100APPLE/img_0001.jpg"}
+
+      182 |       framesTotal: 126,
+      183 |     });
+    > 184 |     await expect(
+          |           ^
+      185 |       extractImportedPoseSequence(clip, null, {
+      186 |         operationId: 'foreign-poster',
+      187 |       }),
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.expect (__tests__/adv/importBridgeLifecycle.adv.test.ts:184:11)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at Object.<anonymous> (node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12)
+
+FAIL __tests__/adv/importedClipBoundary.adv.test.ts
+  ADV imported clip boundary: assertCapturedClip(imported_video)
+    ✓ control: a well-formed imported clip is accepted (5 ms)
+    ✕ ATTACK B1: zero FPS imported clip (no frame timing possible) must be refused (1 ms)
+    ✕ ATTACK B2: sub-millisecond (effectively zero-length) media must be refused (7 ms)
+    ✕ ATTACK B3: imported clip longer than the 60 s native import ceiling must be refused in JS too
+    ✕ ATTACK B4: absurd pixel dimensions (1e9 x 1e9) must be refused
+    ✕ ATTACK B5: an ARRAY dressed up with clip properties must not pass the record check
+    ✕ ATTACK B6: native identity origin native_export on an imported_video clip must be refused
+    ✕ ATTACK B7: poster URI escaping the captures directory must be refused
+    ✕ ATTACK B8: pose sidecar ref claiming more frames than the extraction ceiling must be refused
+    ✕ ATTACK B9: an empty file: URI (no path) must be refused (1 ms)
+    ✕ ATTACK B10: a clip URI with parent-directory traversal must be refused (1 ms)
+  ADV imported clip boundary: persisted row after relaunch
+    ✕ ATTACK B11: a persisted 0 fps / 2 h imported row must not reload as a VALID pending capture (14 ms)
+    ✓ ATTACK B12: a persisted payload with a trailing-garbage JSON body is corrupt, not legacy (6 ms)
+    ✓ ATTACK B13: a persisted payload whose declared byteSize disagrees with its identity is refused (6 ms)
+    ✓ control: a valid persisted imported row reloads as valid evidence (6 ms)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B1: zero FPS imported clip (no frame timing possible) must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      76 |     expect(() =>
+      77 |       assertCapturedClip({ ...validImportedClip(), fps: 0 }, 'imported_video'),
+    > 78 |     ).toThrow();
+         |       ^
+      79 |   });
+      80 |
+      81 |   it('ATTACK B2: sub-millisecond (effectively zero-length) media must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:78:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B2: sub-millisecond (effectively zero-length) media must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      85 |         'imported_video',
+      86 |       ),
+    > 87 |     ).toThrow();
+         |       ^
+      88 |   });
+      89 |
+      90 |   it('ATTACK B3: imported clip longer than the 60 s native import ceiling must be refused in JS too', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:87:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B3: imported clip longer than the 60 s native import ceiling must be refused in JS too
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+       96 |         'imported_video',
+       97 |       ),
+    >  98 |     ).toThrow();
+          |       ^
+       99 |   });
+      100 |
+      101 |   it('ATTACK B4: absurd pixel dimensions (1e9 x 1e9) must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:98:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B4: absurd pixel dimensions (1e9 x 1e9) must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      105 |         'imported_video',
+      106 |       ),
+    > 107 |     ).toThrow();
+          |       ^
+      108 |   });
+      109 |
+      110 |   it('ATTACK B5: an ARRAY dressed up with clip properties must not pass the record check', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:107:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B5: an ARRAY dressed up with clip properties must not pass the record check
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      110 |   it('ATTACK B5: an ARRAY dressed up with clip properties must not pass the record check', () => {
+      111 |     const arrayClip = Object.assign([], validImportedClip());
+    > 112 |     expect(() => assertCapturedClip(arrayClip, 'imported_video')).toThrow();
+          |                                                                   ^
+      113 |   });
+      114 |
+      115 |   it('ATTACK B6: native identity origin native_export on an imported_video clip must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:112:67)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B6: native identity origin native_export on an imported_video clip must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      128 |       },
+      129 |     };
+    > 130 |     expect(() => assertCapturedClip(clip, 'imported_video')).toThrow();
+          |                                                              ^
+      131 |   });
+      132 |
+      133 |   it('ATTACK B7: poster URI escaping the captures directory must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:130:62)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B7: poster URI escaping the captures directory must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      140 |         'imported_video',
+      141 |       ),
+    > 142 |     ).toThrow();
+          |       ^
+      143 |   });
+      144 |
+      145 |   it('ATTACK B8: pose sidecar ref claiming more frames than the extraction ceiling must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:142:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B8: pose sidecar ref claiming more frames than the extraction ceiling must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      149 |         'imported_video',
+      150 |       ),
+    > 151 |     ).toThrow();
+          |       ^
+      152 |   });
+      153 |
+      154 |   it('ATTACK B9: an empty file: URI (no path) must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:151:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B9: an empty file: URI (no path) must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      158 |         'imported_video',
+      159 |       ),
+    > 160 |     ).toThrow();
+          |       ^
+      161 |   });
+      162 |
+      163 |   it('ATTACK B10: a clip URI with parent-directory traversal must be refused', () => {
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:160:7)
+
+  ● ADV imported clip boundary: assertCapturedClip(imported_video) › ATTACK B10: a clip URI with parent-directory traversal must be refused
+
+    expect(received).toThrow()
+
+    Received function did not throw
+
+      170 |         'imported_video',
+      171 |       ),
+    > 172 |     ).toThrow();
+          |       ^
+      173 |   });
+      174 | });
+      175 |
+
+      at Object.toThrow (__tests__/adv/importedClipBoundary.adv.test.ts:172:7)
+
+  ● ADV imported clip boundary: persisted row after relaunch › ATTACK B11: a persisted 0 fps / 2 h imported row must not reload as a VALID pending capture
+
+    expect(received).not.toBe(expected) // Object.is equality
+
+    Expected: not "valid"
+
+      208 |     const pending = await getPendingCapture(db, captureId);
+      209 |     expect(pending).not.toBeNull();
+    > 210 |     expect(pending!.evidenceStatus).not.toBe('valid');
+          |                                         ^
+      211 |     expect(pending!.clip).toBeNull();
+      212 |   });
+      213 |
+
+      at Object.toBe (__tests__/adv/importedClipBoundary.adv.test.ts:210:41)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+FAIL __tests__/adv/importEnvelopeGate.adv.test.ts
+  ADV import envelope gate
+    ✕ ATTACK G1: a 240p @ 8 fps IMPORT with a valid sidecar -> the envelope says UNSUPPORTED, so the run must not score it (103 ms)
+    ✕ ATTACK G2: +Infinity for frameWidthPx+frameHeightPx is not a measurement -> must not be SUPPORTED (4 ms)
+    ✕ ATTACK G2: +Infinity for avgFrameRateFps is not a measurement -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G2: +Infinity for laplacianVarianceMedian is not a measurement -> must not be SUPPORTED (2 ms)
+    ✕ ATTACK G2: +Infinity for denoiseSurvivalRatio is not a measurement -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G2: +Infinity for playerPixelHeightFraction is not a measurement -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G2: +Infinity for playerMeanJointVisibility is not a measurement -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G3: a negative clippedPixelFraction (impossible for a non-negative statistic) -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G3: a negative brightnessStdLuma (impossible for a non-negative statistic) -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G3: a negative meanAbsFrameDiff (impossible for a non-negative statistic) -> must not be SUPPORTED (2 ms)
+    ✕ ATTACK G3: a negative contrastNormalizedFrameDiff (impossible for a non-negative statistic) -> must not be SUPPORTED (1 ms)
+    ✕ ATTACK G3: a negative frameIntervalCv (impossible for a non-negative statistic) -> must not be SUPPORTED
+    ✕ ATTACK G4: visibility 1.5 and pixel-height fraction 5 are outside their [0,1] domains -> must not be SUPPORTED
+    ✓ control: a fully-null measurement set is entirely NOT_MEASURED and never SUPPORTED
+
+  ● ADV import envelope gate › ATTACK G1: a 240p @ 8 fps IMPORT with a valid sidecar -> the envelope says UNSUPPORTED, so the run must not score it
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "quality_blocked"
+    Received: "scored"
+
+      184 |     (globalThis as { fetch?: unknown }).fetch = permitFetch(finalized);
+      185 |     const outcome = await runCaptureAnalysis(screenShapedRequest(db, clip));
+    > 186 |     expect(outcome.kind).toBe('quality_blocked');
+          |                          ^
+      187 |     expect(finalized.filter(entry => entry.outcome === 'scored')).toHaveLength(
+      188 |       0,
+      189 |     );
+
+      at Object.toBe (__tests__/adv/importEnvelopeGate.adv.test.ts:186:26)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for frameWidthPx+frameHeightPx is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "resolution",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "resolution-short-side-v0.1",
+    +     "unit": "px (short side)",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for avgFrameRateFps is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "frame_rate",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "frame-rate-avg-v0.2",
+    +     "unit": "fps",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for laplacianVarianceMedian is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "motion_blur",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "laplacian-variance-320long-median-v0.2",
+    +     "unit": "laplacian variance @320long",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for denoiseSurvivalRatio is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "sensor_noise",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "denoise-survival-ratio-v0.1",
+    +     "unit": "ratio median lapVar denoised/raw",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for playerPixelHeightFraction is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "player_pixel_height",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "player-pixel-height-fraction-v0.1",
+    +     "unit": "fraction of frame height",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G2: +Infinity for playerMeanJointVisibility is not a measurement -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "player_visibility",
+    +     "measured": Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "player-mean-joint-visibility-v0.1",
+    +     "unit": "mean visibility 0-1",
+    +   },
+    + ]
+
+      207 |         dimension => dimension.status === 'SUPPORTED',
+      208 |       );
+    > 209 |       expect(supported).toEqual([]);
+          |                         ^
+      210 |     },
+      211 |   );
+      212 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:209:25)
+
+  ● ADV import envelope gate › ATTACK G3: a negative clippedPixelFraction (impossible for a non-negative statistic) -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "exposure_clipping",
+    +     "measured": -1,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "clipped-pixel-fraction-v0.1",
+    +     "unit": "fraction of pixels <=16 or >=235",
+    +   },
+    + ]
+
+      224 |         dimension => dimension.status === 'SUPPORTED',
+      225 |       );
+    > 226 |       expect(supported).toEqual([]);
+          |                         ^
+      227 |     },
+      228 |   );
+      229 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:226:25)
+
+  ● ADV import envelope gate › ATTACK G3: a negative brightnessStdLuma (impossible for a non-negative statistic) -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "exposure_stability",
+    +     "measured": -1,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "brightness-std-luma-v0.1",
+    +     "unit": "std of per-frame mean luma 0-255",
+    +   },
+    + ]
+
+      224 |         dimension => dimension.status === 'SUPPORTED',
+      225 |       );
+    > 226 |       expect(supported).toEqual([]);
+          |                         ^
+      227 |     },
+      228 |   );
+      229 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:226:25)
+
+  ● ADV import envelope gate › ATTACK G3: a negative meanAbsFrameDiff (impossible for a non-negative statistic) -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "camera_motion",
+    +     "measured": -1,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "global-frame-diff-320long-v0.3",
+    +     "unit": "mean abs luma diff @320long",
+    +   },
+    + ]
+
+      224 |         dimension => dimension.status === 'SUPPORTED',
+      225 |       );
+    > 226 |       expect(supported).toEqual([]);
+          |                         ^
+      227 |     },
+      228 |   );
+      229 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:226:25)
+
+  ● ADV import envelope gate › ATTACK G3: a negative contrastNormalizedFrameDiff (impossible for a non-negative statistic) -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "camera_shake",
+    +     "measured": -1,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "contrast-normalized-frame-diff-v0.1",
+    +     "unit": "mean abs diff / mean spatial std",
+    +   },
+    + ]
+
+      224 |         dimension => dimension.status === 'SUPPORTED',
+      225 |       );
+    > 226 |       expect(supported).toEqual([]);
+          |                         ^
+      227 |     },
+      228 |   );
+      229 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:226:25)
+
+  ● ADV import envelope gate › ATTACK G3: a negative frameIntervalCv (impossible for a non-negative statistic) -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "timing_stability",
+    +     "measured": -Infinity,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "timing-stability-interval-cv-v0.2",
+    +     "unit": "cv of frame intervals",
+    +   },
+    + ]
+
+      224 |         dimension => dimension.status === 'SUPPORTED',
+      225 |       );
+    > 226 |       expect(supported).toEqual([]);
+          |                         ^
+      227 |     },
+      228 |   );
+      229 |
+
+      at toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:226:25)
+
+  ● ADV import envelope gate › ATTACK G4: visibility 1.5 and pixel-height fraction 5 are outside their [0,1] domains -> must not be SUPPORTED
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  1
+    + Received  + 16
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "dimension": "player_pixel_height",
+    +     "measured": 5,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "player-pixel-height-fraction-v0.1",
+    +     "unit": "fraction of frame height",
+    +   },
+    +   Object {
+    +     "dimension": "player_visibility",
+    +     "measured": 1.5,
+    +     "status": "SUPPORTED",
+    +     "thresholdId": "player-mean-joint-visibility-v0.1",
+    +     "unit": "mean visibility 0-1",
+    +   },
+    + ]
+
+      237 |       dimension => dimension.status === 'SUPPORTED',
+      238 |     );
+    > 239 |     expect(supported).toEqual([]);
+          |                       ^
+      240 |   });
+      241 |
+      242 |   it('control: a fully-null measurement set is entirely NOT_MEASURED and never SUPPORTED', () => {
+
+      at Object.toEqual (__tests__/adv/importEnvelopeGate.adv.test.ts:239:23)
+
+FAIL __tests__/adv/importTimeMapping.adv.test.ts
+  ADV time mapping: sidecar timeline vs imported media timeline
+    ✓ control: an aligned sidecar scores with its window inside the media timeline (105 ms)
+    ✓ ATTACK A1: every pose frame is stamped AFTER the clip ends (timeline shifted past durationMs) (26 ms)
+    ✓ ATTACK A2: pose frames carry NEGATIVE timestamps (before media time zero) (30 ms)
+    ✓ ATTACK A3: clip metadata claims a 1 ms media timeline while the sidecar spans seconds (31 ms)
+    ✕ ATTACK A4: clip metadata claims a one-hour media timeline for a four-second sidecar (50 ms)
+    ✕ ATTACK A5: frame indices are negative, duplicated and out of order while timestamps look valid (44 ms)
+
+  ● ADV time mapping: sidecar timeline vs imported media timeline › ATTACK A4: clip metadata claims a one-hour media timeline for a four-second sidecar
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 1967
+    Received:    3600000
+
+      260 |       const stamps = outcome.record.result?.timestamps;
+      261 |       expect(stamps).toBeDefined();
+    > 262 |       expect(stamps!.endMs).toBeLessThanOrEqual(lastMs);
+          |                             ^
+      263 |     } else {
+      264 |       expect(['unavailable', 'quality_blocked']).toContain(outcome.kind);
+      265 |     }
+
+      at Object.toBeLessThanOrEqual (__tests__/adv/importTimeMapping.adv.test.ts:262:29)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+  ● ADV time mapping: sidecar timeline vs imported media timeline › ATTACK A5: frame indices are negative, duplicated and out of order while timestamps look valid
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "scored"
+    Received array: ["unavailable", "quality_blocked"]
+
+      284 |     // A sidecar whose frame indices cannot be mapped back to media frames is
+      285 |     // corrupt evidence; it must be refused rather than repaired or trusted.
+    > 286 |     expect(['unavailable', 'quality_blocked']).toContain(outcome.kind);
+          |                                                ^
+      287 |     expect(
+      288 |       server.finalized.filter(entry => entry.outcome === 'scored'),
+      289 |     ).toHaveLength(0);
+
+      at Object.toContain (__tests__/adv/importTimeMapping.adv.test.ts:286:48)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+PASS __tests__/adv/originalRetryReplay.adv.test.ts
+  ADV original-clip retry: media / sidecar / account drift at replay
+    ✓ control: the saved original imported clip extracts, scores and charges exactly once (151 ms)
+    ✓ ATTACK C1: native reports current bytes as mismatch at replay -> no extraction, no permit, no charge, still recoverable (19 ms)
+    ✓ ATTACK C1: native reports current bytes as unavailable at replay -> no extraction, no permit, no charge, still recoverable (18 ms)
+    ✓ ATTACK C1: native reports current bytes as legacy at replay -> no extraction, no permit, no charge, still recoverable (16 ms)
+    ✓ ATTACK C1: native reports current bytes as invalid at replay -> no extraction, no permit, no charge, still recoverable (21 ms)
+    ✓ ATTACK C2: native says verified but compared a DIFFERENT byte expectation than the original receipt (18 ms)
+    ✓ ATTACK C3: the native byte comparison itself throws (bridge crash) -> hold, then an honest retry scores once (76 ms)
+    ✓ ATTACK C4: extraction returns a receipt above the 4000-frame ceiling (native regression) -> refused, no charge, operation intact (21 ms)
+    ✓ ATTACK C5: the sidecar file is MISSING at replay (native text reader resolves nothing) -> no throw, no permit, no charge (16 ms)
+    ✓ ATTACK C6: the account switches while native extraction is in flight -> account_changed, nothing persisted for either owner (20 ms)
+    ✓ ATTACK C7: two concurrent replays of the same saved operation extract at most once and charge at most once (58 ms)
+
+  console.info
+    [ADV E5] sidecar bytes=4844725 elapsedMs=745 outcome=scored
+
+      at Object.info (__tests__/adv/importedSidecarContent.adv.test.ts:259:13)
+
+FAIL __tests__/adv/importedSidecarContent.adv.test.ts
+  ADV imported sidecar content that survives hash + parse
+    ✓ ATTACK E1: every landmark is renamed to an unknown joint -> no human pose, must not score (78 ms)
+    ✕ ATTACK E2: each frame carries every joint TWICE with contradictory coordinates -> ambiguous evidence must be refused (71 ms)
+    ✕ ATTACK E3: landmarks sit a million image-widths off screen -> not on-image evidence, must not score (43 ms)
+    ✓ ATTACK E4: a single-frame sidecar for a multi-second clip -> no motion, must not score (12 ms)
+    ✓ ATTACK E5: landmark flood (1000 extra joints per frame) is bounded -> finishes with a known outcome, no crash (814 ms)
+    ✓ ATTACK E6: sidecar fps disagrees with the clip fps -> refused (23 ms)
+    ✓ ATTACK E7: sidecar ref frameCount is one less than the file (hash recomputed to match) -> refused (17 ms)
+    ✓ ATTACK E8: sidecar prefixed with a UTF-8 BOM (same logical JSON) -> hash mismatch refuses, never repairs (31 ms)
+
+  ● ADV imported sidecar content that survives hash + parse › ATTACK E2: each frame carries every joint TWICE with contradictory coordinates -> ambiguous evidence must be refused
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "scored"
+    Received array: ["unavailable", "quality_blocked"]
+
+      202 |     };
+      203 |     const { outcome, server } = await attack(doubled, window.endMs);
+    > 204 |     expect(['unavailable', 'quality_blocked']).toContain(outcome.kind);
+          |                                                ^
+      205 |     expect(scoredFinalizations(server)).toBe(0);
+      206 |   });
+      207 |
+
+      at Object.toContain (__tests__/adv/importedSidecarContent.adv.test.ts:204:48)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+  ● ADV imported sidecar content that survives hash + parse › ATTACK E3: landmarks sit a million image-widths off screen -> not on-image evidence, must not score
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "scored"
+    Received array: ["unavailable", "quality_blocked"]
+
+      220 |     };
+      221 |     const { outcome, server } = await attack(offscreen, window.endMs);
+    > 222 |     expect(['unavailable', 'quality_blocked']).toContain(outcome.kind);
+          |                                                ^
+      223 |     expect(scoredFinalizations(server)).toBe(0);
+      224 |   });
+      225 |
+
+      at Object.toContain (__tests__/adv/importedSidecarContent.adv.test.ts:222:48)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+Test Suites: 5 failed, 1 passed, 6 total
+Tests:       31 failed, 29 passed, 60 total
+Snapshots:   0 total
+Time:        2.076 s
+Ran all test suites matching /__tests__\/adv/i.

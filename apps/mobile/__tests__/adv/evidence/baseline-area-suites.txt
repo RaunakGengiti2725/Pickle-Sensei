@@ -1,0 +1,12 @@
+PASS __tests__/nativeImportSafety.test.ts
+PASS __tests__/importedPoseExtraction.test.ts
+PASS __tests__/cameraCapture.test.ts
+PASS __tests__/nativeMediaIdentity.test.ts
+PASS __tests__/importedCaptureAnalysis.test.ts
+PASS __tests__/originalAnalysisRetry.test.ts (6.563 s)
+
+Test Suites: 6 passed, 6 total
+Tests:       432 passed, 432 total
+Snapshots:   0 total
+Time:        7.025 s, estimated 15 s
+Ran all test suites matching /__tests__\/nativeImportSafety.test.ts|__tests__\/nativeMediaIdentity.test.ts|__tests__\/importedCaptureAnalysis.test.ts|__tests__\/importedPoseExtraction.test.ts|__tests__\/cameraCapture.test.ts|__tests__\/originalAnalysisRetry.test.ts/i.

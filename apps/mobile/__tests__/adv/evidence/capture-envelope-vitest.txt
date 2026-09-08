@@ -1,0 +1,39 @@
+
+ RUN  v3.2.7 /home/ubuntu/repos/Pickle-Sensei/packages/capture-envelope
+
+ ✓ test/g08Gate.test.ts (16 tests) 16ms
+ ✓ test/envelope.test.ts (18 tests) 9ms
+ ✓ test/ffmpegPortability.test.ts (3 tests) 33ms
+ ✓ test/f18Analysis.test.ts (6 tests) 19ms
+ ✓ test/g08EvidenceSignals.test.ts (5 tests) 15ms
+ ✓ test/g09SurfacesMonotonicity.test.ts (6 tests) 1189ms
+   ✓ g09: analytic decision-surface monotonicity > 3^9 severity lattice (v0.3 dims): overall == worst measured dimension; one-step-worse never improves overall  724ms
+   ✓ g09: analytic decision-surface monotonicity > STRUCTURAL (known, F22 A5): losing the worst dimension's measurement upgrades the overall verdict  446ms
+ ✓ test/h26EnvelopeRedTeam.test.ts (1 test) 3912ms
+   ✓ h26-E1 (FIXED): half-good/half-black clip no longer passes the envelope > FIXED: 4s good + 4s pitch-black concat is not overall SUPPORTED  3900ms
+ ✓ test/redteamEnvelope.test.ts (10 tests) 10991ms
+   ✓ red-team synthetic adversarial clips (D3-07) > baseline synthetic clip is fully SUPPORTED on video dimensions  538ms
+   ✓ red-team synthetic adversarial clips (D3-07) > 8 fps capture is detected on frame_rate  517ms
+   ✓ red-team synthetic adversarial clips (D3-07) > 240p capture is detected on resolution  423ms
+   ✓ red-team synthetic adversarial clips (D3-07) > near-black exposure is detected on brightness  2299ms
+   ✓ red-team synthetic adversarial clips (D3-07) > heavy synthetic motion blur is detected on motion_blur  2448ms
+   ✓ red-team synthetic adversarial clips (D3-07) > 0.5s clip is detected on clip_duration  484ms
+   ✓ red-team synthetic adversarial clips (D3-07) > VFR timestamps are detected on timing_stability even when avg fps passes  1773ms
+   ✓ red-team synthetic adversarial clips (D3-07) > 90° rotation metadata swaps display dimensions and keeps resolution honest  662ms
+   ✓ red-team synthetic adversarial clips (D3-07) > 180° rotation metadata leaves pixel measurements identical to the unrotated clip  1118ms
+ ✓ test/redteamBypassF22.test.ts (10 tests) 20419ms
+   ✓ f22 envelope bypass regressions > FIXED: heavy blur + grain is caught by sensor_noise  10364ms
+   ✓ f22 envelope bypass regressions > FIXED: half-crushed/half-blown frame is caught by exposure_clipping  863ms
+   ✓ f22 envelope bypass regressions > FIXED: strobing exposure is caught by exposure_stability  2417ms
+   ✓ f22 envelope bypass regressions > KNOWN GAP: 240p upscaled to 720p is overall SUPPORTED  1084ms
+   ✓ f22 envelope bypass regressions > FIXED: tiny-subject clip with pose NOT_MEASURED is SUPPORTED_UNMEASURED, not verified  822ms
+   ✓ f22 envelope bypass regressions > KNOWN GAP: sharp low-texture scene is falsely flagged on motion_blur  628ms
+   ✓ f22 envelope bypass regressions > proven negative: rotation metadata cannot inflate the resolution short side  404ms
+   ✓ f22 envelope bypass regressions > proven negative: duplicate-PTS re-timing is still flagged on timing_stability  1144ms
+   ✓ f22 envelope bypass regressions > FIXED: violent crop-jitter shake on low-contrast content is caught by camera_shake  1675ms
+
+ Test Files  9 passed (9)
+      Tests  75 passed (75)
+   Start at  21:25:32
+   Duration  20.91s (transform 1.01s, setup 0ms, collect 2.50s, tests 36.60s, environment 2ms, prepare 866ms)
+
