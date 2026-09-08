@@ -9,6 +9,7 @@ import {
   type DataOwnerContext,
 } from '../data/accountScope';
 import { computeConsistencySnapshot } from '../consistency/store';
+import { claimSurface } from '../flow/ceremonyRequest';
 import { buildNotificationPlan, type NotificationPlanContext } from './plan';
 import {
   getScheduler,
@@ -231,11 +232,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   requestPermissionAndEnable: async deps => {
     const scheduler = deps?.scheduler ?? getScheduler();
     let state: PermissionState;
+    const sheet = claimSurface('permission');
     try {
       state = await scheduler.requestPermission();
     } catch {
       set({ permission: 'unknown' });
       return false;
+    } finally {
+      sheet.release();
     }
     set({ permission: state });
     if (state !== 'granted') return false;
@@ -247,12 +251,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     const scheduler = deps?.scheduler ?? getScheduler();
     let enabled = false;
     if (choice === 'enable') {
+      const sheet = claimSurface('permission');
       try {
         const state = await scheduler.requestPermission();
         set({ permission: state });
         enabled = state === 'granted';
       } catch {
         set({ permission: 'unknown' });
+      } finally {
+        sheet.release();
       }
     }
     const owner = getActiveDataOwner();

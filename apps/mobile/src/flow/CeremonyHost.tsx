@@ -9,8 +9,10 @@ import React, {
   useState,
 } from 'react';
 import {
+  AccessibilityInfo,
   AppState,
   BackHandler,
+  findNodeHandle,
   Platform,
   StyleSheet,
   View,
@@ -32,7 +34,11 @@ import {
   type ConsistencyCelebration,
 } from '../consistency/store';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
-import { identifyCeremony } from './ceremonyRequest';
+import {
+  identifyCeremony,
+  useSurfaceSlot,
+  type CeremonyTrigger,
+} from './ceremonyRequest';
 
 type Ceremony =
   | { kind: 'rank'; content: RankCelebration }
@@ -43,6 +49,7 @@ type CeremonyKind = Ceremony['kind'];
 type Request = Ceremony & {
   order: number;
   ownerKey: string | null;
+  trigger: CeremonyTrigger | null;
   complete: () => void;
 };
 
@@ -56,12 +63,26 @@ interface Presentation {
 const PresentationContext = createContext<{
   ceremony: Ceremony;
   dismiss: () => void;
+  announce: (message: string) => void;
 } | null>(null);
 const allKinds: readonly CeremonyKind[] = ['rank', 'streak', 'walkthrough'];
 const fallbackWalkthrough = {};
 
 export function useCeremonyPresentation() {
   return useContext(PresentationContext);
+}
+
+/** Announces `message` for the current presentation once: a stage that
+ * re-renders (relayout, re-measure) with the same message stays quiet; a
+ * new message or a new presentation is announced again. Outside a host the
+ * message is announced whenever it changes. */
+export function useCeremonyAnnouncement(message: string | null) {
+  const announce = useContext(PresentationContext)?.announce;
+  useEffect(() => {
+    if (message === null) return;
+    if (announce) announce(message);
+    else AccessibilityInfo.announceForAccessibility(message);
+  }, [announce, message]);
 }
 
 export function CeremonyHost(props: {
@@ -83,9 +104,12 @@ export function CeremonyHost(props: {
     AppState.currentState == null || AppState.currentState === 'active',
   );
   const [presentation, setPresentation] = useState<Presentation | null>(null);
+  const [completed, setCompleted] = useState(0);
   const active = useRef(presentation);
   const nextId = useRef(0);
   const mounted = useRef(false);
+  const focusTrigger = useRef<CeremonyTrigger | null>(null);
+  const announced = useRef<{ id: number; message: string } | null>(null);
 
   useLayoutEffect(() => {
     mounted.current = true;
@@ -153,13 +177,33 @@ export function CeremonyHost(props: {
     tourRequest,
   ]);
 
+  const matching = useMemo(
+    () =>
+      requests.find(
+        candidate =>
+          ownerKey === undefined ||
+          candidate.ownerKey === null ||
+          candidate.ownerKey === ownerKey,
+      ),
+    [ownerKey, requests],
+  );
+  const wanted =
+    presentation !== null ||
+    (enabled &&
+      foreground &&
+      ownerKey !== null &&
+      ownerKey !== SIGNED_OUT_DATA_OWNER &&
+      matching !== undefined);
+  const granted = useSurfaceSlot('ceremony', wanted, completed);
+
   const eligible = useCallback(
     (current: Presentation) =>
       enabled &&
+      granted &&
       current.ownerKey === ownerKey &&
       (!current.context || isDataOwnerContextCurrent(current.context)) &&
       requests.some(request => request.order === current.request.order),
-    [enabled, ownerKey, requests],
+    [enabled, granted, ownerKey, requests],
   );
   const eligibility = useRef(eligible);
   eligibility.current = eligible;
@@ -171,19 +215,13 @@ export function CeremonyHost(props: {
       if (!eligible(current)) update(null);
       return;
     }
-    if (!enabled || !foreground || ownerKey === null) return;
+    if (!enabled || !granted || !foreground || ownerKey === null) return;
     if (ownerKey === SIGNED_OUT_DATA_OWNER) return;
     if (ownerKey !== undefined && getActiveDataOwner() !== ownerKey) return;
-    const request = requests.find(
-      candidate =>
-        ownerKey === undefined ||
-        candidate.ownerKey === null ||
-        candidate.ownerKey === ownerKey,
-    );
-    if (!request) return;
+    if (!matching) return;
     update({
       id: ++nextId.current,
-      request,
+      request: matching,
       context: ownerKey === undefined ? null : captureDataOwnerContext(),
       ownerKey,
     });
@@ -191,9 +229,10 @@ export function CeremonyHost(props: {
     eligible,
     enabled,
     foreground,
+    granted,
+    matching,
     ownerKey,
     presentation,
-    requests,
     update,
     visible,
   ]);
@@ -209,9 +248,30 @@ export function CeremonyHost(props: {
       return false;
     }
     update(null);
+    focusTrigger.current = current.request.trigger;
+    setCompleted(count => count + 1);
     current.request.complete();
     return true;
   }, [id, update]);
+
+  useEffect(() => {
+    if (presentation !== null) return;
+    const trigger = focusTrigger.current;
+    focusTrigger.current = null;
+    if (trigger === null) return;
+    const handle = findNodeHandle(trigger);
+    if (handle != null) AccessibilityInfo.setAccessibilityFocus(handle);
+  }, [presentation]);
+
+  const announce = useCallback(
+    (message: string) => {
+      const last = announced.current;
+      if (last && last.id === id && last.message === message) return;
+      announced.current = { id, message };
+      AccessibilityInfo.announceForAccessibility(message);
+    },
+    [id],
+  );
 
   useEffect(() => {
     if (!visible) return;
@@ -235,7 +295,7 @@ export function CeremonyHost(props: {
       onAccessibilityEscape={dismiss}
     >
       <PresentationContext.Provider
-        value={{ ceremony: presentation.request, dismiss }}
+        value={{ ceremony: presentation.request, dismiss, announce }}
       >
         {props.children}
       </PresentationContext.Provider>

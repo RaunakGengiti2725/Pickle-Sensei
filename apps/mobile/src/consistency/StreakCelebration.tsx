@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import {
-  AccessibilityInfo,
   Pressable,
   ScrollView,
   StatusBar,
@@ -21,7 +20,11 @@ import { color, radius, space, type } from '../design/tokens';
 import { badgeArtFor, MilestoneBadge } from './MilestoneBadge';
 import { specialistTitle } from './engine';
 import { RARITY_LABEL, VOLUME_ACHIEVEMENTS } from './milestones';
-import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
+import {
+  CeremonyHost,
+  useCeremonyAnnouncement,
+  useCeremonyPresentation,
+} from '../flow/CeremonyHost';
 import type { ConsistencyCelebration } from './store';
 import { plural } from '../util/plural';
 
@@ -75,16 +78,14 @@ function CelebrationStage(props: {
       ? specialistTitle(celebration.detail)
       : celebration.title;
 
-  useEffect(() => {
-    AccessibilityInfo.announceForAccessibility(
-      celebration.kind === 'streak'
-        ? `Milestone unlocked: ${title}. ${celebration.value} ${plural(
-            celebration.value,
-            'day',
-          )} of training. Reward: ${celebration.reward}.`
-        : `Achievement unlocked: ${title}. ${celebration.reward}.`,
-    );
-  }, [celebration, title]);
+  useCeremonyAnnouncement(
+    celebration.kind === 'streak'
+      ? `Milestone unlocked: ${title}. ${celebration.value} ${plural(
+          celebration.value,
+          'day',
+        )} of training. Reward: ${celebration.reward}.`
+      : `Achievement unlocked: ${title}. ${celebration.reward}.`,
+  );
 
   const entryStyle = useAnimatedStyle(() => ({
     opacity: entry.value,

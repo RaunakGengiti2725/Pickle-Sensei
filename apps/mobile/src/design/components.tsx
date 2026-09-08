@@ -5,6 +5,7 @@ import {
   type AccessibilityState,
   Animated,
   Easing,
+  type HostInstance,
   Image,
   type Insets,
   Modal,
@@ -76,6 +77,7 @@ export function PressableScale(props: {
   accessibilityRole?: AccessibilityRole;
   testID?: string;
   hitSlop?: number | Insets;
+  ref?: React.Ref<HostInstance>;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();
@@ -99,6 +101,7 @@ export function PressableScale(props: {
       ]}
     >
       <Pressable
+        ref={props.ref}
         testID={props.testID}
         accessibilityRole={props.accessibilityRole ?? 'button'}
         accessibilityLabel={props.accessibilityLabel}

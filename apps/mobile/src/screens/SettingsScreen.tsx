@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  type HostInstance,
   Linking,
   Modal,
   Platform,
@@ -34,6 +35,7 @@ import { useAccessStore } from '../state/accessStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
+import { openCeremonyFrom } from '../flow/ceremonyRequest';
 import type { RootStackParams } from '../navigation/params';
 import { showBrandNotice } from '../design/BrandNotice';
 
@@ -77,6 +79,7 @@ function SettingRow(props: {
   /** Values that are already sentence-cased opt out of auto-capitalize. */
   preserveCase?: boolean;
   onPress?: () => void;
+  ref?: React.Ref<HostInstance>;
 }) {
   const content = (
     <>
@@ -105,6 +108,7 @@ function SettingRow(props: {
   if (props.onPress) {
     return (
       <PressableScale
+        ref={props.ref}
         accessibilityRole="button"
         accessibilityLabel={`${props.label}, ${props.value}`}
         onPress={props.onPress}
@@ -198,6 +202,7 @@ export function SettingsScreen() {
   const session = useAuthStore(s => s.session);
   const signOut = useAuthStore(s => s.signOut);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const walkthroughRow = useRef<HostInstance>(null);
   const access = useAccessStore(s => s.canonicalAccess);
   const refreshAccess = useAccessStore(s => s.refreshAccess);
   const consentAvailability = useConsentStore(s => s.availability);
@@ -471,13 +476,16 @@ export function SettingsScreen() {
               tour spotlights Home-screen elements, so land on Home first —
               the overlay's measurement retries cover the tab transition. */}
           <SettingRow
+            ref={walkthroughRow}
             icon="court"
             label="App walkthrough"
             value="Replay"
             preserveCase
             onPress={() => {
               navigation.navigate('Tabs', { screen: 'Home' });
-              useWalkthroughStore.getState().replay();
+              openCeremonyFrom(walkthroughRow.current, () =>
+                useWalkthroughStore.getState().replay(),
+              );
             }}
           />
           <SettingRow

@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import {
-  AccessibilityInfo,
   Pressable,
   ScrollView,
   StatusBar,
@@ -19,7 +18,11 @@ import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, space, type } from '../design/tokens';
-import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
+import {
+  CeremonyHost,
+  useCeremonyAnnouncement,
+  useCeremonyPresentation,
+} from '../flow/CeremonyHost';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
@@ -75,17 +78,15 @@ function CelebrationStage(props: {
     return () => cancelAnimation(entry);
   }, [entry, reduced]);
 
-  useEffect(() => {
-    AccessibilityInfo.announceForAccessibility(
-      placement
-        ? `You are on the board: ${
-            summary.tierLabel
-          }. Rating ${summary.rating.toFixed(2)} out of 10.`
-        : `Rank up: ${summary.tierLabel}. Rating ${summary.rating.toFixed(
-            2,
-          )} out of 10.`,
-    );
-  }, [placement, summary.rating, summary.tierLabel]);
+  useCeremonyAnnouncement(
+    placement
+      ? `You are on the board: ${
+          summary.tierLabel
+        }. Rating ${summary.rating.toFixed(2)} out of 10.`
+      : `Rank up: ${summary.tierLabel}. Rating ${summary.rating.toFixed(
+          2,
+        )} out of 10.`,
+  );
 
   const entryStyle = useAnimatedStyle(() => ({
     opacity: entry.value,
