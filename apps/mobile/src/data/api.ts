@@ -161,6 +161,25 @@ export function parseTrialSyncAcknowledgement(
  * (which the capture flow would render as an unbounded spinner). */
 export const API_REQUEST_TIMEOUT_MS = 20_000;
 
+/** The runtime follows 3xx silently; a response whose final URL is not the
+ * one requested came from wherever the redirect pointed (a captive portal,
+ * an intercepting proxy, a route the API does not have), never from the API
+ * origin. Whatever it says is a transport artifact, not a verdict. */
+function answeredByAnotherUrl(response: Response, requestUrl: string): boolean {
+  if (response.redirected) return true;
+  const finalUrl: unknown = response.url;
+  if (typeof finalUrl !== 'string' || finalUrl === '') return false;
+  const canonical = (value: string): string | null => {
+    try {
+      return new URL(value).href;
+    } catch {
+      return null;
+    }
+  };
+  const answeredBy = canonical(finalUrl);
+  return answeredBy !== null && answeredBy !== canonical(requestUrl);
+}
+
 async function request<T>(
   config: ApiConfigState,
   method: string,
@@ -187,7 +206,8 @@ async function request<T>(
     }, API_REQUEST_TIMEOUT_MS);
   });
   const fetchAndRead = async (): Promise<T> => {
-    const response = await fetch(`${config.baseUrl}${path}`, {
+    const requestUrl = `${config.baseUrl}${path}`;
+    const response = await fetch(requestUrl, {
       method,
       headers: {
         'content-type': 'application/json',
@@ -198,6 +218,13 @@ async function request<T>(
       signal: controller.signal,
     });
     if (timedOut) throw timeoutError();
+    if (answeredByAnotherUrl(response, requestUrl)) {
+      throw new ApiError(
+        502,
+        'network.redirected',
+        'The connection was redirected away from the rating service. Your work is saved on this device and will be retried.',
+      );
+    }
     const json = (await response.json().catch(() => null)) as
       (T & { error?: { code: string; message: string } }) | null;
     if (timedOut) throw timeoutError();
@@ -296,14 +323,41 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
       outcome: ReleasableAnalysisOutcome,
     ): Promise<void> {
       requireSignedIn();
-      await request(
+      const acknowledgement = await request<unknown>(
         config,
         'POST',
         `/v1/analysis-permits/${encodeURIComponent(permitId)}/finalize`,
         { outcome, ratingId: null },
       );
+      if (!acknowledgesRelease(acknowledgement, permitId, outcome)) {
+        throw new ApiError(
+          502,
+          'access.permit_release_unconfirmed',
+          'The rating service did not confirm the analysis permit was released. It stays reserved on this device until it does.',
+        );
+      }
     },
   };
+}
+
+/** The finalize route only ever answers 2xx with a JSON object, so a body
+ * that is empty or not JSON (a 204, a text/html page) was written by
+ * something that never reached the route and is no verdict on this permit.
+ * When the body names the permit it settled, it must be this one, no longer
+ * `reserved`, and not settled as some other outcome. */
+function acknowledgesRelease(
+  body: unknown,
+  permitId: string,
+  outcome: ReleasableAnalysisOutcome,
+): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  const permit = (body as { permit?: unknown }).permit;
+  if (permit === undefined) return true;
+  if (typeof permit !== 'object' || permit === null) return false;
+  const view = permit as { id?: unknown; status?: unknown; outcome?: unknown };
+  if (view.id !== undefined && view.id !== permitId) return false;
+  if (view.status === 'reserved') return false;
+  return typeof view.outcome !== 'string' || view.outcome === outcome;
 }
 
 /** The permit id gates inference and every durable write, and is the path
