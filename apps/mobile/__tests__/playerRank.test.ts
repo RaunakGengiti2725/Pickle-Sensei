@@ -202,6 +202,7 @@ describe('summaryFromServer', () => {
     const device = rankFromFacts([
       fact('forehand_drive', 8, '2026-08-01T10:00:00.000Z'),
     ]);
+    expect(typeof account.definitionVersion).toBe('string');
     expect(account.definitionVersion).toBe(SCORING_DEFINITION_VERSION);
     expect(device?.definitionVersion).toBe(account.definitionVersion);
   });
