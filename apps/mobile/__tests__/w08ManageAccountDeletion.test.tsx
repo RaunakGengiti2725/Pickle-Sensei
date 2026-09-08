@@ -318,6 +318,22 @@ async function armDeletion(renderer: TestRenderer.ReactTestRenderer) {
   });
 }
 
+/** Opens the sheet only: what it shows is decided by the journal. */
+async function openDeleteSheet(renderer: TestRenderer.ReactTestRenderer) {
+  await press(renderer, pressable(renderer, 'Delete account')[0]!);
+  await act(async () => {});
+}
+
+function expectDeleted(renderer: TestRenderer.ReactTestRenderer) {
+  expect(useAuthStore.getState().completeAccountDeletion).toHaveBeenCalledTimes(
+    1,
+  );
+  expect(mockShowBrandNotice).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Account deleted' }),
+  );
+  expect(allText(renderer)).not.toContain('Deletion status unknown');
+}
+
 function signIn(owner: string, bearer: string, provider: 'google' | 'apple') {
   setActiveDataOwner(owner);
   establishApiSession({
@@ -358,6 +374,41 @@ function expectUnknownOutcome(renderer: TestRenderer.ReactTestRenderer) {
     ),
   ).toHaveLength(0);
   expect(sheetButton(renderer, 'Close').props.disabled).toBe(false);
+}
+
+/** The server refused a new request because a confirmation for this account
+ * is already being carried out (409 account.deletion_in_progress): nothing
+ * new was sent, so the screen may neither claim nothing was deleted nor
+ * offer another request. */
+function expectAlreadyConfirmed(renderer: TestRenderer.ReactTestRenderer) {
+  const text = allText(renderer);
+  expect(text).toContain('Deletion in progress');
+  expect(text).not.toContain('Delete your account?');
+  expect(text).not.toContain('Deletion status unknown');
+  expect(text).not.toContain('Nothing was deleted');
+  expect(text).not.toContain('Nothing has been deleted');
+  expect(text).not.toContain('Keep my account');
+  expect(buttonLabels(renderer)).toEqual(['Close']);
+  expect(sheetButton(renderer, 'Close').props.disabled).toBe(false);
+}
+
+/** Edge API requestAccountDeletion while a confirmation is in progress. */
+function deletionInProgressError() {
+  return {
+    error: {
+      code: 'account.deletion_in_progress',
+      message:
+        'Account deletion is already confirmed. Check its status before starting again.',
+    },
+  };
+}
+
+/** Edge API once the bearer no longer authenticates (the account behind it
+ * is gone, or the session was fenced by the confirmation). */
+function sessionInvalidError() {
+  return {
+    error: { message: 'The session is no longer valid. Sign in again.' },
+  };
 }
 
 describe('W08-01 ManageAccount deletion on the durable operation', () => {
@@ -1228,6 +1279,221 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         expect(allText(renderer)).toContain('Nothing was deleted');
         expect(allText(renderer)).not.toContain('Deletion status unknown');
         expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+  });
+
+  describe('an attempt stays bound to the flow and outcome it started with', () => {
+    it('durable: a 409 deletion_in_progress on the request shows the in-progress deletion, never "nothing deleted" or a new request', async () => {
+      route({
+        'delete-request': () =>
+          reply('delete-request', deletionInProgressError(), 409),
+      });
+      const renderer = renderScreen();
+      await openReview(renderer);
+      await press(renderer, sheetButton(renderer, 'Continue to delete'));
+      expectAlreadyConfirmed(renderer);
+      expectNotDeleted(renderer);
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(journalRows()).toMatchObject([{ phase: 'request_unknown' }]);
+      expect(String(journalRows()[0]!.document)).toContain(
+        '"lastIssue":"in_progress"',
+      );
+      act(() => renderer.unmount());
+
+      // Re-entry surfaces the same refusal instead of the survey.
+      const reopened = renderScreen();
+      try {
+        await openDeleteSheet(reopened);
+        expect(allText(reopened)).not.toContain("What's making you leave?");
+        expectAlreadyConfirmed(reopened);
+        expect(calls('delete-request')).toHaveLength(1);
+        expectNotDeleted(reopened);
+      } finally {
+        act(() => reopened.unmount());
+      }
+    });
+
+    it('fallback: a 409 deletion_in_progress on the request shows the in-progress deletion, never "Delete your account?"', async () => {
+      mockDatabaseUnavailable = true;
+      route({
+        'delete-request': () =>
+          reply('delete-request', deletionInProgressError(), 409),
+      });
+      const renderer = renderScreen();
+      try {
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expectAlreadyConfirmed(renderer);
+        expectNotDeleted(renderer);
+        expect(calls('delete-request')).toHaveLength(1);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('fallback: a 401 on the retry of a lost confirmation stays unknown — the dead bearer proves nothing', async () => {
+      mockDatabaseUnavailable = true;
+      let confirmAttempts = 0;
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => {
+          confirmAttempts += 1;
+          return confirmAttempts === 1
+            ? Promise.reject(new TypeError('Network lost'))
+            : reply('delete-confirm', sessionInvalidError(), 401);
+        },
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expectUnknownOutcome(renderer);
+        expectNotDeleted(renderer);
+
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expect(calls('delete-confirm')).toHaveLength(2);
+        expectUnknownOutcome(renderer);
+        expect(allText(renderer)).toContain('does not confirm');
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('fallback: a 429 on the first confirmation stays unknown rather than re-arming the challenge', async () => {
+      mockDatabaseUnavailable = true;
+      let confirmAttempts = 0;
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => {
+          confirmAttempts += 1;
+          return confirmAttempts === 1
+            ? reply(
+                'delete-confirm',
+                { error: { message: 'Too many requests.' } },
+                429,
+              )
+            : reply('delete-confirm', completionPayload());
+        },
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expectUnknownOutcome(renderer);
+        expect(allText(renderer)).toContain('Too many requests.');
+        expectNotDeleted(renderer);
+
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expect(calls('delete-confirm')).toHaveLength(2);
+        expect(bodyOf(calls('delete-confirm')[1]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expectDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('fallback: a request minted while the database was down is confirmed exactly once through the same flow after the database recovers', async () => {
+      mockDatabaseUnavailable = true;
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        expect(allText(renderer)).toContain('Delete your account?');
+        mockDatabaseUnavailable = false;
+
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(bodyOf(calls('delete-confirm')[0]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expect(journalRows()).toEqual([]);
+        expectDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('durable: a request whose confirm step finds the database down still confirms exactly once through the journal', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        expect(journalRows()).toMatchObject([{ phase: 'ready' }]);
+        mockDatabaseUnavailable = true;
+
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(bodyOf(calls('delete-confirm')[0]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expectDeleted(renderer);
+        expect(journalRows()).toMatchObject([
+          { phase: 'receipt_verified', serverState: 'completed' },
+        ]);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('durable: a lost confirmation whose status window has lapsed re-enters as unknown, never as the survey', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expectUnknownOutcome(renderer);
+        expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
+      } finally {
+        act(() => renderer.unmount());
+      }
+
+      // The status window (24h) lapses before the owner comes back.
+      await advance(2 * DAY_MS);
+      const reopened = renderScreen();
+      try {
+        await openDeleteSheet(reopened);
+        expect(allText(reopened)).not.toContain("What's making you leave?");
+        expectUnknownOutcome(reopened);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expectNotDeleted(reopened);
+      } finally {
+        act(() => reopened.unmount());
+      }
+    });
+
+    it('the account-deleted notice names only the App Store', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expectDeleted(renderer);
+        expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
+        const notice = JSON.stringify(mockShowBrandNotice.mock.calls[0]);
+        expect(notice).toContain('App Store');
+        expect(notice).not.toMatch(/Google Play|Android/);
       } finally {
         act(() => renderer.unmount());
       }
