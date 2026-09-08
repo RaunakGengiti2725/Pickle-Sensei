@@ -1,0 +1,254 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W09-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "158f758a7816c64d6a1f369315aec8f617d281cff6c5e2c48611891e3fb5c8a9",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W09-03-r1",
+      "phase": "review",
+      "prompt_sha256": "774d1d4b9dbef4b74870481833c51d54146093dd5f61b0ba8d33bfd7ac57d9bd",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W09-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "037445a2b268038e8ace887d196b057ba6cc8dec86afdee684a926baa54d2ef5",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "candidate": {
+    "branch": "devin/pp/w09-03/impl-r1",
+    "head_sha": "cb2b66396d697232dba00157c18f7f2e2e7008a2",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W09-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c39a627-20e1-4db4-b95f-17ac7d7ad6f1/attacks-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8b341231-f880-47be-8934-196770d2851d/attacks-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0c5c3a77-d7ab-48a9-a6ce-96fd0c3d189a/ac1-candidate-suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6eee1d9a-615b-433c-9e58-5adc3fcdaad8/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a5843d4-bc9c-42a9-a673-449b58e414d2/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3d0db370-ff93-4a31-b285-e893c6dabc2f/ac4-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w09-03/attack-cb2b6639",
+        "attack_branch_sha": "8eda43e1ebe3d15c8d42c022788d817bfa67497d",
+        "attacked_sha": "cb2b66396d697232dba00157c18f7f2e2e7008a2",
+        "attacks_tried": 18,
+        "breaks": [
+          {
+            "expected": "A live subscriber keeps receiving presses regardless of later subscribers unsubscribing (subscriber list/stack, or restore the previous sink on unsubscribe); navigate called once with ['Tabs',{screen:'Performance'}].",
+            "observed": "VERIFIED on cb2b6639 (exit 1, 1 failed): RootNavigator #1 mounted+ready, RootNavigator #2 mounted then unmounted; a foreground PRESS delivered to #1's live onForegroundEvent handler results in navigationRef.navigate calls == [] — the press is parked in pressIntake.pending because subscribeToNotificationPresses replaced pressIntake.sink with #2's callback and #2's cleanup nulled it (service.ts `if (pressIntake.sink === navigate) pressIntake.sink = null`) without restoring #1. Also fails on BASE (different reason: no sink model). Reachability INFERRED: App.tsx renders exactly one RootNavigator, so two concurrent subscribers need an overlapping mount (React Offscreen/Activity, a second caller of the exported subscribeToNotificationPresses API, or a future feature); not reachable from today's App.tsx tree — hence P2, not P1.",
+            "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/w09EarlyNotificationTapAttack.test.tsx -t 'A9'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w09EarlyNotificationTapAttack.test.tsx",
+            "title": "Single process-wide press sink: a second subscriber's unsubscribe orphans a still-mounted older subscriber (presses silently re-queue instead of dispatching)"
+          },
+          {
+            "expected": "After mount completes, the queued Performance press is reflected in router state (focused tab 'Performance') exactly once even when React double-invokes effects.",
+            "observed": "VERIFIED on cb2b6639 (exit 1): with the REAL @react-navigation container inside <React.StrictMode>, a background-channel press queued before mount produces exactly one navigationRef.navigate('Tabs',{screen:'Performance'}) call (spy count 1) but getRootState() focused tab is 'Home' — the dispatch happened in the first effect invocation, StrictMode's simulated unmount/remount discards the navigator state update, and the intake queue is already empty so nothing replays. Root cause INFERRED (scratch reproduction outside the candidate: a single navigate() from a StrictMode-double-invoked mount effect is dropped by @react-navigation, while calling it in both invocations lands). Reachability VERIFIED-negative: `rg StrictMode apps/mobile/index.js apps/mobile/App.tsx apps/mobile/src` → no matches, StrictMode is not enabled in the shipping app; dev-only concern → P3. Same test also fails on BASE.",
+            "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/w09EarlyNotificationTapAttack.realNav.test.tsx -t 'R6'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w09EarlyNotificationTapAttack.realNav.test.tsx",
+            "title": "Under React.StrictMode the queued press is consumed by the first (simulated-discarded) mount effect and the resulting navigate() is dropped by the real container — press lost, not replayed"
+          }
+        ],
+        "package_id": "W09-03",
+        "summary": "ROLE adversary W09-03, attacked_sha cb2b66396d697232dba00157c18f7f2e2e7008a2 (branch devin/pp/w09-03/impl-r1), attack branch devin/pp/w09-03/attack-cb2b6639 @ 8eda43e1 pushed (no PR, no force-push, no main/ci/mac-*). Only two NEW test files added; no production code or candidate tests touched (git status: 2 untracked → committed).\n\nATTACKS (18 total, two suites):\n[mock harness, apps/mobile/__tests__/w09EarlyNotificationTapAttack.test.tsx, 12 tests] A1 same tap on foreground+background+initial-notification channels → exactly once (PASS); A2 same notification id re-targeted Performance/Home/Performance/Home before ready → ≤2 navigates, last=Home (PASS); A3 double tap after ready → idempotent (PASS); A4 burst of 10 alternating taps before any subscriber → bounded, deduped, in order, last wins (PASS); A5 enqueueBounded limit 0/1/negative boundaries (PASS); A6 tap while signed out replayed exactly once into next sign-in (PASS); A7 getInitialNotification resolving after unmount held for next mount, once (PASS); A8 reentrant foreground tap during ready-replay not lost/duplicated (PASS); A9 overlapping subscribers → FAIL (break #1); A10 malformed payloads (undefined notification, no id, null/string/array/object data, wrong casing, unknown screen, non-PRESS types) never navigate/throw (PASS); A11 rejected getInitialNotification does not poison later presses (PASS); A12 StrictMode double effects with mocked container → once (PASS).\n[real container, apps/mobile/__tests__/w09EarlyNotificationTapAttack.realNav.test.tsx, 6 tests, real NavigationContainer/native-stack/bottom-tabs, real navigationRef.isReady/getRootState] R1 cold-start queued press dispatched during mount, no \"hasn't been initialized\" console.error, focused tab Performance (PASS); R2 background-channel tap + same-id initial notification → 1 navigate (PASS); R3 warm-start foreground presses route immediately, Home wins (PASS); R4 unmount→tap→remount dispatches once on new container (PASS); R5 press after unmount held, not delivered into dead ref (PASS); R6 StrictMode on real container → FAIL (break #2, P3).\n\nEVIDENCE (all VERIFIED, run from apps/mobile on Linux):\n- Attacks on candidate: `npx jest --ci --verbose __tests__/w09EarlyNotificationTapAttack.test.tsx __tests__/w09EarlyNotificationTapAttack.realNav.test.tsx` → exit 1; 18 total / 16 passed / 2 failed (A9, R6) / 0 skipped. Log: apps/mobile/artifacts/w09-03-attack/attacks-candidate.log (gitignored) + attachment.\n- Same attack files copied onto BASE 5c1859a8 (git worktree /home/ubuntu/w09base): exit 1; 18 total / 5 passed / 13 failed → the attacks discriminate base from candidate (candidate fixes A1,A2,A4,A5,A6,A7,A8,A12,R1,R4,R5). Log: attacks-base.log.\n- AC1 on candidate+attack branch: `npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx __tests__/notification*.test.ts*` → exit 0; 3 suites, 43 passed / 0 failed / 0 skipped (ac1-candidate-suites.log). Candidate's own suite is intact (not modified).\n- AC3: `npx tsc --noEmit` → exit 0 (ac3-tsc.log). NOTE: first run failed with exit 2 because the checkout's node_modules lacked @sentry/react-native (env drift, not code); `npm ci` in apps/mobile (exit 0) fixed it; one TS18048 in my own realNav test was fixed before commit.\n- AC4 (root): `npx eslint <2 attack files>` → exit 0; `npx prettier --check <2 attack files>` → exit 0 (after prettier --write on the attack files only); `git diff --check` → exit 0.\n\nASSESSMENT: the objective (bounded, deduped queue; exactly-once after ready; cold + warm start) holds on every reachable path I could construct, including the real React Navigation container. Two confirmed breaks, neither on today's shipping tree: P2 A9 — subscribeToNotificationPresses is last-writer-wins on a single global sink, so any overlapping subscriber orphans the older live one (design fragility of the exported API; App.tsx mounts a single RootNavigator, so INFERRED not user-reachable now). P3 R6 — StrictMode double-invoked effects drop the consumed press (StrictMode VERIFIED absent from the app). Observations (not breaks): dedupe is by screen target, not notification id, so distinct reminders for the same tab collapse to one navigate (matches intent: only targets are retained); with only two targets the bound of 4 is unreachable so 'bounded' is trivially true; routedIds is used only to suppress the initial-notification replay, repeated PRESS events with the same id after ready navigate again (idempotent tab switch, A3). UNKNOWN: real iOS timing of the ready hand-off and the native foreground/background channel selection (Linux; Mac runner not used per rules). No secrets touched, no production systems touched, pnpm not run in apps/mobile."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w09-03/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx __tests__/notification*.test.ts*",
+            "executed": 43,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC1",
+            "note": "VERIFIED on HEAD cb2b6639: 3 suites (w09EarlyNotificationTap, notificationStore, notificationPlan), 43/43 passed. Full mobile suite `cd apps/mobile && npx jest --ci --silent` also run on HEAD: exit 0, 315 suites passed / 1 skipped (pre-existing, not a notification suite), 6070 passed / 1 skipped — artifacts/w09-03/full-mobile-jest.log.",
+            "passed": 43,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-03/ac2-head-run.log",
+            "command": "git worktree add /home/ubuntu/w09-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx <worktree>/apps/mobile/__tests__/ && (cd <worktree>/apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx)  # BASE; then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx",
+            "executed": 6,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC2",
+            "note": "VERIFIED. BASE run (only the final test file copied onto 5c1859a8, node_modules symlinked): exit 1, 6 executed / 0 passed / 6 failed / 0 skipped — artifacts/w09-03/ac2-base-run.log. First failure: cold-start initial press dropped (Expected navigate calls 1, received 0 after container ready); other failures: background-channel press never routed, no bounded queue helper exported. HEAD run: exit 0, 6/6 passed — artifacts/w09-03/ac2-head-run.log.",
+            "passed": 6,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-03/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC3",
+            "note": "VERIFIED on HEAD cb2b6639, empty output. The pre-provisioned environment lacked apps/mobile/node_modules/@sentry/react-native (21 TS errors in src/diagnostics/* unrelated to this package); `cd apps/mobile && npm ci` (exit 0, artifacts/w09-03/npm-ci.log) restored the lockfile-pinned install and tsc is clean.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-03/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/notifications/service.ts apps/mobile/src/navigation/RootNavigator.tsx apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx && npx prettier --check apps/mobile/src/notifications/service.ts apps/mobile/src/navigation/RootNavigator.tsx apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC4",
+            "note": "VERIFIED from repo root (root ESLint config) on HEAD: eslint no findings, prettier 'All matched files use Prettier code style!'. Also `pnpm format:check` exit 0 (artifacts/w09-03/format-check.log) and `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Defect on BASE_SHA: apps/mobile/src/navigation/RootNavigator.tsx:534 `if (!navigationRef.isReady()) return;` drops any press before the container is ready; apps/mobile/src/notifications/service.ts:159-177 navigates immediately for both the cold-start read and foreground PRESS with no queue/dedupe; service.ts:184-189 registerBackgroundNotificationHandler only acknowledges events, although react-native-notify-kit (README + ios/RNNotifee/NotifeeApiModule.mm) delivers taps made while the app is inactive/suspended on the background channel — and RootNavigator mounts late (App.tsx renders it only after splash+auth+profile), so cold-start taps arrive before anything subscribes. Fix: (1) service.ts — exported `MAX_QUEUED_NOTIFICATION_PRESSES` (4) and generic `enqueueBounded()` (dedupe: repeat moves to newest slot; oldest dropped past the limit); a process-wide `pressIntake` {sink, pending, routedIds}: the foreground listener, the background handler and the cold-start read all go through it; presses with no subscriber wait in `pending` and are flushed when `subscribeToNotificationPresses` is called; PRESS notification ids are remembered (bounded) so `getInitialNotification()` of the same tap is not dispatched a second time; unsubscribe clears the sink only if it is still ours. (2) RootNavigator.tsx — presses seen while `!isReady()` are held in a bounded deduped ref queue and replayed once by `NotificationPressReplay`, a null-rendering child placed after the root navigator inside the container: its effect runs in the commit that registers the navigator (isReady() turns true) and otherwise subscribes to the container's `ready` event via `navigationRef.current?.addListener('ready')`. The `onReady` prop was deliberately NOT used because __tests__/wf/be-mobile-security-secrets.test.ts pins the literal `<NavigationContainer ref={navigationRef} theme={theme}>` (linking-free container proof) and out-of-scope test mocks of createNavigationContainerRef expose only isReady/navigate.",
+        "attachment_urls": [],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — on the pre-provisioned VM (before `npm ci`) exit 2 with 21 errors, all 'Cannot find module @sentry/react-native' / downstream implicit-any in src/diagnostics/*; caused by a stale node_modules missing the lockfile-pinned dependency, not by source. Resolved by the sanctioned `cd apps/mobile && npm ci`; not a source-level base failure."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w09-03/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx",
+          "apps/mobile/src/navigation/RootNavigator.tsx",
+          "apps/mobile/src/notifications/service.ts"
+        ],
+        "head_sha": "cb2b66396d697232dba00157c18f7f2e2e7008a2",
+        "out_of_scope_files": [],
+        "package_id": "W09-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx"
+        ],
+        "residual_risks": [
+          "Readiness is observed by a child component's effect plus the container's 'ready' event rather than the documented onReady prop, because be-mobile-security-secrets.test.ts pins the exact <NavigationContainer ref={navigationRef} theme={theme}> literal and is outside write_paths; the ordering argument is INFERRED from @react-navigation/core source, not verified on a device (Mac verification forbidden for this package).",
+          "Dedupe between the background-channel PRESS and getInitialNotification() relies on the notification id (every app-scheduled reminder has a `ps.` id); an id-less notification would be treated as two presses if both channels deliver it.",
+          "The JSDoc on registerBackgroundNotificationHandler ('this only acknowledges the event') is now partially stale; it was left verbatim because the package forbids modifying existing comments — a new comment inside the function documents the PRESS routing.",
+          "The bounded queue keeps the newest MAX_QUEUED_NOTIFICATION_PRESSES=4 distinct targets (only 2 targets exist today, so the bound is effectively a safety cap)."
+        ],
+        "summary": "W09-03 implemented on branch devin/pp/w09-03/impl-r1 (3 commits on top of 5c1859a8: 83066b58 regression test only; 33760482 service queue/dedupe + RootNavigator hold/replay; cb2b6639 switch readiness detection to the container's ready event so the pinned security guard on the NavigationContainer JSX stays intact, with the matching test-mock change). Concrete gap on BASE_SHA: RootNavigator.tsx:534 drops presses before readiness; service.ts:159-177 has no queue/dedupe; service.ts:184-189 ignores background-channel taps (the iOS warm-start path), and RootNavigator mounts only after splash/auth/profile so cold-start taps arrive before any subscriber. All four acceptance criteria PASS with artifacts under artifacts/w09-03/ (gitignored, present in the checkout): AC1 43/43, AC2 base 6 failed → head 6 passed, AC3 tsc clean, AC4 eslint+prettier clean; pnpm format:check and git diff --check exit 0; full mobile Jest 6070 passed / 1 pre-existing skipped. No out-of-scope files; no PR opened; nothing pushed to main/ci/mac-*. UNKNOWN (not verifiable on Linux): the real-device timing of the ready-event hand-off; INFERRED from @react-navigation/core source (useFocusedListenersChildrenAdapter useEffect registers the focus listener that makes isReady() true; BaseNavigationContainer emits 'ready' in its effect after children's effects)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ed9bb20-0697-46aa-baa8-a56a2b89e903/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx __tests__/notification*.test.ts*",
+            "executed": 43,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC1",
+            "note": "VERIFIED on cb2b6639 after `cd apps/mobile && npm ci` (exit 0; the pre-provisioned node_modules lacked @sentry/react-native). 3 suites (w09EarlyNotificationTap, notificationStore, notificationPlan) 43/43. Also ran the full mobile suite `cd apps/mobile && npx jest --ci --silent`: exit 0, 315 suites passed / 1 skipped, 6070 passed / 1 skipped — the single skip is the pre-existing Mac-artifact-gated suite documented in docs/devin/TEST_MATRIX.md, not a notification suite (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc6d06b-151f-4590-8f7d-c5c149171df4/full-mobile-jest.log). Repo-local copies under artifacts/w09-03-review/.",
+            "passed": 43,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d4a52a5-3735-4910-a74c-e208a0e1d699/ac2-head-run.log",
+            "command": "git worktree add /home/ubuntu/w09-review-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && ln -s <candidate>/apps/mobile/node_modules <worktree>/apps/mobile/node_modules && cp apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx <worktree>/apps/mobile/__tests__/ && (cd <worktree>/apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx)  # BASE; then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w09EarlyNotificationTap.test.tsx",
+            "executed": 6,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC2",
+            "note": "VERIFIED. BASE 5c1859a8 with ONLY the new test file copied over (git status showed just the test + node_modules symlink untracked): exit 1, 6 executed / 0 passed / 6 failed / 0 skipped — failures are behavioural (e.g. cold start: 'Expected number of calls: 1, Received: 0' after the container becomes ready; no import/module errors) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/37a2e6d9-4cc8-4e3a-832e-357195eb1005/ac2-base-run.log. HEAD cb2b6639: exit 0, 6/6 passed. Proof holds.",
+            "passed": 6,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d530c9c9-9eab-4391-b537-412bd19dbbb0/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC3",
+            "note": "VERIFIED on cb2b6639 after `npm ci`; empty output, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/79b9ee9a-21df-4ec7-9c60-02d0cf9b76c7/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/notifications/service.ts apps/mobile/src/navigation/RootNavigator.tsx apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx && npx prettier --check apps/mobile/src/notifications/service.ts apps/mobile/src/navigation/RootNavigator.tsx apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-03-AC4",
+            "note": "VERIFIED from repo root (root ESLint config) on cb2b6639 for all three changed files: eslint no findings; prettier 'All matched files use Prettier code style!'.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ed9bb20-0697-46aa-baa8-a56a2b89e903/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37a2e6d9-4cc8-4e3a-832e-357195eb1005/ac2-base-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d4a52a5-3735-4910-a74c-e208a0e1d699/ac2-head-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d530c9c9-9eab-4391-b537-412bd19dbbb0/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/79b9ee9a-21df-4ec7-9c60-02d0cf9b76c7/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc6d06b-151f-4590-8f7d-c5c149171df4/full-mobile-jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/notifications/service.ts:190-198,222-224 — the PRESS/getInitialNotification dedupe is one-directional (an id seen as a PRESS suppresses the later initial read, not vice versa). VERIFIED in node_modules/react-native-notify-kit/ios/NotifeeCore/NotifeeCore+UNUserNotificationCenter.m that an iOS tap both stores _initialNotification and emits a PRESS event, so both channels do deliver the same tap; INFERRED that the PRESS reaches JS long before RootNavigator mounts (splash+auth), so the ordering the code relies on holds in practice, but it is not guaranteed by construction. A symmetric dedupe is not trivially safe because reminder ids (`ps.*`) repeat daily; a time-bounded dedupe would be the robust follow-up.",
+          "apps/mobile/src/navigation/RootNavigator.tsx:586 — uses `navigationRef.current?.addListener('ready', onReady)`; `navigationRef.addListener` (the createNavigationContainerRef proxy buffers listeners while `current` is null, @react-navigation/core 7.21.13 createNavigationContainerRef.tsx:79-94) would be strictly more robust. In practice `current` is set by useImperativeHandle (BaseNavigationContainer.tsx:234) before passive effects, so no functional gap is expected. INFERRED.",
+          "apps/mobile/src/notifications/service.ts:241-243 — the pre-existing JSDoc on registerBackgroundNotificationHandler ('this only acknowledges the event') is now stale since the handler routes PRESS events; left untouched per the no-comment-edit rule. Doc-only follow-up.",
+          "apps/mobile/src/navigation/RootNavigator.tsx:535-543 `holdPress` re-implements `enqueueBounded` from service.ts with its own MAX_PRESSES_AWAITING_READY constant; minor duplication, behaviour identical.",
+          "Real-device timing of the ready-event hand-off is UNKNOWN on Linux (Mac verification is forbidden for this package); the ordering argument (navigator's useFocusedListenersChildrenAdapter useEffect registers the focus listener before the sibling NotificationPressReplay effect; BaseNavigationContainer emits 'ready' in its own effect after children) is INFERRED from @react-navigation/core 7.21.13 source."
+        ],
+        "package_id": "W09-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "cb2b66396d697232dba00157c18f7f2e2e7008a2",
+        "scope_violation": false,
+        "summary": "APPROVE W09-03 candidate devin/pp/w09-03/impl-r1 @ cb2b66396d697232dba00157c18f7f2e2e7008a2 (3 commits on 5c1859a8). SCOPE (VERIFIED): `git diff --stat` shows exactly 3 files — apps/mobile/__tests__/w09EarlyNotificationTap.test.tsx (+352), apps/mobile/src/navigation/RootNavigator.tsx (+57/-), apps/mobile/src/notifications/service.ts (+82/-) — all under write_paths; the navigation file is inside the held serial group mobile-navigation; no out-of-scope files; scope_violation=false. SHIPPED BEHAVIOUR (VERIFIED by reading the diff + index.js): the queue is wired into live paths, not a dead module — RootNavigator.useNotificationPressRouting holds presses seen while !isReady() in a bounded deduped ref and NotificationPressReplay (rendered inside the NavigationContainer after the Stack.Navigator) replays them once when isReady() is already true in its effect or on the container's 'ready' event; service.ts routes the foreground PRESS listener, the background handler registered from index.js (registerBackgroundNotificationHandler) and the cold-start getInitialNotification read through one process-wide pressIntake with a bounded pending queue flushed on subscribe and id-based dedupe against the initial-notification re-read. Confirmed in node_modules/react-native-notify-kit iOS sources that taps while the app is not Active go to the background channel (NotifeeApiModule.mm:136-143) and that a tap both stores the initial notification and emits PRESS (NotifeeCore+UNUserNotificationCenter.m) — so base's background handler that ignored PRESS and the `if (!navigationRef.isReady()) return;` drop were real defects. HARD RULES (VERIFIED via diff grep): no eslint-disable/ts-ignore/any/|| true/passWithNoTests/.skip/.only/timeout changes added; no existing test edited; no existing comment line removed or modified (only new comments added); no user-facing copy; no migrations, grants, RLS, session, billing or diagnostics code touched; the be-mobile-security-secrets pin `<NavigationContainer ref={navigationRef} theme={theme}>` is intact. ACCEPTANCE (all re-executed by me): AC1 exit 0, 43/43/0 skipped; AC2 base 5c1859a8 with only the new test copied → exit 1, 6 failed (behavioural failures, no module errors), HEAD → exit 0, 6/6; AC3 tsc exit 0 empty; AC4 eslint+prettier exit 0. Bonus: full mobile jest on HEAD exit 0, 6070 passed / 1 pre-existing documented Mac-artifact skip. Environment note: apps/mobile/node_modules on the pre-provisioned VM lacked @sentry/react-native; `npm ci` (sanctioned) fixed it. Non-blocking items listed separately (one-directional PRESS/initial dedupe ordering assumption, `navigationRef.current?.addListener` vs the ref proxy's buffered `addListener`, stale pre-existing JSDoc, small helper duplication, device timing UNKNOWN on Linux).",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-5"
+}

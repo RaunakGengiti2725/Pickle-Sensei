@@ -366,6 +366,70 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(rec["agent_counts"]["completed"], 2)
         self.assertEqual(rec["rounds"][0]["decision"]["reasons"], ["implementer session failed"])
 
+    def test_competing_lanes_lowest_accepted_lane_wins_and_findings_merge(self):
+        pid = self.pid
+        lane2_impl = good_impl(self.pkg)
+        lane2_impl["branch"] = f"devin/pp/{pid.lower()}/impl-r1-c2"
+        lane2_impl["head_sha"] = "b" * 40
+        lane2_rev = good_review(self.pkg)
+        lane2_rev["reviewed_sha"] = "b" * 40
+        lane2_adv = good_adv(self.pkg)
+        lane2_adv["attacked_sha"] = "b" * 40
+        adv1 = good_adv(self.pkg)
+        adv1["breaks"] = [{"severity": "P0", "title": "lane1 charged a partial", "repro": "npx jest x"}]
+        rt = FakeRuntime(
+            {
+                f"implement-{pid}-r1": good_impl(self.pkg),
+                f"review-{pid}-r1": good_review(self.pkg),
+                f"adversary-{pid}-r1": adv1,
+                f"implement-{pid}-r1-c2": lane2_impl,
+                f"review-{pid}-r1-c2": lane2_rev,
+                f"adversary-{pid}-r1-c2": lane2_adv,
+            }
+        )
+        rec = run(rt, pid, competing=2)
+        self.assertEqual(rec["status"], "ACCEPTED")
+        self.assertEqual(rec["candidate"], {"branch": lane2_impl["branch"], "head_sha": "b" * 40, "round": 1, "lane": 2})
+        self.assertEqual(rec["rounds"][0]["winning_lane"], 2)
+        self.assertEqual(len(rec["rounds"][0]["lanes"]), 2)
+        self.assertEqual(rec["agent_counts"], {"requested": 6, "launched": 6, "completed": 6, "failed": 0})
+        self.assertEqual(sorted(rt.calls)[:2], [f"adversary-{pid}-r1", f"adversary-{pid}-r1-c2"])
+        # Lane 2's implementer prompt names its own branch and the competing rule.
+        self.assertIn("impl-r1-c2", pl.implement_prompt(self.pkg, BASE, "x", 1, None, lane=2))
+        self.assertIn("COMPETING LANE 2", pl.implement_prompt(self.pkg, BASE, "x", 1, None, lane=2))
+        self.assertNotIn("COMPETING LANE", pl.implement_prompt(self.pkg, BASE, "x", 1, None, lane=1))
+
+        # Both lanes rejected: the next round's prior carries every lane's findings; a single blocked lane is not BLOCKED_EXTERNAL.
+        both_bad_adv = good_adv(self.pkg)
+        both_bad_adv["breaks"] = [{"severity": "P1", "title": "lane2 break", "repro": "deno test y"}]
+        both_bad_adv["attacked_sha"] = "b" * 40
+        blocked_impl = good_impl(self.pkg)
+        blocked_impl["blocked"] = True
+        blocked_impl["blocked_reason"] = "needs staging"
+        blocked_impl["branch"] = f"devin/pp/{pid.lower()}/impl-r2"
+        rt2 = FakeRuntime(
+            {
+                f"implement-{pid}-r1": good_impl(self.pkg),
+                f"review-{pid}-r1": good_review(self.pkg),
+                f"adversary-{pid}-r1": adv1,
+                f"implement-{pid}-r1-c2": lane2_impl,
+                f"review-{pid}-r1-c2": lane2_rev,
+                f"adversary-{pid}-r1-c2": both_bad_adv,
+                f"implement-{pid}-r2": blocked_impl,
+                f"implement-{pid}-r2-c2": FakeRuntime.Err,
+            }
+        )
+        rec2 = run(rt2, pid, competing=2)
+        self.assertEqual(rec2["status"], "BLOCKED_EXTERNAL")
+        r2_prompt = [c for c in rt2.calls if c == f"implement-{pid}-r2"]
+        self.assertEqual(len(r2_prompt), 1)
+        prior = pl.merge_lane_priors(rec2["rounds"][0]["lanes"])
+        self.assertEqual(prior["head_sha"], HEAD)
+        self.assertEqual(prior["findings"]["competing_lanes"][0]["lane"], 2)
+        self.assertEqual(prior["findings"]["competing_lanes"][0]["findings"]["adversary_breaks"][0]["title"], "lane2 break")
+        with self.assertRaises(ValueError):
+            run(FakeRuntime({}), pid, competing=0)
+
     def test_external_and_docs_planes_not_launchable(self):
         rt = FakeRuntime({})
         for pid in ("EXT-DEVICE", "W12-01"):
@@ -455,6 +519,18 @@ class OrchestrationTests(unittest.TestCase):
         prior, start = pl.prior_from_record({"rounds": [{"round": 1, "implement": None, "decision": {"reasons": ["implementer session failed"]}}]})
         self.assertIsNone(prior)
         self.assertEqual(start, 2)
+        # A later round whose implementer stopped as blocked carries no findings: the evaluated round before it does.
+        prior, start = pl.prior_from_record(
+            {
+                "rounds": [
+                    {"round": 3, "implement": {"branch": "b3", "head_sha": HEAD}, "adversary": {"breaks": [{"severity": "P0", "title": "x"}]}, "decision": {"reasons": ["adversarial P0/P1 breaks: 1"]}},
+                    {"round": 4, "implement": {"branch": "b4", "head_sha": "c" * 40, "blocked": True}, "decision": {"reasons": ["blocked: deferred"]}},
+                ]
+            }
+        )
+        self.assertEqual(start, 5)
+        self.assertEqual(prior["branch"], "b3")
+        self.assertEqual(prior["findings"]["adversary_breaks"][0]["title"], "x")
 
     def test_wave_id_scopes_the_record_directory(self):
         rt = FakeRuntime({f"implement-{self.pid}-r1": good_impl(self.pkg), f"review-{self.pid}-r1": good_review(self.pkg), f"adversary-{self.pid}-r1": good_adv(self.pkg)})

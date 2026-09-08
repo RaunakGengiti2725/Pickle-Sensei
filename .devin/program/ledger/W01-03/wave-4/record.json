@@ -6,6 +6,27 @@
       "prompt_sha256": "984db03a4b825ba2ed54a862d53e8d57a5ffdeaced85428ec4d68cf3c1495933",
       "role": "implementer",
       "status": "completed"
+    },
+    {
+      "label": "review-W01-03-r1",
+      "phase": "review",
+      "prompt_sha256": "dadc4db55e6e741bc0ab14fe51e5ad8cbce4b4d2ddeb4a7e6f6219e33b85e4a2",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "b65d2559ad7bf90d75264c92df8b06bedf72c6b8b4dab5d79665ef8d2d5bf138",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W01-03-r2",
+      "phase": "implement",
+      "prompt_sha256": "d6e9194a2f13155e19e30ae5c90d8514a01777bb0bfd3dc23def56e03bd6b745",
+      "role": "implementer",
+      "status": "completed"
     }
   ],
   "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
@@ -17,6 +38,66 @@
   "requeued_from": null,
   "rounds": [
     {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2331d72-9fc6-44e8-891b-f373afd25984/ac2_edge_full_with_attacks_FULL_plain.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f04f519f-f21f-4439-a8a5-e5459946f557/cascade_order_attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/13c39da2-8151-4a9c-8a77-e7bb93283812/attack_on_head_ac7b4956.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/281d0f9c-0619-4adc-a31b-47538317fd8d/EVIDENCE.md"
+        ],
+        "attack_branch": "devin/pp/w01-03/attack-ac7b4956",
+        "attack_branch_sha": "3de7b2803cc4fc4a662d20a88dd5cbca89fde42e",
+        "attacked_sha": "ac7b495661d8c3b5f2cff6923457dd4857937cd9",
+        "attacks_tried": 16,
+        "breaks": [
+          {
+            "expected": "Account deletion (auth.users → profiles → shots/receipts) succeeds regardless of RI trigger firing order; the receipt guard must tolerate the parent-owner cascade (e.g. allow DELETE when the owning profile/user is gone or is being deleted, or drop the direct user_id FK so the receipt only cascades through the shot).",
+            "observed": "VERIFIED: with the cluster oid counter past 100000 before migration 20260908110000 is applied, `delete from auth.users where id = <user with one settled shot>` raises SQLSTATE 23514 'settlement_receipts: a receipt outlives every path but the shot cascade' (RI triggers on public.profiles fire RI_ConstraintTrigger_a_101193→settlement_receipts BEFORE RI_ConstraintTrigger_a_16499→shots). Control run (same schema, same data, oid counter not advanced): exit 0, shot + receipt cascade. Production oid state is UNKNOWN; the schema's correctness depends on it (also flips on any dump/restore/PITR that reassigns oids). Logs: supabase/tests/attack_w01_03/cascade_order_attack.log, cascade_order_control.log; https://la-hacks-rttothemoon.devinenterprise.com/attachments/f04f519f-f21f-4439-a8a5-e5459946f557/cascade_order_attack.log",
+            "repro": "git checkout ac7b495661d8c3b5f2cff6923457dd4857937cd9 && ./supabase/tests/attack_w01_03/run_cascade_order_attack.sh   (psql exit 3; control without oid advance: ATTACK_BURN_OIDS=0 ATTACK_LOG=supabase/tests/attack_w01_03/cascade_order_control.log ./supabase/tests/attack_w01_03/run_cascade_order_attack.sh → exit 0)",
+            "severity": "P0",
+            "test_file": "supabase/tests/attack_w01_03/run_cascade_order_attack.sh (+ fixture_settled_shot.sql, cascade_order_attack.sql)",
+            "title": "Account deletion fails (23514) for any user with a settled scored shot when the settlement_receipts→profiles RI cascade fires before shots→profiles — PostgreSQL orders same-event RI triggers by trigger NAME (RI_ConstraintTrigger_a_<oid>, text sort), so the candidate's append-only guard `settlement_receipts_guard_lifecycle` raises because the shot still exists"
+          },
+          {
+            "expected": "One definition of 'identical settlement' across the edge replay path, the RPC pre-lock/under-lock path and the unique_violation path: an identical binding replays as 'accepted' (original receipt stands) regardless of which lineage the retry was admitted under, or the edge must compare policy too and the RPC must return the original receipt rather than a mismatch.",
+            "observed": "VERIFIED: settle shot S with receipt R(binding B, policy A) → 'accepted'; present the same payload/binding B with policy lineage B (what a second isolate admits after a rotation) → 'shot.receipt_mismatch' (permanent-class client verdict; copy 'This analysis was already settled with different details'), shots=1, receipts=1, ledger=1, spare permit untouched. Edge replay (attack 7) accepts the same retry with the original receipt. Reachable when two identical retries race to the RPC before any receipt is stored (no receipt for the edge lookup to short-circuit on) across a policy rotation; self-heals on the next outbox drain via the stored receipt, one attempt of the 8-attempt budget burnt, no second charge. Log: supabase/tests/attack_w01_03/logs/attack_on_head_ac7b4956.log",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json --filter 'replay after a policy rotation (RPC path)' attack_w01_03_settlement.test.ts",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts (ATTACK 9)",
+            "title": "apply_synced_shot under-lock replay rejects an IDENTICAL binding presented under a rotated release-policy lineage as shot.receipt_mismatch, contradicting the edge's own replay definition (binding-only, index.ts syncShots) and the RPC's unique_violation branch (binding-only)"
+          },
+          {
+            "expected": "Duplicate ids in one batch are rejected as an invalid payload (400) or deduplicated server-side so acceptedIds/receipts carry each id once and the RPC is called once per id.",
+            "observed": "VERIFIED (harness): batch [scored, structuredClone(scored)] → 200 {acceptedIds:[id,id], rejected:[], receipts:[{id..},{id..}]}, apply_synced_shot invoked 2× for the one id (second call would be an under-lock replay in the real RPC → no double charge, INFERRED). The shipping outbox dedupes by shot id before sending, so only a malformed client reaches this; for such a client the acknowledgement is unparseable and every row in the batch is recorded as failed although the shot was settled. Log: supabase/tests/attack_w01_03/logs/attack_on_head_ac7b4956.log",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'duplicate identities' attack_w01_03_settlement.test.ts",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts (ATTACK 3)",
+            "title": "POST /v1/sync/shots with the same shot id twice in one batch answers acceptedIds with the id twice (and two receipts) and calls the chargeable RPC twice — a body the mobile decoder (apps/mobile/src/data/api.ts parseShotSyncAcknowledgement) rejects as invalid"
+          }
+        ],
+        "package_id": "W01-03",
+        "summary": "Adversarial pass on W01-03 candidate ac7b4956 (branch devin/pp/w01-03/impl-r1), disposable postgres:16 only, production untouched, no production code or candidate tests modified, no PR, no force-push. 16 attacks: 15 Deno tests in supabase/functions/api/__wf__/attack_w01_03_settlement.test.ts (edge handler via routesHarness + live-PG RPC) + 1 SQL cascade-order attack (supabase/tests/attack_w01_03/run_cascade_order_attack.sh). Categories: network failure at the receipt read (500, 429+Retry-After) and at the RPC (5xx, null/unexpected verdict); duplicate identities in one batch; claim boundary values (128-char ids, generation 1/999999999/1e9/1.0/'3', floats, -0, unicode, wrong containers); corrupt persisted receipt state (non-canonical bytes, foreign schema, foreign owner); partial/abstention replay + abstention→scored upgrade; replay across a policy rotation (edge and RPC halves); rejection copy vs APP_STORE_SUBMISSION rules; interleaved account switch on one device; legacy pre-receipt shot rows; receipt byte/shape limits (65536 vs 65537 bytes, uppercase digest, 129-char ids, ticket without generation, policy without sha256); free-rating conservation at the free limit with released/foreign/missing permits; unauthorised roles (anon/authenticated/service, API gate, trigger functions, append-only guard); crash-window identical retries across two rotations; account deletion vs receipt lifecycle guard under RI-trigger ordering. RESULTS (VERIFIED): attack suite on candidate `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w01_03_settlement.test.ts` → exit 1, 13 passed / 2 failed / 0 ignored (logs/attack_on_head_ac7b4956.log); cascade attack → psql exit 3 ATTACK CONFIRMED (cascade_order_attack.log), control exit 0 (cascade_order_control.log). Confirmed breaks: P0 cascade-order account-deletion failure; P2 RPC-vs-edge disagreement on 'identical' replay under a rotated policy lineage (shot.receipt_mismatch for a charged identical shot; self-heals next drain); P3 duplicate ids in one batch → duplicated acceptedIds/receipts the mobile decoder rejects. 13 attacks did NOT break the candidate (replay/mismatch ordering before permit/ledger/sequence, conservation, roles, boundaries, corrupt-state handling, copy all held). Candidate acceptance re-run on ac7b4956 (VERIFIED): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (logs/ac1_check.log); AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=… deno task test` with the attack file present → exit 1, 819 passed (31 steps) / 2 failed / 0 ignored = 821 (candidate's 806 + 15 attack tests; the only 2 failures are the attack tests above) (logs/ac2_edge_full_with_attacks.log + full log attachment); AC3 `./supabase/tests/run_rls_tests.sh` exit 0, 4 histories × 3 matrices = 12 'ALL CASES PASSED' (logs/ac3_rls.log); AC4-style regression of the attack file on BASE d8e5db3e with a base-schema PG → exit 1, 1 passed / 14 failed (the 1 pass = RPC-transport-5xx attack, pre-existing behaviour) vs 13/15 on HEAD (logs/ac4_attack_on_base.log). Attack file: deno check exit 0, prettier --check clean, git diff --check clean. All evidence committed under supabase/tests/attack_w01_03/ (EVIDENCE.md + logs/) on devin/pp/w01-03/attack-ac7b4956 @ 3de7b2803cc4fc4a662d20a88dd5cbca89fde42e."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
       "implement": {
         "acceptance_results": [
           {
@@ -105,7 +186,181 @@
         ],
         "summary": "Defect on BASE_SHA d8e5db3e (VERIFIED by the failing regression test, INFERRED from code): the scored settlement's idempotent replay was keyed on (owner, shot id) only — supabase/functions/api/index.ts:2065-2104 (`replayIds` from `select id from shots where user_id = uid and id in (...)` → `acceptedIds.push`) and the RPC's pre-lock/under-lock `exists(select 1 from public.shots where id = ... and user_id = ...)` replay in supabase/migrations/20260908100000_permit_partial_terminal_outcome.sql. No receipt was persisted or returned; device/grant/ticket/operation claims were not parsed (parseSyncShot ignored them, index.ts:1790-1950); the payload digest from canonicalDigest.ts and the verified release-policy lineage (releasePolicy.ts VerifiedReleasePolicy) were not bound to the settlement. Consequently a different payload/permit/device replayed under the same shot id was 'accepted' as a replay, and nothing let a client or auditor prove which settlement a shot id denotes.\n\nFix (all inside write_paths + one justified test-harness edit): (1) supabase/migrations/20260908110000_settlement_receipt_lineage.sql — new `public.settlement_receipts` (shot_id PK→shots cascade, user_id→profiles cascade, denormalized binding columns with shape CHECKs, receipt jsonb + canonical bytes + sha256; RLS on, owner SELECT through the api_private.is_api_request() restrictive gate only, no client INSERT/UPDATE/DELETE, append-only trigger for every role) and `apply_synced_shot(jsonb)` recreated to require a well-formed `shot.settlementReceipt` {canonical, sha256} whose bytes hash to the digest and whose binding names this shot/owner/permit/resultKind (else 'shot.receipt_invalid'), require policy lineage for scored, decide replay on binding + policy lineage both BEFORE the per-user advisory lock and again under it — identical → 'accepted' (original stands, nothing moves), any difference → 'shot.receipt_mismatch' — before the permit, free-rating backstop, ledger or shot are touched; existing permit lifecycle, lifetime_scored_count() under access_lock_key(), SQLSTATE mapping and generic errors preserved. (2) supabase/functions/api/index.ts — `parseSettlementClaims` (installationKeyId / grant{grantId, grantJwsSha256} / ticket{allocationId, generation, ticketId} / operationId; omitted ⇒ all null, present ⇒ exact shape or per-shot 'shot.invalid_payload'), `SettlementBinding` with `payloadSha256 = digestCanonicalOfflineJson(shot)` (canonicalDigest.ts, unchanged), `settlementPolicyLineage(VerifiedReleasePolicy)` (version, policy sha256, validFrom/Until, mechanics+benchmark lineage, approval timestamps/withdrawal/deny flag), receipt = canonical bytes + sha256; syncShots reads the owner's stored receipts in one batched owner-scoped SELECT beside the shots SELECT, returns the ORIGINAL stored receipt for an identical binding (no authority read, no RPC), rejects a mismatched binding as 'shot.receipt_mismatch' before the authority read and the RPC, treats a stored receipt that fails byte/digest/canonical verification as retryable 'shot.write_failed' via the existing operator sink (never fabricated into a replay), and returns `receipts: [{id, canonical, sha256}]` in the acknowledgement only when a settlement carries one (the mobile decoder tolerates the extra key; the existing exact-shape test for an all-rejected batch is untouched). (3) supabase/tests/security_regression.sql — section T (T1–T7) + K24 inventory row. (4) supabase/functions/api/__wf__/xc_concurrency_harness.ts — models the new table (out_of_scope_files).\n\nEvidence: AC1 exit 0; AC2 806 passed/0 failed/0 ignored with disposable PG; AC3 all 4 histories pass (negative control proves section T runs); AC4 base 0/10 → head 10/10. Also VERIFIED: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/1147b0b5-6936-419a-9ad9-bad817ddf2c5/format_check.log), `git diff --check` exit 0, `deno check` of the harness + new test exit 0. Commits: e0cedb6d test(edge) regression (separate, first), ac7b4956 implementation; pushed to origin devin/pp/w01-03/impl-r1 (no force, no PR, no deploy, production untouched)."
       },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/603107a9-c5f3-4366-b3ca-d9f702730382/ac1_deno_check.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei && npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC1",
+            "note": "VERIFIED by reviewer on HEAD ac7b4956. Output `Check file:///.../supabase/functions/api/index.ts`, EXIT=0. Local copy artifacts/review-w01-03/ac1_deno_check.log (artifacts/ is git-ignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e1e9e02-b15e-4e06-a8bd-5e97d6876b86/ac2_edge_suite.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55533/postgres deno task test",
+            "executed": 806,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC2",
+            "note": "VERIFIED by reviewer on HEAD ac7b4956 against a reviewer-built disposable postgres:16 container (port 55533, shim_auth + every migration incl. 20260908110000; never a hosted project). Final line `ok | 806 passed (31 steps) | 0 failed (2m3s)`, EXIT=0. No `... ignored` test count in the summary (the 7 grep hits for 'ignored' are test-name text such as 'body ignored', not ignored tests).",
+            "passed": 806,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1ce9f3e-267e-432c-9066-419ce7e92703/ac3_rls_matrix.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei && ./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC3",
+            "note": "VERIFIED by reviewer on HEAD ac7b4956 (Docker postgres:16). executed/passed = the 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907); each printed `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, `Analysis release policy authority: PASS`; runner EXIT=0. Section T (T1–T7) is present in the executed security_regression.sql. NOTE: T7's account-deletion cascade assertion passes here only because of RI-trigger name ordering — see blocking issue 1.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed283540-bd6f-4d58-8b8b-4a80693ee432/ac4_head_run.log",
+            "command": "git worktree add /home/ubuntu/review-w01-03-base d8e5db3eb346b651e4ce04cc997178abcbed56fe; cp supabase/functions/api/__wf__/settlement_receipt_binding.test.ts /home/ubuntu/review-w01-03-base/supabase/functions/api/__wf__/; (BASE) cd /home/ubuntu/review-w01-03-base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55534/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts; (HEAD) cd /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55533/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC4",
+            "note": "PROOF outcome 0 — VERIFIED by reviewer. BASE run (worktree at d8e5db3e with ONLY settlement_receipt_binding.test.ts copied over; separate disposable PG on port 55534 built from BASE migrations): exit 1, `FAILED | 0 passed | 10 failed` — all 7 Edge route tests and all 3 live-PG tests fail; base log https://la-hacks-rttothemoon.devinenterprise.com/attachments/e7c5c2e8-6a17-4aba-ba9e-d74d5e99d518/ac4_base_run.log . HEAD run (ac7b4956 re-confirmed via git rev-parse immediately before): exit 0, `ok | 10 passed | 0 failed`. XC_PG_URL was set for both runs so none of the 3 PG tests were ignored. The tests exercise the real route harness + real canonicalDigest and prove: identical replay → original stored receipt returned, no RPC/no authority read; mutated payload/permit/resultKind/device/grant/ticket/operation → shot.receipt_mismatch before the RPC (no credit consumed).",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/603107a9-c5f3-4366-b3ca-d9f702730382/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e1e9e02-b15e-4e06-a8bd-5e97d6876b86/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1ce9f3e-267e-432c-9066-419ce7e92703/ac3_rls_matrix.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e7c5c2e8-6a17-4aba-ba9e-d74d5e99d518/ac4_base_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed283540-bd6f-4d58-8b8b-4a80693ee432/ac4_head_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a405b1e-bcc9-4562-bca1-1f3f5f980fd0/probe_cascade_order.sql",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/87ad9402-b20c-4d17-9713-0ba3a3725b17/probe_cascade_order.log"
+        ],
+        "blocking_issues": [
+          "supabase/migrations/20260908110000_settlement_receipt_lineage.sql:128-152 (guard_settlement_receipt_lifecycle + trigger settlement_receipts_lifecycle BEFORE UPDATE OR DELETE): the append-only guard allows a DELETE only when `not exists (select 1 from public.shots where id = old.shot_id)`. settlement_receipts has TWO cascade parents (shot_id → shots ON DELETE CASCADE, user_id → profiles ON DELETE CASCADE) and shots.user_id also cascades from profiles. When a profile is deleted (auth.users → profiles account-deletion cascade), PostgreSQL fires the two RI cascade triggers on profiles in trigger-NAME order (`RI_ConstraintTrigger_a_<oid>`), which is not a guaranteed ordering. If the settlement_receipts_user_id_fkey cascade fires BEFORE the shots_user_id_fkey cascade, the receipt is deleted while its shot still exists and the guard RAISEs `settlement_receipts: a receipt outlives every path but the shot cascade` — account deletion fails for every user who owns a receipted shot. REPRODUCED on the candidate DB (reviewer probe, rolled back): artifacts/review-w01-03/probe_cascade_order.sql — creates a user/profile/permit/shot/receipt, recreates shots_user_id_fkey so its RI trigger name sorts after the receipts one, then `delete from auth.users where id = ...` → `ERROR: settlement_receipts: a receipt outlives every path but the shot cascade / CONTEXT: guard_settlement_receipt_lifecycle() line 9 / SQL statement DELETE FROM ONLY public.settlement_receipts WHERE $1 = user_id` (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/87ad9402-b20c-4d17-9713-0ba3a3725b17/probe_cascade_order.log , probe: https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a405b1e-bcc9-4562-bca1-1f3f5f980fd0/probe_cascade_order.sql ). T7 and the W08 matrix pass in the test histories only because in a fresh cluster the older shots FK has a numerically-and-lexically smaller OID; in production the shots_user_id_fkey OID is fixed and the new FK's OID is whatever the deploy allocates — if the two OIDs differ in digit count (e.g. 9xxxx vs 1xxxxx) the lexical order flips (production ordering UNKNOWN; cannot be inspected per the no-production rule). The repo's own precedent for a delete guard on a doubly-cascaded table handles exactly this: guard_analysis_permit_delete in 20260907100000_permit_settled_no_delete.sql:129-134 first checks `not exists (select 1 from public.profiles p where p.id = old.user_id)` (account cascade → allow). Fix (new later-timestamped migration, not an edit): make guard_settlement_receipt_lifecycle also return old when the owning profile row is gone (or drop the redundant user_id ON DELETE CASCADE so only the shot cascade removes receipts), and add a matrix case that exercises the cascade with the receipts FK trigger firing first."
+        ],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "supabase/migrations/20260908110000_settlement_receipt_lineage.sql:~522-539 (`when unique_violation` fallback in apply_synced_shot): the replay comparison there checks binding_sha256 + binding but omits the `(v_stored.receipt -> 'policy') is not distinct from (v_receipt -> 'policy')` term that the pre-lock/under-lock replay path (lines ~389-408) applies. INFERRED unreachable for a policy-only mismatch in practice: same-owner settlements are serialized by pg_advisory_xact_lock(access_lock_key(uid)) and READ COMMITTED re-reads the committed row in attempt 2, so the fallback only fires for a row inserted outside the RPC (which has no receipt → 'accepted', as legacy). Should be made identical to the primary check for consistency.",
+          "Shots settled before 20260908110000 have no receipt; their replay keeps the prior ownership-only verdict (Edge index.ts ~2349-2352 `if (!row) { if (replayIds.has(id)) accepted }` and RPC `if not found then return 'accepted'`). Acknowledged by the implementer as residual risk; a mismatched replay of a pre-receipt shot is not detectable. Acceptable as compatibility for already-settled rows (no credit can be consumed on that path), but should be recorded in the release packet.",
+          "Deploy ordering: the Edge `settlement_receipts` SELECT fails closed (PGRST205 → generic 503, retryable) until 20260908110000 is applied, so `supabase db push` must precede `functions deploy api` or every shot sync 503s in the interval.",
+          "Shipping mobile client does not yet send `settlement` claims (all-null, recorded as absent) nor consume `receipts`; device/grant/ticket/operation binding is end-to-end only after the client packages wire them. packages/api-contracts ShotsSyncResponse does not list the optional `receipts` key (zod strips unknown keys; mobile decoder verified tolerant in apps/mobile/src/data/api.ts).",
+          "Implementer claim `deno check` of the harness + new test exit 0 could not be reproduced with `--config __wf__/deno.json` (TS2307 `canonicalize` not in the __wf__ import map — same on BASE for the harness, so pre-existing; the __wf__ suite runs with --no-check). Not an acceptance criterion."
+        ],
+        "package_id": "W01-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "ac7b495661d8c3b5f2cff6923457dd4857937cd9",
+        "scope_violation": false,
+        "summary": "Independent re-verification of W01-03 candidate ac7b495661d8c3b5f2cff6923457dd4857937cd9 against BASE d8e5db3e. SCOPE (VERIFIED, `git diff --stat`): 5 files — index.ts, settlement_receipt_binding.test.ts, 20260908110000_settlement_receipt_lineage.sql, security_regression.sql (all write_paths) plus supabase/functions/api/__wf__/xc_concurrency_harness.ts (+11 lines, test-only in-memory PostgREST model, listed in out_of_scope_files, not under any serial_group_paths prefix, no assertion changed) — judged justified wiring, scope_violation=false. canonicalDigest.ts is unchanged and IS called by shipping code (index.ts settlementBinding/settlementReceiptTransport). Objective met as shipped behaviour: syncShots parses device/grant/ticket/operation claims, digests the row payload with canonicalDigest.ts, derives policy lineage from the verified release admission, does an owner-scoped batched receipt read, returns the ORIGINAL stored receipt on identical binding (no authority read, no RPC), rejects a mismatch as shot.receipt_mismatch before the RPC; apply_synced_shot re-decides replay on binding + policy lineage before the advisory lock and again under it, before permit/ledger/shot are touched. ACCEPTANCE (all re-run by me): AC1 exit 0; AC2 806/806, 0 failed, 0 ignored on a disposable PG; AC3 runner exit 0, 4 histories × all matrices PASS; AC4 proof 0 — 0/10 on BASE (only the new test copied), 10/10 on HEAD. HYGIENE (VERIFIED): `git diff --check` exit 0; no existing comment lines removed (diff '-' lines are code only); migration timestamp 20260908110000 is later than every existing one and no applied migration edited; RPC body outside the receipt additions matches 20260907100000 modulo whitespace; new table RLS on, revoke all, SELECT-only for authenticated behind api_private.is_api_request() restrictive gate, trigger fns revoked, K24 inventory extended; no test weakened/skipped/reordered; 5xx bodies generic; shot.receipt_mismatch is not in the mobile transient set (permanent verdict, VERIFIED in apps/mobile/src/data/sync.ts). BLOCKING (1, reproduced): the receipt append-only guard permits deletion only when the shot is already gone, but settlement_receipts cascades from BOTH shots and profiles; on account deletion PostgreSQL fires the two profiles RI cascades in trigger-name order (OID-string order, not guaranteed) and when the receipts cascade fires first the guard raises and account deletion fails. Reproduced on the candidate DB with a rolled-back probe by forcing the other ordering; the repo's own guard_analysis_permit_delete precedent (20260907100000:129-134) avoids this by allowing the delete when the owning profile row is gone. Fixable with a small later-timestamped migration → request_changes. Non-blocking: unique_violation fallback omits the policy-lineage term (practically unreachable), pre-receipt shots keep ownership-only replay, DB-before-function deploy ordering, client claims not yet wired. No production access, no push, no PR, no history rewrite; all DBs disposable local containers.",
+        "verdict": "request_changes"
+      },
       "round": 1
+    },
+    {
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cf6564a-cc6d-452d-ada3-67640ee7866e/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC1",
+            "note": "VERIFIED at HEAD d5469efc (index.ts identical to r1 39852520). Only output: the two pre-existing deno.json workspace-field warnings + 'Check file:///.../supabase/functions/api/index.ts'. Frozen lock honoured (no lock writes).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a3f8b97d-f3b2-478e-9f3c-fbea160d4d98/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 806,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC2",
+            "note": "VERIFIED. Disposable PostgreSQL provisioned by the repo's own supabase/functions/api/__wf__/xc_pg_up.sh (postgres:16 container, shim_auth.sql + every migration incl. 20260908120000). Summary line: 'ok | 806 passed (31 steps) | 0 failed (1m47s)' — no ignored tests (ignored == 0). Includes the 10 settlement_receipt_binding tests and the static migration pins (db_migrations_rls_indexes.test.ts) over the new migration. Environment note: Docker Hub rate-limited (429) the postgres:16 pull, so the locally present postgres:16-alpine image (PostgreSQL 16.15) was tagged postgres:16; no repo script was modified.",
+            "passed": 806,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6514fed6-7c58-436f-93de-f11d267dcab2/ac3_rls.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC3",
+            "note": "VERIFIED at HEAD tree. All 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) apply 20260908110000 + 20260908120000 as pending and report 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' (incl. T1–T8c), 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED', 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED' (111 SQL assertions each), 'Analysis release policy authority: PASS'. executed/passed = 4 histories × 3 SQL matrices all passing (counted as 4 history runs). Negative control (not a gate): same matrix with every migration EXCEPT 20260908120000 → exit 3 at T8a: 'account deletion of a user with a settled shot must not raise, got 23514 (settlement_receipts: a receipt outlives every path but the shot cascade)' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/5835f4e7-4ac8-4bfd-ab1d-ebef116e62c7/t8_negative_control.log . Adversary's own repro re-run: r1 tree → psql exit 3 'ATTACK CONFIRMED' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ad65c778-82d2-4b26-bc9c-88c97be9844b/attack_r1.log); r2 tree with oid counter burned to 101161 and RI_ConstraintTrigger_a_101193→settlement_receipts firing before RI_ConstraintTrigger_a_16499→shots → exit 0 'account deletion cascaded shot … and its receipt' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/a886875d-fae6-4362-8832-f20a3f9203ed/adversary_cascade_order_attack_on_r2.log). The runner copy used for the r2 run only widened the skip/apply list to both W01-03 migrations; it was not committed.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18c3263c-1971-4859-9bc4-4a43804b17d7/ac4_head_regress.log",
+            "command": "git worktree add /home/ubuntu/wt-base d8e5db3eb346b651e4ce04cc997178abcbed56fe; cp supabase/functions/api/__wf__/settlement_receipt_binding.test.ts <wt-base>/supabase/functions/api/__wf__/; (base) XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts; (HEAD) XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC4",
+            "note": "VERIFIED proof: BASE d8e5db3e with only the new test file copied over (base worktree DB built by base's xc_pg_up.sh, i.e. base migrations only) → exit 1, 'FAILED | 0 passed | 10 failed (196ms)' (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/84cf8078-4076-4c3a-acb6-77197db7bcc4/ac4_base_regress.log). HEAD d5469efc → exit 0, 'ok | 10 passed | 0 failed (301ms)'. The suite pins: identical replay returns the ORIGINAL stored receipt with no RPC/authority read and no permit or ledger movement; a replay differing in any bound field (payload digest, owner, device, grant, ticket, operation id, policy lineage) is rejected as shot.receipt_mismatch before the RPC (zero credit, zero sequence); the pg half asserts receipt durability, client-unwritability and exactly one receipt under racing settlements.",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA, cherry-picked the sound r1 commits (test first, then impl) unchanged, reproduced the adversary's cascade-order break on the r1 tree with its own runner (exit 3), wrote matrix case T8 first and confirmed it fails against the r1 guard (exit 3, same 23514 message), then added the smallest additive fix as a later-timestamped migration that only re-defines the guard function body. Verified with the four manifest commands, root format/whitespace checks, a negative control for T8, and the adversary's attack against r2.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cf6564a-cc6d-452d-ada3-67640ee7866e/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a3f8b97d-f3b2-478e-9f3c-fbea160d4d98/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6514fed6-7c58-436f-93de-f11d267dcab2/ac3_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84cf8078-4076-4c3a-acb6-77197db7bcc4/ac4_base_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18c3263c-1971-4859-9bc4-4a43804b17d7/ac4_head_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5835f4e7-4ac8-4bfd-ab1d-ebef116e62c7/t8_negative_control.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a886875d-fae6-4362-8832-f20a3f9203ed/adversary_cascade_order_attack_on_r2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ad65c778-82d2-4b26-bc9c-88c97be9844b/attack_r1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae489af3-1809-49e3-ad31-c93e69cada3a/format_check.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w01-03/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/settlement_receipt_binding.test.ts",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts",
+          "supabase/migrations/20260908110000_settlement_receipt_lineage.sql",
+          "supabase/migrations/20260908120000_settlement_receipt_account_cascade.sql",
+          "supabase/tests/security_regression.sql"
+        ],
+        "head_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+        "out_of_scope_files": [
+          "supabase/migrations/20260908120000_settlement_receipt_account_cascade.sql — new later-timestamped migration under the held `sql` serial group; the reviewer required the guard fix as a NEW migration rather than an edit of 20260908110000 (left byte-identical to r1). Additive: one `create or replace function public.guard_settlement_receipt_lifecycle()` + comment + client revoke; no grant/policy/trigger changes.",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts — (unchanged from r1) 11 additive lines in the shared Edge test harness: a fake `settlement_receipts` table populated beside the fake shot row, so the new settlement_receipt_binding.test.ts can read back the stored receipt for the identical-replay / corrupt-receipt cases. Not under any serial_group_paths prefix; no behavioural change to existing fakes."
+        ],
+        "package_id": "W01-03",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/settlement_receipt_binding.test.ts (10 tests: 7 edge + 3 pg; new file, commit e03bef0f)",
+          "supabase/tests/security_regression.sql section T (T1–T7, r1) + T8a/T8b/T8c (r2, commit 8ea7d6b1): both profiles-cascade orders forced via FK recreation and asserted from pg_trigger; account deletion must cascade profile+shot+receipt in either order; a receipt whose shot and owner both exist stays undeletable"
+        ],
+        "residual_risks": [
+          "AC2/AC3 ran on postgres:16-alpine (PostgreSQL 16.15) tagged locally as postgres:16 because Docker Hub rate-limited the debian image pull; RI trigger-name ordering is catalog (C-collation `name`) ordering and does not depend on the image's libc locale, and the matrix asserts the forced order from pg_trigger, but the exact CI image was not the one executed here.",
+          "The receipt table keeps its direct user_id→profiles ON DELETE CASCADE (the alternative of dropping it was not taken, to keep the r2 change additive and owner-indexed); the guard now tolerates both cascade orders, so correctness no longer depends on production oid state, but production trigger ordering itself remains UNKNOWN (cannot be inspected per the no-production rule).",
+          "Local ./supabase/tests/run_rls_tests.sh counts are reported as 4 history runs (the script has no per-case counter); per-case detail is in the artifact log."
+        ],
+        "summary": "W01-03 round 2 at d5469efcd87a5190c1ff0b76d23575ec1155c67d on devin/pp/w01-03/impl-r2 (4 commits over BASE d8e5db3e: r1 test e03bef0f, r1 impl 39852520 cherry-picked unchanged; r2 test 8ea7d6b1; r2 fix d5469efc). Defect on BASE (unchanged from r1): supabase/functions/api/index.ts syncShots() decided replay on shot id alone and apply_synced_shot(jsonb) persisted no receipt, so a mutated re-settlement of a known id was silently 'accepted' with no binding to owner/device/grant/ticket/operation/payload digest/policy — r1 added public.settlement_receipts (20260908110000), the receipt transport in index.ts and the owner-scoped receipt-bound replay check. Prior-round P0 resolved: the r1 lifecycle guard (20260908110000_settlement_receipt_lineage.sql:128-152) admitted a DELETE only when the shot was already gone; settlement_receipts has two cascade parents (shot_id→shots, user_id→profiles) and shots cascades from profiles, and PostgreSQL fires same-event RI cascade triggers on profiles in trigger-NAME order (RI_ConstraintTrigger_a_<oid>, text compare), so with the receipts FK's oid sorting first the receipt cascade reached the row while its shot still existed and account deletion raised 23514 for every owner with a settled shot. Fix: NEW migration supabase/migrations/20260908120000_settlement_receipt_account_cascade.sql replaces guard_settlement_receipt_lifecycle() to return old when the owning profile row is already gone (account cascade, same detection as guard_analysis_permit_delete) OR when the shot is gone (shot cascade), still raising while both exist; UPDATE stays refused; no grant/policy/trigger changes; 20260908110000 untouched. Matrix: security_regression.sql T8a/T8b force each profiles-cascade order (recreate the other FK → newer oid, assert order from pg_trigger, settle via apply_synced_shot, delete auth.users → profile+shot+receipt gone, no error), T8c pins that a receipt with a live shot and owner remains undeletable. Evidence: T8a fails against the r1 guard with the adversary's exact 23514 message (negative control), the adversary's own run_cascade_order_attack.sh (oid counter burned past 100000, receipts trigger firing first) reproduces exit 3 on r1 and exits 0 on r2. All four acceptance commands PASS (AC1 exit 0; AC2 806/806, 0 ignored; AC3 4/4 histories; AC4 base 0/10 → HEAD 10/10). Also VERIFIED: `pnpm format:check` exit 0 ('All matched files use Prettier code style!', https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae489af3-1809-49e3-ad31-c93e69cada3a/format_check.log) and `git diff --check` exit 0. No PR opened; nothing pushed to main or ci/mac-*; no production resources touched."
+      },
+      "round": 2
     }
   ],
   "start_round": 1,

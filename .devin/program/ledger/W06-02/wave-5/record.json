@@ -1,0 +1,343 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W06-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "b6b605b4ca2489d8f5079fe43e8bfc811d0890bcb2b4c59894fb60d0a55bf5fe",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W06-02-r1",
+      "phase": "review",
+      "prompt_sha256": "f09465ac34c03fadb131352edfc737b799fbd0d772d631ffe1e25ea82006e845",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W06-02-r1",
+      "phase": "adversary",
+      "prompt_sha256": "651a9776b39cf9612f2aa253317e30b319c7948b26fb116e9034c90d163881b8",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W06-02-r2",
+      "phase": "implement",
+      "prompt_sha256": "953ef642a57952bee58bb6a1d18fa5337f258a76e060042b809afc9c71d25908",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W06-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/68d61797-e8dc-45c4-9c8d-8e9a09a5feac/attack_all_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3099c8b2-e36b-49f8-a4d0-fa369a01aca7/attack_all_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e95216f8-ca61-4185-bf3b-1cf20da1e959/attack_fuzz_2000.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c94ab1af-3505-4fbc-82fd-cca3e4de5014/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/206cba81-75c1-4588-a708-19e504e5a61a/ac2_full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e8fedf68-b3af-4d49-b3ec-1af16a97334b/ac3_base.log"
+        ],
+        "attack_branch": "devin/pp/w06-02/attack-59a4afbe",
+        "attack_branch_sha": "f31a6cd1dfd787659fe637fad0066bd4a50deba4",
+        "attacked_sha": "59a4afbef1f7c48f5b8dd804260b720bedb77b4b",
+        "attacks_tried": 59,
+        "breaks": [
+          {
+            "expected": "{ rank: null } — the shared definition returns null for no scored evidence and never fabricates Bronze (PRODUCT INVARIANT: unknown/corrupt state never becomes fabricated history).",
+            "observed": "GET /v1/rank with player_technique_rating rows {score:null} and {score:'NaN'} returned 200 {rank:{definitionVersion:'rank-form-weighted-v2', rating:0, tier:'bronze', techniqueCount:1, techniques:[{score:0,...}], scoredShotCount:null, updatedAt:null}}. Number(null)=0 passes the Number.isFinite filter in index.ts, so a row with NO score becomes a 0.00 technique and a Bronze summary carrying the v2 tag. VERIFIED (candidate). On BASE the same request is also fabricated but untagged (test passes there by design: untagged output is out of the definition's scope).",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'every row unscorable' attack_w06_02_corrupt_state.test.ts",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_corrupt_state.test.ts",
+            "title": "Rank rows with a NULL score are coerced to 0 and served as a tagged Bronze 0.00 (fabricated rank from no evidence)"
+          },
+          {
+            "expected": "A summary tagged with the definition version must satisfy the definition (rating in scale, hundredth-quantised, tier == playerRankTierForRating(rating), known tier key, integer counts, valid timestamp) or the saved row must be rejected/recomputed from evidence; corrupt state must not be re-published as definition output.",
+            "observed": "With the technique view holding one valid row, GET /v1/rank served under definitionVersion=rank-form-weighted-v2: rating 42.5 and rating -3 (outside [0,10]); tier 'bronze' at rating 7.9 (definition says diamond); tier 'grandmaster' (unknown key); tier 'null', scoredShotCount NaN->null, updatedAt 'null' (null columns stringified); rating 7.105 (not 1/100-quantised); rating 9.5 where the served technique rows yield 3.00. index.ts only checks Number.isFinite(state.rating) before copying tier/count/updated_at through String()/Number(). VERIFIED. The trust-the-row behaviour pre-exists on BASE; the candidate adds the tag that asserts these values come from the definition.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'corrupt state' attack_w06_02_corrupt_state.test.ts   (7 tests, 0 passed, 7 failed)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_corrupt_state.test.ts",
+            "title": "Saved player_rank_state is trusted verbatim under the v2 tag: out-of-scale ratings, contradictory/unknown/null tiers, foreign quantisation and evidence-less ratings are all served as 'rank-form-weighted-v2' output"
+          },
+          {
+            "expected": "Rows outside the shared definition's domain (score outside [0,10], weight != min(sampled_count,cap), non-positive sample counts, duplicate technique identity, null text columns) are rejected or normalised per the definition before a summary is tagged; the tagged rating must equal what computePlayerRank would yield for the same evidence.",
+            "observed": "score 55 -> rating 55 tagged v2; score -2.5 -> rating -2.5; confidence_weight 1e6 vs 5 -> rating 10 (cap 5 would give 5.00); two 'dink' rows + 'drive' -> techniqueCount 3 with duplicate shot_type; sampled_count 0/-1/null served as 0/-1/0; shot_type null / captured_at null served as the string 'null'. Only Number.isFinite(score) is filtered in index.ts; the port's ratingFromTechniques divides by the stored confidence_weight instead of min(sampled_count, cap). VERIFIED. Pre-exists on BASE untagged.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'corrupt view' attack_w06_02_corrupt_state.test.ts   (9 tests, 3 passed, 6 failed)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_corrupt_state.test.ts",
+            "title": "Inline-fallback rank accepts out-of-domain view rows: 0-100 legacy scores, negative scores, uncapped confidence weights, duplicate shot_type rows, sampled_count 0/negative/null and null shot_type/captured_at all flow into a tagged summary"
+          },
+          {
+            "expected": "A malformed success body is a dependency failure like any other: controlled generic 503 (not cached), no crash, no tag.",
+            "observed": "Stubbed PostgREST answered 200 {\"message\":\"unexpected\"} (an object, not an array). GET /v1/rank logged '[api] unhandled error ... TypeError' and returned 500 {\"error\":{\"message\":\"Something went wrong. Please try again.\"}}; GET /v1/progress identically returned 500. Every other failure mode tested (500/502/503/429+Retry-After on either table, 302 redirect) is correctly mapped to the controlled generic 503. VERIFIED. Same on BASE.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'non-array body' attack_w06_02_network_concurrency.test.ts attack_w06_02_progress_boundaries.test.ts   (2 tests, 0 passed, 2 failed)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_network_concurrency.test.ts",
+            "title": "PostgREST 200 with a non-array JSON body on player_technique_rating or progress_daily crashes the handler: unhandled TypeError -> HTTP 500"
+          },
+          {
+            "expected": "Every 200 from the tagged deployment carries definitionVersion — either version the cache key (e.g. include SCORING_DEFINITION_VERSION) or reject cached entries lacking the tag.",
+            "observed": "After cacheSet('rank:<uid>', <legacy payload without definitionVersion>) the candidate's GET /v1/rank returned 200 with rank.definitionVersion === undefined; same for 'progress:<uid>'. Keys are `rank:${userId}` / `progress:${userId}` (index.ts:1953-1954), shared with the previous deployment through L2 Redis when configured. VERIFIED (harness, L1 cache). Only reachable during the deploy window / until TTL; not applicable on BASE (no tag exists there).",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'pre-tag deployment' attack_w06_02_network_concurrency.test.ts   (2 tests, 0 passed, 2 failed)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_network_concurrency.test.ts",
+            "title": "Rolling deploy / restart: rank and progress payloads cached by the pre-tag deployment are served UNTAGGED (200 without definitionVersion) for up to the 60s TTL because the cache key does not encode the definition version"
+          },
+          {
+            "expected": "Rows are validated against the shared definition (0-10 finite score, hundredth-quantised, best >= avg, integer shot_count >= 1, ISO day, non-empty shot_type, unique key) and invalid rows are dropped or the response fails closed; nulls are never coerced to 0.",
+            "observed": "Examples (all 200, definitionVersion=rank-form-weighted-v2): avg_score null -> avg_score 0 with best 81; best_score null -> best 0 < avg 72.5; shot_count null -> 0; shot_count 2.5 -> 2.5; avg_score '7.2x' -> null; 72.5/81 legacy -> 725/810 on the 0-100 wire; -1.5 -> -15; 10.01 -> 100.1; day null -> 'null'; day '2026-13-45' passes; shot_type null -> 'null', '   ' passes; two rows with the same (day, shot_type, version) both served. buildProgress maps rows with String()/Number()/Math.round only. VERIFIED. Same on BASE untagged. The mobile parser (apps/mobile/src/progress/api.ts) rejects some of these shapes, so the visible effect is a client-side parse failure of the whole progress payload rather than a wrong number.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'progress corrupt' attack_w06_02_progress_boundaries.test.ts   (17 tests, 2 passed, 15 failed)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_02_progress_boundaries.test.ts",
+            "title": "GET /v1/progress serves malformed progress_daily rows verbatim under the v2 tag: null avg/best/count become 0, text junk becomes null, negative / >10 / 0-100 legacy scores, fractional or zero shot_count, null/invalid day, null/blank shot_type and duplicate (day, shot_type, version) keys all pass through"
+          }
+        ],
+        "package_id": "W06-02",
+        "summary": "ATTACKED 59a4afbef1f7c48f5b8dd804260b720bedb77b4b (branch devin/pp/w06-02/impl-r1). Attack branch devin/pp/w06-02/attack-59a4afbe @ f31a6cd1dfd787659fe637fad0066bd4a50deba4 pushed (no force, no PR); it adds ONLY five test files under supabase/functions/api/__wf__/attack_w06_02_*.test.ts — no production code, migration or candidate-owned test touched (git status verified). All five files pass `deno fmt`, `deno lint` and `deno check` (exit 0).\n\nCANDIDATE BASELINE (VERIFIED): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1.log). AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` exit 0, `ok | 827 passed (31 steps) | 0 failed`, ignored=0 (ac2_full.log; disposable docker postgres:16 on :55433). AC3: candidate-owned scoring_parity.test.ts copied onto BASE 5c1859a8 -> exit 1, `3 passed | 7 failed` (ac3_base.log); on candidate it is part of the 827 passing.\n\nATTACK RUN (VERIFIED): `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w06_02_fuzz_cross_plane.test.ts attack_w06_02_corrupt_state.test.ts attack_w06_02_network_concurrency.test.ts attack_w06_02_replay_clock_sql.test.ts attack_w06_02_progress_boundaries.test.ts` -> exit 1, `FAILED | 26 passed | 33 failed`, 0 ignored (attack_all_candidate.log). Same files on BASE (with the candidate's scoringDefinition.ts copied so imports resolve, uncommitted, base worktree): exit 1, `20 passed | 39 failed` (attack_all_base.log) — every tag/parity/network/concurrency/replay attack fails on base and passes on candidate; the corrupt-state attacks pass on base only because they hold ONLY tagged output to the definition.\n\nATTACK CATEGORIES (9 distinct; 59 Deno tests = attacks_tried, each test failing == confirmed break):\n1. Cross-plane parity fuzz (SQL trigger/view/state vs shared computePlayerRank vs Edge saved-state vs Edge inline fallback), seeded mulberry32: 160 cases default (attack_all_candidate.log) and 2000 cases seed 7 (`W06_02_FUZZ_CASES=2000 W06_02_FUZZ_SEED=7`, attack_fuzz_2000.log): `ok | 1 passed | 0 failed`, mismatches=0, halfTieRatings=191, overWindowCases=1207 — NO BREAK. The port is byte-identical to the shared definition on valid evidence.\n2. Corrupt/partial persisted state (saved player_rank_state): 7/7 FAIL — BREAK #2.\n3. Corrupt view rows into the inline fallback: 9 tests, 6 FAIL (breaks #1 and #3); 3 pass (null weight is capped, non-numeric-string score dropped, empty view + stale state => {rank:null}).\n4. Network failure at each PostgREST step: 500/502/429/503+Retry-After on the view, 500 on rank_state, 302 redirect, 500 on progress_daily => all controlled generic 503, nothing cached, next call recovers tagged — NO BREAK (7 pass). Non-array 200 body => unhandled TypeError/500 on both routes — BREAK #4 (2 fail).\n5. Concurrency/reentrancy: 12 simultaneous first reads coalesce into one view read + identical tagged body; sync-side cacheDel during an in-flight build fences the stale result — NO BREAK (2 pass).\n6. Process death/restart & rolling deploy: corrupt non-JSON cache entry falls through to a fresh tagged build (pass); pre-tag cached rank/progress payload served untagged for the TTL — BREAK #5 (2 fail).\n7. Unauthorised roles: no bearer / garbage bearer / alg=none JWT / Basic / anon apikey => 401 on /v1/rank and /v1/progress, scoring tables never read; every PostgREST call is scoped to the bearer's user id — NO BREAK (2 pass).\n8. Replay & clock (real SQL on disposable PG, cross-checked with shared TS and the Edge handler): duplicate shot id refused by PK and counted once; byte-identical copy under a fresh id counts twice on every plane (no content dedupe anywhere, consistent); clock rollback / far-past / far-future ordered by captured_at with shots_captured_at_bounds refusing <2000 and >=2100; same-instant ties; low_confidence/null-score/demo (shots_source_check) never rank; deleting the only scored shot recomputes to unranked — NO BREAK (5 pass).\n9. Progress boundaries: all 1001 two-decimal scores 0.00..10.00 map exactly to the 0-100 wire without float drift (pass); empty account => tagged honest-empty payload (pass); future/malformed practice days never inflate the streak (pass); 15/17 corrupt-row cases + duplicate keys + non-array body FAIL — BREAK #6 (+#4).\n\nFree-rating conservation and copy/accessibility were not attackable on this package's surface (read-only GET routes, no user-facing copy) — not attempted. NOT VERIFIED here: behaviour against live Upstash L2 (harness runs L1 memory cache; cacheSet L2 return is false without Redis), and whether production PostgREST can ever emit the corrupt shapes (the SQL view constrains scores/timestamps, so #2/#3/#6 need a corrupt or foreign-version row — the candidate's tag now vouches for such rows). All six breaks except #5 pre-exist on BASE untagged; the candidate's objective (tag responses as definition output) is what makes them definition-contract violations. Severity rationale: P1 = a supported GET returns a tagged rank/progress the definition cannot produce, or crashes 500 on a malformed dependency reply; P2 = time-boxed untagged response during deploy."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 5"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4102bae6-0eed-4820-bdca-8eb741b2ec8c/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC1",
+            "note": "VERIFIED on HEAD 59a4afbe with the frozen lockfile (no lockfile change; the shared module has no imports so no import-map entry was needed). Local copy: artifacts/w06-02/ac1_deno_check.log (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/59ae6d5e-9d43-41fe-b8f7-52770ff2f669/ac2_edge_suite_zero_ignored.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 827,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC2",
+            "note": "VERIFIED: 827 passed (31 steps) | 0 failed | 0 ignored, exit 0, disposable postgres:16 in Docker (container pickle-xc-pg, 127.0.0.1:55433, all migrations applied). The manifest command as literally written (XC_PG_URL only) was ALSO run on HEAD: 815 passed | 0 failed | 12 ignored, exit 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b468caf5-7791-462c-b1b1-28fbca842dd1/ac2_edge_suite_xc_only.log. The 12 ignored tests are the pre-existing w06_01_golden_parity.test.ts live-DB tests, which read only PICKLE_AUDIT_PG_URL (not XC_PG_URL); that file is outside this package's write_paths so it was not edited — supplying the same disposable URL under both names is what brings ignored to 0 (recorded in baseline_failures_observed). No test was weakened, skipped or reordered.",
+            "passed": 827,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd4294de-a0fe-49cf-8814-49a60d8d9755/ac3_head_scoring_parity.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json scoring_parity.test.ts  (on BASE_SHA with ONLY scoring_parity.test.ts copied in, then on HEAD)",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC3",
+            "note": "PROOF exit 0. BASE run (worktree /home/ubuntu/w06-base at 5c1859a8, clean, only the HEAD copy of scoring_parity.test.ts copied in): 3 passed | 7 failed, exit 1 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/a284e9f2-fd51-4cee-a75d-776ef4095c30/ac3_base_scoring_parity.log; failures are rank.definitionVersion undefined for all 17 ranked golden cases in both modes, progress.definitionVersion undefined, ../scoringDefinition.ts not found, and the index.ts literal pins. HEAD run (59a4afbe): 10 passed | 0 failed, exit 0. Both runs used the installed Deno 2.9.6 via the __wf__ deno.json task settings (-A --no-check).",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: scoring_parity.test.ts written and run on the base tree (3 passed / 7 failed, exit 1), committed alone; then scoringDefinition.ts added as a thin derivation layer over the shared definition (re-export by reference, no duplicated constants) and index.ts rewired with the smallest hunks (one import block, one sort call, the fallback body, two payload keys) to keep the edge-index serial-group merge clean.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4102bae6-0eed-4820-bdca-8eb741b2ec8c/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b468caf5-7791-462c-b1b1-28fbca842dd1/ac2_edge_suite_xc_only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/59ae6d5e-9d43-41fe-b8f7-52770ff2f669/ac2_edge_suite_zero_ignored.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a284e9f2-fd51-4cee-a75d-776ef4095c30/ac3_base_scoring_parity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd4294de-a0fe-49cf-8814-49a60d8d9755/ac3_head_scoring_parity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/03387b70-2d5f-4e82-b149-94307e07b5b8/base_edge_suite_xc_only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd8ad018-ae7b-4ad2-8969-897bd81e49d9/format_check.log"
+        ],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test — on BASE_SHA 5c1859a8: 805 passed (31 steps) | 0 failed | 12 ignored, exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/03387b70-2d5f-4e82-b149-94307e07b5b8/base_edge_suite_xc_only.log). The 12 ignored are w06_01_golden_parity.test.ts live-DB tests gated on PICKLE_AUDIT_PG_URL only; not a failure, but the manifest's literal command cannot reach ignored == 0 without also exporting PICKLE_AUDIT_PG_URL. Not fixed (outside write_paths)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w06-02/impl-r1",
+        "files_changed": [
+          "supabase/functions/api/__wf__/scoring_parity.test.ts",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/scoringDefinition.ts"
+        ],
+        "head_sha": "59a4afbef1f7c48f5b8dd804260b720bedb77b4b",
+        "out_of_scope_files": [],
+        "package_id": "W06-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/scoring_parity.test.ts"
+        ],
+        "residual_risks": [
+          "GET /v1/progress is tagged with the rank definition version although its series come from the progress_daily view (per-day avg/best of shot scores), not from the rank formula; the tag identifies the scoring definition in force, as the objective requested, but the progress aggregates themselves are not part of the golden fixture.",
+          "The `import ... from \"./scoringDefinition.ts\"` in index.ts is placed mid-file directly beneath the preserved tier-threshold comment (so that existing comment stays verbatim and true) rather than in the top import block; ESM hoists it, deno check and the full suite pass.",
+          "ratingFromTechniques returns null only for an empty row list; the inline-fallback branch in buildPlayerRank handles that null by answering { rank: null }, which is unreachable in practice because the empty case is already answered earlier — kept for type honesty rather than a non-null assertion.",
+          "Test runs used the installed Deno 2.9.6 (the __wf__ task is not version-pinned); only AC1 was run under deno@2.5.6 as the manifest specifies."
+        ],
+        "summary": "Defect on BASE_SHA (VERIFIED by reading + by the new test failing 7/10 on base): supabase/functions/api/index.ts carried its own copy of the rank definition instead of computing through packages/shared-types/src/scoringDefinition.ts — a literal tier ladder PLAYER_RANK_TIERS (index.ts:2714-2720 on base), a local playerRankTierForRating (2722-2728), a hand-rolled technique sort `b.score - a.score || (a.shot_type < b.shot_type ? -1 : 1)` (2792), and the inline-fallback rating with literal cap 5 and 100 hundredths (2831-2843). Neither GET /v1/rank (payload 2853-2862) nor GET /v1/progress (2700) emitted a definitionVersion, so a response could not identify which definition produced it. Fix: new supabase/functions/api/scoringDefinition.ts re-exports SCORING_DEFINITION / SCORING_DEFINITION_VERSION from the shared module (same object by reference, not a copy) and derives PLAYER_RANK_TIERS, RANK_CONFIDENCE_CAP, RANK_HUNDREDTHS_PER_POINT, RANK_RATING_DECIMALS, playerRankTierForRating, compareTechniqueOrder (walks rating.techniqueOrder.keys, code-unit collation) and ratingFromTechniques (confidence-weighted mean of rounded technique scores in integer hundredths, the same expression as computePlayerRank; null when no rows). index.ts now imports those (the import sits under the preserved tier-threshold comment; existing comments were left verbatim), sorts techniques with compareTechniqueOrder, computes the inline fallback via ratingFromTechniques + playerRankTierForRating, and tags rank.definitionVersion and progress.definitionVersion with SCORING_DEFINITION_VERSION. Saved-state precedence, { rank: null } for no scored evidence, auth, rate limits, 60s cache TTL, cache fence/invalidation and generic 5xx bodies are unchanged. Commits: ea7bcaeb (test only, fails on base) then 59a4afbe (module + wiring + tightened constant pins). The regression test drives the real handler through routesHarness for every golden case in both saved-state and inline-fallback modes (rating, tier, techniqueCount, technique rows, definitionVersion), every unranked case ({ rank: null }, no version), progress version tagging, technique ordering, module identity/derived constants, the 10^decimals == perPoint rounding invariant, and a static pin that index.ts imports ./scoringDefinition.ts and carries no minRating / Math.min(...,5) literals. Verified locally with Deno 2.9.6 for the test runs and npx deno@2.5.6 for AC1. No PR opened; branch devin/pp/w06-02/impl-r1 pushed to origin."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/review-w06-02/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC1",
+            "note": "VERIFIED on 59a4afbe from the repo root with the frozen production lockfile (deno.lock unchanged by the candidate; the new module imports only ../../../packages/shared-types/src/scoringDefinition.ts). Log ends with `Check file:///.../supabase/functions/api/index.ts` and exit=0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w06-02/ac2_edge_suite_both_urls_run4.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_MATRIX_PG_URL=postgres://postgres:pg@127.0.0.1:55434/pickle_audit_review deno task test",
+            "executed": 827,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC2",
+            "note": "VERIFIED: `ok | 827 passed (31 steps) | 0 failed`, 0 ignored (grep for '... ignored' returns 0), exit=0, on 59a4afbe with installed Deno (the __wf__ task is -A --no-check). Disposable PostgreSQL: docker container review-pg (postgres:16-alpine, the only image available locally; docker.io returned 429 for postgres:16), 127.0.0.1:55434, all supabase/migrations applied to db `postgres`; `pickle_audit_review` created empty for the audit matrix, which applies the migration chain itself. scoring_parity.test.ts contributed 10 of the 827 and w06_01_golden_parity.test.ts ran its 17 live-DB tests. Earlier attempts in the same environment (ac2_edge_suite_both_urls.log run1: 826 passed / 1 failed) failed only because db_migrations_rls_indexes.audit.test.ts could not pull postgres:16 (registry 429) — environmental, not a candidate defect; run4 executes that test for real.",
+            "passed": 827,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w06-02/ac3_head_scoring_parity.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json scoring_parity.test.ts (on BASE_SHA worktree with ONLY scoring_parity.test.ts copied in; then on HEAD 59a4afbe)",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC3",
+            "note": "PROOF exit 0. BASE run: detached worktree /home/ubuntu/w06-review-base at 5c1859a8 (git status shows only the untracked copied test; cmp confirms it is byte-identical to HEAD's; supabase/functions/api/scoringDefinition.ts absent) → `FAILED | 3 passed | 7 failed`, exit 1, log artifacts/review-w06-02/ac3_base_scoring_parity.log. Base failures: rank.definitionVersion undefined (saved-state and inline-fallback for all ranked golden cases), progress.definitionVersion undefined, ../scoringDefinition.ts module not found (module identity, rating port, fallback-constants tests), index.ts literal pins (minRating / Math.min(...,5)). The 3 base passes are the fixture-version pin, { rank: null } for unranked cases, and technique ordering — i.e. the base already had numeric parity; the defect was the missing shared-definition derivation and version tag. HEAD run: `ok | 10 passed | 0 failed`, exit 0.",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "supabase/functions/api/index.ts:2715-2726 — the new `import ... from \"./scoringDefinition.ts\"` sits mid-file directly beneath the pre-existing tier-threshold JSDoc (which still names PLAYER_RANK_TIERS/playerRank.ts). No comment line was edited (git diff shows zero +/- comment lines), and ESM hoisting makes it correct, but the comment now documents an import rather than a constant; a comment refresh should be done in a package that is allowed to edit comments.",
+          "supabase/functions/api/index.ts (buildPlayerRank saved-state branch) — rank.definitionVersion is stamped with the Edge's SCORING_DEFINITION_VERSION even when the summary comes from the SQL-computed player_rank_state row, which carries no version column (grep of supabase/migrations finds none). This is the only possible behaviour without a `sql`-group migration and W06-01 golden parity pins SQL == shared definition at the same version, but if the SQL definition is ever bumped independently the tag would mislabel saved rows.",
+          "GET /v1/progress is tagged with the rank definition version although its series come from the progress_daily view, whose per-day aggregates are not part of the golden fixture (implementer already lists this as a residual risk).",
+          "AC2 as literally written in the manifest (XC_PG_URL only) cannot reach ignored==0: w06_01_golden_parity.test.ts reads PICKLE_AUDIT_PG_URL and db_migrations_rls_indexes.audit.test.ts needs either `docker run postgres:16` or PICKLE_AUDIT_MATRIX_PG_URL pointing at an empty loopback pickle_audit_* database plus a host psql. Both are pre-existing test-harness facts outside this package's write_paths; the reviewer supplied all three URLs against the same disposable container to execute every test."
+        ],
+        "package_id": "W06-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "59a4afbef1f7c48f5b8dd804260b720bedb77b4b",
+        "scope_violation": false,
+        "summary": "APPROVE W06-02 candidate 59a4afbef1f7c48f5b8dd804260b720bedb77b4b. Scope (VERIFIED): `git diff --stat 5c1859a8..59a4afbe` touches exactly the three write_paths (index.ts +21/-29, scoringDefinition.ts +121, __wf__/scoring_parity.test.ts +439); no out-of-scope files, no migrations, no deno.lock/deno.json change, no existing test modified. Behaviour shipped (VERIFIED by reading the diff and by the parity test driving the real handler through routesHarness): index.ts imports compareTechniqueOrder/playerRankTierForRating/ratingFromTechniques/SCORING_DEFINITION_VERSION from the new Edge module, which re-exports the canonical SCORING_DEFINITION object by reference and derives tiers, cap (5), hundredths (100) and decimals from it; the inline fallback and technique sort go through those functions; GET /v1/rank and GET /v1/progress carry definitionVersion=rank-form-weighted-v2. Semantics are preserved: sort is score desc then code-unit shot_type asc (base's `a<b?-1:1` differed only for equal shot_type, impossible from the per-technique view), rating is the same integer-hundredths confidence-weighted mean, empty evidence still answers { rank: null } (no fabricated Bronze), saved-state precedence, auth, rate limits, 60s cache, fence invalidation and generic 5xx bodies unchanged; apps/mobile parsePlayerRank ignores the extra key so old clients are unaffected. Invariants (VERIFIED): no RLS/grant/session/billing/copy/diagnostics/migration change; no test weakening (no ignore/any/ts-ignore/eslint-disable/|| true in the new files); zero comment lines added or removed in index.ts. AC1 exit 0 under frozen deno@2.5.6; AC2 827 passed / 0 failed / 0 ignored exit 0 against a disposable PostgreSQL with all three DB env vars supplied; AC3 proof holds (base 3/7 FAIL exit 1 → HEAD 10/0 PASS exit 0). Supplementary: targeted prettier --check and eslint on the three files pass. Non-blocking notes are recorded (mid-file import under the untouched tier comment, saved-state rows stamped with the Edge's version because player_rank_state has no version column, progress tagged with the rank definition version, and the manifest's XC_PG_URL-only AC2 command cannot reach ignored==0 for pre-existing harness reasons).",
+        "verdict": "approve"
+      },
+      "round": 1
+    },
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W06-02-AC1 status FAIL",
+          "impl: W06-02-AC2 status FAIL",
+          "impl: W06-02-AC3 status FAIL"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w06-02/ac1-typecheck.log (local checkout only, untracked, unpushed)",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-02-AC1",
+            "note": "deferred by owner directive 2026-09-08; work stopped. The command itself ran on local commit f4428b5f with exit 0 (VERIFIED), but the branch was never pushed so the criterion is recorded FAIL for this deferred package.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "artifacts/w06-02/ac2-edge-suite.log (partial; local checkout only)",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 0,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W06-02-AC2",
+            "note": "deferred by owner directive 2026-09-08; work stopped. A first run against an UNMIGRATED postgres:16 (my setup error, not a code failure) gave exit 1: 850 passed / 38 failed / 12 ignored, all 37 PostgresError 'relation auth.users does not exist' plus the dependent matrix.json assertion. The rerun against the correctly migrated disposable DB (xc_pg_up.sh: shim_auth.sql + all migrations) was still running when the directive arrived and was killed — result UNKNOWN.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "artifacts/w06-02/ac3-base.log (base run; local checkout only, untracked, unpushed)",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json scoring_parity.test.ts (on BASE_SHA with only the new test file copied over, then on HEAD)",
+            "executed": 83,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W06-02-AC3",
+            "note": "deferred by owner directive 2026-09-08; work stopped. Base run (BASE_SHA 5c1859a8 + new test file only): exit 1, 82 executed / 3 passed / 79 failed / 0 skipped, log artifacts/w06-02/ac3-base.log. Candidate run on local commit f4428b5f: exit 0, 83 passed / 0 failed (VERIFIED; the test file gained one test between the base run and the candidate run, so the base run must be repeated on resume). Proof outcome recorded as 1 because the candidate was never pushed and the package is deferred.",
+            "passed": 83,
+            "skipped": 0,
+            "status": "FAIL"
+          }
+        ],
+        "approach": "New module supabase/functions/api/scoringDefinition.ts imports SCORING_DEFINITION/SCORING_DEFINITION_VERSION from packages/shared-types (one definition object, no copied ladder/cap), validates every player_technique_rating and progress_daily row against the definition's domain (finite number scores on scale and hundredth-quantised, integer counts in [1, window], bounded text, bounded ISO instants, calendar-valid days, duplicate identities collapsed or dropped), computes rating via min(sampled_count, cap)-weighted mean of rounded hundredths and tier via the definition ladder, treats a non-array row body as a dependency failure, and consults the saved rank row only for scoredShotCount/updatedAt when it satisfies the definition and agrees with the served evidence. index.ts wiring: import + readAllRows non-array guard (-> generic 503, uncached) + buildProgress uses progressSeriesFromRows and tags definitionVersion + buildPlayerRank uses edgeRankFromRows.",
+        "attachment_urls": [],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w06-02/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/scoringDefinition.ts",
+          "supabase/functions/api/__wf__/scoring_parity.test.ts"
+        ],
+        "head_sha": "f4428b5f040abf44b3b022f0875bc4a4b79b2466",
+        "out_of_scope_files": [],
+        "package_id": "W06-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/scoring_parity.test.ts"
+        ],
+        "residual_risks": [
+          "Branch devin/pp/w06-02/impl-r2 (commits 2c476afc, f4428b5f) exists only on this session's VM; if the VM is discarded the work is lost unless someone pushes it or re-derives it from this record.",
+          "AC2 (full Edge suite on migrated disposable Postgres), pnpm format:check and git diff --check were never completed on the candidate.",
+          "The wip commit deletes the PLAYER_RANK_TIERS constant/inline compute in index.ts along with the comments attached to that code; a reviewer may treat that as 'modifying existing comments' — on resume consider keeping the deletion but confirming the policy.",
+          "Code-unit ordering replaced localeCompare in the progress series sort (deterministic, matches the definition's shotType collation) — a behaviour change for non-ASCII shot types."
+        ],
+        "summary": "FAILED — deferred by owner directive 2026-09-08; work stopped. Package W06-02 deferred to v1.0.1 (DEFERRED_V1_1). NOTHING WAS PUSHED: branch devin/pp/w06-02/impl-r2 exists only in the local checkout /home/ubuntu/repos/Pickle-Sensei (git ls-remote shows no remote branch). Local commits above BASE_SHA 5c1859a8: (1) 2c476afc test(edge): scoring_parity.test.ts regression suite; (2) f4428b5f040abf44b3b022f0875bc4a4b79b2466 wip(edge): scoringDefinition.ts + index.ts wiring — local checkpoint, unpushed per directive. Defects scoped on BASE_SHA (VERIFIED by running the new suite on base: 3 passed / 79 failed): supabase/functions/api/index.ts buildPlayerRank coerced view rows with Number()/String() and filtered only Number.isFinite(score) so Number(null)=0 fabricated a Bronze; saved player_rank_state was trusted verbatim after Number.isFinite(state.rating); inline confidence used the stored confidence_weight; readAllRows spread a non-array PostgREST body (TypeError -> 500); buildProgress mapped progress_daily rows with String()/Number()/Math.round only; no definitionVersion tag on either route. State reached before stop (VERIFIED): scoring_parity.test.ts 83 passed / 0 failed on f4428b5f; frozen `npx --yes deno@2.5.6 check ... index.ts` exit 0 (artifacts/w06-02/ac1-typecheck.log, untracked). AC2 full Edge suite against a migrated disposable Postgres (xc_pg_up.sh) was still running when stopped — UNKNOWN. pnpm format:check and git diff --check were NOT run — UNKNOWN. Note: the wip commit removes the PLAYER_RANK_TIERS constant and the inline compute in buildPlayerRank together with the comments attached to that deleted code."
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "REQUEUE",
+  "wave_id": "wave-5"
+}

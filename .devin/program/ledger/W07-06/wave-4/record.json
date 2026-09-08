@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W07-06-r1",
@@ -20,9 +26,35 @@
       "prompt_sha256": "d5876e33ae3a04eabca9584d654106ef73b251b537b4e3360dc0f8fd662af78f",
       "role": "adversary",
       "status": "completed"
+    },
+    {
+      "label": "implement-W07-06-r2",
+      "phase": "implement",
+      "prompt_sha256": "2806e276d525e96ac6ad5a8157b8dc71f9be8af617f7205fad5870e72a3a3de3",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-06-r2",
+      "phase": "review",
+      "prompt_sha256": "851a7241c253f7bded36b4951e25f35710143510585de21e74eb0646b8588b82",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-06-r2",
+      "phase": "adversary",
+      "prompt_sha256": "f4aa5467e5de24fa05bc1f7da46bbb585a23358b557014f84d3d6bd91d4898d3",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/w07-06/impl-r2",
+    "head_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+    "round": 2
+  },
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.6",
   "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
@@ -256,9 +288,214 @@
         "verdict": "approve"
       },
       "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cb33cd92-37e4-4a24-80e4-2d60519c8d77/attack_run_final.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0dd3cc52-ee5e-4d52-9a38-7c640cfd6d1b/full_suite_attack_branch.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/532d4230-e4c7-47a2-850e-23f045d8b14b/ac1_deno_check.log"
+        ],
+        "attack_branch": "devin/pp/w07-06/attack-da57d8f7",
+        "attack_branch_sha": "813de8f77083ec1afacb19a7f11997f4f738fc42",
+        "attacked_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "A finite honest source whose row count is <= INVENTORY_MAX_PAGES × pageRows completes (the budget should admit MAX_PAGES full pages plus the empty proof page, or the documented capacity should say MAX_PAGES-1 full pages).",
+            "observed": "readOwnerInventory with pageRows=1 over an honest descending source of exactly INVENTORY_MAX_PAGES (1_000) rows returns {status:'INCOMPLETE', reason:'page_budget'} after 1000 readPage calls; the same source with MAX_PAGES-1 rows is COMPLETE. On the shipping path this means an owner whose progress_daily/practice_days inventory is exactly 999_001..1_000_000 rows gets a 503 although the source is finite and honest (the documented budget 'MAX_PAGES full pages' overstates capacity by one page). Not reachable at realistic volumes (~128k rows for 35 years × 5 shot types × 2 versions), so P3.",
+            "repro": "git checkout 813de8f77083ec1afacb19a7f11997f4f738fc42 && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination_attack.test.ts --filter 'attack A1'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/inventory_pagination_attack.test.ts",
+            "title": "Honest finite inventory of exactly INVENTORY_MAX_PAGES full pages is reported INCOMPLETE (page_budget) — off-by-one: the empty proof page is never requested"
+          },
+          {
+            "expected": "Either every row is read, or the read is INCOMPLETE (e.g. malformed_page when a row's cursor is not strictly below the previous row's cursor in the requested direction — the reader already derives every cursor and can compare adjacent ones).",
+            "observed": "Source honours the cursor filter (rows strictly below cursor) but not the requested order inside a page: page 1 = [9, 8, 0] (limit 3). The reader positions the cursor at the last row (0), the next page is empty, and the result is {status:'COMPLETE', rows:[9,8,0]} — rows 1..7 are never read, nothing repeats, so the repeated_row check cannot see it. The objective's invariant 'either completes or reports INCOMPLETE explicitly' is violated by an undetected anomaly class. Requires PostgREST/the view to violate ORDER BY (or a future readAllRows caller whose .order() columns disagree with its keyColumns), so P2 rather than P1.",
+            "repro": "git checkout 813de8f77083ec1afacb19a7f11997f4f738fc42 && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination_attack.test.ts --filter 'attack A2'",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/inventory_pagination_attack.test.ts",
+            "title": "A page served out of keyset order is accepted and silently skips every unread row above its last row — COMPLETE with 3 of 10 rows"
+          },
+          {
+            "expected": "Numeric keyset values that are not safe integers (|n| > Number.MAX_SAFE_INTEGER) — or all numeric keys, forcing callers to select bigint columns as text — are refused so the read is INCOMPLETE (malformed_page) instead of silently skipping rows.",
+            "observed": "Two rows with bigint ids 9007199254740993 and 9007199254740992 (differ only beyond 2^53). JSON.parse collapses the first to 9007199254740992; postgrestKeysetAfter accepts the finite number and the cursor filter becomes id.lt.\"9007199254740992\", which excludes the real row 9007199254740992. Result: {status:'COMPLETE', rows:1} with servedPages ['[{\"id\":9007199254740993}]','[]']. The two shipping callers only key on text/date columns (day, shot_type, scoring_model_version), so no current route is affected; the helper is exported for reuse by deletion/cleanup consumers, which do have bigint/serial keys. P3.",
+            "repro": "git checkout 813de8f77083ec1afacb19a7f11997f4f738fc42 && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination_attack.test.ts --filter 'attack A3'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/inventory_pagination_attack.test.ts",
+            "title": "postgrestKeysetAfter accepts JSON numbers above 2^53 as keyset values — precision loss skips a row and the read still reports COMPLETE"
+          }
+        ],
+        "package_id": "W07-06",
+        "summary": "Adversarial pass over W07-06 candidate da57d8f7 (attacked_sha = git rev-parse HEAD on devin/pp/w07-06/impl-r2). 12 attacks written as Deno tests in supabase/functions/api/__wf__/inventory_pagination_attack.test.ts on branch devin/pp/w07-06/attack-da57d8f7 (sha 813de8f77083ec1afacb19a7f11997f4f738fc42, pushed; no candidate production code or candidate tests modified; no PR). VERIFIED `deno test -A --no-check --config deno.json inventory_pagination_attack.test.ts`: exit 1, 9 passed / 3 failed / 0 ignored — the 3 failures are the reported breaks (A1 page-budget off-by-one P3; A2 out-of-order page silently skips unread rows P2; A3 >2^53 numeric keyset precision loss P3). None is on a currently-shipping path with realistic data, so the core objective (no silent truncation of GET /v1/progress for large honest owners; INCOMPLETE → generic 503) HOLDS. Attacks the candidate survived (regression pins now on the branch): A4 non-adjacent replay → repeated_row; A5 null/sparse/object/NaN/boolean/missing-key rows → malformed_page, no rows kept; A6 429, 301, empty-body 502, aborted fetch (DOMException), non-Error rejection → page_error with httpStatus preserved and completedInventoryRows null; A7 two owners paging concurrently (2007-day + 1300-row owner vs 3-day owner, maxRows 400) each receive exactly their own history, every page carries user_id=eq.<owner>, limit=1000, no offset, or= references only key columns; A8 rows deleted from already-served pages and late-synced rows inserted below the cursor mid-read → no duplicates, no dropped unread rows, 5 pages; A9 600 rows with hostile key values (quotes, backslashes, commas, parens, dots, empty strings, and/or/not.in keywords) at 86 page boundaries (maxRows 7) → all 600 present once, 87 requests; A10 route-level 429+Retry-After / 302 redirect / 200 text-html body / empty-body 502 on page 2 → 503 with generic body, '[api] Progress:' logged, no internal detail leaked; A11 route-level overflow (1001 rows) / object page / null key on page 2 → 503 with INV02/INV01 logged; A12 two coalesced same-owner requests during a failing keyset page → both 503 from ONE shared build (2 page requests), nothing cached, next request completes (2001-day streak) and is then served from cache. Acceptance re-run on the attack branch: AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0; AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test` (disposable postgres:16-alpine with shim_auth.sql + all migrations; Docker Hub rate-limited the postgres:16 pull so the cached 16-alpine image was tagged postgres:16 locally) exit 1, 831 passed (31 steps) / 3 failed / 0 ignored — the only 3 failures are the attack breaks; the candidate's own 822 tests all pass. `pnpm format:check` exit 0, `git diff --check` clean. AC3 (base-vs-head regression of the candidate's own test) was not re-run by the adversary. UNKNOWN: real PostgREST/Supabase behaviour beyond the stand-in (no live project touched by design)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7edb4a3-7c80-4673-bca8-f96f6aeb5f65/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC1",
+            "note": "VERIFIED on da57d8f7 from the repo root; also artifacts/w07-06/ac1_deno_check.log in the checkout (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/53b555fe-80dc-4821-9c02-c24730ddf5d8/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 822,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC2",
+            "note": "VERIFIED on da57d8f7: `ok | 822 passed (31 steps) | 0 failed (2m0s)`, no 'ignored' in the summary line (ignored == 0). Disposable PostgreSQL = docker container pickle-xc-pg (postgres:16-alpine, tagged locally as postgres:16 because Docker Hub rate-limited the pull) on 127.0.0.1:55433. Local copy artifacts/w07-06/ac2_edge_suite.log.",
+            "passed": 822,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce1e22ed-d3a9-45f8-9c21-c30f1fe60ef3/ac3_head_run.log",
+            "command": "git worktree add --detach /home/ubuntu/w0706-base d8e5db3eb346b651e4ce04cc997178abcbed56fe && cp supabase/functions/api/__wf__/{inventory_pagination.test.ts,postgrestStandIn.ts} <base>/supabase/functions/api/__wf__/ && (cd <base>/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination.test.ts)  # BASE: exit 1;  then on HEAD: (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination.test.ts)  # exit 0",
+            "executed": 26,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC3",
+            "note": "VERIFIED. BASE run (only the two new files copied over a clean d8e5db3e worktree): exit 1, `FAILED | 1 passed | 25 failed` — the 17+ page route pins fail on the silent 20-page truncation, the max_rows pins fail with 200 + a truncated history, the reader/keyset pins fail because the exports do not exist; the single BASE pass is 'a page error part-way through is 503' (BASE already surfaced page errors). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/549730eb-1aa1-45d1-819f-f335b94a2dbc/ac3_base_run.log . HEAD run: exit 0, `ok | 26 passed | 0 failed`.",
+            "passed": 26,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Generic cursor reader `readOwnerInventory(reader)` in accountDeletionOperations.ts: pages by keyset (`readPage(cursor, limit)` → `cursorAfter(row)`), CONTINUES after every non-empty page (short or full) and treats ONLY an empty page as proof of completion (closes the r1 P1: PostgREST db-max-rows clamps answer 200 with a short page). Any anomaly returns `{status:'INCOMPLETE', reason, rows(diagnostic), pages, error, httpStatus}`: page_error (PostgREST error or thrown reader), malformed_page (null/non-array data without error), page_overflow (more rows than requested), repeated_row (cursor key seen before → stalled/overlapping/ignored cursor), invalid_page_size, page_budget (INVENTORY_MAX_PAGES=1000 × 1000 rows). `completedInventoryRows(result)` returns rows only for COMPLETE (null otherwise) so deletion/cleanup consumers cannot mistake a partial inventory for done. `postgrestKeysetBefore`/`postgrestKeysetAfter` build the descending-order PostgREST `or=(and(a.eq,b.eq,c.lt),and(a.eq,b.lt),a.lt)` filter from the ordered unique columns, with column-name validation and quote/backslash escaping. index.ts `readAllRows` (buildProgress: progress_daily keyed by day,shot_type,scoring_model_version; practice_days keyed by day) uses `.or(before).order(...).limit(limit)` instead of `.range()`+MAX_PAGES and maps INCOMPLETE to the existing generic 503 via `serviceUnavailable('Progress', failureDetail(...))`; non-page-error reasons log as `{name:'UnexpectedResult', code: INV01..INV05}` (INVENTORY_INCOMPLETE_CODES), no new console sink, body unchanged.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7edb4a3-7c80-4673-bca8-f96f6aeb5f65/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/53b555fe-80dc-4821-9c02-c24730ddf5d8/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/549730eb-1aa1-45d1-819f-f335b94a2dbc/ac3_base_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce1e22ed-d3a9-45f8-9c21-c30f1fe60ef3/ac3_head_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e3b36c2c-f3ed-460f-881e-742cb3aaabfe/format_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/58114837-ac46-4074-866a-4dee12ed6de7/base_edge_suite.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test  on BASE d8e5db3e: `FAILED | 795 passed (24 steps) | 1 failed` — db_migrations_rls_indexes.audit.test.ts: `psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: No such file or directory` (the test's pg_isready loop can catch the postgres:16 entrypoint's temporary init server under full-suite load; it passes when run alone 2/2 and passed inside the candidate full-suite run). Environmental/flaky, outside write_paths, not fixed. Log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/58114837-ac46-4074-866a-4dee12ed6de7/base_edge_suite.log"
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w07-06/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/accountDeletionOperations.ts",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/inventory_pagination.test.ts",
+          "supabase/functions/api/__wf__/postgrestStandIn.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts",
+          "supabase/functions/api/__wf__/edge_domain_regressions.test.ts",
+          "supabase/functions/api/__wf__/be-edge-routes-shots-rank.test.ts"
+        ],
+        "head_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — held serial group `edge-index`; minimal wiring hunk: `readAllRows` in buildProgress now drives `readOwnerInventory` with PostgREST keyset filters (`.or(before)` + `.limit(limit)`, owner scoping `.eq('user_id', authed.id)` kept) and maps INCOMPLETE to the existing generic 503 `serviceUnavailable('Progress', …)`; the BASE offset/MAX_PAGES=20 loop is removed. No other symbol touched.",
+          "supabase/functions/api/__wf__/postgrestStandIn.ts — NEW test-support module (additive): PostgREST keyset stand-in (order/limit/`or=(and(...),...)` filters + silent db-max-rows clamp) used by the new W07-06 test and by routesHarness; needed because BASE route fixtures returned the whole table on every request, which cannot model keyset pages.",
+          "supabase/functions/api/__wf__/routesHarness.ts — 4 additive lines: paged GETs (`limit`/`or` present) are served through postgrestStandIn so existing route tests get real keyset pages; non-paged requests are unchanged.",
+          "supabase/functions/api/__wf__/edge_domain_regressions.test.ts — EDR-C fixture (`orderedSlice`) on BASE hard-coded offset/Range semantics (it ignored the keyset filter and served the same page forever); same adaptation as r1 plus the expected request count 21→22 because a complete read now ends with the empty page that proves the end. Assertions on total rows/streak/order are unchanged (not weakened).",
+          "supabase/functions/api/__wf__/be-edge-routes-shots-rank.test.ts — one expectation `readsBefore + 1` → `readsBefore + 2` (the DB-backed rebuild reads the one-row page and the empty proof page); the pin's purpose (post-sync read is DB-backed, not a cache hit) is preserved."
+        ],
+        "package_id": "W07-06",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/inventory_pagination.test.ts (26 tests: reader unit pins — 17+ full pages, exact-multiple needs the empty proof page, db-max-rows=500/999 clamps, 1-row pages, ignored cursor, overlapping pages, duplicate rows, page error, thrown reader, thrown cursorAfter, null/malformed page, overflow, invalid page size, page budget, completedInventoryRows() null on INCOMPLETE, keyset filter builder/escaping; route pins — 21,003 practice_days, 21,000 progress_daily rows, max_rows 500 and 999 still full history, repeated page → 503 with generic body + INV03 in the fn log, mid-read error → 503, INCOMPLETE never cached)",
+          "supabase/functions/api/__wf__/postgrestStandIn.ts (test support imported by the above)"
+        ],
+        "residual_risks": [
+          "Every complete read costs one extra (empty) PostgREST request; for GET /v1/progress that is +2 requests per cache miss (progress_daily + practice_days). The response is cached 60s as before.",
+          "Keyset correctness relies on (user_id, day, shot_type, scoring_model_version) being unique per row in progress_daily and (user_id, day) in practice_days (they are grouped views/unique per day on BASE — INFERRED from the view definitions, the reader additionally rejects any repeated key as INCOMPLETE rather than looping).",
+          "`INVENTORY_MAX_PAGES=1000` (1,000,000 rows per owner read) is a hard budget after which the read is INCOMPLETE → 503, never silently truncated.",
+          "Dependent existing pins (EDR-C, shots-rank re-cache) now encode the extra empty proof request; any future change to the completion proof must update those counts.",
+          "The pinned PostgREST client retries GET 503 internally, so the mid-read error pin uses a non-retried 500 (57014); real 503s from PostgREST are retried by the SDK before the reader sees them."
+        ],
+        "summary": "Defect on BASE d8e5db3e (VERIFIED by the new pins failing 25/26 on BASE): supabase/functions/api/index.ts `readAllRows` (BASE ~L1990-2010, `PAGE_ROWS = 1_000; MAX_PAGES = 20`) paged progress_daily/practice_days by offset `.range(from, to)`, stopped on a short page OR after 20 pages and returned the accumulated prefix as the whole inventory — GET /v1/progress answered 200 with a silently truncated history for owners above 20,000 rows, and the r1 candidate (b7388260, 'batch.length < limit completes') re-opened the same class under PostgREST db-max-rows clamping (200 with 500 of 1200 rows). Fix: cursor/keyset reader `readOwnerInventory` + `completedInventoryRows` + keyset filter builders in accountDeletionOperations.ts (write_path), completion proved ONLY by an empty page, every anomaly reported as INCOMPLETE with a bounded reason; wired into buildProgress via the minimal `readAllRows` hunk in index.ts (held group edge-index) so INCOMPLETE → generic 503 'Progress is temporarily unavailable', owner scoping unchanged. Regression test inventory_pagination.test.ts (+ test-support postgrestStandIn.ts) committed first (828e481a), implementation separately (434d9d08, da57d8f7); the shared stand-in is also used by routesHarness so existing route fixtures serve real keyset pages, and two existing pins' request counts were updated to include the empty proof page. VERIFIED on da57d8f7: AC1 frozen deno 2.5.6 check exit 0; AC2 full Edge suite with disposable PG exit 0 `822 passed (31 steps) | 0 failed`, ignored 0; AC3 BASE `1 passed | 25 failed` (exit 1) vs HEAD `26 passed | 0 failed` (exit 0); `pnpm format:check` exit 0; `git diff --check` exit 0. Pushed to origin devin/pp/w07-06/impl-r2 (new branch); no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fad43979-6cde-499c-bfad-cc1b7392e77a/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC1",
+            "note": "VERIFIED by reviewer on da57d8f7 from the repo root with the frozen deno 2.5.6 via npx (local deno 2.9.6 not used); log ends `Check file:///.../supabase/functions/api/index.ts` + EXIT=0. Local copy artifacts/w07-06-review/ac1_deno_check.log (artifacts/ gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/40d3b481-1d06-45fb-b9fd-edfa0689dcf8/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test",
+            "executed": 822,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC2",
+            "note": "VERIFIED by reviewer on da57d8f7: summary line `ok | 822 passed (31 steps) | 0 failed (1m48s)`, no `ignored` token in the summary (ignored == 0); the DB-backed be-edge-routes-shots-rank / xc_pg_* tests ran and passed. Disposable PostgreSQL = docker container w0706-review-pg on 127.0.0.1:55434 created by the repo's own `XC_PG_CONTAINER=w0706-review-pg XC_PG_PORT=55434 ./xc_pg_up.sh` (postgres:16-alpine retagged locally as postgres:16 because Docker Hub answered 429; shim_auth.sql + every migration applied in order). A first reviewer attempt against an UNMIGRATED container exited 1 with `relation \"auth.users\" does not exist` (reviewer setup error, not a candidate defect) — kept as artifacts/w07-06-review/ac2_edge_suite_attempt1_unmigrated_db.log for transparency. Local copy artifacts/w07-06-review/ac2_edge_suite.log.",
+            "passed": 822,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/96c8836c-94b0-425d-a396-99faa1ed73d8/ac3_head_run.log",
+            "command": "git worktree add --detach /home/ubuntu/w0706-base d8e5db3eb346b651e4ce04cc997178abcbed56fe && cp supabase/functions/api/__wf__/{inventory_pagination.test.ts,postgrestStandIn.ts} /home/ubuntu/w0706-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0706-base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination.test.ts)  # BASE; then (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json inventory_pagination.test.ts)  # HEAD da57d8f7",
+            "executed": 26,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-06-AC3",
+            "note": "PROOF HOLDS. BASE run (clean d8e5db3e worktree, `git status` showed ONLY the two copied new files untracked; base routesHarness/index.ts untouched): exit 1, `FAILED | 1 passed | 25 failed (288ms)` — the practice_days route pin fails with Actual 20000 / Expected 21003 (the silent 20-page cap), the max_rows=500 pin with Actual 500 / Expected 1200 (short-page = end), the reader/keyset unit pins fail because the exports do not exist on BASE; the single BASE pass is `a page error part-way through is 503` (BASE already surfaced page errors). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3616fe8-9579-42f2-8d8f-07c70291f4a1/ac3_base_run.log (local artifacts/w07-06-review/ac3_base_run.log). HEAD run on da57d8f7: exit 0, `ok | 26 passed | 0 failed (333ms)` (local artifacts/w07-06-review/ac3_head_run.log). Worktree removed afterwards.",
+            "passed": 26,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd4a51a9-c4cc-41ae-ba7a-53e88bd2ca83/verdict.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fad43979-6cde-499c-bfad-cc1b7392e77a/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/40d3b481-1d06-45fb-b9fd-edfa0689dcf8/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3616fe8-9579-42f2-8d8f-07c70291f4a1/ac3_base_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/96c8836c-94b0-425d-a396-99faa1ed73d8/ac3_head_run.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "`completedInventoryRows()` (accountDeletionOperations.ts:839) has no shipping caller yet: on BASE there is no Edge deletion/cleanup code path that reads an owner inventory (deletion cascades through auth.users), so the objective's second clause ('deletion/cleanup consumers must treat INCOMPLETE as not-done') is delivered as the reader contract + helper that W08-06 (deps: [W07-06]) must consume. The reader itself IS shipped behaviour: index.ts readAllRows → buildProgress (progress_daily, practice_days), so rule 1b is not triggered.",
+          "INFERRED (not executable here): PostgREST's acceptance of backslash escapes inside double-quoted logic-tree values (`postgrestFilterValue`) is exercised only against the test stand-in, not a real PostgREST. Keyset values in the shipping call sites are `date` text, `shot_type text not null` slugs and `scoring_model_version text not null` — none contain quotes/backslashes — so the risk is confined to the escaping branch.",
+          "Every complete owner read now costs one extra (empty) PostgREST request (+2 per GET /v1/progress cache miss); response caching (60s) is unchanged.",
+          "supabase/functions/api/__wf__/edge_domain_regressions.test.ts EDR-C and be-edge-routes-shots-rank.test.ts request-count pins now encode the empty proof page (22 and readsBefore+2); assertions on totals/streak/order were strengthened (streak == total instead of == 20000), not weakened.",
+          "The implementer's `baseline_failures_observed` (db_migrations_rls_indexes.audit flake on BASE full suite) was not re-run by the reviewer — not required by any acceptance criterion; the candidate full suite passed 822/822 here."
+        ],
+        "package_id": "W07-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+        "scope_violation": false,
+        "summary": "APPROVE W07-06 candidate da57d8f7 (branch devin/pp/w07-06/impl-r2, base d8e5db3e). Scope: 7 files changed — 2 write_paths (accountDeletionOperations.ts +207, inventory_pagination.test.ts +747); index.ts (serial group edge-index, HELD by this package) is a single minimal wiring hunk replacing the offset `.range()` + `MAX_PAGES=20` loop with `readOwnerInventory` keyset paging (`.or(before).order(...).limit(limit)`, owner scoping `.eq('user_id', authed.id)` preserved, INCOMPLETE → existing generic 503 `serviceUnavailable('Progress', …)`, diagnostics only in failureDetail logs as INV01–INV05); the three test-support edits (new postgrestStandIn.ts, +4 lines routesHarness.ts, request-count updates in EDR-C and shots-rank pins) are listed in out_of_scope_files, lie under no serial-group path this package does not hold, and are the minimum needed because BASE fixtures hard-coded offset semantics. scope_violation=false. Acceptance re-verified by the reviewer (not copied): AC1 frozen deno 2.5.6 check exit 0; AC2 full Edge suite with a disposable migrated PostgreSQL exit 0 `822 passed (31 steps) | 0 failed`, ignored 0; AC3 BASE exit 1 `1 passed | 25 failed` (Actual 20000 vs Expected 21003 on the practice_days route pin proves the silent 20-page cap) vs HEAD exit 0 `26 passed | 0 failed` → regression_fails_on_base=true. Invariant audit of the full diff against AGENTS.md/REVIEW.md: no migration edits, no RLS/grant/session changes, no billing code touched, owner isolation unchanged, 5xx body unchanged (generic), no user-facing copy added, no `|| true`/`@ts-ignore`/`any`/eslint-disable/ignore/sanitize-off in the diff (`any` hits are English in comments), `git diff --check` and Prettier check exit 0; the only existing comment replaced is the PAGE_ROWS/MAX_PAGES doc comment whose subject code was removed. Key columns are `text not null`/date so `postgrestKeysetAfter` cannot throw on shipping rows (VERIFIED in 20260829120000_progress_data.sql). Zero blocking issues; non-blocking notes recorded (completedInventoryRows awaits its W08-06 consumer; PostgREST quoted-value escaping INFERRED). No PR opened, nothing pushed, no production or Mac-runner access.",
+        "verdict": "approve"
+      },
+      "round": 2
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-4"
 }

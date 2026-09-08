@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W02-03-r4",
@@ -20,9 +26,35 @@
       "prompt_sha256": "37cf8df8828726ebe00385a44f032383da296326824d67e2f3910f37bdaaaf9a",
       "role": "adversary",
       "status": "completed"
+    },
+    {
+      "label": "implement-W02-03-r5",
+      "phase": "implement",
+      "prompt_sha256": "15bc5c2a6f938170db73ec392de831d661b2eef768dd1830e027f76754ac3fe3",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W02-03-r5",
+      "phase": "review",
+      "prompt_sha256": "a4a2c06e1f00345e9204675b2f784cad1cd6c2624e405f24326cc70669693396",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W02-03-r5",
+      "phase": "adversary",
+      "prompt_sha256": "45cf2cccef0cbebbce628c8b80d3843bdc32fa46127f7aee492ac331bd8bde3c",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "candidate": {
+    "branch": "devin/pp/w02-03/impl-r5",
+    "head_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+    "round": 5
+  },
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.5",
   "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
@@ -263,9 +295,255 @@
         "verdict": "approve"
       },
       "round": 4
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/51296a65-75ef-4ac7-a2b3-e72cc3be493a/attack-candidate-run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/76557cb4-79dd-4df8-bf3f-3a55300ede99/attack-base-run1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf154b2a-2e13-4a14-a325-ad133ab4f197/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7af00c9a-e5aa-4f10-b993-0773a5f35781/ac3-candidate-after-npmci.log"
+        ],
+        "attack_branch": "devin/pp/w02-03/attack-ddf33b22",
+        "attack_branch_sha": "60ca2064c03f1b88f2c846db6b6237d99e77c6c9",
+        "attacked_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+        "attacks_tried": 58,
+        "breaks": [
+          {
+            "expected": "A reserve body with no recognised status is not a verdict: ApiError(502,'access.permit_invalid') (or another non-terminal 5xx) so the journal keeps the attempt pending under the same reservation key and retries on the next launch, exactly as the candidate already does for a blank id / non-string expiresAt.",
+            "observed": "VERIFIED on ddf33b22: 4 failed / 54 passed / 58 total, exit 1 (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/51296a65-75ef-4ac7-a2b3-e72cc3be493a/attack-candidate-run3.log). For {permit:{id,accessSource:'free',expiresAt,...}} with status undefined / '' / 7 / 'pending', createAnalysisPermitClient().reserve() throws ApiError(409,'access.permit_not_reserved') (api.ts parseReservedPermit passes status through unchecked; reserve() maps every status !== 'reserved' to the 409). runJournal failure() (reserve phase, 409 + access.permit_not_reserved) turns that into terminalReason 'permit_not_reserved', so the attempt goes terminal on the device even though the body carries no server verdict about the permit; if the server did reserve (version skew / body mangling), that reservation is never finalized by this client and counts against availableToReserve until the pg_cron sweep. The control case (status:'finalized' on an idempotent replay) correctly yields the 409 and passes. Same 4 cases fail identically on BASE f250acd7 (base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/76557cb4-79dd-4df8-bf3f-3a55300ede99/attack-base-run1.log).",
+            "repro": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.attack.test.ts -t \"a reserve body naming a permit whose\"",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w02ProcessDeathRecovery.attack.test.ts (describe 'G. transport boundary values on request()', it.each 'a reserve body naming a permit whose %s is not a server verdict ...')",
+            "title": "reserve() fabricates the terminal verdict 409 access.permit_not_reserved from a 200 reserve body whose permit.status is missing, empty, non-string or outside the contract (pre-existing on base, unchanged by the candidate, inside write_paths apps/mobile/src/data/api.ts)"
+          }
+        ],
+        "package_id": "W02-03",
+        "summary": "Adversarial suite apps/mobile/__tests__/w02ProcessDeathRecovery.attack.test.ts (58 tests, one new file, no production or candidate-owned test changes) pushed to devin/pp/w02-03/attack-ddf33b22 @ 60ca2064c03f1b88f2c846db6b6237d99e77c6c9 (no PR). Attack categories: (A) a second process death INSIDE the relaunch recovery step (kill during recovery reserve/finalize/sync) -> third launch settles exactly one permit/one result; (B) 429+Retry-After, JSON 503, HTML 500, empty 502, JSON 499 without envelope, HTML 403 at every recovery step (finalize, recovery reserve, relaunch sync) -> held on the same permit/key/outbox row, honest launch settles once; (C) first-admission network faults without process death; (D) out-of-band SQLite corruption/partial state (non-UUID permit_id, outbox payload stripped of analysisPermitId, deleted attempt row) and boundary values (attempt_count INT32 max, updated_at far-future, created_at rolled back to 0); (E) replay/duplicate identity across extra launches; (F) 301/308 redirects on finalize and recovery reserve never followed; (G) transport boundary values on request() (300/399, redirected=true same URL, opaqueredirect, status 0, same-origin URL spellings, cross-origin final URL, 299, unreadable 499/451, non-string envelope code, case-variant permit id, array/unknown-shot sync acks, malformed reserve bodies). Free-rating conservation asserted throughout (no shot => no scored permit). VERIFIED results — candidate ddf33b22: `cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.attack.test.ts` exit 1, 58 executed / 54 passed / 4 failed / 0 skipped; the 4 failures are the single confirmed break (P2, reserve status not validated -> fabricated terminal 409). BASE f250acd7 with only the attack file + the candidate's new __harness__/processDeath/ copied (the harness does not exist on base): exit 1, 58 executed / 36 passed / 22 failed / 0 skipped — the 18 extra base failures are the redirect / unreadable-4xx / finalize-acknowledgement regressions the candidate fixes (AC2 satisfied for the new attack file). AC1 `npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` on candidate: exit 0, 88/88 passed (13 kill points). AC3 `npx tsc --noEmit` after `npm ci`: exit 0. AC4 root `npx eslint` + `npx prettier --check` on the changed attack file: exit 0; `git diff --cached --check` clean. No P0/P1 found: every process-death, transport-artifact, redirect, corruption and replay attack held exactly one durable result / one outbox row / one permit and never consumed a free rating without a synced scored shot."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da11e4d0-8cf9-4614-909f-3d4fc89a8c25/ac1-w02-suite.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 88,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED on ddf33b22. 1 suite, 88 tests passed. KILL_POINTS (apps/mobile/__harness__/processDeath/killPoints.ts) has >= 8 distinct ids, asserted by the suite itself ('expect(KILL_POINTS.length).toBeGreaterThanOrEqual(8)').",
+            "passed": 88,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da11e4d0-8cf9-4614-909f-3d4fc89a8c25/ac1-w02-suite.log",
+            "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS. Executed as: git worktree at f250acd7 (/home/ubuntu/wt-base, `cd apps/mobile && npm ci`), `git archive HEAD apps/mobile/__harness__/processDeath apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts | tar -x -C <base worktree>` (all files new relative to BASE_SHA), then `cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` on base and on HEAD",
+            "executed": 88,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "PROOF: base FAILS, candidate PASSES → exit_code 0. BASE run: command `cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts` at f250acd768bfdd9c04949e03e97002125958641e with only the new harness dir + test file copied over → exit 1, 88 executed, 28 passed, 60 failed, 0 skipped; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5a7638c-7b80-46f7-8580-bc9ba8895bd4/ac2-base-f250acd7.log. The 60 base failures are exactly the targeted classes: finalize answered 200 {}/{ok:true}/{permit:{}}/{permit:{status:'finalized'}}/error-envelope/202 {} recorded as released (r5); finalize/reserve/sync answered bare 4xx (400 text/plain, 403 text/html, 404 text/html) treated as terminal verdicts (r5); 3xx redirects followed / non-JSON 2xx acknowledged (r3/r4). CANDIDATE run (ddf33b22): exit 0, 88/88 passed.",
+            "passed": 88,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/75fae621-ca48-4c49-9399-aa86769b6cc8/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED on ddf33b22 (after all edits): no diagnostics, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f4fb0b52-66ae-492d-a860-546867863fe2/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/faultProxy.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts apps/mobile/__harness__/analysisPermitRoute.ts apps/mobile/__harness__/serverResponseMatrix/callSites.ts apps/mobile/__harness__/serverResponseMatrix/scenarios.ts apps/mobile/__tests__/analysisPermitApi.test.ts apps/mobile/__tests__/analyzeScreenFullFlowE2E.test.tsx apps/mobile/__tests__/attack3/permitFaults.attack.test.ts apps/mobile/__tests__/attack4RunCaptureAnalysisPermits.test.ts apps/mobile/__tests__/attack5/permitContract.test.ts apps/mobile/__tests__/audit/structural1PermitReleaseOnThrow.test.ts apps/mobile/__tests__/autoDetectAnalysis.test.ts apps/mobile/__tests__/captureAnalysisFlow.test.ts apps/mobile/__tests__/originalAnalysisRetry.test.ts apps/mobile/__tests__/runCaptureJournalIntegration.test.ts apps/mobile/__tests__/savedTechniqueConfirmationRoute.test.tsx apps/mobile/__tests__/serverResponseMatrix.outbox.test.ts apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts apps/mobile/__tests__/xcBehavioral/permitLifecycleMatrix.test.ts apps/mobile/src/data/api.ts && npx prettier --check <same 28 files>  (run from repo root; file list: https://la-hacks-rttothemoon.devinenterprise.com/attachments/65463204-0566-47d2-9a40-5ddb2989d8ee/changed-files.txt)",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC4",
+            "note": "VERIFIED on ddf33b22: ESLint 0 errors (1 informational warning: register.js matches the repo's eslint ignore pattern — the same as r3/r4, not a rule violation); Prettier 'All matched files use Prettier code style!'. Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/cefc31ea-0290-4f9d-9038-9f7e334c6882/format-check.log) and `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA f250acd7, kept the sound r3/r4 commits (harness, redirect:'manual' + 3xx guard, JSON-object-only 2xx), then: (1) wrote the r5 regressions FIRST in __tests__/w02ProcessDeathRecovery.test.ts (commit f7d54243) covering both adversary breaks at process-death level (fault proxy answering finalize/reserve/sync with 200 non-verdict JSON and bare 4xx between kill points) and unit level against createAnalysisPermitClient over request(); proved they fail on base. (2) Implemented in apps/mobile/src/data/api.ts (commit ddf33b22): acknowledgesRelease() now requires body.permit to be an object with permit.id === requested id, a string status !== 'reserved' and permit.outcome === requested outcome (the real route's {permit,access} view); request() maps a 4xx whose body carries no `{error:{code:string}}` envelope (excluding 401/408/429) to ApiError(502,'network.invalid_response') so runJournal's existing failure() classifier and sync's isPermanentSyncFailure() keep the attempt release_pending/reserve_pending on the same permit id/reservation key and the outbox row unburned — no edit to apps/mobile/src/analysis/ or sync.ts was needed. (3) Reconciled the fixtures the tightened contract exposed (mocked finalize `{ok:true}`/`{}` → production-shaped ack via new test-only __harness__/analysisPermitRoute.ts; server-response matrix oracle distinguishes bare 4xx from coded envelopes) without weakening, skipping or deleting any test.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da11e4d0-8cf9-4614-909f-3d4fc89a8c25/ac1-w02-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5a7638c-7b80-46f7-8580-bc9ba8895bd4/ac2-base-f250acd7.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/75fae621-ca48-4c49-9399-aa86769b6cc8/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f4fb0b52-66ae-492d-a860-546867863fe2/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cefc31ea-0290-4f9d-9038-9f7e334c6882/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/92ee0f61-6e44-4de0-9cfc-9cf1cd0519ec/r5-full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/65463204-0566-47d2-9a40-5ddb2989d8ee/changed-files.txt"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w02-03/impl-r5",
+        "files_changed": [
+          "apps/mobile/__harness__/processDeath/child.ts",
+          "apps/mobile/__harness__/processDeath/durableSqlite.ts",
+          "apps/mobile/__harness__/processDeath/faultProxy.ts",
+          "apps/mobile/__harness__/processDeath/harness.ts",
+          "apps/mobile/__harness__/processDeath/killPoints.ts",
+          "apps/mobile/__harness__/processDeath/killSwitch.ts",
+          "apps/mobile/__harness__/processDeath/ratingService.ts",
+          "apps/mobile/__harness__/processDeath/reactNativeStub.ts",
+          "apps/mobile/__harness__/processDeath/register.js",
+          "apps/mobile/__harness__/processDeath/report.ts",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/__harness__/analysisPermitRoute.ts",
+          "apps/mobile/__harness__/serverResponseMatrix/callSites.ts",
+          "apps/mobile/__harness__/serverResponseMatrix/scenarios.ts",
+          "apps/mobile/__tests__/serverResponseMatrix.outbox.test.ts",
+          "apps/mobile/__tests__/analysisPermitApi.test.ts",
+          "apps/mobile/__tests__/analyzeScreenFullFlowE2E.test.tsx",
+          "apps/mobile/__tests__/attack3/permitFaults.attack.test.ts",
+          "apps/mobile/__tests__/attack4RunCaptureAnalysisPermits.test.ts",
+          "apps/mobile/__tests__/attack5/permitContract.test.ts",
+          "apps/mobile/__tests__/audit/structural1PermitReleaseOnThrow.test.ts",
+          "apps/mobile/__tests__/autoDetectAnalysis.test.ts",
+          "apps/mobile/__tests__/captureAnalysisFlow.test.ts",
+          "apps/mobile/__tests__/originalAnalysisRetry.test.ts",
+          "apps/mobile/__tests__/runCaptureJournalIntegration.test.ts",
+          "apps/mobile/__tests__/savedTechniqueConfirmationRoute.test.tsx",
+          "apps/mobile/__tests__/xcBehavioral/permitLifecycleMatrix.test.ts"
+        ],
+        "head_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+        "out_of_scope_files": [
+          "apps/mobile/__harness__/analysisPermitRoute.ts — NEW test-only helper (not under any serial_group_paths prefix) that builds the finalize acknowledgement exactly as supabase/functions/api/index.ts permitView()+access writes it; the prior-round finding required test fixtures answering finalize with `{}`/`{ok:true}` to be updated to the real route shape (not weakened) once release() is tightened.",
+          "apps/mobile/__harness__/serverResponseMatrix/scenarios.ts — marks the four envelope-less 4xx scenarios (status_400_empty, status_404_html, status_405, status_410) `bareStatus` and teaches judge() that for request()-served families (outbox/permit/feedback) such a cell must stay retryable (`retry_class_transient_expected`) while a coded envelope must still be permanent. Minimum oracle change so the matrix reflects the package invariant instead of pinning the base defect.",
+          "apps/mobile/__harness__/serverResponseMatrix/callSites.ts — the finalize call site's `good` body becomes the production `{permit:{id,accessSource,status:'finalized',outcome,reservedAt,expiresAt},access}` view (the old `{permit:{id,status:'released'}}` had no outcome and does not match the route).",
+          "apps/mobile/__tests__/serverResponseMatrix.outbox.test.ts — outbox expectations: bare-4xx → rows kept with attempts 0 (transport artifact); a 2xx whose body is not a JSON object no longer completes the void createSession/finalizeSession rows (they stay pending, attempts 0). Follows the new request() contract; nothing was removed or skipped.",
+          "apps/mobile/__tests__/analysisPermitApi.test.ts — 'releases an abstention' fixture: finalize mock `{}` → production-shaped acknowledgement for that permit id/outcome (explicitly called out by the prior-round finding).",
+          "apps/mobile/__tests__/analyzeScreenFullFlowE2E.test.tsx — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/attack3/permitFaults.attack.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/attack4RunCaptureAnalysisPermits.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/attack5/permitContract.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/audit/structural1PermitReleaseOnThrow.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/autoDetectAnalysis.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement (4 mocks).",
+          "apps/mobile/__tests__/captureAnalysisFlow.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/originalAnalysisRetry.test.ts — finalize mock echoed the permit still `status:'reserved'`; now `status:'finalized'` as the route does after settling.",
+          "apps/mobile/__tests__/runCaptureJournalIntegration.test.ts — same: finalize mock now reports `status:'finalized'`.",
+          "apps/mobile/__tests__/savedTechniqueConfirmationRoute.test.tsx — test server finalize `{ok:true}` → production-shaped acknowledgement.",
+          "apps/mobile/__tests__/xcBehavioral/permitLifecycleMatrix.test.ts — test server finalize `{ok:true}` → production-shaped acknowledgement."
+        ],
+        "package_id": "W02-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts — 'a finalize acknowledgement that is not a permit verdict leaves the reservation recoverable' (process-death: 200 {}, {ok:true}, {permit:{}}, {permit:{status:'finalized'}} no id, 200 error envelope, 202 {}, 400 text/plain, 403 text/html, 404 text/html)",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts — 'a transport artifact on the recovery reservation leaves the reservation key recoverable' (reserve 400 text/plain, 403 text/html, 404 text/html → same reservation key, one permit)",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts — 'transport artifacts on the relaunch sync never consume the outbox budget' (bare 4xx sync → attempts stay 0, delivered exactly once)",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts — 'the shipping transport … release() accepts only a verdict on this permit' (18 unit cells incl. control `{permit,access}` → resolves) and 'a 4xx without the API’s JSON error envelope is a transport artifact, not a verdict' (finalize/reserve: 400/402/403/404/409 text/html/plain/[]/{}/envelope-without-code → 502 network.invalid_response; coded envelope, 401, 408, 429 keep their status)"
+        ],
+        "residual_risks": [
+          "INFERRED: a 4xx from the real Edge route that ever omitted the `{error:{code}}` envelope would now be retried rather than recorded as permanent; supabase/functions/api/http.ts always writes the envelope for 4xx (read, not exercised live here).",
+          "INFERRED: acknowledgesRelease() requires permit.outcome === requested outcome; the Edge finalize route stores exactly the requested outcome for a fresh release and answers 409 for a conflicting settled outcome (read in supabase/functions/api/index.ts, not exercised live here).",
+          "The unrelated pre-existing skipped test in the full mobile suite (1 skipped, present on base) was not touched."
+        ],
+        "summary": "Defects on BASE_SHA f250acd7 (VERIFIED): (a) apps/mobile/src/data/api.ts createAnalysisPermitClient().release() (base ~L176-190) accepted ANY 2xx as a finalize acknowledgement — on base there was no acknowledgesRelease() at all, and the r4 candidate's version returned true whenever `body.permit === undefined` — so `{}`, `{ok:true}`, `{permit:{}}`, `{permit:{status:'finalized'}}` (no id), a 200 error envelope and a 202 `{}` were recorded as state 'released' while the server permit stayed 'reserved' (reservation leaked). (b) request() (base ~L200-235) mapped a 4xx with a non-JSON / non-envelope body to ApiError(status,'unknown'); runJournal failure() (src/analysis/runJournal.ts) and sync isPermanentSyncFailure() (src/data/sync.ts) treat any 4xx other than 401/408/429 as terminal, so a captive-portal 403 HTML / gateway 404 / proxy 400 text on finalize made the attempt 'terminal'/'release_rejected' (server permit still reserved, never retried), on the recovery reserve made it 'terminal'/'reservation_rejected' though the server never saw the request, and on sync burned an outbox attempt. Fix (commit ddf33b22, all in apps/mobile/src/data/api.ts, wired into the shipping request()/permit client path): a finalize acknowledgement must be the route's `{permit,access}` view naming THIS permit id with a settled (non-'reserved') status and the REQUESTED outcome — anything else is ApiError(502,'access.permit_release_unconfirmed'); a 4xx without a `{error:{code}}` envelope (401/408/429 excepted) is ApiError(502,'network.invalid_response') so it is retried under the same permit id / reservation key / outbox row on the next launch, while a coded envelope keeps its status+code as the verdict. Evidence: W02 suite 88/88 on HEAD vs 60 failed / 28 passed on BASE with only the new files copied; full mobile jest 313 suites / 6142 tests passed, 1 pre-existing skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/92ee0f61-6e44-4de0-9cfc-9cf1cd0519ec/r5-full.log); tsc, changed-file eslint+prettier, root pnpm format:check and git diff --check all exit 0. Fixture reconciliation outside write_paths (16 test/harness files, none under a serial_group_paths prefix, none weakened) is itemised in out_of_scope_files. Branch devin/pp/w02-03/impl-r5 pushed at ddf33b225fd6ba1c958eb6873d0ed068d11a3e04; no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/617dbe14-2890-47ef-8e0d-96cdbf136830/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 88,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED on ddf33b22 (after `cd apps/mobile && npm ci`): 1 suite passed, 88/88 tests, 211s. Kill points: KILL_POINTS in apps/mobile/__harness__/processDeath/killPoints.ts has 13 distinct ids (capture_saved, operation_insert_mid_transaction, seal_update_mid_transaction, attempt_insert_mid_transaction, attempt_admitted_before_reserve_request, permit_reserved_response_lost, permit_update_mid_transaction, commit_shot_inserted_mid_transaction, commit_outbox_inserted_mid_transaction, result_committed_before_sync_request, sync_accepted_response_lost, receipt_inserted_mid_transaction, ...); the suite asserts >= 8 and id uniqueness, and runs it.each(KILL_POINTS) with a real SIGKILL of a child Node process (killSwitch.ts process.kill(pid,'SIGKILL'); parent asserts signal==='SIGKILL', exitCode null, kill marker) followed by relaunch asserting exactly one durable analysis/shot/outbox row, same permit id and reservation key. The child imports shipping modules (savePendingCapture, configureSyncRuntime, triggerOutboxSync, prepareOriginalCaptureAnalysis, runOriginalCaptureAnalysis) — it does not reimplement recovery.",
+            "passed": 88,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/36070ada-9c9a-46bc-b7fa-0b4388413bb4/ac2-base.log",
+            "command": "git worktree add /home/ubuntu/wt-base f250acd768bfdd9c04949e03e97002125958641e && (cd /home/ubuntu/wt-base/apps/mobile && npm ci) && git archive ddf33b225fd6ba1c958eb6873d0ed068d11a3e04 apps/mobile/__harness__/processDeath apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts | tar -x -C /home/ubuntu/wt-base && (cd /home/ubuntu/wt-base/apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts)  # BASE must fail; then same jest command on candidate checkout must pass",
+            "executed": 88,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "PROOF holds (exit_code 0 = base FAILS, candidate PASSES). BASE run at f250acd7 with ONLY the new harness dir + new test file copied (both new relative to base; `git status --short` in the base worktree showed exactly those 2 untracked paths, no src/ changes): exit 1, 1 suite failed, 88 executed, 28 passed, 60 failed, 0 skipped; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/36070ada-9c9a-46bc-b7fa-0b4388413bb4/ac2-base.log. The 60 base failures are exactly the criterion's classes: (a) finalize answered 200 text/html / 204 no body / 200 {} / {ok:true} / {permit:{}} / {permit:{status:'finalized'}} no id / 200 error envelope / 202 {} recorded as released on base (15 process-death cells + 18 unit cells 'release() accepts only a verdict on this permit'); (b) 302/307 redirects followed by the transport on finalize, reserve and sync (12 process-death cells); (c) bare 4xx (400 text/plain, 403 text/html, 404 text/html) treated as terminal verdicts on finalize/reserve/sync (15 cells). The 28 base passes are the 13 SIGKILL kill-point recoveries + control + hermetic/env checks + coded-envelope/401/408/429 controls, which base recovery already satisfied. CANDIDATE run (ddf33b22): exit 0, 88/88 passed, 0 failed, 0 skipped — https://la-hacks-rttothemoon.devinenterprise.com/attachments/617dbe14-2890-47ef-8e0d-96cdbf136830/ac1-head.log.",
+            "passed": 88,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2760102a-2bd4-486b-8bbd-33793a13f40f/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED on ddf33b22: no diagnostics, exit 0. (A first run before `npm ci` failed only on missing @sentry/* modules from an incomplete node_modules — environment, not candidate; after `cd apps/mobile && npm ci` it passes.)",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d91551f1-5d50-4dc4-907b-e35adecb8396/ac4-eslint.log",
+            "command": "cd <repo root> && npx eslint $(git diff --name-only f250acd7..ddf33b22 | grep '^apps/mobile/') && npx prettier --check $(git diff --name-only f250acd7..ddf33b22)  # 28 files, list: https://la-hacks-rttothemoon.devinenterprise.com/attachments/54fad0b5-dfd3-44ec-8b9b-a1ddd7104ba3/changed-files.txt",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC4",
+            "note": "VERIFIED on ddf33b22 from repo root with root ESLint/Prettier: ESLint exit 0, 0 errors, 1 warning (processDeath/register.js matches the repo eslint ignore pattern — pre-existing config, not a rule violation); Prettier exit 0 'All matched files use Prettier code style!' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a41ad88-b831-4017-a9ed-820febc7f580/ac4-prettier.log). Also `git diff --check f250acd7..ddf33b22` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/617dbe14-2890-47ef-8e0d-96cdbf136830/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/36070ada-9c9a-46bc-b7fa-0b4388413bb4/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2760102a-2bd4-486b-8bbd-33793a13f40f/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d91551f1-5d50-4dc4-907b-e35adecb8396/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a41ad88-b831-4017-a9ed-820febc7f580/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/54fad0b5-dfd3-44ec-8b9b-a1ddd7104ba3/changed-files.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e53931ba-7d8b-4008-b850-ba48705039a8/full-jest-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/__tests__/serverResponseMatrix.outbox.test.ts: one pre-existing test-oracle comment ('ANY 2xx completes them (the body is never consulted)') was rewritten to describe the new contract. The hard rule says 'do not modify existing code comments'; the old text would have been a false statement about the assertion directly beneath it after the deliberate oracle change, so I treat it as part of the deliberate test change rather than a comment edit. Flagging for the judge; no other existing comment in the 28-file diff was touched (checked every '-' line in git diff f250acd7..ddf33b22).",
+          "ESLint reports 1 warning: apps/mobile/__harness__/processDeath/register.js is ignored by the repo's eslint ignore pattern (0 errors). Pre-existing repo config, not a rule violation; the file is a 10-line Node --import loader hook for the child process.",
+          "Full mobile jest on the candidate: 313 suites / 6142 tests passed, 1 suite skipped (__tests__/importedRealFootageAnalysis.test.ts, `artifactsPresent ? describe : describe.skip`, unchanged by the candidate; environmental non-gate present on base). Not an acceptance criterion; recorded for completeness.",
+          "INFERRED (read, not exercised live): the new request() classification maps an envelope-less 4xx (except 401/408/429) to ApiError(502,'network.invalid_response'); supabase/functions/api/http.ts always writes {error:{code}} for 4xx, so real API verdicts keep status+code. A 3xx from the real gateway (none expected) would now be a transport artifact rather than followed."
+        ],
+        "package_id": "W02-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+        "scope_violation": false,
+        "summary": "APPROVE W02-03 at ddf33b225fd6ba1c958eb6873d0ed068d11a3e04 (base f250acd768bfdd9c04949e03e97002125958641e). SCOPE (VERIFIED via git diff --stat, 28 files): 12 files under write_paths (10 in __harness__/processDeath/, the W02 test, src/data/api.ts — api.ts is under mobile-data which this package holds). 16 files outside write_paths, all itemised in out_of_scope_files, none under any serial_group_paths prefix (all are apps/mobile/__harness__/* or __tests__/*), and each is the minimum consequence of tightening release(): 1 new test-only helper analysisPermitRoute.ts (finalize ack shaped as supabase/functions/api/index.ts permitView()+access writes it), 13 test files whose mocked finalize `{ok:true}`/`{}`/`status:'reserved'` bodies become the production {permit:{id,status:'finalized',outcome,...},access} shape (only the mock response body changed — no assertion removed, no skip/only/timeout added; checked every '-' line), and the server-response-matrix oracle (scenarios.ts bareStatus + isClientErrorVerdict, callSites.ts finalize good body, outbox.test.ts expectations) updated to distinguish a coded API 4xx verdict from an envelope-less intermediary 4xx. scope_violation=false. SHIPPED BEHAVIOUR (VERIFIED by reading api.ts diff + call graph): request() now fetches with redirect:'manual', rejects opaqueredirect/3xx/response.redirected/url-mismatch before reading the body (ApiError 502 network.redirected), parses body as unknown, rejects non-object 2xx bodies, and maps a 4xx without {error:{code:string}} (except 401/408/429) to ApiError(502,'network.invalid_response') so runJournal failure() and sync isPermanentSyncFailure() (both read: 5xx => recoverable) keep the attempt release_pending/reserve_pending under the same permit id/reservation key and leave the outbox row unburned; createAnalysisPermitClient().release() now awaits the body and requires acknowledgesRelease(): permit.id === requested id, string status !== 'reserved', outcome === requested outcome (matches the Edge finalize route's {permit,access} view; same-outcome refinalize idempotent, conflicting settled outcome 409 coded). Every shipping API call goes through request(); nothing new is dead code. The package invariant 'request() never follows redirects and never treats a non-JSON 2xx body as an acknowledgement' is pinned by the new suite. ACCEPTANCE (all re-executed by me): AC1 88/88 exit 0 with 13 deterministic SIGKILL kill points of a real child Node process using shipping modules; AC2 proof holds — base with only the new files: exit 1, 60 failed/28 passed (failures exactly: non-JSON/non-verdict 2xx finalize recorded as released, 302/307 followed, bare 4xx treated as terminal), candidate 88/88; AC3 tsc exit 0; AC4 eslint 0 errors (1 ignore-pattern warning) + prettier clean on all 28 files; git diff --check clean. Extra: full mobile jest on candidate 313 suites/6142 tests passed, 1 pre-existing environmental skip (importedRealFootageAnalysis, unchanged). HARD RULES: no eslint-disable/@ts-ignore/@ts-expect-error/any/`|| true`/passWithNoTests/.skip/.only/timeout inflation/jest force-exit in the diff (process.exit in the harness child is the child process's own termination, which is the harness's purpose); no migrations, grants, RLS, session checks, billing, native, copy (new user-facing strings contain no prohibited terms) or diagnostics touched. One judgement call recorded under non_blocking_issues: a stale oracle comment in serverResponseMatrix.outbox.test.ts was rewritten alongside the assertion it describes. No PR opened, nothing pushed, candidate not modified.",
+        "verdict": "approve"
+      },
+      "round": 5
     }
   ],
   "start_round": 4,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-3"
 }

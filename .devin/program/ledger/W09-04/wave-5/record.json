@@ -1,0 +1,245 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W09-04-r3",
+      "phase": "implement",
+      "prompt_sha256": "0586d1b60bafb1ed7f4046aa5cd24a08210a2903538202cc2e43a890a00d3eff",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W09-04-r3",
+      "phase": "review",
+      "prompt_sha256": "044ed009417faedbb541189fd05a487aebc91488f92b987d9ac7413168f2baba",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W09-04-r3",
+      "phase": "adversary",
+      "prompt_sha256": "fbde84af4bfc10e98c0ae52a87aa71e7500a9f6bb575657020da372840f68fa6",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "candidate": {
+    "branch": "devin/pp/w09-04/impl-r3",
+    "head_sha": "1216c58884b64ad90ab80f18e41ed12400b34dce",
+    "round": 3
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W09-04",
+  "requeued_from": {
+    "branch": "devin/pp/w09-04/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w09-04/attack-e0c19d11",
+      "adversary_breaks": [],
+      "judge": [
+        "review: unknown acceptance id 'W09-04-REGRESS'"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "e0c19d1113c17e1d30934778faff94c93fc501ab"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ebda14a0-7069-445d-b1f3-f3b1de00e8b2/attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f53e7a07-51e4-411a-8fc9-a334d669ad6c/ac1-candidate-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3568500b-05dd-40f8-80f7-d50448503313/tsc.log"
+        ],
+        "attack_branch": "devin/pp/w09-04/attack-1216c588",
+        "attack_branch_sha": "2b98846a476928c2239d96fc54857943789db0b6",
+        "attacked_sha": "1216c58884b64ad90ab80f18e41ed12400b34dce",
+        "attacks_tried": 21,
+        "breaks": [
+          {
+            "expected": "Objective says error overlays are arbitrated so only one is presented — i.e. serialized, not discarded. Each distinct error notice raised while held should be presented in turn (or the arbiter should document that notices coalesce and only the latest survives).",
+            "observed": "VERIFIED (Linux Jest, attack-final.log): with the rank-up ceremony presented, notify('Privacy policy could not be opened') then notify('Terms of use could not be opened') → after dismissing the ceremony only 'Terms of use could not be opened' is ever presented; expected ['Privacy policy could not be opened','Terms of use could not be opened'], received ['Terms of use could not be opened']. BrandNoticeHost keeps a single `notice`/`pendingNotice` and replaces it while the arbiter withholds the notice slot. INFERRED: on BASE the first notice was at least briefly visible over the ceremony; the candidate turns that window into the whole ceremony lifetime, so the first failure feedback is silently dropped.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09OverlayArbiterAttack.test.tsx -t 'two distinct error notices raised behind a showing ceremony are both shown once the ceremony is dismissed'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w09OverlayArbiterAttack.test.tsx",
+            "title": "A second, different error notice raised while a ceremony holds the notice slot overwrites the first — the first error is never shown"
+          },
+          {
+            "expected": "Focus should return to the trigger only once no other modal surface is about to cover it (after the chained ceremony/notice clears), or the queued surface should be presented without the intermediate focus push.",
+            "observed": "VERIFIED (Linux Jest, attack-final.log): Settings → Replay opens the walkthrough via openCeremonyFrom(row); a rank-up ceremony (or a 'Video unavailable' notice) is queued behind it. Pressing Skip: AccessibilityInfo.setAccessibilityFocus(replayRow) is called (focusCallsWhileRankUpPresented=1 / focusCallsWhileNoticePresented=1) in the same act in which the next modal surface (rank-up overlay / notice Modal) becomes visible. CeremonyHost.dismiss() restores focus whenever presentation returns to null even though the arbiter immediately presents the next surface. Focus is not restored again after the chain clears (total calls stay 1). UNKNOWN: real VoiceOver outcome on device — Linux Jest only proves the mocked call ordering; the Mac runner was not used per instructions.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09OverlayArbiterAttack.test.tsx -t 'focus restoration with chained ceremonies'  (2 failing tests: 'a rank-up queued behind the replayed tour…' and 'a notice waiting behind the replayed tour…')",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w09OverlayArbiterAttack.test.tsx",
+            "title": "Focus is restored to the trigger while another modal surface (queued ceremony or waiting notice) presents in the same act"
+          }
+        ],
+        "package_id": "W09-04",
+        "summary": "Attacked candidate devin/pp/w09-04/impl-r3 @ 1216c58884b64ad90ab80f18e41ed12400b34dce (git rev-parse HEAD VERIFIED). Attack suite apps/mobile/__tests__/w09OverlayArbiterAttack.test.tsx (21 tests, 6 groups) pushed on devin/pp/w09-04/attack-1216c588 @ 2b98846a476928c2239d96fc54857943789db0b6 (1 commit over the candidate; no production code or candidate tests touched; no PR, no force-push). VERIFIED runs: `cd apps/mobile && npx jest --ci __tests__/w09OverlayArbiterAttack.test.tsx` → exit 1, 21 executed / 18 passed / 3 failed / 0 skipped (artifacts/w09-04-attack/attack-final.log, uploaded). Candidate AC1 unchanged: `npx jest --ci --silent __tests__/w09OverlayArbiter.test.tsx __tests__/ceremonyArbitration.test.tsx` → exit 0, 40/40 (ac1-candidate-final.log). `npx tsc --noEmit` exit 0 after `npm ci` (tsc.log); root `npx eslint` + `npx prettier --check` on the attack file exit 0. Attack categories: (1) replay/duplicate identities — same notice twice (held, shown once: PASS), two distinct notices (BREAK P2: first dropped), rapid double-tap Replay (one tour, one announcement, one focus restore: PASS); (2) concurrency — notice+rank-up raised under the permission sheet (ordered notice→ceremony, ceremony announced once: PASS), native permission request rejects (blocker released: PASS), two overlapping permission requests (held until LAST releases: PASS); (3) focus restoration with chained ceremonies — rank-up queued behind tour and notice queued behind tour (BREAK P3: focus pushed to row while next modal surface presents in same act), tour withdrawn by paywall and re-presented (trigger survives: PASS); (4) account-owner transitions — owner switch while rank-up is held behind paywall (old owner's ceremony never presents: PASS), sign-out while a notice waits (ceremony withdrawn, notice shown once: PASS); (5) process death/remount — full unmount while withheld leaves no stale claim (PASS), notice+ceremony raised before any host mounts (exactly one shows then the other: PASS), host remount while presented is a new presentation announced once (PASS); (6) arbiter re-entrancy/boundaries — listener claiming a blocker during notification (settles; note: listeners fire synchronously inside claimSurface before the handle is returned: PASS), subscriber added during notification (PASS), blockers released in either order (PASS), double/never-presented release no-ops (PASS), 1000 interleaved claims never unseat the presented surface (PASS), restoreFocusToTrigger with invalid handle never throws (PASS), openCeremonyFrom that throws leaves no pending trigger (PASS). Not attempted: network/SQL/Edge/free-rating attacks (package has no server or credit surface). UNKNOWN: real VoiceOver focus/announcement behaviour on device (Linux Jest only; Mac runner not used per instructions)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w09-04-r3/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09OverlayArbiter.test.tsx __tests__/ceremonyArbitration.test.tsx",
+            "executed": 40,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC1",
+            "note": "VERIFIED on HEAD 1216c588 after `cd apps/mobile && npm ci` (artifacts/w09-04-r3/npm-ci.log). Test Suites: 2 passed, 2 total; Tests: 40 passed, 40 total. Regression proof (recorded here because the manifest has no regress id): the new __tests__/w09OverlayArbiter.test.tsx copied onto a clean BASE_SHA worktree (/home/ubuntu/w09base) and run with `cd apps/mobile && npx jest --ci --silent __tests__/w09OverlayArbiter.test.tsx` exits 1 — Test Suites: 1 failed; Tests: 8 failed, 5 passed, 13 total (log: artifacts/w09-04-r3/regress-base.log; the 8 failures are the arbitration/focus/announce-once cases; the 5 passing on BASE are the no-throw/no-trigger safety cases). Same file on HEAD: 13/13 pass within the 40 above. Broader regression: full `cd apps/mobile && npx jest --ci --silent` on HEAD exit 0 — Test Suites: 1 skipped, 315 passed, 315 of 316; Tests: 1 skipped, 6077 passed, 6078 (artifacts/w09-04-r3/full-jest.log; the skip is the documented Linux non-gate importedRealFootageAnalysis.test.ts per docs/devin/TEST_MATRIX.md, outside this criterion).",
+            "passed": 40,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-04-r3/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC2",
+            "note": "VERIFIED on HEAD 1216c588, exit 0, no diagnostics. A first run against the snapshot's stale apps/mobile/node_modules (missing @sentry/react-native) exited 2 with 21 unrelated diagnostics under src/diagnostics/**; `cd apps/mobile && npm ci` (exit 0) resolved it — environment staleness, not a code issue.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-04-r3/ac3-lint.log",
+            "command": "npx eslint apps/mobile/__tests__/w09OverlayArbiter.test.tsx apps/mobile/src/components/RankUpCelebration.tsx apps/mobile/src/consistency/StreakCelebration.tsx apps/mobile/src/design/BrandNotice.tsx apps/mobile/src/design/components.tsx apps/mobile/src/flow/CeremonyHost.tsx apps/mobile/src/flow/ceremonyRequest.ts apps/mobile/src/notifications/notificationStore.ts apps/mobile/src/screens/PaywallScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/walkthrough/FirstRunWalkthrough.tsx && npx prettier --check <same 11 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC3",
+            "note": "VERIFIED at repo root on HEAD 1216c588: eslint exit 0 (no output), prettier 'All matched files use Prettier code style!'. Also VERIFIED: root `pnpm format:check` exit 0 (artifacts/w09-04-r3/format-check.log) and `git diff --check 5c1859a8 HEAD` exit 0. Diff contains no eslint-disable/@ts-ignore/@ts-expect-error/any/`|| true`/passWithNoTests and removes no existing comment lines.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA 5c1859a8 on a fresh branch and replayed the sound r2 commits in test-first order (b7de00f1, 944507d7 tests → 8cd18c3f impl → eb17fe69 r2-adversary regression tests → 1216c588 fix), then re-verified every gate against a fresh `npm ci`. The only judge finding from r2 was the extra acceptance id 'W09-04-REGRESS'; this round reports exactly the three manifest ids and folds the BASE-fails/HEAD-passes proof into the AC1 note.",
+        "attachment_urls": [],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [
+          "Environment only (not a code failure): on the snapshot's stale apps/mobile/node_modules, `cd apps/mobile && npx tsc --noEmit` exited 2 with 21 diagnostics all under src/diagnostics/** (Cannot find module '@sentry/react-native'). Cleared by `cd apps/mobile && npm ci`; reported for reproducibility, not waived."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w09-04/impl-r3",
+        "files_changed": [
+          "apps/mobile/__tests__/w09OverlayArbiter.test.tsx",
+          "apps/mobile/src/flow/CeremonyHost.tsx",
+          "apps/mobile/src/flow/ceremonyRequest.ts",
+          "apps/mobile/src/components/RankUpCelebration.tsx",
+          "apps/mobile/src/consistency/StreakCelebration.tsx",
+          "apps/mobile/src/design/BrandNotice.tsx",
+          "apps/mobile/src/design/components.tsx",
+          "apps/mobile/src/notifications/notificationStore.ts",
+          "apps/mobile/src/screens/PaywallScreen.tsx",
+          "apps/mobile/src/screens/SettingsScreen.tsx",
+          "apps/mobile/src/walkthrough/FirstRunWalkthrough.tsx"
+        ],
+        "head_sha": "1216c58884b64ad90ab80f18e41ed12400b34dce",
+        "out_of_scope_files": [
+          "apps/mobile/src/components/RankUpCelebration.tsx — replace direct AccessibilityInfo.announceForAccessibility with useCeremonyAnnouncement so the rank-up announcement is made once per presentation (objective: announcements made once)",
+          "apps/mobile/src/consistency/StreakCelebration.tsx — same announcement routing through CeremonyHost's dedupe (announce once)",
+          "apps/mobile/src/walkthrough/FirstRunWalkthrough.tsx — same announcement routing through CeremonyHost's dedupe (announce once)",
+          "apps/mobile/src/design/BrandNotice.tsx — BrandNoticeHost claims the 'notice' surface slot via useSurfaceSlot so error notices and ceremonies are never presented together (one modal surface at a time)",
+          "apps/mobile/src/design/components.tsx — minimal hook so the notice overlay's visible prop is gated by the arbiter's presented flag",
+          "apps/mobile/src/notifications/notificationStore.ts — claimSurface('permission') around scheduler.requestPermission() so the system permission sheet withdraws ceremonies/notices while up (objective: permissions arbitrated)",
+          "apps/mobile/src/screens/PaywallScreen.tsx — claimSurface('paywall') for the mounted lifetime so ceremonies defer behind the paywall while paywall-owned notices still show (objective: paywall arbitrated)",
+          "apps/mobile/src/screens/SettingsScreen.tsx — openCeremonyFrom(walkthroughRow.current, replay) captures the Replay row as the ceremony trigger so focus can return to it (objective: focus returns to trigger)"
+        ],
+        "package_id": "W09-04",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w09OverlayArbiter.test.tsx"
+        ],
+        "residual_risks": [
+          "UNKNOWN: native VoiceOver focus restoration and single-announcement behaviour on an iPhone are not provable from Linux Jest; needs Mac/M4 device evidence (not run — Mac runner off-limits for this package).",
+          "CeremonyHost.tsx is under the shared 'mobile-navigation' serial group; edits there are confined to the ceremony slot claim, trigger capture, focus restore and announce dedupe (no reformatting), but a concurrent package touching the same file could still conflict at integration.",
+          "Only the Settings 'Replay walkthrough' row currently passes a trigger via openCeremonyFrom; ceremonies raised from non-interactive sources (rank-up after analysis, streak) have no trigger and intentionally skip focus restoration."
+        ],
+        "summary": "Defect on BASE_SHA (INFERRED from code, VERIFIED by the 8 BASE failures in artifacts/w09-04-r3/regress-base.log): apps/mobile/src/flow/CeremonyHost.tsx presented any queued ceremony via FullWindowOverlay with no knowledge of other surfaces — BrandNoticeHost (src/design/BrandNotice.tsx) rendered its error notice overlay independently, PaywallScreen (src/screens/PaywallScreen.tsx) and the notification permission request (src/notifications/notificationStore.ts requestPermission) did nothing to hold a ceremony, so a rank-up/streak/walkthrough could stack under/over a notice, the paywall or the system permission sheet. Nothing recorded which control opened a ceremony, so VoiceOver focus was never returned (SettingsScreen replay row → walkthrough). RankUpCelebration.tsx, StreakCelebration.tsx and FirstRunWalkthrough.tsx each called AccessibilityInfo.announceForAccessibility from render-time effects that re-fired on re-measure/rerender, so the same message could be announced more than once per presentation. Fix (write paths): src/flow/ceremonyRequest.ts gains a small surface arbiter — claimSurface(kind) with kinds notice|ceremony (slots, priority notice>ceremony, one presented at a time) and permission|paywall (blockers: permission withdraws notice+ceremony, paywall withdraws ceremony only so the paywall's own Terms/Privacy failure notice still shows over it), useSurfaceSlot() hook, openCeremonyFrom(trigger, open) trigger capture, and restoreFocusToTrigger() which wraps findNodeHandle in try/catch so an unmounted trigger returns false instead of throwing into RootErrorBoundary. CeremonyHost.tsx claims the 'ceremony' slot, captures the trigger per request, restores focus when presentation returns to null, and exposes announce() through PresentationContext with per-(presentation id, message) dedupe via useCeremonyAnnouncement; a ceremony withdrawn by paywall and re-presented is a new presentation and announces again. Wiring (listed in out_of_scope_files): BrandNoticeHost claims 'notice'; PaywallScreen claims 'paywall' for its mount; requestPermission wraps the native sheet in claimSurface('permission'); SettingsScreen wraps replay() in openCeremonyFrom(row); the three celebration components route announcements through useCeremonyAnnouncement. Regression suite __tests__/w09OverlayArbiter.test.tsx (13 tests): 8 fail on BASE_SHA and all pass on HEAD; AC1 40/40, AC2 tsc exit 0, AC3 eslint+prettier exit 0, root pnpm format:check exit 0, git diff --check exit 0, full mobile jest 6077 passed / 1 documented skip. Pushed devin/pp/w09-04/impl-r3 at 1216c58884b64ad90ab80f18e41ed12400b34dce (5 commits over BASE, no PR, no force-push). UNKNOWN: real VoiceOver focus/announcement behaviour on device — Linux Jest cannot prove native accessibility; the Mac runner was not used per instructions."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/w09-04-review/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09OverlayArbiter.test.tsx __tests__/ceremonyArbitration.test.tsx",
+            "executed": 40,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC1",
+            "note": "VERIFIED by reviewer on HEAD 1216c588 after fresh `cd apps/mobile && npm ci` (exit 0, artifacts/w09-04-review/npm-ci.log; the snapshot's stale node_modules lacked @sentry/react-native). Test Suites: 2 passed, 2 total; Tests: 40 passed, 40 total. Regression proof (manifest has no regress id): only __tests__/w09OverlayArbiter.test.tsx copied onto a clean BASE_SHA 5c1859a8 worktree at /home/ubuntu/w09base (node_modules symlinked) and run with `cd apps/mobile && npx jest --ci --silent __tests__/w09OverlayArbiter.test.tsx` -> exit 1, Test Suites: 1 failed; Tests: 8 failed, 5 passed, 13 total (artifacts/w09-04-review/regress-base.log). Same file on HEAD alone: exit 0, 13 passed, 13 total (artifacts/w09-04-review/regress-head.log). Supporting: full `cd apps/mobile && npx jest --ci --silent` on HEAD exit 0 — Test Suites: 1 skipped, 315 passed, 315 of 316; Tests: 1 skipped, 6077 passed, 6078 (artifacts/w09-04-review/full-jest.log; the one skip is the documented Linux non-gate importedRealFootageAnalysis.test.ts per docs/devin/TEST_MATRIX.md and is outside this criterion's two suites).",
+            "passed": 40,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-04-review/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC2",
+            "note": "VERIFIED by reviewer on HEAD 1216c588 after npm ci: exit 0, no diagnostics. Non-test check (counts 0 by schema).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-04-review/ac3-eslint.log",
+            "command": "FILES=$(git diff --name-only 5c1859a80a024be823d3512e6e7739a0f6f8a9d9..HEAD) && npx eslint $FILES && npx prettier --check $FILES  # run at repo root; FILES = the 11 changed apps/mobile files",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-04-AC3",
+            "note": "VERIFIED by reviewer at repo root on HEAD 1216c588 over all 11 changed files: root eslint exit 0 (no output, artifacts/w09-04-review/ac3-eslint.log); root prettier --check exit 0 'All matched files use Prettier code style!' (artifacts/w09-04-review/ac3-prettier.log). `git diff --check 5c1859a8..HEAD` exit 0. Non-test check (counts 0 by schema).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "UNKNOWN (not a defect): native VoiceOver focus restoration (AccessibilityInfo.setAccessibilityFocus) and single-announcement behaviour on device are not provable from Linux Jest; the candidate records this honestly and no Mac evidence exists for this SHA. Needs Mac Full Verify / device pass before release, outside this package.",
+          "Only the Settings 'Replay walkthrough' row passes a trigger via openCeremonyFrom; rank-up/streak ceremonies raised from non-interactive sources have no trigger and skip focus restoration by design (documented in residual_risks).",
+          "restoreFocusToTrigger silently returns false when findNodeHandle throws on an unmounted trigger — correct for the RootErrorBoundary safety case, but any other findNodeHandle failure is also swallowed (no diagnostics). Acceptable given diagnostics transport is disabled."
+        ],
+        "package_id": "W09-04",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "1216c58884b64ad90ab80f18e41ed12400b34dce",
+        "scope_violation": false,
+        "summary": "APPROVE W09-04 candidate devin/pp/w09-04/impl-r3 @ 1216c58884b64ad90ab80f18e41ed12400b34dce (5 commits over BASE 5c1859a8; 11 files, +1009/-53, no lockfile/native/SQL/edge changes). SCOPE (VERIFIED via git diff --stat): 3 files in write_paths (CeremonyHost.tsx — under mobile-navigation, which this package holds; ceremonyRequest.ts; __tests__/w09OverlayArbiter.test.tsx) plus 8 files all listed in out_of_scope_files with justifications I checked against the diff: RankUpCelebration/StreakCelebration/FirstRunWalkthrough (direct AccessibilityInfo.announceForAccessibility effects replaced by useCeremonyAnnouncement — announce once), BrandNotice.tsx (BrandNoticeHost claims 'notice' slot, dialog visible gated by presented), components.tsx (+3 lines: optional ref forwarded from PressableScale to Pressable, needed for the trigger ref), notificationStore.ts (claimSurface('permission') around both native permission requests, released in finally), PaywallScreen.tsx (one-line useLayoutEffect claimSurface('paywall') for mount lifetime), SettingsScreen.tsx (ref on the Replay row + openCeremonyFrom(walkthroughRow.current, replay)). None is under a serial-group prefix this package does not hold; each is the minimum wiring for the objective's behaviours (permissions/paywall/error arbitration, focus return). scope_violation=false. SHIPPING PATH (VERIFIED by reading App.tsx, RootNavigator.tsx, walkthroughStore.ts, notification screens): CeremonyHost and BrandNoticeHost are rendered in App.tsx, PaywallScreen via RootNavigator's PaywallRoute, requestPermission via notification UI, identifyCeremony via walkthroughStore.raise — the new arbiter is exercised by shipping code, not an orphan module. ACCEPTANCE (all re-run by me, fresh npm ci): AC1 exit 0, 40/40; AC2 tsc exit 0; AC3 eslint+prettier exit 0 on all 11 files. REGRESSION PROOF (VERIFIED): new suite on BASE worktree exit 1 (8 failed / 5 passed of 13 — the 5 passing on BASE are the no-throw/no-trigger safety cases), on HEAD exit 0 (13/13); full mobile jest on HEAD 6077 passed / 1 documented skip. INVARIANTS (VERIFIED by grep + diff read): no eslint-disable/@ts-ignore/@ts-expect-error/any/`|| true`/passWithNoTests/inflated timeouts/forceExit; no test skipped, deleted or reordered (ceremonyArbitration.test.tsx untouched, 27 tests still pass); no existing comment lines removed; no migrations, RLS, grants, session/auth, billing, owner-isolation or diagnostics-transport code touched; no new user-facing copy. Design review of ceremonyRequest.ts/CeremonyHost.tsx: slot priority notice>ceremony with permission withdrawing both and paywall withdrawing ceremony only (paywall's own Terms/Privacy notice still shows — pinned by an r2 regression test); the `completed` generation forces a claim release/re-claim between consecutive ceremonies so a waiting notice gets its turn; openCeremonyFrom restores the previous pending trigger in finally and identifyCeremony consumes it synchronously, so a trigger cannot leak to an unrelated ceremony; restoreFocusToTrigger wraps findNodeHandle in try/catch so an unmounted trigger returns false instead of throwing into RootErrorBoundary (pinned by test); announcements are deduped per (presentation id, message) and a paywall-withdrawn ceremony re-presents as a new presentation and announces again (pinned by test). UNKNOWN: real VoiceOver focus/announcement behaviour on device — Linux Jest cannot prove native accessibility; the Mac runner was not used per instructions. No blocking issues.",
+        "verdict": "approve"
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-5"
+}

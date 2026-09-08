@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W10-02-r1",
@@ -18,6 +24,27 @@
       "label": "adversary-W10-02-r1",
       "phase": "adversary",
       "prompt_sha256": "7ede99a7e177e8b5f20be5d81c2813a0cba66d532468dc548eef1a151d4c1e6d",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W10-02-r2",
+      "phase": "implement",
+      "prompt_sha256": "87f241a8686284d5447e353265a9ce3f9192e8ec824e33ede1e669c7bc6609b3",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W10-02-r2",
+      "phase": "review",
+      "prompt_sha256": "9d91f058a262ff51b3f68631d5fd462480118e0006b11150057bf5a5c715ac24",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W10-02-r2",
+      "phase": "adversary",
+      "prompt_sha256": "40878e3189a7d4d7bdff5f4519b9f3fbae2395b8a92d61b3097dbaeaec3e5a58",
       "role": "adversary",
       "status": "completed"
     }
@@ -258,9 +285,224 @@
         "verdict": "approve"
       },
       "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d44f097-9707-4780-bcaa-0f51dd199b07/attack-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e89960b-5b21-4d40-8149-cf70134a5a64/ac1-candidate-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d9499ff-5a52-4995-97cb-7f51adcd3b9b/ac1-with-attack-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/588fbf4a-b6f8-451f-9dbd-ae6534cc2fe7/tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a73362da-7b46-4b5c-8011-0303fb4c17b7/eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8352b3a0-71b9-45c0-adeb-b6c4e1b56725/prettier.log"
+        ],
+        "attack_branch": "devin/pp/w10-02/attack-08eb551b",
+        "attack_branch_sha": "af5ac745c91eb23bf2a5ea51ac3921d8526c7f6b",
+        "attacked_sha": "08eb551b57f880be0c1984c241ae47591b47ce15",
+        "attacks_tried": 9,
+        "breaks": [
+          {
+            "expected": "A retry window that resolves to <= 0 ms must fall back to the 60 s rateLimitMs default (429) or the capped backoff (5 s..1 h, 5xx); at most one probe per window.",
+            "observed": "VERIFIED: retryAfterMs(...) returns 0 for 'Retry-After: 0' and for a past HTTP-date (Math.max(0, ...)), and rateLimitMs('0:error') returns 0; classifyDiagnosticDelivery returns retryAfterMs=0 which is truthy-checked with '?? delays.rateLimitMs' so the 60 s default is NOT applied. createRetainedTransport then re-arms schedule(0) after every probe: with the scheduler seam the transport issued 40 requests with 40 zero-delay re-arms where 1 was expected; under the default setTimeout scheduler it hit the ingest 1001 times in one simulated second (expected 1). @sentry/core's own rate limiter computes the same 0 ms window so it does not shield the ingest. 6/6 A1 tests fail (attack-suite.log).",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts -t 'A1 zero-window'",
+            "severity": "P1",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts",
+            "title": "429/503 with Retry-After resolving to a 0 ms window (Retry-After: 0, already-past HTTP-date, malformed '-5') drives a zero-delay retry storm against the ingest"
+          },
+          {
+            "expected": "Retry wait after a clock rollback is clamped to maxMs (1 h) and flush() delivers once the ingest is healthy.",
+            "observed": "VERIFIED: after a 503 armed a 5 s backoff at T0, the device clock moved back 2 days; the next drain re-armed schedule(172_805_000 ms) (pausedUntil - now with no cap) instead of <= maxMs (3_600_000). Retained rows wait ~2 days (during which the 7-day age cap keeps ticking on |now-storedAt|) even though the ingest is healthy. 1/1 A2 test fails (attack-suite.log).",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts -t 'A2 clock rollback'",
+            "severity": "P1",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts",
+            "title": "Clock rollback while a retry window is armed pins the drain for the whole rollback (2 d observed) instead of the declared 1 h cap"
+          },
+          {
+            "expected": "An envelope is persisted before (or independently of) the network round trip and removed only after acknowledgement, so a crash-time envelope survives a hung request and process death.",
+            "observed": "VERIFIED: with the real @sentry/core fetch transport and a fetch that never resolves (captive portal / connected-without-internet), 5 s after send() there were 0 storage inserts and 0 retained rows; flush(2_000) at shutdown returned false and still left 0 rows on disk. The fatal path in index.js hands the error to the default handler right after capture, so the process dies with the envelope only in memory. 2/2 A3 tests fail (attack-suite.log).",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts -t 'A3 crash-time'",
+            "severity": "P1",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts",
+            "title": "Online envelope is only written to disk after the network answers; a hung request plus process death loses the crash report"
+          },
+          {
+            "expected": "A transient I/O failure on one row leaves previously retained rows intact; unaddressable/corrupt rows are evicted individually; the store recovers on the next healthy operation instead of staying inert.",
+            "observed": "VERIFIED: 5 retained rows; a single failing insert (e.g. SQLITE_FULL) -> store reset -> 0 rows remain. Two transient insert failures -> store inert: later pushes persist nothing and peek() is undefined for the rest of the process. In a real SQLite database, one foreign row with sequence 9007199254740993 (unsafe integer) alongside 2 valid rows -> planDiagnosticRetention returns RESET_PLAN -> both valid rows dropped (peek() undefined, table empty). 4/4 A4 tests fail (attack-suite.log). This matches the candidate's documented 'reset once then inert' design, so severity is P2 not P1.",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts -t 'A4 one storage error'",
+            "severity": "P2",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts",
+            "title": "One transient storage error resets the whole table (all retained diagnostics lost); a second makes retention inert for the process; one unaddressable row resets every valid neighbour"
+          },
+          {
+            "expected": "A 4xx refusal of an unrelated envelope carries no information about ingest availability; the armed outage window and backoff progression are left untouched.",
+            "observed": "VERIFIED: two retained rows in a 20 s 5xx backoff; an online envelope answered 400 triggers acknowledge('rejected') which sets pausedUntil=-Infinity and retryDelay=initialMs and kicks a 100 ms drain, so the ingest was probed 7 times where 4 were expected within the same interval. 1/1 A5 test fails (attack-suite.log).",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts -t 'A5 a terminal refusal'",
+            "severity": "P3",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts",
+            "title": "An unrelated online 4xx (terminal refusal) collapses an active 5xx backoff window and resets the exponential backoff"
+          }
+        ],
+        "package_id": "W10-02",
+        "summary": "Adversarial suite apps/mobile/src/diagnostics/__tests__/retention.attack.test.ts (20 tests, 9 attack categories) pushed on devin/pp/w10-02/attack-08eb551b @ af5ac745 (no PR, no force-push; candidate production code and tests untouched). Attacked sha 08eb551b57f880be0c1984c241ae47591b47ce15. VERIFIED runs: `cd apps/mobile && npx jest --ci src/diagnostics/__tests__/retention.attack.test.ts` exit=1, 20 executed / 6 passed / 14 failed / 0 skipped (attack-suite.log); candidate AC1 `npx jest --ci --silent src/diagnostics --testPathIgnorePatterns retention.attack` exit=0, 160/160 (ac1-candidate-only.log); with the attack suite included exit=1, 180 executed / 166 passed / 14 failed (ac1-with-attack-suite.log); `npx tsc --noEmit` exit=0 (tsc.log); root `npx eslint` + `npx prettier --check` on the attack file exit=0 (eslint.log, prettier.log). CONFIRMED BREAKS (14 failing tests): A1 network/429+Retry-After — a Retry-After that resolves to 0 ms (Retry-After: 0, past HTTP-date, malformed '-5', X-Sentry-Rate-Limits '0:error', 503+Retry-After: 0) bypasses the 60 s default and yields a zero-delay retry storm (1001 probes in 1 s) [P1]; A2 clock rollback — an armed backoff is not clamped to maxMs, drain pinned for the full 2-day rollback [P1]; A3 process death — envelope is persisted only after the network answers, so a hung request + crash loses it (0 inserts; flush(timeout) does not persist) [P1]; A4 corrupt/partial state — one transient storage error wipes all retained rows, a second makes the store inert for the process, one unaddressable row (unsafe-integer sequence in real SQLite) resets every valid neighbour [P2, documented design]; A5 network — an unrelated online 4xx collapses an active 5xx backoff (7 probes vs 4) [P3]. WITHSTOOD (6 passing tests): A6 concurrency — @sentry/core bufferSize=8 overflow (queue_overflow) with 9 hung sends retains the 9th and replays all 9 exactly once; A7 reentrancy — two overlapping flush() calls plus a concurrent send burst deliver every envelope exactly once; A8 restart — a row acknowledged but not yet removed before process death is replayed once by a fresh store on the same SQLite database and sequences continue monotonically; A9 boundaries — 9-digit Retry-After / far-future HTTP-date capped at maxMs, NaN/non-finite clock stores and replays nothing, byte cap measured in UTF-8 bytes. Not applicable to this package: SQL/Edge authorisation, free-rating conservation, copy/accessibility (no UI or backend surface)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b2a4532-44a0-4c8c-8b74-4718f626b7e4/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent src/diagnostics",
+            "executed": 160,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC1",
+            "note": "VERIFIED on HEAD 08eb551b: 6 suites passed, 160 tests. Regression proof: new suite on BASE_SHA f250acd7 exits 1 (Cannot find module '../retention', 0 tests; https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c707770-f811-405b-a572-065ab3a2373b/ac1-regression-on-base.log); full AC1 on BASE with only the test commit: exit 1, 106 passed / 1 suite failed to run (https://la-hacks-rttothemoon.devinenterprise.com/attachments/a0b4abf4-6966-4ff5-9511-8ef1574263a0/ac1-base-with-tests.log). Local copy also at artifacts/w10-02-r2/ac1-jest.log (artifacts/ is gitignored).",
+            "passed": 160,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/619e55db-b0aa-4593-8d2d-6d0b0da504a4/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC2",
+            "note": "VERIFIED on HEAD: no diagnostics emitted.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c528ad0-5b16-4101-a00c-389325103559/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/diagnostics/retention.ts apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/diagnostics/__tests__/retention.test.ts && npx prettier --check apps/mobile/src/diagnostics/retention.ts apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/diagnostics/__tests__/retention.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC3",
+            "note": "VERIFIED from repo root on HEAD: ESLint clean, 'All matched files use Prettier code style!'. Also VERIFIED: pnpm format:check exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/df31df2f-7078-428a-b419-a3c88e12f1da/format-check.log); git diff --check exit 0 for both the working tree and BASE..HEAD (https://la-hacks-rttothemoon.devinenterprise.com/attachments/bac8fd4f-8a3c-485d-9a31-4e5166536baf/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: wrote retention.test.ts against the intended API, stashed the implementation, proved the suite fails on BASE (module missing, exit 1), committed tests alone, restored and committed the implementation separately. Delivery outcome is classified from the sink's resolved value (statusCode + retry-after / x-sentry-rate-limits headers) rather than from promise settlement; durability comes from claim-then-remove-after-ack; identity preservation comes from parsing the stamps the scrub layer wrote and scrubbing on read with the recovered identity instead of the current one.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b2a4532-44a0-4c8c-8b74-4718f626b7e4/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/619e55db-b0aa-4593-8d2d-6d0b0da504a4/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c528ad0-5b16-4101-a00c-389325103559/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/df31df2f-7078-428a-b419-a3c88e12f1da/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bac8fd4f-8a3c-485d-9a31-4e5166536baf/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c707770-f811-405b-a572-065ab3a2373b/ac1-regression-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a0b4abf4-6966-4ff5-9511-8ef1574263a0/ac1-base-with-tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/921d55f0-76d3-4265-ad8b-9bbefca79ad3/r1-adversary-suite-on-head.log"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w10-02/impl-r2",
+        "files_changed": [
+          "apps/mobile/src/diagnostics/__tests__/retention.test.ts",
+          "apps/mobile/src/diagnostics/retention.ts",
+          "apps/mobile/src/diagnostics/sentry.ts"
+        ],
+        "head_sha": "08eb551b57f880be0c1984c241ae47591b47ce15",
+        "out_of_scope_files": [
+          "apps/mobile/src/diagnostics/sentry.ts — wiring only: optionsForDiagnostics() gains an optional retain(sink) wrapper that initializeSdk() supplies from createDiagnosticRetention(identity), placed behind createScrubbedTransport so the shipping Sentry path actually retains/replays (objective is phrased as behaviour); getDiagnosticsStatus().persistentQueue reports it. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W10-02",
+        "regression_tests_added": [
+          "apps/mobile/src/diagnostics/__tests__/retention.test.ts (54 tests: caps/oldest-first eviction/determinism, real-SQLite corruption tolerance + payload-bytes-on-disk measurement, monotonic sequences, serialised never-blocking access, delivery classification, REAL @sentry/browser makeFetchTransport answered 429+Retry-After / 503 on drain and online paths, producing-identity replay after app update (unit + through optionsForDiagnostics wiring), in-flight durability, hung request not pinning later envelopes, flush(timeout), sent_at refresh, startup drain, inert degradation)"
+        ],
+        "residual_risks": [
+          "The r1 adversary suite's A4/A5/A7/A9 still fail on HEAD, but only because they deep-equal replayed envelopes including the ORIGINAL sent_at while its own A8 requires sent_at to be refreshed to send time; the two expectations are mutually exclusive. This candidate keeps A8's semantics (refresh sent_at, preserve the event verbatim) and pins it in retention.test.ts. Not committed to the branch as it is the adversary's file; run log attached.",
+          "artifacts/ is gitignored, so the acceptance logs exist in the checkout and as uploaded attachment URLs, not on the pushed branch.",
+          "op-sqlite runtime behaviour on device is INFERRED from its API (unit tests use a real better-sqlite3-style in-process SQLite via the storage adapter and an op-sqlite openAsync shim); no Mac/iOS run was performed since no native/iOS paths changed.",
+          "Retention is scoped to the JS-only transport that the gate already allows; diagnostics transport enablement itself is unchanged (still governed by the existing gate)."
+        ],
+        "summary": "Defects on BASE_SHA f250acd7: apps/mobile/src/diagnostics/retention.ts does not exist and sentry.ts:156-161 builds createScrubbedTransport(makeTransport(options)) with no persistence — an envelope the JS-only transport cannot deliver is lost, so the W10-02 objective (bounded on-disk buffer with size/age caps, deterministic eviction, corruption tolerance, never blocking the UI thread) is unmet as behaviour; getDiagnosticsStatus() hard-codes persistentQueue:false (sentry.ts:315). The r1 candidate (614ab65f) added retention but (a) retention.ts:513 treated any RESOLVED sink.send() as delivery, while @sentry/core's fetch transport resolves {statusCode:429/503} and then drops locally under its own rate limit, so a 429+Retry-After or a 5xx outage drained and discarded the whole buffer; (b) online 5xx answers were never stored; (c) decodeEnvelope() (retention.ts:171-183) re-scrubbed stored payloads with the CURRENT identity so after an app update build N crashes were attributed to build N+1. Round 2 (from BASE, reusing the sound r1 store/SQLite/scheduling design): test commit d2b2b372 adds apps/mobile/src/diagnostics/__tests__/retention.test.ts (54 tests, fails on BASE: module missing); impl commit 08eb551b adds retention.ts — classifyDiagnosticDelivery() accepts only 2xx, treats 429 as an answered retry honouring Retry-After (seconds/HTTP-date) or X-Sentry-Rate-Limits with a 60 s default, 408/5xx as answered retries, other 4xx as terminal refusals (dropped, not retried forever), statusless results as unanswered retries; the drain peek()s the oldest row and remove()s it only after acknowledgement (in-flight sequences skipped so a hung request does not pin later envelopes); retry windows are clock-based so no probe happens before Retry-After/capped backoff (5 s..1 h) elapses; online sends refused with a retryable status are stored like network failures; retainedDiagnosticIdentity() recovers release/dist/environment/source_revision/model_version/policy_version from the stamped event and decodeEnvelope() re-scrubs with THAT identity (only sent_at is refreshed to send time); byte cap is measured against length(CAST(payload AS BLOB)) on disk; sequences are monotonic within a process even after the table empties. sentry.ts wires retention behind the scrub layer in the shipping init path. VERIFIED: AC1 160/160, AC2 exit 0, AC3 exit 0, pnpm format:check exit 0, git diff --check exit 0; r1 adversary suite against HEAD: A1/A2a/A2b/A3/A6/A8/A10 pass (https://la-hacks-rttothemoon.devinenterprise.com/attachments/921d55f0-76d3-4265-ad8b-9bbefca79ad3/r1-adversary-suite-on-head.log). Branch pushed; no PR opened; no force-push; base unchanged."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc290ba9-2442-4a4d-a757-e7e93e66aab6/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent src/diagnostics",
+            "executed": 160,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC1",
+            "note": "VERIFIED by reviewer on 08eb551b after root `pnpm install --frozen-lockfile` + `cd apps/mobile && npm ci`: 6 suites passed / 6, 160 tests passed / 160, 0 skipped. Regression proof (kind=regress semantics): retention.test.ts copied alone onto BASE f250acd7 -> exit 1, 1 suite failed to run, 0 tests (`Cannot find module '../retention'`), artifacts/review-w10-02/regress-on-base.log; same file on candidate -> exit 0, 54/54 passed, artifacts/review-w10-02/regress-on-head.log. Extra (not a gate): full `npx jest --ci --silent` in apps/mobile exit 0, 313 suites passed, 6108 tests passed, 1 pre-existing environment-gated suite skipped (__tests__/importedRealFootageAnalysis.test.ts, untouched by the candidate), artifacts/review-w10-02/full-mobile-jest.log. Uploaded: AC1 https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc290ba9-2442-4a4d-a757-e7e93e66aab6/ac1-jest.log; base regression https://la-hacks-rttothemoon.devinenterprise.com/attachments/e30e3995-f497-4326-91d0-2619ccf56a51/regress-on-base.log; head regression https://la-hacks-rttothemoon.devinenterprise.com/attachments/e9779269-09a8-4fc5-8952-02dc7be0c934/regress-on-head.log.",
+            "passed": 160,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f56efc65-2f19-4db2-9c10-4baa8953321e/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC2",
+            "note": "VERIFIED by reviewer on 08eb551b: no diagnostics emitted, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f293c260-0edb-476e-9a35-dd3db8c25924/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/diagnostics/retention.ts apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/diagnostics/__tests__/retention.test.ts && npx prettier --check apps/mobile/src/diagnostics/retention.ts apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/diagnostics/__tests__/retention.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-02-AC3",
+            "note": "VERIFIED by reviewer from repo root on 08eb551b against all three files in `git diff --stat BASE..HEAD`: ESLint clean; Prettier 'All matched files use Prettier code style!'; exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc290ba9-2442-4a4d-a757-e7e93e66aab6/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f56efc65-2f19-4db2-9c10-4baa8953321e/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f293c260-0edb-476e-9a35-dd3db8c25924/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e30e3995-f497-4326-91d0-2619ccf56a51/regress-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e9779269-09a8-4fc5-8952-02dc7be0c934/regress-on-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/40c452f0-f05d-4443-ad9c-e035b982f5a5/verdict.json"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/diagnostics/sentry.ts initializeSdk(): the shipping construction `createDiagnosticRetention(identity)` -> `optionsForDiagnostics({..., retain: nextRetention.retain})` -> `getDiagnosticsStatus().persistentQueue === true` is not exercised by any test (sentry.test.ts never reaches initializeSdk; retention.test.ts covers the wiring via optionsForDiagnostics({retain}) directly). Wiring VERIFIED by reading the diff (sentry.ts lines ~150-175, ~265-285, ~315), test coverage INFERRED gap; recommend a follow-up test that drives initializeSdk with a mocked SDK and asserts persistentQueue flips to true.",
+          "op-sqlite behaviour on device (openAsync/executeAsync/BLOB length, file location under the app sandbox) is INFERRED from the API; tests run the adapter against in-process node:sqlite. No native/iOS paths changed so no Mac run was performed (and --remote is prohibited for this review). UNKNOWN on-device until the next scheduled Mac run.",
+          "planDiagnosticRetention uses Math.abs(now - storedAt) <= maxAgeMs, so rows stamped more than 7 days in the FUTURE (device clock jumped backwards after storing) are evicted as 'expired' rather than kept; deterministic and bounded, and arguably the safer choice, but worth documenting."
+        ],
+        "package_id": "W10-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "08eb551b57f880be0c1984c241ae47591b47ce15",
+        "scope_violation": false,
+        "summary": "Independent re-verification of W10-02 candidate devin/pp/w10-02/impl-r2 @ 08eb551b (BASE f250acd7). SCOPE: `git diff --stat` shows exactly 3 files — retention.ts (+880, write_path), __tests__/retention.test.ts (+1856, write_path), sentry.ts (+18/-4). sentry.ts is the declared out_of_scope wiring file; it is not under any serial_group_paths prefix, and the edit is minimal (optional `retain?: (sink) => DiagnosticTransport` on optionsForDiagnostics, applied INSIDE createScrubbedTransport so only scrubbed envelopes are ever persisted; initializeSdk builds createDiagnosticRetention(identity) and passes retain; getDiagnosticsStatus().persistentQueue reports it). No existing comments modified, no test edits outside the new file. scope_violation=false. SHIPPED BEHAVIOUR (1b): the module is called from the shipping init path (initializeSdk) — VERIFIED by reading; the retention only activates when the existing gate reaches ready_js_only, and the gate/runtimeConfig/DSN are untouched (sentry.test.ts still pins transportEnabled:false, dsn:null, persistentQueue:false in the shipped config), so 'diagnostics transport stays disabled' holds. ACCEPTANCE (all re-run by me): AC1 exit 0, 6 suites / 160 tests passed / 0 failed / 0 skipped; AC2 exit 0; AC3 exit 0 on all three changed files. REGRESSION PROOF: new suite on BASE -> exit 1 (Cannot find module '../retention', 0 tests); on candidate -> exit 0, 54/54. regression_fails_on_base=true. Extra: full apps/mobile jest exit 0 (313 suites, 6108 tests, 1 pre-existing gated skip unrelated to the candidate). CODE REVIEW vs REVIEW.md/objective: hard caps enforced in planDiagnosticRetention (maxEnvelopes 32, maxTotalBytes 256 KiB measured as length(CAST(payload AS BLOB)) on disk, maxEnvelopeBytes 32 KiB, maxAge 7 d) with deterministic oldest-first (sequence-ordered) eviction after dropping invalid/oversize/expired rows; corruption tolerance = per-row JSON/shape validation with removal, schema/table reset on read failure, and inert degradation when the SQLite module cannot load (send() still resolves, flush() resolves). UI thread: every store op is chained on a promise queue and awaits op-sqlite async APIs; nothing synchronous touches disk; retries are timer-driven with clock-based windows (5 s..1 h backoff, 429 honours Retry-After / X-Sentry-Rate-Limits, default 60 s). Delivery classification accepts only 2xx; 408/429/5xx/statusless retain; other 4xx are terminal (not retried forever) — so a partial/failed/replayed delivery never counts as success and corrupt rows never become fabricated state. Durability is claim-then-remove-after-ack with in-flight sequence tracking so a hung request does not pin later envelopes. Privacy: only scrubDiagnosticEnvelope() output is persisted; on replay the producing identity (release/dist/environment/source_revision/model_version/policy_version) is recovered from the stamped event and re-scrubbed with THAT identity (only sent_at refreshed), with tests pinning no marker leaks and no attribution to the current build after an update. No RLS/grants/migrations/billing/session/auth/copy surfaces touched. Grepped the diff for test-weakening constructs (.skip/.only/@ts-ignore/any/eslint-disable/passWithNoTests/forceExit/inflated timeouts): none. VERDICT: approve. Artifacts under artifacts/review-w10-02/ (gitignored) in the local checkout.",
+        "verdict": "approve"
+      },
+      "round": 2
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "REQUEUE",
   "wave_id": "wave-3"
 }

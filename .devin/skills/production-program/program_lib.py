@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.7"
+LIB_VERSION = "2026-09-08.8"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -314,15 +314,24 @@ SCOPE POLICY: `write_paths` is the declared scope. When wiring the objective end
 EVIDENCE STANDARD: every claim carries the exact command, exit code, executed/passed/failed/skipped counts and an artifact (log path in the repo checkout or an uploaded attachment URL via the upload_attachment tool). Label statements VERIFIED (you ran it) / INFERRED (read code) / UNKNOWN. A skipped, ignored, unavailable or zero-test run is NOT a pass. Missing output is UNVERIFIED, never PASS. Do not report 'PASS' prose — fill the structured acceptance objects exactly."""
 
 
-def implement_prompt(pkg: dict, base_sha: str, integration_branch: str, round_no: int, prior: dict | None, serial_group_paths: dict | None = None) -> str:
+def lane_suffix(lane: int) -> str:
+    """Label/branch suffix for competing implementer lane `lane` (1-based); lane 1 keeps the classic name."""
+    if lane < 1:
+        raise ValueError("lane must be >= 1")
+    return "" if lane == 1 else f"-c{lane}"
+
+
+def implement_prompt(pkg: dict, base_sha: str, integration_branch: str, round_no: int, prior: dict | None, serial_group_paths: dict | None = None, lane: int = 1) -> str:
     serial_group_paths = serial_group_paths or {}
-    branch = f"devin/pp/{pkg['id'].lower()}/impl-r{round_no}"
+    branch = f"devin/pp/{pkg['id'].lower()}/impl-r{round_no}{lane_suffix(lane)}"
     prior_block = ""
+    if lane > 1:
+        prior_block += f"\n\nCOMPETING LANE {lane}: another implementer works the same package from the same BASE_SHA on its own branch; the first candidate that passes independent review AND adversarial testing is integrated. Do not coordinate with or read the other lane's branch — produce your own complete, verified candidate."
     if prior:
-        prior_block = "\n\nPRIOR ROUND FINDINGS (you MUST resolve every item; the previous candidate branch is " + prior["branch"] + " at " + prior["head_sha"] + " — start from BASE_SHA and cherry-pick/reuse what is sound):\n" + dump(prior["findings"])
+        prior_block += "\n\nPRIOR ROUND FINDINGS (you MUST resolve every item; the previous candidate branch is " + prior["branch"] + " at " + prior["head_sha"] + " — start from BASE_SHA and cherry-pick/reuse what is sound):\n" + dump(prior["findings"])
     return f"""{common_rules(base_sha, integration_branch)}
 
-ROLE: IMPLEMENTER for work package {pkg['id']} ({pkg['parent']}) — round {round_no}.
+ROLE: IMPLEMENTER for work package {pkg['id']} ({pkg['parent']}) — round {round_no}{' lane ' + str(lane) if lane > 1 else ''}.
 BASE_SHA: {base_sha}
 WORK PACKAGE (frozen manifest entry):
 {dump({k: pkg[k] for k in ('id', 'title', 'objective', 'severity', 'source_ids', 'plane', 'write_paths', 'additive_shared_paths', 'serial_groups', 'acceptance', 'invariants', 'external_blocker')})}
@@ -417,14 +426,15 @@ async def _call(rt: Runtime, ledger: list[dict], role: str, prompt: str, schema:
 def prior_from_record(record: dict) -> tuple[dict | None, int]:
     """Findings the next round must resolve and the next round number, from a saved REQUEUE record.
 
-    Only the last round that produced an implementer result contributes findings;
+    Only the last round that produced an evaluated implementer result contributes
+    findings (a round whose implementer stopped as `blocked` carries no findings);
     the round counter continues so candidate branch names never collide.
     """
     rounds = record.get("rounds") or []
     next_round = max([int(r.get("round", 0)) for r in rounds] + [0]) + 1
     for rnd in reversed(rounds):
         impl = rnd.get("implement")
-        if not impl:
+        if not impl or impl.get("blocked"):
             continue
         decision = rnd.get("decision") or {}
         rev = rnd.get("review") or {}
@@ -438,6 +448,36 @@ def prior_from_record(record: dict) -> tuple[dict | None, int]:
             findings["adversary_branch"] = adv.get("attack_branch", "")
         return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}, next_round
     return None, next_round
+
+
+def _lane_findings(lane: dict) -> dict:
+    """Findings the next round must resolve, from one evaluated lane."""
+    impl = lane.get("implement") or {}
+    rev = lane.get("review") or {}
+    adv = lane.get("adversary") or {}
+    decision = lane.get("decision") or {}
+    findings: dict[str, Any] = {"judge": decision.get("reasons", [])}
+    if rev:
+        findings["review_blocking"] = rev.get("blocking_issues", [])
+        findings["review_invariants"] = rev.get("invariant_violations", [])
+    if adv:
+        findings["adversary_breaks"] = blocking_breaks(adv)
+        findings["adversary_branch"] = adv.get("attack_branch", "")
+    return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}
+
+
+def merge_lane_priors(lanes: list[dict]) -> dict | None:
+    """One PRIOR block for the next round from every evaluated competing lane (lane order is frozen)."""
+    evaluated = [ln for ln in lanes if ln.get("implement")]
+    if not evaluated:
+        return None
+    if len(evaluated) == 1:
+        return _lane_findings(evaluated[0])
+    first = _lane_findings(evaluated[0])
+    first["findings"]["competing_lanes"] = [
+        {"lane": ln["lane"], **_lane_findings(ln)} for ln in evaluated[1:]
+    ]
+    return first
 
 
 def wave_phases(agent_slots: int) -> list[dict]:
@@ -463,9 +503,10 @@ async def run_wave(
 ) -> dict:
     """Run many packages concurrently inside ONE workflow run.
 
-    `packages` is a frozen list of {package_id, max_rounds, start_round, prior};
+    `packages` is a frozen list of {package_id, max_rounds, start_round, prior, competing};
     each package gets its own implementer → (reviewer ‖ adversary) → judge
-    pipeline and its own ledger record. The wave is registered once; a
+    pipeline and its own ledger record (`competing` > 1 runs that many
+    independent implementer lanes per round; see run_package). The wave is registered once; a
     package whose pipeline raises is recorded as FAILED rather than taking the
     wave down.
 
@@ -491,7 +532,7 @@ async def run_wave(
                 raise ValueError(
                     f"serial group {group} held by {held[group]} exceeds the wave limit of {serial_group_limit}"
                 )
-    slots = sum(int(p.get("max_rounds", MAX_ROUNDS_DEFAULT)) for p in packages)
+    slots = sum(int(p.get("max_rounds", MAX_ROUNDS_DEFAULT)) * int(p.get("competing", 1)) for p in packages)
     await runtime.register_workflow(
         {
             "name": f"pickle-sensei-program-{wave_id}",
@@ -516,6 +557,7 @@ async def run_wave(
                 wave_id=wave_id,
                 start_round=int(p.get("start_round", 1)),
                 prior=p.get("prior"),
+                competing=int(p.get("competing", 1)),
                 register=False,
             )
         except Exception as exc:  # noqa: BLE001 — one package must not sink the wave
@@ -723,12 +765,24 @@ async def run_package(
     wave_id: str = "",
     start_round: int = 1,
     prior: dict | None = None,
+    competing: int = 1,
     register: bool = True,
 ) -> dict:
+    """Implement → (review ‖ adversary) → judge, up to `max_rounds` rounds.
+
+    `competing` > 1 launches that many independent implementer lanes per round
+    from the same base with the same prior findings, each on its own branch
+    (`impl-r<n>`, `impl-r<n>-c2`, …) and each judged by its own reviewer and
+    adversary. The winner is the LOWEST-numbered lane whose candidate is
+    accepted (deterministic on replay); the other lanes' findings are merged
+    into the next round's prior block when nothing is accepted.
+    """
     if not SHA_RE.match(base_sha):
         raise ValueError(f"base_sha must be a full 40-hex sha, got {base_sha!r}")
     if start_round < 1:
         raise ValueError("start_round must be >= 1")
+    if competing < 1:
+        raise ValueError("competing must be >= 1")
     manifest = load_manifest(manifest_path)
     pkg = find_package(manifest, package_id)
     sg_paths = manifest.get("serial_group_paths", {})
@@ -745,6 +799,7 @@ async def run_package(
         "base_sha": base_sha,
         "integration_branch": integration_branch,
         "start_round": start_round,
+        "competing": competing,
         "requeued_from": prior,
         "rounds": [],
         "agents": ledger,
@@ -760,67 +815,74 @@ async def run_package(
                 "description": f"{package_id}: {pkg['title']} — implement → independent review → adversary → deterministic judge (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
                 "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
                 "soft_time_limit_minutes": minutes,
-                "phases": wave_phases(max_rounds),
+                "phases": wave_phases(max_rounds * competing),
             }
         )
 
-    final_status = "REQUEUE"
-    for round_no in range(start_round, start_round + max_rounds):
-        runtime.log(f"{package_id} round {round_no}/{start_round + max_rounds - 1} on base {base_sha[:12]}")
-        rnd: dict[str, Any] = {"round": round_no}
-        record["rounds"].append(rnd)
-        impl = await _call(runtime, ledger, "implementer", implement_prompt(pkg, base_sha, integration_branch, round_no, prior, sg_paths), IMPLEMENT_SCHEMA, f"implement-{package_id}-r{round_no}", "implement", minutes, mode)
-        rnd["implement"] = impl
+    async def evaluate_lane(round_no: int, lane: int, lane_prior: dict | None) -> dict:
+        """One implementer lane: implement → (review ‖ adversary) → judge. Never raises on agent failure."""
+        sfx = lane_suffix(lane)
+        tag = f"{package_id}" + (f" lane {lane}" if competing > 1 else "")
+        ln: dict[str, Any] = {"lane": lane, "implement": None, "review": None, "adversary": None, "decision": None, "blocked": False}
+        impl = await _call(runtime, ledger, "implementer", implement_prompt(pkg, base_sha, integration_branch, round_no, lane_prior, sg_paths, lane=lane), IMPLEMENT_SCHEMA, f"implement-{package_id}-r{round_no}{sfx}", "implement", minutes, mode)
+        ln["implement"] = impl
         _save(out_dir, "record.json", record)
         if impl is None:
-            rnd["decision"] = {"accepted": False, "reasons": ["implementer session failed"], "criteria_examined": []}
-            final_status = "REQUEUE"
-            continue
+            ln["decision"] = {"accepted": False, "reasons": ["implementer session failed"], "criteria_examined": []}
+            return ln
         if impl.get("blocked"):
-            runtime.log(f"{package_id}: implementer blocked — {impl.get('blocked_reason')}")
-            rnd["decision"] = {"accepted": False, "reasons": [f"blocked: {impl.get('blocked_reason')}"], "criteria_examined": []}
-            final_status = "BLOCKED_EXTERNAL"
-            break
+            runtime.log(f"{tag}: implementer blocked — {impl.get('blocked_reason')}")
+            ln["decision"] = {"accepted": False, "reasons": [f"blocked: {impl.get('blocked_reason')}"], "criteria_examined": []}
+            ln["blocked"] = True
+            return ln
         pre = grade_acceptance(pkg, impl.get("acceptance_results"))
         if not SHA_RE.match(str(impl.get("head_sha", "")).lower()) or pre:
             # Do not spend reviewer/adversary on a candidate that already fails its own evidence.
-            rnd["decision"] = {"accepted": False, "reasons": [f"impl: {r}" for r in pre] or ["impl: head_sha invalid"], "criteria_examined": ["implementer acceptance coverage"]}
-            runtime.log(f"{package_id} round {round_no}: implementer evidence insufficient ({len(rnd['decision']['reasons'])} reasons)")
-            prior = {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": {"judge": rnd["decision"]["reasons"]}}
-            _save(out_dir, "record.json", record)
-            continue
+            ln["decision"] = {"accepted": False, "reasons": [f"impl: {r}" for r in pre] or ["impl: head_sha invalid"], "criteria_examined": ["implementer acceptance coverage"]}
+            runtime.log(f"{tag} round {round_no}: implementer evidence insufficient ({len(ln['decision']['reasons'])} reasons)")
+            return ln
         # Reviewer and adversary examine the same frozen candidate sha independently, so they run concurrently.
         rev, adv = await asyncio.gather(
-            _call(runtime, ledger, "reviewer", review_prompt(pkg, base_sha, integration_branch, impl, sg_paths), REVIEW_SCHEMA, f"review-{package_id}-r{round_no}", "review", minutes, mode),
-            _call(runtime, ledger, "adversary", adversary_prompt(pkg, base_sha, integration_branch, impl), ADVERSARY_SCHEMA, f"adversary-{package_id}-r{round_no}", "adversary", minutes, mode),
+            _call(runtime, ledger, "reviewer", review_prompt(pkg, base_sha, integration_branch, impl, sg_paths), REVIEW_SCHEMA, f"review-{package_id}-r{round_no}{sfx}", "review", minutes, mode),
+            _call(runtime, ledger, "adversary", adversary_prompt(pkg, base_sha, integration_branch, impl), ADVERSARY_SCHEMA, f"adversary-{package_id}-r{round_no}{sfx}", "adversary", minutes, mode),
         )
-        rnd["review"] = rev
-        rnd["adversary"] = adv
+        ln["review"] = rev
+        ln["adversary"] = adv
         _save(out_dir, "record.json", record)
         if rev is None or adv is None:
-            rnd["decision"] = {"accepted": False, "reasons": ["reviewer or adversary session failed"], "criteria_examined": []}
-            final_status = "REQUEUE"
-            continue
+            ln["decision"] = {"accepted": False, "reasons": ["reviewer or adversary session failed"], "criteria_examined": []}
+            return ln
         decision = judge(pkg, impl, rev, adv)
-        rnd["decision"] = decision.as_dict()
-        _save(out_dir, "record.json", record)
-        if decision.accepted:
-            runtime.log(f"{package_id} ACCEPTED at {impl['head_sha'][:12]} ({impl['branch']})")
-            record["candidate"] = {"branch": impl["branch"], "head_sha": impl["head_sha"], "round": round_no}
+        ln["decision"] = decision.as_dict()
+        if not decision.accepted:
+            runtime.log(f"{tag} round {round_no} REJECTED: " + "; ".join(decision.reasons[:6]))
+        return ln
+
+    final_status = "REQUEUE"
+    for round_no in range(start_round, start_round + max_rounds):
+        runtime.log(f"{package_id} round {round_no}/{start_round + max_rounds - 1} on base {base_sha[:12]}" + (f" ({competing} competing lanes)" if competing > 1 else ""))
+        rnd: dict[str, Any] = {"round": round_no}
+        record["rounds"].append(rnd)
+        lanes = list(await asyncio.gather(*(evaluate_lane(round_no, lane, prior) for lane in range(1, competing + 1))))
+        if competing > 1:
+            rnd["lanes"] = lanes
+        winner = next((ln for ln in lanes if (ln.get("decision") or {}).get("accepted")), None)
+        shown = winner or lanes[0]
+        for key in ("implement", "review", "adversary", "decision"):
+            rnd[key] = shown[key]
+        if winner is not None:
+            rnd["winning_lane"] = winner["lane"]
+            impl = winner["implement"]
+            runtime.log(f"{package_id} ACCEPTED at {impl['head_sha'][:12]} ({impl['branch']})" + (f" — lane {winner['lane']}" if competing > 1 else ""))
+            record["candidate"] = {"branch": impl["branch"], "head_sha": impl["head_sha"], "round": round_no, "lane": winner["lane"]}
             final_status = "ACCEPTED"
+            _save(out_dir, "record.json", record)
             break
-        runtime.log(f"{package_id} round {round_no} REJECTED: " + "; ".join(decision.reasons[:6]))
-        prior = {
-            "branch": impl.get("branch", ""),
-            "head_sha": impl.get("head_sha", ""),
-            "findings": {
-                "judge": decision.reasons,
-                "review_blocking": rev.get("blocking_issues", []),
-                "review_invariants": rev.get("invariant_violations", []),
-                "adversary_breaks": blocking_breaks(adv),
-                "adversary_branch": adv.get("attack_branch", ""),
-            },
-        }
+        _save(out_dir, "record.json", record)
+        if all(ln["blocked"] for ln in lanes if ln.get("implement") is not None) and any(ln["blocked"] for ln in lanes):
+            final_status = "BLOCKED_EXTERNAL"
+            break
+        prior = merge_lane_priors([ln for ln in lanes if not ln["blocked"]]) or prior
         final_status = "REQUEUE"
     record["status"] = final_status
     record["agent_counts"] = {

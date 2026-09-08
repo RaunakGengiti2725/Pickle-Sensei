@@ -1,0 +1,14 @@
+{
+  "agents": [],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W01-05",
+  "requeued_from": null,
+  "rounds": [],
+  "start_round": 1,
+  "status": "RUNNING",
+  "wave_id": "wave-5"
+}

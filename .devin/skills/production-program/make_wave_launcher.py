@@ -84,6 +84,7 @@ def make(
     requeue: dict[str, str] | None = None,
     requeue_blocked: dict[str, str] | None = None,
     serial_group_limit: int = 1,
+    competing: dict[str, int] | None = None,
 ) -> str:
     sys.path.insert(0, HERE)
     import program_lib  # noqa: E402
@@ -105,6 +106,12 @@ def make(
         raise SystemExit(f"package given both --requeue and --requeue-blocked: {sorted(both)}")
     if serial_group_limit < 1:
         raise SystemExit("--group-limit must be >= 1")
+    competing = competing or {}
+    unknown_c = set(competing) - set(package_ids)
+    if unknown_c:
+        raise SystemExit(f"--competing for packages not in --pkgs: {sorted(unknown_c)}")
+    if any(n < 1 for n in competing.values()):
+        raise SystemExit("--competing lanes must be >= 1")
     packages: list[dict] = []
     held: dict[str, list[str]] = {}
     for pid in package_ids:
@@ -115,7 +122,7 @@ def make(
             held.setdefault(group, []).append(pid)
             if len(held[group]) > serial_group_limit:
                 raise SystemExit(f"serial group {group} held by {held[group]} exceeds --group-limit {serial_group_limit}")
-        entry: dict = {"package_id": pid, "max_rounds": max_rounds, "start_round": 1, "prior": None}
+        entry: dict = {"package_id": pid, "max_rounds": max_rounds, "start_round": 1, "prior": None, "competing": int(competing.get(pid, 1))}
         if pid in requeue:
             with open(requeue[pid], encoding="utf8") as fh:
                 record = json.load(fh)
@@ -169,7 +176,14 @@ if __name__ == "__main__":
     ap.add_argument("--group-limit", type=int, default=1, help="max packages per serial group in this wave (1 = exclusive); >1 records the frozen integration order and requeues conflicts")
     ap.add_argument("--requeue", action="append", default=[], metavar="PKG=RECORD_JSON")
     ap.add_argument("--requeue-blocked", action="append", default=[], metavar="PKG=RECORD_JSON", help="BLOCKED_EXTERNAL record whose manifest entry was amended since")
+    ap.add_argument("--competing", action="append", default=[], metavar="PKG=N", help="run N independent implementer lanes per round for PKG (hard requeues); lowest accepted lane wins")
     a = ap.parse_args()
+    comp: dict[str, int] = {}
+    for item in a.competing:
+        pid, _, n = item.partition("=")
+        if not pid or not n.isdigit():
+            raise SystemExit(f"--competing expects PKG=N, got {item!r}")
+        comp[pid] = int(n)
     rqb: dict[str, str] = {}
     for item in a.requeue_blocked:
         pid, _, path = item.partition("=")
@@ -183,4 +197,4 @@ if __name__ == "__main__":
             raise SystemExit(f"--requeue expects PKG=RECORD_JSON, got {item!r}")
         rq[pid] = rec
     pkgs = [p.strip() for p in a.pkgs.split(",") if p.strip()]
-    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq, requeue_blocked=rqb, serial_group_limit=a.group_limit))
+    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq, requeue_blocked=rqb, serial_group_limit=a.group_limit, competing=comp))
