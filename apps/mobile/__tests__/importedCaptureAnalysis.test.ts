@@ -403,11 +403,14 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('refuses a 12 fps import as unsupported frame rate before any permit is reserved', async () => {
+  it('refuses a 241 fps import as unsupported frame rate before the sidecar is read or any permit is reserved', async () => {
     const { db, calls } = recordingDb();
-    const { sequence } = generateSwingSequence({ handed: 'right', fps: 12 });
-    const { clip, sidecarJson } = importedClipWithSidecar(sequence);
-    mockReadArtifact = async () => sidecarJson;
+    const { sequence } = generateSwingSequence({ handed: 'right', fps: 241 });
+    const { clip } = importedClipWithSidecar(sequence);
+    const readSpy = jest.fn(async () => {
+      throw new Error('sidecar must not be read for a refused clip');
+    });
+    mockReadArtifact = readSpy;
     const fetchSpy = jest.fn();
     (globalThis as { fetch?: unknown }).fetch = fetchSpy;
 
@@ -415,8 +418,9 @@ describe('W03-01 import admission — session-less runCaptureAnalysis', () => {
     expect(outcome.kind).toBe('quality_blocked');
     if (outcome.kind !== 'quality_blocked') return;
     expect(outcome.reason).toBe(
-      importAdmissionRejectionMessage('frame_rate_too_low'),
+      importAdmissionRejectionMessage('frame_rate_too_high'),
     );
+    expect(readSpy).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
