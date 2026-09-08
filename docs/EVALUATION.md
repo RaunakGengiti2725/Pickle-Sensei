@@ -413,6 +413,86 @@ work would need, so **no new files were added under `ml/`** — duplicating the
 schemas would have been worse than leaving them alone. The concrete gap is
 label _volume_, not label _schema_.
 
+### 5.1 Scientific validation protocol package (W06-06, 2026-09-08)
+
+`ml/scripts/validation_protocol.py` (standard library only; tests in
+`ml/scripts/test_validation_protocol.py`) is the machine-checkable side of the
+W06 external study. It ships with **zero labels, zero coaches, zero metrics**
+and no fixture data under `datasets/`: `datasets/validation-protocol/` does not
+exist in the repository, and the test suite pins that the default report on the
+committed tree contains no records and is `BLOCKED_EXTERNAL`.
+
+**Commands**
+
+```bash
+python3 ml/scripts/validation_protocol.py --report            # human-readable report, exit 0
+python3 ml/scripts/validation_protocol.py --report --json     # same report as JSON
+python3 ml/scripts/validation_protocol.py --report --inputs DIR
+python3 ml/scripts/validation_protocol.py --validate KIND FILE [FILE ...]   # exit 1 on any error
+python3 ml/scripts/validation_protocol.py --schema KIND                     # print the schema
+python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+```
+
+`KIND` ∈ `protocol | consent | footage | reviewer | review | adjudication | prediction`.
+
+**Input layout (owner-supplied, never committed by engineering)**
+
+| Path under `datasets/validation-protocol/` | Record kind    | Who supplies                                                |
+| ------------------------------------------ | -------------- | ----------------------------------------------------------- |
+| `protocol.json`                            | `protocol`     | owner + signatories (ratified, frozen)                      |
+| `consent/*.json`                           | `consent`      | owner (participant releases, guardian for minors)           |
+| `footage/*.json`                           | `footage`      | owner (capture metadata, verification, rights)              |
+| `reviewers/*.json`                         | `reviewer`     | owner (qualification under `coach-qualification-policy-v1`) |
+| `reviews/*.json`                           | `review`       | qualified blinded coaches                                   |
+| `adjudications/*.json`                     | `adjudication` | qualified adjudicator                                       |
+| `predictions/*.json`                       | `prediction`   | engineering (frozen candidate output per clip)              |
+
+Records are JSON documents validated against a strict schema (unknown fields
+rejected; identifiers are opaque — no names/emails; media identified by
+SHA-256) plus cross-record checks. The validator refuses, among other things:
+footage whose `clip_id`/`session_id` is a protected holdout (`wm-dink-01`,
+`afn-vic-rally1`, `wm-tournament-2014`, `afn-vic-2025`); third-party/broadcast
+sources; a minor without a guardian release; a reviewer whose satisfied
+qualification criteria are not backed by verified evidence
+(`unverified_disclosed` never qualifies); a review with model output, other
+reviews or athlete identity disclosed; a `cannot_evaluate` review carrying a
+rating; a prediction range with `lower > upper`; an adjudicator who authored
+one of the clip's reviews; a `technique` outside the canonical taxonomy from
+`ml/scripts/validate_annotations.py`.
+
+**Report statuses**
+
+- `BLOCKED_EXTERNAL` — at least one owner-supplied input is missing. The report
+  lists every missing input with its id, expected path, the requirement and
+  what exactly is missing (per clip / per reviewer where applicable): ratified
+  protocol, consented footage, verified capture metadata, rights clearance,
+  qualified blinded reviewers (incl. adjudicator), blinded reviews,
+  adjudication.
+- `BLOCKED_INTERNAL` — only `candidate_predictions` (engineering-owned) is
+  missing.
+- `INVALID_INPUT` — supplied records are malformed or mutually inconsistent;
+  every error is listed and nothing is computed.
+- `COMPUTED` — all inputs present and valid. The report contains point
+  estimates only (coach exact agreement, player-weighted MAE, range coverage,
+  median range width, per-subgroup breakdowns, abstention counts) and one
+  verdict per preregistered gate (`MET`/`NOT_MET`, or `NOT_EVALUABLE` when the
+  protocol left the target `null`). Abstentions are counted, never scored.
+
+In every status `numerical_release_authorized` is `false` and
+`release_decision` is `"human"`: the runner is an input to the go/no-go
+packet, not the decision. The exit code of `--report` is `0` whenever the
+report was produced (including `BLOCKED_EXTERNAL`) and `1` only for
+`INVALID_INPUT`, so CI can run it without pretending the science exists.
+
+**What this does not do.** It does not collect footage, consent, ratings or
+reviewers; it does not qualify coaches (that is the policy in
+`docs/COACH_QUALIFICATION_POLICY.md`, recorded per reviewer in the `reviewer`
+record); and it does not turn a `COMPUTED` report into a release. The
+scientific claim remains `BLOCKED_EXTERNAL` until the owner supplies consented
+rights-cleared footage, verified metadata, ≥ 2 qualified blinded coaches, an
+adjudicator, a ratified frozen protocol and frozen cohorts — the report names
+exactly these when they are absent.
+
 ---
 
 ## 6. Verification record for this document's claims

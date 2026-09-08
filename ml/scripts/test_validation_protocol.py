@@ -275,7 +275,8 @@ class SchemaContractTest(unittest.TestCase):
         self.assertEqual(validate_record("consent", doc, "c"), [])
         adult = consent()
         adult["guardian_release_id"] = "guardian-release-test-0001"
-        self.assertTrue(any("guardian_release_id" in e for e in validate_record("consent", adult, "c")))
+        errors = validate_record("consent", adult, "c")
+        self.assertTrue(any("guardian_release_id" in e for e in errors))
 
     def test_protected_holdouts_are_refused_as_footage(self) -> None:
         for protected in sorted(PROTECTED_HOLDOUT_IDS):
@@ -311,7 +312,8 @@ class SchemaContractTest(unittest.TestCase):
     def test_review_must_be_blinded_and_internally_consistent(self) -> None:
         doc = review()
         doc["blinding"]["model_output_disclosed"] = True
-        self.assertTrue(any("model_output_disclosed" in e for e in validate_record("review", doc, "rv")))
+        errors = validate_record("review", doc, "rv")
+        self.assertTrue(any("model_output_disclosed" in e for e in errors))
         doc = review()
         doc["review_id"] = "wrong-id-0001"
         self.assertTrue(any("review_id" in e for e in validate_record("review", doc, "rv")))
@@ -321,7 +323,8 @@ class SchemaContractTest(unittest.TestCase):
         self.assertTrue(any("cannot_evaluate" in e for e in validate_record("review", doc, "rv")))
         doc = review()
         doc["cannot_evaluate_reason"] = "but also rated"
-        self.assertTrue(any("cannot_evaluate_reason" in e for e in validate_record("review", doc, "rv")))
+        errors = validate_record("review", doc, "rv")
+        self.assertTrue(any("cannot_evaluate_reason" in e for e in errors))
         doc = review()
         doc["quality_rating"] = None
         self.assertTrue(any("quality_rating" in e for e in validate_record("review", doc, "rv")))
@@ -347,10 +350,12 @@ class SchemaContractTest(unittest.TestCase):
         self.assertTrue(any("ratified_by" in e for e in validate_record("protocol", doc, "p")))
         doc = protocol()
         doc["frozen_before_evaluation"] = False
-        self.assertTrue(any("frozen_before_evaluation" in e for e in validate_record("protocol", doc, "p")))
+        errors = validate_record("protocol", doc, "p")
+        self.assertTrue(any("frozen_before_evaluation" in e for e in errors))
         doc = protocol()
         doc["minimum_reviewers_per_clip"] = 1
-        self.assertTrue(any("minimum_reviewers_per_clip" in e for e in validate_record("protocol", doc, "p")))
+        errors = validate_record("protocol", doc, "p")
+        self.assertTrue(any("minimum_reviewers_per_clip" in e for e in errors))
         proposed = protocol()
         proposed.update({"status": "proposed", "ratified_by": [], "ratified_at": None})
         self.assertEqual(validate_record("protocol", proposed, "p"), [])
