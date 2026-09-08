@@ -1,0 +1,16 @@
+INT-networking-recovery — adversarial run against 30a4065036a917514fb4984fde73f87867f38619
+All commands run from the repo root on Linux (Node v24.19.0, Deno 2.9.6); no device, no production Supabase.
+
+mobile.transportBounds.log   : cd apps/mobile && npx jest --ci __tests__/adv/networkingRecovery.transportBounds.adv.test.ts   → 19 failed, 4 passed, 23 total; exit=1
+mobile.retryAfter.log        : cd apps/mobile && npx jest --ci __tests__/adv/networkingRecovery.retryAfter.adv.test.ts        → 2 failed, 2 passed, 4 total; exit=1
+mobile.hostileBodies.log     : cd apps/mobile && npx jest --ci __tests__/adv/networkingRecovery.hostileBodies.adv.test.ts     → 3 failed, 3 passed, 6 total; exit=1
+mobile.baseline_controls.log : cd apps/mobile && npx jest --ci __tests__/offlineNetwork.test.ts __tests__/sessionKeeperShortLife.test.ts __tests__/xcBehavioral/syncRuntimeMatrix.test.ts __tests__/authDurableSession.test.ts → 164 passed, 164 total; exit=0
+edge.adv_networking_recovery.log : cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_networking_recovery.test.ts → 8 passed, 3 failed; exit=1
+edge.baseline_controls.log   : cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json rateLimit.test.ts cache.test.ts → 37 passed, 0 failed; exit=0
+edge.frozen_check.log        : npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts → exit=0
+
+Hygiene on the new test files only (no production source or existing test touched):
+  cd apps/mobile && npx tsc --noEmit                                  → exit=0
+  pnpm format:check && pnpm lint                                      → exit=0 / exit=0
+  cd supabase/functions/api/__wf__ && deno lint adv_networking_recovery.test.ts && deno check --config deno.json adv_networking_recovery.test.ts → exit=0
+  (root Prettier is the formatting authority per AGENTS.md; `deno fmt --check` disagrees with it on this file, as it is not a CI gate it was not applied.)
