@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
   "agents": [
     {
       "label": "implement-W10-03-r1",
@@ -6,9 +12,28 @@
       "prompt_sha256": "971c882917bbfe2f91427629e8f17ef45560090d3101ef2e31f954272477bd99",
       "role": "implementer",
       "status": "completed"
+    },
+    {
+      "label": "review-W10-03-r1",
+      "phase": "review",
+      "prompt_sha256": "65378c423232dcc6934b2438bfe6dffde9ab6c1f61c7e949ad1cb22e13684c34",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W10-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "04af384ef9d09cef8af6482bad2a2037c2c94c47f9440cc3c92a3a53ec9a56b6",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "candidate": {
+    "branch": "devin/pp/w10-03/impl-r1",
+    "head_sha": "4675b54fdead87ae55f55ee4124a5fe618e0d579",
+    "round": 1
+  },
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.5",
   "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
@@ -17,6 +42,74 @@
   "requeued_from": null,
   "rounds": [
     {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/88dd8c61-3a7a-48dd-b832-a066ea9c7f57/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a5630599-a560-499c-b8cd-cc0b0def5d1d/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d6ac6a41-8990-4ea4-ba9b-445e5875bef3/attack-build-full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f18a6d1-e57f-40ac-a111-9c2831d2504c/attack-runtime-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/14aa9d13-3080-4e3e-af5a-3829af718322/ac1-with-attacks.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cab51852-e07e-46db-8e13-32b33f3c8b50/ac2-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf403a5a-a7dc-4684-904e-b64c14ebbac1/ac3-eslint-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/76e2a93a-e45e-4915-8e20-9160f7af7be4/ac3-prettier-attack.log"
+        ],
+        "attack_branch": "devin/pp/w10-03/attack-4675b54f",
+        "attack_branch_sha": "460e4a7b0ec115e3781c097f98860fe33a2ddb24",
+        "attacked_sha": "4675b54fdead87ae55f55ee4124a5fe618e0d579",
+        "attacks_tried": 28,
+        "breaks": [
+          {
+            "expected": "Objective: 'commit from the immutable candidate'. A bundle built from a tree that differs from HEAD must be refused (no identity written, gate blocked_identity) or stamped as uncommitted; it must not be attributed to a commit that does not contain it.",
+            "observed": "bundle-xcode.sh prints 'Release identity: committed candidate written for diagnostics.' and writes releaseIdentity.generated.json with gitSha=HEAD and committed:true; Metro would inline that SHA as tags.source_revision for JS that HEAD does not contain. --require-committed only compares the identity files (manifest/app.json/pbxproj/plist/runtimeConfig) against HEAD, never the bundled sources; nothing in the Xcode phase or the fastlane archive lane checks the working tree is clean (only scripts/mac-full-verify.sh --remote does).",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js -t 'identity drift' (real scripts/release-identity.mjs + bundle-xcode.sh in a shared sparse clone of HEAD with src/diagnostics/sentry.ts and src/config/releaseIdentity.ts modified but uncommitted)",
+            "severity": "P2",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js",
+            "title": "Bundle phase stamps HEAD's commit as 'committed' onto a tree whose diagnostics sources are uncommitted (source_revision drift)"
+          },
+          {
+            "expected": "An identity the release gate approves and the phase reports as written is the identity the envelope carries (release com.picklesensei@<version>+<build>, dist, tags.source_revision), or the build phase/validator refuses it loudly at build time. Validator and runtime must share one build-number/version range.",
+            "observed": "release-identity.mjs accepts any positive safe integer (<= Number.MAX_SAFE_INTEGER, message says so) and /^\\d+\\.\\d+(\\.\\d+)?$/; the phase reports 'committed candidate written' and writes the record; parseGeneratedReleaseIdentity (MAX_BUILD_NUMBER 99_999_999, /^[0-9]{1,4}(\\.[0-9]{1,4}){0,2}$/, mirroring base privacy.ts diagnosticsIdentity) returns null, so diagnosticsGate(approvedConfig, parsed) is blocked_identity with every approval flag true and no build-time signal. Current manifest (1.0 / build 1) is unaffected; the runtime bound predates W10-03 (privacy.ts on BASE) but W10-03 wires the two ends together without reconciling them.",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js -t 'validator/runtime boundary' (2 tests: a committed clone with buildNumber 2026090801 passes the real release-identity.mjs --check --require-committed --json and bundle-xcode.sh writes it; parseGeneratedReleaseIdentity/applyGeneratedReleaseIdentity on 99_999_999 ok, 100_000_000 / 2026090801 / MAX_SAFE_INTEGER / '1.12345' / '10000.0' -> null)",
+            "severity": "P2",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js",
+            "title": "Release gate and bundle phase accept build numbers / versions the runtime parser silently refuses (10-digit date-style build 2026090801, any build > 99_999_999, version components > 4 digits)"
+          },
+          {
+            "expected": "A build's bundle carries the identity its own phase wrote (per-configuration/per-DERIVED_FILE_DIR artifact, or a lock), or the phase fails the build instead of reporting success.",
+            "observed": "Build A's stdout: 'Release identity: committed candidate written for diagnostics.' followed by MISSING — B's unconditional `rm -f \"${identity_file}\" \"${identity_file}.tmp\"` removed A's file between A's phase and A's Metro read, so A's archive inlines null (blocked_identity) although its phase reported success. The generated file is a single shared path under src/config regardless of CONFIGURATION/DERIVED_FILE_DIR.",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js -t concurrency (build A's phase writes the file and hands off to the bundler stand-in; build B's phase starts on the same tree and reaches its validator; A's bundler then reads src/config/releaseIdentity.generated.json)",
+            "severity": "P2",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js",
+            "title": "Concurrent build of the same source tree deletes the first build's identity before Metro reads it (rm -f races the bundler; phase already reported 'committed candidate written')"
+          },
+          {
+            "expected": "Any validator output that is not a committed identity object is refused ('Release identity: refused; diagnostics identity stays blocked.') and no artifact is written.",
+            "observed": "The node -e reducer destructures the array, JSON.stringify drops the undefined fields, `{}` is written as releaseIdentity.generated.json and the phase prints 'Release identity: committed candidate written for diagnostics.'; the bundler stand-in sees `{}`. Runtime parseGeneratedReleaseIdentity({}) is null, so the gate still fails closed (blocked_identity); only the phase's success message and the artifact are wrong. Empty stdout, null, truncated JSON, exit-1 with valid JSON and warning-prefixed JSON are all refused correctly.",
+            "repro": "cd apps/mobile && npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js -t 'a JSON array' (fake release-identity.mjs prints [] with exit 0)",
+            "severity": "P3",
+            "test_file": "apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js",
+            "title": "Validator stdout that is a JSON array is converted to `{}` and reported as 'committed candidate written'"
+          }
+        ],
+        "package_id": "W10-03",
+        "summary": "W10-03 adversary on candidate 4675b54f (branch devin/pp/w10-03/impl-r1). attacked_sha = git rev-parse HEAD = 4675b54fdead87ae55f55ee4124a5fe618e0d579 (VERIFIED). Candidate acceptance reproduced after `cd apps/mobile && npm ci`: AC1 `npx jest --ci --silent src/diagnostics` exit 0, 6 suites / 122 tests passed, 0 failed, 0 skipped (ac1-head.log, VERIFIED); AC2 `npx tsc --noEmit` exit 0 (ac2-head.log, VERIFIED). No PR opened, no force-push, no production/ASC/Mac-runner/secret access; candidate tests and production code untouched (git diff 4675b54f..460e4a7b touches only the two new attack files).\n\nAttack branch devin/pp/w10-03/attack-4675b54f pushed at 460e4a7b0ec115e3781c097f98860fe33a2ddb24 (one commit on top of the candidate) with 2 files / 28 real Jest attacks:\n- apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js (16 tests; real scripts/release-identity.mjs + bundle-xcode.sh in a `git clone --shared` sparse clone of HEAD, fake trees under os.tmpdir(), and real Metro builds of readGeneratedReleaseIdentity.js with maxWorkers 1): identity drift (dirty sources), validator/runtime range (2), concurrent phases on one tree, hostile PROJECT_DIR + leftover .tmp, 6 validator-stdout shapes, committed:false forwarded then refused at runtime, NODE_BINARY ''/'node'/'./node'/missing off PATH, Metro inlines [null] without the file / the record with it / no replay after removal / no build-machine path leak.\n- apps/mobile/src/diagnostics/__tests__/attackReleaseIdentityRuntime.test.ts (12 tests): prototype-inherited fields, JSON __proto__ key, boxed primitives, whitespace/zero-width/fullwidth-digit disguises, -0 / 1+epsilon, TOCTOU getters (each field read once, frozen result), throwing getters, cross-candidate replay incl. numerically-equal '01'/'1.0' drift, missing runtime bundleIdentifier, identity file appearing after startup (not re-read), restart with removed/other candidate file, reader throwing (corrupt module) -> blocked_identity not crash, shipping config stays 'disabled' with SDK unloaded and no identity in status, forged non-boolean approval flags / DSN suffixes.\n\nResults on the candidate (VERIFIED): `npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityBuild.test.js` exit 1, 16 tests: 11 passed / 5 failed (attack-build-full.log); `npx jest --ci src/diagnostics/__tests__/attackReleaseIdentityRuntime.test.ts` exit 0, 12/12 passed (attack-runtime-run2.log); combined `npx jest --ci --silent src/diagnostics` on the attack branch exit 1, 8 suites (7 passed, 1 failed), 150 tests: 145 passed / 5 failed / 0 skipped, all 5 failures in the attack build file, candidate suites 122/122 still green (ac1-with-attacks.log). Attack files: `npx tsc --noEmit` exit 0 (ac2-attack.log); root `npx eslint <2 files>` exit 0 (the .js file is ignored by the root config exactly like the candidate's buildSetup.test.js — 0 errors, 1 ignore warning; ac3-eslint-attack.log); root `npx prettier --check <2 files>` exit 0 (ac3-prettier-attack.log).\n\nConfirmed breaks: 3x P2 + 1x P3, no P0/P1 (see breaks). The 23 non-breaking attacks confirm the parser/gate/startup half fails closed at every boundary tried and that transport stays disabled by default. Shell-only probe (not counted in attacks_tried, VERIFIED): with a generated releaseIdentity.generated.json present in the checkout the candidate suites still pass 122/122 (ac1-with-artifact.log, local only). Caveat for whoever reruns the attack branch: Metro's default worker pool spawned from inside Jest drove this Linux VM to load >100 and killed the shell three times; the committed test pins Metro maxWorkers:1, which ran cleanly (load stayed < 30). Apple runtime/Xcode behaviour was not exercised (Linux only; INFERRED that the bundle phase behaves identically under Xcode's env wrapper)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
       "implement": {
         "acceptance_results": [
           {
@@ -103,10 +196,64 @@
         ],
         "summary": "W10-03 implemented on devin/pp/w10-03/impl-r1 (base f250acd7 → head 4675b54f; two commits: 7b07a7ca regression tests, 4675b54f implementation; pushed, no PR, no force-push). Gap on BASE: diagnostics identity fields (nativeBuildNumber, sourceRevision) were null in runtimeConfig and diagnosticsGate/initializeDiagnostics in apps/mobile/src/diagnostics/sentry.ts read only that config, so no shipping path ever carried the candidate's build number or commit; no build-time identity artifact existed. Now the Xcode bundle phase (apps/mobile/src/diagnostics/bundle-xcode.sh) runs the unmodified scripts/release-identity.mjs --check --require-committed --json and writes a git-ignored src/config/releaseIdentity.generated.json; apps/mobile/src/config/releaseIdentity.ts validates it fail-closed and completes the runtime diagnostics config; diagnosticsGate applies it after every approval gate so envelopes carry release com.picklesensei@<version>+<build>, dist, and tags.source_revision from the immutable candidate, with transport still disabled by default and no runtime increment. AC1 jest src/diagnostics 122/122 exit 0; AC2 tsc exit 0; AC3 root eslint+prettier exit 0; pnpm format:check and git diff --check exit 0. Regression proof: HEAD test files fail on BASE (exit 1, 6 failed) and pass on HEAD (exit 0, 24 passed). Out-of-scope wiring (bundle-xcode.sh, readGeneratedReleaseIdentity.js, .gitignore) is additive and justified in out_of_scope_files; no serial-group path touched."
       },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bcfee56c-2be3-4fdc-9c58-10bab0bbe5f2/ac1-jest-diagnostics.log",
+            "command": "cd apps/mobile && npx jest --ci --silent src/diagnostics",
+            "executed": 122,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-03-AC1",
+            "note": "VERIFIED on 4675b54f after `cd apps/mobile && npm ci`: 6 suites / 122 tests passed, 0 skipped (repo copy artifacts/review-w10-03/ac1-jest-diagnostics.log). Regression proof (VERIFIED): only releaseIdentity.test.ts + buildSetup.test.js copied onto a BASE f250acd7 worktree → exit 1, 2 suites failed, 12 tests: 6 failed / 6 passed (releaseIdentity.test.ts cannot resolve ../../config/readGeneratedReleaseIdentity; 6 buildSetup identity tests fail) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f4fc96a-58e3-4227-a728-ae47f077f5cf/regress-base.log ; same two files on candidate → exit 0, 2 suites / 24 passed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/968619bc-1b11-490b-ac96-47e8c3ff2249/regress-candidate.log . Adjacent suites __tests__/w11ReleaseIdentity.test.ts + wf/flow-app-store-compliance-ios-config.test.ts on candidate: exit 0, 144 passed (artifacts/review-w10-03/adjacent-suites.log).",
+            "passed": 122,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f459c908-80ee-4043-9da7-5727afe9741c/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-03-AC2",
+            "note": "VERIFIED on 4675b54f; no diagnostics emitted.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2da39d2c-7752-407b-b246-180832bb412c/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/config/releaseIdentity.ts apps/mobile/src/config/readGeneratedReleaseIdentity.js apps/mobile/src/diagnostics/__tests__/releaseIdentity.test.ts apps/mobile/src/diagnostics/__tests__/buildSetup.test.js && npx prettier --check apps/mobile/src/diagnostics/sentry.ts apps/mobile/src/config/releaseIdentity.ts apps/mobile/src/config/readGeneratedReleaseIdentity.js apps/mobile/src/diagnostics/__tests__/releaseIdentity.test.ts apps/mobile/src/diagnostics/__tests__/buildSetup.test.js",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W10-03-AC3",
+            "note": "VERIFIED at repo root on 4675b54f: eslint exit 0 with 0 errors / 2 warnings (the two .js files are ignored by the pre-existing root `**/*.js` ignore); prettier exit 0, all 5 files formatted. apps/mobile/.gitignore and bundle-xcode.sh have no Prettier parser (prettier exits 2 'No parser could be inferred' on them — pre-existing, not checkable). Also VERIFIED: root `pnpm format:check` exit 0 (artifacts/review-w10-03/format-check.log) and `git diff --check f250acd7..4675b54f` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "release-identity.mjs `committed` covers only the six identity files, not the whole working tree; a Release archive from a tree with uncommitted non-identity source edits still records gitSha=HEAD, committed=true (pre-existing validator semantics shared with the fastlane pre-archive gate; the implementer's residual-risk note slightly overstates the protection).",
+          "apps/mobile/src/config/readGeneratedReleaseIdentity.js is shipping code that root ESLint ignores by the pre-existing `**/*.js` rule; reviewed manually (20 lines, guarded require inside try, JSDoc return type unknown, no `any`).",
+          "bundle-xcode.sh writes src/config/releaseIdentity.generated.json.tmp which is not in .gitignore; it is removed on both success and refusal paths, so only a killed build could leave it behind.",
+          "UNKNOWN on Linux: bundle phase inside a real Xcode archive (PROJECT_DIR/NODE_BINARY from with-environment.sh). Candidate touches no apps/mobile/ios/ path so the Mac runner was not required; exercised by invoking the real bundle-xcode.sh with PROJECT_DIR=apps/mobile/ios, DERIVED_FILE_DIR set and a stubbed react-native-xcode.sh."
+        ],
+        "package_id": "W10-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4675b54fdead87ae55f55ee4124a5fe618e0d579",
+        "scope_violation": false,
+        "summary": "APPROVE W10-03 candidate 4675b54fdead87ae55f55ee4124a5fe618e0d579 (base f250acd7). Scope: 7 files changed, 759+/2-; sentry.ts, releaseIdentity.ts and the two __tests__ files are in write_paths; bundle-xcode.sh (+29 additive lines, existing Xcode bundle-phase hook already wired via project.pbxproj), readGeneratedReleaseIdentity.js (20-line guarded require, needed because root ESLint forbids require() in .ts) and .gitignore (+2) are justified minimal wiring, none under any serial-group prefix (release-identity group's pbxproj/fastlane/release-identity.mjs untouched — pinned by a new test). Objective met as shipped behaviour (VERIFIED): initializeDiagnostics() in apps/mobile/index.js startup passes generatedReleaseIdentity() into diagnosticsGate(); identity is applied only after transport/provider/disclosures/DSN/native-privacy gates; runtimeConfig defaults keep transport disabled. Fail-closed parsing (committed===true, com.picklesensei, dotted version, integer build 1..99999999, 40-hex sha, frozen, hostile input → null → blocked_identity), drift vs populated config rejected. Build path VERIFIED on Linux: real bundle-xcode.sh with stubbed react-native-xcode.sh ran the unmodified release-identity.mjs --check --require-committed --json and wrote {marketingVersion:'1.0',buildNumber:1,bundleIdentifier:'com.picklesensei',gitSha:4675b54f…,committed:true}; git check-ignore confirms it is ignored; `npx react-native bundle --platform ios --dev false` exit 0 both without the file (Metro optional dependency, sha absent from bundle) and with it (sha present once). AC1 122/122 exit 0; AC2 exit 0; AC3 exit 0 (0 lint errors, prettier clean). Regression proof holds: new tests on BASE exit 1 (6 failed/6 passed), on candidate exit 0 (24 passed). Invariant read: no RLS/grant/migration/billing/auth/copy changes; only 2 deleted lines (both in sentry.ts, replaced by new wiring); no test lines removed, no existing comments modified, no bypass tokens. No blocking issues; non-blocking notes listed.",
+        "verdict": "approve"
+      },
       "round": 1
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-3"
 }

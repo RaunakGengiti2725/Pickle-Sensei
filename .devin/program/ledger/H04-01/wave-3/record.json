@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-H04-01-r3",
@@ -27,9 +33,28 @@
       "prompt_sha256": "f995752523730ca57451912e4233e2737ee99e39046453133ef495d7c8eabccc",
       "role": "implementer",
       "status": "completed"
+    },
+    {
+      "label": "review-H04-01-r4",
+      "phase": "review",
+      "prompt_sha256": "317b8a1d518da214b93becb9a6c7c0eec3e198fd1e259ced19da8acfcc923e61",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-H04-01-r4",
+      "phase": "adversary",
+      "prompt_sha256": "86cc2ea1b65a4a39dbdf7f70883cfc6b5952690521c64b1bb6ce607c29608e0d",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "candidate": {
+    "branch": "devin/pp/h04-01/impl-r4",
+    "head_sha": "7aafae061d0eb74e98306b636a5efdbfffed59e1",
+    "round": 4
+  },
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.5",
   "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
@@ -217,6 +242,87 @@
       "round": 3
     },
     {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c92a078-91db-46d9-9e98-7eaf1b915733/r4-acceptance.out",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/449b0201-8c25-40d3-aab3-8d812126e75f/r4-registry.out",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8c84ef35-0af2-4de3-9927-f9ef6d641c5d/disposition-coverage.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e64d1952-ebc4-42b6-8213-0b2a7fe969ca/negative-controls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c9cc4ee-959e-4021-bf4e-13eece68f89d/bundle.log"
+        ],
+        "attack_branch": "devin/pp/h04-01/attack-7aafae06",
+        "attack_branch_sha": "9bb0c90bcc9a1fc538a646145f70bcdcc54284d5",
+        "attacked_sha": "7aafae061d0eb74e98306b636a5efdbfffed59e1",
+        "attacks_tried": 40,
+        "breaks": [
+          {
+            "expected": "exit 1, 'GHSA-vcc3-ghjq-m6fr: MISSING disposition' — §8.2(b) claims the check 'parses table rows … does not search the section for keywords'; a row a reader cannot see is not a table row of the document.",
+            "observed": "exit 0, 'GHSA-vcc3-ghjq-m6fr: dispositioned ACCEPTED RISK', advisories=3 missing=0 for (a) §4.3 real Disposition row deleted and re-added inside <!-- -->; (b) same inside a ``` fence; (c) whole dispositioned §4.3 wrapped in <!-- --> followed by a visible §4.3 whose only Disposition is **PENDING** (section() takes the first heading match; lines are matched with /^\\|/ regardless of comment/fence context). Rendered §4.3 shows 0 rows / PENDING.",
+            "repro": "git checkout 7aafae061d0eb74e98306b636a5efdbfffed59e1 && git checkout 9bb0c90b -- tools/attack/h04-01 && node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B1, 3 tests; needs pnpm install, apps/mobile npm ci — B0 runs the §8.2 fence first)",
+            "severity": "P2",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "§8.2 disposition check counts Disposition rows that no Markdown renderer shows (HTML comment / fenced code) — a document with NO visible disposition for GHSA-vcc3-ghjq-m6fr passes"
+          },
+          {
+            "expected": "exit 1 (undispositioned advisory or 'report/document disagree' diagnostic): the AC criterion is 'every advisory has a disposition', not 'every GHSA id'; at minimum the count of extracted ids should be reconciled against metadata.vulnerabilities.total / pnpm.metadata.vulnerabilities.",
+            "observed": "pnpm.json with one high advisory whose github_advisory_id is null → exit 0, 'advisories=3', stdout line shows pnpm high=1 yet no MISSING; mobile.json with an extra labelled package whose via.url is https://npmjs.com/advisories/1234 → exit 0 with metadata total=17 vs advisories=3; a mobile report whose via urls all lack GHSA ids against a document without GHSA headings → exit 0 with advisories=0 while metadata total=16.",
+            "repro": "node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B2, 3 tests)",
+            "severity": "P2",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "'every advisory has a disposition' is evaluated only for advisories carrying a GHSA id; advisories without one (pnpm github_advisory_id null / npm via.url without GHSA) are silently excluded and metadata totals are never reconciled"
+          },
+          {
+            "expected": "exit 1: NOT APPLICABLE requires the package to be absent from the report; UPGRADED requires the advisory to no longer be reported (the check already has mobile.vulnerabilities[pkg] and the id set available to enforce both).",
+            "observed": "exit 0, 'GHSA-vcc3-ghjq-m6fr: dispositioned NOT APPLICABLE' / 'dispositioned UPGRADED', advisories=3 missing=0 — finalRe only checks the leading keyword vocabulary.",
+            "repro": "node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B4, 2 tests)",
+            "severity": "P2",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "A disposition that contradicts the audit report is accepted: **NOT APPLICABLE** (defined in §4 as 'package not present') or **UPGRADED** for GHSA-vcc3-ghjq-m6fr while mobile.json still reports decode-uri-component@0.2.2"
+          },
+          {
+            "expected": "exit 1 'INSIDE vulnerable range' for prereleases ordered inside the range (or an explicit rejection of prerelease floors), and a rejection/diagnostic for a version that is not a published release. Boundary-value weakness only; the committed floor 9.5.0 is correct.",
+            "observed": "exit 0, 'floor query-string@9.4.1-beta.0 vs audited range \"5.0.0 - 9.4.1\": outside vulnerable range' (semver.satisfies default mode excludes prereleases; semver.satisfies(v, range, {includePrerelease:true}) is true); 'floor query-string@99.0.0 … outside vulnerable range' with no existence check.",
+            "repro": "node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B3, 4 failing tests + 1 semver ground-truth test that passes)",
+            "severity": "P3",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "§8.2(d) 'remediation floors are real' accepts prerelease versions numerically inside the audited range (query-string@9.4.1-beta.0, 9.0.0-rc.1, 5.0.0-alpha.1) and non-existent versions (query-string@99.0.0)"
+          },
+          {
+            "expected": "A diagnosed 'run §8.2 first / audit did not execute' line on stdout and the log artifact written (the harness's undocumented precondition is that §8.2 already ran in the same checkout).",
+            "observed": "exit 1, stderr 'Error: ENOENT: no such file or directory, open artifacts/advisories/mobile.json' at [stdin]:12 (fs.readFileSync before any diagnostic); artifacts/advisories/disposition-coverage.negative-controls.log not created.",
+            "repro": "node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B5) — or in a checkout without artifacts/: bash on the §8.3 fence",
+            "severity": "P3",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "§8.3 negative-control harness dies with an uncaught ENOENT on a clean checkout (no artifacts/) and writes no negative-controls log — the same defect class §9 says round 4 fixed for §8.2"
+          },
+          {
+            "expected": "wellFormed() rejects a report without a `vulnerabilities` object → 'audit report malformed', finish(1) writes the log, nothing on stderr.",
+            "observed": "exit 1 (uncaught), stderr 'TypeError: Cannot read properties of undefined (reading 'query-string')' at `const v = mobile.vulnerabilities[pkg]`; log file absent. Exit code is still non-zero so the AC outcome is right; only the artifact/diagnostic contract is broken.",
+            "repro": "node --test tools/attack/h04-01/r4-acceptance-check.attack.test.mjs  (suite B9, 2 failing tests; the truncated-JSON case passes)",
+            "severity": "P3",
+            "test_file": "tools/attack/h04-01/r4-acceptance-check.attack.test.mjs",
+            "title": "Corrupt mobile.json that passes wellFormed() (metadata present, `vulnerabilities` key absent or null) crashes §8.2 with an uncaught TypeError and no disposition-coverage.log, contradicting 'The script always writes artifacts/advisories/disposition-coverage.log'"
+          }
+        ],
+        "package_id": "H04-01",
+        "summary": "Attacked H04-01 candidate 7aafae06 (docs/security/ADVISORIES_2026-09-08.md only) with 40 tests on branch devin/pp/h04-01/attack-7aafae06 @ 9bb0c90b (pushed; no PR). VERIFIED baseline: the committed §8.2 fence run verbatim via bash exits 0 (advisories=3 missing=0 stale=0 floors=1 badFloors=0; artifact disposition-coverage.log), the §8.3 harness exits 0 controls=21 failed=0, fresh pnpm audit = 0 advisories/388 deps and npm audit = 16 labels/3 GHSAs exactly as documented; prettier --check exit 0, git diff --check exit 0, no forbidden copy terms. tools/attack/h04-01/r4-registry-facts.attack.test.mjs (node --test, 17/17 pass, exit 0) re-derives every r4 fact from live sources: GitHub advisory records (CVE ids, severities, CVSS 7.5/null, ranges <=2.0.2 / <=0.4.2, first patched none/0.5.0, publish dates), the RN 0.86.3 correction (community-cli-plugin@0.86.3 & metro-config@0.86.3 → metro ^0.84.3; metro-config@0.84.6 → metro 0.84.6; metro 0.84.4 has image-size ^1.0.2, 0.84.5/0.84.6 none, 0.87.0 has it; 0.86.3 older than 0.87.1 = downgrade), decode-uri-component@0.5.0 ESM-only published 2026-06-29, query-string 9.5.0 first with ^0.5.0 (published 2026-08-06), @react-navigation/core latest 7.21.13 → query-string ^7.1.3, npm ls single instances image-size@1.2.1 / decode-uri-component@0.2.2 / query-string@7.1.3, no linking prop / deep-link API in shipping source, Info.plist only GoogleSignInReturn scheme + no associated domains, both deno.lock v5 with the same 13 npm entries and `deno audit` 'No known vulnerabilities found', and a rebuilt release iOS bundle: 2001 modules, 0 from image-size/metro/*, exactly 1 each decode-uri-component & query-string, getStateFromPath present. So the documentation's facts, reachability and dispositions hold. tools/attack/h04-01/r4-acceptance-check.attack.test.mjs (node --test, 23 tests: 8 pass, 15 fail, exit 1) breaks the hardened §8.2/§8.3 machinery at its boundaries — the 15 failures are the 6 findings above (all P2/P3, none affect the current tree's dispositions): hidden-row acceptance (HTML comment / code fence / commented-out section), non-GHSA advisories excluded with no metadata reconciliation, contradictory NOT APPLICABLE/UPGRADED accepted, prerelease/non-existent floors accepted, §8.3 harness ENOENT crash on clean checkout, and TypeError crash on a report lacking `vulnerabilities`. Attacks that did NOT break: real registry-unreachable run of the fence (npm_config_registry → closed port: exit 1, 'audit did not execute', stale exit-0 log overwritten), semver absent (documented diagnostic, log written), truncated mobile.json (SyntaxError diagnosed), CRLF document (exit 0), plus all 17 fact re-verifications. No candidate file was modified; no push to main/ci/mac-*, no PR, no force-push."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
       "implement": {
         "acceptance_results": [
           {
@@ -262,10 +368,50 @@
         ],
         "summary": "Gap on BASE_SHA: docs/security/ADVISORIES_2026-09-08.md does not exist (H04-ADVISORIES OPEN in docs/RELEASE_READINESS_2026-09-07.md:53). Round-3 candidate (336689d0) defects resolved: (1) review-blocking — its §4.1 (l.93) and §6 (l.177) falsely stated react-native@0.86.3 'does not remove image-size' / 'no security gain'; VERIFIED via npm view (@react-native/community-cli-plugin@0.86.3 -> metro ^0.84.3; metro-config@0.84.6 -> metro 0.84.6; metro@0.84.6 has no image-size dep) and a throwaway lockfile probe (npm install --package-lock-only --ignore-scripts --legacy-peer-deps exit 0; resolves metro@0.84.6, no image-size; npm audit --json exit 0 total 0). §2 #7/#8/#9, §4.1, §6 and §9 now state the 0.86.3 tree does drop the image-size family and is rejected solely because it downgrades the shipping runtime framework 0.87.1->0.86.3 (outside 'upgrade where safe'; would need mobile tsc/jest gates + Mac plane). (2) adversary P1 — round-3 §8.2 regex matched **ACCEPTED RISK**/**UPGRADED**/**NOT APPLICABLE** anywhere under the GHSA heading. New §8.2 check parses Markdown table rows: exactly one '| Disposition | … |' row per '### <n> GHSA-…' section whose cell BEGINS with one of the three values; stale-section detection; remediation floors must be full semver (scoped ok), name a package present in mobile.json, and lie outside the audited vulnerable range; malformed/missing/empty reports diagnosed on stdout; mkdir -p before writing the log (round-3 died with uncaught ENOENT on a clean checkout, no log). §8.3 embeds a 21-case negative-control harness that extracts the §8.2 script from the doc itself. Regression-first commits: 4512e0f9 = corrected facts + §8.3 harness with the round-3 check still embedded (harness exit 1, controls=21 failed=15 — N04/N05 adversary cases exit 0 falsely; recorded in that commit's §8.3); 7aafae06 = hardened check (harness exit 0, controls=21 failed=0). Audit state unchanged: pnpm 0 advisories/388 deps (exit 0); mobile npm 16 labels = 3 GHSAs (GHSA-vcc3-ghjq-m6fr decode-uri-component; GHSA-w3rx-r6r6-pgpr, GHSA-5p2g-fcmc-qvqq image-size), 7 moderate 9 high (npm exit 1 = advisories present, not an execution failure); Deno locks (root + supabase/functions/api, v5, 13 npm entries each) 0 advisories, frozen check exit 0. Reachability: image-size is Metro build tooling, 0 modules in the production bundle source map (2001 modules); decode-uri-component is bundled via query-string <- @react-navigation/core getStateFromPath but unreachable because NavigationContainer has no linking prop (apps/mobile/src/navigation/RootNavigator.tsx) and nothing calls getStateFromPath/useLinkTo/useLinkProps. No safe upgrade: decode-uri-component@0.5.0 is ESM-only and breaks query-string@7.1.3 parse() (TypeError probe); React Navigation stable 7.21.13 still pulls query-string 7.x; 8.x is alpha. All three ACCEPTED RISK with remediation floor query-string>=9.5.0 (published 2026-08-06). Also ran root pnpm format:check (exit 0) and git diff --check (exit 0) on both commits. The round-3 adversary suite (tools/attack/h04-01/acceptance-script.attack.test.mjs) was re-run locally against this doc with only its fence anchor adjusted for the leading mkdir line: all A3/A4 behaviour tests pass (PENDING+quoted, PENDING+negated, scoped floor, 9.4 floor, boundary, unknown package); the 3 remaining failures are string-format expectations tied to r3 (summary line now includes stale=, and the test that asserts 'no mkdir in the fence')."
       },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f962980-3184-4049-ba80-9db8544258aa/disposition-coverage.log",
+            "command": "mkdir -p artifacts/advisories; pnpm audit --json > artifacts/advisories/pnpm.json; (cd apps/mobile && npm audit --json > ../../artifacts/advisories/mobile.json); node -e '<§8.2 disposition check extracted verbatim from docs/security/ADVISORIES_2026-09-08.md>'",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H04-01-AC1",
+            "note": "VERIFIED by my own re-execution after pnpm install --frozen-lockfile (exit 0) and apps/mobile npm ci (exit 0). Audits executed: pnpm audit --json exit 0 (metadata all zero, 388 deps; https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ee56e7f-27bb-4021-b66f-bb91c75ef06d/pnpm.json); npm audit --json exit 1 = advisories present, well-formed report with metadata {info:0,low:0,moderate:7,high:9,critical:0,total:16}, no error object, 16 labels resolving to exactly 3 GHSA ids GHSA-5p2g-fcmc-qvqq, GHSA-vcc3-ghjq-m6fr, GHSA-w3rx-r6r6-pgpr (https://la-hacks-rttothemoon.devinenterprise.com/attachments/b89a9986-73b1-43fa-835a-446c663d2a8c/mobile.json). Every advisory has a disposition: the §8.2 sequence extracted from the committed doc exits 0 with 'advisories=3 missing=0 stale=0 floors=1 badFloors=0', each id 'dispositioned ACCEPTED RISK', 'floor query-string@9.5.0 vs audited range \"5.0.0 - 9.4.1\": outside vulnerable range'. The raw manifest command's shell status is 1 (npm audit exit code semantics, §8.1); exit_code 0 above is the check sequence's exit. Deno: deno audit --lock=deno.lock exit 0 and (cd supabase/functions/api && deno audit --lock=deno.lock) exit 0, both 'No known vulnerabilities found' (locks v5, 13 npm, 0 jsr/remote); npx --yes deno@2.5.6 check --frozen --lock=deno.lock index.ts exit 0. Summary of all commands+exit codes: https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e9887d1-b16f-405a-b91a-4796a1e03c10/REVIEW_SUMMARY.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e9887d1-b16f-405a-b91a-4796a1e03c10/REVIEW_SUMMARY.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f962980-3184-4049-ba80-9db8544258aa/disposition-coverage.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b89a9986-73b1-43fa-835a-446c663d2a8c/mobile.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ee56e7f-27bb-4021-b66f-bb91c75ef06d/pnpm.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7a133de-6cf4-4a4c-a6bb-ab496b8c8cdf/sec83-run-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1a711436-9b7e-4b26-807d-ee586842e4de/sec83-run-r3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6cb9709-7b47-4474-848c-c8c54eb1e2d8/sec83-run-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8df67dec-6a94-4f8c-9b08-3b561c8c2876/bundle-module-scan.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2b32dda-fc62-42c0-bc03-c7b90a5cfa21/registry-facts.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "The §8.2 disposition check and §8.3 negative-control harness live only inside docs/security/ADVISORIES_2026-09-08.md (extracted by hand / by the harness); nothing in CI (scripts/security-scan.sh, verify-cloud.sh) executes them, so the document can go stale silently. Follow-up for a package holding the ci-scripts serial group: wire the §8.2 check into scripts/security-scan.sh or a docs check.",
+          "§2 #19 says the react-native@0.86.3 probe lockfile has 298 packages; my re-run of the same probe (npm install --package-lock-only --ignore-scripts --legacy-peer-deps) has 299 `packages` entries including the root entry — same resolution (metro@0.84.6, metro-config@0.84.6, no image-size, audit total 0); cosmetic count difference only.",
+          "The manifest acceptance command run verbatim exits 1 (npm audit's advisories-present signal, documented in §8.1); the acceptance record's exit_code 0 is the exit of the §8.2 sequence (manifest command + disposition check). The judge should read exit_code with that note, as the doc and the implementer both state."
+        ],
+        "package_id": "H04-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "7aafae061d0eb74e98306b636a5efdbfffed59e1",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope: git diff --stat BASE..7aafae06 = exactly one file, docs/security/ADVISORIES_2026-09-08.md (+480), which is the declared write_path; no serial-group path touched; no dependency, lockfile, migration, test or comment edits (scope_violation=false). The objective is documentation (write_paths permits only the doc), so 'no module nothing calls' does not apply. Acceptance H04-01-AC1 re-verified by my own runs (VERIFIED): pnpm audit exit 0 / 0 advisories / 388 deps; npm audit exit 1 with a well-formed report of 16 labels = 3 GHSA ids; the §8.2 check extracted from the committed doc exits 0 'advisories=3 missing=0 stale=0 floors=1 badFloors=0'. Regression proof (VERIFIED): the §8.3 21-case harness extracted from the HEAD doc exits 0 'controls=21 failed=0' at HEAD; run against commit 4512e0f9's doc (round-3 regex check) it exits 1 'controls=21 failed=15' (N04/N05/N06/N08/N13/N14/N16 falsely exit 0, matching the adversary finding); at BASE_SHA the doc is absent so both the harness and the §8.2 check exit 1 (ENOENT) — regression_fails_on_base=true. Factual claims independently re-verified: RootNavigator.tsx:550 <NavigationContainer ref theme> has no linking prop; @react-navigation/native@7.3.18 NavigationContainer.tsx:81 isLinkingEnabled=false without linking, useLinking.native.tsx:158/190 gates; no getStateFromPath/useLinkTo/useLinkProps callers under apps/mobile/src (only RN Linking.openURL outbound calls); the single CFBundleURLTypes scheme is the Google Sign-In reverse client id and the doc addresses it; entitlements hold only applesignin. Production bundle (react-native bundle --dev false, exit 0, 2001 modules): 0 modules from image-size/metro/metro-config/metro-transform-worker/@react-native/metro-config/community-cli-plugin/new-app-screen; exactly 1 decode-uri-component and 1 query-string module plus getStateFromPath.js — bundled-but-unreachable claim holds. Registry (npm view / gh api): decode-uri-component 0.5.0 type=module published 2026-06-29, GHSA range <=0.4.2 first_patched 0.5.0; image-size GHSAs range <=2.0.2 first_patched null, CVSS 7.5, published 2026-06-10; query-string 9.4.1 -> ^0.4.1, 9.5.0 -> ^0.5.0 (published 2026-08-06), latest 9.5.1; @react-navigation/core latest 7.21.13 -> query-string ^7.1.3, next 8.0.0-alpha.34; metro 0.84.4 has image-size ^1.0.2, 0.84.5/0.84.6 none, 0.87.0 (latest, only 0.87.x) ^1.0.2; RN 0.86.3 published 2026-08-24, 0.87.1 2026-08-26 latest. Probe #14 reproduced: decode-uri-component@0.5.0 override under query-string@7.1.3 -> parse() TypeError decodeComponent is not a function (exit 1). Probe #19 reproduced: react-native@0.86.3 tree resolves metro@0.84.6 with no image-size and audits total 0 — the corrected round-4 statement (clears image-size but is a runtime downgrade, rejected) is accurate. Deno: both locks audit clean (exit 0), frozen deno@2.5.6 check exit 0. Hygiene: pnpm format:check exit 0, git diff --check exit 0, no prohibited copy terms (Android/Google Play/guest mode/Live Court/DUPR/competitors/accuracy %), no secrets in the doc. No invariant violations (doc-only change). Non-blocking: the check/harness are not wired into CI (out of this package's write scope); trivial package-count difference (298 vs 299) in §2 #19; the manifest command's raw exit is 1 by npm audit semantics, recorded as such in the note.",
+        "verdict": "approve"
+      },
       "round": 4
     }
   ],
   "start_round": 3,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-3"
 }
