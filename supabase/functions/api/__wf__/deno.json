@@ -9,6 +9,7 @@
     "postgres": "npm:postgres@3.4.5",
     "@std/assert": "jsr:@std/assert@1.0.19",
     "../../../../packages/shared-types/src/analysisOutcome.js": "../../../../packages/shared-types/src/analysisOutcome.ts",
+    "../../../../packages/shared-types/src/chargeability.js": "../../../../packages/shared-types/src/chargeability.ts",
     "../../../../packages/shared-types/src/domain.js": "../../../../packages/shared-types/src/domain.ts",
     "../../../../packages/shared-types/src/errors.js": "../../../../packages/shared-types/src/errors.ts",
     "../../../../packages/shared-types/src/techniqueBenchmark.js": "../../../../packages/shared-types/src/techniqueBenchmark.ts"
