@@ -6,11 +6,13 @@ import React, {
   useState,
 } from 'react';
 import {
+  AppState,
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
+  type AccessibilityActionEvent,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -106,6 +108,16 @@ const VERDICT: Record<StopVerdict, { label: string; tint: string }> = {
 /** Fallback stage aspect (portrait phone capture) when nothing recorded a size. */
 const DEFAULT_VIDEO = { width: 9, height: 16 };
 const TICK_MS = 1000 / 30;
+/** Reduce Motion: the pose-only replay steps at a coarser cadence, so the
+ * exoskeleton does not redraw thirty times a second; wall-clock speed is the
+ * same. */
+const REDUCED_TICK_MS = 120;
+/** VoiceOver increment/decrement moves the playhead by this share of the clip. */
+const SEEK_STEPS = 20;
+const SEEK_ACTIONS = [
+  { name: 'increment' as const },
+  { name: 'decrement' as const },
+];
 const END_TOLERANCE_MS = 30;
 const EXTENT_PAD_MS = 250;
 const TRACK_HEIGHT = 32;
@@ -219,6 +231,7 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   autoPauseRef.current = autoPause;
 
   const rate = REVIEW_SPEEDS[speedIndex] ?? 1;
+  const tickMs = reduced ? REDUCED_TICK_MS : TICK_MS;
 
   const setPlayingState = useCallback((value: boolean) => {
     playingRef.current = value;
@@ -282,16 +295,25 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   useEffect(() => {
     if (nativeDriven || !playing) return;
     const timer = setInterval(() => {
-      const next = playheadRef.current + TICK_MS * rate;
+      const next = playheadRef.current + tickMs * rate;
       if (next >= durationMs) {
         advanceTo(durationMs);
         finish();
         return;
       }
       advanceTo(next);
-    }, TICK_MS);
+    }, tickMs);
     return () => clearInterval(timer);
-  }, [advanceTo, durationMs, finish, nativeDriven, playing, rate]);
+  }, [advanceTo, durationMs, finish, nativeDriven, playing, rate, tickMs]);
+
+  // Playback belongs to the foreground: leaving the app freezes the replay
+  // where it is, and only a deliberate play resumes it.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active' && playingRef.current) setPlayingState(false);
+    });
+    return () => subscription.remove();
+  }, [setPlayingState]);
 
   const togglePlay = () => {
     if (playingRef.current) {
@@ -326,6 +348,24 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   };
   const endScrub = () => {
     scrubbingRef.current = false;
+  };
+
+  /** VoiceOver seek: the same jump a finger on the track performs. */
+  const seekStepMs = durationMs / SEEK_STEPS;
+  const onSeekAccessibilityAction = (event: AccessibilityActionEvent) => {
+    if (durationMs <= 0) return;
+    let target: number;
+    switch (event.nativeEvent.actionName) {
+      case 'increment':
+        target = playheadRef.current + seekStepMs;
+        break;
+      case 'decrement':
+        target = playheadRef.current - seekStepMs;
+        break;
+      default:
+        return;
+    }
+    jumpTo(clamp01(target / durationMs) * durationMs, null);
   };
 
   // ── Derived frame state ────────────────────────────────────────────────
@@ -525,8 +565,19 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
       <View style={styles.timelineRow}>
         <View
           accessible
+          accessibilityRole="adjustable"
           accessibilityLabel="Review timeline"
-          accessibilityHint="Drag to move through the clip; dots mark measured checkpoints"
+          accessibilityHint="Drag, or swipe up and down, to move through the clip; dots mark measured checkpoints"
+          accessibilityValue={{
+            min: 0,
+            max: Math.round(durationMs),
+            now: Math.round(playheadMs),
+            text: phaseNow
+              ? `${formatClock(playheadMs)}, ${phaseNow.title}`
+              : formatClock(playheadMs),
+          }}
+          accessibilityActions={SEEK_ACTIONS}
+          onAccessibilityAction={onSeekAccessibilityAction}
           onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
