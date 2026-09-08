@@ -41,7 +41,7 @@ const EVENT_ID = /^[a-f0-9]{32}$/;
 const DEBUG_ID =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
-function record(value: unknown): Record<string, unknown> | null {
+export function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
@@ -108,7 +108,7 @@ function coordinate(value: unknown): value is number {
   );
 }
 
-function boundedItems(
+export function boundedItems(
   value: unknown,
   limit: number,
   fromEnd = false,
