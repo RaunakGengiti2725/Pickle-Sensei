@@ -22,15 +22,21 @@ import type { CapturedClip } from './capture';
  *   reserved, so a rejected clip never reaches charging.
  *
  * The event count is MONOTONIC in the evidence: adding motion to a clip can
- * only keep or raise the number of comparable events, never lower it. Events
- * are split at every genuine dip in wrist speed (so two strokes with a short
- * pause between them stay two), cross-wrist grouping uses bounded peak
- * proximity only (so motion of the other wrist can never bridge two strokes
- * into one), and a candidate is comparable on ABSOLUTE evidence — a peak of
- * at least `minStrokePeakTorsoPerSecond` torso lengths per second — or
- * relative to the strongest peak. Any event admitted as a stroke on its own
- * clears the absolute floor, so appending a stronger stroke can never demote
- * it: a rally of dinks followed by a drive stays a rally.
+ * only keep or raise the number of comparable events, never lower it. Every
+ * judgement is ABSOLUTE, in torso lengths per second and milliseconds of the
+ * player's own body and clip — never relative to a whole-wrist baseline or
+ * to the loudest motion in the clip, both of which extra motion could move.
+ * Events are split at every genuine dip in wrist speed (so two strokes with
+ * a short pause between them stay two) and at every peak more than a
+ * contact-dip apart (so a fast hand battle whose speed never subsides is
+ * still several volleys), cross-wrist grouping uses bounded peak proximity
+ * only (so motion of the other wrist can never bridge two strokes into
+ * one), and a candidate is comparable when it peaks at or above
+ * `minComparablePeakTorsoPerSecond` on its own evidence. The only motion
+ * folded into a stroke is its wind-up and recovery: a slower burst that is
+ * continuous with the stroke and travels AGAINST it — the geometry of a
+ * backswing — never a burst in the stroke's own direction, which is a
+ * second, softer stroke.
  *
  * Every rejection carries a precise machine reason plus a diagnostic detail;
  * `importAdmissionRejectionMessage` maps reasons to store-compliant player
@@ -74,34 +80,67 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
    * strokes.
    */
   smoothingSpanMs: 85,
-  /** A wrist has a distinct stroke only when its peak clears the idle baseline by this factor. */
-  distinctPeakRatio: 2.5,
   /** An event's span is cut where the smoothed speed drops below this fraction of its peak. */
   runFloorRatio: 0.12,
-  /** Two adjacent speed peaks of one wrist are separate events when the speed between them falls below this fraction of the lesser peak. */
+  /** Two speed peaks of one wrist a contact dip apart are one event only while the speed between them stays above this fraction of the lesser peak. */
   eventValleyRatio: 0.5,
+  /**
+   * Two speed peaks of one wrist further apart than a contact dip are
+   * distinct events only when the speed between them drops at least this
+   * much, in torso lengths per second, below the lesser peak. Smaller dips
+   * are jitter on one movement (a steady walk, a slow sweep). Absolute on
+   * purpose: motion added evenly to a clip raises peaks and valleys alike,
+   * so it can never fuse two strokes into one.
+   */
+  minPeakProminenceTorsoPerSecond: 1.5,
   /** An event needs at least this many samples to count as motion at all. */
   minRunSamples: 3,
-  /** A candidate peaking at or above this fraction of the strongest peak is a comparable event. */
-  comparablePeakRatio: 0.4,
   /** Body scale needs at least this many frames with both shoulders and both hips tracked. */
   minTorsoSamples: 4,
   /**
    * A wrist peaking at or above this speed, in torso lengths per second, is
-   * a stroke-sized event on its own evidence — comparable no matter how much
-   * stronger another event in the clip is. A lone event below it is not
-   * admitted as a stroke, which keeps the comparable count monotonic.
+   * a stroke-sized event on its own evidence. A lone event below it is not
+   * admitted as a stroke.
    */
   minStrokePeakTorsoPerSecond: 4,
   /**
+   * A motion event peaking at or above this speed, in torso lengths per
+   * second, is a comparable event: a movement a player could mean as a
+   * stroke (a dink, a block, a reset). Absolute on purpose: measured against
+   * the player's body, never against the loudest motion elsewhere in the
+   * clip, so a harder stroke can never demote a softer one.
+   */
+  minComparablePeakTorsoPerSecond: 2,
+  /**
    * A speed peak below this, in torso lengths per second, is idle jitter and
-   * not a motion event at all. Absolute on purpose: measured against the
-   * player's body, never against the loudest motion elsewhere in the clip,
-   * so a louder burst can never erase a real stroke from the candidates.
+   * not a motion event at all.
    */
   minCandidatePeakTorsoPerSecond: 1,
   /** Peaks within this distance of an event's first peak belong to that event (contact dip, both wrists in one swing). */
   sameEventPeakDistanceMs: 350,
+  /**
+   * A wind-up or recovery peaks at most at this fraction of its stroke's
+   * peak speed (and always below `minStrokePeakTorsoPerSecond`). A burst
+   * faster than that is a stroke in its own right.
+   */
+  maxWindUpPeakRatio: 0.5,
+  /**
+   * A wind-up ends, or a recovery begins, within this much time of the
+   * stroke's motion span. A longer pause separates two movements.
+   */
+  maxWindUpPauseMs: 400,
+  /**
+   * A wind-up, a recovery and the stroke itself each travel at least this
+   * far, in torso lengths, along their net direction. Motion that goes
+   * nowhere has no direction to be opposite to.
+   */
+  minDirectedTravelTorso: 0.2,
+  /**
+   * Cosine between the net travel of a wind-up (or recovery) and the net
+   * travel of the stroke must be at most this negative: a backswing moves
+   * against the swing it prepares, a recovery returns against it.
+   */
+  maxWindUpDirectionCosine: -0.3,
   /** A single stroke's motion core lasts at least this long; shorter bursts are tracking spikes. */
   minStrokeMotionMs: 150,
   /** A single stroke's continuous motion never lasts longer than this; two complete swings cannot fit. */
@@ -173,10 +212,11 @@ export interface StrokeEventCandidate {
   /** The same peak in torso lengths per second — body-scale independent. */
   peakTorsoPerSecond: number;
   /**
-   * True when this candidate is a stroke-sized event: it peaks at or above
-   * `minStrokePeakTorsoPerSecond`, or within `comparablePeakRatio` of the
-   * strongest peak in the clip. Each test only ever adds comparable events,
-   * so a louder stroke elsewhere in the clip never demotes this one.
+   * True when this candidate is a comparable event: it peaks at or above
+   * `minComparablePeakTorsoPerSecond` and is not the wind-up or recovery of
+   * a neighbouring stroke. Both judgements use only this candidate and its
+   * immediate neighbour, so a louder stroke elsewhere in the clip never
+   * demotes this one.
    */
   comparable: boolean;
 }
@@ -366,6 +406,9 @@ export function admitImportedMedia(
 interface SpeedSample {
   timestampMs: number;
   value: number;
+  /** Wrist position at this sample, aspect-corrected image heights. */
+  x: number;
+  y: number;
   /** True when a tracking gap separates this sample from the previous one. */
   gapBefore: boolean;
 }
@@ -414,6 +457,8 @@ function wristSpeedSeries(
       value:
         (Math.hypot(current.x - previous.x, current.y - previous.y) / dtMs) *
         1000,
+      x: current.x,
+      y: current.y,
       gapBefore,
     });
     gapBefore = false;
@@ -512,8 +557,6 @@ interface WristMeasurement {
   series: SpeedSample[];
   smoothed: number[];
   peak: number;
-  baseline: number;
-  distinct: boolean;
 }
 
 function measureWrist(
@@ -527,9 +570,7 @@ function measureWrist(
   const smoothed = movingAverage(series, smoothingHalfWindow(series));
   let peak = 0;
   for (const value of smoothed) if (value > peak) peak = value;
-  const baseline = median(smoothed);
-  const distinct = peak >= Math.max(baseline * limits.distinctPeakRatio, 1e-6);
-  return { wrist, series, smoothed, peak, baseline, distinct };
+  return { wrist, series, smoothed, peak };
 }
 
 /**
@@ -570,6 +611,8 @@ function localPeaks(
 interface WristEvent {
   /** Indices of the smoothed-series peaks that belong to this event, ascending. */
   peakIndices: number[];
+  /** Index of the event's highest peak so far. */
+  maxIndex: number;
 }
 
 function minBetween(
@@ -594,17 +637,24 @@ function minBetween(
 
 /**
  * Groups one wrist's peaks into events. A peak joins the open event only
- * when it lies within `sameEventPeakDistanceMs` of that event's FIRST peak
- * (a contact dip splits one stroke into two nearby maxima) or when the
- * speed between it and the previous peak never subsides below
- * `eventValleyRatio` of the lesser peak (one continuous movement). A quiet
- * pause of any length — including one shorter than a backswing — ends the
- * event, so two complete strokes are never fused into one.
+ * when no tracking gap separates them and either it lies within
+ * `sameEventPeakDistanceMs` of that event's FIRST peak with the speed
+ * between never subsiding below `eventValleyRatio` of the lesser peak (the
+ * two maxima a contact dip cuts one swing into), or the speed between never
+ * drops `minPeakProminenceTorsoPerSecond` below the lesser peak (jitter on
+ * one movement). The valley and the lesser peak are always measured
+ * against the event's HIGHEST peak, so a run of jitter peaks on a plateau
+ * can never chain two strokes together. A quiet pause of any length ends
+ * the event, so two complete strokes are never fused into one; and a real
+ * dip between peaks further apart than a contact dip ends it however high
+ * the speed stays, so a fast hand battle is as many events as it has
+ * volleys.
  */
 function groupPeaks(
   series: readonly SpeedSample[],
   smoothed: readonly number[],
   peakIndices: readonly number[],
+  torsoLength: number,
 ): WristEvent[] {
   const limits = IMPORT_ADMISSION_LIMITS;
   const events: WristEvent[] = [];
@@ -612,33 +662,52 @@ function groupPeaks(
     const open = events[events.length - 1];
     if (open) {
       const firstPeak = open.peakIndices[0] ?? peakIndex;
-      const lastPeak =
-        open.peakIndices[open.peakIndices.length - 1] ?? peakIndex;
-      const valley = minBetween(series, smoothed, lastPeak, peakIndex);
+      const valley = minBetween(series, smoothed, open.maxIndex, peakIndex);
       const peakDistanceMs =
         (series[peakIndex]?.timestampMs ?? 0) -
         (series[firstPeak]?.timestampMs ?? 0);
       const lesserPeak = Math.min(
-        smoothed[lastPeak] ?? 0,
+        smoothed[open.maxIndex] ?? 0,
         smoothed[peakIndex] ?? 0,
       );
-      const continuous = valley.value > lesserPeak * limits.eventValleyRatio;
-      if (
-        !valley.gap &&
-        (peakDistanceMs <= limits.sameEventPeakDistanceMs || continuous)
-      ) {
+      const contactDip =
+        peakDistanceMs <= limits.sameEventPeakDistanceMs &&
+        valley.value > lesserPeak * limits.eventValleyRatio;
+      const jitter =
+        lesserPeak - valley.value <
+        torsoLength * limits.minPeakProminenceTorsoPerSecond;
+      if (!valley.gap && (contactDip || jitter)) {
         open.peakIndices.push(peakIndex);
+        if ((smoothed[peakIndex] ?? 0) > (smoothed[open.maxIndex] ?? 0))
+          open.maxIndex = peakIndex;
         continue;
       }
     }
-    events.push({ peakIndices: [peakIndex] });
+    events.push({ peakIndices: [peakIndex], maxIndex: peakIndex });
   }
   return events;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
 interface MeasuredCandidate extends StrokeEventCandidate {
+  startIndex: number;
+  endIndex: number;
+  /** The span begins at the first tracked sample or right after a tracking gap. */
   touchesSeriesStart: boolean;
+  /** The span ends at the last tracked sample or right before a tracking gap. */
   touchesSeriesEnd: boolean;
+  /** Wrist position where the span begins, peaks and ends. */
+  startPoint: Point;
+  peakPoint: Point;
+  endPoint: Point;
+  /** 'stroke' once this candidate has absorbed a wind-up or recovery; 'wind_up' / 'recovery' once absorbed. */
+  role: 'motion' | 'stroke' | 'wind_up' | 'recovery';
+  /** The stroke this candidate is the wind-up or recovery of, once absorbed. */
+  phaseOf: MeasuredCandidate | null;
 }
 
 /**
@@ -659,6 +728,7 @@ function candidatesFor(
     series,
     smoothed,
     localPeaks(series, smoothed, floor),
+    torsoLength,
   );
   const candidates: MeasuredCandidate[] = [];
   events.forEach((event, position) => {
@@ -701,28 +771,167 @@ function candidatesFor(
       endIndex += 1;
     }
     if (endIndex - startIndex + 1 < limits.minRunSamples) return;
+    // Each sample's position is where its speed interval ENDS, so the span's
+    // travel starts at the sample before it (when no gap separates them).
+    const startSample =
+      startIndex > 0 && !series[startIndex]?.gapBefore
+        ? series[startIndex - 1]
+        : series[startIndex];
+    const peakSample = series[peakIndex];
+    const endSample = series[endIndex];
+    if (!startSample || !peakSample || !endSample) return;
     candidates.push({
       wrist: measurement.wrist,
       startMs: series[startIndex]?.timestampMs ?? 0,
-      endMs: series[endIndex]?.timestampMs ?? 0,
-      peakMs: series[peakIndex]?.timestampMs ?? 0,
+      endMs: endSample.timestampMs,
+      peakMs: peakSample.timestampMs,
       peakSpeed: smoothed[peakIndex] ?? 0,
       peakTorsoPerSecond: (smoothed[peakIndex] ?? 0) / torsoLength,
       comparable: false,
-      touchesSeriesStart: startIndex === 0,
-      touchesSeriesEnd: endIndex === smoothed.length - 1,
+      startIndex,
+      endIndex,
+      touchesSeriesStart:
+        startIndex === 0 || (series[startIndex]?.gapBefore ?? false),
+      touchesSeriesEnd:
+        endIndex === smoothed.length - 1 ||
+        (series[endIndex + 1]?.gapBefore ?? false),
+      startPoint: { x: startSample.x, y: startSample.y },
+      peakPoint: { x: peakSample.x, y: peakSample.y },
+      endPoint: { x: endSample.x, y: endSample.y },
+      role: 'motion',
+      phaseOf: null,
     });
   });
+  foldStrokePhases(candidates, series, torsoLength);
   return candidates;
+}
+
+function travel(from: Point, to: Point): Point {
+  return { x: to.x - from.x, y: to.y - from.y };
+}
+
+/** Cosine of the angle between two travels; 1 when either has no length (never "opposite"). */
+function directionCosine(left: Point, right: Point): number {
+  const norms = Math.hypot(left.x, left.y) * Math.hypot(right.x, right.y);
+  if (!(norms > 0)) return 1;
+  return (left.x * right.x + left.y * right.y) / norms;
+}
+
+function hasGapBetween(
+  series: readonly SpeedSample[],
+  fromIndex: number,
+  toIndex: number,
+): boolean {
+  for (let cursor = fromIndex + 1; cursor <= toIndex; cursor += 1)
+    if (series[cursor]?.gapBefore) return true;
+  return false;
+}
+
+/**
+ * Whether `phase` is the wind-up (before) or recovery (after) of `stroke`:
+ * a slower burst — at most `maxWindUpPeakRatio` of the stroke's peak and
+ * below the absolute `minStrokePeakTorsoPerSecond`, since a stroke-sized
+ * burst is a stroke wherever it sits — continuous with the stroke's span
+ * within `maxWindUpPauseMs` and with no tracking gap between, whose net
+ * travel runs AGAINST the stroke's net travel. Both travels must cover `minDirectedTravelTorso`: motion without
+ * net displacement has no direction, and a burst in the stroke's own
+ * direction is another stroke.
+ */
+function isStrokePhase(
+  stroke: MeasuredCandidate,
+  phase: MeasuredCandidate,
+  side: 'wind_up' | 'recovery',
+  series: readonly SpeedSample[],
+  torsoLength: number,
+): boolean {
+  const limits = IMPORT_ADMISSION_LIMITS;
+  if (phase.peakSpeed > stroke.peakSpeed * limits.maxWindUpPeakRatio)
+    return false;
+  if (phase.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond)
+    return false;
+  const pauseMs =
+    side === 'wind_up'
+      ? stroke.startMs - phase.endMs
+      : phase.startMs - stroke.endMs;
+  if (pauseMs > limits.maxWindUpPauseMs) return false;
+  const gap =
+    side === 'wind_up'
+      ? hasGapBetween(series, phase.endIndex, stroke.startIndex)
+      : hasGapBetween(series, stroke.endIndex, phase.startIndex);
+  if (gap) return false;
+  const minTravel = torsoLength * limits.minDirectedTravelTorso;
+  const phaseTravel = travel(phase.startPoint, phase.endPoint);
+  const strokeTravel = travel(stroke.startPoint, stroke.endPoint);
+  if (
+    Math.hypot(phaseTravel.x, phaseTravel.y) < minTravel ||
+    Math.hypot(strokeTravel.x, strokeTravel.y) < minTravel
+  )
+    return false;
+  return (
+    directionCosine(phaseTravel, strokeTravel) <=
+    limits.maxWindUpDirectionCosine
+  );
+}
+
+/**
+ * Folds each stroke-sized candidate's immediate neighbours into it when they
+ * are its wind-up and recovery (`isStrokePhase`). Strokes are visited from
+ * the fastest down; a candidate absorbs at most one neighbour on each side,
+ * and a candidate that has absorbed a phase is a stroke and is never itself
+ * absorbed. Everything else keeps its own standing, so no motion that is
+ * not the immediate, opposite, continuous neighbour of a stroke is ever
+ * hidden by it.
+ */
+function foldStrokePhases(
+  candidates: MeasuredCandidate[],
+  series: readonly SpeedSample[],
+  torsoLength: number,
+): void {
+  const limits = IMPORT_ADMISSION_LIMITS;
+  const order = candidates
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(
+      ({ candidate }) =>
+        candidate.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond,
+    )
+    .sort(
+      (left, right) =>
+        right.candidate.peakSpeed - left.candidate.peakSpeed ||
+        left.index - right.index,
+    );
+  for (const { candidate: stroke, index } of order) {
+    if (stroke.role !== 'motion' && stroke.role !== 'stroke') continue;
+    const before = candidates[index - 1];
+    if (
+      before &&
+      before.role === 'motion' &&
+      isStrokePhase(stroke, before, 'wind_up', series, torsoLength)
+    ) {
+      before.role = 'wind_up';
+      before.phaseOf = stroke;
+      stroke.role = 'stroke';
+    }
+    const after = candidates[index + 1];
+    if (
+      after &&
+      after.role === 'motion' &&
+      isStrokePhase(stroke, after, 'recovery', series, torsoLength)
+    ) {
+      after.role = 'recovery';
+      after.phaseOf = stroke;
+      stroke.role = 'stroke';
+    }
+  }
 }
 
 /**
  * Groups comparable candidates (already sorted by peak time) into physical
  * events using bounded peak proximity only: a candidate joins the open
  * cluster when its peak lies within `sameEventPeakDistanceMs` of the
- * cluster's FIRST peak. This is the minimum number of fixed-width windows
- * covering the peaks, so adding a candidate can never reduce the count —
- * one wrist's motion cannot bridge two strokes of the other wrist.
+ * cluster's FIRST peak and the cluster holds no event of the same wrist yet
+ * (both wrists move through one swing; one wrist's two events are two
+ * movements, however close). Adding a candidate can never reduce the count
+ * — one wrist's motion cannot bridge two strokes of the other wrist.
  */
 function clusterComparable(
   candidates: readonly MeasuredCandidate[],
@@ -735,7 +944,8 @@ function clusterComparable(
     if (
       open &&
       anchor &&
-      candidate.peakMs - anchor.peakMs <= limits.sameEventPeakDistanceMs
+      candidate.peakMs - anchor.peakMs <= limits.sameEventPeakDistanceMs &&
+      !open.some(member => member.wrist === candidate.wrist)
     ) {
       open.push(candidate);
     } else {
@@ -813,20 +1023,15 @@ export function admitImportedStrokeEvents(
   }
 
   const measured = measurements
-    .filter(measurement => measurement.distinct)
     .flatMap(measurement => candidatesFor(measurement, torsoLength))
     .sort(
       (left, right) =>
         left.peakMs - right.peakMs || left.wrist.localeCompare(right.wrist),
     );
-  let strongest = 0;
-  for (const candidate of measured)
-    if (candidate.peakSpeed > strongest) strongest = candidate.peakSpeed;
   for (const candidate of measured) {
     candidate.comparable =
-      candidate.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond ||
-      (strongest > 0 &&
-        candidate.peakSpeed >= strongest * limits.comparablePeakRatio);
+      (candidate.role === 'motion' || candidate.role === 'stroke') &&
+      candidate.peakTorsoPerSecond >= limits.minComparablePeakTorsoPerSecond;
   }
   const candidates = measured.map(publicCandidate);
   const clusters = clusterComparable(
@@ -840,8 +1045,8 @@ export function admitImportedStrokeEvents(
       version,
       reason: 'no_stroke_event',
       detail:
-        'Wrist motion has no distinct stroke peak above the idle baseline ' +
-        `(${measurements.map(m => `${m.wrist}: peak ${m.peak.toFixed(3)}, baseline ${m.baseline.toFixed(3)}`).join('; ')}).`,
+        `Wrist motion never reaches ${limits.minComparablePeakTorsoPerSecond} torso lengths/s ` +
+        `(${measurements.map(m => `${m.wrist}: peak ${(m.peak / torsoLength).toFixed(2)} torso lengths/s`).join('; ')}).`,
       candidates,
       comparableEventCount,
     };
@@ -879,8 +1084,27 @@ export function admitImportedStrokeEvents(
       comparableEventCount: 0,
     };
   }
-  const startMs = Math.min(...cluster.map(member => member.startMs));
-  const endMs = Math.max(...cluster.map(member => member.endMs));
+  // The admitted movement is the stroke cluster plus the wind-up and
+  // recovery folded into its members: the phases sit right beside them.
+  const movement = measured.filter(
+    candidate =>
+      cluster.includes(candidate) ||
+      (candidate.phaseOf !== null && cluster.includes(candidate.phaseOf)),
+  );
+  const startMs = Math.min(...movement.map(member => member.startMs));
+  const endMs = Math.max(...movement.map(member => member.endMs));
+  // A clip edge can only shorten the measured span, so a span already too
+  // long for one stroke is judged on its length first.
+  if (endMs - startMs > limits.maxStrokeMotionMs) {
+    return {
+      admitted: false,
+      version,
+      reason: 'motion_not_stroke_like',
+      detail: `Motion core lasts ${endMs - startMs} ms; a single stroke stays under ${limits.maxStrokeMotionMs} ms.`,
+      candidates,
+      comparableEventCount,
+    };
+  }
   if (
     cluster.some(member => member.touchesSeriesStart || member.touchesSeriesEnd)
   ) {
@@ -888,17 +1112,7 @@ export function admitImportedStrokeEvents(
       admitted: false,
       version,
       reason: 'stroke_truncated_at_clip_edge',
-      detail: `Stroke motion (${startMs}–${endMs} ms) runs into the ${cluster.some(m => m.touchesSeriesStart) ? 'first' : 'last'} tracked frame; the swing is not fully inside the clip.`,
-      candidates,
-      comparableEventCount,
-    };
-  }
-  if (endMs - startMs > limits.maxStrokeMotionMs) {
-    return {
-      admitted: false,
-      version,
-      reason: 'motion_not_stroke_like',
-      detail: `Motion core lasts ${endMs - startMs} ms; a single stroke stays under ${limits.maxStrokeMotionMs} ms.`,
+      detail: `Stroke motion (${startMs}–${endMs} ms) runs into the ${cluster.some(m => m.touchesSeriesStart) ? 'first' : 'last'} tracked frame or a tracking gap; the swing is not fully inside the clip.`,
       candidates,
       comparableEventCount,
     };
