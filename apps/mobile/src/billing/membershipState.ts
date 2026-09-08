@@ -211,13 +211,13 @@ export function describeMembershipState(
       const date = formatMembershipDate(horizon);
       return {
         kind: 'grace',
-        label: 'Pro active · renewal unconfirmed',
-        eyebrow: 'MEMBERSHIP ACTIVE · RENEWAL UNCONFIRMED',
+        label: 'Pro active · renewal not yet loaded',
+        eyebrow: 'MEMBERSHIP ACTIVE · RENEWAL NOT YET LOADED',
         title: 'Your full court is still open.',
         detail:
           reconciliationStatus === 'unavailable'
             ? `Your last verified membership period ended ${date}, and our server could not be reached to re-verify it since. Access stays as last verified. Renewals are confirmed by the App Store — open Manage subscription if billing needs attention.`
-            : `Your last verified membership period ended ${date}. Our server still grants access on this account, but it has not re-verified a renewal yet. Renewals are confirmed by the App Store — open Manage subscription if billing needs attention.`,
+            : `Your last verified membership period ended ${date}. Pro access on this account is granted as of the last server check, and this app has not loaded a newer membership period yet. Renewals are confirmed by the App Store — open Manage subscription if billing needs attention.`,
         horizon,
         manageSubscription: true,
         purchaseAllowed: false,

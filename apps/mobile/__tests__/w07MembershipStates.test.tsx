@@ -393,10 +393,14 @@ const boundRequest = (): BillingFulfilmentRequest => ({
 });
 
 /** Grace copy may name the last verified end date; it must never assert a
- * live server report the client has not received. */
+ * live server report the client has not received, nor a server negative
+ * ("has not re-verified") the client cannot know — only what THIS app has
+ * and has not loaded. */
 function expectNoInventedServerReport(text: string) {
   expect(text).not.toMatch(/server still reports/i);
   expect(text).not.toMatch(/still reports your membership/i);
+  expect(text).not.toMatch(/has not re-verified a renewal/i);
+  expect(text).not.toMatch(/server still grants/i);
 }
 
 function selectMembership(now = NOW_MS) {
@@ -536,7 +540,7 @@ describe('describeMembershipState (server truth only)', () => {
     });
     expect(state).toMatchObject({
       kind: 'grace',
-      label: 'Pro active · renewal unconfirmed',
+      label: 'Pro active · renewal not yet loaded',
       horizon: PAST,
       manageSubscription: true,
       purchaseAllowed: false,
@@ -954,6 +958,27 @@ describe('accessStore membership lifecycle (one server truth, one state)', () =>
     expect(state.label).not.toContain('renewal unconfirmed');
   });
 
+  it('A4: grace copy read past the horizon never asserts what the server has or has not re-verified', async () => {
+    const truth: ServerTruth = {
+      access: access(true),
+      sync: () => ({ billing: billing(true, FUTURE), access: access(true) }),
+    };
+    configure(dependencies(truth), memoryStorage());
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+      await useAccessStore.getState().syncBilling();
+      await useAccessStore.getState().refreshAccess();
+    });
+    // The answer above predates the horizon, so past it the client only knows
+    // what it last loaded — it may say so, but not speak for the server.
+    const state = selectMembership(AFTER_FUTURE_MS);
+    expect(useAccessStore.getState().canonicalAccess?.premium).toBe(true);
+    expect(state.kind).toBe('grace');
+    expect(state.detail).not.toMatch(/has not re-verified a renewal/i);
+    expect(state.label).not.toContain('renewal unconfirmed');
+    expectNoInventedServerReport(state.detail);
+  });
+
   it('A4: a premium access answer before the horizon keeps the synced horizon and Manage subscription', async () => {
     const truth: ServerTruth = {
       access: access(true),
@@ -1114,7 +1139,9 @@ describe('Settings membership row states', () => {
     );
     const renderer = await renderSettings();
     expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
-    expect(membershipValue(renderer)).toBe('Pro active · renewal unconfirmed');
+    expect(membershipValue(renderer)).toBe(
+      'Pro active · renewal not yet loaded',
+    );
     expect(manageRows(renderer)).toHaveLength(1);
 
     // The server answers premium past the horizon: the stale horizon is
@@ -1340,7 +1367,7 @@ describe('Paywall membership states', () => {
     });
     const renderer = await renderPaywall();
     const copy = allText(renderer);
-    expect(copy).toContain('RENEWAL UNCONFIRMED');
+    expect(copy).toContain('RENEWAL NOT YET LOADED');
     expect(copy).toContain(formatMembershipDate(PAST));
     expect(copy).not.toContain('MEMBERSHIP VERIFIED');
     expectNoInventedPrice(copy);
@@ -1366,7 +1393,7 @@ describe('Paywall membership states', () => {
     expect(useAccessStore.getState().reconciliation.status).toBe('unavailable');
     const renderer = await renderPaywall();
     const copy = allText(renderer);
-    expect(copy).toContain('RENEWAL UNCONFIRMED');
+    expect(copy).toContain('RENEWAL NOT YET LOADED');
     expect(copy).toContain('could not be reached');
     expect(copy).not.toMatch(/still grants/i);
     expectNoInventedServerReport(copy);
