@@ -90,11 +90,27 @@ IDENTITY_FIELDS = frozenset(
     }
 )
 
+# Every identifier-valued field across the record kinds. Identities are opaque
+# and compared exactly, so two spellings that differ only by letter case are
+# refused as ambiguous rather than treated as two people, clips or releases.
+IDENTIFIER_FIELDS = IDENTITY_FIELDS | frozenset(
+    {"protocol_id", "clip_id", "session_id", "excluded_case_ids"}
+)
+
 # JSON numbers are exchanged as IEEE-754 doubles; anything outside the exactly
 # representable integer range (or non-finite) is refused rather than rounded.
 MAX_SAFE_MAGNITUDE = 2**53
 
+# No record schema nests deeper than a handful of levels; a document nested
+# beyond this bound is refused before any recursive traversal touches it, so a
+# hostile or corrupt file can never exhaust the interpreter's recursion limit.
+MAX_RECORD_DEPTH = 32
+
 OPAQUE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+# Joins <clip_id> and <reviewer_id> into a review_id; it lies outside the
+# opaque-id alphabet so two distinct (clip, reviewer) pairs can never compose
+# to the same review_id.
+REVIEW_ID_SEPARATOR = "/"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 DATE_TIME_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$"
 
@@ -716,8 +732,8 @@ def _check_schema(value: object, schema: dict, path: str, errors: list[str]) -> 
     if value is None:
         return
     if isinstance(value, str):
-        if "minLength" in schema and len(value) < schema["minLength"]:
-            errors.append(f"{path}: must not be empty")
+        if "minLength" in schema and len(value.strip()) < schema["minLength"]:
+            errors.append(f"{path}: must not be empty or whitespace-only")
         if "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
             errors.append(f"{path}: does not match {schema['pattern']}")
         elif schema.get("format") == "date-time" and _parse_date_time(value) is None:
@@ -832,6 +848,27 @@ def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
         if isinstance(rights, dict) and rights.get("state") == "cleared":
             if rights.get("verified_by") is None or rights.get("verified_at") is None:
                 err("rights.state=cleared requires verified_by and verified_at")
+        parties = {
+            "athlete_id": doc.get("athlete_id"),
+            "rights.rights_holder_id": rights.get("rights_holder_id")
+            if isinstance(rights, dict)
+            else None,
+        }
+        verifiers = {
+            "rights.verified_by": rights.get("verified_by") if isinstance(rights, dict) else None,
+            "metadata_verification.verified_by": verification.get("verified_by")
+            if isinstance(verification, dict)
+            else None,
+        }
+        for verifier_field, verifier in verifiers.items():
+            if not isinstance(verifier, str):
+                continue
+            for party_field, party in parties.items():
+                if isinstance(party, str) and party.lower() == verifier.lower():
+                    err(
+                        f"{verifier_field} {verifier!r} is the footage's {party_field}; "
+                        "verification must be independent of the parties to the footage"
+                    )
     elif kind == "reviewer":
         qualification = doc.get("qualification")
         if isinstance(qualification, dict):
@@ -870,8 +907,8 @@ def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
         clip_id = doc.get("clip_id")
         reviewer_id = doc.get("reviewer_id")
         if isinstance(clip_id, str) and isinstance(reviewer_id, str):
-            if doc.get("review_id") != f"{clip_id}.{reviewer_id}":
-                err("review_id must equal '<clip_id>.<reviewer_id>'")
+            if doc.get("review_id") != review_id_for(clip_id, reviewer_id):
+                err(f"review_id must equal '<clip_id>{REVIEW_ID_SEPARATOR}<reviewer_id>'")
         outcome = doc.get("outcome")
         rating = doc.get("quality_rating")
         reason = doc.get("cannot_evaluate_reason")
@@ -905,11 +942,38 @@ def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
                     err("prediction.status=abstained requires a non-empty reason")
 
 
+def review_id_for(clip_id: str, reviewer_id: str) -> str:
+    return f"{clip_id}{REVIEW_ID_SEPARATOR}{reviewer_id}"
+
+
+def exceeds_depth(value: object, limit: int = MAX_RECORD_DEPTH) -> bool:
+    """True when `value` nests containers deeper than `limit` levels. Iterative
+    (breadth-first), so it is safe on documents that would overflow a
+    recursive walk."""
+    level = [value]
+    depth = 0
+    while level:
+        depth += 1
+        if depth > limit:
+            return True
+        next_level: list[object] = []
+        for item in level:
+            if isinstance(item, dict):
+                next_level.extend(item.values())
+            elif isinstance(item, list):
+                next_level.extend(item)
+        level = next_level
+    return False
+
+
 def validate_record(kind: str, doc: object, name: str) -> list[str]:
     """Return every schema and cross-field error for one record (empty = valid)."""
     if kind not in SCHEMAS:
         raise ValueError(f"unknown record kind {kind!r}; known: {sorted(SCHEMAS)}")
     errors: list[str] = []
+    if exceeds_depth(doc):
+        errors.append(f"{name}: nests deeper than {MAX_RECORD_DEPTH} levels")
+        return errors
     _check_schema(doc, SCHEMAS[kind], name, errors)
     if isinstance(doc, dict):
         cross: list[str] = []
@@ -945,23 +1009,78 @@ def _refuse_non_finite(constant: str) -> object:
     raise ValueError(f"non-finite number {constant} is not valid JSON")
 
 
+def _refuse_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate key {key!r}; a record cannot say two things at once")
+        result[key] = value
+    return result
+
+
 def _read_json(path: Path, display: str, errors: list[str]) -> object:
     """Parse one strict-JSON file; returns `_UNREADABLE` (and records the error)
-    when the file cannot be parsed. A JSON `null` document is returned as None
-    so the caller can reject it as an invalid record rather than skip it."""
+    when the file cannot be parsed, repeats a key, or nests deeper than
+    MAX_RECORD_DEPTH. A JSON `null` document is returned as None so the caller
+    can reject it as an invalid record rather than skip it."""
     try:
         with path.open(encoding="utf-8") as handle:
-            return json.load(handle, parse_constant=_refuse_non_finite)
+            doc = json.load(
+                handle,
+                parse_constant=_refuse_non_finite,
+                object_pairs_hook=_refuse_duplicate_keys,
+            )
     except (OSError, ValueError) as exc:
         errors.append(f"{display}: could not be read as JSON ({exc})")
+        return _UNREADABLE
     except RecursionError:
         errors.append(f"{display}: could not be read as JSON (nesting too deep)")
-    return _UNREADABLE
+        return _UNREADABLE
+    if exceeds_depth(doc):
+        errors.append(
+            f"{display}: could not be read as JSON (nests deeper than {MAX_RECORD_DEPTH} levels)"
+        )
+        return _UNREADABLE
+    return doc
+
+
+def _unrecognised_root_entries(root: Path, errors: list[str]) -> None:
+    """Every entry under the inputs root must be protocol.json or one of the
+    record directories; anything else is reported rather than skipped, so a
+    misplaced or misnamed record can never be silently left out of a report."""
+    if not root.is_dir():
+        return
+    directories = {kind["path"].split("/")[0] for kind in INPUT_KINDS if "/" in kind["path"]}
+    for entry in sorted(root.iterdir()):
+        if entry.name == "protocol.json" and entry.is_file():
+            continue
+        if entry.name in directories and entry.is_dir():
+            continue
+        errors.append(
+            f"{entry.name}: unrecognised entry under the inputs root; only protocol.json and "
+            f"the record directories ({', '.join(sorted(directories))}/) are read"
+        )
+
+
+def _record_files(directory: Path, errors: list[str]) -> list[Path]:
+    """The `*.json` entries of one record directory; every other entry is an
+    error so that e.g. `record.JSON` or `record.json.bak` cannot hide a record."""
+    paths: list[Path] = []
+    for entry in sorted(directory.iterdir()):
+        if entry.name.endswith(".json"):
+            paths.append(entry)
+        else:
+            errors.append(
+                f"{directory.name}/{entry.name}: unrecognised entry; only "
+                f"{directory.name}/*.json record files are read"
+            )
+    return paths
 
 
 def load_inputs(root: Path) -> ProtocolInputs:
     """Load and validate every input under `root`; never invents a record."""
     inputs = ProtocolInputs(root=root, root_exists=root.is_dir())
+    _unrecognised_root_entries(root, inputs.errors)
     loaded: dict[str, list[dict]] = {}
     for kind in INPUT_KINDS:
         schema = kind["schema"]
@@ -981,7 +1100,7 @@ def load_inputs(root: Path) -> ProtocolInputs:
         records: list[dict] = []
         count = 0
         if directory.is_dir():
-            for path in sorted(directory.glob("*.json")):
+            for path in _record_files(directory, inputs.errors):
                 display = f"{directory.name}/{path.name}"
                 doc = _read_json(path, display, inputs.errors)
                 if doc is _UNREADABLE:
@@ -1000,7 +1119,39 @@ def load_inputs(root: Path) -> ProtocolInputs:
     inputs.adjudications = loaded["adjudications"]
     inputs.predictions = loaded["predictions"]
     _check_uniqueness(inputs)
+    _check_identity_spellings(inputs)
     return inputs
+
+
+def _identifier_values(value: object, out: dict[str, set[str]]) -> None:
+    """Collect every identifier-valued string of a (depth-bounded) record,
+    grouped by its case-folded spelling."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in IDENTIFIER_FIELDS:
+                for candidate in child if isinstance(child, list) else [child]:
+                    if isinstance(candidate, str):
+                        out.setdefault(candidate.casefold(), set()).add(candidate)
+            _identifier_values(child, out)
+    elif isinstance(value, list):
+        for child in value:
+            _identifier_values(child, out)
+
+
+def _check_identity_spellings(inputs: ProtocolInputs) -> None:
+    spellings: dict[str, set[str]] = {}
+    records: list[object] = [inputs.protocol] if inputs.protocol is not None else []
+    records += inputs.consent + inputs.footage + inputs.reviewers
+    records += inputs.reviews + inputs.adjudications + inputs.predictions
+    for record in records:
+        _identifier_values(record, spellings)
+    for variants in spellings.values():
+        if len(variants) > 1:
+            listed = ", ".join(repr(variant) for variant in sorted(variants))
+            inputs.errors.append(
+                f"identities {listed} differ only by letter case and are ambiguous; one "
+                "identity has one spelling across every record"
+            )
 
 
 def _check_uniqueness(inputs: ProtocolInputs) -> None:
@@ -1087,11 +1238,57 @@ def _cross_record_checks(inputs: ProtocolInputs, qualified: dict[str, dict]) -> 
                 f"{record['athlete_id']!r} is also a reviewer record"
             )
 
+    # Qualification is assessed by an administrator who is not themselves a
+    # reviewer, and it must precede every review or adjudication it licenses.
+    reviewers_by_id = {reviewer["reviewer_id"]: reviewer for reviewer in inputs.reviewers}
+    for reviewer in inputs.reviewers:
+        assessed_by = reviewer["qualification"]["assessed_by"]
+        if assessed_by in reviewer_ids:
+            errors.append(
+                f"reviewers/{reviewer['reviewer_id']}: qualification.assessed_by {assessed_by!r} "
+                "is itself a reviewer record; coach-qualification-policy-v1 requires an "
+                "independent admin assessor, not a peer"
+            )
+
+    def assessed_before(label: str, reviewer_id: str, submitted_at_text: str) -> None:
+        reviewer = reviewers_by_id.get(reviewer_id)
+        if reviewer is None:
+            return
+        assessed_at = _parse_date_time(reviewer["qualification"]["assessed_at"])
+        submitted_at = _parse_date_time(submitted_at_text)
+        if assessed_at is not None and submitted_at is not None and submitted_at < assessed_at:
+            errors.append(
+                f"{label}: submitted_at precedes {reviewer_id!r}'s qualification.assessed_at; "
+                "work done before the qualification was assessed is not qualified evidence"
+            )
+
+    for review in inputs.reviews:
+        assessed_before(
+            f"reviews/{review['review_id']}", review["reviewer_id"], review["submitted_at"]
+        )
+        if review["clip_id"] not in footage_by_clip:
+            errors.append(
+                f"reviews/{review['review_id']}: clip_id {review['clip_id']!r} matches no "
+                "footage record; a review of unknown footage cannot be accounted for"
+            )
+    for record in inputs.predictions:
+        if record["clip_id"] not in footage_by_clip:
+            errors.append(
+                f"predictions/{record['clip_id']}: clip_id matches no footage record; a "
+                "prediction on unknown footage cannot be accounted for"
+            )
+
     for adjudication in inputs.adjudications:
         clip_id = adjudication["clip_id"]
         adjudicator_id = adjudication["adjudicator_id"]
         adjudicator = qualified.get(adjudicator_id)
         clip_reviews = reviews_by_clip.get(clip_id, [])
+        assessed_before(f"adjudications/{clip_id}", adjudicator_id, adjudication["submitted_at"])
+        if clip_id not in footage_by_clip:
+            errors.append(
+                f"adjudications/{clip_id}: clip_id matches no footage record; an adjudication "
+                "of unknown footage cannot be accounted for"
+            )
         for review in clip_reviews:
             if review["reviewer_id"] == adjudicator_id:
                 errors.append(
@@ -1518,6 +1715,11 @@ def build_report(inputs: ProtocolInputs) -> dict:
         adjudication = adjudication_by_clip.get(clip_id)
         if not state.disagreement:
             state.target = next(iter(state.ratings.values()))
+            if adjudication is not None:
+                errors.append(
+                    f"adjudications/{clip_id}: the blinded reviewers agree on this clip; an "
+                    "adjudication was not called for and cannot replace their rating"
+                )
         elif adjudication is None:
             _missing(
                 missing,
@@ -1580,6 +1782,14 @@ def build_report(inputs: ProtocolInputs) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+def _one_line(text: str) -> str:
+    """Escape control and line-breaking characters so a value taken from an
+    input (a file name, an identifier) renders as exactly one report line."""
+    return "".join(
+        ch if ch.isprintable() else ch.encode("unicode_escape").decode("ascii") for ch in text
+    )
+
+
 def render_report(report: dict) -> str:
     lines = [
         f"Scientific validation protocol report ({report['schema_version']})",
@@ -1634,7 +1844,7 @@ def render_report(report: dict) -> str:
         "Numerical release authorized: no (submission and release are human decisions; "
         "this report is an input to them)"
     )
-    return "\n".join(lines)
+    return "\n".join(_one_line(line) for line in lines)
 
 
 def _run_report(root: Path, as_json: bool) -> int:

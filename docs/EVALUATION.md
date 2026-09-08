@@ -503,6 +503,30 @@ second, active release is supplied. Predictions from more than one candidate
 `subject` (pipeline/scoring/model version) in a single report are an error —
 one frozen candidate per report.
 
+_Strict input handling (round 4)._ Records are refused, not crashed on: a
+document that parses but nests deeper than `MAX_RECORD_DEPTH` (32) levels is
+"could not be read" (`INVALID_INPUT` naming the file, exit 1, no traceback —
+the depth is measured iteratively before any recursive validation touches the
+document); a JSON object repeating a key is refused rather than letting the
+last value win; whitespace-only strings do not satisfy a non-empty field.
+Nothing under the inputs root is skipped silently: any entry other than
+`protocol.json` and the record directories, or any entry in a record directory
+that is not `*.json` (`record.JSON`, `record.json.bak`), is an error.
+Identifiers are opaque and compared exactly, so two spellings that differ only
+by letter case anywhere in the input set (`reviewer-x` vs `REVIEWER-X`, an
+athlete spelled like a reviewer) are ambiguous and refused. A reviewer's
+qualification must be assessed by someone who is not themselves a reviewer
+record, and a review or adjudication dated before its author's
+`qualification.assessed_at` is not qualified evidence. Footage may not be
+verified (metadata or rights) by its own athlete or rights holder. Reviews,
+adjudications and predictions whose `clip_id` matches no footage record, and
+an adjudication of a clip whose blinded reviewers agree, are errors rather
+than records the report quietly ignores. `review_id` is
+`<clip_id>/<reviewer_id>` — the separator lies outside the identifier
+alphabet, so two different (clip, reviewer) pairs can never share a
+`review_id`. The text report escapes control characters taken from inputs
+(file names, identifiers) so a single record cannot forge a `Status:` line.
+
 **Report statuses**
 
 - `BLOCKED_EXTERNAL` — at least one owner-supplied input is missing. The report
