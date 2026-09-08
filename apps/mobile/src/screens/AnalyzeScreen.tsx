@@ -596,7 +596,7 @@ export function strokeIntentPresentation(
           'not to an exact stroke — but this attempt couldn’t be measured ' +
           'cleanly enough to score, so no score was invented and this did ' +
           'not use a rating. Re-record with your full body in frame, or ' +
-          'declare the technique for the most precise read.',
+          'declare the technique for a stroke-specific read.',
         showResult: hasResult,
       };
     }
