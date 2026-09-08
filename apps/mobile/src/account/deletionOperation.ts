@@ -236,9 +236,10 @@ export function createDeletionOperationFoundation(
   async function submitRequest(
     entry: DeletionJournalEntry,
     context: DeletionTransportContext,
+    body: Readonly<Record<string, unknown>>,
   ): Promise<DeletionOperationResult> {
     requireCurrent(context);
-    const reply = await transport.request(context);
+    const reply = await transport.request(context, body);
     if (reply.kind !== 'requested') {
       const unknown = await update(entry, {
         phase: 'request_unknown',
@@ -328,6 +329,7 @@ export function createDeletionOperationFoundation(
         references: [],
         legacyMedia: 'unverified',
       },
+      body: Readonly<Record<string, unknown>> = {},
     ): Promise<DeletionOperationResult> {
       const ownership = parseDeletionOwnership(draft);
       if (!ownership) return held('invalid_ownership_draft');
@@ -358,7 +360,7 @@ export function createDeletionOperationFoundation(
             cleanup: { completed: [], pending: null },
             ownership,
           });
-          return submitRequest(entry, context);
+          return submitRequest(entry, context, body);
         });
       } catch (error) {
         return errorResult(error);
@@ -384,6 +386,7 @@ export function createDeletionOperationFoundation(
     },
     retryRequest(
       handle: DeletionOperationHandle,
+      body: Readonly<Record<string, unknown>> = {},
     ): Promise<DeletionOperationResult> {
       return runHandle(handle, async ({ entry, context }) => {
         if (
@@ -397,7 +400,7 @@ export function createDeletionOperationFoundation(
         if (now() < entry.nextAttemptAtMs)
           throw new DeletionFoundationError('retry_later');
         const pending = await update(entry, { phase: 'request_pending' });
-        return submitRequest(pending, context);
+        return submitRequest(pending, context, body);
       });
     },
     confirm(handle: DeletionOperationHandle): Promise<DeletionOperationResult> {
