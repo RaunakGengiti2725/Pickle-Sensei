@@ -450,15 +450,56 @@ python3 -m unittest discover -s ml/scripts -p 'test_*.py'
 Records are JSON documents validated against a strict schema (unknown fields
 rejected; identifiers are opaque — no names/emails; media identified by
 SHA-256) plus cross-record checks. The validator refuses, among other things:
-footage whose `clip_id`/`session_id` is a protected holdout (`wm-dink-01`,
-`afn-vic-rally1`, `wm-tournament-2014`, `afn-vic-2025`); third-party/broadcast
-sources; a minor without a guardian release; a reviewer whose satisfied
-qualification criteria are not backed by verified evidence
-(`unverified_disclosed` never qualifies); a review with model output, other
-reviews or athlete identity disclosed; a `cannot_evaluate` review carrying a
-rating; a prediction range with `lower > upper`; an adjudicator who authored
-one of the clip's reviews; a `technique` outside the canonical taxonomy from
-`ml/scripts/validate_annotations.py`.
+third-party/broadcast sources; a minor without a guardian release; a review
+with model output, other reviews or athlete identity disclosed; a
+`cannot_evaluate` review carrying a rating; a prediction range with
+`lower > upper`; a `technique` outside the canonical taxonomy from
+`ml/scripts/validate_annotations.py`; non-finite numbers, integers beyond 2^53
+and timestamps that match the ISO pattern but are not calendar dates
+(`2026-02-30`); a JSON `null`, non-object or unparseable record (reported as an
+error, never silently skipped).
+
+_Protected holdouts (round 2)._ Protected footage is refused by **content
+identity**, not just by name: `footage.media_sha256` is checked against the
+seven protected source hashes enforced by
+`packages/evaluation/src/benchmarkRelease.ts` plus every recording that
+`datasets/corpus/recordings.json` files under a protected session or derives
+from one (re-cuts, crops, re-encodes). Identifiers (`clip_id`, `session_id`,
+`athlete_id`, `athlete_group_id`) are matched case-insensitively and as
+substrings, so `WM-DINK-01`, `wm-dink-01-recut-0001`, `AFN-VIC-2025` and the
+corpus aliases (`afn-provic`, `wm-dink-nearplayer`, `rec-…`) are all refused.
+Two footage records with the same `media_sha256` are a duplicate, not two
+independent clips.
+
+_Coach qualification policy v1 (round 2)._ Mirroring
+`docs/COACH_QUALIFICATION_POLICY.md` and
+`packages/swing-lab/src/coachProvisioning.ts`: a reviewer whose satisfied
+criteria are not backed by verified evidence (`unverified_disclosed` never
+qualifies) is not qualified; `qualification.assessed_by == reviewer_id`
+(self-assessment) is an error; any identity field in any record (reviewer id,
+credential ref, assessor, adjudicator, verifier, rights holder, signatory,
+athlete) matching `/synthetic/i` is an error — so a complete input set with a
+SYNTHETIC assessor is `INVALID_INPUT`, never `COMPUTED`. Two reviewers sharing
+a `credential_ref` are not two independent reviewers. A reviewer who also
+appears as a clip's athlete, rights holder or metadata/rights verifier is a
+conflict of interest. Only qualified reviewers holding the `reviewer` role
+count toward `minimum_reviewers_per_clip` or may author blinded reviews; an
+adjudicator-only record cannot.
+
+_Adjudication independence (round 2)._ An adjudicator who authored **any**
+review of the clip is rejected regardless of which `review_ids` the
+adjudication lists, and the adjudication must list every review of the clip.
+A clip on which every blinded reviewer abstained is counted as unevaluable —
+the adjudicator's rating alone never becomes the clip's target.
+
+_Temporal ordering and consent (round 2)._ Reviews dated before the protocol's
+`ratified_at`, before the clip's `capture.recorded_at` or before the
+participant's consent `signed_at`, adjudications dated before the reviews they
+resolve, and metadata verification dated before capture are all errors. A
+withdrawn consent for an athlete blocks every clip of that athlete even when a
+second, active release is supplied. Predictions from more than one candidate
+`subject` (pipeline/scoring/model version) in a single report are an error —
+one frozen candidate per report.
 
 **Report statuses**
 
