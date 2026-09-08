@@ -70,8 +70,79 @@ const RANK_RECENCY_WEIGHTS = DEFINITION.recencyWeights.weights;
 
 const HUNDREDTHS_PER_POINT = DEFINITION.scoreQuantization.perPoint;
 
-const CAPTURED_AT_MIN = Date.parse(DEFINITION.countability.capturedAt.min);
-const CAPTURED_AT_MAX_EXCLUSIVE = Date.parse(DEFINITION.countability.capturedAt.maxExclusive);
+const MICROS_PER_SECOND = 1_000_000;
+const MICROS_PER_MILLI = 1_000;
+
+/** `countability.capturedAt.grammar`: the `Date#toISOString` shape the sync
+ * ingress admits (supabase/functions/api/index.ts ISO_UTC_INSTANT_RE). */
+const ISO_UTC_INSTANT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
+
+/** C `rint()` in the default rounding mode — what Postgres applies to a
+ * parsed fraction of a second (`rint(frac * 1e6)`). */
+function roundHalfEven(value: number): number {
+  const floor = Math.floor(value);
+  const remainder = value - floor;
+  if (remainder < 0.5) return floor;
+  if (remainder > 0.5) return floor + 1;
+  return floor % 2 === 0 ? floor : floor + 1;
+}
+
+/**
+ * The capture instant in whole microseconds since the epoch — timestamptz
+ * precision, so two rows inside one millisecond order the way SQL orders
+ * them — or null when the text is outside the ingress grammar (a zone offset,
+ * a missing `Z`, a rolled-over calendar date, free-form text). The fraction
+ * is parsed the way Postgres parses it (a double, `* 1e6`, half to even), so
+ * a 7th+ digit rounds identically on both planes. Built from the matched
+ * fields rather than `Date.parse` so every runtime (Hermes, V8, Deno) reads
+ * the same instant.
+ */
+function parseCaptureInstantMicros(value: string): number | null {
+  const match = ISO_UTC_INSTANT_RE.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
+    return null;
+  }
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, 0);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  const fraction = match[7];
+  const fractionMicros =
+    fraction === undefined ? 0 : roundHalfEven(Number(`0.${fraction}`) * MICROS_PER_SECOND);
+  return date.getTime() * MICROS_PER_MILLI + fractionMicros;
+}
+
+function definitionInstantMicros(text: string): number {
+  const micros = parseCaptureInstantMicros(text);
+  if (micros === null) throw new Error(`Scoring definition instant is not an instant: ${text}`);
+  return micros;
+}
+
+const CAPTURED_AT_MIN = definitionInstantMicros(DEFINITION.countability.capturedAt.min);
+const CAPTURED_AT_MAX_EXCLUSIVE = definitionInstantMicros(
+  DEFINITION.countability.capturedAt.maxExclusive,
+);
+
+const SHOT_TYPE_EXCLUDED_CODE_POINTS = DEFINITION.countability.shotType.excludedCodePoints;
+
+/** UTF-16 code-unit order (`countability.identity.survivor` /
+ * `rating.techniqueOrder` `collation: "code-unit"`), never a locale collation. */
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 export type PlayerRankTierKey = (typeof PLAYER_RANK_TIERS)[number]["key"];
 
@@ -173,27 +244,28 @@ export function playerRankDivisionForRating(rating: number): {
   return { division, label: DIVISION_LABELS[division] };
 }
 
-function parseTimestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
-}
-
-function isCountable(input: PlayerRankAnalysisInput): boolean {
+/** The capture instant (microseconds) when every countability rule holds
+ * for the row, else null. */
+function countableInstantMicros(input: PlayerRankAnalysisInput): number | null {
   const rule = DEFINITION.countability;
-  const at = Date.parse(input.capturedAt);
-  return (
-    input.resultKind === rule.resultKind &&
-    typeof input.overallScore === "number" &&
-    Number.isFinite(input.overallScore) &&
-    input.overallScore >= rule.overallScore.min &&
-    input.overallScore <= rule.overallScore.max &&
-    typeof input.shotType === "string" &&
-    input.shotType.trim().length > 0 &&
-    input.shotType.length <= rule.shotType.maxLength &&
-    (input.source ?? rule.absentSourceCountsAs) === rule.source &&
-    at >= CAPTURED_AT_MIN &&
-    at < CAPTURED_AT_MAX_EXCLUSIVE
-  );
+  if (
+    input.resultKind !== rule.resultKind ||
+    typeof input.overallScore !== "number" ||
+    !Number.isFinite(input.overallScore) ||
+    input.overallScore < rule.overallScore.min ||
+    input.overallScore > rule.overallScore.max ||
+    typeof input.shotType !== "string" ||
+    input.shotType.trim().length === 0 ||
+    input.shotType.length > rule.shotType.maxLength ||
+    SHOT_TYPE_EXCLUDED_CODE_POINTS.some((codePoint) => input.shotType.includes(codePoint)) ||
+    (input.source ?? rule.absentSourceCountsAs) !== rule.source ||
+    typeof input.capturedAt !== "string"
+  ) {
+    return null;
+  }
+  const at = parseCaptureInstantMicros(input.capturedAt);
+  if (at === null || at < CAPTURED_AT_MIN || at >= CAPTURED_AT_MAX_EXCLUSIVE) return null;
+  return at;
 }
 
 /**
@@ -216,9 +288,11 @@ function toHundredths(score: number): number {
 
 interface CountableAnalysis {
   hundredths: number;
+  /** Capture instant in microseconds since the epoch. */
   at: number;
   capturedAt: string;
   id: string;
+  shotType: string;
 }
 
 /** Newest first: capture instant desc, then id desc (Postgres
@@ -226,9 +300,20 @@ interface CountableAnalysis {
  * without ids still order deterministically. */
 function compareNewestFirst(a: CountableAnalysis, b: CountableAnalysis): number {
   if (a.at !== b.at) return b.at - a.at;
-  if (a.id !== b.id) return a.id > b.id ? -1 : 1;
-  if (a.capturedAt !== b.capturedAt) return a.capturedAt > b.capturedAt ? -1 : 1;
-  return 0;
+  if (a.id !== b.id) return compareCodeUnits(b.id, a.id);
+  return compareCodeUnits(b.capturedAt, a.capturedAt);
+}
+
+/** `countability.identity.survivor`: of several countable rows sharing an
+ * id, the first under this total order is the analysis; the rest are
+ * replays. Earliest capture first — the row the server stored first when
+ * rows arrive in capture order — then a content tie-break, so the order the
+ * rows are handed in never changes the outcome. */
+function compareSurvivorFirst(a: CountableAnalysis, b: CountableAnalysis): number {
+  if (a.at !== b.at) return a.at - b.at;
+  if (a.capturedAt !== b.capturedAt) return compareCodeUnits(a.capturedAt, b.capturedAt);
+  if (a.hundredths !== b.hundredths) return a.hundredths - b.hundredths;
+  return compareCodeUnits(a.shotType, b.shotType);
 }
 
 /**
@@ -239,30 +324,38 @@ function compareNewestFirst(a: CountableAnalysis, b: CountableAnalysis): number 
 export function computePlayerRank(
   analyses: readonly PlayerRankAnalysisInput[],
 ): PlayerRankSummary | null {
-  const byTechnique = new Map<string, CountableAnalysis[]>();
-  const seenIds = new Set<string>();
-  let scoredAnalysisCount = 0;
+  const byId = new Map<string, CountableAnalysis>();
+  const withoutId: CountableAnalysis[] = [];
   for (const input of analyses) {
-    if (!isCountable(input)) continue;
+    const at = countableInstantMicros(input);
+    if (at === null) continue;
     // One analysis per id, like the SQL primary key: a replayed row is the
     // same evidence, not more of it. Lowercase so text order == uuid byte order.
     const id = input.id === undefined ? "" : input.id.toLowerCase();
-    if (id !== "") {
-      if (seenIds.has(id)) continue;
-      seenIds.add(id);
-    }
-    scoredAnalysisCount += 1;
     const entry: CountableAnalysis = {
       // Integer hundredths keep one/two-decimal scores exact so the result
       // matches Postgres numeric math bit for bit.
       hundredths: toHundredths(input.overallScore as number),
-      at: parseTimestamp(input.capturedAt),
+      at,
       capturedAt: input.capturedAt,
       id,
+      shotType: input.shotType,
     };
-    const bucket = byTechnique.get(input.shotType);
+    if (id === "") {
+      withoutId.push(entry);
+      continue;
+    }
+    const kept = byId.get(id);
+    if (kept === undefined || compareSurvivorFirst(entry, kept) < 0) byId.set(id, entry);
+  }
+
+  const byTechnique = new Map<string, CountableAnalysis[]>();
+  let scoredAnalysisCount = 0;
+  for (const entry of [...byId.values(), ...withoutId]) {
+    scoredAnalysisCount += 1;
+    const bucket = byTechnique.get(entry.shotType);
     if (bucket) bucket.push(entry);
-    else byTechnique.set(input.shotType, [entry]);
+    else byTechnique.set(entry.shotType, [entry]);
   }
   if (byTechnique.size === 0) return null;
 
@@ -288,7 +381,7 @@ export function computePlayerRank(
     for (const analysis of bucket) {
       if (
         analysis.at > latest.at ||
-        (analysis.at === latest.at && analysis.capturedAt > latest.capturedAt)
+        (analysis.at === latest.at && compareCodeUnits(analysis.capturedAt, latest.capturedAt) > 0)
       ) {
         latest = analysis;
       }
@@ -302,7 +395,7 @@ export function computePlayerRank(
       confidence: Math.min(bucket.length, RANK_CONFIDENCE_CAP),
     });
   }
-  techniques.sort((a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType));
+  techniques.sort((a, b) => b.score - a.score || compareCodeUnits(a.shotType, b.shotType));
 
   // Rating: confidence-weighted average of the per-technique ROUNDED scores,
   // rounded to 2 decimals again — the same two-stage rounding the SQL

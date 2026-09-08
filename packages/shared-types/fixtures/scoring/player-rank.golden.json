@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "player-rank-golden-v2",
+  "schemaVersion": "player-rank-golden-v3",
   "definitionVersion": "rank-form-weighted-v2",
   "cases": [
     {
@@ -1025,6 +1025,380 @@
         ],
         "nextTier": null
       }
+    },
+    {
+      "id": "same-millisecond-orders-by-microseconds",
+      "description": "Two drives inside one millisecond: SQL keeps timestamptz microseconds, so the .000900 row is newer than .000001 (weights 8 and 7), with a newer millisecond row on top as the reported capture.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000900Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000001Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "drive",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.86,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 5.86,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.64
+        }
+      }
+    },
+    {
+      "id": "sub-microsecond-fractions-round-half-even-like-timestamptz",
+      "description": "Seven-digit fractions .0000015 and .0000024 both round to microsecond 2 (rint), so the rows share an instant and id descending decides recency; a newer whole-millisecond row is the reported capture.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.0000015Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.0000024Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "drive",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.14,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 6.14,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.36
+        }
+      }
+    },
+    {
+      "id": "equal-scores-order-techniques-by-code-unit",
+      "description": "Mixed-case and punctuated shot types at one score list in UTF-16 code-unit order (uppercase before underscore before lowercase), as GET /v1/rank orders them — never a locale collation.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "backhand",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "Dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "_serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 3,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "Dink",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "_serve",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "backhand",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "nine-digit-fraction-at-the-top-of-the-window",
+      "description": "A nine-digit fraction (the ingress maximum) is a valid capture; timestamptz rounds it to .123457, one microsecond newer than the .123456 row, so it takes weight 7 behind the newer whole-millisecond row.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "serve",
+          "overallScore": 7.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.123456789Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": 5.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.123456Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.36,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 6.36,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.14
+        }
+      }
+    }
+  ],
+  "replays": [
+    {
+      "id": "replayed-id-conflicting-content-keeps-earliest-capture",
+      "description": "One id arrives three times with different content. The earliest capture is the analysis (the row the server stored first when rows arrive in capture order); the later rows are replays and never count, in any input order.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T11:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 9,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "dink",
+            "score": 5,
+            "capturedAt": "2026-08-01T09:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "replayed-id-same-instant-breaks-ties-by-text-score-shot-type",
+      "description": "Replays of one id at one instant: the row with the smaller capturedAt text (code-unit order), then the lower score, then the smaller shot type is the analysis; an uppercase spelling of the uuid is the same id.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 4,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 8,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "volley",
+          "overallScore": 1,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 2.5,
+        "tier": "bronze",
+        "tierLabel": "Bronze",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 4,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "volley",
+            "score": 1,
+            "capturedAt": "2026-08-01T09:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "silver",
+          "label": "Silver",
+          "minRating": 3.5,
+          "pointsNeeded": 1
+        }
+      }
     }
   ],
   "rejectedInputs": [
@@ -1230,6 +1604,91 @@
       "refusedBy": {
         "layer": "sql",
         "check": "sqlstate 22007"
+      }
+    },
+    {
+      "id": "captured-at-without-zone",
+      "description": "A local-time instant (no Z) is outside the ingress grammar; SQL would read it in the session zone, not as the device meant it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000002",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000",
+        "source": "real"
+      },
+      "refusedBy": {
+        "layer": "edge",
+        "check": "parseSyncShot capturedAt"
+      }
+    },
+    {
+      "id": "captured-at-with-offset",
+      "description": "A zone offset is outside the ingress grammar even though it names an instant.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000003",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T12:00:00.000+02:00",
+        "source": "real"
+      },
+      "refusedBy": {
+        "layer": "edge",
+        "check": "parseSyncShot capturedAt"
+      }
+    },
+    {
+      "id": "captured-at-calendar-rollover",
+      "description": "February 30 matches the grammar but is not a calendar date; the ingress round-trips the fields and refuses it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000004",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-02-30T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": {
+        "layer": "edge",
+        "check": "parseSyncShot capturedAt"
+      }
+    },
+    {
+      "id": "captured-at-ten-fraction-digits",
+      "description": "Ten fractional digits exceed the ingress grammar (1-9).",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000005",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.0000000001Z",
+        "source": "real"
+      },
+      "refusedBy": {
+        "layer": "edge",
+        "check": "parseSyncShot capturedAt"
+      }
+    },
+    {
+      "id": "shot-type-surrogate-pairs-exceed-cap",
+      "description": "33 emoji are 66 UTF-16 code units: over the 64 cap the ingress measures with String#length, though only 33 code points.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000006",
+        "shotType": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": {
+        "layer": "edge",
+        "check": "parseSyncShot shotType"
       }
     }
   ]

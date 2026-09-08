@@ -57,16 +57,35 @@ export type ScoringDefinitionComponentKey = (typeof SCORING_DEFINITION_COMPONENT
  * values this formula produces. */
 export type ScoringRoundingMode = "half-away-from-zero";
 
+/** Which server layer keeps a violating row out of the stored history. */
+export type ScoringServerIngressLayer = "edge" | "sql";
+
 export interface ScoringRounding {
   readonly mode: ScoringRoundingMode;
   readonly decimals: number;
 }
 
 export interface ScoringOrderKey {
-  readonly field: "capturedAt" | "id" | "capturedAtText";
-  readonly direction: "desc";
+  readonly field: "capturedAt" | "id" | "capturedAtText" | "scoreHundredths" | "shotType" | "score";
+  readonly direction: "asc" | "desc";
   /** Text keys are compared in this form so TS text order == SQL byte order. */
   readonly normalize?: "lowercase";
+  /** Text keys compare by UTF-16 code unit — never a locale collation, so
+   * every runtime (Hermes, V8, Deno) and a `C`-collated SQL sort agree. */
+  readonly collation?: "code-unit";
+}
+
+/** The capturedAt text grammar every plane admits: `Date#toISOString` shape,
+ * UTC `Z` only, 1-9 fractional digits, calendar-valid (no 2026-02-30). */
+export type ScoringInstantGrammar = "iso-8601-utc-instant";
+
+/** Half to even == C `rint()` — how Postgres rounds a fraction beyond
+ * microseconds when it parses a timestamptz. */
+export type ScoringInstantFractionRounding = "half-even";
+
+export interface ScoringServerIngressCheck {
+  readonly layer: ScoringServerIngressLayer;
+  readonly check: string;
 }
 
 export interface ScoringTierThreshold {
@@ -89,9 +108,6 @@ export const SCORING_COUNTABILITY_RULE_KEYS = [
 
 export type ScoringCountabilityRuleKey = (typeof SCORING_COUNTABILITY_RULE_KEYS)[number];
 
-/** Which server layer keeps a violating row out of the stored history. */
-export type ScoringServerIngressLayer = "edge" | "sql";
-
 export interface ScoringDefinitionComponents {
   /** 1. Abstention rules. An analysis counts only when ALL hold; when nothing
    * counts, the rank is null — never a fabricated tier. */
@@ -99,21 +115,47 @@ export interface ScoringDefinitionComponents {
     readonly resultKind: string;
     readonly overallScore: { readonly finite: true; readonly min: number; readonly max: number };
     /** Non-empty after trimming, at most `maxLength` characters. */
-    readonly shotType: { readonly trimmedNonEmpty: true; readonly maxLength: number };
+    readonly shotType: {
+      readonly trimmedNonEmpty: true;
+      readonly maxLength: number;
+      /** `maxLength` counts what `String#length` counts (the Edge parser's unit). */
+      readonly lengthUnit: "utf16-code-units";
+      /** Code points Postgres `text` cannot hold; a row carrying one is never stored. */
+      readonly excludedCodePoints: readonly string[];
+    };
     readonly source: string;
     /** Mobile RealAnalysisFact rows carry no `source`; they are real by construction. */
     readonly absentSourceCountsAs: string;
     /** ISO-8601 instant inside [min, maxExclusive) — `shots_captured_at_bounds`. */
-    readonly capturedAt: { readonly min: string; readonly maxExclusive: string };
+    readonly capturedAt: {
+      readonly grammar: ScoringInstantGrammar;
+      readonly fractionDigits: { readonly min: number; readonly max: number };
+      /** The instant is kept at timestamptz precision: fractional digits
+       * beyond `precision` are rounded (`fractionRounding`) BEFORE the bounds
+       * check and before recency ordering — 2099-12-31T23:59:59.9999995Z is
+       * 2100-01-01 and does not count. */
+      readonly precision: "microseconds";
+      readonly fractionRounding: ScoringInstantFractionRounding;
+      readonly min: string;
+      readonly maxExclusive: string;
+    };
     /** `id` identifies one analysis on every plane (SQL primary key); a row
      * replayed under an id already seen counts once, never twice. */
-    readonly identity: { readonly field: "id"; readonly duplicates: "count-once" };
+    readonly identity: {
+      readonly field: "id";
+      readonly normalize: "lowercase";
+      readonly duplicates: "count-once";
+      /** Which of several countable rows sharing an id is THE analysis: the
+       * first row under this total order (the earliest capture — the row the
+       * server stored first when rows arrive in capture order), so the same
+       * multiset of rows yields the same rank in every input order. */
+      readonly survivor: { readonly keys: readonly ScoringOrderKey[] };
+    };
     readonly noEvidence: "null";
+    /** Every server-side check that keeps a row violating the rule out of
+     * the stored history; a golden `rejectedInputs` entry names one of them. */
     readonly serverIngress: {
-      readonly [Rule in ScoringCountabilityRuleKey]: {
-        readonly layer: ScoringServerIngressLayer;
-        readonly check: string;
-      };
+      readonly [Rule in ScoringCountabilityRuleKey]: readonly ScoringServerIngressCheck[];
     };
   };
   /** 2. Scores are accumulated as exact integers so TS and Postgres numeric
@@ -152,6 +194,8 @@ export interface ScoringDefinitionComponents {
     readonly of: "rounded-technique-hundredths";
     readonly weights: "confidenceWeight";
     readonly rounding: ScoringRounding;
+    /** How the summary lists its techniques (Edge `GET /v1/rank` order). */
+    readonly techniqueOrder: { readonly keys: readonly ScoringOrderKey[] };
   };
   /** 9. Tier = highest threshold with `minRating <= rating`; divisions split
    * the tier band into thirds (III at the floor, I at the top). */
@@ -185,19 +229,64 @@ export const SCORING_DEFINITION = deepFreeze({
     countability: {
       resultKind: "scored",
       overallScore: { finite: true, min: 0, max: 10 },
-      shotType: { trimmedNonEmpty: true, maxLength: 64 },
+      shotType: {
+        trimmedNonEmpty: true,
+        maxLength: 64,
+        lengthUnit: "utf16-code-units",
+        excludedCodePoints: ["\u0000"],
+      },
       source: "real",
       absentSourceCountsAs: "real",
-      capturedAt: { min: "2000-01-01T00:00:00.000Z", maxExclusive: "2100-01-01T00:00:00.000Z" },
-      identity: { field: "id", duplicates: "count-once" },
+      capturedAt: {
+        grammar: "iso-8601-utc-instant",
+        fractionDigits: { min: 1, max: 9 },
+        precision: "microseconds",
+        fractionRounding: "half-even",
+        min: "2000-01-01T00:00:00.000Z",
+        maxExclusive: "2100-01-01T00:00:00.000Z",
+      },
+      identity: {
+        field: "id",
+        normalize: "lowercase",
+        duplicates: "count-once",
+        survivor: {
+          keys: [
+            { field: "capturedAt", direction: "asc" },
+            { field: "capturedAtText", direction: "asc", collation: "code-unit" },
+            { field: "scoreHundredths", direction: "asc" },
+            { field: "shotType", direction: "asc", collation: "code-unit" },
+          ],
+        },
+      },
       noEvidence: "null",
       serverIngress: {
-        resultKind: { layer: "sql", check: "shots_result_kind_check" },
-        overallScore: { layer: "sql", check: "shots_overall_score_check" },
-        shotType: { layer: "edge", check: "parseSyncShot shotType" },
-        source: { layer: "sql", check: "shots_source_check" },
-        capturedAt: { layer: "sql", check: "shots_captured_at_bounds" },
-        identity: { layer: "sql", check: "shots_pkey" },
+        resultKind: [
+          { layer: "edge", check: "parseSyncShot resultKind" },
+          { layer: "sql", check: "shots_result_kind_check" },
+          { layer: "sql", check: "shots_low_confidence_unscored" },
+        ],
+        overallScore: [
+          { layer: "edge", check: "parseSyncShot overallScore" },
+          { layer: "sql", check: "shots_overall_score_check" },
+          { layer: "sql", check: "scored_shots_have_scores" },
+        ],
+        shotType: [
+          { layer: "edge", check: "parseSyncShot shotType" },
+          { layer: "sql", check: "sqlstate 22021" },
+        ],
+        source: [
+          { layer: "edge", check: "parseSyncShot source" },
+          { layer: "sql", check: "shots_source_check" },
+        ],
+        capturedAt: [
+          { layer: "edge", check: "parseSyncShot capturedAt" },
+          { layer: "sql", check: "shots_captured_at_bounds" },
+          { layer: "sql", check: "sqlstate 22007" },
+        ],
+        identity: [
+          { layer: "edge", check: "shots:sync replay acknowledgement" },
+          { layer: "sql", check: "shots_pkey" },
+        ],
       },
     },
     scoreQuantization: {
@@ -209,8 +298,8 @@ export const SCORING_DEFINITION = deepFreeze({
     recencyOrder: {
       keys: [
         { field: "capturedAt", direction: "desc" },
-        { field: "id", direction: "desc", normalize: "lowercase" },
-        { field: "capturedAtText", direction: "desc" },
+        { field: "id", direction: "desc", normalize: "lowercase", collation: "code-unit" },
+        { field: "capturedAtText", direction: "desc", collation: "code-unit" },
       ],
     },
     formWindow: { size: FORM_WINDOW },
@@ -230,6 +319,12 @@ export const SCORING_DEFINITION = deepFreeze({
       of: "rounded-technique-hundredths",
       weights: "confidenceWeight",
       rounding: { mode: "half-away-from-zero", decimals: 2 },
+      techniqueOrder: {
+        keys: [
+          { field: "score", direction: "desc" },
+          { field: "shotType", direction: "asc", collation: "code-unit" },
+        ],
+      },
     },
     tiers: {
       thresholds: [
@@ -252,7 +347,7 @@ export const SCORING_DEFINITION = deepFreeze({
  * implementation and must reproduce `expected` exactly (or the subset of
  * fields it produces). `expected: null` means "no rank".
  */
-export const PLAYER_RANK_GOLDEN_SCHEMA_VERSION = "player-rank-golden-v2";
+export const PLAYER_RANK_GOLDEN_SCHEMA_VERSION = "player-rank-golden-v3";
 
 export const PLAYER_RANK_GOLDEN_FIXTURE_PATH =
   "packages/shared-types/fixtures/scoring/player-rank.golden.json";
@@ -300,6 +395,18 @@ export interface PlayerRankGoldenCase {
   readonly expected: PlayerRankGoldenExpected | null;
 }
 
+/** In-domain rows where one id occurs more than once. `analyses` lists each
+ * id's surviving row (per `countability.identity.survivor`) BEFORE its
+ * replays, so a server receiving the rows in this order stores exactly the
+ * survivors (`shots_pkey` refuses the rest) and reproduces `expected`; the TS
+ * plane must reproduce `expected` from EVERY permutation. */
+export interface PlayerRankGoldenReplayCase {
+  readonly id: string;
+  readonly description: string;
+  readonly analyses: readonly PlayerRankGoldenAnalysis[];
+  readonly expected: PlayerRankGoldenExpected | null;
+}
+
 /** A row outside the input domain. TS excludes it from every rank; the named
  * server layer refuses it before it reaches SQL rank state, so it never
  * becomes evidence on any plane. */
@@ -309,8 +416,8 @@ export interface PlayerRankGoldenRejectedInput {
   /** A `ScoringCountabilityRuleKey` (JSON-wide string; the golden test narrows it). */
   readonly rule: string;
   readonly analysis: PlayerRankGoldenAnalysis;
-  /** `layer` is a `ScoringServerIngressLayer` and must equal the rule's
-   * `countability.serverIngress` layer. */
+  /** One of the rule's `countability.serverIngress` checks (`layer` is a
+   * `ScoringServerIngressLayer`). */
   readonly refusedBy: { readonly layer: string; readonly check: string };
 }
 
@@ -318,5 +425,6 @@ export interface PlayerRankGoldenFixture {
   readonly schemaVersion: string;
   readonly definitionVersion: string;
   readonly cases: readonly PlayerRankGoldenCase[];
+  readonly replays: readonly PlayerRankGoldenReplayCase[];
   readonly rejectedInputs: readonly PlayerRankGoldenRejectedInput[];
 }

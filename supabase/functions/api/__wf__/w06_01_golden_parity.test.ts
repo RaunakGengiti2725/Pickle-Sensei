@@ -11,7 +11,9 @@
  *         player_technique_rating (20260831130000_form_weighted_rank.sql)
  *         must store EVERY case row and reproduce `expected`; every
  *         `rejectedInputs` row whose `refusedBy.layer` is `sql` must be
- *         refused by exactly the named check.
+ *         refused by exactly the named check; every `replays` case must
+ *         store exactly the survivors (`shots_pkey` refuses the rest) and
+ *         reproduce `expected`, which TS reproduces from every permutation.
  *
  * Postgres setup (same as be-edge-routes-shots-rank.test.ts):
  *   docker run -d --name pickle-audit -p 55432:5432 -e POSTGRES_PASSWORD=pg postgres:16
@@ -127,7 +129,7 @@ async function readSqlRank(tx: Sql, userId: string): Promise<SqlRank | null> {
   const view = await tx.unsafe(
     `select shot_type, score::text as score, captured_at, sampled_count, confidence_weight
        from public.player_technique_rating where user_id = $1
-       order by score desc, shot_type asc`,
+       order by score desc, shot_type collate "C" asc`,
     [userId],
   );
   if (state.length === 0) {
@@ -186,10 +188,26 @@ Deno.test("W06-01 golden: fixture pins the canonical definition version and sche
   assertEquals(SCORING_DEFINITION.version, "rank-form-weighted-v2");
 });
 
+function permutations<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) return [[...items]];
+  return items.flatMap((item, index) =>
+    permutations([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [
+      item,
+      ...rest,
+    ]),
+  );
+}
+
 Deno.test("W06-01 golden: every case reproduces through computePlayerRank under Deno", () => {
   for (const goldenCase of fixture.cases) {
     const actual = computePlayerRank(goldenCase.analyses as PlayerRankAnalysisInput[]);
     assertEquals(JSON.parse(JSON.stringify(actual)), goldenCase.expected, goldenCase.id);
+  }
+  for (const replay of fixture.replays) {
+    for (const rows of permutations(replay.analyses)) {
+      const actual = computePlayerRank(rows as PlayerRankAnalysisInput[]);
+      assertEquals(JSON.parse(JSON.stringify(actual)), replay.expected, replay.id);
+    }
   }
   for (const rejected of fixture.rejectedInputs) {
     assertEquals(
@@ -274,7 +292,7 @@ Deno.test(
   async () => {
     const refused: string[] = [];
     let userSeq = 0;
-    for (const goldenCase of fixture.cases) {
+    for (const goldenCase of [...fixture.cases, ...fixture.replays]) {
       for (const a of goldenCase.analyses) {
         userSeq += 1;
         const userId = `e0000000-0000-4000-8000-${String(userSeq).padStart(12, "0")}`;
@@ -350,6 +368,53 @@ Deno.test({
       problems,
       [],
       `golden cases the SQL plane does not reproduce:\n${problems.join("\n")}`,
+    );
+  },
+});
+
+Deno.test({
+  name: "W06-01 golden: every replay case stores exactly the survivors (shots_pkey) and reproduces on the SQL plane",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL);
+    const problems: string[] = [];
+    try {
+      for (const replay of fixture.replays) {
+        const userId = crypto.randomUUID();
+        await withRollback(sql, async (tx) => {
+          await tx.unsafe(`insert into auth.users (id, email) values ($1, $2)`, [
+            userId,
+            `${userId}@example.com`,
+          ]);
+          const seen = new Set<string>();
+          const outcomes: string[] = [];
+          const wanted: string[] = [];
+          for (const a of replay.analyses) {
+            const id = a.id.toLowerCase();
+            wanted.push(`${a.id}:${seen.has(id) ? "shots_pkey" : "stored"}`);
+            seen.add(id);
+            outcomes.push(`${a.id}:${(await insertAnalysis(tx, userId, a)) ?? "stored"}`);
+          }
+          const actual = stripWeights(await readSqlRank(tx, userId));
+          const expected = sqlProjection(replay.expected);
+          const same =
+            JSON.stringify(actual) === JSON.stringify(expected) &&
+            JSON.stringify(outcomes) === JSON.stringify(wanted);
+          console.log(`${replay.id}: ${same ? "MATCH" : "MISMATCH"} rows=[${outcomes.join(", ")}]`);
+          if (!same) {
+            problems.push(
+              `${replay.id}\n  rows     = ${outcomes.join(", ")}\n  wanted   = ${wanted.join(", ")}\n  sql      = ${JSON.stringify(actual)}\n  expected = ${JSON.stringify(expected)}`,
+            );
+          }
+        });
+      }
+    } finally {
+      await sql.end();
+    }
+    assertEquals(
+      problems,
+      [],
+      `replay cases the SQL plane does not reproduce:\n${problems.join("\n")}`,
     );
   },
 });
@@ -584,6 +649,89 @@ Deno.test({
         assertEquals(sqlRank?.scoredAnalysisCount, 2);
         assertEquals(tsRank?.scoredAnalysisCount, sqlRank?.scoredAnalysisCount);
         assertEquals(tsRank?.rating, sqlRank?.rating);
+      });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "W06-01 golden: a conflicting replay of one id ranks the same in SQL and in TS from every input order",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL);
+    try {
+      const userId = crypto.randomUUID();
+      const first = row(
+        "00000000-0000-4000-8000-000000000001",
+        "drive",
+        9,
+        "2026-08-01T10:00:00.000Z",
+      );
+      const replay = row(
+        "00000000-0000-4000-8000-000000000001",
+        "drive",
+        3,
+        "2026-08-01T11:00:00.000Z",
+      );
+      await withRollback(sql, async (tx) => {
+        await tx.unsafe(`insert into auth.users (id, email) values ($1, $2)`, [
+          userId,
+          `${userId}@example.com`,
+        ]);
+        assertEquals(await insertAnalysis(tx, userId, first), null);
+        assertEquals(await insertAnalysis(tx, userId, replay), "shots_pkey");
+        const sqlRank = await readSqlRank(tx, userId);
+        assertEquals(sqlRank?.rating, 9);
+        for (const rows of [
+          [first, replay],
+          [replay, first],
+        ]) {
+          const tsRank = computePlayerRank(rows as PlayerRankAnalysisInput[]);
+          assertEquals(tsRank?.rating, sqlRank?.rating);
+          assertEquals(tsRank?.tier, sqlRank?.tier);
+          assertEquals(tsRank?.scoredAnalysisCount, sqlRank?.scoredAnalysisCount);
+        }
+      });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "W06-01 golden: a sub-microsecond instant Postgres rounds up to the 2100 bound is no evidence on SQL and TS alike",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL);
+    try {
+      const userId = crypto.randomUUID();
+      const roundsUp = row(
+        "00000000-0000-4000-8000-000000000001",
+        "dink",
+        8,
+        "2099-12-31T23:59:59.9999995Z",
+      );
+      const roundsDown = row(
+        "00000000-0000-4000-8000-000000000002",
+        "dink",
+        2,
+        "2099-12-31T23:59:59.9999994Z",
+      );
+      await withRollback(sql, async (tx) => {
+        await tx.unsafe(`insert into auth.users (id, email) values ($1, $2)`, [
+          userId,
+          `${userId}@example.com`,
+        ]);
+        assertEquals(await insertAnalysis(tx, userId, roundsUp), "shots_captured_at_bounds");
+        assertEquals(computePlayerRank([roundsUp as PlayerRankAnalysisInput]), null);
+        assertEquals(await insertAnalysis(tx, userId, roundsDown), null);
+        const sqlRank = await readSqlRank(tx, userId);
+        const tsRank = computePlayerRank([roundsUp, roundsDown] as PlayerRankAnalysisInput[]);
+        assertEquals(sqlRank?.rating, 2);
+        assertEquals(tsRank?.rating, sqlRank?.rating);
+        assertEquals(tsRank?.scoredAnalysisCount, sqlRank?.scoredAnalysisCount);
       });
     } finally {
       await sql.end();

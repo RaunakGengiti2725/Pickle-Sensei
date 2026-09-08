@@ -3,6 +3,7 @@ import {
   PLAYER_RANK_TIERS,
   playerRankDivisionForRating,
   playerRankTierForRating,
+  SCORING_DEFINITION_VERSION,
   type PlayerRankSummary,
 } from '@pickle/shared-types';
 import type { ApiSession } from '../account/apiSession';
@@ -197,12 +198,15 @@ export function summaryFromServer(server: ServerPlayerRank): PlayerRankSummary {
   const tierIndex = PLAYER_RANK_TIERS.findIndex(t => t.key === tier.key);
   const next = PLAYER_RANK_TIERS[tierIndex + 1] ?? null;
   const techniques = [...server.techniques].sort(
-    (a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType),
+    (a, b) =>
+      b.score - a.score ||
+      (a.shotType < b.shotType ? -1 : a.shotType > b.shotType ? 1 : 0),
   );
   const { division, label: divisionLabel } = playerRankDivisionForRating(
     server.rating,
   );
   return {
+    definitionVersion: SCORING_DEFINITION_VERSION,
     rating: server.rating,
     tier: tier.key,
     tierLabel: tier.label,

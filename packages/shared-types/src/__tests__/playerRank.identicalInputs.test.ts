@@ -38,9 +38,7 @@ describe("replayed ids: one analysis per id, chosen independently of input order
   const later = scored(ID_A, "serve", "2026-08-02T10:00:00.000Z", 6);
 
   it("ranks every permutation of a conflicting replay identically", () => {
-    const summaries = permutations([first, replay, later]).map((rows) =>
-      computePlayerRank(rows),
-    );
+    const summaries = permutations([first, replay, later]).map((rows) => computePlayerRank(rows));
     expect(summaries[0]).not.toBeNull();
     for (const summary of summaries) expect(summary).toEqual(summaries[0]);
   });
@@ -51,10 +49,11 @@ describe("replayed ids: one analysis per id, chosen independently of input order
   });
 
   it("breaks a same-instant replay tie by timestamp text, then score, then shot type", () => {
-    const plain = scored(ID_A, "drive", "2026-08-01T10:00:00Z", 9);
-    const fraction = scored(ID_A, "drive", "2026-08-01T10:00:00.000Z", 3);
-    expect(computePlayerRank([fraction, plain])).toEqual(computePlayerRank([plain]));
-    expect(computePlayerRank([plain, fraction])).toEqual(computePlayerRank([plain]));
+    // Code-unit order: "." (0x2E) sorts before "Z" (0x5A).
+    const plain = scored(ID_A, "drive", "2026-08-01T10:00:00Z", 3);
+    const fraction = scored(ID_A, "drive", "2026-08-01T10:00:00.000Z", 9);
+    expect(computePlayerRank([fraction, plain])).toEqual(computePlayerRank([fraction]));
+    expect(computePlayerRank([plain, fraction])).toEqual(computePlayerRank([fraction]));
 
     const low = scored(ID_A, "drive", AT, 3);
     const high = scored(ID_A, "drive", AT, 9);
@@ -69,7 +68,7 @@ describe("replayed ids: one analysis per id, chosen independently of input order
 
   it("treats uppercase and lowercase spellings of one uuid as the same analysis", () => {
     const lower = scored(ID_B, "dink", "2026-08-01T10:00:00.000Z", 7);
-    const upper = { ...lower, id: ID_B.toUpperCase(), overallScore: 1 };
+    const upper = { ...lower, id: ID_B.toUpperCase(), overallScore: 9 };
     const other = scored(ID_C, "dink", "2026-08-01T09:00:00.000Z", 5);
     const expected = computePlayerRank([lower, other]);
     expect(expected?.scoredAnalysisCount).toBe(2);
@@ -79,11 +78,8 @@ describe("replayed ids: one analysis per id, chosen independently of input order
   });
 
   it("does not collapse distinct rows that carry no id", () => {
-    const a: PlayerRankAnalysisInput = { ...scored(ID_A, "dink", AT, 4), id: undefined };
-    const b: PlayerRankAnalysisInput = {
-      ...scored(ID_A, "dink", "2026-08-02T10:00:00.000Z", 8),
-      id: undefined,
-    };
+    const { id: _a, ...a } = scored(ID_A, "dink", AT, 4);
+    const { id: _b, ...b } = scored(ID_A, "dink", "2026-08-02T10:00:00.000Z", 8);
     expect(computePlayerRank([a, b])?.scoredAnalysisCount).toBe(2);
     expect(computePlayerRank([b, a])).toEqual(computePlayerRank([a, b]));
   });
@@ -108,7 +104,8 @@ describe("capturedAt: the ingress grammar, timestamptz precision and the shots b
     ];
     const leaks: string[] = [];
     for (const capturedAt of refusedByIngress) {
-      if (computePlayerRank([scored(ID_A, "drive", capturedAt, 6)]) !== null) leaks.push(capturedAt);
+      if (computePlayerRank([scored(ID_A, "drive", capturedAt, 6)]) !== null)
+        leaks.push(capturedAt);
     }
     expect(leaks).toEqual([]);
     for (const capturedAt of [
@@ -124,14 +121,20 @@ describe("capturedAt: the ingress grammar, timestamptz precision and the shots b
   });
 
   it("applies the shots bounds: inclusive 2000-01-01, exclusive 2100-01-01", () => {
-    expect(computePlayerRank([scored(ID_A, "drive", "2000-01-01T00:00:00.000Z", 6)])).not.toBeNull();
+    expect(
+      computePlayerRank([scored(ID_A, "drive", "2000-01-01T00:00:00.000Z", 6)]),
+    ).not.toBeNull();
     expect(computePlayerRank([scored(ID_A, "drive", "1999-12-31T23:59:59.999999Z", 6)])).toBeNull();
-    expect(computePlayerRank([scored(ID_A, "drive", "2099-12-31T23:59:59.999999Z", 6)])).not.toBeNull();
+    expect(
+      computePlayerRank([scored(ID_A, "drive", "2099-12-31T23:59:59.999999Z", 6)]),
+    ).not.toBeNull();
     expect(computePlayerRank([scored(ID_A, "drive", "2100-01-01T00:00:00.000Z", 6)])).toBeNull();
   });
 
   it("rounds sub-microsecond fractions half-to-even like timestamptz before the bounds check", () => {
-    expect(computePlayerRank([scored(ID_A, "drive", "2099-12-31T23:59:59.9999995Z", 6)])).toBeNull();
+    expect(
+      computePlayerRank([scored(ID_A, "drive", "2099-12-31T23:59:59.9999995Z", 6)]),
+    ).toBeNull();
     expect(
       computePlayerRank([scored(ID_A, "drive", "2099-12-31T23:59:59.9999994Z", 6)]),
     ).not.toBeNull();

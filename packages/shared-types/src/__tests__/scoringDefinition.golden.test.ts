@@ -23,7 +23,33 @@ const countability = SCORING_DEFINITION.components.countability;
 
 /** The sync wire shapes the Edge ingress accepts (`parseSyncShot`). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ISO_UTC_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+const ISO_UTC_INSTANT_RE = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+
+/** `parseSyncShot` capturedAt: grammar, calendar round-trip, bounds (ms). */
+function edgeAdmitsInstant(text: string): boolean {
+  const match = ISO_UTC_INSTANT_RE.exec(text);
+  if (!match) return false;
+  const at = Date.parse(text);
+  if (!Number.isFinite(at)) return false;
+  const parsed = new Date(at);
+  return (
+    parsed.getUTCFullYear() === Number(match[1]) &&
+    parsed.getUTCMonth() === Number(match[2]) - 1 &&
+    parsed.getUTCDate() === Number(match[3]) &&
+    at >= Date.parse(countability.capturedAt.min) &&
+    at < Date.parse(countability.capturedAt.maxExclusive)
+  );
+}
+
+function permutations<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) return [[...items]];
+  return items.flatMap((item, index) =>
+    permutations([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [
+      item,
+      ...rest,
+    ]),
+  );
+}
 
 function isCountabilityRule(value: string): value is ScoringCountabilityRuleKey {
   return (SCORING_COUNTABILITY_RULE_KEYS as readonly string[]).includes(value);
@@ -34,7 +60,11 @@ function isCountabilityRule(value: string): value is ScoringCountabilityRuleKey 
 function violatedDomainRules(row: PlayerRankGoldenAnalysis): string[] {
   const violated: string[] = [];
   if (!UUID_RE.test(row.id)) violated.push("identity");
-  if (row.shotType.trim().length === 0 || row.shotType.length > countability.shotType.maxLength) {
+  if (
+    row.shotType.trim().length === 0 ||
+    row.shotType.length > countability.shotType.maxLength ||
+    countability.shotType.excludedCodePoints.some((codePoint) => row.shotType.includes(codePoint))
+  ) {
     violated.push("shotType");
   }
   if (row.resultKind === countability.resultKind) {
@@ -50,14 +80,7 @@ function violatedDomainRules(row: PlayerRankGoldenAnalysis): string[] {
     violated.push("resultKind");
   }
   if (row.source !== undefined && row.source !== countability.source) violated.push("source");
-  const at = Date.parse(row.capturedAt);
-  if (
-    !ISO_UTC_INSTANT_RE.test(row.capturedAt) ||
-    !(at >= Date.parse(countability.capturedAt.min)) ||
-    !(at < Date.parse(countability.capturedAt.maxExclusive))
-  ) {
-    violated.push("capturedAt");
-  }
+  if (!edgeAdmitsInstant(row.capturedAt)) violated.push("capturedAt");
   return violated;
 }
 
@@ -106,16 +129,59 @@ describe("canonical scoring definition", () => {
     expect(components.tiers.topOfScale).toBe(SCORING_DEFINITION.scale.max);
   });
 
-  it("names the server ingress layer for every countability rule", () => {
+  it("names the server ingress checks for every countability rule", () => {
     expect(Object.keys(countability.serverIngress).sort()).toEqual(
       [...SCORING_COUNTABILITY_RULE_KEYS].sort(),
     );
     for (const rule of SCORING_COUNTABILITY_RULE_KEYS) {
       const ingress = countability.serverIngress[rule];
-      expect(["edge", "sql"]).toContain(ingress.layer);
-      expect(ingress.check.length).toBeGreaterThan(0);
+      expect(ingress.length, rule).toBeGreaterThan(0);
+      for (const { layer, check } of ingress) {
+        expect(["edge", "sql"]).toContain(layer);
+        expect(check.length).toBeGreaterThan(0);
+      }
     }
-    expect(countability.serverIngress.shotType.layer).toBe("edge");
+    expect(countability.serverIngress.shotType.map((c) => c.layer)).toContain("edge");
+    expect(countability.serverIngress.capturedAt.map((c) => c.layer)).toContain("edge");
+    expect(countability.serverIngress.identity.map((c) => c.check)).toContain("shots_pkey");
+  });
+
+  it("pins the input domain shared with the ingress and the SQL column types", () => {
+    expect(countability.shotType.lengthUnit).toBe("utf16-code-units");
+    expect(countability.shotType.excludedCodePoints).toEqual(["\u0000"]);
+    expect(countability.capturedAt.grammar).toBe("iso-8601-utc-instant");
+    expect(countability.capturedAt.fractionDigits).toEqual({ min: 1, max: 9 });
+    expect(countability.capturedAt.precision).toBe("microseconds");
+    expect(countability.capturedAt.fractionRounding).toBe("half-even");
+    expect(ISO_UTC_INSTANT_RE.test(countability.capturedAt.min)).toBe(true);
+    expect(ISO_UTC_INSTANT_RE.test(countability.capturedAt.maxExclusive)).toBe(true);
+  });
+
+  it("orders replays and techniques by total, locale-free key lists", () => {
+    expect(countability.identity.normalize).toBe("lowercase");
+    expect(countability.identity.duplicates).toBe("count-once");
+    expect(countability.identity.survivor.keys.map((k) => [k.field, k.direction])).toEqual([
+      ["capturedAt", "asc"],
+      ["capturedAtText", "asc"],
+      ["scoreHundredths", "asc"],
+      ["shotType", "asc"],
+    ]);
+    const { components } = SCORING_DEFINITION;
+    expect(components.recencyOrder.keys.map((k) => [k.field, k.direction])).toEqual([
+      ["capturedAt", "desc"],
+      ["id", "desc"],
+      ["capturedAtText", "desc"],
+    ]);
+    expect(components.rating.techniqueOrder.keys.map((k) => [k.field, k.direction])).toEqual([
+      ["score", "desc"],
+      ["shotType", "asc"],
+    ]);
+    const textKeys = [
+      ...countability.identity.survivor.keys,
+      ...components.recencyOrder.keys,
+      ...components.rating.techniqueOrder.keys,
+    ].filter((k) => k.field === "id" || k.field === "capturedAtText" || k.field === "shotType");
+    for (const key of textKeys) expect(key.collation, key.field).toBe("code-unit");
   });
 
   it("is deeply immutable and JSON-serialisable for the other planes", () => {
@@ -128,12 +194,15 @@ describe("canonical scoring definition", () => {
 });
 
 describe("golden fixture: identical inputs on every plane", () => {
-  it("has ranked cases, no-rank cases and rejected inputs", () => {
+  it("has ranked cases, no-rank cases, replay cases and rejected inputs", () => {
     expect(fixture.cases.length).toBeGreaterThanOrEqual(14);
     expect(fixture.cases.some((c) => c.expected === null)).toBe(true);
     expect(fixture.cases.some((c) => c.expected !== null)).toBe(true);
+    expect(fixture.replays.length).toBeGreaterThanOrEqual(2);
     expect(fixture.rejectedInputs.length).toBeGreaterThanOrEqual(8);
-    const ids = [...fixture.cases, ...fixture.rejectedInputs].map((entry) => entry.id);
+    const ids = [...fixture.cases, ...fixture.replays, ...fixture.rejectedInputs].map(
+      (entry) => entry.id,
+    );
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -154,6 +223,9 @@ describe("golden fixture: identical inputs on every plane", () => {
     expect(rows.some((row) => row.overallScore === countability.overallScore.min)).toBe(true);
     expect(rows.some((row) => row.overallScore === countability.overallScore.max)).toBe(true);
     expect(rows.some((row) => /[A-F]/.test(row.id))).toBe(true);
+    expect(rows.some((row) => /\.\d{4,6}Z$/.test(row.capturedAt))).toBe(true);
+    expect(rows.some((row) => /\.\d{7,9}Z$/.test(row.capturedAt))).toBe(true);
+    expect(rows.some((row) => /[A-Z_]/.test(row.shotType))).toBe(true);
     expect(
       rows.some(
         (row) => typeof row.overallScore === "number" && String(row.overallScore).length > 4,
@@ -211,6 +283,40 @@ describe("golden fixture: identical inputs on every plane", () => {
     }
   });
 
+  it("replay cases: in-domain rows, a real conflict, survivors listed first", () => {
+    for (const replay of fixture.replays) {
+      const ids = replay.analyses.map((row) => row.id.toLowerCase());
+      expect(new Set(ids).size, replay.id).toBeLessThan(ids.length);
+      expect(replay.analyses.length, replay.id).toBeLessThanOrEqual(5);
+      const survivors: PlayerRankGoldenAnalysis[] = [];
+      const seen = new Set<string>();
+      for (const row of replay.analyses) {
+        expect(violatedDomainRules(row), `${replay.id} / ${row.id}`).toEqual([]);
+        const id = row.id.toLowerCase();
+        if (seen.has(id)) continue;
+        seen.add(id);
+        survivors.push(row);
+      }
+      expect(computePlayerRank(survivors), replay.id).toEqual(replay.expected);
+      const asDistinctRows = replay.analyses.map((row, index) => ({
+        ...row,
+        id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      }));
+      expect(
+        computePlayerRank(asDistinctRows),
+        `${replay.id}: counting the replays would change the outcome`,
+      ).not.toEqual(replay.expected);
+    }
+  });
+
+  it("replay cases reproduce the expected summary from every permutation", () => {
+    for (const replay of fixture.replays) {
+      for (const rows of permutations(replay.analyses)) {
+        expect(computePlayerRank(rows), replay.id).toEqual(replay.expected);
+      }
+    }
+  });
+
   it("rejected inputs are excluded by TS and refused by the server layer the rule names", () => {
     const anchor: PlayerRankAnalysisInput = {
       id: "0000000a-0000-4000-8000-000000000001",
@@ -228,10 +334,9 @@ describe("golden fixture: identical inputs on every plane", () => {
       if (!isCountabilityRule(rejected.rule)) continue;
       rulesCovered.add(rejected.rule);
       expect(violatedDomainRules(rejected.analysis), rejected.id).toContain(rejected.rule);
-      expect(rejected.refusedBy.layer, rejected.id).toBe(
-        countability.serverIngress[rejected.rule].layer,
+      expect(countability.serverIngress[rejected.rule], rejected.id).toContainEqual(
+        rejected.refusedBy,
       );
-      expect(rejected.refusedBy.check.length, rejected.id).toBeGreaterThan(0);
       expect(computePlayerRank([rejected.analysis]), rejected.id).toBeNull();
       expect(computePlayerRank([anchor, rejected.analysis]), rejected.id).toEqual(anchorOnly);
     }

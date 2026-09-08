@@ -10,6 +10,7 @@ import {
   type PlayerRankFetch,
   type ServerPlayerRank,
 } from '../src/progress/playerRank';
+import { SCORING_DEFINITION_VERSION } from '@pickle/shared-types';
 
 function fact(
   shotType: string,
@@ -192,6 +193,46 @@ describe('summaryFromServer', () => {
       ],
     });
     expect(summary.tier).toBe('diamond');
+  });
+
+  it('tags the account plane with the canonical definition version the device plane carries', () => {
+    const account = summaryFromServer(
+      parsePlayerRank(SERVER_RANK_PAYLOAD) as ServerPlayerRank,
+    );
+    const device = rankFromFacts([
+      fact('forehand_drive', 8, '2026-08-01T10:00:00.000Z'),
+    ]);
+    expect(account.definitionVersion).toBe(SCORING_DEFINITION_VERSION);
+    expect(device?.definitionVersion).toBe(account.definitionVersion);
+  });
+
+  it('orders equal-score techniques by code unit exactly like the device plane', () => {
+    const at = '2026-08-01T10:00:00.000Z';
+    const rows = [
+      { shotType: 'backhand', score: 6, capturedAt: at, sampledCount: 1 },
+      { shotType: 'Dink', score: 6, capturedAt: at, sampledCount: 1 },
+      { shotType: '_serve', score: 6, capturedAt: at, sampledCount: 1 },
+    ];
+    const account = summaryFromServer({
+      rating: 6,
+      tier: 'gold',
+      techniqueCount: 3,
+      scoredShotCount: 3,
+      updatedAt: null,
+      techniques: rows,
+    });
+    const device = rankFromFacts(
+      rows.map(row => ({
+        ...fact(row.shotType, row.score, at),
+        id: `00000000-0000-4000-8000-00000000000${rows.indexOf(row) + 1}`,
+      })),
+    );
+    expect(account.techniques.map(t => t.shotType)).toEqual([
+      'Dink',
+      '_serve',
+      'backhand',
+    ]);
+    expect(device).toEqual(account);
   });
 });
 
