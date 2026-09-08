@@ -408,7 +408,7 @@ describe('W09-02 — Result → details', () => {
     const renderer = await render(<ResultScreen />);
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
 
-    const links = pressablesByTestId(renderer, BREAKDOWN_LINK);
+    const links = hostByTestId(renderer, BREAKDOWN_LINK);
     expect(links).toHaveLength(1);
     const [link] = links;
     expect(link!.props.accessibilityLabel).toBe('Full breakdown');
@@ -460,14 +460,14 @@ describe('W09-02 — Result → details', () => {
 
   it('the entry lives on the SCORE page only; the later pages and the recap stay as decided', async () => {
     const renderer = await render(<ResultScreen />);
-    expect(pressablesByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(1);
+    expect(hostByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(1);
 
     // Walk every later page: no second entry anywhere, and the recap card
     // keeps its no-link decision.
     let guard = 0;
-    while (pressablesByTestId(renderer, 'result-guide-next').length > 0) {
+    while (hostByTestId(renderer, 'result-guide-next').length > 0) {
       await press(renderer, 'result-guide-next');
-      expect(pressablesByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
+      expect(hostByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
       expect(allText(renderer)).not.toContain('Full breakdown');
       guard += 1;
       expect(guard).toBeLessThan(5);
@@ -479,11 +479,11 @@ describe('W09-02 — Result → details', () => {
     );
 
     // Back to the first page brings the entry back.
-    while (pressablesByTestId(renderer, 'result-guide-back').length > 0) {
+    while (hostByTestId(renderer, 'result-guide-back').length > 0) {
       await press(renderer, 'result-guide-back');
     }
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
-    expect(pressablesByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(1);
+    expect(hostByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(1);
   });
 
   it('an abstained result hosts the breakdown inline and offers no separate entry', async () => {
@@ -496,7 +496,7 @@ describe('W09-02 — Result → details', () => {
     expect(hostByTestId(renderer, 'result-guide-full-breakdown')).toHaveLength(
       1,
     );
-    expect(pressablesByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
+    expect(hostByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
     expect(allText(renderer)).not.toContain('Full breakdown');
   });
 
@@ -507,7 +507,7 @@ describe('W09-02 — Result → details', () => {
     expect(hostByTestId(renderer, 'result-details-breakdown')).toHaveLength(1);
     expect(allText(renderer)).toContain('Full breakdown');
     // The details route never offers the guide's entry back into itself.
-    expect(pressablesByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
+    expect(hostByTestId(renderer, BREAKDOWN_LINK)).toHaveLength(0);
     expect(hostByTestId(renderer, 'result-guide')).toHaveLength(0);
 
     await pressByLabel(renderer, 'Back');
