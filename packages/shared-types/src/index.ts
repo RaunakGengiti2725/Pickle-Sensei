@@ -11,6 +11,7 @@ export * from "./mediaRetention.js";
 export * from "./offlineAuthorization.js";
 export * from "./pickleballTaxonomy.js";
 export * from "./playerRank.js";
+export * from "./scoringDefinition.js";
 export * from "./stabilitySlo.js";
 export * from "./states.js";
 export * from "./techniqueBenchmark.js";

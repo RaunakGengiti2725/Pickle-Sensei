@@ -1,0 +1,1972 @@
+{
+  "schemaVersion": "player-rank-golden-v4",
+  "definitionVersion": "rank-form-weighted-v2",
+  "cases": [
+    {
+      "id": "no-evidence-no-rank",
+      "description": "No analyses at all: the rank is null, never a fabricated Bronze.",
+      "analyses": [],
+      "expected": null
+    },
+    {
+      "id": "low-confidence-rows-never-rank",
+      "description": "Only low_confidence rows (score null): nothing countable remains, so the rank is null.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": null,
+          "resultKind": "low_confidence",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": null,
+          "resultKind": "low_confidence",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "low-confidence-rows-do-not-dilute-scored-evidence",
+      "description": "A newer low_confidence row beside one scored analysis changes nothing: only the scored row counts, and it is the technique's latest capture.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 6.3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": null,
+          "resultKind": "low_confidence",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.3,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6.3,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.2
+        }
+      }
+    },
+    {
+      "id": "single-scored-analysis",
+      "description": "One scored dink at 6.3: technique score equals the raw score, rating equals the technique score, Gold I (6.3 is above 2/3 of the 5-6.5 band).",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 6.3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.3,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6.3,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.2
+        }
+      }
+    },
+    {
+      "id": "absent-source-counts-as-real",
+      "description": "Rows without a `source` field (mobile RealAnalysisFact shape) count as real evidence.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "serve",
+          "overallScore": 7.2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": 7.2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7.2,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 7.2,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 2
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.3
+        }
+      }
+    },
+    {
+      "id": "form-weighted-then-confidence-weighted",
+      "description": "Dink 5.0 (old) then 7.0 (new) → (8·700+7·500)/15 = 6.07; serve 9.0 once → weights 2 vs 1 → round((2·607+900)/3)/100 = 7.05.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "serve",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7.05,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 9,
+            "capturedAt": "2026-08-03T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "dink",
+            "score": 6.07,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 2
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.45
+        }
+      }
+    },
+    {
+      "id": "input-order-does-not-matter",
+      "description": "The previous case with its rows shuffled; the summary is identical.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "serve",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7.05,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 9,
+            "capturedAt": "2026-08-03T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "dink",
+            "score": 6.07,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 2
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.45
+        }
+      }
+    },
+    {
+      "id": "form-window-keeps-newest-eight-with-linear-weights",
+      "description": "Ten dinks scored 1..10 by day: only the newest eight (3..10) define form with weights 8..1, but all ten count as evidence.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 1,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "dink",
+          "overallScore": 4,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-04T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-05T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "shotType": "dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-06T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-07T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "shotType": "dink",
+          "overallScore": 8,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-08T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000009",
+          "shotType": "dink",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-09T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000010",
+          "shotType": "dink",
+          "overallScore": 10,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-10T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7.67,
+        "tier": "diamond",
+        "tierLabel": "Diamond",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 10,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 7.67,
+            "capturedAt": "2026-08-10T10:00:00.000Z",
+            "sampledCount": 8
+          }
+        ],
+        "nextTier": null
+      }
+    },
+    {
+      "id": "same-instant-ties-break-by-id-descending",
+      "description": "Two dinks at the same instant: the higher id is 'newest' (weight 8), the lower id gets weight 7.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 5.7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.84,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 5.84,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 2
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.66
+        }
+      }
+    },
+    {
+      "id": "same-instant-mixed-case-ids-order-by-uuid-bytes",
+      "description": "Ids are compared as lowercase uuid text (Postgres uuid byte order): 'F…' outranks 'e…' even though 'F' < 'e' in raw string order.",
+      "analyses": [
+        {
+          "id": "E0000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "f0000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 8,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.2,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 5.2,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 2
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 1.3
+        }
+      }
+    },
+    {
+      "id": "three-decimal-scores-quantize-on-decimal-text",
+      "description": "6.005 and 2.345 quantize to hundredths on their decimal text (half away from zero, as numeric(4,2) stores them): 6.01 and 2.35, rating 4.18.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 6.005,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": 2.345,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 4.18,
+        "tier": "silver",
+        "tierLabel": "Silver",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6.01,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "serve",
+            "score": 2.35,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "gold",
+          "label": "Gold",
+          "minRating": 5,
+          "pointsNeeded": 0.82
+        }
+      }
+    },
+    {
+      "id": "technique-stage-rounds-half-away-from-zero",
+      "description": "Four dinks 5.01, 5.00, 5.00, 5.01 (oldest→newest): (8·501+7·500+6·500+5·501)/26 = 500.5 → 5.01, not 5.00.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 5.01,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "dink",
+          "overallScore": 5.01,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-04T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.01,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 4,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 5.01,
+            "capturedAt": "2026-08-04T10:00:00.000Z",
+            "sampledCount": 4
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 1.49
+        }
+      }
+    },
+    {
+      "id": "rating-stage-rounds-half-away-from-zero",
+      "description": "Two techniques with one analysis each at 5.00 and 5.01: (500+501)/2 = 500.5 → 5.01.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": 5.01,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.01,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 5.01,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "dink",
+            "score": 5,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 1.49
+        }
+      }
+    },
+    {
+      "id": "confidence-weight-caps-at-five",
+      "description": "Seven dinks at 7.0 and one serve at 7.0: technique weights are min(count,5)=5 and 1; the rating is 7.00 regardless.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-04T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-05T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-06T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "shotType": "dink",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-07T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "shotType": "serve",
+          "overallScore": 7,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-08T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 8,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 7,
+            "capturedAt": "2026-08-07T10:00:00.000Z",
+            "sampledCount": 7
+          },
+          {
+            "shotType": "serve",
+            "score": 7,
+            "capturedAt": "2026-08-08T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "equal-scores-order-techniques-by-shot-type",
+      "description": "Three techniques at 6.2: listed alphabetically by shot type when scores tie.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "volley",
+          "overallScore": 6.2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 6.2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "serve",
+          "overallScore": 6.2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-03T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.2,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 3,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6.2,
+            "capturedAt": "2026-08-02T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "serve",
+            "score": 6.2,
+            "capturedAt": "2026-08-03T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "volley",
+            "score": 6.2,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.3
+        }
+      }
+    },
+    {
+      "id": "score-floor-is-inclusive-bronze-three",
+      "description": "A score of exactly 0 is countable evidence: Bronze III with the full 3.5 points to Silver.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 0,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 0,
+        "tier": "bronze",
+        "tierLabel": "Bronze",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 0,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "silver",
+          "label": "Silver",
+          "minRating": 3.5,
+          "pointsNeeded": 3.5
+        }
+      }
+    },
+    {
+      "id": "silver-floor-is-inclusive",
+      "description": "A rating of exactly 3.5 is Silver (tier floors are inclusive), division III.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 3.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 3.5,
+        "tier": "silver",
+        "tierLabel": "Silver",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 3.5,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "gold",
+          "label": "Gold",
+          "minRating": 5,
+          "pointsNeeded": 1.5
+        }
+      }
+    },
+    {
+      "id": "division-two-starts-at-one-third-of-band",
+      "description": "Gold band is 5-6.5; 5.5 sits exactly on the 1/3 mark → division II.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 5.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.5,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 5.5,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 1
+        }
+      }
+    },
+    {
+      "id": "division-one-starts-at-two-thirds-of-band",
+      "description": "Gold band is 5-6.5; 6.0 sits exactly on the 2/3 mark → division I.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "diamond-floor-has-no-next-tier",
+      "description": "A rating of exactly 7.5 is Diamond III with nextTier null.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 7.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7.5,
+        "tier": "diamond",
+        "tierLabel": "Diamond",
+        "division": 3,
+        "divisionLabel": "III",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 7.5,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": null
+      }
+    },
+    {
+      "id": "top-of-scale-is-diamond-one",
+      "description": "A perfect 10 is Diamond I.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "dink",
+          "overallScore": 10,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 10,
+        "tier": "diamond",
+        "tierLabel": "Diamond",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 10,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": null
+      }
+    },
+    {
+      "id": "same-millisecond-orders-by-microseconds",
+      "description": "Two drives inside one millisecond: SQL keeps timestamptz microseconds, so the .000900 row is newer than .000001 (weights 8 and 7), with a newer millisecond row on top as the reported capture.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000900Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000001Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "drive",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 5.86,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 5.86,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.64
+        }
+      }
+    },
+    {
+      "id": "sub-microsecond-fractions-round-half-even-like-timestamptz",
+      "description": "Seven-digit fractions .0000015 and .0000024 both round to microsecond 2 (rint), so the rows share an instant and id descending decides recency; a newer whole-millisecond row is the reported capture.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.0000015Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.0000024Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "drive",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.14,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 6.14,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.36
+        }
+      }
+    },
+    {
+      "id": "equal-scores-order-techniques-by-code-unit",
+      "description": "Mixed-case and punctuated shot types at one score list in UTF-16 code-unit order (uppercase before underscore before lowercase), as GET /v1/rank orders them — never a locale collation.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "backhand",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "Dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "_serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 3,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "Dink",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "_serve",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "backhand",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "nine-digit-fraction-at-the-top-of-the-window",
+      "description": "A nine-digit fraction (the ingress maximum) is a valid capture; timestamptz rounds it to .123457, one microsecond newer than the .123456 row, so it takes weight 7 behind the newer whole-millisecond row.",
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "serve",
+          "overallScore": 7.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.123456789Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "serve",
+          "overallScore": 5.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.123456Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:01.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6.36,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 3,
+        "techniques": [
+          {
+            "shotType": "serve",
+            "score": 6.36,
+            "capturedAt": "2026-08-01T10:00:01.000Z",
+            "sampledCount": 3
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.14
+        }
+      }
+    }
+  ],
+  "replays": [
+    {
+      "id": "replayed-id-conflicting-content-first-arrival-holds",
+      "description": "One id arrives three times with different content, earliest capture first. The first storable arrival (drive 9) is the analysis; the two later copies are replays the server acknowledges without reading, so they never count. Another arrival order gives another rating (see the late-capture-first case).",
+      "conflicting": true,
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T11:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "shotType": "serve",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-02T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "shotType": "dink",
+          "overallScore": 5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 7,
+        "tier": "platinum",
+        "tierLabel": "Platinum",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "drive",
+            "score": 9,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "dink",
+            "score": 5,
+            "capturedAt": "2026-08-01T09:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "diamond",
+          "label": "Diamond",
+          "minRating": 7.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    },
+    {
+      "id": "replayed-id-conflicting-content-late-capture-arrives-first",
+      "description": "The same conflicting id as above, but the later capture (drive 3) arrives first and therefore holds the id on every plane: SQL stores it and shots_pkey refuses the earlier capture; TS keeps the first storable arrival. Rating differs from capture-order arrival by design.",
+      "conflicting": true,
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "drive",
+          "overallScore": 3,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T11:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "shotType": "drive",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "shotType": "dink",
+          "overallScore": 5.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 4.25,
+        "tier": "silver",
+        "tierLabel": "Silver",
+        "division": 2,
+        "divisionLabel": "II",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 5.5,
+            "capturedAt": "2026-08-01T09:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "drive",
+            "score": 3,
+            "capturedAt": "2026-08-01T11:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "gold",
+          "label": "Gold",
+          "minRating": 5,
+          "pointsNeeded": 0.75
+        }
+      }
+    },
+    {
+      "id": "replayed-id-identical-copies-count-once-in-any-order",
+      "description": "Byte-identical replays of two ids (one copy spelt with an uppercase uuid) count once each; every permutation reproduces this summary on every plane.",
+      "conflicting": false,
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 4,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 4,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "volley",
+          "overallScore": 1,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "shotType": "volley",
+          "overallScore": 1,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T09:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "shotType": "dink",
+          "overallScore": 4,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 2.5,
+        "tier": "bronze",
+        "tierLabel": "Bronze",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 2,
+        "scoredAnalysisCount": 2,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 4,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          },
+          {
+            "shotType": "volley",
+            "score": 1,
+            "capturedAt": "2026-08-01T09:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "silver",
+          "label": "Silver",
+          "minRating": 3.5,
+          "pointsNeeded": 1
+        }
+      }
+    },
+    {
+      "id": "replayed-id-abstention-arriving-first-holds-the-id",
+      "description": "A low_confidence row is storable: it holds its id and contributes nothing, so a scored copy of the same id arriving behind it is a replay and never counts. Nothing scored remains, so the rank is null, not a fabricated Bronze.",
+      "conflicting": true,
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "shotType": "dink",
+          "overallScore": null,
+          "resultKind": "low_confidence",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "shotType": "dink",
+          "overallScore": 9,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "replayed-id-rejected-row-holds-nothing",
+      "description": "A row no plane stores (score above the scale) does not hold its id: the in-domain copy arriving behind it is the analysis on every plane, and the differing copy behind that one is a replay (so arrival order among the stored copies matters, as on the server).",
+      "conflicting": true,
+      "analyses": [
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "shotType": "dink",
+          "overallScore": 10.5,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "shotType": "dink",
+          "overallScore": 6,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000008",
+          "shotType": "dink",
+          "overallScore": 2,
+          "resultKind": "scored",
+          "capturedAt": "2026-08-01T10:00:00.000Z",
+          "source": "real"
+        }
+      ],
+      "expected": {
+        "definitionVersion": "rank-form-weighted-v2",
+        "rating": 6,
+        "tier": "gold",
+        "tierLabel": "Gold",
+        "division": 1,
+        "divisionLabel": "I",
+        "techniqueCount": 1,
+        "scoredAnalysisCount": 1,
+        "techniques": [
+          {
+            "shotType": "dink",
+            "score": 6,
+            "capturedAt": "2026-08-01T10:00:00.000Z",
+            "sampledCount": 1
+          }
+        ],
+        "nextTier": {
+          "key": "platinum",
+          "label": "Platinum",
+          "minRating": 6.5,
+          "pointsNeeded": 0.5
+        }
+      }
+    }
+  ],
+  "rejectedInputs": [
+    {
+      "id": "result-kind-unknown",
+      "description": "An unrecognised resultKind never counts.",
+      "rule": "resultKind",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": null,
+        "resultKind": "scored_draft",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot resultKind"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_result_kind_check"
+        }
+      ]
+    },
+    {
+      "id": "result-kind-beats-score",
+      "description": "A low_confidence row carrying a numeric score is still an abstention: resultKind decides, not the score.",
+      "rule": "resultKind",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "low_confidence",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot resultKind"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_low_confidence_unscored"
+        }
+      ]
+    },
+    {
+      "id": "scored-without-score",
+      "description": "A scored row with a null score has no evidence to count.",
+      "rule": "overallScore",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": null,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot overallScore"
+        },
+        {
+          "layer": "sql",
+          "check": "scored_shots_have_scores"
+        }
+      ]
+    },
+    {
+      "id": "score-above-max",
+      "description": "10.5 is outside the 0-10 domain.",
+      "rule": "overallScore",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 10.5,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot overallScore"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_overall_score_check"
+        }
+      ]
+    },
+    {
+      "id": "score-below-min",
+      "description": "-0.1 is outside the 0-10 domain.",
+      "rule": "overallScore",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": -0.1,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot overallScore"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_overall_score_check"
+        }
+      ]
+    },
+    {
+      "id": "shot-type-empty",
+      "description": "An empty shot type identifies no technique.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot shotType"
+        }
+      ]
+    },
+    {
+      "id": "shot-type-whitespace",
+      "description": "A whitespace-only shot type identifies no technique.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "   ",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot shotType"
+        }
+      ]
+    },
+    {
+      "id": "shot-type-too-long",
+      "description": "A shot type longer than 64 characters is refused.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot shotType"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_text_bounds"
+        }
+      ]
+    },
+    {
+      "id": "source-fixture",
+      "description": "Fixture output must never enter user history or rank a player.",
+      "rule": "source",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "fixture"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot source"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_source_check"
+        }
+      ]
+    },
+    {
+      "id": "captured-before-2000",
+      "description": "Capture instants before 2000-01-01 are outside the storable range.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "1999-12-31T23:59:59.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_captured_at_bounds"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-or-after-2100",
+      "description": "Capture instants from 2100-01-01 on are outside the storable range.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2100-01-01T00:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        },
+        {
+          "layer": "sql",
+          "check": "shots_captured_at_bounds"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-unparseable",
+      "description": "Text that is not an instant has no recency and cannot be stored.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000001",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "not-an-instant",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        },
+        {
+          "layer": "sql",
+          "check": "sqlstate 22007"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-without-zone",
+      "description": "A local-time instant (no Z) is outside the ingress grammar; SQL would read it in the session zone, not as the device meant it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000002",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-with-offset",
+      "description": "A zone offset is outside the ingress grammar even though it names an instant.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000003",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T12:00:00.000+02:00",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-calendar-rollover",
+      "description": "February 30 matches the grammar but is not a calendar date; the ingress round-trips the fields and refuses it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000004",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-02-30T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        },
+        {
+          "layer": "sql",
+          "check": "sqlstate 22008"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-ten-fraction-digits",
+      "description": "Ten fractional digits exceed the ingress grammar (1-9).",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000005",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.0000000001Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        }
+      ]
+    },
+    {
+      "id": "shot-type-surrogate-pairs-exceed-cap",
+      "description": "33 emoji are 66 UTF-16 code units: over the 64 cap the ingress measures with String#length, though only 33 code points.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000006",
+        "shotType": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot shotType"
+        }
+      ]
+    },
+    {
+      "id": "shot-type-embedded-nul",
+      "description": "Postgres text cannot hold U+0000: the wire refuses the row (sqlstate 22021) whichever route it takes, while the Edge parser admits it. TS excludes it so the device never counts what the account plane can never store.",
+      "rule": "shotType",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000007",
+        "shotType": "di\u0000nk",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2026-08-01T10:00:00.000Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "sql",
+          "check": "sqlstate 22021"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-lower-bound-rounds-up-only-in-sql",
+      "description": "1999-12-31T23:59:59.9999995Z stores as 2000-01-01T00:00:00Z (half-even microseconds) so the SQL bounds check admits it, but the Edge parser compares Date.parse milliseconds (…59.999) and refuses it. TS excludes it because not every plane's check admits it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000008",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "1999-12-31T23:59:59.9999995Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "edge",
+          "check": "parseSyncShot capturedAt"
+        }
+      ]
+    },
+    {
+      "id": "captured-at-upper-bound-rounds-up-only-in-sql",
+      "description": "2099-12-31T23:59:59.9999995Z is inside 2099 at millisecond precision, so the Edge parser admits it, but it stores as 2100-01-01T00:00:00Z and shots_captured_at_bounds refuses it. TS excludes it because not every plane's check admits it.",
+      "rule": "capturedAt",
+      "analysis": {
+        "id": "0000000f-0000-4000-8000-000000000009",
+        "shotType": "dink",
+        "overallScore": 7,
+        "resultKind": "scored",
+        "capturedAt": "2099-12-31T23:59:59.9999995Z",
+        "source": "real"
+      },
+      "refusedBy": [
+        {
+          "layer": "sql",
+          "check": "shots_captured_at_bounds"
+        }
+      ]
+    }
+  ]
+}
