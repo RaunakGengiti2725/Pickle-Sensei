@@ -10,11 +10,34 @@ import {
   createBillingLifecycleCallback,
   selectBillingReconciliationRetryAtMs,
   useAccessStore,
+  type AccessStoreState,
 } from '../state/accessStore';
 
 const MIN_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 2_147_483_647;
 let stopCurrent: (() => void) | null = null;
+
+/**
+ * A pending record's own retry deadline governs, except when the last pass
+ * failed before it could attempt the record (the record was already due when
+ * that pass started and its deadline did not move — e.g. the journal could
+ * not be read): then the store's reconciliation backoff bounds the retry.
+ */
+function selectRetryAtMs(state: AccessStoreState): number | null {
+  const retryAt = selectBillingReconciliationRetryAtMs(state);
+  const { status, lastAttemptAtMs, nextAttemptAtMs } = state.reconciliation;
+  if (
+    retryAt === null ||
+    state.pendingFulfilment === null ||
+    status !== 'unavailable' ||
+    lastAttemptAtMs === null ||
+    nextAttemptAtMs === null ||
+    Date.now() < lastAttemptAtMs ||
+    retryAt > lastAttemptAtMs
+  )
+    return retryAt;
+  return Math.max(retryAt, nextAttemptAtMs);
+}
 
 export function stopBillingLifecycle(): void {
   stopCurrent?.();
@@ -74,7 +97,7 @@ export function startBillingLifecycle(owner: string): void {
       state.operation !== 'idle'
     )
       return;
-    const retryAt = initial ? 0 : selectBillingReconciliationRetryAtMs(state);
+    const retryAt = initial ? 0 : selectRetryAtMs(state);
     if (retryAt === null || !Number.isFinite(retryAt)) return;
     const scheduledGeneration = timerGeneration;
     timer = setTimeout(
@@ -100,7 +123,7 @@ export function startBillingLifecycle(owner: string): void {
       state.operation !== 'idle'
     )
       return;
-    const retryAt = selectBillingReconciliationRetryAtMs(state);
+    const retryAt = selectRetryAtMs(state);
     if (
       !initial &&
       (retryAt === null || !Number.isFinite(retryAt) || retryAt > Date.now())
