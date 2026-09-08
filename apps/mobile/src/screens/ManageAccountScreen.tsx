@@ -72,13 +72,7 @@ const SUBSCRIPTION_MANAGEMENT =
         accessibilityLabel: 'Manage subscription in the App Store',
         url: 'https://apps.apple.com/account/subscriptions',
       }
-    : Platform.OS === 'android'
-      ? {
-          storeName: 'Google Play',
-          accessibilityLabel: 'Manage subscription in Google Play',
-          url: 'https://play.google.com/store/account/subscriptions',
-        }
-      : null;
+    : null;
 
 /** Exit survey, question 1 — display order; values are the wire vocabulary
  * (deletion.ts ACCOUNT_DELETION_REASONS). "Something else" stays last. */
@@ -989,7 +983,7 @@ export function ManageAccountScreen() {
               showBrandNotice({
                 title: 'Account deleted',
                 detail:
-                  'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.',
+                  'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store subscription.',
                 tone: 'success',
                 eyebrow: 'DELETION CONFIRMED',
               });
