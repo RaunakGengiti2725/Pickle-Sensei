@@ -865,6 +865,44 @@ describe('GUARD build dependency security', () => {
     },
   );
 
+  it('guards the config process without loading the transform-worker toolchain, then hands workers the upstream interface', () => {
+    const counts = JSON.parse(
+      successfulProbe(
+        `
+        const assert = require('node:assert/strict');
+        __pickleProbeMark('config-start');
+        const config = require('./metro.config.js');
+        __pickleProbeMark('config-ready');
+        const loaded = id => require.cache[require.resolve(id)] !== undefined;
+        assert.ok(loaded(config.transformerPath));
+        assert.equal(loaded('metro-transform-worker'), false);
+        assert.equal(loaded('@babel/core'), false);
+        const { getAssetSize } = require('metro/private/Assets');
+        __pickleProbeMark('parser-start');
+        assert.throws(
+          () => getAssetSize('png', Buffer.from(process.argv[1], 'hex'), 'disguised.png'),
+          { name: 'TypeError', message: 'disabled file type: icns' },
+        );
+        __pickleProbeMark('parser-rejected');
+        const configModules = Object.keys(require.cache).length;
+        const wrapped = require(config.transformerPath);
+        const upstream = require('metro-transform-worker');
+        assert.equal(wrapped.transform, upstream.transform);
+        assert.equal(wrapped.getCacheKey, upstream.getCacheKey);
+        assert.ok(loaded('@babel/core'));
+        console.log(JSON.stringify({
+          configModules,
+          workerModules: Object.keys(require.cache).length,
+        }));
+        __pickleProbeMark('source-complete');
+      `,
+        [unsafeImageFixtures[0]!.hex],
+      ),
+    ) as { configModules: number; workerModules: number };
+    expect(counts.configModules).toBeGreaterThan(0);
+    expect(counts.configModules).toBeLessThan(counts.workerModules);
+  });
+
   it('fresh Metro workers fail fast on disguised files without loading the app config', () => {
     const config = workerConfig();
     const { tmpdir } = require('node:os') as { tmpdir: () => string };
