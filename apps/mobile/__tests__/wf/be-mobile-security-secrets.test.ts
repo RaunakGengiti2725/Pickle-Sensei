@@ -1665,6 +1665,7 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(filesMatching(/['"]react-native-keychain['"]/).sort()).toEqual([
       'src/account/deletionCapabilityVault.ts',
       'src/account/sessionVault.ts',
+      'src/data/trustedTime.ts',
     ]);
     const vault = read('src/account/sessionVault.ts');
     expect(vault).toMatch(/AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY/);
@@ -1685,6 +1686,17 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(deletionVault).toContain('parseDeletionSecret(value)');
     expect(deletionVault).not.toMatch(
       /refreshToken|accessToken|bearerToken|identityToken|idToken|authorizationCode|resetGenericPassword|sessionVault|sessionLifecycle/,
+    );
+    // The trusted-time anchor is a device-only, credential-free Keychain
+    // record in its own service; it never reads or clears another vault.
+    const trustedTimeModule = read('src/data/trustedTime.ts');
+    expect(trustedTimeModule).toContain(
+      "'com.picklesensei.offline.trusted-time'",
+    );
+    expect(trustedTimeModule).toContain('AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY');
+    expect(trustedTimeModule).toContain('cloudSync: false');
+    expect(trustedTimeModule).not.toMatch(
+      /refreshToken|accessToken|bearerToken|identityToken|idToken|authorizationCode|resetGenericPassword|sessionVault|sessionLifecycle|account-deletion/,
     );
     // No other durable store is in play for anything: AsyncStorage is not a
     // dependency of the app's sources at all.

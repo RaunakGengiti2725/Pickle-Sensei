@@ -5,6 +5,7 @@ import type {
 import type { SyncTransport } from './sync';
 import { reportApiUnauthorized } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { responseDateHeader, trustedTime } from './trustedTime';
 
 /**
  * API client. Base URL/token come from app state; in development the API's
@@ -210,6 +211,12 @@ async function request<T>(
         json?.error?.code ?? 'unknown',
         json?.error?.message ?? response.statusText,
       );
+    }
+    if (token) {
+      void trustedTime.observeServerTime({
+        dateHeader: responseDateHeader(response),
+        authenticated: true,
+      });
     }
     return json as T;
   };
