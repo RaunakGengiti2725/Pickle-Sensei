@@ -409,9 +409,11 @@ already covers the outcome states (`unknown_technique`, `no_stroke`,
 `partial`, `aborted`) and orthogonal attributes; the dataset manifest schema
 already requires consent terms, rights review, provenance, human review and
 athlete-group splits per record. No schema or validator gap was found that the §4 labeling
-work would need, so **no new files were added under `ml/`** — duplicating the
-schemas would have been worse than leaving them alone. The concrete gap is
-label _volume_, not label _schema_.
+work would need, so the 2026-09-04 audit **added no new files under `ml/`** —
+duplicating the schemas would have been worse than leaving them alone. The
+concrete gap is label _volume_, not label _schema_. (The validation protocol
+package in §5.1 below is separate tooling for the external study — it does not
+duplicate the annotation or manifest schemas.)
 
 ### 5.1 Scientific validation protocol package (W06-06, 2026-09-08)
 
