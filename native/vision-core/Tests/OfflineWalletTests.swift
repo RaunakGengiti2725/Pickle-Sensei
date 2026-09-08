@@ -440,7 +440,8 @@ final class OfflineWalletTests: XCTestCase {
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: -1) }
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 1.5) }
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: Double.nan) }
-    assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 9_007_199_254_740_993) }
+    XCTAssertEqual(try OfflineWallet.revision(fromBridge: 9_007_199_254_740_991), 9_007_199_254_740_991)
+    assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 9_007_199_254_740_992) }
   }
 
   // MARK: - Typed failures and integrity primitives

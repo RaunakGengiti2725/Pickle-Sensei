@@ -20,7 +20,8 @@ Pod::Spec.new do |s|
     "Sources/Core/PoseMotionTrail.swift",
     "Sources/Core/PoseReadinessEvaluator.swift",
     "Sources/Core/TemporalStrokeDetector.swift",
-    "Sources/Core/VisionCoreContracts.swift"
+    "Sources/Core/VisionCoreContracts.swift",
+    "Sources/Core/OfflineWallet.swift"
   ]
   s.swift_version = "5.9"
   s.dependency "React-Core"
