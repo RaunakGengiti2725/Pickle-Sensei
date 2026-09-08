@@ -12,7 +12,6 @@ import {
   AccessibilityInfo,
   AppState,
   BackHandler,
-  findNodeHandle,
   Platform,
   StyleSheet,
   View,
@@ -36,6 +35,7 @@ import {
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import {
   identifyCeremony,
+  restoreFocusToTrigger,
   useSurfaceSlot,
   type CeremonyTrigger,
 } from './ceremonyRequest';
@@ -258,9 +258,7 @@ export function CeremonyHost(props: {
     if (presentation !== null) return;
     const trigger = focusTrigger.current;
     focusTrigger.current = null;
-    if (trigger === null) return;
-    const handle = findNodeHandle(trigger);
-    if (handle != null) AccessibilityInfo.setAccessibilityFocus(handle);
+    if (trigger !== null) restoreFocusToTrigger(trigger);
   }, [presentation]);
 
   const announce = useCallback(
