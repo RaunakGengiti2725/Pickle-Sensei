@@ -46,10 +46,19 @@ def load_records() -> dict[str, dict]:
     return out
 
 
-def plan(done: set[str], active: set[str], blocked: set[str], max_active: int = MAX_ACTIVE) -> list[dict]:
+def plan(done: set[str], active: set[str], blocked: set[str], max_active: int = MAX_ACTIVE, group_limit: int = 1) -> list[dict]:
+    """`group_limit` packages may hold the same serial group at once (1 = exclusive);
+    above 1 the wave's frozen integration order resolves the shared paths and a
+    conflicting later candidate is requeued (see program_lib.run_wave)."""
+    if group_limit < 1:
+        raise ValueError("group_limit must be >= 1")
     m = pl.load_manifest(MANIFEST)
     pk = {p["id"]: p for p in m["packages"]}
-    busy_groups = {g for a in active for g in pk[a]["serial_groups"]}
+    load: dict[str, int] = {}
+    for a in active:
+        for g in pk[a]["serial_groups"]:
+            load[g] = load.get(g, 0) + 1
+    busy_groups = {g for g, n in load.items() if n >= group_limit}
     ready = []
     for p in m["packages"]:
         if p["id"] in done or p["id"] in active or p["id"] in blocked:
@@ -64,14 +73,15 @@ def plan(done: set[str], active: set[str], blocked: set[str], max_active: int = 
     ready.sort(key=lambda p: (SEV[p["severity"]], len([q for q in m["packages"] if p["id"] in q["deps"]]) * -1, p["id"]))
     # greedy: fill free slots without introducing a serial-group clash among the chosen
     chosen: list[dict] = []
-    taken = set(busy_groups)
+    taken = dict(load)
     for p in ready:
         if len(chosen) + len(active) >= max_active:
             break
-        if set(p["serial_groups"]) & taken:
+        if any(taken.get(g, 0) >= group_limit for g in p["serial_groups"]):
             continue
         chosen.append(p)
-        taken |= set(p["serial_groups"])
+        for g in p["serial_groups"]:
+            taken[g] = taken.get(g, 0) + 1
     return chosen
 
 
@@ -137,10 +147,11 @@ def main() -> None:
     ap.add_argument("--blocked", default="")
     ap.add_argument("--runs", default=os.path.join(LEDGER_DIR, "runs.json"))
     ap.add_argument("--max-active", type=int, default=MAX_ACTIVE, help="owner-approved concurrent package limit")
+    ap.add_argument("--group-limit", type=int, default=1, help="packages allowed per serial group at once (1 = exclusive)")
     args = ap.parse_args()
     split = lambda s: {x for x in s.split(",") if x}  # noqa: E731
     if args.cmd == "plan":
-        for p in plan(split(args.done), split(args.active), split(args.blocked), args.max_active):
+        for p in plan(split(args.done), split(args.active), split(args.blocked), args.max_active, args.group_limit):
             print(f"{p['id']}\t{p['severity']}\t{p['plane']}\t{','.join(p['serial_groups']) or '-'}\t{p['title']}")
     else:
         out = ledger(args.runs)

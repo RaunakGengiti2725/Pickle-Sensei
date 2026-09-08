@@ -41,6 +41,7 @@ MANIFEST_PATH = {manifest_path!r}
 MANIFEST_SHA256 = {manifest_sha!r}
 OUT_ROOT = {out_root!r}
 MODE = {mode!r}
+SERIAL_GROUP_LIMIT = {serial_group_limit!r}
 PACKAGES = {packages!r}
 
 
@@ -63,6 +64,7 @@ async def main():
         out_root=OUT_ROOT,
         runtime=runtime,
         mode=MODE,
+        serial_group_limit=SERIAL_GROUP_LIMIT,
     )
     log("WAVE RESULT " + program_lib.dump(summary))
 
@@ -81,6 +83,7 @@ def make(
     mode: str | None = None,
     requeue: dict[str, str] | None = None,
     requeue_blocked: dict[str, str] | None = None,
+    serial_group_limit: int = 1,
 ) -> str:
     sys.path.insert(0, HERE)
     import program_lib  # noqa: E402
@@ -100,16 +103,18 @@ def make(
     both = set(requeue) & set(requeue_blocked)
     if both:
         raise SystemExit(f"package given both --requeue and --requeue-blocked: {sorted(both)}")
+    if serial_group_limit < 1:
+        raise SystemExit("--group-limit must be >= 1")
     packages: list[dict] = []
-    held: dict[str, str] = {}
+    held: dict[str, list[str]] = {}
     for pid in package_ids:
         pkg = program_lib.find_package(manifest, pid)
         if pkg["plane"] in ("external", "docs"):
             raise SystemExit(f"{pid} is {pkg['plane']}-plane; not launchable")
         for group in pkg.get("serial_groups", []):
-            if group in held:
-                raise SystemExit(f"{pid} and {held[group]} both hold serial group {group}; not in one wave")
-            held[group] = pid
+            held.setdefault(group, []).append(pid)
+            if len(held[group]) > serial_group_limit:
+                raise SystemExit(f"serial group {group} held by {held[group]} exceeds --group-limit {serial_group_limit}")
         entry: dict = {"package_id": pid, "max_rounds": max_rounds, "start_round": 1, "prior": None}
         if pid in requeue:
             with open(requeue[pid], encoding="utf8") as fh:
@@ -146,6 +151,7 @@ def make(
                 manifest_sha=manifest["manifest_sha256"],
                 out_root=LEDGER_ROOT,
                 mode=mode,
+                serial_group_limit=serial_group_limit,
                 packages=packages,
             )
         )
@@ -160,6 +166,7 @@ if __name__ == "__main__":
     ap.add_argument("--branch", default=INTEGRATION_BRANCH)
     ap.add_argument("--mode", default=None)
     ap.add_argument("--rounds", type=int, default=2)
+    ap.add_argument("--group-limit", type=int, default=1, help="max packages per serial group in this wave (1 = exclusive); >1 records the frozen integration order and requeues conflicts")
     ap.add_argument("--requeue", action="append", default=[], metavar="PKG=RECORD_JSON")
     ap.add_argument("--requeue-blocked", action="append", default=[], metavar="PKG=RECORD_JSON", help="BLOCKED_EXTERNAL record whose manifest entry was amended since")
     a = ap.parse_args()
@@ -176,4 +183,4 @@ if __name__ == "__main__":
             raise SystemExit(f"--requeue expects PKG=RECORD_JSON, got {item!r}")
         rq[pid] = rec
     pkgs = [p.strip() for p in a.pkgs.split(",") if p.strip()]
-    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq, requeue_blocked=rqb))
+    print(make(a.base_sha, a.wave_id, pkgs, integration_branch=a.branch, mode=a.mode, max_rounds=a.rounds, requeue=rq, requeue_blocked=rqb, serial_group_limit=a.group_limit))

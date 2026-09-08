@@ -478,8 +478,8 @@ class WaveTests(unittest.TestCase):
             s[f"adversary-{p['id']}-r1"] = good_adv(p)
         return s
 
-    def _wave(self, rt: FakeRuntime, packages: list[dict], tmp: str) -> dict:
-        return asyncio.run(pl.run_wave(wave_id="wave-9", packages=packages, base_sha=BASE, integration_branch="codex/x", manifest_path=MANIFEST, out_root=tmp, runtime=rt.runtime()))
+    def _wave(self, rt: FakeRuntime, packages: list[dict], tmp: str, group_limit: int = 1) -> dict:
+        return asyncio.run(pl.run_wave(wave_id="wave-9", packages=packages, base_sha=BASE, integration_branch="codex/x", manifest_path=MANIFEST, out_root=tmp, runtime=rt.runtime(), serial_group_limit=group_limit))
 
     def test_packages_run_concurrently_with_one_registration_and_own_records(self):
         started: list[str] = []
@@ -526,6 +526,31 @@ class WaveTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self._wave(rt, [{"package_id": self.a["id"]}, {"package_id": other["id"]}], tmp)
         self.assertIsNone(rt.registered)
+
+    def test_group_limit_allows_bounded_sharing_and_freezes_integration_order(self):
+        shared = set(self.a["serial_groups"])
+        others = [p for p in self.m["packages"] if p["id"] != self.a["id"] and set(p.get("serial_groups", [])) & shared and p["plane"] not in ("external", "docs")]
+        other = others[0]
+        rt = FakeRuntime(self._script(self.a, other))
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = self._wave(rt, [{"package_id": self.a["id"]}, {"package_id": other["id"]}], tmp, group_limit=2)
+        self.assertEqual(summary["serial_group_limit"], 2)
+        group = next(iter(shared & set(other["serial_groups"])))
+        self.assertEqual(summary["integration_order"][group], [self.a["id"], other["id"]])
+        self.assertEqual(summary["packages"][other["id"]]["status"], "ACCEPTED")
+        # a third holder of the same group still exceeds the limit
+        third = next((p for p in others[1:] if set(p["serial_groups"]) & {group}), None)
+        if third is not None:
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(ValueError):
+                    self._wave(FakeRuntime({}), [{"package_id": self.a["id"]}, {"package_id": other["id"]}, {"package_id": third["id"]}], tmp, group_limit=2)
+        with self.assertRaises(ValueError):
+            self._wave(FakeRuntime({}), [{"package_id": self.a["id"]}], "/nonexistent", group_limit=0)
+
+    def test_implement_prompt_states_shared_path_discipline(self):
+        text = pl.implement_prompt(self.a, BASE, "codex/x", 1, None, self.m.get("serial_group_paths"))
+        self.assertIn("SHARED-PATH DISCIPLINE", text)
+        self.assertIn("integrated in a fixed order", text)
 
     def test_requeue_entry_continues_round_numbering(self):
         p = self.a

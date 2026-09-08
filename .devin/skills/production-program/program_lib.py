@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.5"
+LIB_VERSION = "2026-09-08.6"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -327,6 +327,7 @@ BASE_SHA: {base_sha}
 WORK PACKAGE (frozen manifest entry):
 {dump({k: pkg[k] for k in ('id', 'title', 'objective', 'severity', 'source_ids', 'plane', 'write_paths', 'additive_shared_paths', 'serial_groups', 'acceptance', 'invariants', 'external_blocker')})}
 SERIAL GROUP PATHS (edit only under groups this package holds): {dump(serial_group_paths)}
+SHARED-PATH DISCIPLINE: other packages holding the same serial group may be implemented concurrently from the same BASE_SHA and are integrated in a fixed order; keep every edit to a shared path (Edge `index.ts`, migrations, lockfiles, shared types) minimal and additive — new module files plus the smallest wiring hunk, new migration files with a fresh later timestamp, no reformatting or moving of existing code — so the integrator can merge cleanly. A candidate that conflicts at integration is returned to you with the conflict recorded.
 
 PROCEDURE:
 1. Reproduce/scope: read the relevant code and tests; write down (in `summary`) the concrete defect or gap you found on BASE_SHA with file:line references. If the package objective is already fully satisfied on BASE_SHA, prove it with the acceptance commands and say so — do not invent work.
@@ -458,6 +459,7 @@ async def run_wave(
     out_root: str,
     runtime: Runtime,
     mode: str | None = None,
+    serial_group_limit: int = 1,
 ) -> dict:
     """Run many packages concurrently inside ONE workflow run.
 
@@ -465,19 +467,30 @@ async def run_wave(
     each package gets its own implementer → (reviewer ‖ adversary) → judge
     pipeline and its own ledger record. The wave is registered once; a
     package whose pipeline raises is recorded as FAILED rather than taking the
-    wave down. Serial-group exclusivity is the scheduler's job (schedule.py
-    plan) — this function refuses a wave that violates it.
+    wave down.
+
+    Serial groups bound how many packages may edit the same shared paths at
+    once: at most `serial_group_limit` per group (1 = exclusive). Above 1 the
+    packages are implemented from the same base on isolated branches and the
+    wave summary records the frozen `integration_order` per group (the order
+    packages appear in the wave); the integrator merges in that order and a
+    conflicting later candidate is requeued with the conflict as a finding —
+    it is never dropped or merged by force.
     """
+    if serial_group_limit < 1:
+        raise ValueError("serial_group_limit must be >= 1")
     manifest = load_manifest(manifest_path)
     ids = [p["package_id"] for p in packages]
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate package ids in wave")
-    held: dict[str, str] = {}
+    held: dict[str, list[str]] = {}
     for pid in ids:
         for group in find_package(manifest, pid).get("serial_groups", []):
-            if group in held:
-                raise ValueError(f"{pid} and {held[group]} both hold serial group {group}")
-            held[group] = pid
+            held.setdefault(group, []).append(pid)
+            if len(held[group]) > serial_group_limit:
+                raise ValueError(
+                    f"serial group {group} held by {held[group]} exceeds the wave limit of {serial_group_limit}"
+                )
     slots = sum(int(p.get("max_rounds", MAX_ROUNDS_DEFAULT)) for p in packages)
     await runtime.register_workflow(
         {
@@ -513,6 +526,8 @@ async def run_wave(
     summary = {
         "wave_id": wave_id,
         "base_sha": base_sha,
+        "serial_group_limit": serial_group_limit,
+        "integration_order": {g: pids for g, pids in held.items() if len(pids) > 1},
         "packages": {r["package_id"]: {k: r.get(k) for k in ("status", "candidate", "agent_counts")} for r in records},
     }
     _save(os.path.join(out_root, "_waves"), f"{wave_id}.json", summary)
