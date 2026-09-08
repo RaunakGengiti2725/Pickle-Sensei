@@ -254,7 +254,7 @@ export function createDeletionOperationTransport(dependencies: {
     context: DeletionTransportContext,
     path: string,
     bearer: string,
-    body: Record<string, string>,
+    body: Readonly<Record<string, unknown>>,
   ): Promise<HttpReply> {
     const controller = new AbortController();
     const url = `${context.apiOrigin}/v1/me/${path}`;
@@ -337,11 +337,12 @@ export function createDeletionOperationTransport(dependencies: {
     },
     async request(
       context: DeletionTransportContext,
+      body: Readonly<Record<string, unknown>> = {},
     ): Promise<DeletionRequestReply> {
       if (!isCurrent(context)) return { kind: 'stale' };
       const bearer = sessionBearer(context);
       if (!bearer) return { kind: 'session_required' };
-      const reply = await post(context, 'delete-request', bearer, {});
+      const reply = await post(context, 'delete-request', bearer, body);
       if (reply.kind !== 'response') return reply;
       if (reply.status !== 200) return failure(reply, false);
       const request = parseDeletionRequest(reply.payload);

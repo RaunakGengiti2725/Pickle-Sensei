@@ -272,5 +272,27 @@ export function createDeletionOperationJournal(db: LocalDb) {
         return after;
       });
     },
+    /** Deletes exactly the row `value` describes (same revision and
+     * document); a sealed receipt is never removed. */
+    async remove(value: DeletionJournalEntry): Promise<boolean> {
+      const entry = parseDeletionJournalEntry(value);
+      if (!entry) throw new DeletionFoundationError('journal_invalid');
+      if (entry.receipt !== null)
+        throw new DeletionFoundationError('journal_conflict');
+      await initialize();
+      return transaction(async tx => {
+        const current = await readIn(tx, entry.jobId);
+        if (!current) return false;
+        if (JSON.stringify(current) !== JSON.stringify(entry))
+          throw new DeletionFoundationError('stale_handler');
+        const result = await tx.execute(
+          `DELETE FROM ${TABLE} WHERE job_id = ? AND revision = ?`,
+          [entry.jobId, entry.revision],
+        );
+        if (result.rowsAffected !== 1)
+          throw new DeletionFoundationError('stale_handler');
+        return true;
+      });
+    },
   });
 }
