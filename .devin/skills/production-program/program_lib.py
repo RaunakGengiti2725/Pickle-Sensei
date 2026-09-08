@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.2"
+LIB_VERSION = "2026-09-08.3"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -51,7 +51,10 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ACCEPTANCE_ITEM_DOC = (
     "one object per acceptance criterion id: {id, status: PASS|FAIL|UNKNOWN, command, exit_code, "
     "executed, passed, failed, skipped, artifact, note}. executed/passed/failed/skipped are integers "
-    "(use 0 for non-test checks). artifact is a repo-relative log path or uploaded attachment URL."
+    "(use 0 for non-test checks). artifact is a repo-relative log path or uploaded attachment URL. "
+    "For kind=regress: exit_code is the PROOF outcome (0 only when the new tests FAIL on BASE_SHA and PASS "
+    "on the candidate; otherwise 1) and executed/passed/failed/skipped are the candidate (HEAD) run's counts; "
+    "put the base run's exit code, counts and log in `note`."
 )
 
 IMPLEMENT_SCHEMA = {
@@ -290,10 +293,12 @@ READ FIRST: `AGENTS.md` (in full), `REVIEW.md`, `docs/prompts/codex-production-r
 ENVIRONMENT: Node 22+ and pnpm 10.15.1 (root `pnpm install --frozen-lockfile`); `apps/mobile` uses npm ONLY (`cd apps/mobile && npm ci`) — never pnpm inside it; Deno via `curl -fsSL https://deno.land/install.sh | sh` if missing (frozen checks use `npx --yes deno@2.5.6`). Postgres for Edge/RLS tests: `docker compose up -d postgres postgres_test` or `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=pg postgres:16` and export `XC_PG_URL`/`DATABASE_URL_TEST` accordingly. `./supabase/tests/run_rls_tests.sh` needs Docker or a local initdb.
 HARD RULES (a violation makes the candidate ineligible): never weaken, skip, delete or reorder tests; no `|| true`, `--passWithNoTests`, `@ts-ignore`, `any`, `eslint-disable`, inflated timeouts or force-exit; never edit an applied migration (add a new file with a LATER timestamp than every existing one); never widen grants/RLS or weaken session checks; never touch production Supabase (ucqnaiwqwjtgvlduiuib), App Store Connect, secrets, dashboards or diagnostics transport; never store/print secrets; never add Android/3D/Live Court/guest-entry scope; user-facing copy must follow APP_STORE_SUBMISSION.md (no Android, Google Play, guest mode, Live Court, DUPR, competitor names, accuracy %, superlatives or AI-coach-equivalence claims); no fabricated labels, metrics, approvals or benchmark numbers; do not modify existing code comments; do not run pnpm inside apps/mobile; do not run Debug and Release builds against the same Pods directory.
 PRODUCT INVARIANTS: charge only after BOTH independently validated outputs are durably delivered; partial/failed/withheld/replayed results never consume a credit; ambiguous commitment => HOLD/recover (never refund or retry under a new operation id); offline allocation != consumption and a disconnected device's allocation is never auto-reclaimed; Pro offline leases <= 7 days and <= verified entitlement expiry; never persist provider/access tokens (only the approved refresh credential in the Keychain vault); preserve owner generations, original-owner recovery and cross-account isolation; unknown/corrupt state never becomes fabricated empty history, authorization, successful deletion or completed payment recovery; count free ratings through lifetime_scored_count() under access_lock_key(); diagnostics transport stays disabled.
+SCOPE POLICY: `write_paths` is the declared scope. When wiring the objective end to end genuinely requires editing another file, you may do so ONLY if that file is not under a `serial_group_paths` prefix of a group this package does not hold (see the manifest's `serial_group_paths`), the edit is the minimum needed for the objective, and you list it in `out_of_scope_files` with a one-line justification; the independent reviewer decides whether it is justified wiring (`scope_violation=false`) or a violation. A new module that nothing in the shipping app calls does not meet an objective phrased as behaviour.
 EVIDENCE STANDARD: every claim carries the exact command, exit code, executed/passed/failed/skipped counts and an artifact (log path in the repo checkout or an uploaded attachment URL via the upload_attachment tool). Label statements VERIFIED (you ran it) / INFERRED (read code) / UNKNOWN. A skipped, ignored, unavailable or zero-test run is NOT a pass. Missing output is UNVERIFIED, never PASS. Do not report 'PASS' prose — fill the structured acceptance objects exactly."""
 
 
-def implement_prompt(pkg: dict, base_sha: str, integration_branch: str, round_no: int, prior: dict | None) -> str:
+def implement_prompt(pkg: dict, base_sha: str, integration_branch: str, round_no: int, prior: dict | None, serial_group_paths: dict | None = None) -> str:
+    serial_group_paths = serial_group_paths or {}
     branch = f"devin/pp/{pkg['id'].lower()}/impl-r{round_no}"
     prior_block = ""
     if prior:
@@ -303,11 +308,12 @@ def implement_prompt(pkg: dict, base_sha: str, integration_branch: str, round_no
 ROLE: IMPLEMENTER for work package {pkg['id']} ({pkg['parent']}) — round {round_no}.
 BASE_SHA: {base_sha}
 WORK PACKAGE (frozen manifest entry):
-{dump({k: pkg[k] for k in ('id', 'title', 'objective', 'severity', 'source_ids', 'plane', 'write_paths', 'additive_shared_paths', 'acceptance', 'invariants', 'external_blocker')})}
+{dump({k: pkg[k] for k in ('id', 'title', 'objective', 'severity', 'source_ids', 'plane', 'write_paths', 'additive_shared_paths', 'serial_groups', 'acceptance', 'invariants', 'external_blocker')})}
+SERIAL GROUP PATHS (edit only under groups this package holds): {dump(serial_group_paths)}
 
 PROCEDURE:
 1. Reproduce/scope: read the relevant code and tests; write down (in `summary`) the concrete defect or gap you found on BASE_SHA with file:line references. If the package objective is already fully satisfied on BASE_SHA, prove it with the acceptance commands and say so — do not invent work.
-2. Write the regression test FIRST (it must fail on BASE_SHA), commit it separately, then implement the minimal, general fix inside `write_paths`. Files listed in `additive_shared_paths` may only receive additive edits (new exports/routes), never behavioural changes to existing symbols. Any other file is out of scope — report it in `out_of_scope_files` and expect rejection.
+2. Write the regression test FIRST (it must fail on BASE_SHA), commit it separately, then implement the minimal, general fix inside `write_paths`, wired into the shipping code path so the objective is met as behaviour (not just as an unused module). Files listed in `additive_shared_paths` may only receive additive edits (new exports/routes), never behavioural changes to existing symbols. Any other file follows the SCOPE POLICY above — list it in `out_of_scope_files` with its justification.
 3. Run EVERY acceptance command from the manifest exactly as written (substitute placeholders with the real paths you created), plus root `pnpm format:check` and `git diff --check`. Fix all failures at the root cause.
 4. Commit with clear messages, push branch `{branch}` to origin (this exact name), and record `head_sha` = `git rev-parse HEAD` (40 hex).
 5. If a pre-existing failure on BASE_SHA is unrelated to your package, record it in `baseline_failures_observed` with the exact command — do not fix it silently, do not skip it, and do not count it as your failure unless it is inside your write_paths.
@@ -316,7 +322,8 @@ PROCEDURE:
 Fill `acceptance_results` with one object per acceptance id: {ACCEPTANCE_ITEM_DOC}{prior_block}"""
 
 
-def review_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict) -> str:
+def review_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict, serial_group_paths: dict | None = None) -> str:
+    serial_group_paths = serial_group_paths or {}
     return f"""{common_rules(base_sha, integration_branch)}
 
 ROLE: INDEPENDENT REVIEWER for work package {pkg['id']}. You did NOT write this candidate. Your job is to re-verify, not to trust.
@@ -328,7 +335,8 @@ IMPLEMENTER CLAIMS (verify, do not copy):
 {dump({k: impl.get(k) for k in ('approach', 'files_changed', 'out_of_scope_files', 'acceptance_results', 'regression_tests_added', 'baseline_failures_observed', 'residual_risks', 'summary')})}
 
 PROCEDURE:
-1. `git diff --stat {base_sha}..{impl['head_sha']}` — every changed file must be under write_paths (or an additive edit inside additive_shared_paths). Set `scope_violation` accordingly.
+1. `git diff --stat {base_sha}..{impl['head_sha']}` — every changed file must be under write_paths, an additive edit inside additive_shared_paths, or a justified minimal wiring edit listed in the implementer's `out_of_scope_files` that is NOT under a serial-group path this package does not hold (serial groups held: {dump(pkg.get('serial_groups', []))}; group paths: {dump(serial_group_paths)}). Set `scope_violation` accordingly and name the offending file in `blocking_issues`.
+1b. The objective must be met as shipped behaviour: if the candidate adds a module that no shipping code path calls, that is a blocking issue, not a note.
 2. Re-run EVERY acceptance command yourself on the candidate; fill `acceptance_reverified` with YOUR counts and exit codes (one object per acceptance id: {ACCEPTANCE_ITEM_DOC}).
 3. Regression proof: check out BASE_SHA, copy ONLY the new/changed test files from the candidate over it, run them — they must FAIL; then run them on the candidate — they must PASS. Set `regression_fails_on_base`.
 4. Read the whole diff against REVIEW.md and the package invariants: security (RLS, grants, session checks), billing conservation, owner isolation, copy rules, no test weakening, no bypasses, no comment edits, no migration history edits. List each violation in `invariant_violations`.
@@ -388,6 +396,32 @@ async def _call(rt: Runtime, ledger: list[dict], role: str, prompt: str, schema:
     return result
 
 
+def prior_from_record(record: dict) -> tuple[dict | None, int]:
+    """Findings the next round must resolve and the next round number, from a saved REQUEUE record.
+
+    Only the last round that produced an implementer result contributes findings;
+    the round counter continues so candidate branch names never collide.
+    """
+    rounds = record.get("rounds") or []
+    next_round = max([int(r.get("round", 0)) for r in rounds] + [0]) + 1
+    for rnd in reversed(rounds):
+        impl = rnd.get("implement")
+        if not impl:
+            continue
+        decision = rnd.get("decision") or {}
+        rev = rnd.get("review") or {}
+        adv = rnd.get("adversary") or {}
+        findings: dict[str, Any] = {"judge": decision.get("reasons", [])}
+        if rev:
+            findings["review_blocking"] = rev.get("blocking_issues", [])
+            findings["review_invariants"] = rev.get("invariant_violations", [])
+        if adv:
+            findings["adversary_breaks"] = blocking_breaks(adv)
+            findings["adversary_branch"] = adv.get("attack_branch", "")
+        return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}, next_round
+    return None, next_round
+
+
 async def run_package(
     *,
     package_id: str,
@@ -399,14 +433,19 @@ async def run_package(
     max_rounds: int = MAX_ROUNDS_DEFAULT,
     mode: str | None = None,
     wave_id: str = "",
+    start_round: int = 1,
+    prior: dict | None = None,
 ) -> dict:
     if not SHA_RE.match(base_sha):
         raise ValueError(f"base_sha must be a full 40-hex sha, got {base_sha!r}")
+    if start_round < 1:
+        raise ValueError("start_round must be >= 1")
     manifest = load_manifest(manifest_path)
     pkg = find_package(manifest, package_id)
+    sg_paths = manifest.get("serial_group_paths", {})
     if pkg["plane"] in ("external", "docs"):
         raise ValueError(f"{package_id} is {pkg['plane']}-plane and is not launched through this workflow")
-    out_dir = os.path.join(out_root, package_id)
+    out_dir = os.path.join(out_root, package_id, wave_id) if wave_id else os.path.join(out_root, package_id)
     ledger: list[dict] = []
     record: dict[str, Any] = {
         "lib_version": LIB_VERSION,
@@ -416,6 +455,8 @@ async def run_package(
         "wave_id": wave_id,
         "base_sha": base_sha,
         "integration_branch": integration_branch,
+        "start_round": start_round,
+        "requeued_from": prior,
         "rounds": [],
         "agents": ledger,
         "status": "RUNNING",
@@ -437,13 +478,12 @@ async def run_package(
         }
     )
 
-    prior: dict | None = None
     final_status = "REQUEUE"
-    for round_no in range(1, max_rounds + 1):
-        runtime.log(f"{package_id} round {round_no}/{max_rounds} on base {base_sha[:12]}")
+    for round_no in range(start_round, start_round + max_rounds):
+        runtime.log(f"{package_id} round {round_no}/{start_round + max_rounds - 1} on base {base_sha[:12]}")
         rnd: dict[str, Any] = {"round": round_no}
         record["rounds"].append(rnd)
-        impl = await _call(runtime, ledger, "implementer", implement_prompt(pkg, base_sha, integration_branch, round_no, prior), IMPLEMENT_SCHEMA, f"implement-{package_id}-r{round_no}", "implement", minutes, mode)
+        impl = await _call(runtime, ledger, "implementer", implement_prompt(pkg, base_sha, integration_branch, round_no, prior, sg_paths), IMPLEMENT_SCHEMA, f"implement-{package_id}-r{round_no}", "implement", minutes, mode)
         rnd["implement"] = impl
         _save(out_dir, "record.json", record)
         if impl is None:
@@ -463,12 +503,12 @@ async def run_package(
             prior = {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": {"judge": rnd["decision"]["reasons"]}}
             _save(out_dir, "record.json", record)
             continue
-        # Review and adversary run sequentially: the program-wide active-worker limit is two,
-        # and two package runs execute concurrently.
-        rev = await _call(runtime, ledger, "reviewer", review_prompt(pkg, base_sha, integration_branch, impl), REVIEW_SCHEMA, f"review-{package_id}-r{round_no}", "review", minutes, mode)
+        # Reviewer and adversary examine the same frozen candidate sha independently, so they run concurrently.
+        rev, adv = await asyncio.gather(
+            _call(runtime, ledger, "reviewer", review_prompt(pkg, base_sha, integration_branch, impl, sg_paths), REVIEW_SCHEMA, f"review-{package_id}-r{round_no}", "review", minutes, mode),
+            _call(runtime, ledger, "adversary", adversary_prompt(pkg, base_sha, integration_branch, impl), ADVERSARY_SCHEMA, f"adversary-{package_id}-r{round_no}", "adversary", minutes, mode),
+        )
         rnd["review"] = rev
-        _save(out_dir, "record.json", record)
-        adv = await _call(runtime, ledger, "adversary", adversary_prompt(pkg, base_sha, integration_branch, impl), ADVERSARY_SCHEMA, f"adversary-{package_id}-r{round_no}", "adversary", minutes, mode)
         rnd["adversary"] = adv
         _save(out_dir, "record.json", record)
         if rev is None or adv is None:

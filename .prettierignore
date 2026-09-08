@@ -25,6 +25,11 @@ docs/HANDOFF_V3.md
 docs/DECISIONS.md
 .testing/
 .pytest_cache/
+# Production-program frozen inputs and machine-written ledger records: the
+# manifest hash is taken over its canonical JSON bytes and records are written
+# by the coordinator; reformatting them rewrites provenance.
+.devin/program/manifest.json
+.devin/program/ledger/
 # Supabase CLI local state + committed bench result artifacts (provenance bytes)
 supabase/.temp/
 tools/mac-bench/results/

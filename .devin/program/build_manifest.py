@@ -17,7 +17,7 @@ import hashlib
 import json
 import os
 
-MANIFEST_VERSION = "2026-09-08.1"
+MANIFEST_VERSION = "2026-09-08.2"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 CONTINUATION_BRANCH = "codex/production-continuation-20260907"
 HANDOFF_SHA = "c23d16013b9872cdba7541329c9151d23045090b"
@@ -31,6 +31,7 @@ SERIAL_GROUPS = {
     "shared-types": "packages/shared-types public contract",
     "mobile-data": "apps/mobile/src/data (db/repository/sync/offlineCapabilities) shared runtime",
     "mobile-billing": "apps/mobile/src/billing + accessStore",
+    "mobile-analysis": "apps/mobile/src/analysis (runCaptureAnalysis/runJournal) shared pipeline",
     "mobile-navigation": "apps/mobile/src/navigation + App.tsx + CeremonyHost",
     "native-pod": "apps/mobile/ios/LocalPods/PickleNative + Podfile/Podfile.lock",
     "native-managed-media": "native/managed-media Swift package",
@@ -38,6 +39,25 @@ SERIAL_GROUPS = {
     "ci-scripts": "scripts/*.sh and .github/workflows",
     "docs-packet": "docs/RELEASE_READINESS_2026-09-07.md and readiness docs (integration writer only)",
 }
+
+# Path prefixes each serial group owns. A package may edit a file under one of
+# these prefixes only if it holds that group; reviewers grade any other edit
+# there as a scope violation even when it looks like harmless wiring.
+SERIAL_GROUP_PATHS = {
+    "edge-index": ["supabase/functions/api/index.ts"],
+    "sql": ["supabase/migrations/", "supabase/tests/"],
+    "shared-types": ["packages/shared-types/src/"],
+    "mobile-data": ["apps/mobile/src/data/"],
+    "mobile-billing": ["apps/mobile/src/billing/", "apps/mobile/src/state/accessStore.ts"],
+    "mobile-analysis": ["apps/mobile/src/analysis/"],
+    "mobile-navigation": ["apps/mobile/src/navigation/", "apps/mobile/App.tsx", "apps/mobile/src/flow/CeremonyHost.tsx"],
+    "native-pod": ["apps/mobile/ios/LocalPods/", "apps/mobile/ios/Podfile", "apps/mobile/ios/Podfile.lock"],
+    "native-managed-media": ["native/managed-media/"],
+    "release-identity": ["apps/mobile/ios/fastlane/", "apps/mobile/ios/PickleSensei.xcodeproj/", "apps/mobile/scripts/release-identity.mjs"],
+    "ci-scripts": ["scripts/", ".github/workflows/"],
+    "docs-packet": ["docs/RELEASE_READINESS_2026-09-07.md"],
+}
+assert set(SERIAL_GROUP_PATHS) == set(SERIAL_GROUPS)
 
 # Acceptance templates. `kind` tells the judge how to grade the record:
 #   test    -> exit 0, executed > 0, failed == 0, skipped == 0
@@ -223,7 +243,7 @@ pkg(
     "In runCaptureAnalysis/runJournal and accessStore, a partial outcome (mechanics without validated benchmark) must settle as non-chargeable, must not decrement the local free-rating view, and Result must render an explicit 'benchmark unavailable' state (no invented confidence).",
     severity="P0", source_ids=["W01", "W06-SOFTWARE"], plane="cloud", deps=["W01-04"],
     write_paths=["apps/mobile/src/analysis/", "apps/mobile/src/state/accessStore.ts", "apps/mobile/src/screens/ResultScreen.tsx", "apps/mobile/__tests__/w01PartialOutcome.test.tsx"],
-    serial_groups=["mobile-billing"],
+    serial_groups=["mobile-billing", "mobile-analysis"],
     acceptance=[mobile_jest("__tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx", "partial-outcome suites pass"), regress("partial outcome leaves free-rating count unchanged"), MOBILE_TSC, MOBILE_LINT],
 )
 pkg(
@@ -231,7 +251,7 @@ pkg(
     "Add a mobile client for GET /v1/analysis/release-policy with bounded cache, canonical-bytes/SHA-256 verification (mirror releasePolicy.ts), and gate numerical publication on an active policy. Offline with a cached valid policy inside its validity window is allowed; no policy ⇒ mechanics-only partial.",
     severity="P0", source_ids=["W01", "W06-SOFTWARE"], plane="cloud", deps=["W01-05"],
     write_paths=["apps/mobile/src/analysis/releasePolicyClient.ts", "apps/mobile/src/data/api.ts", "apps/mobile/__tests__/releasePolicyClient.test.ts"],
-    serial_groups=["mobile-data"], additive_shared_paths=["apps/mobile/src/data/api.ts"],
+    serial_groups=["mobile-data", "mobile-analysis"], additive_shared_paths=["apps/mobile/src/data/api.ts"],
     acceptance=[mobile_jest("__tests__/releasePolicyClient.test.ts", "policy client suite passes"), regress("tampered policy bytes rejected; withdrawn policy blocks numerical output"), MOBILE_TSC, MOBILE_LINT],
 )
 
@@ -249,7 +269,7 @@ pkg(
 pkg(
     "W02-02", "W02", "Owner-generation fencing adversarial matrix across account switch during in-flight analysis",
     "Add tests switching accounts at each stage of an in-flight analysis (capture, extraction, settlement, sync) and assert no row is written under the new owner, no result leaks, and original-owner recovery restores the pending result.",
-    severity="P0", source_ids=["W02"], plane="cloud",
+    severity="P0", source_ids=["W02"], plane="cloud", serial_groups=["mobile-data"],
     write_paths=["apps/mobile/src/data/accountScope.ts", "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts"],
     acceptance=[mobile_jest("__tests__/w02OwnerFencingMatrix.test.ts", "owner fencing matrix passes"), regress("at least one stage leaks on base or the matrix documents existing coverage per stage"), MOBILE_TSC, MOBILE_LINT],
 )
@@ -275,29 +295,29 @@ pkg(
 pkg(
     "W03-01", "W03", "Conservative import event admission (reject ambiguous/unsupported clips before extraction)",
     "Implement admission rules for imported clips: duration bounds, frame-rate/rotation/codec support, single-stroke plausibility; ambiguous clips are rejected with a precise reason and never reach charging.",
-    severity="P0", source_ids=["W03"], plane="cloud",
-    write_paths=["apps/mobile/src/camera/importAdmission.ts", "apps/mobile/__tests__/w03ImportAdmission.test.ts"],
+    severity="P0", source_ids=["W03"], plane="cloud", serial_groups=["mobile-analysis"],
+    write_paths=["apps/mobile/src/camera/importAdmission.ts", "apps/mobile/src/analysis/runCaptureAnalysis.ts", "apps/mobile/__tests__/w03ImportAdmission.test.ts", "apps/mobile/__tests__/importedCaptureAnalysis.test.ts"],
     acceptance=[mobile_jest("__tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts", "import admission suites pass"), regress("ambiguous clip admitted on base"), MOBILE_TSC, MOBILE_LINT],
 )
 pkg(
     "W03-02", "W03", "Versioned time mapping between imported media timestamps and analysis frames",
     "Introduce a versioned time-mapping contract (media pts ↔ frame index ↔ analysis window) with round-trip tests, recorded in the run journal so a future mapping version cannot reinterpret stored results.",
-    severity="P1", source_ids=["W03"], plane="cloud", deps=["W03-01"],
+    severity="P1", source_ids=["W03"], plane="cloud", serial_groups=["mobile-analysis"], deps=["W03-01"],
     write_paths=["apps/mobile/src/camera/timeMapping.ts", "apps/mobile/src/analysis/runJournalSchema.ts", "apps/mobile/__tests__/w03TimeMapping.test.ts"],
     acceptance=[mobile_jest("__tests__/w03TimeMapping.test.ts __tests__/runJournal*.test.ts", "time mapping suites pass"), MOBILE_TSC, MOBILE_LINT],
 )
 pkg(
     "W03-03", "W03", "Byte identity of imported originals (digest verified before and after processing)",
     "Ensure the imported original's byte digest is computed once, stored with the run, re-verified before retry, and any mismatch aborts the retry with a user-visible reason (nativeMediaIdentity.ts).",
-    severity="P1", source_ids=["W03"], plane="cloud", deps=["W03-01"],
+    severity="P1", source_ids=["W03"], plane="cloud", serial_groups=["mobile-analysis"], deps=["W03-01"],
     write_paths=["apps/mobile/src/camera/nativeMediaIdentity.ts", "apps/mobile/src/analysis/originalAnalysisOperations.ts", "apps/mobile/__tests__/w03ByteIdentity.test.ts"],
     acceptance=[mobile_jest("__tests__/w03ByteIdentity.test.ts", "byte identity suite passes"), regress("mutated original accepted for retry on base"), MOBILE_TSC, MOBILE_LINT],
 )
 pkg(
     "W03-04", "W03", "Measured import resource bounds (memory/time) with an enforced budget",
     "Measure import extraction memory and wall time on committed fixtures, define an explicit budget, and enforce it with cancellation (bounded buffers/queues), recording the measurement method in docs/CAPTURE_EVIDENCE.md.",
-    severity="P1", source_ids=["W03"], plane="cloud", deps=["W03-01"],
-    write_paths=["apps/mobile/src/camera/importBudget.ts", "apps/mobile/__tests__/w03ImportBudget.test.ts", "docs/CAPTURE_EVIDENCE.md"],
+    severity="P1", source_ids=["W03"], plane="cloud", serial_groups=["mobile-analysis"], deps=["W03-01"],
+    write_paths=["apps/mobile/src/camera/importBudget.ts", "apps/mobile/src/analysis/runCaptureAnalysis.ts", "apps/mobile/__tests__/w03ImportBudget.test.ts", "docs/CAPTURE_EVIDENCE.md"],
     acceptance=[mobile_jest("__tests__/w03ImportBudget.test.ts", "budget enforcement suite passes"), MOBILE_TSC, MOBILE_LINT],
 )
 
@@ -360,7 +380,7 @@ pkg(
 pkg(
     "W05-02", "W05", "Trusted time source for lease expiry (monotonic + last-known server time, tamper-resistant)",
     "Implement a trusted-time module combining server time from authenticated responses, monotonic uptime and Keychain-persisted anchors; a backwards wall-clock jump cannot extend a lease.",
-    severity="P0", source_ids=["W05"], plane="cloud",
+    severity="P0", source_ids=["W05"], plane="cloud", serial_groups=["mobile-data"],
     write_paths=["apps/mobile/src/data/trustedTime.ts", "apps/mobile/__tests__/w05TrustedTime.test.ts"],
     acceptance=[mobile_jest("__tests__/w05TrustedTime.test.ts", "trusted time suite passes"), regress("clock rollback extends lease on base"), MOBILE_TSC, MOBILE_LINT],
 )
@@ -569,7 +589,7 @@ pkg("W09-03", "W09", "Early notification tap before navigation ready is queued a
     acceptance=[mobile_jest("__tests__/w09EarlyNotificationTap.test.tsx __tests__/notification*.test.ts*", "notification suites pass"), regress("early tap dropped or double-dispatched on base"), MOBILE_TSC, MOBILE_LINT])
 pkg("W09-04", "W09", "Overlay/ceremony arbiter: one modal surface at a time, focus restored, VoiceOver announcements",
     "CeremonyHost arbitrates rank-up, permissions, paywall and error overlays so only one is presented, focus returns to the trigger, and announcements are made once.",
-    severity="P0", source_ids=["W09"], plane="cloud",
+    severity="P0", source_ids=["W09"], plane="cloud", serial_groups=["mobile-navigation"],
     write_paths=["apps/mobile/src/flow/CeremonyHost.tsx", "apps/mobile/src/flow/ceremonyRequest.ts", "apps/mobile/__tests__/w09OverlayArbiter.test.tsx"],
     acceptance=[mobile_jest("__tests__/w09OverlayArbiter.test.tsx __tests__/ceremonyArbitration.test.tsx", "overlay arbiter suites pass"), MOBILE_TSC, MOBILE_LINT])
 pkg("W09-05", "W09", "Bottom tab bar and headings at largest Dynamic Type: no clipped labels, 44pt targets",
@@ -617,7 +637,7 @@ pkg("W09-11", "W09", "Native screen-matrix acceptance on simulator (XCUITest smo
 pkg("W10-01", "W10", "Native crash envelope scrubbing (paths, emails, tokens, media ids) with tests",
     "Implement a native + JS scrubber for diagnostic envelopes with a deny-list of PII/media identifiers and allow-list of fields; transport stays disabled.",
     severity="P0", source_ids=["W10"], plane="cloud",
-    write_paths=["apps/mobile/src/diagnostics/privacy.ts", "apps/mobile/src/diagnostics/scrub.ts", "apps/mobile/src/diagnostics/__tests__/"],
+    write_paths=["apps/mobile/src/diagnostics/privacy.ts", "apps/mobile/src/diagnostics/scrub.ts", "apps/mobile/src/diagnostics/sentry.ts", "apps/mobile/src/diagnostics/__tests__/"],
     acceptance=[mobile_jest("src/diagnostics", "diagnostics suites pass"), regress("PII sample survives scrubbing on base"), MOBILE_TSC, MOBILE_LINT])
 pkg("W10-02", "W10", "Bounded offline diagnostic retention (size/age caps, oldest-first eviction)",
     "Diagnostic buffer on disk has hard size and age caps with deterministic eviction and corruption tolerance; never blocks the UI thread.",
@@ -626,7 +646,7 @@ pkg("W10-02", "W10", "Bounded offline diagnostic retention (size/age caps, oldes
     acceptance=[mobile_jest("src/diagnostics", "diagnostics suites pass"), MOBILE_TSC, MOBILE_LINT])
 pkg("W10-03", "W10", "Release identity tags for diagnostics derived from the immutable candidate (no runtime increment)",
     "Diagnostics envelope carries version/build/commit from a generated release identity file produced at build time; transport remains disabled by default and gated by explicit approval flags.",
-    severity="P1", source_ids=["W10", "W11"], plane="cloud", deps=["W11-08"],
+    severity="P1", source_ids=["W10", "W11"], plane="cloud", deps=["W11-08", "W10-01"],
     write_paths=["apps/mobile/src/diagnostics/sentry.ts", "apps/mobile/src/config/releaseIdentity.ts", "apps/mobile/src/diagnostics/__tests__/"],
     acceptance=[mobile_jest("src/diagnostics", "diagnostics suites pass"), MOBILE_TSC, MOBILE_LINT])
 
@@ -788,6 +808,7 @@ def main() -> None:
         "continuation_branch": CONTINUATION_BRANCH,
         "handoff_sha": HANDOFF_SHA,
         "serial_groups": SERIAL_GROUPS,
+        "serial_group_paths": SERIAL_GROUP_PATHS,
         "packages": sorted(P, key=lambda p: p["id"]),
     }
     canonical = json.dumps(body, sort_keys=True, ensure_ascii=False, indent=2) + "\n"

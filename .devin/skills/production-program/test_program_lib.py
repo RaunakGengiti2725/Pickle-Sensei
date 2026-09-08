@@ -355,6 +355,81 @@ class OrchestrationTests(unittest.TestCase):
         self.assertIn("You did NOT write this candidate", rp)
         self.assertIn(HEAD, rp)
 
+    def test_prompts_carry_serial_group_ownership(self):
+        sg = self.m["serial_group_paths"]
+        ip = pl.implement_prompt(self.pkg, BASE, "codex/x", 1, None, sg)
+        self.assertIn("apps/mobile/src/analysis/", ip)
+        self.assertIn("SCOPE POLICY", ip)
+        rp = pl.review_prompt(self.pkg, BASE, "codex/x", good_impl(self.pkg), sg)
+        self.assertIn("mobile-analysis", rp)
+        self.assertIn("no shipping code path calls", rp)
+
+    def test_review_and_adversary_run_concurrently_on_same_candidate(self):
+        started: list[str] = []
+        release = asyncio.Event()
+
+        class Rt(FakeRuntime):
+            async def agent(self, prompt, **kw):
+                if kw["phase"] in ("review", "adversary"):
+                    started.append(kw["phase"])
+                    if len(started) == 2:
+                        release.set()
+                    await asyncio.wait_for(release.wait(), 2)
+                return await super().agent(prompt, **kw)
+
+        rt = Rt({f"implement-{self.pid}-r1": good_impl(self.pkg), f"review-{self.pid}-r1": good_review(self.pkg), f"adversary-{self.pid}-r1": good_adv(self.pkg)})
+        rec = run(rt, self.pid)
+        self.assertEqual(rec["status"], "ACCEPTED")
+        self.assertEqual(sorted(started), ["adversary", "review"])
+
+    def test_requeue_continues_round_numbering_with_prior_findings(self):
+        rev1 = good_review(self.pkg)
+        rev1["verdict"] = "reject"
+        rev1["blocking_issues"] = ["admission not wired into runCaptureAnalysis"]
+        adv1 = good_adv(self.pkg)
+        adv1["breaks"] = [{"severity": "P1", "title": "two strokes fused", "repro": "npx jest y"}, {"severity": "P3", "title": "nit", "repro": "n/a"}]
+        adv1["attack_branch"] = "devin/pp/attack/x"
+        rt1 = FakeRuntime({f"implement-{self.pid}-r1": good_impl(self.pkg), f"review-{self.pid}-r1": rev1, f"adversary-{self.pid}-r1": adv1})
+        first = run(rt1, self.pid, max_rounds=1, wave_id="pilot")
+        self.assertEqual(first["status"], "REQUEUE")
+        prior, start = pl.prior_from_record(first)
+        self.assertEqual(start, 2)
+        self.assertEqual(prior["head_sha"], HEAD)
+        self.assertEqual(prior["findings"]["review_blocking"], rev1["blocking_issues"])
+        self.assertEqual([b["title"] for b in prior["findings"]["adversary_breaks"]], ["two strokes fused"])
+        self.assertEqual(prior["findings"]["adversary_branch"], "devin/pp/attack/x")
+
+        seen_prompts: list[str] = []
+
+        class Rt(FakeRuntime):
+            async def agent(self, prompt, **kw):
+                seen_prompts.append(prompt)
+                return await super().agent(prompt, **kw)
+
+        impl2 = good_impl(self.pkg)
+        impl2["branch"] = f"devin/pp/{self.pid.lower()}/impl-r2"
+        rt2 = Rt({f"implement-{self.pid}-r2": impl2, f"review-{self.pid}-r2": good_review(self.pkg), f"adversary-{self.pid}-r2": good_adv(self.pkg)})
+        second = run(rt2, self.pid, max_rounds=1, wave_id="wave-1", start_round=start, prior=prior)
+        self.assertEqual(second["status"], "ACCEPTED")
+        self.assertEqual(second["candidate"]["round"], 2)
+        self.assertEqual(second["start_round"], 2)
+        self.assertEqual(second["requeued_from"], prior)
+        self.assertEqual(rt2.calls[0], f"implement-{self.pid}-r2")
+        self.assertIn("admission not wired into runCaptureAnalysis", seen_prompts[0])
+        self.assertIn("two strokes fused", seen_prompts[0])
+
+    def test_prior_from_record_without_implementer_result(self):
+        prior, start = pl.prior_from_record({"rounds": [{"round": 1, "implement": None, "decision": {"reasons": ["implementer session failed"]}}]})
+        self.assertIsNone(prior)
+        self.assertEqual(start, 2)
+
+    def test_wave_id_scopes_the_record_directory(self):
+        rt = FakeRuntime({f"implement-{self.pid}-r1": good_impl(self.pkg), f"review-{self.pid}-r1": good_review(self.pkg), f"adversary-{self.pid}-r1": good_adv(self.pkg)})
+        with tempfile.TemporaryDirectory() as tmp:
+            asyncio.run(pl.run_package(package_id=self.pid, base_sha=BASE, integration_branch="codex/x", manifest_path=MANIFEST, out_root=tmp, runtime=rt.runtime(), wave_id="wave-7"))
+            with open(os.path.join(tmp, self.pid, "wave-7", "record.json"), encoding="utf8") as fh:
+                self.assertEqual(json.load(fh)["status"], "ACCEPTED")
+
 
 if __name__ == "__main__":
     unittest.main()

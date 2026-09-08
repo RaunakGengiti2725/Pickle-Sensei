@@ -1,8 +1,8 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "ed7605718402a91d27d636a12b934f39abf81fb19591c6234f9af6e4df012c7b",
-  "manifest_version": "2026-09-08.1",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
   "packages": [
     {
       "acceptance": [
@@ -854,7 +854,8 @@
       "parent": "W01",
       "plane": "cloud",
       "serial_groups": [
-        "mobile-billing"
+        "mobile-billing",
+        "mobile-analysis"
       ],
       "severity": "P0",
       "source_ids": [
@@ -912,7 +913,8 @@
       "parent": "W01",
       "plane": "cloud",
       "serial_groups": [
-        "mobile-data"
+        "mobile-data",
+        "mobile-analysis"
       ],
       "severity": "P0",
       "source_ids": [
@@ -1016,7 +1018,9 @@
       "objective": "Add tests switching accounts at each stage of an in-flight analysis (capture, extraction, settlement, sync) and assert no row is written under the new owner, no result leaks, and original-owner recovery restores the pending result.",
       "parent": "W02",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-data"
+      ],
       "severity": "P0",
       "source_ids": [
         "W02"
@@ -1144,7 +1148,9 @@
       "objective": "Implement admission rules for imported clips: duration bounds, frame-rate/rotation/codec support, single-stroke plausibility; ambiguous clips are rejected with a precise reason and never reach charging.",
       "parent": "W03",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-analysis"
+      ],
       "severity": "P0",
       "source_ids": [
         "W03"
@@ -1152,7 +1158,9 @@
       "title": "Conservative import event admission (reject ambiguous/unsupported clips before extraction)",
       "write_paths": [
         "apps/mobile/src/camera/importAdmission.ts",
-        "apps/mobile/__tests__/w03ImportAdmission.test.ts"
+        "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+        "apps/mobile/__tests__/w03ImportAdmission.test.ts",
+        "apps/mobile/__tests__/importedCaptureAnalysis.test.ts"
       ]
     },
     {
@@ -1189,7 +1197,9 @@
       "objective": "Introduce a versioned time-mapping contract (media pts ↔ frame index ↔ analysis window) with round-trip tests, recorded in the run journal so a future mapping version cannot reinterpret stored results.",
       "parent": "W03",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-analysis"
+      ],
       "severity": "P1",
       "source_ids": [
         "W03"
@@ -1241,7 +1251,9 @@
       "objective": "Ensure the imported original's byte digest is computed once, stored with the run, re-verified before retry, and any mismatch aborts the retry with a user-visible reason (nativeMediaIdentity.ts).",
       "parent": "W03",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-analysis"
+      ],
       "severity": "P1",
       "source_ids": [
         "W03"
@@ -1287,7 +1299,9 @@
       "objective": "Measure import extraction memory and wall time on committed fixtures, define an explicit budget, and enforce it with cancellation (bounded buffers/queues), recording the measurement method in docs/CAPTURE_EVIDENCE.md.",
       "parent": "W03",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-analysis"
+      ],
       "severity": "P1",
       "source_ids": [
         "W03"
@@ -1295,6 +1309,7 @@
       "title": "Measured import resource bounds (memory/time) with an enforced budget",
       "write_paths": [
         "apps/mobile/src/camera/importBudget.ts",
+        "apps/mobile/src/analysis/runCaptureAnalysis.ts",
         "apps/mobile/__tests__/w03ImportBudget.test.ts",
         "docs/CAPTURE_EVIDENCE.md"
       ]
@@ -1640,7 +1655,9 @@
       "objective": "Implement a trusted-time module combining server time from authenticated responses, monotonic uptime and Keychain-persisted anchors; a backwards wall-clock jump cannot extend a lease.",
       "parent": "W05",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-data"
+      ],
       "severity": "P0",
       "source_ids": [
         "W05"
@@ -2832,7 +2849,9 @@
       "objective": "CeremonyHost arbitrates rank-up, permissions, paywall and error overlays so only one is presented, focus returns to the trigger, and announcements are made once.",
       "parent": "W09",
       "plane": "cloud",
-      "serial_groups": [],
+      "serial_groups": [
+        "mobile-navigation"
+      ],
       "severity": "P0",
       "source_ids": [
         "W09"
@@ -3208,6 +3227,7 @@
       "write_paths": [
         "apps/mobile/src/diagnostics/privacy.ts",
         "apps/mobile/src/diagnostics/scrub.ts",
+        "apps/mobile/src/diagnostics/sentry.ts",
         "apps/mobile/src/diagnostics/__tests__/"
       ]
     },
@@ -3280,7 +3300,8 @@
       "additive_shared_paths": [],
       "competing": 1,
       "deps": [
-        "W11-08"
+        "W11-08",
+        "W10-01"
       ],
       "estimate_minutes": 60,
       "external_blocker": null,
@@ -3785,10 +3806,58 @@
     }
   ],
   "repo": "RaunakGengiti2725/Pickle-Sensei",
+  "serial_group_paths": {
+    "ci-scripts": [
+      "scripts/",
+      ".github/workflows/"
+    ],
+    "docs-packet": [
+      "docs/RELEASE_READINESS_2026-09-07.md"
+    ],
+    "edge-index": [
+      "supabase/functions/api/index.ts"
+    ],
+    "mobile-analysis": [
+      "apps/mobile/src/analysis/"
+    ],
+    "mobile-billing": [
+      "apps/mobile/src/billing/",
+      "apps/mobile/src/state/accessStore.ts"
+    ],
+    "mobile-data": [
+      "apps/mobile/src/data/"
+    ],
+    "mobile-navigation": [
+      "apps/mobile/src/navigation/",
+      "apps/mobile/App.tsx",
+      "apps/mobile/src/flow/CeremonyHost.tsx"
+    ],
+    "native-managed-media": [
+      "native/managed-media/"
+    ],
+    "native-pod": [
+      "apps/mobile/ios/LocalPods/",
+      "apps/mobile/ios/Podfile",
+      "apps/mobile/ios/Podfile.lock"
+    ],
+    "release-identity": [
+      "apps/mobile/ios/fastlane/",
+      "apps/mobile/ios/PickleSensei.xcodeproj/",
+      "apps/mobile/scripts/release-identity.mjs"
+    ],
+    "shared-types": [
+      "packages/shared-types/src/"
+    ],
+    "sql": [
+      "supabase/migrations/",
+      "supabase/tests/"
+    ]
+  },
   "serial_groups": {
     "ci-scripts": "scripts/*.sh and .github/workflows",
     "docs-packet": "docs/RELEASE_READINESS_2026-09-07.md and readiness docs (integration writer only)",
     "edge-index": "supabase/functions/api/index.ts and the __wf__ suite share one Deno entry point",
+    "mobile-analysis": "apps/mobile/src/analysis (runCaptureAnalysis/runJournal) shared pipeline",
     "mobile-billing": "apps/mobile/src/billing + accessStore",
     "mobile-data": "apps/mobile/src/data (db/repository/sync/offlineCapabilities) shared runtime",
     "mobile-navigation": "apps/mobile/src/navigation + App.tsx + CeremonyHost",
