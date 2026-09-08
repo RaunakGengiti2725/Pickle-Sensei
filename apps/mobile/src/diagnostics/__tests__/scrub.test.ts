@@ -1,4 +1,3 @@
-import type { ErrorEvent } from '@sentry/react-native';
 import {
   minimizeDiagnosticEvent,
   type DiagnosticEnvelope,
@@ -305,7 +304,7 @@ function dirtyNativeEvent() {
   };
 }
 
-function expectedNativeEvent(): ErrorEvent {
+function expectedNativeEvent() {
   return {
     type: undefined,
     platform: 'cocoa',
@@ -500,7 +499,7 @@ describe('diagnostic deny-list', () => {
     expect(scrubDiagnosticText(`hash ${'f'.repeat(40)} lost`)).toBe(
       'hash [redacted] lost',
     );
-    expect(scrubDiagnosticText(`blob ${'QUJD'.repeat(12)}+/== lost`)).toBe(
+    expect(scrubDiagnosticText(`blob ${'QUJD'.repeat(12)}+A== lost`)).toBe(
       'blob [redacted] lost',
     );
     expect(scrubDiagnosticText('call +1 (415) 555-0100 now')).toBe(
@@ -520,7 +519,6 @@ describe('diagnostic deny-list', () => {
       '__pthread_kill',
       'std::__1::basic_string<char>::append',
       'com.picklesensei@1.0+1',
-      'app:///main.jsbundle',
       'sentry.cocoa.react-native',
       'iPhone15,2',
       '18.6.2',
@@ -529,6 +527,7 @@ describe('diagnostic deny-list', () => {
       expect(scrubDiagnosticText(text)).toBe(text);
       expect(findDeniedDiagnosticContent(text)).toBeNull();
     }
+    expect(findDeniedDiagnosticContent('app:///main.jsbundle')).toBeNull();
     expect(
       findDeniedDiagnosticContent(minimizeDiagnosticEvent(jsEvent(), identity)),
     ).toBeNull();
