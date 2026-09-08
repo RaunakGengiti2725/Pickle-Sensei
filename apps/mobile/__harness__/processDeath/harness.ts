@@ -82,6 +82,18 @@ export interface ScenarioResult {
   readonly server: ServerSnapshot;
 }
 
+const CHILD_VARIABLE_PREFIX = 'PD_';
+
+/** The parent's own environment minus every harness variable: a launch is
+ * armed only by the `PD_*` values its spec sets, never by ambient ones. */
+function hermeticEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !name.startsWith(CHILD_VARIABLE_PREFIX),
+    ),
+  );
+}
+
 export function writeFixture(dir: string): string {
   const { sequence, window } = generateSwingSequence();
   const sidecar = serializePoseSequence(sequence);
@@ -144,7 +156,7 @@ export function launchChild(env: ChildEnvironment): Promise<LaunchResult> {
       ],
       {
         cwd: MOBILE_ROOT,
-        env: { ...process.env, ...env },
+        env: { ...hermeticEnvironment(), ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
