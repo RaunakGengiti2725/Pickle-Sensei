@@ -8,15 +8,14 @@ import {
   type RuntimeDiagnosticsConfig,
 } from '../config/runtimeConfig';
 import {
-  createFilteredTransport,
   diagnosticErrorType,
   diagnosticsIdentity,
   diagnosticsRelease,
-  minimizeDiagnosticEvent,
   type DiagnosticOrigin,
   type DiagnosticsIdentity,
   type DiagnosticTransportFactory,
 } from './privacy';
+import { createScrubbedTransport, scrubDiagnosticEvent } from './scrub';
 
 export const NATIVE_DIAGNOSTICS_STATUS = 'blocked_unverified_native_filtering';
 
@@ -144,7 +143,7 @@ export function optionsForDiagnostics(
     initialScope: {},
     tunnel: undefined,
     beforeSend: event =>
-      releaseIdentity ? minimizeDiagnosticEvent(event, releaseIdentity) : null,
+      releaseIdentity ? scrubDiagnosticEvent(event, releaseIdentity) : null,
     beforeBreadcrumb: () => null,
     beforeSendTransaction: () => null,
     beforeSendLog: () => null,
@@ -158,7 +157,7 @@ export function optionsForDiagnostics(
     transport: options => {
       try {
         return releaseIdentity
-          ? createFilteredTransport(makeTransport(options), releaseIdentity)
+          ? createScrubbedTransport(makeTransport(options), releaseIdentity)
           : disabledTransport;
       } catch {
         return disabledTransport;
@@ -209,7 +208,7 @@ export function createErrorReporter(
             stackFrames = [];
           }
         }
-        const event = minimizeDiagnosticEvent(
+        const event = scrubDiagnosticEvent(
           {
             type: undefined,
             platform: 'javascript',
