@@ -144,7 +144,7 @@ individual severity/refinement is recorded in the dated entries below.
   gate detected crashes only. No auth safeguard was relaxed.
   CocoaPods also normalized comments/empty sections in the Xcode project;
   commit that generated output before the next clean candidate run.
-- **H05-NOTICES, P1, IN_PROGRESS / LOCAL_BINARY:** fresh built Release
+- **H05-NOTICES, P1, IN_PROGRESS / LOCAL_INTEGRATION:** fresh built Release
   app passed `generate-third-party-notices.mjs --check-app` with explicit
   source-map path and both expected SHA-256 hashes. Evidence:
   `artifacts/readiness-20260907-baseline/phase0-binary-notices.log`.
@@ -153,7 +153,7 @@ individual severity/refinement is recorded in the dated entries below.
   This proves membership/resource delivery for that pair, not rights,
   distribution signing or App Store clearance. Recheck the final binary.
 
-- **P0-NATIVE launch verification, P1, FIXED / SIMULATOR:** Xcode's
+- **P0-NATIVE launch verification, P1, FIXED / LOCAL_INTEGRATION:** Xcode's
   explicit ad-hoc simulator build restores the simulated application identity
   without a distribution certificate, provisioning update or archive. The
   unchanged Release app reaches Welcome with its primary and returning-user
@@ -168,6 +168,52 @@ individual severity/refinement is recorded in the dated entries below.
   `mac-launch-runtime-selftest.log`. Residual: this is fresh signed-out launch
   evidence, not physical sign-in/restore or complete native screen acceptance.
   The corrected whole gate must still run on a clean committed tree.
+
+- **P0 second frozen attempt, P1, IN_PROGRESS / LOCAL_INTEGRATION:**
+  candidate `c71ff6e05a2ce2860daba0ccb7c3f421449dca0a`, same complete fresh-deps
+  command. Cloud again passed 14/15 stages; mobile had two failures / 5,805
+  passes. Mac environment and native packages passed; its mobile rerun had
+  one failure / 5,806 passes, so this run did **not** reach app build/launch.
+  Both planes rejected the CocoaPods-omitted optional packageReferences list;
+  cloud also repeated the ICNS subprocess timeout. Summary/log hashes:
+  `artifacts/readiness-20260907-baseline/phase0-r2-completion.json`.
+  Guard diagnostics remain an investigation: normal warm probes and the Mac
+  pass do not identify why the cloud subprocess exceeded its unchanged
+  five-second total deadline.
+- **P0 native project fixture, P2, FIXED / AUTOMATED_LOGIC:**
+  `flow-app-store-compliance-ios-config.test.ts` now accepts an absent empty
+  optional package-reference list, as CocoaPods emits. All independent
+  package-object, product-reference, framework-link and empty-lockfile
+  assertions remain. Focused 32 tests, owned ESLint/Prettier pass.
+  Evidence: `cocoapods-project-normalization-test.json` and sibling logs.
+  Residual: new whole candidate gate required.
+- **W11 / submission inventory, P1, OPEN / LIVE_SERVICE:** read-only App
+  Store Connect API inspection at `2026-09-08T05:16:15Z` confirms uploaded
+  builds 1, 2 and 3 are VALID; build 3 is newest and the list has no next
+  page. Version 1.0 is PREPARE_FOR_SUBMISSION with MANUAL release. Source
+  build 1 cannot be reused for the new candidate; commit a coherent next
+  build identity and recheck uploaded builds before the human archive.
+  Evidence: `asc-readonly-inventory.json` in the baseline artifact directory.
+- **W07 / submission product metadata, P1, OPEN / LIVE_SERVICE:** the same
+  read-only API inventory confirms one subscription group with monthly
+  `pickle_sensei_pro_monthly` and annual `pickle_sensei_pro_yearly`, plus
+  non-consumable `pickle_sensei_pro_lifetime`. All three are MISSING_METADATA;
+  each review-screenshot endpoint returns HTTP 200 with null data. English
+  localizations are present; Family Sharing is false. Prepare actual final
+  paywall review screenshots, complete the draft product records and recheck
+  readiness. This is not evidence of purchase/restore/refund success.
+  Evidence: `asc-readonly-store-metadata.json` and
+  `asc-readonly-product-completeness.json`. No listing, price, territory,
+  product, release or submission mutation was made.
+- **W02/W09 source follow-up, P1/P2, OPEN / SOURCE_VERIFIED:** confirmed
+  cross-batch session starvation, unchecked ACK retry exhaustion, missing
+  ResultDetails entry, inaccessible review seek control and pre-navigation
+  notification press loss. The exact boundaries and proposed regressions
+  are captured in `w02-sync-implementation-plan.md`,
+  `server-response-exception-audit.md` and the native baseline
+  `audits/w09-native-accessibility-audit.md`. Existing native harnesses are
+  historical references until rerun against this candidate. Draft real
+  SQLite tests are prepared under ignored artifacts and have not run.
 
 ## 3. Canonical gates
 

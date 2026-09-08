@@ -134,7 +134,10 @@ describe('iOS native dependency and redistribution resource configuration', () =
   };
 
   it('has no native Supabase package, product object, or framework link', () => {
-    expect(project().packageReferences).toEqual([]);
+    // CocoaPods removes an empty optional list when normalizing the project.
+    // Both representations mean no package references; the object and link
+    // assertions below still reject every native SwiftPM dependency.
+    expect(project().packageReferences ?? []).toEqual([]);
     expect(app().packageProductDependencies ?? []).toEqual([]);
     expect(objects('XCRemoteSwiftPackageReference')).toEqual([]);
     expect(objects('XCLocalSwiftPackageReference')).toEqual([]);
