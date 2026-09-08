@@ -161,11 +161,16 @@ export function parseTrialSyncAcknowledgement(
  * (which the capture flow would render as an unbounded spinner). */
 export const API_REQUEST_TIMEOUT_MS = 20_000;
 
-/** The runtime follows 3xx silently; a response whose final URL is not the
- * one requested came from wherever the redirect pointed (a captive portal,
- * an intercepting proxy, a route the API does not have), never from the API
- * origin. Whatever it says is a transport artifact, not a verdict. */
+/** A redirect is never an API verdict. The request asks the runtime not to
+ * follow (`redirect: 'manual'`), so a compliant fetch hands back the 3xx (or
+ * an opaque redirect) itself; a runtime that follows anyway (React Native's
+ * XHR-backed fetch) reports it through `redirected` / a final URL that is
+ * not the one requested. Either way the answer came from wherever the
+ * redirect pointed (a captive portal, an intercepting proxy, a route the API
+ * does not have), never from the API origin: a transport artifact. */
 function answeredByAnotherUrl(response: Response, requestUrl: string): boolean {
+  if (response.type === 'opaqueredirect') return true;
+  if (response.status >= 300 && response.status < 400) return true;
   if (response.redirected) return true;
   const finalUrl: unknown = response.url;
   if (typeof finalUrl !== 'string' || finalUrl === '') return false;
@@ -178,6 +183,13 @@ function answeredByAnotherUrl(response: Response, requestUrl: string): boolean {
   };
   const answeredBy = canonical(finalUrl);
   return answeredBy !== null && answeredBy !== canonical(requestUrl);
+}
+
+/** Every API route answers 2xx with a JSON object; anything else (an empty
+ * 204, a text/html page, a bare literal) was written by something that never
+ * reached the route and acknowledges nothing. */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function request<T>(
@@ -215,6 +227,7 @@ async function request<T>(
         'x-client-version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      redirect: 'manual',
       signal: controller.signal,
     });
     if (timedOut) throw timeoutError();
@@ -225,20 +238,30 @@ async function request<T>(
         'The connection was redirected away from the rating service. Your work is saved on this device and will be retried.',
       );
     }
-    const json = (await response.json().catch(() => null)) as
-      (T & { error?: { code: string; message: string } }) | null;
+    const json: unknown = await response.json().catch(() => undefined);
     if (timedOut) throw timeoutError();
+    const verdict = isJsonObject(json) ? json : null;
     if (!response.ok) {
       if (response.status === 401 && token) {
         reportApiUnauthorized(token);
       }
+      const failure = verdict?.['error'];
+      const code = isJsonObject(failure) ? failure['code'] : undefined;
+      const message = isJsonObject(failure) ? failure['message'] : undefined;
       throw new ApiError(
         response.status,
-        json?.error?.code ?? 'unknown',
-        json?.error?.message ?? response.statusText,
+        typeof code === 'string' ? code : 'unknown',
+        typeof message === 'string' ? message : response.statusText,
       );
     }
-    return json as T;
+    if (verdict === null) {
+      throw new ApiError(
+        502,
+        'network.invalid_response',
+        'The rating service answered without a readable result. Your work is saved on this device and will be retried.',
+      );
+    }
+    return verdict as T;
   };
   try {
     return await Promise.race([fetchAndRead(), deadline]);
