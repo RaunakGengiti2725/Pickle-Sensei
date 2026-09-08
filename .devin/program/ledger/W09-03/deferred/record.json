@@ -1,0 +1,19 @@
+{
+  "agents": [],
+  "decided_at": "2026-09-08T22:42:53Z",
+  "held_candidate": {
+    "branch": "devin/pp/w09-03/impl-r1",
+    "head_sha": "cb2b66396d697232dba00157c18f7f2e2e7008a2",
+    "round": 1
+  },
+  "integration_head_at_decision": "58f9030510c99f31fa94f089b5d5926074c706e2",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "note": "owner directive 2026-09-08 (launch slice): ACCEPTED candidate held, NOT integrated into 1.0; deferred to 1.0.1",
+  "package_id": "W09-03",
+  "prior_records": [
+    "wave-5:ACCEPTED"
+  ],
+  "rounds": [],
+  "status": "DEFERRED_V1_1",
+  "wave_id": "deferred"
+}

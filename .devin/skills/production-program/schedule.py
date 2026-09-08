@@ -37,12 +37,35 @@ MAX_ACTIVE = 2
 SEV = {"P0": 0, "P1": 1, "P2": 2}
 
 
+def _record_rank(rec: dict) -> tuple:
+    """Owner deferral outranks everything; an ACCEPTED candidate outranks later
+    rejected rounds (it is integrated or held, never re-run); otherwise the most
+    recent wave wins."""
+    status = rec.get("status", "")
+    wave = str(rec.get("wave_id", ""))
+    num = "".join(ch for ch in wave.split("-")[1:2] if ch.isdigit()) if "-" in wave else ""
+    return (
+        2 if status == "DEFERRED_V1_1" else 1 if status == "ACCEPTED" else 0,
+        int(num) if num else -1,
+        wave,
+    )
+
+
 def load_records() -> dict[str, dict]:
-    out = {}
-    for path in sorted(glob.glob(os.path.join(ART, "*", "record.json"))):
+    """Latest decision per package across the live run artifacts and the
+    committed ledger copies (`.devin/program/ledger/<pkg>/<wave>/record.json`)."""
+    out: dict[str, dict] = {}
+    paths = glob.glob(os.path.join(ART, "*", "record.json")) + glob.glob(
+        os.path.join(LEDGER_DIR, "*", "*", "record.json")
+    )
+    for path in sorted(paths):
         with open(path, encoding="utf8") as fh:
             rec = json.load(fh)
-        out[rec["package_id"]] = rec
+        pid = rec.get("package_id")
+        if not pid:
+            continue
+        if pid not in out or _record_rank(rec) >= _record_rank(out[pid]):
+            out[pid] = rec
     return out
 
 

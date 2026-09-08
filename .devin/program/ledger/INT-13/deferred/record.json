@@ -1,0 +1,15 @@
+{
+  "agents": [],
+  "decided_at": "2026-09-08T22:42:52Z",
+  "held_candidate": null,
+  "integration_head_at_decision": "58f9030510c99f31fa94f089b5d5926074c706e2",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "note": "owner directive 2026-09-08 (launch slice): deferred to 1.0.1; not implemented, not launched",
+  "package_id": "INT-13",
+  "prior_records": [
+    "wave-6:RUNNING"
+  ],
+  "rounds": [],
+  "status": "DEFERRED_V1_1",
+  "wave_id": "deferred"
+}

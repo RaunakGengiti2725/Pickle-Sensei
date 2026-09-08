@@ -1,0 +1,2526 @@
+{
+  "agents": [
+    {
+      "label": "implement-H04-01-r3",
+      "package_id": "H04-01",
+      "phase": "implement",
+      "prompt_sha256": "e0d70f610079281465b7d7c8a1f67493e0cc9ed4747a31c8795a5e227b9abb27",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H04-01-r3",
+      "package_id": "H04-01",
+      "phase": "review",
+      "prompt_sha256": "a93a882e8494f54103cb054199d08913965fb0a9ac07bab2405098e6d7028d4f",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H04-01-r3",
+      "package_id": "H04-01",
+      "phase": "adversary",
+      "prompt_sha256": "b42e56173e47aade5a9a8e0a860b14b84daa01d032c637d5803894bd8b79d84b",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H04-01-r4",
+      "package_id": "H04-01",
+      "phase": "implement",
+      "prompt_sha256": "f995752523730ca57451912e4233e2737ee99e39046453133ef495d7c8eabccc",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H04-01-r4",
+      "package_id": "H04-01",
+      "phase": "review",
+      "prompt_sha256": "317b8a1d518da214b93becb9a6c7c0eec3e198fd1e259ced19da8acfcc923e61",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H04-01-r4",
+      "package_id": "H04-01",
+      "phase": "adversary",
+      "prompt_sha256": "86cc2ea1b65a4a39dbdf7f70883cfc6b5952690521c64b1bb6ce607c29608e0d",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H05-01-r1",
+      "package_id": "H05-01",
+      "phase": "implement",
+      "prompt_sha256": "7b3d2d017dc20dd6b1e77fcc8facf69bd531abd0d5d9c0a0c22cf27d6a95e476",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H05-01-r2",
+      "package_id": "H05-01",
+      "phase": "implement",
+      "prompt_sha256": "9c5c6cb23e1a8c2bca259b8c525ed327e935dcc9250656c8bdde8800430310af",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H05-01-r2",
+      "package_id": "H05-01",
+      "phase": "review",
+      "prompt_sha256": "3580862f610b33b607c67b6f35b6e0cca66b68b5619f213796929cceb0a1b3bb",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H05-01-r2",
+      "package_id": "H05-01",
+      "phase": "adversary",
+      "prompt_sha256": "0e9f39265b483621f6832575f278ab9d67b216c8c6e53d0c9e56976c4f154483",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H06-01-r3",
+      "package_id": "H06-01",
+      "phase": "implement",
+      "prompt_sha256": "d49ae719c2bafa846f556a41cafea7317a191b59d28bc6018e944349985b3587",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H06-01-r3",
+      "package_id": "H06-01",
+      "phase": "review",
+      "prompt_sha256": "f279f9d84a6ad14c5d39c8197e125cd7b9b1db6b233028dc62c8ef56dd6ffadb",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H06-01-r3",
+      "package_id": "H06-01",
+      "phase": "adversary",
+      "prompt_sha256": "2d5b1708789c8a5d3ba8d59c7b7b629a06286b8ad195b6047033d76288d82e44",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H06-01-r4",
+      "package_id": "H06-01",
+      "phase": "implement",
+      "prompt_sha256": "ad36ee81071f7c7438a4b440bf689aa725ad6a534647ef0d394549460ad137e4",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H06-01-r4",
+      "package_id": "H06-01",
+      "phase": "review",
+      "prompt_sha256": "0dccb3ac708d8c81233fbbc5ca5a8908f023c6ba663c73a56f21705c0d44a48a",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H06-01-r4",
+      "package_id": "H06-01",
+      "phase": "adversary",
+      "prompt_sha256": "10092adad090684625732e8c276444cc0f01a0eb6011d2d17a426858ca0d50ed",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H07-01-r1",
+      "package_id": "H07-01",
+      "phase": "implement",
+      "prompt_sha256": "0c72ec888bed2006d092a62b4221888e0f5cf34433ad94f26b2fb24a48daa8a4",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H07-01-r1",
+      "package_id": "H07-01",
+      "phase": "review",
+      "prompt_sha256": "417c0488deeb20156a99047c386296fb3d9dfa35845bda8d24a8973a921da8e9",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H07-01-r1",
+      "package_id": "H07-01",
+      "phase": "adversary",
+      "prompt_sha256": "b14348f432b4bb55222fbbf93869e9229453c5618808f272a4704f95591ac93f",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H07-01-r2",
+      "package_id": "H07-01",
+      "phase": "implement",
+      "prompt_sha256": "f14b5f2f4a6ce0fb79e04618197d33126928da1ff028282230f9cf75c7d0b548",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H07-01-r2",
+      "package_id": "H07-01",
+      "phase": "review",
+      "prompt_sha256": "e699416173da313a25cc1b901e42a619bfa57fd2acd26489281bb222e10e8932",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H07-01-r2",
+      "package_id": "H07-01",
+      "phase": "adversary",
+      "prompt_sha256": "16f7c5a2b7a4f6e0f779f5ef31d8c5c85bc4b9feb20add0d2477b07da34be503",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-H09-01-r3",
+      "package_id": "H09-01",
+      "phase": "implement",
+      "prompt_sha256": "843b758ad2fddd107043749a428ec80331f1357b756a0b208a499be93b869a14",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-H09-01-r3",
+      "package_id": "H09-01",
+      "phase": "review",
+      "prompt_sha256": "d7e86c8767f38418d231fe0f0eae8b227bd000c6d34098077d4bba0532f5aed6",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-H09-01-r3",
+      "package_id": "H09-01",
+      "phase": "adversary",
+      "prompt_sha256": "a6d7d0812e43aab8e5903082afd7a898ad0ae961fe278b05e8192ce8a90f13f0",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-01-r3",
+      "package_id": "P0-01",
+      "phase": "implement",
+      "prompt_sha256": "9cd7f026afed65c3a961eb6d07eb679c9ec41a794c003ba3cfa4cc26540fb9cc",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-01-r3",
+      "package_id": "P0-01",
+      "phase": "review",
+      "prompt_sha256": "33fb07abfd0a2959795d6f6fa286df072f317471a0f1b5cd920f6c113d35f25e",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-01-r3",
+      "package_id": "P0-01",
+      "phase": "adversary",
+      "prompt_sha256": "c7e8eb2b104938880b09be8cb3db7fbbd019873712a598dc98a950fd4f1ebe99",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-02-r2",
+      "package_id": "P0-02",
+      "phase": "implement",
+      "prompt_sha256": "d6e1b7e967c9c59f16c9c45c934b2efde2b5804e9e1211cb7066ab1fc536d796",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-02-r2",
+      "package_id": "P0-02",
+      "phase": "review",
+      "prompt_sha256": "ced98f7a3e18813030110fbf9f22503d2e5b5d06ba0c946cea57ddded8427b4f",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-02-r2",
+      "package_id": "P0-02",
+      "phase": "adversary",
+      "prompt_sha256": "eb086ca0f8787831ca9d8871421a2a7663f83ec4c0869501e717ee02da33fb45",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-02-r3",
+      "package_id": "P0-02",
+      "phase": "implement",
+      "prompt_sha256": "020ad277e5a3e4ac16024e50b7c625efcdf4c79d1ea688074870c0db3e15752b",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-02-r3",
+      "package_id": "P0-02",
+      "phase": "review",
+      "prompt_sha256": "d505595335d7c233d79d0780e1348e279c1d05b5a180a7cbff55647e31c362ae",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-02-r3",
+      "package_id": "P0-02",
+      "phase": "adversary",
+      "prompt_sha256": "bc0bf0b19f51187b9d5652868274274a570613563c353aa97cb54ef31b2e50e4",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-03-r1",
+      "package_id": "P0-03",
+      "phase": "implement",
+      "prompt_sha256": "48187e3d2e6f22ac6084fa728f4c0e57a514981ebb3cd019e4a61df63499dfa7",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-03-r1",
+      "package_id": "P0-03",
+      "phase": "review",
+      "prompt_sha256": "53866bd8e1c0521e157aff726abc63d920d5579e9a5041286f83df099119723e",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-03-r1",
+      "package_id": "P0-03",
+      "phase": "adversary",
+      "prompt_sha256": "b5f0808734957e1154a6c2c251ae5f5bb83110bc3b57ec352e3d70031fb15ddf",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-04-r1",
+      "package_id": "P0-04",
+      "phase": "implement",
+      "prompt_sha256": "227c0d520c4bd999286da84ec984c4b841d7da0ecf4867b2ba6fa823945f8545",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-04-r1",
+      "package_id": "P0-04",
+      "phase": "review",
+      "prompt_sha256": "09565c7442bf598ab084a03ff191610402eff94a511835a701c2307d4c80dfa7",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-04-r1",
+      "package_id": "P0-04",
+      "phase": "adversary",
+      "prompt_sha256": "049a7b2c492c7a2fa2e313cc9052e61be2616eb3a948e60407e9f06c0464a017",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-P0-05-r3",
+      "package_id": "P0-05",
+      "phase": "implement",
+      "prompt_sha256": "7981121e616ebf8b273a5eb3184be52b7eb42f247cc1d8ba5b782c32a61c4dee",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-P0-05-r3",
+      "package_id": "P0-05",
+      "phase": "review",
+      "prompt_sha256": "4944398279bcbd01fe0179a88350c791fb3b737b1fcf0e488f014ac835192503",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-P0-05-r3",
+      "package_id": "P0-05",
+      "phase": "adversary",
+      "prompt_sha256": "273cc36dd80e044c9282b77dec7440d30ccd5f710fe3bcb042dcb979ffc83ee1",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-01-r1",
+      "package_id": "W01-01",
+      "phase": "implement",
+      "prompt_sha256": "17f6708176a9511221dfeb9de1eea0d17921cf719e3ce29f39d5971783eecc44",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-01-r1",
+      "package_id": "W01-01",
+      "phase": "review",
+      "prompt_sha256": "292fe613fd0e7ee10fba22c3f94ec3f1887a2094b303e10e632dce3e4eeb7af3",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-01-r1",
+      "package_id": "W01-01",
+      "phase": "adversary",
+      "prompt_sha256": "a21739148c367cafbfd766b64e270888c059f27ca92aa63641bf73ba2b803443",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-02-r1",
+      "package_id": "W01-02",
+      "phase": "implement",
+      "prompt_sha256": "c5c2827744e6350d4f4536237d8514fd6eaf98bd2defac13b027faaaee73e13c",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-02-r2",
+      "package_id": "W01-02",
+      "phase": "implement",
+      "prompt_sha256": "ba05025fcd24fd74d2f83fef536663cfbfb12a3b7eb9b9f2e2211c57413eaec4",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-02-r2",
+      "package_id": "W01-02",
+      "phase": "review",
+      "prompt_sha256": "695093e71d9dc08330a6126ced4e10a635d96b4482b9710952817c08660b8a91",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-02-r2",
+      "package_id": "W01-02",
+      "phase": "adversary",
+      "prompt_sha256": "5b85d3866b2271e81f3e71f74c565984f5833e8eb9e986a25dc20e4eeb0e946f",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-03-r1",
+      "package_id": "W01-03",
+      "phase": "implement",
+      "prompt_sha256": "984db03a4b825ba2ed54a862d53e8d57a5ffdeaced85428ec4d68cf3c1495933",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-03-r1",
+      "package_id": "W01-03",
+      "phase": "review",
+      "prompt_sha256": "dadc4db55e6e741bc0ab14fe51e5ad8cbce4b4d2ddeb4a7e6f6219e33b85e4a2",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-03-r1",
+      "package_id": "W01-03",
+      "phase": "adversary",
+      "prompt_sha256": "b65d2559ad7bf90d75264c92df8b06bedf72c6b8b4dab5d79665ef8d2d5bf138",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-03-r2",
+      "package_id": "W01-03",
+      "phase": "implement",
+      "prompt_sha256": "d6e9194a2f13155e19e30ae5c90d8514a01777bb0bfd3dc23def56e03bd6b745",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-03-r2",
+      "package_id": "W01-03",
+      "phase": "review",
+      "prompt_sha256": "9bf0d0d24c240b262135d26af7101d079b265fde8eeaf37c15d01cd375292987",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-03-r2",
+      "package_id": "W01-03",
+      "phase": "adversary",
+      "prompt_sha256": "b16c459ce3b1ba3f78352d7a09f0c9238c78c13eff76d5fe94874c4dc08d9e7b",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W01-04-r1",
+      "package_id": "W01-04",
+      "phase": "implement",
+      "prompt_sha256": "16aadee802915c487e5483631cedfd1969dc1caf3439e8b1c26e6cf5fcb6064a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-04-r1",
+      "package_id": "W01-04",
+      "phase": "review",
+      "prompt_sha256": "a0e5eb3a1d20f78de401c352544a115294a67bd08c1364a110cadc5614f072dc",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-04-r1",
+      "package_id": "W01-04",
+      "phase": "adversary",
+      "prompt_sha256": "84ec02006389c5ea27f6243b2e0179f491b7b794c2a219de2eda89be6c990371",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-01-r3",
+      "package_id": "W02-01",
+      "phase": "implement",
+      "prompt_sha256": "4f6deb8e5435445e787182bd60bbb6356994f672f035be8723c221f343a7c037",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-01-r4",
+      "package_id": "W02-01",
+      "phase": "implement",
+      "prompt_sha256": "945b7033f3916565ad424e5fef58ace2db34ae8b12ec0e89973c7ed2ec77ff02",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W02-01-r4",
+      "package_id": "W02-01",
+      "phase": "review",
+      "prompt_sha256": "f3a391cfa6d63ee4f8aa0358cae3a0426b5f7b284f233793db6f7e2443cf940c",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W02-01-r4",
+      "package_id": "W02-01",
+      "phase": "adversary",
+      "prompt_sha256": "3a0cf365e026dbfdaeaf2e7b8e67aa5298b4cbf5433c60dde101d4866eead379",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-02-r1",
+      "package_id": "W02-02",
+      "phase": "implement",
+      "prompt_sha256": "0505f638ac65ff5134528421c5884a7e3279d4c13dfad74a56a1d0eec9b893c1",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-02-r2",
+      "package_id": "W02-02",
+      "phase": "implement",
+      "prompt_sha256": "3cb6bc9d7570a364400ce73285624722b7a256e9f178e7cdbd451168f1c81fdb",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W02-02-r2",
+      "package_id": "W02-02",
+      "phase": "review",
+      "prompt_sha256": "1d25908ba0ced64343b9ee36cb18433fc086fe793a4ca362facc93ac9b6f2fbd",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W02-02-r2",
+      "package_id": "W02-02",
+      "phase": "adversary",
+      "prompt_sha256": "a0a65d8b97126168829baa3460cba080c1da835e0ab6507d2628a588754cf43b",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-03-r4",
+      "package_id": "W02-03",
+      "phase": "implement",
+      "prompt_sha256": "65e02d8502d0aa8b7e27cc13530b1611c79577abc0cbb1661494825f2444f613",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W02-03-r4",
+      "package_id": "W02-03",
+      "phase": "review",
+      "prompt_sha256": "e93caac35cfa05a4f57918ee8d1253c9cee691f4d5ad6c6fd317017a5a873848",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W02-03-r4",
+      "package_id": "W02-03",
+      "phase": "adversary",
+      "prompt_sha256": "37cf8df8828726ebe00385a44f032383da296326824d67e2f3910f37bdaaaf9a",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W02-03-r5",
+      "package_id": "W02-03",
+      "phase": "implement",
+      "prompt_sha256": "15bc5c2a6f938170db73ec392de831d661b2eef768dd1830e027f76754ac3fe3",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W02-03-r5",
+      "package_id": "W02-03",
+      "phase": "review",
+      "prompt_sha256": "a4a2c06e1f00345e9204675b2f784cad1cd6c2624e405f24326cc70669693396",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W02-03-r5",
+      "package_id": "W02-03",
+      "phase": "adversary",
+      "prompt_sha256": "45cf2cccef0cbebbce628c8b80d3843bdc32fa46127f7aee492ac331bd8bde3c",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W03-01-r7",
+      "package_id": "W03-01",
+      "phase": "implement",
+      "prompt_sha256": "88c84400fcc872909f29f55e4bd49094feab009a1bfc7d6249c32572ed9184b9",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W03-01-r7",
+      "package_id": "W03-01",
+      "phase": "review",
+      "prompt_sha256": "ca71664da9a16ffb84277032558c4faf0d75d0897dee5355a59edf586fada37a",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W03-01-r7",
+      "package_id": "W03-01",
+      "phase": "adversary",
+      "prompt_sha256": "0449f9573b767b581eb5027354ab0e4563abf914fb681e2b5bd99761d04b307a",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W03-01-r8",
+      "package_id": "W03-01",
+      "phase": "implement",
+      "prompt_sha256": "a673dbe8a00d195e3b73d5b54e0dfb07a265232a7a4b65f7cd2cef6de7664f14",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W06-01-r3",
+      "package_id": "W06-01",
+      "phase": "implement",
+      "prompt_sha256": "70bb15b1cadef5c673cfbbe2af8766ec074b5c46c997add058808321dc780d40",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W06-01-r3",
+      "package_id": "W06-01",
+      "phase": "review",
+      "prompt_sha256": "6be6db0b29b1305c23d8b36105bca4e228a0cc73820574cbb763f5aa12f7fdf5",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W06-01-r3",
+      "package_id": "W06-01",
+      "phase": "adversary",
+      "prompt_sha256": "dd9e49f40b215c2bcd4fea6b0e58aaa2e4a3d1c071d98dc0a1e4665b163f26c8",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W06-01-r4",
+      "package_id": "W06-01",
+      "phase": "implement",
+      "prompt_sha256": "0811a9b45f812b233b8cab6967423ccb6da73393458bf6b48917422dc94da485",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W06-01-r4",
+      "package_id": "W06-01",
+      "phase": "review",
+      "prompt_sha256": "89dca2e8ed68b8422989e7329e9e922261ffd105ed77925c0d77536d19a76a5f",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W06-01-r4",
+      "package_id": "W06-01",
+      "phase": "adversary",
+      "prompt_sha256": "21f0a680324ad3c9cb47759c661887f50fbcd3aa826588b51f71f49872190735",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-01-r1",
+      "package_id": "W07-01",
+      "phase": "implement",
+      "prompt_sha256": "4a1d27e77b191a983634b625931368f7a252c3ff4cc2e9a43d7dc998b16a4bfa",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-01-r2",
+      "package_id": "W07-01",
+      "phase": "implement",
+      "prompt_sha256": "0c75842ad669bb6d58a62349c978cd287cdd9817b1a91c81f61beebe3c062c06",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-01-r2",
+      "package_id": "W07-01",
+      "phase": "review",
+      "prompt_sha256": "a7899b3950db493b3279dd99c2e5970b215c94b0540ce9ff1110ed02a94c16fa",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-01-r2",
+      "package_id": "W07-01",
+      "phase": "adversary",
+      "prompt_sha256": "400d915557f469d01291f5cff4229299d04e9276c74d258f6513f215e6a40633",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-02-r3",
+      "package_id": "W07-02",
+      "phase": "implement",
+      "prompt_sha256": "23e2cab7a72c20e911d1a86f813c2c8ea2e4f3f4f4714e19d3e7bea52670240f",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-02-r3",
+      "package_id": "W07-02",
+      "phase": "review",
+      "prompt_sha256": "a96ceda0d0017e81ffed725083c8e52b7751fbdb38310d2574bf1d0693404abf",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-02-r3",
+      "package_id": "W07-02",
+      "phase": "adversary",
+      "prompt_sha256": "4e7dc515f4d60cfc296aa472a34cc9bf4ea86cb67ee05f703d350d620a7c487c",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-02-r4",
+      "package_id": "W07-02",
+      "phase": "implement",
+      "prompt_sha256": "c1f4d4ddeea64820e3c96c3f820ca1c464aeee7f363341808fee06a1705e4f68",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-02-r4",
+      "package_id": "W07-02",
+      "phase": "review",
+      "prompt_sha256": "a1258a5b6f8771b417a1ba6ad127b0705fac5403392fd4975841c90cd9fb23f5",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-02-r4",
+      "package_id": "W07-02",
+      "phase": "adversary",
+      "prompt_sha256": "27a5d597ab5c1c3960ddedd54d57d56cb48da20a4e2b446f9b619063ef9f3e23",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-05-r3",
+      "package_id": "W07-05",
+      "phase": "implement",
+      "prompt_sha256": "fa810e6dd155075e25e902d2055f079ba0a5ce5e5a95806b767e1b5e49fe9704",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-05-r3",
+      "package_id": "W07-05",
+      "phase": "review",
+      "prompt_sha256": "beb8c6a2802ee5f9cbe8b5ebb363c118a4b30b43fc404dfc5b302b63b84f638b",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-05-r3",
+      "package_id": "W07-05",
+      "phase": "adversary",
+      "prompt_sha256": "4add785e44afc64685c3d907bcb648b2cd3878d752eaaaface38ea36abeb4cb4",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-05-r4",
+      "package_id": "W07-05",
+      "phase": "implement",
+      "prompt_sha256": "954c64d84118efd008d00c12a7a0e0fb536d0239c7180dde87fc73e74ed8c846",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-05-r4",
+      "package_id": "W07-05",
+      "phase": "review",
+      "prompt_sha256": "9424aa0e8ca2f8bf0094413a51ab961fdf78161e610b68134116eb07253e23f0",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-05-r4",
+      "package_id": "W07-05",
+      "phase": "adversary",
+      "prompt_sha256": "66bed7f79ce369ffb5d8c80d226d3482e46f5a4a405e7a9ccea2d6cde5aab01a",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-06-r1",
+      "package_id": "W07-06",
+      "phase": "implement",
+      "prompt_sha256": "f99ba804bcefddcdcda0dcdc803b9837c4e78435c5615c2e3536d15f9c27091e",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-06-r1",
+      "package_id": "W07-06",
+      "phase": "review",
+      "prompt_sha256": "eafbf2a0089db12b13585d9277aac3414e3e5d8cd2fe2d92c26c9547bbb10dcf",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-06-r1",
+      "package_id": "W07-06",
+      "phase": "adversary",
+      "prompt_sha256": "d5876e33ae3a04eabca9584d654106ef73b251b537b4e3360dc0f8fd662af78f",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W07-06-r2",
+      "package_id": "W07-06",
+      "phase": "implement",
+      "prompt_sha256": "2806e276d525e96ac6ad5a8157b8dc71f9be8af617f7205fad5870e72a3a3de3",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-06-r2",
+      "package_id": "W07-06",
+      "phase": "review",
+      "prompt_sha256": "851a7241c253f7bded36b4951e25f35710143510585de21e74eb0646b8588b82",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-06-r2",
+      "package_id": "W07-06",
+      "phase": "adversary",
+      "prompt_sha256": "f4aa5467e5de24fa05bc1f7da46bbb585a23358b557014f84d3d6bd91d4898d3",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W08-01-r3",
+      "package_id": "W08-01",
+      "phase": "implement",
+      "prompt_sha256": "b63e4985941211484ae721db6c212a3c065f1dddd59c446603d45ecf5d295c2a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W08-01-r3",
+      "package_id": "W08-01",
+      "phase": "review",
+      "prompt_sha256": "cb23f3ae54876b03939a1d08d70d36c39c45503a09d1fa8f41603ff149529dca",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W08-01-r3",
+      "package_id": "W08-01",
+      "phase": "adversary",
+      "prompt_sha256": "7abbb06427c6f54d578c1b0e057de2fb752f0961733064444121c2f3bb15e9ff",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W08-01-r4",
+      "package_id": "W08-01",
+      "phase": "implement",
+      "prompt_sha256": "8ac9350367fe02577b00c4d0eb6852d87bf4f4ee6c9982b4506e3f0d582d66f9",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W09-01-r1",
+      "package_id": "W09-01",
+      "phase": "implement",
+      "prompt_sha256": "2b3a2d8993aedf4723365a068fb604f78e4a2dfc6bd008a8168e91e6ddb2e623",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W09-01-r1",
+      "package_id": "W09-01",
+      "phase": "review",
+      "prompt_sha256": "81e8259d82ed12df00a62d7600d41fa148acd747dfe19df7f4ff438531e7b160",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W09-01-r1",
+      "package_id": "W09-01",
+      "phase": "adversary",
+      "prompt_sha256": "9da9a6ec179f3a2db3186ee225ffc6a424c3ae68077db19f24992f31e0c473d5",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W09-02-r1",
+      "package_id": "W09-02",
+      "phase": "implement",
+      "prompt_sha256": "b3bc865313ac241cc60d6eff3257da8451bc790c3e0c62984966e052dfb61cb0",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W09-02-r1",
+      "package_id": "W09-02",
+      "phase": "review",
+      "prompt_sha256": "3ea41f186354f9d8a5d22b65eed19a6adc0cd21ee2c44fc7b084d6c5f9d738f5",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W09-02-r1",
+      "package_id": "W09-02",
+      "phase": "adversary",
+      "prompt_sha256": "77d77805629b73880e9d923d0e02a9c946e717ca99061e9f76f3fcb8dbb13f91",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W09-08-r1",
+      "package_id": "W09-08",
+      "phase": "implement",
+      "prompt_sha256": "5225128b52a566dea0ebe6683407cccd69f3a83bc8169931db23081d5f04376d",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W09-08-r1",
+      "package_id": "W09-08",
+      "phase": "review",
+      "prompt_sha256": "04369633242cd1811ee060d616618c477f94f8aa3935c0bb823c74c8f9f7a12a",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W09-08-r1",
+      "package_id": "W09-08",
+      "phase": "adversary",
+      "prompt_sha256": "282ada0fb34580c2fff9055107b8137786089f551ad4b2917e09cc6c82033743",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W10-01-r1",
+      "package_id": "W10-01",
+      "phase": "implement",
+      "prompt_sha256": "2b56f36ded3ccfaec3744e1e8349a48e04e56e04231cc4cf6c0cf2216709968c",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W10-01-r1",
+      "package_id": "W10-01",
+      "phase": "review",
+      "prompt_sha256": "27c68aadbc208676da01b796cdae85f7784729b084b6b9145aa8c2faf32d4776",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W10-01-r1",
+      "package_id": "W10-01",
+      "phase": "adversary",
+      "prompt_sha256": "d7895251b194e43159af48054d72995232a4ef110ca861d0f36ffa73f2a7a284",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W10-03-r1",
+      "package_id": "W10-03",
+      "phase": "implement",
+      "prompt_sha256": "971c882917bbfe2f91427629e8f17ef45560090d3101ef2e31f954272477bd99",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W10-03-r1",
+      "package_id": "W10-03",
+      "phase": "review",
+      "prompt_sha256": "65378c423232dcc6934b2438bfe6dffde9ab6c1f61c7e949ad1cb22e13684c34",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W10-03-r1",
+      "package_id": "W10-03",
+      "phase": "adversary",
+      "prompt_sha256": "04af384ef9d09cef8af6482bad2a2037c2c94c47f9440cc3c92a3a53ec9a56b6",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W11-01-r1",
+      "package_id": "W11-01",
+      "phase": "implement",
+      "prompt_sha256": "32a932986ce27e0d4a2ea902aa58398d5d2f3bfcbfc32ebb9c443a23c25bc4ad",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W11-01-r1",
+      "package_id": "W11-01",
+      "phase": "review",
+      "prompt_sha256": "65ed941d28d5c6d644b7addab1fee6f96ac96bf8ee1e99c20da1531c0c8fadc5",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W11-01-r1",
+      "package_id": "W11-01",
+      "phase": "adversary",
+      "prompt_sha256": "55eb7f697e51d7b18f5c3165424a543d3d59dd6a25bc2c6acb20e174840aea6e",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W11-01-r2",
+      "package_id": "W11-01",
+      "phase": "implement",
+      "prompt_sha256": "de59b409c040419a0726c42996e948ece47a3130fce1bff5b19019f1cef89e43",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W11-01-r2",
+      "package_id": "W11-01",
+      "phase": "review",
+      "prompt_sha256": "a7976481b9d013467c2587393bf41bda5316207315a3f6383b4e64271387d8b8",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W11-01-r2",
+      "package_id": "W11-01",
+      "phase": "adversary",
+      "prompt_sha256": "fa30c9c317cbd487d0080baaa5cb79851dc2b577f72afb6dd2627588d3990cd6",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W11-08-r1",
+      "package_id": "W11-08",
+      "phase": "implement",
+      "prompt_sha256": "599a01c57c20ef3467d37401934504f2a797a0ce8fa41b736a2909cbafc4f72a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W11-08-r1",
+      "package_id": "W11-08",
+      "phase": "review",
+      "prompt_sha256": "f74d54660967ae536534a659a1a5d7a7a3b53841c960cd60b9c10eaac246a6ec",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W11-08-r1",
+      "package_id": "W11-08",
+      "phase": "adversary",
+      "prompt_sha256": "7b14005d2fe59fd10498a1a307f952e48bdffc2735e71e17ece58de7bdf5fa57",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W11-08-r2",
+      "package_id": "W11-08",
+      "phase": "implement",
+      "prompt_sha256": "ee6112c5e23a9429639aa8a59dad0c5552d66e827d667a28308a6d1e2b1dd11a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W11-08-r2",
+      "package_id": "W11-08",
+      "phase": "review",
+      "prompt_sha256": "c515b49f268a2a8dfac429fa1a91693aaf1285f00e6110478beb6701ff39d96b",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W11-08-r2",
+      "package_id": "W11-08",
+      "phase": "adversary",
+      "prompt_sha256": "f47d131cbf90fffd8cddcbb6f1e4fbac506c82536519b45a66702cf1a6e79886",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    }
+  ],
+  "counts": {
+    "agents": {
+      "completed": 136,
+      "failed": 0,
+      "launched": 136,
+      "requested": 136,
+      "with_session_id": 0
+    },
+    "packages": {
+      "ACCEPTED": 27,
+      "BLOCKED_EXTERNAL": 6,
+      "DEFERRED_V1_1": 48,
+      "NOT_STARTED": 11,
+      "REQUEUE": 2,
+      "RUNNING": 9
+    },
+    "sessions": 0,
+    "workflow_runs": 0
+  },
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "packages": [
+    {
+      "candidate": null,
+      "external_blocker": "Owner completes App Store Connect metadata",
+      "id": "EXT-ASC-METADATA",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner runs on physical devices and supplies dated results",
+      "id": "EXT-DEVICE",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner approvals",
+      "id": "EXT-LEGAL-OPS",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner performs after reviewing final evidence",
+      "id": "EXT-ROLLOUT",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner runs sandbox flows with real Apple IDs and RevenueCat",
+      "id": "EXT-STOREKIT",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner authorizes dashboard backup access",
+      "id": "H02-BACKUP",
+      "parent": "EXT",
+      "plane": "external",
+      "severity": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "H03-01",
+      "parent": "H03",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/h04-01/impl-r4",
+        "head_sha": "7aafae061d0eb74e98306b636a5efdbfffed59e1",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "H04-01",
+      "parent": "H04",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/h05-01/impl-r2",
+        "head_sha": "c3f2dceb8d748574a4894361f8153522f404b73f",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "H05-01",
+      "parent": "H05",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/h06-01/impl-r4",
+        "head_sha": "0d44c72071b23c4900240bcc2f30f32be22c7672",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "H06-01",
+      "parent": "H06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/h07-01/impl-r2",
+        "head_sha": "2bfe49a10418640f995be0ad17ff830d7e2206f3",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "H07-01",
+      "parent": "H07",
+      "plane": "cloud",
+      "severity": "P2",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/h09-01/impl-r3",
+        "head_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+        "round": 3
+      },
+      "external_blocker": null,
+      "id": "H09-01",
+      "parent": "H09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-01",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-02",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-03",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-04",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-05",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-06",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-07",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-08",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-09",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-10",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-11",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-12",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-13",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-14",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-15",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-16",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-17",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "INT-18",
+      "parent": "INT",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/p0-01/impl-r3",
+        "head_sha": "f010c464e4ed1b43541bdc70c5bc873da4f4a33a",
+        "round": 3
+      },
+      "external_blocker": null,
+      "id": "P0-01",
+      "parent": "P0",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "P0-02",
+      "parent": "P0",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "REQUEUE",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/p0-03/impl-r1",
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "P0-03",
+      "parent": "P0",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/p0-04/impl-r1",
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "P0-04",
+      "parent": "P0",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/p0-05/impl-r3",
+        "head_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+        "round": 3
+      },
+      "external_blocker": null,
+      "id": "P0-05",
+      "parent": "P0",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w01-01/impl-r1",
+        "head_sha": "4b785e99e9086ba33f39f635f536ea94e5ec7336",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W01-01",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w01-02/impl-r2",
+        "head_sha": "c01576c43b96c4e78e21d211a5c69b9e1b0a099f",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W01-02",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w01-03/impl-r2",
+        "head_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W01-03",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w01-04/impl-r1",
+        "head_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W01-04",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W01-05",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W01-06",
+      "parent": "W01",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w02-01/impl-r4",
+        "head_sha": "954a377835a28035d6884585f0de42c2a763cbe5",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "W02-01",
+      "parent": "W02",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w02-02/impl-r2",
+        "head_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W02-02",
+      "parent": "W02",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w02-03/impl-r5",
+        "head_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+        "round": 5
+      },
+      "external_blocker": null,
+      "id": "W02-03",
+      "parent": "W02",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W02-04",
+      "parent": "W02",
+      "plane": "mac",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W03-01",
+      "parent": "W03",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W03-02",
+      "parent": "W03",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W03-03",
+      "parent": "W03",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W03-04",
+      "parent": "W03",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W04-01",
+      "parent": "W04",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W04-02",
+      "parent": "W04",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W04-03",
+      "parent": "W04",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W04-04",
+      "parent": "W04",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W04-05",
+      "parent": "W04",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W05-01",
+      "parent": "W05",
+      "plane": "mac",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W05-02",
+      "parent": "W05",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W05-03",
+      "parent": "W05",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W05-04",
+      "parent": "W05",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W05-05",
+      "parent": "W05",
+      "plane": "mac",
+      "severity": "P1",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w06-01/impl-r4",
+        "head_sha": "61206685cccb7302c659636c68899f83435ca20e",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "W06-01",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W06-02",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W06-03",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W06-04",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W06-05",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": "Owner must supply consented footage, verified metadata, qualified blinded reviewers and adjudication",
+      "id": "W06-06",
+      "parent": "W06",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w07-01/impl-r2",
+        "head_sha": "4defd4dd58ea8f23ec4047b3912e4f8c3f16e713",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W07-01",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w07-02/impl-r4",
+        "head_sha": "226bb810ca0b2be27aa76475e127e1669305d653",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "W07-02",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W07-03",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W07-04",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w07-05/impl-r4",
+        "head_sha": "6dc61a4da49cad1f5a88de514d9666215bcf67d3",
+        "round": 4
+      },
+      "external_blocker": null,
+      "id": "W07-05",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w07-06/impl-r2",
+        "head_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W07-06",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W07-07",
+      "parent": "W07",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-01",
+      "parent": "W08",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-02",
+      "parent": "W08",
+      "plane": "mac",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-03",
+      "parent": "W08",
+      "plane": "mac",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-04",
+      "parent": "W08",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-05",
+      "parent": "W08",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W08-06",
+      "parent": "W08",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "RUNNING",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w09-01/impl-r1",
+        "head_sha": "ef72f07848f7efa2434da2a2060a2a70c7beeb2f",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W09-01",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w09-02/impl-r1",
+        "head_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W09-02",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-03",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-04",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-05",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-06",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-07",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w09-08/impl-r1",
+        "head_sha": "315fb2ef47501f6771e60cb8dc79db85b92bd630",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W09-08",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-09",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-10",
+      "parent": "W09",
+      "plane": "cloud",
+      "severity": "P2",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W09-11",
+      "parent": "W09",
+      "plane": "mac",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w10-01/impl-r1",
+        "head_sha": "f57804e79ead1838c2e2bd27b1ad293f3078c82b",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W10-01",
+      "parent": "W10",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W10-02",
+      "parent": "W10",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w10-03/impl-r1",
+        "head_sha": "4675b54fdead87ae55f55ee4124a5fe618e0d579",
+        "round": 1
+      },
+      "external_blocker": null,
+      "id": "W10-03",
+      "parent": "W10",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-01",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "REQUEUE",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-02",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P1",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-03",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-04",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-05",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-06",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-07",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": {
+        "branch": "devin/pp/w11-08/impl-r2",
+        "head_sha": "cfdfb2e1dd4c4da35dc88ebb79390d87e256057a",
+        "round": 2
+      },
+      "external_blocker": null,
+      "id": "W11-08",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "ACCEPTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W11-09",
+      "parent": "W11",
+      "plane": "cloud",
+      "severity": "P0",
+      "status": "DEFERRED_V1_1",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W12-01",
+      "parent": "W12",
+      "plane": "docs",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    },
+    {
+      "candidate": null,
+      "external_blocker": null,
+      "id": "W12-02",
+      "parent": "W12",
+      "plane": "docs",
+      "severity": "P0",
+      "status": "NOT_STARTED",
+      "workflow_run_ids": []
+    }
+  ],
+  "workflow_run_ids": []
+}
