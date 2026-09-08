@@ -682,3 +682,198 @@ export async function storeAccountAppleCredential(
   }
   throw new Error("Apple credential storage is unavailable.");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner inventory pagination
+//
+// PostgREST truncates unpaged reads at its max_rows (1000 on the hosted
+// platform) and clamps every paged read to min(limit, max_rows) — silently,
+// with HTTP 200. Every owner-wide read (progress history today; deletion and
+// cleanup inventories next) therefore pages, and paging must either PROVE it
+// reached the end or say so: a fixed page budget that returns what it has is a
+// silent truncation, and so is stopping on "a short page", because under a
+// max_rows below the requested page size EVERY page is short. A cleanup that
+// treats either as the whole set leaves data behind.
+//
+// The reader is keyset (cursor) driven: each page is read strictly after the
+// last row of the previous one, so a row inserted or deleted mid-read shifts
+// nothing. Completion is proven ONLY by an EMPTY page after the last cursor;
+// anything else — a page error, a row served twice, more rows than requested,
+// a page the source could not describe, a degenerate page size, or a source
+// that never ends — is reported INCOMPLETE with the rows read so far exposed
+// for diagnostics but never handed out as the inventory.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Rows requested per page — PostgREST's hosted max_rows. A server that clamps
+ * lower is still read completely: page size never decides completion. */
+export const INVENTORY_PAGE_ROWS = 1_000;
+
+/** Pages read before a source that never serves an empty page is reported
+ * INCOMPLETE instead of being read until the isolate is killed (1_000_000 rows
+ * at the shipping page size — far beyond any owner's history). */
+export const INVENTORY_MAX_PAGES = 1_000;
+
+export interface InventoryPage<Row> {
+  data: Row[] | null;
+  error: { message: string; code?: string } | null;
+  status?: number;
+}
+
+export interface InventoryCursorReader<Row, Cursor> {
+  /** Reads at most `limit` rows strictly after `cursor` (`null` = first page). */
+  readPage(cursor: Cursor | null, limit: number): PromiseLike<InventoryPage<Row>>;
+  /** Cursor positioned after `row`; must throw for a row it cannot describe. */
+  cursorAfter(row: Row): Cursor;
+  /** Stable identity of a cursor — equal for the same row, never for two rows
+   * of one owner's inventory; a repeat means the source re-served a row. */
+  cursorKey(cursor: Cursor): string;
+  pageRows?: number;
+}
+
+export type InventoryIncompleteReason =
+  | "page_error"
+  | "malformed_page"
+  | "page_overflow"
+  | "repeated_row"
+  | "invalid_page_size"
+  | "page_budget";
+
+export interface CompleteInventory<Row> {
+  status: "COMPLETE";
+  rows: Row[];
+  pages: number;
+}
+
+export interface IncompleteInventory<Row> {
+  status: "INCOMPLETE";
+  /** Rows read before the read stopped — diagnostics only, never the set. */
+  rows: Row[];
+  pages: number;
+  reason: InventoryIncompleteReason;
+  error: { message: string; code?: string };
+  httpStatus: number | null;
+}
+
+export type InventoryReadResult<Row> = CompleteInventory<Row> | IncompleteInventory<Row>;
+
+function thrownDetail(thrown: unknown): { message: string; code?: string } {
+  if (thrown instanceof Error) {
+    const code = (thrown as Error & { code?: unknown }).code;
+    return typeof code === "string"
+      ? { message: thrown.message, code }
+      : { message: thrown.message };
+  }
+  return { message: String(thrown) };
+}
+
+export async function readOwnerInventory<Row, Cursor>(
+  reader: InventoryCursorReader<Row, Cursor>,
+): Promise<InventoryReadResult<Row>> {
+  const limit = reader.pageRows ?? INVENTORY_PAGE_ROWS;
+  const rows: Row[] = [];
+  const seenRows = new Set<string>();
+  let cursor: Cursor | null = null;
+  let pages = 0;
+  const incomplete = (
+    reason: InventoryIncompleteReason,
+    error: { message: string; code?: string } = { message: reason },
+    httpStatus: number | null = null,
+  ): IncompleteInventory<Row> => ({ status: "INCOMPLETE", rows, pages, reason, error, httpStatus });
+
+  if (!Number.isSafeInteger(limit) || limit <= 0) return incomplete("invalid_page_size");
+
+  while (pages < INVENTORY_MAX_PAGES) {
+    pages += 1;
+    let page: InventoryPage<Row>;
+    try {
+      page = await reader.readPage(cursor, limit);
+    } catch (thrown) {
+      return incomplete("page_error", thrownDetail(thrown));
+    }
+    if (page.error) {
+      return incomplete(
+        "page_error",
+        page.error,
+        typeof page.status === "number" ? page.status : null,
+      );
+    }
+    if (!Array.isArray(page.data)) return incomplete("malformed_page");
+    const batch = page.data;
+    if (batch.length === 0) return { status: "COMPLETE", rows, pages };
+    if (batch.length > limit) return incomplete("page_overflow");
+
+    let next: Cursor | null = null;
+    const keys: string[] = [];
+    try {
+      for (const row of batch) {
+        next = reader.cursorAfter(row);
+        keys.push(reader.cursorKey(next));
+      }
+    } catch (thrown) {
+      return incomplete("malformed_page", thrownDetail(thrown));
+    }
+    for (const key of keys) {
+      if (seenRows.has(key)) return incomplete("repeated_row");
+      seenRows.add(key);
+    }
+    rows.push(...batch);
+    cursor = next;
+  }
+  return incomplete("page_budget");
+}
+
+/** The inventory rows, or `null` when the read did not prove completion —
+ * deletion/cleanup consumers must not act on a partial set as if it were whole. */
+export function completedInventoryRows<Row>(result: InventoryReadResult<Row>): Row[] | null {
+  return result.status === "COMPLETE" ? result.rows : null;
+}
+
+export interface KeysetColumn {
+  column: string;
+  value: string;
+}
+
+const POSTGREST_COLUMN = /^[a-z_][a-z0-9_]*$/;
+
+/** A value inside a PostgREST logic tree (`or=(…)`): double-quoted, with the
+ * backslash escapes PostgREST's parser unescapes. */
+export function postgrestFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** PostgREST `or` filter body selecting the rows strictly BEFORE `key` under a
+ * descending order over its columns — the next page of a newest-first read. */
+export function postgrestKeysetBefore(key: ReadonlyArray<KeysetColumn>): string {
+  if (key.length === 0) throw new Error("keyset cursor needs at least one column");
+  for (const { column } of key) {
+    if (!POSTGREST_COLUMN.test(column)) throw new Error(`invalid keyset column: ${column}`);
+  }
+  return keysetBeforeDisjuncts(key).join(",");
+}
+
+function keysetBeforeDisjuncts(key: ReadonlyArray<KeysetColumn>): string[] {
+  const [head, ...rest] = key;
+  const value = postgrestFilterValue(head.value);
+  const before = `${head.column}.lt.${value}`;
+  if (rest.length === 0) return [before];
+  const tail = keysetBeforeDisjuncts(rest);
+  const tailExpr = tail.length === 1 ? tail[0] : `or(${tail.join(",")})`;
+  return [before, `and(${head.column}.eq.${value},${tailExpr})`];
+}
+
+/** The keyset cursor after a PostgREST row: the row's values for `keyColumns`
+ * as text. Throws for a row that lacks a key column or holds one that is not a
+ * string or finite number — a `null` or object key cannot be filtered on, so
+ * the read reports INCOMPLETE rather than paging past the row. */
+export function postgrestKeysetAfter(
+  row: Record<string, unknown>,
+  keyColumns: readonly string[],
+): KeysetColumn[] {
+  return keyColumns.map((column) => {
+    const value = row[column];
+    if (typeof value === "string") return { column, value };
+    if (typeof value === "number" && Number.isFinite(value))
+      return { column, value: String(value) };
+    throw new Error(`keyset column ${column} is not a filterable value`);
+  });
+}
