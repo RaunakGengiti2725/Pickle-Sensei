@@ -101,7 +101,18 @@ import {
   redisConfigured,
   sha256Hex,
 } from "./cache.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import {
+  authFailureIdentity,
+  authRefusal,
+  authRefusalKind,
+  authRefusalOf,
+  chargeAuthFailure,
+  enforceRateLimit,
+  peekAuthFailureBudget,
+  peekAuthFailureShard,
+  peekRateLimit,
+  rateLimitResponse,
+} from "./rateLimit.ts";
 import {
   accessLogEntry,
   clientIp,
@@ -749,7 +760,12 @@ function authUpstreamTimeoutMs(): number {
 
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; detail: ReturnType<typeof failureDetail> }
+  | {
+      kind: "refused";
+      status: number;
+      detail: ReturnType<typeof failureDetail>;
+      errorCode: string | null;
+    }
   | { kind: "unavailable"; detail: ReturnType<typeof failureDetail>; retryAfterSeconds: number };
 
 interface AuthUserLike {
@@ -969,6 +985,7 @@ async function authRequest<T>(
       kind: "refused",
       status: answer.status,
       detail: authResponseErrorDetail(answer.status, body),
+      errorCode: isRecord(body) && typeof body.error_code === "string" ? body.error_code : null,
     };
   }
   if (answer.status >= 200 && answer.status < 300) {
@@ -1018,6 +1035,14 @@ function bearerExpired(payload: Record<string, unknown> | null): boolean {
 function bearerOf(request: Request): string {
   const authorization = request.headers.get("Authorization") ?? "";
   return authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : "";
+}
+
+/** A bearer shaped like a session token this API issued (Supabase Auth is
+ * its issuer), live or not — decided from the unverified payload, so it only
+ * ever chooses which auth-failure shard gates the request, never access. */
+function isSessionBearer(token: string): boolean {
+  const iss = token ? decodeJwtPayload(token)?.iss : undefined;
+  return typeof iss === "string" && iss.endsWith("/auth/v1");
 }
 
 const authCacheKey = async (token: string): Promise<string> => `auth:${await sha256Hex(token)}`;
@@ -1128,18 +1153,19 @@ async function authenticateProviderToken(request: Request): Promise<
   | Response
 > {
   const token = bearerOf(request);
-  if (!token) return errorJson(401, "Missing bearer token.");
+  const local = (message: string) => authRefusal(errorJson(401, message), { kind: "local" });
+  if (!token) return local("Missing bearer token.");
   const payload = decodeJwtPayload(token);
   const provider = providerForIssuer(payload?.iss);
   if (!provider) {
-    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
+    return local("Bearer token is not a Google or Apple ID token.");
   }
   if (bearerExpired(payload)) {
-    return errorJson(401, "The identity token has expired.");
+    return local("The identity token has expired.");
   }
   const providerSubject = payload?.sub;
   if (typeof providerSubject !== "string" || !providerSubject) {
-    return errorJson(401, "The identity token has no subject.");
+    return local("The identity token has no subject.");
   }
   const signIn = await anonAuthClient(request)
     .auth.signInWithIdToken({ provider, token })
@@ -1173,19 +1199,18 @@ async function authenticateProviderToken(request: Request): Promise<
  *    Remove this branch once no such build is in the field. */
 async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const token = bearerOf(request);
-  if (!token) return errorJson(401, "Missing bearer token.");
+  const local = (message: string) => authRefusal(errorJson(401, message), { kind: "local" });
+  const liveness = (message: string) => authRefusal(errorJson(401, message), { kind: "liveness" });
+  if (!token) return local("Missing bearer token.");
 
   const payload = decodeJwtPayload(token);
   const provider = providerForIssuer(payload?.iss);
   const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
   if (!provider && !supabaseIssued) {
-    return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
+    return local("Bearer token is not a session token or a Google/Apple ID token.");
   }
   if (bearerExpired(payload)) {
-    return errorJson(
-      401,
-      provider ? "The identity token has expired." : "The session token has expired.",
-    );
+    return local(provider ? "The identity token has expired." : "The session token has expired.");
   }
 
   // Session bearers carry the Supabase session_id; a provider ID token does
@@ -1194,7 +1219,7 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const cacheKey = await authCacheKey(token);
   const cached = await readAuthCache(cacheKey, provider, sessionId);
   if (cached.revoked) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return liveness("The session is no longer valid. Sign in again.");
   }
   if (cached.authed) return cached.authed;
 
@@ -1234,18 +1259,20 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     });
   }
   if (verified.kind === "refused") {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: authRefusalKind(verified.errorCode),
+    });
   }
   const user = verified.value;
   const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
-    return errorJson(401, "The session does not belong to a Google or Apple account.");
+    return liveness("The session does not belong to a Google or Apple account.");
   }
   // The session may have been logged out while getUser() was in flight: a
   // verification that raced its own revocation must neither be served nor
   // cached. (Revocation is fenced again on every later read regardless.)
   if (sessionId && (await cacheIsRevoked(authRevokedKey(sessionId))) === true) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return liveness("The session is no longer valid. Sign in again.");
   }
   await writeAuthCache(
     cacheKey,
@@ -1314,6 +1341,11 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
+  // The refresh token is this route's credential: its own auth-failure shard
+  // gates the rotation (a bearer on the request, live or dead, does not).
+  const identity = await authFailureIdentity(refreshToken);
+  const shard = await peekAuthFailureShard(clientIp(request), identity, AUTH_FAILURE_LIMIT);
+  if (!shard.allowed) return rateLimitResponse(shard);
   const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
     return serviceUnavailable("Session refresh", rotated.detail, {
@@ -1321,7 +1353,10 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
     });
   }
   if (rotated.kind === "refused") {
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+    return authRefusal(errorJson(401, "The session could not be refreshed. Sign in again."), {
+      kind: authRefusalKind(rotated.errorCode),
+      identity,
+    });
   }
   return json(200, { session: sessionView(rotated.value) });
 }
@@ -5013,12 +5048,26 @@ async function handleRequest(request: Request): Promise<Response> {
 
   // Atomic INCR on the aligned auth-failure window (peeked above) — never a
   // read-then-write, so concurrent bad bearers cannot under-count.
-  const recordAuthFailure = () =>
-    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+  // The refusal's tag decides what is charged: the egress-wide budget only
+  // for the first refusal of a credential Auth rejected, the credential's own
+  // shard for every refusal of it, the anonymous shard for junk refused
+  // locally. Refresh gates itself on the refresh token in its body.
+  const bearer = bearerOf(request);
+  const presented = {
+    identity: await authFailureIdentity(bearer),
+    anonymous: route !== "POST /v1/account/bootstrap" && !isSessionBearer(bearer),
+  };
+  if (route !== "POST /v1/auth/refresh") {
+    const budget = await peekAuthFailureBudget(ip, presented, AUTH_FAILURE_LIMIT);
+    if (!budget.allowed) return rateLimitResponse(budget);
+  }
+  const recordAuthFailure = (refused: Response) =>
+    chargeAuthFailure(ip, presented, authRefusalOf(refused), AUTH_FAILURE_LIMIT);
 
   if (isAccountDeletionStatusCapability(bearerOf(request))) {
-    await recordAuthFailure();
-    return errorJson(401, "A deletion status capability cannot authorize this route.");
+    const refused = errorJson(401, "A deletion status capability cannot authorize this route.");
+    await recordAuthFailure(authRefusal(refused, { kind: "local" }));
+    return refused;
   }
 
   // ── Session establishment and rotation run BEFORE general authentication:
@@ -5036,7 +5085,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
-      if (exchanged.status === 401) await recordAuthFailure();
+      if (exchanged.status === 401) await recordAuthFailure(exchanged);
       return exchanged;
     }
     const userLimit = await enforceRateLimit(
@@ -5062,13 +5111,13 @@ async function handleRequest(request: Request): Promise<Response> {
     );
     if (!rl.allowed) return rateLimitResponse(rl);
     const refreshed = await refreshSessionRoute(request);
-    if (refreshed.status === 401) await recordAuthFailure();
+    if (refreshed.status === 401) await recordAuthFailure(refreshed);
     return refreshed;
   }
 
   const authed = await authenticate(request);
   if (authed instanceof Response) {
-    if (authed.status === 401) await recordAuthFailure();
+    if (authed.status === 401) await recordAuthFailure(authed);
     return authed;
   }
 

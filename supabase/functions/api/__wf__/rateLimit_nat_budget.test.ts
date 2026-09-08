@@ -13,9 +13,9 @@
 //     `user_banned`, `refresh_token_already_used`) is a stale-but-real
 //     credential, not a guess: it never charges the egress, only its shard;
 //   * a refusal decided locally without consulting Auth (no credential,
-//     non-JWT bearer, lowercase scheme, expired token) never charges the
-//     egress; anonymous noise throttles anonymous traffic from that egress
-//     only, session credentials issued by this API are never fenced by it;
+//     non-JWT bearer, lowercase scheme, expired token) charges nothing: no
+//     guess was checked upstream, and the per-IP request budget bounds it;
+//     a peer signing in behind that egress is never fenced by such noise;
 //   * DISTINCT refused credentials still close the egress (stuffing stays
 //     starved) — that is the one venue-wide budget and it stays per IP.
 //
@@ -410,26 +410,59 @@ Deno.test(
 );
 
 Deno.test(
-  "NAT: anonymous noise throttles only anonymous traffic — after 30 credential-less refusals a provider ID token on a general route is 429, a session bearer is 200",
+  "NAT: after 30 credential-less and 30 garbage-bearer refusals a peer can still SIGN IN behind the egress (bootstrap 200)",
   async () => {
     const h = await loadHarness();
     h.tables.profiles = [profile()];
     const ip = freshIp();
     await repeat(LIMIT, () => readMeWithAuthorization(h.handler, ip));
-    const anonymous = await readMe(h.handler, ip, fakeGoogleIdToken());
-    assertEquals(anonymous.status, 429, "the noisy egress may not mint sessions this window");
-    assertEquals(
-      h.callsTo("/auth/v1/token").length,
-      0,
-      "the throttled ID token never reached Auth",
-    );
-    await assertPeersServed(h.handler, ip, "anonymous noise fenced signed-in peers");
+    let n = 0;
+    await repeat(LIMIT, () => readMe(h.handler, ip, `garbage-${n++}`));
+    assertEquals(h.callsTo("/auth/v1").length, 0, "nothing was probed upstream");
+    const signedIn = await postBootstrap(h.handler, ip, fakeGoogleIdToken());
+    assertEquals(signedIn.status, 200, "local noise fenced a peer's sign-in");
+    await assertPeersServed(h.handler, ip, "local noise fenced signed-in peers");
+    // The junk itself IS throttled: anything that is not a session bearer of
+    // this API (nothing, garbage, or a provider token on a session route) now
+    // answers 429 from that egress until the window turns — without Auth.
+    const probes = h.callsTo("/auth/v1").length;
+    const junk = await readMeWithAuthorization(h.handler, ip);
+    assertEquals(junk.status, 429, "anonymous junk is not throttled");
+    const retryAfter = Number(junk.headers.get("Retry-After"));
+    assert(retryAfter >= 1 && retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds, `${retryAfter}`);
+    await junk.body?.cancel();
+    const transitional = await readMe(h.handler, ip, fakeGoogleIdToken());
+    assertEquals(transitional.status, 429, "a provider token on a session route is anonymous");
+    await transitional.body?.cancel();
+    assertEquals(h.callsTo("/auth/v1").length, probes, "throttled junk never reaches Auth");
   },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refresh: the refresh token is the credential; a bearer on the request is not.
+// POST /v1/auth/refresh also has its own per-IP route budget (30 / 60 s), so
+// these tests spread the refusals over two clock minutes inside ONE 300 s
+// auth-failure window — the route budget is not what is under test here.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Freeze Date.now() one second into the current 300 s auth-failure bucket
+ * and let the test advance it; every window the handler consults is aligned
+ * to that clock, so a 61 s step opens a new refresh-route minute without
+ * leaving the auth-failure window. */
+async function withFrozenClock(run: (advance: (ms: number) => void) => Promise<void>) {
+  const realNow = Date.now;
+  const windowMs = AUTH_FAILURE_LIMIT.windowSeconds * 1_000;
+  let now = Math.floor(realNow() / windowMs) * windowMs + 1_000;
+  Date.now = () => now;
+  try {
+    await run((ms) => {
+      now += ms;
+    });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
 Deno.test(
   "NAT: one refused refresh token replayed 31× charges the egress once and is throttled alone",
   async () => {
@@ -440,19 +473,27 @@ Deno.test(
       isRefreshCall(call) && bodyField(call, "refresh_token") === "rt-revoked-replayed"
         ? refreshRefused()
         : null;
-    const statuses = await repeat(LIMIT + 1, () =>
-      postRefresh(h.handler, ip, "rt-revoked-replayed"),
-    );
-    assertEquals(statuses.slice(0, LIMIT), new Array(LIMIT).fill(401));
-    assertEquals(statuses[LIMIT], 429);
-    assertEquals(
-      h.calls.filter(
-        (c) => isRefreshCall(c) && bodyField(c, "refresh_token") === "rt-revoked-replayed",
-      ).length,
-      LIMIT,
-    );
-    assertEquals(await egressCharged(ip), 1);
-    await assertPeersServed(h.handler, ip, "one replayed refresh token locked the venue out");
+    await withFrozenClock(async (advance) => {
+      const half = LIMIT / 2;
+      const statuses = await repeat(half, () => postRefresh(h.handler, ip, "rt-revoked-replayed"));
+      advance(61_000);
+      statuses.push(
+        ...(await repeat(LIMIT + 1 - half, () =>
+          postRefresh(h.handler, ip, "rt-revoked-replayed"),
+        )),
+      );
+      assertEquals(statuses.slice(0, LIMIT), new Array(LIMIT).fill(401));
+      assertEquals(statuses[LIMIT], 429, "the replaying handset alone is throttled");
+      assertEquals(
+        h.calls.filter(
+          (c) => isRefreshCall(c) && bodyField(c, "refresh_token") === "rt-revoked-replayed",
+        ).length,
+        LIMIT,
+        "the throttled replay never reached Auth",
+      );
+      assertEquals(await egressCharged(ip), 1);
+      await assertPeersServed(h.handler, ip, "one replayed refresh token locked the venue out");
+    });
   },
 );
 
@@ -466,11 +507,18 @@ Deno.test(
       isRefreshCall(call) && bodyField(call, "refresh_token").startsWith("rt-raced-")
         ? refreshRefused("refresh_token_already_used")
         : null;
-    let n = 0;
-    const statuses = await repeat(LIMIT, () => postRefresh(h.handler, ip, `rt-raced-${n++}`));
-    assertEquals(statuses, new Array(LIMIT).fill(401));
-    assertEquals(await egressCharged(ip), 0);
-    await assertPeersServed(h.handler, ip, "rotation races locked the venue out");
+    await withFrozenClock(async (advance) => {
+      let n = 0;
+      const half = LIMIT / 2;
+      const statuses = await repeat(half, () => postRefresh(h.handler, ip, `rt-raced-${n++}`));
+      advance(61_000);
+      statuses.push(
+        ...(await repeat(LIMIT - half, () => postRefresh(h.handler, ip, `rt-raced-${n++}`))),
+      );
+      assertEquals(statuses, new Array(LIMIT).fill(401));
+      assertEquals(await egressCharged(ip), 0);
+      await assertPeersServed(h.handler, ip, "rotation races locked the venue out");
+    });
   },
 );
 
@@ -524,15 +572,16 @@ Deno.test(
     const ip = "198.51.100.1";
     const identity = await rateLimit.authFailureIdentity("dead-bearer");
     assert(identity !== null);
+    const session = { identity, anonymous: false };
     for (let i = 0; i < BUDGET.limit; i += 1) {
       assertEquals(
-        (await rateLimit.peekAuthFailureBudget(ip, { identity, session: true }, BUDGET)).allowed,
+        (await rateLimit.peekAuthFailureBudget(ip, session, BUDGET)).allowed,
         true,
         `replay ${i + 1} is still allowed`,
       );
-      await rateLimit.chargeAuthFailure(ip, identity, "credential", BUDGET);
+      await rateLimit.chargeAuthFailure(ip, session, { kind: "credential" }, BUDGET);
     }
-    const shard = await rateLimit.peekAuthFailureBudget(ip, { identity, session: true }, BUDGET);
+    const shard = await rateLimit.peekAuthFailureBudget(ip, session, BUDGET);
     assertEquals(shard.allowed, false, "the replayed credential is throttled");
     assert(shard.retryAfterSeconds >= 1 && shard.retryAfterSeconds <= BUDGET.windowSeconds);
     const egress = await rateLimit.peekRateLimit(
@@ -544,32 +593,74 @@ Deno.test(
     assertEquals(spent(egress), 1);
     const other = await rateLimit.authFailureIdentity("another-bearer");
     assertEquals(
-      (await rateLimit.peekAuthFailureBudget(ip, { identity: other, session: true }, BUDGET))
-        .allowed,
+      (await rateLimit.peekAuthFailureShard(ip, other, BUDGET)).allowed,
       true,
       "a different credential behind the egress is unaffected",
     );
+    assertEquals(
+      (await rateLimit.peekAuthFailureShard(ip, null, BUDGET)).allowed,
+      true,
+      "no credential presented → no shard to be spent",
+    );
+    const refresh = await rateLimit.authFailureIdentity("rt-judged");
+    await rateLimit.chargeAuthFailure(
+      ip,
+      session,
+      { kind: "credential", identity: refresh },
+      BUDGET,
+    );
+    assertEquals(
+      spent(await rateLimit.peekAuthFailureShard(ip, refresh, BUDGET)),
+      1,
+      "a refusal's own identity replaces the presented one",
+    );
+    assertEquals(spent(await rateLimit.peekAuthFailureShard(ip, identity, BUDGET)), BUDGET.limit);
   },
 );
 
 Deno.test(
-  "rateLimit: liveness charges only the shard; local charges only the anonymous lane; expired charges nothing",
+  "rateLimit: liveness charges only the credential's shard; a local refusal charges the anonymous shard for anonymous junk and nothing for a route credential",
   async () => {
     configureRedis(false);
     const { rateLimit } = await loadIsolate();
     const ip = "198.51.100.2";
     const dead = await rateLimit.authFailureIdentity("signed-out-bearer");
+    const deadSession = { identity: dead, anonymous: false };
     for (let i = 0; i < BUDGET.limit; i += 1) {
-      await rateLimit.chargeAuthFailure(ip, dead, "liveness", BUDGET);
+      await rateLimit.chargeAuthFailure(ip, deadSession, { kind: "liveness" }, BUDGET);
     }
-    assertEquals(
-      (await rateLimit.peekAuthFailureBudget(ip, { identity: dead, session: true }, BUDGET))
-        .allowed,
-      false,
-    );
+    assertEquals((await rateLimit.peekAuthFailureBudget(ip, deadSession, BUDGET)).allowed, false);
+    const noisy = await rateLimit.authFailureIdentity("garbage-bearer");
+    const expired = await rateLimit.authFailureIdentity("expired-session-bearer");
     for (let i = 0; i < BUDGET.limit; i += 1) {
-      await rateLimit.chargeAuthFailure(ip, null, "local", BUDGET);
-      await rateLimit.chargeAuthFailure(ip, dead, "expired", BUDGET);
+      await rateLimit.chargeAuthFailure(
+        ip,
+        { identity: null, anonymous: true },
+        { kind: "local" },
+        BUDGET,
+      );
+      await rateLimit.chargeAuthFailure(
+        ip,
+        { identity: noisy, anonymous: true },
+        { kind: "local" },
+        BUDGET,
+      );
+      await rateLimit.chargeAuthFailure(
+        ip,
+        { identity: expired, anonymous: false },
+        {
+          kind: "local",
+        },
+        BUDGET,
+      );
+      await rateLimit.chargeAuthFailure(
+        ip,
+        { identity: null, anonymous: true },
+        {
+          kind: "liveness",
+        },
+        BUDGET,
+      );
     }
     const egress = await rateLimit.peekRateLimit(
       "authfail",
@@ -577,19 +668,36 @@ Deno.test(
       BUDGET.limit,
       BUDGET.windowSeconds,
     );
-    assertEquals(spent(egress), 0, "neither liveness nor local nor expired is stuffing signal");
+    assertEquals(spent(egress), 0, "neither liveness nor local is stuffing signal");
     assertEquals(
-      (await rateLimit.peekAuthFailureBudget(ip, { identity: null, session: false }, BUDGET))
+      (await rateLimit.peekAuthFailureBudget(ip, { identity: null, anonymous: true }, BUDGET))
         .allowed,
       false,
-      "anonymous traffic from the noisy egress is throttled",
+      "anonymous junk from the noisy egress is throttled",
+    );
+    assertEquals(
+      (await rateLimit.peekAuthFailureBudget(ip, { identity: noisy, anonymous: true }, BUDGET))
+        .allowed,
+      false,
+      "…whatever garbage it carries",
+    );
+    assertEquals(
+      spent(await rateLimit.peekAuthFailureShard(ip, noisy, BUDGET)),
+      0,
+      "a locally refused credential opens no shard of its own",
+    );
+    assertEquals(
+      (await rateLimit.peekAuthFailureBudget(ip, { identity: expired, anonymous: false }, BUDGET))
+        .allowed,
+      true,
+      "a handset whose own session token expired is neither charged nor fenced",
     );
     const peer = await rateLimit.authFailureIdentity("peer-session");
     assertEquals(
-      (await rateLimit.peekAuthFailureBudget(ip, { identity: peer, session: true }, BUDGET))
+      (await rateLimit.peekAuthFailureBudget(ip, { identity: peer, anonymous: false }, BUDGET))
         .allowed,
       true,
-      "a session credential is never fenced by anonymous noise",
+      "a peer's session credential is never fenced by another handset's refusals",
     );
   },
 );
@@ -602,7 +710,12 @@ Deno.test(
     const ip = "198.51.100.3";
     for (let i = 0; i < BUDGET.limit; i += 1) {
       const identity = await rateLimit.authFailureIdentity(`guess-${i}`);
-      await rateLimit.chargeAuthFailure(ip, identity, "credential", BUDGET);
+      await rateLimit.chargeAuthFailure(
+        ip,
+        { identity, anonymous: false },
+        { kind: "credential" },
+        BUDGET,
+      );
     }
     const egress = await rateLimit.peekRateLimit(
       "authfail",
@@ -685,10 +798,17 @@ Deno.test("rateLimit: shard and egress accounting persists in Redis across isola
     const ip = "198.51.100.4";
     const identity = await a.rateLimit.authFailureIdentity("shared-dead-bearer");
     for (let i = 0; i < BUDGET.limit; i += 1) {
-      await a.rateLimit.chargeAuthFailure(ip, identity, "credential", BUDGET);
+      await a.rateLimit.chargeAuthFailure(
+        ip,
+        { identity, anonymous: false },
+        {
+          kind: "credential",
+        },
+        BUDGET,
+      );
     }
     assertEquals(
-      (await b.rateLimit.peekAuthFailureBudget(ip, { identity, session: true }, BUDGET)).allowed,
+      (await b.rateLimit.peekAuthFailureShard(ip, identity, BUDGET)).allowed,
       false,
       "another isolate sees the spent shard",
     );
@@ -714,12 +834,16 @@ Deno.test(
       const ip = "198.51.100.5";
       const identity = await rateLimit.authFailureIdentity("dead-during-outage");
       for (let i = 0; i < BUDGET.limit; i += 1) {
-        await rateLimit.chargeAuthFailure(ip, identity, "credential", BUDGET);
+        await rateLimit.chargeAuthFailure(
+          ip,
+          { identity, anonymous: false },
+          {
+            kind: "credential",
+          },
+          BUDGET,
+        );
       }
-      assertEquals(
-        (await rateLimit.peekAuthFailureBudget(ip, { identity, session: true }, BUDGET)).allowed,
-        false,
-      );
+      assertEquals((await rateLimit.peekAuthFailureShard(ip, identity, BUDGET)).allowed, false);
     } finally {
       redis.restore();
       configureRedis(false);

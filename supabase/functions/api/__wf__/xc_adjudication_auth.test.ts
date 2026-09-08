@@ -114,6 +114,17 @@ function liveSessionForToken(token: string): Session | null {
   return null;
 }
 
+/** Unverified claims of a bearer (the fake Auth, like GoTrue, answers a token
+ * it never minted with `bad_jwt`, and one it minted for a session that is
+ * gone with `session_not_found`). */
+function claimsOf(token: string): Record<string, unknown> {
+  try {
+    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+  } catch {
+    return {};
+  }
+}
+
 function userJson(userId: string) {
   return {
     id: userId,
@@ -250,12 +261,16 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (url.origin === SUPABASE_URL && url.pathname === "/auth/v1/user") {
     upstreamCalls.push("auth:getUser");
     const session = liveSessionForToken(bearer);
-    if (!session)
-      return json(401, {
-        code: 401,
-        error_code: "session_not_found",
-        msg: "Session from session_id claim in JWT does not exist",
-      });
+    if (!session) {
+      const sessionId = claimsOf(bearer).session_id;
+      if (typeof sessionId === "string" && sessions.has(sessionId))
+        return json(401, {
+          code: 401,
+          error_code: "session_not_found",
+          msg: "Session from session_id claim in JWT does not exist",
+        });
+      return json(401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
+    }
     return json(200, userJson(session.userId));
   }
 
@@ -665,7 +680,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "characterization: per-IP auth-failure budget (30/5 min) — 30 DISTINCT forged bearers (credential stuffing) lock out VALID bearers, bootstrap and refresh from the same address",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -706,6 +721,57 @@ Deno.test(
       (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
       429,
       "refresh from the address → 429",
+    );
+  },
+);
+
+Deno.test(
+  "NAT egress: 30 signed-out co-tenants (liveness 401) and one handset replaying ONE dead bearer never lock VALID bearers, bootstrap or refresh out of the same address",
+  async () => {
+    const ip = freshIp();
+    const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
+
+    // 30 co-tenants whose sessions Auth no longer honours (signed out
+    // elsewhere): each bearer is real, refused with `session_not_found`.
+    for (let i = 0; i < 30; i += 1) {
+      const gone = newSession(`${ATTACKER}-${i}`);
+      const dead = mintAccessToken(gone);
+      gone.revoked = true;
+      assertEquals(
+        (await call("GET", PROBE_ROUTE, { token: dead, ip })).status,
+        401,
+        `signed-out bearer ${i} → 401`,
+      );
+    }
+    // One handset replays a single dead bearer past the budget: the 31st
+    // replay is throttled — that bearer alone.
+    const replayed = newSession(`${ATTACKER}-replay`);
+    const replay = mintAccessToken(replayed);
+    replayed.revoked = true;
+    for (let i = 0; i < 30; i += 1) {
+      assertEquals((await call("GET", PROBE_ROUTE, { token: replay, ip })).status, 401);
+    }
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: replay, ip })).status,
+      429,
+      "the replayed dead bearer is throttled",
+    );
+
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
+      200,
+      "victim's VALID bearer still reads",
+    );
+    const signIn = await call("POST", "/v1/account/bootstrap", {
+      token: googleIdToken(VICTIM),
+      ip,
+      body: {},
+    });
+    assertEquals(signIn.status, 200, "sign-in from the address still works");
+    assertEquals(
+      (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
+      200,
+      "refresh from the address still works",
     );
   },
 );
