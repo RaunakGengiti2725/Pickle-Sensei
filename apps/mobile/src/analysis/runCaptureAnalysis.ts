@@ -34,6 +34,12 @@ import {
   verifyCapturedClipCurrentBytes,
   type CapturedClip,
 } from '../camera/capture';
+import {
+  admitImportedClip,
+  admitImportedMedia,
+  importAdmissionRejectionMessage,
+  type ImportAdmissionReason,
+} from '../camera/importAdmission';
 import type { LocalDb } from '../data/db';
 import {
   assertDataOwnerContext,
@@ -397,6 +403,31 @@ function cancelledOutcome(): CaptureAnalysisOutcome {
     cause: 'cancelled',
     reason: 'This analysis was cancelled. Your capture is still saved.',
   };
+}
+
+/**
+ * An imported clip refused by import admission. Nothing was reserved,
+ * journaled or inferred; the precise reason is what the player reads.
+ */
+function importRefusedOutcome(
+  reason: ImportAdmissionReason,
+  envelope: EnvelopeVerdict | null,
+): Extract<CaptureAnalysisOutcome, { kind: 'quality_blocked' }> {
+  return {
+    kind: 'quality_blocked',
+    reason: importAdmissionRejectionMessage(reason),
+    envelope,
+  };
+}
+
+function parseRecordedPoseSequence(sidecarJson: string) {
+  return parsePoseSequence(sidecarJson, {
+    providerId:
+      Platform.OS === 'android' ? 'pose.mediapipe' : 'pose.apple-vision',
+    runtime: Platform.OS === 'android' ? 'mediapipe' : 'vision_framework',
+    executionTarget: 'on_device',
+    artifactHash: null,
+  });
 }
 
 function recoveryPendingOutcome(): Extract<
@@ -806,6 +837,12 @@ export async function runOriginalCaptureAnalysis(
       };
     let clip = await originalAnalysisOperations.readCapture(db, operation);
     execution.assertCurrent();
+    // Import admission precedes extraction and the attempt: a refused import
+    // has no journal row for recovery or reconciliation to reserve against.
+    if (clip.captureMode === 'imported_video') {
+      const media = admitImportedMedia(clip);
+      if (!media.admitted) return importRefusedOutcome(media.reason, envelope);
+    }
     if (!clip.poseSequence) {
       if (
         clip.captureMode !== 'imported_video' ||
@@ -854,6 +891,14 @@ export async function runOriginalCaptureAnalysis(
     }
     const sidecar = await readCaptureArtifact(clip.poseSequence!.uri);
     execution.assertCurrent();
+    if (clip.captureMode === 'imported_video') {
+      const parsed = parseRecordedPoseSequence(sidecar);
+      if (parsed.ok) {
+        const admission = admitImportedClip(clip, parsed.value);
+        if (!admission.admitted)
+          return importRefusedOutcome(admission.reason, envelope);
+      }
+    }
     operation = await originalAnalysisOperations.sealObservation(
       db,
       execution,
@@ -1237,6 +1282,29 @@ async function runCaptureAnalysisCore(
         'This capture predates pose-sequence recording, so it cannot be scored. New guided captures record the full motion.',
     };
   }
+  // ── Import admission: refused imports never reach a permit ─────────────
+  // With `original` set the attempt is released like an unreadable sidecar.
+  const refuseImport = async (reason: ImportAdmissionReason) => {
+    if (original) {
+      await originalAnalysisOperations.requestRelease(
+        request.db,
+        original.run,
+        'unsupported',
+      );
+      original.releaseAdmissionGuard();
+      await journal.recover(
+        request.db,
+        original.execution.scope,
+        permitPort(original.execution.scope),
+        { operationId: original.run.operationId, limit: 1 },
+      );
+    }
+    return importRefusedOutcome(reason, envelope);
+  };
+  if (clip.captureMode === 'imported_video') {
+    const media = admitImportedMedia(clip);
+    if (!media.admitted) return await refuseImport(media.reason);
+  }
 
   // ── Load and validate the canonical temporal record ────────────────────
   let sidecarJson: string;
@@ -1280,13 +1348,7 @@ async function runCaptureAnalysisCore(
         'The recorded pose sequence failed its integrity check (hash mismatch). It will not be trusted or repaired.',
     };
   }
-  const parsed = parsePoseSequence(sidecarJson, {
-    providerId:
-      Platform.OS === 'android' ? 'pose.mediapipe' : 'pose.apple-vision',
-    runtime: Platform.OS === 'android' ? 'mediapipe' : 'vision_framework',
-    executionTarget: 'on_device',
-    artifactHash: null,
-  });
+  const parsed = parseRecordedPoseSequence(sidecarJson);
   if (!parsed.ok) {
     return {
       kind: 'unavailable',
@@ -1306,6 +1368,10 @@ async function runCaptureAnalysisCore(
       reason:
         'The recorded pose sequence does not match this capture’s saved metadata. It will not be repaired or rated.',
     };
+  }
+  if (clip.captureMode === 'imported_video') {
+    const admission = admitImportedClip(clip, parsed.value);
+    if (!admission.admitted) return await refuseImport(admission.reason);
   }
 
   const fusion = createFusionProviders(request.declaredStroke);
