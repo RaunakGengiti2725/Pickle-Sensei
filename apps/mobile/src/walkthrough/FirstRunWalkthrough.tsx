@@ -7,7 +7,6 @@ import React, {
   useState,
 } from 'react';
 import {
-  AccessibilityInfo,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,7 +27,11 @@ import {
   type TargetRect,
   type WalkthroughTargetKey,
 } from './targets';
-import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
+import {
+  CeremonyHost,
+  useCeremonyAnnouncement,
+  useCeremonyPresentation,
+} from '../flow/CeremonyHost';
 
 /**
  * The first-run walkthrough — a spotlight tour over the REAL interface.
@@ -758,14 +761,13 @@ function WalkthroughStage({ dismiss }: { dismiss: () => void }) {
     frame.height,
   ]);
 
-  useEffect(() => {
-    if (!rect) return;
-    AccessibilityInfo.announceForAccessibility(
-      `Walkthrough, step ${index + 1} of ${WALKTHROUGH_STEPS.length}. ${
-        step.headline
-      } ${step.body}`,
-    );
-  }, [index, rect, step]);
+  useCeremonyAnnouncement(
+    rect
+      ? `Walkthrough, step ${index + 1} of ${WALKTHROUGH_STEPS.length}. ${
+          step.headline
+        } ${step.body}`
+      : null,
+  );
 
   return (
     <View
