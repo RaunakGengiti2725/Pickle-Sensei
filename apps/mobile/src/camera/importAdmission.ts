@@ -93,6 +93,22 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
    * so it can never fuse two strokes into one.
    */
   minPeakProminenceTorsoPerSecond: 1.5,
+  /**
+   * Two speed peaks of one wrist further apart than a contact dip are one
+   * movement only while the speed between them also stays above this
+   * fraction of the lesser peak. A shallower valley between stroke-sized
+   * peaks is a hand battle whose volleys never subside, not jitter: the
+   * absolute prominence floor alone let four volleys with valleys at 64–75 %
+   * of their peaks fuse into one event.
+   */
+  maxSharedValleyRatio: 0.8,
+  /**
+   * The smoothed wrist speed stays within `maxSharedValleyRatio` of an
+   * event's peak for at most this long. A swing accelerates to contact and
+   * decelerates; a wrist that holds stroke speed for longer is a rally whose
+   * volleys never drop out of the plateau, however the peaks are grouped.
+   */
+  maxNearPeakMs: 600,
   /** An event needs at least this many samples to count as motion at all. */
   minRunSamples: 3,
   /** Body scale needs at least this many frames with both shoulders and both hips tracked. */
@@ -130,6 +146,15 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
    * stroke's motion span. A longer pause separates two movements.
    */
   maxWindUpPauseMs: 400,
+  /**
+   * A burst that is stroke-sized on its own (`minStrokePeakTorsoPerSecond`)
+   * is folded only as a wind-up, and only when it hands off into the swing
+   * within this much time — the backswing of a hard drive reverses straight
+   * into the forward swing. After a rest it was a stroke of its own, and a
+   * stroke-sized burst AFTER the swing is never a recovery: a second stroke
+   * is at least as likely, so the clip is ambiguous.
+   */
+  maxStrokePhaseHandoffMs: 100,
   /**
    * A wind-up, a recovery and the stroke itself each travel at least this
    * far, in torso lengths, along their net direction. Motion that goes
@@ -676,7 +701,8 @@ function groupPeaks(
         valley.value > lesserPeak * limits.eventValleyRatio;
       const jitter =
         lesserPeak - valley.value <
-        torsoLength * limits.minPeakProminenceTorsoPerSecond;
+          torsoLength * limits.minPeakProminenceTorsoPerSecond &&
+        valley.value > lesserPeak * limits.maxSharedValleyRatio;
       if (!valley.gap && (contactDip || jitter)) {
         open.peakIndices.push(peakIndex);
         if ((smoothed[peakIndex] ?? 0) > (smoothed[open.maxIndex] ?? 0))
@@ -701,6 +727,11 @@ interface MeasuredCandidate extends StrokeEventCandidate {
   touchesSeriesStart: boolean;
   /** The span ends at the last tracked sample or right before a tracking gap. */
   touchesSeriesEnd: boolean;
+  /** Smoothed speed at the span's first and last sample. */
+  startSpeed: number;
+  endSpeed: number;
+  /** How long the smoothed speed stays within `maxSharedValleyRatio` of the peak around it. */
+  nearPeakMs: number;
   /** Wrist position where the span begins, peaks and ends. */
   startPoint: Point;
   peakPoint: Point;
@@ -781,6 +812,22 @@ function candidatesFor(
     const peakSample = series[peakIndex];
     const endSample = series[endIndex];
     if (!startSample || !peakSample || !endSample) return;
+    const plateauFloor =
+      (smoothed[peakIndex] ?? 0) * limits.maxSharedValleyRatio;
+    let plateauStart = peakIndex;
+    while (
+      plateauStart > startIndex &&
+      (smoothed[plateauStart - 1] ?? 0) >= plateauFloor
+    ) {
+      plateauStart -= 1;
+    }
+    let plateauEnd = peakIndex;
+    while (
+      plateauEnd < endIndex &&
+      (smoothed[plateauEnd + 1] ?? 0) >= plateauFloor
+    ) {
+      plateauEnd += 1;
+    }
     candidates.push({
       wrist: measurement.wrist,
       startMs: series[startIndex]?.timestampMs ?? 0,
@@ -796,6 +843,11 @@ function candidatesFor(
       touchesSeriesEnd:
         endIndex === smoothed.length - 1 ||
         (series[endIndex + 1]?.gapBefore ?? false),
+      startSpeed: smoothed[startIndex] ?? 0,
+      endSpeed: smoothed[endIndex] ?? 0,
+      nearPeakMs:
+        (series[plateauEnd]?.timestampMs ?? 0) -
+        (series[plateauStart]?.timestampMs ?? 0),
       startPoint: { x: startSample.x, y: startSample.y },
       peakPoint: { x: peakSample.x, y: peakSample.y },
       endPoint: { x: endSample.x, y: endSample.y },
@@ -852,6 +904,10 @@ function isStrokePhase(
       ? stroke.startMs - phase.endMs
       : phase.startMs - stroke.endMs;
   if (pauseMs > limits.maxWindUpPauseMs) return false;
+  if (phase.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond) {
+    if (side === 'recovery') return false;
+    if (pauseMs > limits.maxStrokePhaseHandoffMs) return false;
+  }
   const gap =
     side === 'wind_up'
       ? hasGapBetween(series, phase.endIndex, stroke.startIndex)
@@ -1103,14 +1159,56 @@ export function admitImportedStrokeEvents(
       comparableEventCount,
     };
   }
-  if (
-    cluster.some(member => member.touchesSeriesStart || member.touchesSeriesEnd)
-  ) {
+  if (lead.nearPeakMs > limits.maxNearPeakMs) {
+    return {
+      admitted: false,
+      version,
+      reason: 'motion_not_stroke_like',
+      detail:
+        `Wrist speed stays within ${Math.round(limits.maxSharedValleyRatio * 100)} % of its peak for ${lead.nearPeakMs} ms; ` +
+        `a single stroke holds stroke speed for at most ${limits.maxNearPeakMs} ms.`,
+      candidates,
+      comparableEventCount,
+    };
+  }
+  // The core is truncated whenever it touches an edge; a folded wind-up or
+  // recovery is truncated when the evidence stops while the wrist is still
+  // near that phase's peak speed, i.e. before the phase was seen to decay.
+  const cutAtStart = movement.some(
+    member =>
+      member.touchesSeriesStart &&
+      (cluster.includes(member) ||
+        member.startSpeed >= member.peakSpeed * limits.maxSharedValleyRatio),
+  );
+  const cutAtEnd = movement.some(
+    member =>
+      member.touchesSeriesEnd &&
+      (cluster.includes(member) ||
+        member.endSpeed >= member.peakSpeed * limits.maxSharedValleyRatio),
+  );
+  if (cutAtStart || cutAtEnd) {
     return {
       admitted: false,
       version,
       reason: 'stroke_truncated_at_clip_edge',
-      detail: `Stroke motion (${startMs}–${endMs} ms) runs into the ${cluster.some(m => m.touchesSeriesStart) ? 'first' : 'last'} tracked frame or a tracking gap; the swing is not fully inside the clip.`,
+      detail: `Stroke motion (${startMs}–${endMs} ms) runs into the ${cutAtStart ? 'first' : 'last'} tracked frame or a tracking gap; the swing is not fully inside the clip.`,
+      candidates,
+      comparableEventCount,
+    };
+  }
+  // The hitting wrist's evidence must be continuous while the player is
+  // tracked: frames that carry the body but not this wrist for longer than
+  // a sample gap could hide a whole stroke, so the clip cannot prove exactly
+  // one. Stretches without any pose frame are bounded by the coverage gate.
+  const hole = wristTrackingHole(frames, lead.wrist);
+  if (hole) {
+    return {
+      admitted: false,
+      version,
+      reason: 'wrist_not_tracked',
+      detail:
+        `${lead.wrist} was not tracked between ${hole.fromMs} and ${hole.toMs} ms ` +
+        `(${hole.toMs - hole.fromMs} ms, more than the ${limits.maxSampleGapMs} ms sample gap); a stroke could hide in that hole.`,
       candidates,
       comparableEventCount,
     };
@@ -1151,6 +1249,37 @@ export function admitImportedStrokeEvents(
     candidates,
     comparableEventCount,
   };
+}
+
+/**
+ * The first stretch of pose frames on which `wrist` is not tracked that is
+ * longer than `maxSampleGapMs` and lies between two frames where it is:
+ * the body was measured, the wrist was not.
+ */
+function wristTrackingHole(
+  frames: readonly CanonicalPoseFrame[],
+  wrist: WristName,
+): { fromMs: number; toMs: number } | null {
+  const limits = IMPORT_ADMISSION_LIMITS;
+  let lastTrackedMs: number | null = null;
+  let untrackedFrames = 0;
+  for (const frame of frames) {
+    const tracked = landmarkPoint(frame, wrist, 1) !== null;
+    if (!tracked) {
+      if (lastTrackedMs !== null) untrackedFrames += 1;
+      continue;
+    }
+    if (
+      lastTrackedMs !== null &&
+      untrackedFrames > 0 &&
+      frame.timestampMs - lastTrackedMs > limits.maxSampleGapMs
+    ) {
+      return { fromMs: lastTrackedMs, toMs: frame.timestampMs };
+    }
+    lastTrackedMs = frame.timestampMs;
+    untrackedFrames = 0;
+  }
+  return null;
 }
 
 /** Longest stretch of the clip without a tracked pose: lead-in, tail, or an interior gap. */
