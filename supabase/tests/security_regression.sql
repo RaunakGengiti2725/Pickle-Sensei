@@ -5860,12 +5860,12 @@ begin
     raise exception 'W07-T42b: a subject on both sides is dropped from both; the other destination still queues (got %)', r;
   end if;
   payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-6c', 'type', 'TRANSFER',
-    'transferred_from', '00000000-0000-4000-8000-0000000000b1',
-    'transferred_to', '00000000-0000-4000-8000-0000000000b8'));
+    'app_user_id', '00000000-0000-4000-8000-0000000000b8',
+    'transferred_from', '00000000-0000-4000-8000-0000000000b1'));
   lease := (public.claim_billing_webhook_delivery('w07-transfer-6c', payload)->>'lease_token')::uuid;
-  r := public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000b1'::uuid], 'w07-transfer-6c', payload, lease);
-  if r->0->>'outcome' <> 'issued' then
-    raise exception 'W07-T42c: a transfer whose parties are not arrays still verifies directly (got %)', r;
+  r := public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000b8'::uuid], 'w07-transfer-6c', payload, lease);
+  if jsonb_array_length(r) <> 1 or r->0->>'outcome' <> 'issued' then
+    raise exception 'W07-T42c: a transfer whose parties are not arrays still verifies its subject directly (got %)', r;
   end if;
   payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-7', 'type', 'TRANSFER',
     'transferred_from', jsonb_build_array('$RCAnonymousID:one'), 'transferred_to', jsonb_build_array('$RCAnonymousID:two')));
@@ -6270,8 +6270,8 @@ begin
     raise exception 'W07-R2-33: the destination verdict applies once the source is authoritatively absent (got %)', r;
   end if;
   r := public.complete_billing_webhook('w07-r2-transfer-4', payload, jsonb_build_object(dst::text, dst_ticket), lease);
-  if not (r->>'verified')::boolean then
-    raise exception 'W07-R2-34: the redelivered transfer webhook completes (got %)', r;
+  if not (r->>'received')::boolean or (r->>'verified')::boolean then
+    raise exception 'W07-R2-34: the redelivered transfer webhook completes, reporting the absent subject as unverified (got %)', r;
   end if;
 end $$;
 reset role;
@@ -6280,8 +6280,10 @@ declare
   t api_private.billing_transfers%rowtype;
 begin
   select * into strict t from api_private.billing_transfers where event_id = 'w07-r2-transfer-4';
-  if t.state <> 'confirmed' then
-    raise exception 'W07-R2-35: the transfer must confirm once its only source is absent';
+  if t.state <> 'confirmed'
+     or not exists (select 1 from public.webhook_events where id = 'w07-r2-transfer-4' and processed_at is not null)
+     or exists (select 1 from api_private.billing_webhook_claims where event_id = 'w07-r2-transfer-4' and lease_token is not null) then
+    raise exception 'W07-R2-35: the transfer must confirm and the delivery must be settled once its only source is absent';
   end if;
   if not exists (select 1 from api_private.billing_transfer_sides where transfer_id = t.id and role = 'source' and user_missing_at is not null)
      or not exists (select 1 from api_private.billing_transfer_audit where transfer_id = t.id and action = 'source_missing'
@@ -6333,7 +6335,7 @@ declare
   inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
   r jsonb;
 begin
-  r := public.persist_billing_verdict(src, (select src_ticket from pg_temp.w07_r2_state), inactive);
+  r := public.persist_billing_verdict(src, (select s.src_ticket from pg_temp.w07_r2_state s), inactive);
   if not (r->>'applied')::boolean or (r->'billing'->>'premium')::boolean then
     raise exception 'W07-R2-38: the source loss must persist even though the destination cannot be applied (got %)', r;
   end if;
@@ -6374,7 +6376,7 @@ declare
   dst_ticket uuid;
   r jsonb;
 begin
-  perform public.release_billing_webhook_delivery('w07-r2-transfer-5', payload, (select lease from pg_temp.w07_r2_state));
+  perform public.release_billing_webhook_delivery('w07-r2-transfer-5', payload, (select s.lease from pg_temp.w07_r2_state s));
   lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-5', payload)->>'lease_token')::uuid;
   issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-5', payload, lease);
   select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
