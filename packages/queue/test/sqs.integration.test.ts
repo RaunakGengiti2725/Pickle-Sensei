@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CreateQueueCommand, SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { SqsJobQueue } from "../src/index.js";
+import { resolveSqsTestEndpoint } from "./sqsTestEndpoint.js";
 
 /**
  * Wave H h21-backend-cert (Gate 10): real SQS-protocol behavior against a
@@ -13,7 +14,7 @@ import { SqsJobQueue } from "../src/index.js";
  *   and stays visible until explicitly handled
  */
 
-const endpoint = process.env["SQS_ENDPOINT_TEST"] ?? "";
+const endpoint = await resolveSqsTestEndpoint();
 
 describe.skipIf(!endpoint)("SqsJobQueue against ElasticMQ", () => {
   const region = "elasticmq";
