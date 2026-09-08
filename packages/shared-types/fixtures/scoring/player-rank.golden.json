@@ -1030,12 +1030,12 @@
   "rejectedInputs": [
     {
       "id": "result-kind-unknown",
-      "description": "An unrecognised resultKind never counts, even with a valid score.",
+      "description": "An unrecognised resultKind never counts.",
       "rule": "resultKind",
       "analysis": {
         "id": "0000000f-0000-4000-8000-000000000001",
         "shotType": "dink",
-        "overallScore": 7,
+        "overallScore": null,
         "resultKind": "scored_draft",
         "capturedAt": "2026-08-01T10:00:00.000Z",
         "source": "real"
@@ -1076,7 +1076,7 @@
       },
       "refusedBy": {
         "layer": "sql",
-        "check": "shots_check"
+        "check": "scored_shots_have_scores"
       }
     },
     {
@@ -1229,7 +1229,7 @@
       },
       "refusedBy": {
         "layer": "sql",
-        "check": "timestamptz cast (22007 invalid_datetime_format)"
+        "check": "sqlstate 22007"
       }
     }
   ]
