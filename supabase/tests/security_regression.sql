@@ -5848,6 +5848,7 @@ language sql security definer as $$
     (select count(*) from public.offline_grants where user_id = p_uid));
 $$;
 grant execute on function pg_temp.t_service_probe(uuid) to service_role;
+grant select on t_state to service_role;
 set local role service_role;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000059';
 set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005901"}';
