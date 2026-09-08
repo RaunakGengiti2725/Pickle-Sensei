@@ -262,7 +262,7 @@ security invoker
 set search_path = ''
 as $$
 begin
-  raise exception 'offline_allocation_ledger is append-only'
+  raise exception '% is append-only', tg_table_name
     using errcode = 'check_violation';
 end;
 $$;
@@ -272,6 +272,45 @@ revoke execute on function public.guard_offline_ledger_append_only() from public
 drop trigger if exists offline_allocation_ledger_append_only on public.offline_allocation_ledger;
 create trigger offline_allocation_ledger_append_only
   before update or delete on public.offline_allocation_ledger
+  for each row execute function public.guard_offline_ledger_append_only();
+
+-- ---------------------------------------------------------------------------
+-- 3b. Late-linked identities: the hold follows every identity of the holder
+-- ---------------------------------------------------------------------------
+-- An allocation row snapshots the holder's sign-in identities AT ALLOCATION.
+-- An identity linked to the account afterwards (the same late-link event
+-- 20260905000100 propagates the free-rating ledger on) is recorded here per
+-- outstanding ticket, so that after the account is deleted and re-created
+-- through ONLY that identity the tickets are still its holds: counted by
+-- offline_hold_count(), recoverable by the original installation, and never
+-- a fresh allocation. No foreign key (survives the account, like the
+-- ledger); append-only; no client or service role reads or writes it — the
+-- definers below are its only readers, the auth.identities trigger its only
+-- writer.
+create table if not exists public.offline_allocation_identity_links (
+  id bigint generated always as identity primary key,
+  ticket_id uuid not null,
+  identity_hash text not null,
+  user_id uuid not null,
+  created_at timestamptz not null default now(),
+  constraint offline_allocation_identity_links_hash_shape
+    check (identity_hash ~ '^[0-9a-f]{64}$'),
+  unique (ticket_id, identity_hash)
+);
+
+comment on table public.offline_allocation_identity_links is
+  'Append-only. One row per (outstanding ticket, sign-in identity linked to the holder AFTER the allocation): the hold follows a late-linked identity through account deletion and re-creation exactly as the free-rating ledger does. user_id is the account that linked the identity. No FK, no client or service grant; written only by the auth.identities trigger, read only by the ownership definers.';
+
+create index if not exists offline_allocation_identity_links_hash_idx
+  on public.offline_allocation_identity_links (identity_hash, ticket_id);
+
+alter table public.offline_allocation_identity_links enable row level security;
+revoke all on public.offline_allocation_identity_links from public, anon, authenticated, service_role;
+revoke all on sequence public.offline_allocation_identity_links_id_seq from public, anon, authenticated, service_role;
+
+drop trigger if exists offline_allocation_identity_links_append_only on public.offline_allocation_identity_links;
+create trigger offline_allocation_identity_links_append_only
+  before update or delete on public.offline_allocation_identity_links
   for each row execute function public.guard_offline_ledger_append_only();
 
 -- The sign-in identities of an account, hashed exactly like
@@ -292,13 +331,15 @@ $$;
 revoke all on function api_private.offline_identity_hashes(uuid) from public, anon, authenticated, service_role;
 
 -- Ownership of a ticket: the account it was allocated to, OR an account that
--- currently holds one of the sign-in identities it was allocated under. The
--- second arm is what lets the original installation of a deleted-and-
+-- currently holds one of the sign-in identities it was allocated under, OR
+-- one that holds an identity linked to the holder after the allocation. The
+-- identity arms are what let the original installation of a deleted-and-
 -- re-created account recover, consume or return its outstanding ticket; an
--- unrelated account on the same installation key matches neither arm.
+-- unrelated account on the same installation key matches no arm.
 create or replace function api_private.offline_ticket_owned_by(
   p_allocation_user_id uuid,
   p_identity_hashes text[],
+  p_ticket_id uuid,
   p_uid uuid
 )
 returns boolean
@@ -310,18 +351,119 @@ as $$
   select p_uid is not null and (
     p_allocation_user_id = p_uid
     or p_identity_hashes && api_private.offline_identity_hashes(p_uid)
+    or exists (
+      select 1
+      from public.offline_allocation_identity_links l
+      where l.ticket_id = p_ticket_id
+        and l.identity_hash = any(api_private.offline_identity_hashes(p_uid))
+    )
   )
 $$;
 
-revoke all on function api_private.offline_ticket_owned_by(uuid, text[], uuid) from public, anon, authenticated, service_role;
+revoke all on function api_private.offline_ticket_owned_by(uuid, text[], uuid, uuid) from public, anon, authenticated, service_role;
+
+-- Every allocated ticket an account owns, by any of the three arms above —
+-- the one set offline_hold_count() counts and the late-link trigger extends.
+create or replace function api_private.offline_owned_allocations(p_uid uuid)
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select a.ticket_id
+  from public.offline_allocation_ledger a
+  where a.event = 'allocated'
+    and (
+      a.user_id = p_uid
+      or a.identity_hashes && api_private.offline_identity_hashes(p_uid)
+    )
+  union
+  select l.ticket_id
+  from public.offline_allocation_identity_links l
+  where l.identity_hash = any(api_private.offline_identity_hashes(p_uid))
+$$;
+
+revoke all on function api_private.offline_owned_allocations(uuid) from public, anon, authenticated, service_role;
+
+-- A link names an allocated ticket that the linking account owns (by any
+-- arm) — nothing can attach a stranger's identity to a ticket.
+create or replace function public.guard_offline_identity_link()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_allocation public.offline_allocation_ledger%rowtype;
+begin
+  select * into v_allocation
+  from public.offline_allocation_ledger a
+  where a.ticket_id = new.ticket_id and a.event = 'allocated';
+  if not found then
+    raise exception 'offline ticket % was never allocated', new.ticket_id
+      using errcode = 'check_violation';
+  end if;
+  if not api_private.offline_ticket_owned_by(v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id) then
+    raise exception 'offline ticket % belongs to another owner', new.ticket_id
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.guard_offline_identity_link() from public, anon, authenticated;
+
+drop trigger if exists offline_allocation_identity_links_guard on public.offline_allocation_identity_links;
+create trigger offline_allocation_identity_links_guard
+  before insert on public.offline_allocation_identity_links
+  for each row execute function public.guard_offline_identity_link();
+
+-- The late-link event. Fires beside inherit_free_rating_ledger
+-- (20260905000100): when an identity is added to an account, every
+-- outstanding ticket the account owns is recorded for every identity the
+-- account now holds that the allocation did not already name. Consumed or
+-- released tickets are terminal and need no link. Idempotent.
+create or replace function public.inherit_offline_allocation_holds()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.offline_allocation_identity_links (ticket_id, identity_hash, user_id)
+  select o.ticket_id, h.identity_hash, new.user_id
+  from api_private.offline_owned_allocations(new.user_id) o(ticket_id)
+  join public.offline_allocation_ledger a
+    on a.ticket_id = o.ticket_id and a.event = 'allocated'
+  cross join unnest(api_private.offline_identity_hashes(new.user_id)) h(identity_hash)
+  where not (h.identity_hash = any(a.identity_hashes))
+    and not exists (
+      select 1 from public.offline_allocation_ledger t
+      where t.ticket_id = o.ticket_id and t.event in ('consumed', 'released')
+    )
+  on conflict (ticket_id, identity_hash) do nothing;
+  return new;
+end;
+$$;
+
+revoke execute on function public.inherit_offline_allocation_holds() from public, anon, authenticated;
+
+drop trigger if exists on_auth_identity_linked_offline_holds on auth.identities;
+create trigger on_auth_identity_linked_offline_holds
+  after insert on auth.identities
+  for each row execute function public.inherit_offline_allocation_holds();
 
 -- Every append passes the state machine. An allocation names the installation
 -- key of the device it was issued to (inherited from the device row when not
 -- given). A terminal event needs a prior allocation, no earlier terminal
 -- event, an owner that is the allocation's account or holds one of its
 -- sign-in identities, and the allocation's installation key; consumption
--- names a scored shot of the writing owner that no online permit paid for;
--- release names a known reason. Reads public.shots for any owner → definer.
+-- names a scored shot of the writing owner that no online permit paid for
+-- and that was written no earlier than the allocation (a rating already
+-- counted toward lifetime_scored_count() before the ticket existed is not
+-- the ticket's rating); release names a known reason. Reads public.shots
+-- for any owner → definer.
 create or replace function public.guard_offline_ledger_event()
 returns trigger
 language plpgsql
@@ -362,7 +504,7 @@ begin
     raise exception 'offline ticket % already has a terminal event', new.ticket_id
       using errcode = 'check_violation';
   end if;
-  if not api_private.offline_ticket_owned_by(v_allocation.user_id, v_allocation.identity_hashes, new.user_id) then
+  if not api_private.offline_ticket_owned_by(v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id) then
     raise exception 'offline ticket % belongs to another owner', new.ticket_id
       using errcode = 'check_violation';
   end if;
@@ -379,6 +521,7 @@ begin
         and s.user_id = new.user_id
         and s.result_kind = 'scored'
         and s.analysis_permit_id is null
+        and s.created_at >= v_allocation.created_at
     ) then
       raise exception 'offline ticket % cannot be consumed by shot %', new.ticket_id, new.shot_id
         using errcode = 'check_violation';
@@ -402,9 +545,10 @@ create trigger offline_allocation_ledger_guard_event
 -- 4. Conservation: the hold reader and the two online decision points
 -- ---------------------------------------------------------------------------
 -- Tickets allocated to the caller's account or to any of the caller's sign-in
--- identities that were never consumed. Definer because auth.identities and
--- other accounts' ledger rows are not client-readable; the read is scoped to
--- auth.uid() and answers 0 without the API proof.
+-- identities (named at allocation or linked afterwards) that were never
+-- consumed. Definer because auth.identities and other accounts' ledger rows
+-- are not client-readable; the read is scoped to auth.uid() and answers 0
+-- without the API proof.
 create or replace function public.offline_hold_count()
 returns integer
 language sql
@@ -416,20 +560,11 @@ as $$
     when (select auth.uid()) is null or not api_private.is_api_request() then 0
     else (
       select count(*)::int
-      from public.offline_allocation_ledger a
-      where a.event = 'allocated'
-        and (
-          a.user_id = (select auth.uid())
-          or a.identity_hashes && (
-            select coalesce(array_agg(public.free_rating_identity_hash(i.provider, i.provider_id)), '{}'::text[])
-            from auth.identities i
-            where i.user_id = (select auth.uid())
-          )
-        )
-        and not exists (
-          select 1 from public.offline_allocation_ledger c
-          where c.ticket_id = a.ticket_id and c.event = 'consumed'
-        )
+      from api_private.offline_owned_allocations((select auth.uid())) o(ticket_id)
+      where not exists (
+        select 1 from public.offline_allocation_ledger c
+        where c.ticket_id = o.ticket_id and c.event = 'consumed'
+      )
     )
   end
 $$;
@@ -779,7 +914,7 @@ begin
   from public.offline_allocation_ledger a
   where a.installation_key_id = v_device.installation_key_id
     and a.event = 'allocated'
-    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, v_uid)
+    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, a.ticket_id, v_uid)
     and not exists (
       select 1 from public.offline_allocation_ledger t
       where t.ticket_id = a.ticket_id and t.event in ('consumed', 'released')
@@ -873,7 +1008,7 @@ begin
   from public.offline_allocation_ledger a
   where a.ticket_id = p_ticket_id
     and a.event = 'allocated'
-    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, v_uid);
+    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, a.ticket_id, v_uid);
   if not found then
     return 'offline.ticket_not_found';
   end if;
@@ -889,13 +1024,16 @@ begin
   end if;
 
   -- Chargeable: a durably delivered scored shot of this owner that no online
-  -- permit paid for and that no other ticket has already paid for.
+  -- permit paid for, that no other ticket has already paid for, and that was
+  -- written no earlier than the allocation — a rating counted toward
+  -- lifetime_scored_count() before the ticket existed is not this ticket's.
   if not exists (
     select 1 from public.shots s
     where s.id = p_shot_id
       and s.user_id = v_uid
       and s.result_kind = 'scored'
       and s.analysis_permit_id is null
+      and s.created_at >= v_allocation.created_at
   ) or exists (
     select 1 from public.offline_allocation_ledger c
     where c.shot_id = p_shot_id and c.event = 'consumed'
@@ -947,7 +1085,7 @@ begin
   from public.offline_allocation_ledger a
   where a.ticket_id = p_ticket_id
     and a.event = 'allocated'
-    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, v_uid);
+    and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, a.ticket_id, v_uid);
   if not found then
     return 'offline.ticket_not_found';
   end if;
