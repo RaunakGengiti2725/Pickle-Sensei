@@ -10,7 +10,7 @@
 # Stages (each is a gate; the run fails if any stage fails):
 #   environment  macOS / Xcode / Swift / SDK / simulator inventory; the actual
 #                Xcode workspace, scheme and SwiftPM package layout are printed.
-#   swift-native native/vision-core: `swift build`, `swift test` (XCTest,
+#   swift-native native/vision-core and native/managed-media: `swift build`, `swift test` (XCTest,
 #                xunit XML), `xcodebuild test` on macOS and on an iOS
 #                Simulator (.xcresult each); native/swing-lab: release build
 #                and a REAL Apple Vision pose extraction over a committed clip.
@@ -23,6 +23,8 @@
 #
 # Artifacts land in $MAC_ARTIFACTS (default macos-ci-artifacts/): logs,
 # *.xcresult, xunit XML, Info.plist, launch screenshots/logs, summary.json.
+# PICKLE_NATIVE_JOBS bounds compiler/test workers (default 2); SwiftPM scratch
+# and Xcode DerivedData both live under PICKLE_CI_CACHE.
 # Per-step helpers live in tools/macos-ci/ (simulator selection, CocoaPods,
 # launch/crash check, xcresult and swing-lab summaries); this script is the
 # only orchestrator, so the workflow YAML stays a thin wrapper.
@@ -115,6 +117,11 @@ fi
 # -------------------------------------------------------------- local mode ----
 [ "$(uname -s)" = "Darwin" ] || { echo "this script runs on macOS; from Linux use --remote" >&2; exit 2; }
 
+NATIVE_JOBS="${PICKLE_NATIVE_JOBS:-2}"
+case "$NATIVE_JOBS" in
+  ''|*[!0-9]*|0*) echo "PICKLE_NATIVE_JOBS must be a positive integer" >&2; exit 2 ;;
+esac
+
 if [ -n "$ONLY" ]; then IFS=',' read -r -a STAGES <<<"$ONLY"; else STAGES=("${ALL_STAGES[@]}"); fi
 
 export LANG="${LANG:-en_US.UTF-8}" LC_ALL="${LC_ALL:-en_US.UTF-8}"
@@ -167,36 +174,52 @@ stage_environment() {
     xcodebuild -list -project apps/mobile/ios/PickleSensei.xcodeproj
     grep -E 'SUPPORTED_PLATFORMS|IPHONEOS_DEPLOYMENT_TARGET|CODE_SIGN_STYLE' apps/mobile/ios/PickleSensei.xcodeproj/project.pbxproj | sort -u
     echo "--- native/vision-core (SwiftPM) ---"; (cd native/vision-core && swift package describe --type json | "$HELPERS/describe-package.py")
+    echo "--- native/managed-media (SwiftPM) ---"; (cd native/managed-media && swift package describe --type json | "$HELPERS/describe-package.py")
     echo "--- native/swing-lab (SwiftPM executable, macOS) ---"; (cd native/swing-lab && swift package describe --type json | "$HELPERS/describe-package.py")
   } | tee -a "$ARTIFACTS/environment.txt"
 }
 
-stage_swift_native() {
-  if [ "$CLEAN" = 1 ]; then rm -rf "$PICKLE_CI_CACHE/swiftpm-derived" native/vision-core/.build native/swing-lab/.build; fi
+verify_swift_package() {
+  local name="$1" package="$2" fallback_scheme="$3" list scheme udid result
+  local scratch="$PICKLE_CI_CACHE/$name-swiftpm" derived="$PICKLE_CI_CACHE/$name-derived"
+  (cd "$package" && swift build --scratch-path "$scratch" --jobs "$NATIVE_JOBS" 2>&1 \
+     | tee "$ARTIFACTS/$name-swift-build.log" | tail -20)
+  (cd "$package" && swift test --scratch-path "$scratch" --jobs "$NATIVE_JOBS" \
+     --parallel --num-workers "$NATIVE_JOBS" --xunit-output "$ARTIFACTS/$name-xunit.xml" 2>&1 \
+     | tee "$ARTIFACTS/$name-swift-test.log" | tail -40)
 
-  (cd native/vision-core && swift build 2>&1 | tee "$ARTIFACTS/vision-core-swift-build.log" | tail -20)
-  (cd native/vision-core && swift test --parallel --xunit-output "$ARTIFACTS/vision-core-xunit.xml" 2>&1 \
-     | tee "$ARTIFACTS/vision-core-swift-test.log" | tail -40)
+  list="$(cd "$package" && xcodebuild -list 2>&1)"; echo "$list" >"$ARTIFACTS/$name-xcodebuild-list.txt"
+  scheme="$fallback_scheme-Package"; echo "$list" | grep -q "$scheme" || scheme="$fallback_scheme"
+  echo "$name xcodebuild scheme: $scheme"
 
-  local list scheme udid result
-  list="$(cd native/vision-core && xcodebuild -list 2>&1)"; echo "$list" >"$ARTIFACTS/vision-core-xcodebuild-list.txt"
-  scheme="PickleVisionCore-Package"; echo "$list" | grep -q "$scheme" || scheme="PickleVisionCore"
-  echo "vision-core xcodebuild scheme: $scheme"
-
-  result="$ARTIFACTS/vision-core-macos.xcresult"; rm -rf "$result"
-  (cd native/vision-core && xcodebuild test -scheme "$scheme" -destination 'platform=macOS,arch=arm64' \
-     -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
-     | tee "$ARTIFACTS/vision-core-xcodebuild-macos.log" | { grep -E 'Test Suite|Executed|error:|\*\* TEST' || true; } | tail -30)
+  result="$ARTIFACTS/$name-macos.xcresult"; rm -rf "$result"
+  (cd "$package" && xcodebuild test -scheme "$scheme" -destination 'platform=macOS,arch=arm64' \
+     -jobs "$NATIVE_JOBS" -parallel-testing-enabled NO \
+     -derivedDataPath "$derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
+     | tee "$ARTIFACTS/$name-xcodebuild-macos.log" | { grep -E 'Test Suite|Executed|error:|\*\* TEST' || true; } | tail -30)
 
   udid="$("$HELPERS/select-simulator.sh" --boot)"
-  result="$ARTIFACTS/vision-core-ios-simulator.xcresult"; rm -rf "$result"
-  (cd native/vision-core && xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$udid" \
-     -derivedDataPath "$PICKLE_CI_CACHE/swiftpm-derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
-     | tee "$ARTIFACTS/vision-core-xcodebuild-ios.log" | { grep -E 'Test Suite|Executed|error:|\*\* TEST' || true; } | tail -30)
+  result="$ARTIFACTS/$name-ios-simulator.xcresult"; rm -rf "$result"
+  (cd "$package" && xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$udid" \
+     -jobs "$NATIVE_JOBS" -parallel-testing-enabled NO \
+     -derivedDataPath "$derived" -resultBundlePath "$result" CODE_SIGNING_ALLOWED=NO 2>&1 \
+     | tee "$ARTIFACTS/$name-xcodebuild-ios.log" | { grep -E 'Test Suite|Executed|error:|\*\* TEST' || true; } | tail -30)
+}
 
-  (cd native/swing-lab && swift build -c release 2>&1 | tee "$ARTIFACTS/swing-lab-swift-build.log" | tail -10)
+stage_swift_native() {
+  if [ "$CLEAN" = 1 ]; then
+    rm -rf "$PICKLE_CI_CACHE/vision-core-swiftpm" "$PICKLE_CI_CACHE/vision-core-derived" \
+      "$PICKLE_CI_CACHE/managed-media-swiftpm" "$PICKLE_CI_CACHE/managed-media-derived" \
+      "$PICKLE_CI_CACHE/swing-lab-swiftpm"
+  fi
+  verify_swift_package vision-core native/vision-core PickleVisionCore
+  verify_swift_package managed-media native/managed-media PickleManagedMedia
+
+  (cd native/swing-lab && swift build -c release --scratch-path "$PICKLE_CI_CACHE/swing-lab-swiftpm" \
+     --jobs "$NATIVE_JOBS" 2>&1 | tee "$ARTIFACTS/swing-lab-swift-build.log" | tail -10)
   local bin out
-  bin="$(cd native/swing-lab && swift build -c release --show-bin-path)/swing-lab"
+  bin="$(cd native/swing-lab && swift build -c release --scratch-path "$PICKLE_CI_CACHE/swing-lab-swiftpm" \
+    --jobs "$NATIVE_JOBS" --show-bin-path)/swing-lab"
   file "$bin"
   out="$ARTIFACTS/swing-lab-extract"; rm -rf "$out"
   [ -f "$CLIP" ] || { echo "committed clip missing: $CLIP"; return 1; }
@@ -213,27 +236,38 @@ stage_ios_app() {
   node --version; npm --version
   (cd apps/mobile && npm ci --no-audit --no-fund)
   if [ "$SKIP_JS" = 0 ]; then
-    (cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent 2>&1 | tee "$ARTIFACTS/jest.log" | tail -15)
+    (cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent --maxWorkers="$NATIVE_JOBS" 2>&1 | tee "$ARTIFACTS/jest.log" | tail -15)
   fi
 
   "$HELPERS/pod-install.sh" 2>&1 | tee "$ARTIFACTS/pod-install.log" | tail -20
 
-  # The RN "Bundle React Native code and images" phase resolves node via ios/.xcode.env(.local).
-  echo "export NODE_BINARY=$(command -v node)" >apps/mobile/ios/.xcode.env.local
+  # The RN bundle phase resolves node via ios/.xcode.env(.local). Preserve an
+  # existing local configuration, including when Xcode exits unsuccessfully.
+  local node_env="apps/mobile/ios/.xcode.env.local" node_env_backup had_node_env=0
+  [ ! -L "$node_env" ] || { echo "refusing to replace a symlinked .xcode.env.local" >&2; return 1; }
+  node_env_backup="$(mktemp "$PICKLE_CI_CACHE/xcode-env.XXXXXX")"
+  if [ -f "$node_env" ]; then had_node_env=1; cp -p "$node_env" "$node_env_backup"; fi
+  restore_xcode_node_environment() {
+    if [ "$had_node_env" = 1 ]; then cp -p "$node_env_backup" "$node_env"; else rm -f "$node_env"; fi
+    rm -f "$node_env_backup"
+  }
+  trap restore_xcode_node_environment EXIT
+  printf 'export NODE_BINARY=%q\n' "$(command -v node)" >"$node_env"
 
   xcodebuild -list -workspace "$WORKSPACE" 2>&1 | tee "$ARTIFACTS/xcodebuild-list.txt" | head -40
-  xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE" -scheme "$SCHEME" \
+  xcodebuild -resolvePackageDependencies -jobs "$NATIVE_JOBS" -workspace "$WORKSPACE" -scheme "$SCHEME" \
     -derivedDataPath "$PICKLE_CI_CACHE/app-derived" 2>&1 | tee "$ARTIFACTS/xcodebuild-resolve.log" | tail -10
 
   local result app
   result="$ARTIFACTS/PickleSensei-build.xcresult"; rm -rf "$result"
-  xcodebuild build -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
+  xcodebuild build -jobs "$NATIVE_JOBS" -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
     -destination 'generic/platform=iOS Simulator' -derivedDataPath "$PICKLE_CI_CACHE/app-derived" \
     -resultBundlePath "$result" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY="" COMPILER_INDEX_STORE_ENABLE=NO 2>&1 \
     | tee "$ARTIFACTS/xcodebuild-build.log" \
     | { grep -E '^(\*\* BUILD|=== |error:|.*: error:|PhaseScriptExecution|The following build commands failed)' || true; } | tail -60
-  rm -f apps/mobile/ios/.xcode.env.local
+  restore_xcode_node_environment
+  trap - EXIT
   app="$PICKLE_CI_CACHE/app-derived/Build/Products/$CONFIGURATION-iphonesimulator/PickleSensei.app"
   [ -d "$app" ] || { echo "no app bundle at $app — see $ARTIFACTS/xcodebuild-build.log"; return 1; }
   [ -f "$app/main.jsbundle" ] || { echo "main.jsbundle missing — the React Native bundle phase did not run"; return 1; }
@@ -247,7 +281,7 @@ stage_ios_app() {
 
 # -------------------------------------------------------------------- main ----
 echo "Pickle Sensei — mac-full-verify @ $GIT_SHA on $(hostname -s 2>/dev/null) ($(uname -m))"
-echo "stages: ${STAGES[*]}   artifacts: $ARTIFACTS   cache: $PICKLE_CI_CACHE"
+echo "stages: ${STAGES[*]}   native jobs: $NATIVE_JOBS   artifacts: $ARTIFACTS   cache: $PICKLE_CI_CACHE"
 for s in "${STAGES[@]}"; do
   fn="stage_${s//-/_}"
   declare -F "$fn" >/dev/null || { echo "unknown stage: $s" >&2; exit 2; }

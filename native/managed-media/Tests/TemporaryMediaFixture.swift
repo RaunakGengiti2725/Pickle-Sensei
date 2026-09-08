@@ -15,7 +15,14 @@ final class TemporaryMediaFixture {
     if let supplied = ProcessInfo.processInfo.environment["PICKLE_MANAGED_MEDIA_TEST_TMPDIR"] {
       temporary = URL(fileURLWithPath: supplied, isDirectory: true)
     } else {
-      temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+      // Foundation preserves the /var alias even after resolvingSymlinksInPath
+      // on macOS. Supply the physical system temp directory to the trusted-root
+      // API; its no-symlink checks must still reject caller-provided aliases.
+      guard let physical = FileManager.default.temporaryDirectory.path.withCString({ realpath($0, nil) }) else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+      }
+      defer { free(physical) }
+      temporary = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
     }
     base = temporary.appendingPathComponent("W08-test-" + UUID().uuidString.lowercased(), isDirectory: true)
     container = base.appendingPathComponent("Container", isDirectory: true)
