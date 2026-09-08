@@ -31,6 +31,8 @@ import program_lib as pl  # noqa: E402
 MANIFEST = os.path.join(ROOT, ".devin", "program", "manifest.json")
 ART = os.path.join(ROOT, "artifacts", "production-program")
 LEDGER_DIR = os.path.join(ROOT, ".devin", "program", "ledger")
+# Program default (two active workers). The owner may raise it explicitly per
+# wave with --max-active; serial groups and dependencies still gate what runs.
 MAX_ACTIVE = 2
 SEV = {"P0": 0, "P1": 1, "P2": 2}
 
@@ -44,7 +46,7 @@ def load_records() -> dict[str, dict]:
     return out
 
 
-def plan(done: set[str], active: set[str], blocked: set[str]) -> list[dict]:
+def plan(done: set[str], active: set[str], blocked: set[str], max_active: int = MAX_ACTIVE) -> list[dict]:
     m = pl.load_manifest(MANIFEST)
     pk = {p["id"]: p for p in m["packages"]}
     busy_groups = {g for a in active for g in pk[a]["serial_groups"]}
@@ -64,7 +66,7 @@ def plan(done: set[str], active: set[str], blocked: set[str]) -> list[dict]:
     chosen: list[dict] = []
     taken = set(busy_groups)
     for p in ready:
-        if len(chosen) + len(active) >= MAX_ACTIVE:
+        if len(chosen) + len(active) >= max_active:
             break
         if set(p["serial_groups"]) & taken:
             continue
@@ -134,10 +136,11 @@ def main() -> None:
     ap.add_argument("--active", default="")
     ap.add_argument("--blocked", default="")
     ap.add_argument("--runs", default=os.path.join(LEDGER_DIR, "runs.json"))
+    ap.add_argument("--max-active", type=int, default=MAX_ACTIVE, help="owner-approved concurrent package limit")
     args = ap.parse_args()
     split = lambda s: {x for x in s.split(",") if x}  # noqa: E731
     if args.cmd == "plan":
-        for p in plan(split(args.done), split(args.active), split(args.blocked)):
+        for p in plan(split(args.done), split(args.active), split(args.blocked), args.max_active):
             print(f"{p['id']}\t{p['severity']}\t{p['plane']}\t{','.join(p['serial_groups']) or '-'}\t{p['title']}")
     else:
         out = ledger(args.runs)

@@ -1,8 +1,10 @@
 """Generate a frozen per-package launcher for `run_workflow`.
 
-    python3 .devin/skills/production-program/make_launcher.py <PKG_ID> <BASE_SHA> <WAVE_ID>
+    python3 .devin/skills/production-program/make_launcher.py <PKG_ID> <BASE_SHA> <WAVE_ID> [INTEGRATION_BRANCH] [MODE]
 
-Writes `.devin/program/runs/<pkg>__<base12>.py`. The launcher embeds the
+INTEGRATION_BRANCH (default codex/production-continuation-20260907) must
+contain BASE_SHA on origin — children start with `git fetch origin <branch>
+&& git checkout <sha>`. Writes `.devin/program/runs/<pkg>__<base12>.py`. The launcher embeds the
 package id, base sha, integration branch, manifest hash and wave id as
 constants so a resumed run replays byte-for-byte; nothing is read from the
 clock, environment or network at orchestration time.
@@ -64,7 +66,15 @@ asyncio.run(main())
 '''
 
 
-def make(package_id: str, base_sha: str, wave_id: str, *, max_rounds: int = 2, mode: str | None = None) -> str:
+def make(
+    package_id: str,
+    base_sha: str,
+    wave_id: str,
+    *,
+    integration_branch: str = INTEGRATION_BRANCH,
+    max_rounds: int = 2,
+    mode: str | None = None,
+) -> str:
     sys.path.insert(0, HERE)
     import program_lib  # noqa: E402
 
@@ -83,7 +93,7 @@ def make(package_id: str, base_sha: str, wave_id: str, *, max_rounds: int = 2, m
                 lib_dir=HERE,
                 package_id=package_id,
                 base_sha=base_sha,
-                integration_branch=INTEGRATION_BRANCH,
+                integration_branch=integration_branch,
                 manifest_path=MANIFEST,
                 manifest_sha=manifest["manifest_sha256"],
                 out_root=os.path.join(ROOT, "artifacts", "production-program"),
@@ -98,4 +108,6 @@ def make(package_id: str, base_sha: str, wave_id: str, *, max_rounds: int = 2, m
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         raise SystemExit(__doc__)
-    print(make(sys.argv[1], sys.argv[2], sys.argv[3]))
+    branch = sys.argv[4] if len(sys.argv) > 4 else INTEGRATION_BRANCH
+    launch_mode = sys.argv[5] if len(sys.argv) > 5 else None
+    print(make(sys.argv[1], sys.argv[2], sys.argv[3], integration_branch=branch, mode=launch_mode))
