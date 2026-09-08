@@ -1,0 +1,212 @@
+# Third-party notices — Release JS bundle membership
+
+Machine-checked inventory of the third-party npm packages whose source files are present in the iOS Release JavaScript bundle of the shipping app (`apps/mobile`, entry `index.js`). It is generated from `scripts/third-party-notices.sources.json` by `scripts/verify-notices.mjs --write` and re-verified by `node scripts/verify-notices.mjs`, which builds the Release bundle + composed Hermes source map on Linux, enumerates the packages the map references, and fails if this inventory, the receipt or the shipped `assets/legal/ThirdPartyNotices.txt` disagree with the bundle.
+
+Do not edit by hand: the verifier compares this file byte for byte with what it regenerates.
+
+## What is verified
+
+- Every source path in the composed Release source map is classified against the locked npm closure (`package-lock.json`); an unknown package fails the check.
+- Every npm package below has verbatim notice/license text recorded in the receipt and emitted in the shipped `assets/legal/ThirdPartyNotices.txt` (`Component: npm:<path>` section).
+- The membership below is exactly the set observed in the fresh Release bundle: a package that stops shipping or starts shipping fails the check until this file is regenerated (and, for a new package, until its notice is captured with `generate-third-party-notices.mjs`).
+- The source map is a complete, flattened v3 map whose debug ID is embedded in the Hermes bundle it was produced with.
+
+## What is not verified here (Mac-plane follow-up)
+
+- Which CocoaPods/SwiftPM/xcframework components Xcode actually linked into the Mach-O, and that the archived `.app` carries the same `main.jsbundle`/map pair. Run `node scripts/generate-third-party-notices.mjs --check-app <PickleSensei.app> --source-map <main.jsbundle.map> --expected-bundle-sha256 <sha> --expected-map-sha256 <sha>` against the Release archive on the Mac runner (`scripts/mac-full-verify.sh`) for that evidence.
+- The Linux build uses the npm `hermes-compiler` hermesc, not the Pods `hermes-engine` one, so bytecode hashes differ from an Xcode build; JS membership is decided by Metro and is the same.
+- Rights, signature or App Store clearance. Dependency presence is not a rights certification.
+
+## Bundled npm packages (66)
+
+Format: `<lock path>` `<locked version>` — declared license (notice sources in the receipt).
+
+- `node_modules/@babel/runtime` `7.29.7` — MIT (1 notice source)
+- `node_modules/@op-engineering/op-sqlite` `18.1.4` — MIT (3 notice sources)
+- `node_modules/@react-native-google-signin/google-signin` `16.1.4` — MIT (1 notice source)
+- `node_modules/@react-native/asset-utils` `0.87.1` — MIT (1 notice source)
+- `node_modules/@react-native/js-polyfills` `0.87.1` — MIT (1 notice source)
+- `node_modules/@react-native/normalize-colors` `0.87.1` — MIT (1 notice source)
+- `node_modules/@react-native/virtualized-lists` `0.87.1` — MIT (1 notice source)
+- `node_modules/@react-navigation/bottom-tabs` `7.18.18` — MIT (1 notice source)
+- `node_modules/@react-navigation/core` `7.21.13` — MIT (1 notice source)
+- `node_modules/@react-navigation/core/node_modules/react-is` `19.2.8` — MIT (1 notice source)
+- `node_modules/@react-navigation/elements` `2.9.40` — MIT (1 notice source)
+- `node_modules/@react-navigation/native` `7.3.18` — MIT (1 notice source)
+- `node_modules/@react-navigation/native-stack` `7.18.10` — MIT (1 notice source)
+- `node_modules/@react-navigation/routers` `7.6.4` — MIT (1 notice source)
+- `node_modules/@revenuecat/purchases-js-hybrid-mappings` `18.33.1` — MIT (1 notice source)
+- `node_modules/@revenuecat/purchases-typescript-internal` `18.33.1` — MIT (1 notice source)
+- `node_modules/@sentry/browser` `10.71.0` — MIT (1 notice source)
+- `node_modules/@sentry/browser-utils` `10.71.0` — MIT (1 notice source)
+- `node_modules/@sentry/conventions` `0.16.0` — MIT (1 notice source)
+- `node_modules/@sentry/core` `10.71.0` — MIT (1 notice source)
+- `node_modules/@sentry/react` `10.71.0` — MIT (1 notice source)
+- `node_modules/@sentry/react-native` `8.24.0` — MIT (1 notice source)
+- `node_modules/@tanstack/query-core` `5.102.6` — MIT (1 notice source)
+- `node_modules/@tanstack/react-query` `5.102.6` — MIT (1 notice source)
+- `node_modules/base64-js` `1.5.1` — MIT (1 notice source)
+- `node_modules/color` `4.2.3` — MIT (1 notice source)
+- `node_modules/color-convert` `2.0.1` — MIT (1 notice source)
+- `node_modules/color-name` `1.1.4` — MIT (1 notice source)
+- `node_modules/color-string` `1.9.1` — MIT (1 notice source)
+- `node_modules/decode-uri-component` `0.2.2` — MIT (1 notice source)
+- `node_modules/escape-string-regexp` `4.0.0` — MIT (1 notice source)
+- `node_modules/fast-deep-equal` `3.1.3` — MIT (1 notice source)
+- `node_modules/filter-obj` `1.1.0` — MIT (1 notice source)
+- `node_modules/invariant` `2.2.4` — MIT (1 notice source)
+- `node_modules/memoize-one` `5.2.1` — MIT (1 notice source)
+- `node_modules/metro-runtime` `0.87.0` — MIT (1 notice source)
+- `node_modules/nanoid` `3.3.18` — MIT (1 notice source)
+- `node_modules/nullthrows` `1.1.1` — MIT (1 notice source)
+- `node_modules/promise` `8.3.0` — MIT (1 notice source)
+- `node_modules/query-string` `7.1.3` — MIT (1 notice source)
+- `node_modules/react` `19.2.3` — MIT (1 notice source)
+- `node_modules/react-freeze` `1.0.4` — MIT (1 notice source)
+- `node_modules/react-native` `0.87.1` — MIT (1 notice source)
+- `node_modules/react-native-is-edge-to-edge` `1.3.1` — MIT (1 notice source)
+- `node_modules/react-native-keychain` `10.0.0` — MIT (1 notice source)
+- `node_modules/react-native-notify-kit` `10.5.0` — Apache-2.0 (1 notice source)
+- `node_modules/react-native-purchases` `10.8.1` — MIT (1 notice source)
+- `node_modules/react-native-reanimated` `4.6.0` — MIT (1 notice source)
+- `node_modules/react-native-safe-area-context` `5.9.1` — MIT (1 notice source)
+- `node_modules/react-native-screens` `4.27.0` — MIT (1 notice source)
+- `node_modules/react-native-svg` `15.15.5` — MIT (1 notice source)
+- `node_modules/react-native-video` `6.19.2` — MIT (1 notice source)
+- `node_modules/react-native-webview` `14.0.1` — MIT (1 notice source)
+- `node_modules/react-native-worklets` `0.12.1` — MIT (1 notice source)
+- `node_modules/regenerator-runtime` `0.13.11` — MIT (1 notice source)
+- `node_modules/scheduler` `0.27.0` — MIT (1 notice source)
+- `node_modules/simple-swizzle` `0.2.4` — MIT (1 notice source)
+- `node_modules/simple-swizzle/node_modules/is-arrayish` `0.3.4` — MIT (1 notice source)
+- `node_modules/split-on-first` `1.1.0` — MIT (1 notice source)
+- `node_modules/stacktrace-parser` `0.1.11` — MIT (1 notice source)
+- `node_modules/strict-uri-encode` `2.0.0` — MIT (1 notice source)
+- `node_modules/use-latest-callback` `0.2.6` — MIT (1 notice source)
+- `node_modules/use-sync-external-store` `1.6.0` — MIT (1 notice source)
+- `node_modules/warn-once` `0.1.1` — MIT (1 notice source)
+- `node_modules/whatwg-fetch` `3.6.20` — MIT (1 notice source)
+- `node_modules/zustand` `5.0.15` — MIT (1 notice source)
+
+## Native components in the receipt (118, not verified by this script)
+
+Candidates from `ios/Podfile.lock`, the vendored Sentry xcframework and bundled fonts; their notices are in the shipped `assets/legal/ThirdPartyNotices.txt`. Linked-binary membership requires the Mac-plane check above.
+
+- `font:Manrope_400Regular.ttf` `Version 4.504`
+- `font:Manrope_500Medium.ttf` `Version 4.504`
+- `font:Manrope_600SemiBold.ttf` `Version 4.504`
+- `font:Manrope_700Bold.ttf` `Version 4.504`
+- `font:Roboto-Bold.ttf` `Version 2.000980; 2014`
+- `generated:CocoaPods` `1.15.2`
+- `native:Sentry` `9.24.0` — MIT (requires actual upstream text)
+- `pod:AppAuth` `2.1.0`
+- `pod:AppCheckCore` `11.3.1`
+- `pod:BVLinearGradient` `2.8.3` — MIT
+- `pod:DoubleConversion` `1.1.6` — MIT
+- `pod:FBLazyVector` `0.87.1` — MIT
+- `pod:GTMAppAuth` `5.0.0`
+- `pod:GTMSessionFetcher` `3.5.0`
+- `pod:GoogleSignIn` `9.2.0`
+- `pod:GoogleUtilities` `8.1.0`
+- `pod:PickleNative` `0.1.0` — [object Object]
+- `pod:PromisesObjC` `2.4.0`
+- `pod:PromisesSwift` `2.4.0`
+- `pod:PurchasesHybridCommon` `18.33.1`
+- `pod:RCT-Folly` `2024.11.18.00` — MIT
+- `pod:RCTDeprecation` `0.87.1` — MIT
+- `pod:RCTRequired` `0.87.1` — MIT
+- `pod:RCTSwiftUI` `0.87.1` — MIT
+- `pod:RCTSwiftUIWrapper` `0.87.1` — MIT
+- `pod:RCTTypeSafety` `0.87.1` — MIT
+- `pod:RNGoogleSignin` `16.1.4` — MIT
+- `pod:RNKeychain` `10.0.0` — MIT
+- `pod:RNNotifee` `10.5.0` — Apache-2.0
+- `pod:RNPurchases` `10.8.1` — MIT
+- `pod:RNReanimated` `4.6.0` — MIT
+- `pod:RNSVG` `15.15.5` — MIT
+- `pod:RNScreens` `4.27.0` — MIT
+- `pod:RNSentry` `8.24.0` — MIT
+- `pod:RNWorklets` `0.12.1` — MIT
+- `pod:React` `0.87.1` — MIT
+- `pod:React-Core` `0.87.1` — MIT
+- `pod:React-Core-prebuilt` `0.87.1` — MIT
+- `pod:React-CoreModules` `0.87.1` — MIT
+- `pod:React-Fabric` `0.87.1` — MIT
+- `pod:React-FabricComponents` `0.87.1` — MIT
+- `pod:React-FabricImage` `0.87.1` — MIT
+- `pod:React-ImageManager` `0.87.1` — MIT
+- `pod:React-Mapbuffer` `0.87.1` — MIT
+- `pod:React-NativeModulesApple` `0.87.1` — MIT
+- `pod:React-RCTActionSheet` `0.87.1` — MIT
+- `pod:React-RCTAnimatedModuleProvider` `0.87.1` — MIT
+- `pod:React-RCTAnimation` `0.87.1` — MIT
+- `pod:React-RCTAppDelegate` `0.87.1` — MIT
+- `pod:React-RCTBlob` `0.87.1` — MIT
+- `pod:React-RCTFBReactNativeSpec` `0.87.1` — MIT
+- `pod:React-RCTFabric` `0.87.1` — MIT
+- `pod:React-RCTImage` `0.87.1` — MIT
+- `pod:React-RCTLinking` `0.87.1` — MIT
+- `pod:React-RCTNetwork` `0.87.1` — MIT
+- `pod:React-RCTRuntime` `0.87.1` — MIT
+- `pod:React-RCTSettings` `0.87.1` — MIT
+- `pod:React-RCTText` `0.87.1` — MIT
+- `pod:React-RCTVibration` `0.87.1` — MIT
+- `pod:React-RuntimeApple` `0.87.1` — MIT
+- `pod:React-RuntimeCore` `0.87.1` — MIT
+- `pod:React-RuntimeHermes` `0.87.1` — MIT
+- `pod:React-bridging` `0.87.1` — MIT
+- `pod:React-callinvoker` `0.87.1` — MIT
+- `pod:React-cxxreact` `0.87.1` — MIT
+- `pod:React-cxxstableapi` `0.87.1` — MIT
+- `pod:React-debug` `0.87.1` — MIT
+- `pod:React-defaultsnativemodule` `0.87.1` — MIT
+- `pod:React-domnativemodule` `0.87.1` — MIT
+- `pod:React-featureflags` `0.87.1` — MIT
+- `pod:React-featureflagsnativemodule` `0.87.1` — MIT
+- `pod:React-graphics` `0.87.1` — MIT
+- `pod:React-hermes` `0.87.1` — MIT
+- `pod:React-idlecallbacksnativemodule` `0.87.1` — MIT
+- `pod:React-intersectionobservernativemodule` `0.87.1` — MIT
+- `pod:React-jserrorhandler` `0.87.1` — MIT
+- `pod:React-jsi` `0.87.1` — MIT
+- `pod:React-jsiexecutor` `0.87.1` — MIT
+- `pod:React-jsinspector` `0.87.1` — MIT
+- `pod:React-jsinspectorcdp` `0.87.1` — MIT
+- `pod:React-jsinspectornetwork` `0.87.1` — MIT
+- `pod:React-jsinspectortracing` `0.87.1` — MIT
+- `pod:React-jsitooling` `0.87.1` — MIT
+- `pod:React-jsitracing` `0.87.1` — MIT
+- `pod:React-logger` `0.87.1` — MIT
+- `pod:React-microtasksnativemodule` `0.87.1` — MIT
+- `pod:React-mutationobservernativemodule` `0.87.1` — MIT
+- `pod:React-networking` `0.87.1` — MIT
+- `pod:React-oscompat` `0.87.1` — MIT
+- `pod:React-perflogger` `0.87.1` — MIT
+- `pod:React-performancecdpmetrics` `0.87.1` — MIT
+- `pod:React-performancetimeline` `0.87.1` — MIT
+- `pod:React-rendererconsistency` `0.87.1` — MIT
+- `pod:React-renderercss` `0.87.1` — MIT
+- `pod:React-rendererdebug` `0.87.1` — MIT
+- `pod:React-runtimeexecutor` `0.87.1` — MIT
+- `pod:React-runtimescheduler` `0.87.1` — MIT
+- `pod:React-timing` `0.87.1` — MIT
+- `pod:React-utils` `0.87.1` — MIT
+- `pod:React-viewtransitionnativemodule` `0.87.1` — MIT
+- `pod:React-webperformancenativemodule` `0.87.1` — MIT
+- `pod:ReactAppDependencyProvider` `0.87.1` — MIT
+- `pod:ReactCodegen` `0.87.1` — Unlicense
+- `pod:ReactCommon` `0.87.1` — MIT
+- `pod:ReactNativeDependencies` `0.87.1` — MIT
+- `pod:RecaptchaInterop` `101.0.0`
+- `pod:RevenueCat` `5.87.1`
+- `pod:SocketRocket` `0.7.1` — MIT
+- `pod:Yoga` `0.0.0` — MIT
+- `pod:boost` `1.84.0` — MIT
+- `pod:fast_float` `8.0.0` — MIT
+- `pod:fmt` `12.1.0` — MIT
+- `pod:glog` `0.3.5` — MIT
+- `pod:hermes-engine` `250829098.0.17` — MIT
+- `pod:op-sqlite` `18.1.4` — MIT
+- `pod:react-native-safe-area-context` `5.9.1` — MIT
+- `pod:react-native-video` `6.19.2` — MIT
+- `pod:react-native-webview` `14.0.1` — MIT
