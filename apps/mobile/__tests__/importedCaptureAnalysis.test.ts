@@ -291,7 +291,9 @@ describe('runCaptureAnalysis imported-video gate', () => {
     const { db, calls } = recordingDb();
     const first = generateSwingSequence({ readyMs: 400, recoverMs: 550 });
     const second = generateSwingSequence({ readyMs: 200, recoverMs: 550 });
-    const rally = concatSequences(first.sequence, second.sequence, 0);
+    // One frame period at 60 fps: the canonical parser requires strictly
+    // increasing timestamps, so the second swing starts on the next frame.
+    const rally = concatSequences(first.sequence, second.sequence, 17);
     const { clip, sidecarJson } = importedClipWithSidecar(rally);
     mockReadArtifact = async () => sidecarJson;
     const { fetchMock, finalized } = permitServer();

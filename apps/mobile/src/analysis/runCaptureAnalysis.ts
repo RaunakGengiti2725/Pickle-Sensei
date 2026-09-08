@@ -34,6 +34,11 @@ import {
   verifyCapturedClipCurrentBytes,
   type CapturedClip,
 } from '../camera/capture';
+import {
+  admitImportedClip,
+  admitImportedMedia,
+  importAdmissionRejectionMessage,
+} from '../camera/importAdmission';
 import type { LocalDb } from '../data/db';
 import {
   assertDataOwnerContext,
@@ -1237,6 +1242,18 @@ async function runCaptureAnalysisCore(
         'This capture predates pose-sequence recording, so it cannot be scored. New guided captures record the full motion.',
     };
   }
+  // ── Import admission, container envelope (W03-01) ──────────────────────
+  // An imported clip outside the supported media envelope is refused with
+  // its precise reason before the sidecar is even read.
+  if (clip.captureMode === 'imported_video') {
+    const mediaAdmission = admitImportedMedia(clip);
+    if (!mediaAdmission.admitted) {
+      return {
+        kind: 'unavailable',
+        reason: importAdmissionRejectionMessage(mediaAdmission.reason),
+      };
+    }
+  }
 
   // ── Load and validate the canonical temporal record ────────────────────
   let sidecarJson: string;
@@ -1306,6 +1323,21 @@ async function runCaptureAnalysisCore(
       reason:
         'The recorded pose sequence does not match this capture’s saved metadata. It will not be repaired or rated.',
     };
+  }
+
+  // ── Import admission, single-stroke plausibility (W03-01) ──────────────
+  // The imported sidecar must cover the clip and hold exactly one distinct
+  // stroke. Zero events or several comparable events abstain here, with the
+  // precise reason, BEFORE any permit is reserved — the loudest motion is
+  // never picked silently.
+  if (clip.captureMode === 'imported_video') {
+    const admission = admitImportedClip(clip, parsed.value);
+    if (!admission.admitted) {
+      return {
+        kind: 'unavailable',
+        reason: importAdmissionRejectionMessage(admission.reason),
+      };
+    }
   }
 
   const fusion = createFusionProviders(request.declaredStroke);
