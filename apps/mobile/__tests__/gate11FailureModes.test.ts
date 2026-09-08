@@ -25,6 +25,7 @@ import {
   canonicalDataOwner,
   setActiveDataOwner,
 } from '../src/data/accountScope';
+import { drainRows, executeSyncSql } from '../test-support/outboxScheduleFake';
 
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 
@@ -49,16 +50,10 @@ function fakeDb() {
       if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (sql.startsWith('DELETE FROM outbox')) {
         const idx = outbox.findIndex(

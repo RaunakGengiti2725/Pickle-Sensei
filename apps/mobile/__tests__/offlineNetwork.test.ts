@@ -46,6 +46,7 @@ import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
 } from '../src/data/accountScope';
+import { drainRows, executeSyncSql } from '../test-support/outboxScheduleFake';
 
 // ─── Fake durable store (same contract the sqlite driver satisfies) ────────
 
@@ -100,16 +101,10 @@ function fakeDb(options?: { failReceiptWrites?: () => boolean }) {
         else receipts.push(receipt);
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (sql.startsWith('DELETE FROM outbox')) {
         const row = outbox.find(

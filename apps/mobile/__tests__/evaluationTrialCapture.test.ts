@@ -14,6 +14,7 @@ import {
   type EvaluationTelemetryContext,
 } from '../src/evaluation/trialCapture';
 import { GUEST_DATA_OWNER, setActiveDataOwner } from '../src/data/accountScope';
+import { drainRows, executeSyncSql } from '../test-support/outboxScheduleFake';
 
 const shotResult: ShotAnalysis = {
   id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
@@ -241,6 +242,13 @@ describe('evaluation.trial outbox sync', () => {
     let nextId = 1;
     const db: LocalDb = {
       async execute(sql: string, params: unknown[] = []) {
+        if (
+          sql === 'BEGIN IMMEDIATE' ||
+          sql === 'COMMIT' ||
+          sql === 'ROLLBACK'
+        ) {
+          return { rows: [] };
+        }
         if (sql.includes('INSERT INTO outbox')) {
           outbox.push({
             id: nextId++,
@@ -252,16 +260,10 @@ describe('evaluation.trial outbox sync', () => {
           });
           return { rows: [] };
         }
+        const handled = executeSyncSql(outbox, sql, params);
+        if (handled) return handled;
         if (sql.startsWith('SELECT id, kind, payload')) {
-          return {
-            rows: outbox
-              .filter(
-                r =>
-                  r.owner_key === String(params[0]) &&
-                  r.attempts < Number(params[1]),
-              )
-              .map(r => ({ ...r })),
-          };
+          return { rows: drainRows(outbox, params) };
         }
         if (sql.startsWith('DELETE FROM outbox')) {
           const idx = outbox.findIndex(
@@ -275,7 +277,7 @@ describe('evaluation.trial outbox sync', () => {
             r => r.owner_key === params[1] && r.id === params[2],
           );
           if (row) {
-            row.attempts += 1;
+            if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
             row.last_error = String(params[0]);
           }
           return { rows: [] };

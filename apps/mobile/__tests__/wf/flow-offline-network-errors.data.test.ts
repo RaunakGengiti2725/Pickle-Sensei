@@ -59,6 +59,10 @@ import type {
   StorePlans,
 } from '../../src/billing/types';
 import * as apiSessionModule from '../../src/account/apiSession';
+import {
+  drainRows,
+  executeSyncSql,
+} from '../../test-support/outboxScheduleFake';
 
 const setSession = (
   apiSessionModule as unknown as { __setSession: (s: unknown) => void }
@@ -136,16 +140,10 @@ function fakeDb() {
         else receipts.push(String(params[1]));
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (sql.startsWith('DELETE FROM outbox')) {
         const row = outbox.find(
