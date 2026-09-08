@@ -41,7 +41,7 @@ const TOKEN_SOURCE =
   `\\b(?:bearer|basic|digest)\\s+[A-Za-z0-9._~+/=-]{8,}` +
   `|\\beyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_-]{4,}(?:\\.[A-Za-z0-9_-]*)?` +
   `|\\b(?:access_token|refresh_token|id_token|auth_token|token|api[_-]?key|apikey|client_secret|secret|password|passwd|pwd|authorization|session[_-]?id|signature|sig|code)=[^&\\s"'<>]+` +
-  `|\\b(?:appl_|goog_|test_|strp_|sk_live_|sk_test_|rk_live_|pk_live_|pk_test_|ghp_|gho_|github_pat_|xox[abprs]-|AIza|ya29\\.|sbp_|sk-)[A-Za-z0-9_.-]{8,}`;
+  `|\\b(?:appl_|goog_|test_|strp_|[prs]k_(?:live|test)_|ghp_|gho_|github_pat_|xox[abprs]-|AIza|ya29\\.|sbp_|sk-)[A-Za-z0-9_.-]{8,}`;
 const EMAIL_SOURCE =
   '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}';
 const NETWORK_SOURCE =
