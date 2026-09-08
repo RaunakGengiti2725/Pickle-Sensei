@@ -511,7 +511,41 @@ function buildProbe(source: string, args: string[] = [], timeout = 5000) {
     __pickleProbeMark('node-ready');
     process.on('beforeExit', () => __pickleProbeMark('beforeExit'));
     process.on('exit', () => __pickleProbeMark('exit'));
-    ${source}
+    const __pickleModules = require('node:module');
+    const __pickleOriginalLoad = __pickleModules._load;
+    const __pickleLoadLabels = new Map([
+      ['@react-native/metro-config', 'react-native-config'],
+      ['metro-config', 'metro-config'],
+      ['@sentry/react-native/metro', 'sentry-metro'],
+      ['./scripts/metro-asset-transformer.cjs', 'asset-guard'],
+      ['image-size', 'image-size'],
+      ['metro-transform-worker', 'transform-worker'],
+      ['@babel/core', 'babel-core'],
+      ['@babel/parser', 'babel-parser'],
+      ['@sentry/core', 'sentry-core'],
+      ['metro/private/DeltaBundler/Serializers/baseJSBundle', 'bundle-serializer'],
+      ['metro/private/DeltaBundler/Serializers/sourceMapString', 'map-serializer'],
+      ['metro/private/lib/bundleToString', 'bundle-string'],
+    ]);
+    const __pickleObservedLoads = new Set();
+    __pickleModules._load = function(request) {
+      const label = __pickleLoadLabels.get(request);
+      if (!label || __pickleObservedLoads.has(label)) {
+        return __pickleOriginalLoad.apply(this, arguments);
+      }
+      __pickleObservedLoads.add(label);
+      __pickleProbeMark('require-start:' + label);
+      try {
+        return __pickleOriginalLoad.apply(this, arguments);
+      } finally {
+        __pickleProbeMark('require-end:' + label);
+      }
+    };
+    try {
+      ${source}
+    } finally {
+      __pickleModules._load = __pickleOriginalLoad;
+    }
   `;
   const started = performance.now();
   const result = childProcess.spawnSync(
