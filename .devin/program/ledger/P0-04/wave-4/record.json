@@ -1,0 +1,155 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-P0-04-r1",
+      "phase": "implement",
+      "prompt_sha256": "227c0d520c4bd999286da84ec984c4b841d7da0ecf4867b2ba6fa823945f8545",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-P0-04-r1",
+      "phase": "review",
+      "prompt_sha256": "09565c7442bf598ab084a03ff191610402eff94a511835a701c2307d4c80dfa7",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-P0-04-r1",
+      "phase": "adversary",
+      "prompt_sha256": "049a7b2c492c7a2fa2e313cc9052e61be2616eb3a948e60407e9f06c0464a017",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/p0-04/impl-r1",
+    "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "P0-04",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [],
+        "attack_branch": "devin/pp/p0-04/attack-d8e5db3e",
+        "attack_branch_sha": "b1365ea109d155eea2b97306ff5ca7aa5dee28ec",
+        "attacked_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "attacks_tried": 7,
+        "breaks": [
+          {
+            "expected": "The SQL authority types validFrom/validUntil with jsonb_typeof = 'number'; `version` should likewise require jsonb_typeof(document->'version') = 'string' and raise check_violation (23514), matching packages/shared-types/src/analysisReleasePolicy.ts. Owner-only surface, fail-closed downstream — minor (P3): a mistyped install permanently burns a unique version string and can never activate. Fix would be a NEW forward migration (create or replace function), not an edit to 20260908020000.",
+            "observed": "VERIFIED: `{\"version\":7}`, `{\"version\":true}`, `{\"version\":{\"nested\":1}}` all install (allowed 1); the row stores version text '7'; a later real string version \"7\" is refused with 23505 (unique violation) and the row cannot be removed (history is append-only). The edge reader (supabase/functions/api/releasePolicy.ts readVerifiedReleasePolicy → validateAnalysisReleasePolicy: typeof version !== 'string') treats the row as an integrity failure → ineligible/unverified, so no chargeable path opens (INFERRED from code; SQL side VERIFIED in attack_04).",
+            "repro": "cd supabase && RUN_CANDIDATE_TESTS=1 ./tests/attacks/run_attacks.sh  (attack_04_release_policy_boundaries.sql, assertions tagged 'A04-P3 observed'). Minimal: as owner, select public.install_analysis_release_policy(doc, sha256(doc)) where doc is a valid analysis-release-policy-v1 document with {\"version\":7}; then try to install a real document with {\"version\":\"7\"}.",
+            "severity": "P3",
+            "test_file": "supabase/tests/attacks/attack_04_release_policy_boundaries.sql",
+            "title": "install_analysis_release_policy() accepts a non-string JSON `version` (number/boolean/object) by coercing it through ->>; the shared validator and edge reader reject such rows fail-closed"
+          }
+        ],
+        "package_id": "P0-04",
+        "summary": "ADVERSARIAL RESULT for P0-04 at d8e5db3eb346b651e4ce04cc997178abcbed56fe: no P0/P1/P2 break found; one P3 boundary finding (non-string `version` accepted by the SQL release-policy authority, fail-closed at the edge). Baseline VERIFIED: `./supabase/tests/run_rls_tests.sh` exit 0 on the candidate (4 histories; W07 14 concurrent scenarios, W08 111 assertions + 5 concurrent scenarios, release-policy authority PASS per history). Attack suite on branch devin/pp/p0-04/attack-d8e5db3e @ b1365ea109d155eea2b97306ff5ca7aa5dee28ec (17 files, +20486, only supabase/tests/attacks/** — no candidate test or migration touched; no PR opened; no force-push). Harness `cd supabase && RUN_CANDIDATE_TESTS=1 ./tests/attacks/run_attacks.sh` rebuilds fresh + production_20260906 + upstream_20260906 + ordered_20260907 with ON_ERROR_STOP=1, runs the candidate's 3 matrix files, then 6 attack files per history, snapshots the full security catalog (tables/columns/grants/RLS/policies/triggers/constraints/indexes/functions incl. security props/default ACLs/roles/extensions; 5559 lines) and diffs each history against fresh; it refuses zero-attack runs (exit 3). VERIFIED runs (all exit 0; logs committed under supabase/tests/attacks/out/): attack_run_pg16.txt (postgres:16 = the canonical image; 16/16 candidate PASS lines, per history 27+86+116+2444+68+73 = 2814 attack assertions, 4 histories → 11256 assertions, 0 failed, 0 skipped; 3 catalog diffs empty; 'ATTACK HARNESS: 6 attack files x 4 histories passed on postgres:16', EXIT=0), attack_run_pg15.txt and attack_run_pg17.txt (Supabase-hosted major boundaries; both 16/16 candidate PASS, 6 attacks x 4 histories passed, catalogs identical, EXIT=0; those two ran before the A04-P3 probes were added so they show 110 assertions for attack_04). SHA256SUMS.txt pins every catalog snapshot (all 12 catalogs across PG15/16/17 x 4 histories hash 7837363…6075 — byte-identical) and catalog_fresh.txt is committed. Attacks tried (7): 01 catalog convergence of all historical upgrade paths vs fresh install (no drift in grants/RLS/policies/triggers/function security); 02 concurrency/reentrancy via real dblink sessions — double partial submit, scored↔partial interleavings, client release racing scored sync and vice versa, malformed payload rollback + clean retry under access_lock_key (27 assertions); 03 unauthorised roles for the new release-authority + partial-outcome surfaces — anon/authenticated/service on install/approve/withdraw/read, direct api_private table+sequence access, cross-user permit settlement, trigger-function EXECUTE, bearer WITHOUT x-pickle-api-key (allowed AND denied paths, 86); 04 release-policy boundary values — digest case/length/mismatch/null, malformed JSON/scalar/array, schemaVersion, version ''/128/129/whitespace, validFrom/validUntil negative/equal/reversed/fractional/1e30/year-9999 bound, report hash formats, canonical doc at exactly 65536 vs 65537 octets, replay/duplicate install, double approval, cross-output report hash, withdrawal terminality, kill switch, owner immutability (116); 05 exhaustive permit (status,outcome) matrix — owner insert 33 shapes, owner transition 18x33, authenticated transition matrix, stale reservation sweep, corrupt legacy released/NULL rows settled without charging (2444); 06 free-rating conservation — partial never charges, exactly 2 scored consume, over-issued permits cannot mint a 3rd, replayed scored/partial shot ids idempotent, stale/far-past/far-future timestamps, 30h-old offline reservation settled partial without charge, delete+recreate keeps ledger, premium expiry ±1s (68); 07 duplicate/replayed identities — late-linked identity inherits spent ledger, max-not-sum across identities, identity reuse across deleted/recreated accounts, hash determinism/case/whitespace/separator sensitivity, cross-user shot-id replay leaks nothing, ledger service-only (73). Attack-side corrections made during the run (not candidate defects): catalog_snapshot string_agg syntax; attack_02 now adopts an already-installed dblink extension when the candidate's W07 ran first in the same DB. Not attacked (out of SQL-only scope for this package): Edge network-failure paths (429/5xx/redirect), mobile copy/accessibility, process death — UNKNOWN for this package. Environment: Docker Hub 429 → official images pulled from public.ecr.aws/docker/library/postgres:{15,16,17} and tagged locally; scripts unmodified."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/11408e10-d12d-46e8-a34a-3ea82447c3ef/rls_base.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-04-AC1",
+            "note": "executed/passed = 3 SQL matrices (security_regression.sql, account_deletion_operations.sql, analysis_release_policy.sql) x 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907); every matrix ran under psql -v ON_ERROR_STOP=1 and printed its ALL CASES PASSED / PASS terminator. Per history: W07 concurrent billing scenarios passed: 14; W08 SQL assertions passed: 111; W08 concurrent deletion scenarios passed: 5. Run on working tree == HEAD == BASE_SHA d8e5db3e (git status clean). Postgres image: official postgres:16 (PostgreSQL 16.15 Debian 16.15-1.pgdg13+2) pulled via public.ecr.aws mirror because Docker Hub answered 429 on this box; script unmodified. Secondary run on postgres:16-alpine 16.15 also exit 0: https://la-hacks-rttothemoon.devinenterprise.com/attachments/1a33ceff-bd57-4e9b-b114-5d89dcb8bde6/rls_base_alpine.log . Root pnpm format:check exit 0: https://la-hacks-rttothemoon.devinenterprise.com/attachments/86ffa76d-3b10-4546-8dbc-9347ce0cc180/format_check.log ; git diff --check exit 0.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Reproduce-first per the package procedure: checked out BASE_SHA d8e5db3e exactly, read AGENTS.md / REVIEW.md / docs/prompts/codex-production-readiness.md §4.3 / RELEASE_READINESS §11 / OPERATING_SYSTEM.md / test-authentication skill, then ran the acceptance command `./supabase/tests/run_rls_tests.sh` unchanged against the real `postgres:16` image (PostgreSQL 16.15 Debian). All four histories (fresh, production_20260906, upstream_20260906, ordered_20260907) applied every migration through 20260908100000 and all three SQL matrices passed in each, exit 0. Because the objective ('run on BASE_SHA; fix only if a history fails') is already satisfied on BASE_SHA, no migration or test file was changed (the procedure forbids inventing work) and the branch devin/pp/p0-04/impl-r1 was pushed pointing at BASE_SHA. Root `pnpm format:check` and `git diff --check` also pass.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/11408e10-d12d-46e8-a34a-3ea82447c3ef/rls_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1a33ceff-bd57-4e9b-b114-5d89dcb8bde6/rls_base_alpine.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/86ffa76d-3b10-4546-8dbc-9347ce0cc180/format_check.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/p0-04/impl-r1",
+        "files_changed": [],
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "out_of_scope_files": [],
+        "package_id": "P0-04",
+        "regression_tests_added": [],
+        "residual_risks": [
+          "INFERRED (not live-asserted): supabase/tests/analysis_release_policy.sql checks EXECUTE denial only for install_analysis_release_policy (service_role) and read_analysis_release_policy (anon/authenticated); denial of approve/activate/withdraw/deny_new for anon/authenticated/service_role rests on the REVOKE at supabase/migrations/20260908020000_analysis_release_authority.sql:175-180 plus RLS-on/no-grant api_private tables, and is not exercised by a live `set local role` attempt. Not changed here because the objective forbids inventing work when the matrix passes; a candidate for a later test-strengthening package.",
+          "The historical-history filters in run_rls_tests.sh (production_20260906 / upstream_20260906 / ordered_20260907, lines 29-43) encode assumed remote states; whether production's actual `supabase migration list` matches one of them is UNKNOWN from this box (no production access by rule).",
+          "Docker Hub rate limiting (HTTP 429) was hit on this box; CI's supabase-security job pulls postgres:16 from Docker Hub and could hit the same limit in a constrained runner. Not addressed (scripts/ is outside this package's serial groups)."
+        ],
+        "summary": "VERIFIED: the SQL security matrix passes on BASE_SHA d8e5db3eb346b651e4ce04cc997178abcbed56fe for all four migration histories — no defect found, no fix required. Command: `./supabase/tests/run_rls_tests.sh` (exit 0). Per history the runner applied the full 34-file migration set (supabase/tests/run_rls_tests.sh:18-52; base/pending split per history), then security_regression.sql printed `W07 concurrent billing scenarios passed: 14` + `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, account_deletion_operations.sql printed `W08 SQL assertions passed: 111` + `W08 concurrent deletion scenarios passed: 5` + `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, and analysis_release_policy.sql printed `Analysis release policy authority: PASS` (log lines 113-114/597/611-612/620 fresh; 733-734/1217/1231-1232/1240 production_20260906; 1353-1354/1837/1851-1852/1860 upstream_20260906; 1973-1974/2457/2471-2472/2480 ordered_20260907; `EXIT=0` at line 2481). psql ran with ON_ERROR_STOP=1 on every file, so any raised assertion would have aborted the run non-zero; zero `ERROR` lines in the log. This closes the §11 gap 'the newly wired fresh/all-history RLS matrix still need a complete run' and covers the two migrations added after the P0-SQL FIXED entry (20260908020000_analysis_release_authority.sql, 20260908100000_permit_partial_terminal_outcome.sql — the latter's allowed AND denied paths are asserted in security_regression.sql section S, lines 3980-4090+). Also VERIFIED: root `pnpm format:check` exit 0 (`All matched files use Prettier code style!`) and `git diff --check` exit 0 on the clean BASE tree. Environment note (VERIFIED): Docker Hub returned HTTP 429 for `docker pull postgres:16` on this box; the identical official image was pulled from the mirror `public.ecr.aws/docker/library/postgres:16` (digest sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94, `postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)`) and tagged locally as `postgres:16`; the script itself was not modified. An earlier run with the locally cached `postgres:16-alpine` (16.15) tagged as postgres:16 also passed exit 0 (rls_base_alpine.log) and is kept as secondary evidence only. HEAD == BASE_SHA by design: files_changed is empty and no regression test was added because nothing failed."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04085696-a354-4ebf-b008-e61c87a2df06/rls_candidate.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-04-AC1",
+            "note": "Reviewer's own run on HEAD d8e5db3e (== BASE_SHA, git status clean), unmodified script, real docker.io postgres:16 pulled directly from Docker Hub (digest sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94, PostgreSQL 16.15 Debian 16.15-1.pgdg13+2). executed/passed = 3 SQL matrices x 4 histories; each history applied all 34 migrations (fresh/production_20260906/upstream_20260906/ordered_20260907 base+pending) and printed SECURITY REGRESSION MATRIX: ALL CASES PASSED (W07 concurrent billing scenarios passed: 14), W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED (W08 SQL assertions passed: 111; concurrent deletion scenarios passed: 5), Analysis release policy authority: PASS (log lines 112-114/597/611-612/620, 732-734/1217/1231-1232/1240, 1352-1354/1837/1851-1852/1860, 1972-1974/2457/2471-2472/2480). 0 ERROR/FATAL lines; psql ON_ERROR_STOP=1 on every file; EXIT=0 at log line 2481.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04085696-a354-4ebf-b008-e61c87a2df06/rls_candidate.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (matches implementer's residual risk, confirmed by reading supabase/tests/analysis_release_policy.sql:6-15,29): the analysis-release matrix asserts EXECUTE denial only via has_function_privilege for install_analysis_release_policy (service_role) and read_analysis_release_policy (anon/authenticated); approve/activate/withdraw/deny_new denial for client roles is not exercised by a live `set local role` attempt. Not part of this package's objective (no history failed), candidate for a later test-strengthening package under the sql serial group.",
+          "UNKNOWN: whether production's actual `supabase migration list` matches one of the three historical filters in supabase/tests/run_rls_tests.sh:29-43 cannot be checked from this box (no production access by rule)."
+        ],
+        "package_id": "P0-04",
+        "regression_fails_on_base": false,
+        "reviewed_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "scope_violation": false,
+        "summary": "APPROVE P0-04 at d8e5db3eb346b651e4ce04cc997178abcbed56fe. VERIFIED scope: `git diff --stat d8e5db3e..origin/devin/pp/p0-04/impl-r1` is empty (candidate branch points at BASE_SHA; files_changed=[] and out_of_scope_files=[] are accurate), so scope_violation=false and no module/comment/migration-history/test-weakening concerns can arise (nothing was edited). VERIFIED acceptance P0-04-AC1 by my own re-execution: `./supabase/tests/run_rls_tests.sh` exit 0 on a clean checkout of HEAD d8e5db3e with the unmodified script against docker.io/library/postgres:16 pulled directly from Docker Hub (same digest sha256:f1c3376c… the implementer reported via the ECR mirror; PostgreSQL 16.15). All 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) applied all 34 migrations through 20260908100000 and all 3 matrices passed in each: SECURITY REGRESSION MATRIX ALL CASES PASSED (W07 concurrent billing 14), W08 ACCOUNT DELETION MATRIX ALL CASES PASSED (111 assertions, 5 concurrent scenarios), Analysis release policy authority PASS — 12/12, 0 failed, 0 skipped, 0 ERROR/FATAL lines under psql ON_ERROR_STOP=1. Artifact: rls_candidate.log (attachment). Implementer counts and log line numbers reproduce exactly. Regression proof: the package's acceptance is kind=test (not regress) and the candidate adds/changes no test files because no history failed on BASE_SHA, so there is nothing to show failing on base; regression_fails_on_base recorded as false meaning not-applicable, not as a failed proof. The objective ('run on BASE_SHA; fix only if a history fails') is met as shipped behaviour with no change required; this closes the §11 'newly wired fresh/all-history RLS matrix still need a complete run' gap for this SHA. Non-blocking observations listed separately (analysis_release_policy.sql denial coverage for approve/activate/withdraw is privilege-table-only; production migration-list match is UNKNOWN from this box).",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-4"
+}

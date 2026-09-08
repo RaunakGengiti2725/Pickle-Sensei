@@ -1,0 +1,246 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W01-04-r1",
+      "phase": "implement",
+      "prompt_sha256": "16aadee802915c487e5483631cedfd1969dc1caf3439e8b1c26e6cf5fcb6064a",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-04-r1",
+      "phase": "review",
+      "prompt_sha256": "a0e5eb3a1d20f78de401c352544a115294a67bd08c1364a110cadc5614f072dc",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-04-r1",
+      "phase": "adversary",
+      "prompt_sha256": "84ec02006389c5ea27f6243b2e0179f491b7b794c2a219de2eda89be6c990371",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/w01-04/impl-r1",
+    "head_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W01-04",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/467a3c7e-7228-4847-b4c0-08cfe55666a4/attack-shared-types-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2222aef3-2029-4772-aaa9-b4adc05f9851/attack-edge-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2f4e4680-40fa-487a-b2d8-02518a3060a2/attack-mobile-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/07c71e1d-6268-4cfd-8240-6eb5c6382dc5/baseline-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3f1a6b7f-7feb-49d9-b7a1-288a77373f4e/ac2-base-run.log"
+        ],
+        "attack_branch": "devin/pp/w01-04/attack-654695aa",
+        "attack_branch_sha": "9f28d162767ff8297d70d9510459e177a3a9191d",
+        "attacked_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+        "attacks_tried": 62,
+        "breaks": [
+          {
+            "expected": "At least one non-test module of the production backend (supabase/functions/api, outside __wf__) and of apps/mobile/src decides chargeability through the shared module, or the package explicitly documents the wiring as follow-up scope.",
+            "observed": "shippingCallers('supabase/functions/api') === [] and shippingCallers('apps/mobile/src') === [] (test/__wf__/__tests__ excluded); validateOfflineResultReceiptBinding has zero callers outside offlineAuthorization.ts and tests. The 'single definition ... so the three planes cannot drift' exists only in fixture-consumer tests; the Edge function and mobile app decide chargeability without consulting it (VERIFIED by executed test; classification as P2 rather than P1 is a judgement: no money path is wrong, but the objective is phrased as behaviour and per SCOPE POLICY 'a new module that nothing in the shipping app calls does not meet an objective phrased as behaviour').",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack/chargeability.shippingCaller.attack.test.ts  (exit 1; 3 failed / 0 passed on 654695aa)",
+            "severity": "P2",
+            "test_file": "packages/shared-types/src/__tests__/attack/chargeability.shippingCaller.attack.test.ts",
+            "title": "Objective not met on a shipping path: no non-test Edge or mobile module ever calls the canonical predicate (decideChargeability / isChargeableAnalysis); the only production caller (validateOfflineResultReceiptBinding in offlineAuthorization.ts) itself has no non-test caller in any plane"
+          },
+          {
+            "expected": "The contract should decide on an immutable snapshot (e.g. structured clone / JSON round-trip of the raw input) or reject non-plain objects (getters/proxies) so the verdict cannot diverge from the validated view; fail closed.",
+            "observed": "decideChargeability(outcomeWithGetter, eligibility) → {chargeable:true, reasonCode:'both_outputs_validated_and_durably_delivered', creditsConsumed:1} even though outcome.status reads 'partial' by the time the decision is returned (getter returns 'complete' on the first read only). VERIFIED. Impact bounded: exploitation requires an in-process caller to pass a live non-plain object; JSON-parsed inputs (the mobile/Edge boundary) are immune, hence P2 not P1.",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack/chargeability.attack.test.ts -t \"live object whose status flips\"  (exit 1)",
+            "severity": "P2",
+            "test_file": "packages/shared-types/src/__tests__/attack/chargeability.attack.test.ts",
+            "title": "Live/hostile object whose `status` getter flips from 'complete' to 'partial' between validation and decision still returns chargeable:true, creditsConsumed:1 (TOCTOU on non-snapshotted input)"
+          },
+          {
+            "expected": "Identifiers that bind a credit to a durable row should reject C0/C1 control characters and Unicode line/paragraph separators, or be normalised before binding comparison.",
+            "observed": "isIdentifier() only requires non-empty, <=128 chars, trim()===value; analysisId/operationId/ownerId/captureId/publicationId = 'a\\u0000b' on both sides → chargeable:true. VERIFIED at the pure predicate; no storage/SQL truncation attack was executed, so downstream impact is UNKNOWN (P3 unless a persistence layer normalises/truncates NULs, which would make two distinct identities collide).",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack/chargeability.attack.test.ts -t \"control characters\"  (exit 1)",
+            "severity": "P3",
+            "test_file": "packages/shared-types/src/__tests__/attack/chargeability.attack.test.ts",
+            "title": "Identifiers containing control characters (e.g. 'a\\u0000b', '\\u200b', '\\u2028') are accepted as durable identities and the outcome is chargeable"
+          }
+        ],
+        "package_id": "W01-04",
+        "summary": "ADVERSARY W01-04 vs 654695aa47bc844e23486d7bbb8b29511e7a956b. Attack branch devin/pp/w01-04/attack-654695aa @ 9f28d162767ff8297d70d9510459e177a3a9191d (pushed, no PR, no force). Adds 4 test files only; candidate production code and tests untouched (git diff 654695aa..9f28d162 --stat: 4 added files).\n\nBASELINE (VERIFIED): AC1 `pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test` exit 0, 18 files / 311 passed / 0 failed (baseline-shared-types.log). Mobile consumer `cd apps/mobile && npx jest --ci __tests__/jointChargeabilityContract.test.ts` exit 0, 4/4. Edge consumer `deno test --allow-read --allow-env joint_chargeability_contract.test.ts` exit 0, 4/4. AC2 regress: on BASE d8e5db3e with ONLY the candidate's new test+fixture copied, vitest exits 1 with 'Cannot find module ../chargeability.js' (ac2-base-run.log) — fails before executing assertions (import resolution, since the module is new), passes on HEAD as part of AC1. Reviewer should treat AC2 base failure as procedural, not behavioural.\n\nATTACKS (62 test cases across 4 files, 4 planes/tooling):\n(1) shared-types vitest packages/shared-types/src/__tests__/attack/chargeability.attack.test.ts — `cd packages/shared-types && npx vitest run src/__tests__/attack` exit 1: 45 total, 40 passed, 5 failed (attack-shared-types-run2.log). Classes: malformed/unknown/primitive/array inputs, __proto__/inherited fields/proxies/extra & duplicate keys, binding mutation of every field on either side, replay (already_consumed) & malformed credit state, publication state/timestamp boundaries (far-future/past/leap/rollback/non-UTC), lineage drift, benchmark interval NaN/Infinity/negative/inverted/width & boundary-step EPSILON edges, uncertainty coverage/scope, fixture-table tampering (verdict/reason/credit inconsistency, duplicate ids, wrong versions, empty cases), free-rating conservation (every partial/failed/withheld/replayed fixture case → creditsConsumed 0), hostile mutable objects. 2 candidate failures (breaks 2, 3).\n(2) shared-types vitest chargeability.shippingCaller.attack.test.ts — 3/3 fail: canonical predicate has no shipping caller (break 1).\n(3) Edge Deno supabase/functions/api/__wf__/attack_joint_chargeability_clock.test.ts — `cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json attack_joint_chargeability_clock.test.ts` exit 0, 8 passed / 0 failed (attack-edge-run2.log); `deno check`, `deno lint`, `deno fmt --check` clean. Release-authority clock boundaries (validFrom-1, validUntil, far future/past, NaN, negative), clock rollback before approval, withdrawal at/after approval, policy-version drift, unsupported/unconfirmed/extra-key observed input, tampered canonical doc/digest/version rows, storage error → all fail closed into decideChargeability. No break.\n(4) Mobile Jest apps/mobile/__tests__/jointChargeabilityAttack.test.ts — `cd apps/mobile && npx jest --ci __tests__/jointChargeabilityAttack.test.ts` exit 0, 9 passed / 0 failed (attack-mobile-run2.log). Cross-plane drift (all 3 Deno import maps realpath to the one chargeability.ts; Edge and mobile consumers read the same fixture file; version pins), interleaved account switch (A/B binding cross → binding_mismatch), process death/restart rehydration, crash between publication and ledger verification, corrupt persisted rows. No break.\n\nNON-BREAK OBSERVATIONS (VERIFIED): malformed creditState 'consumed' → eligibility_unverified (fail closed, correct). Far-future/past but well-formed publishedAtIso remains chargeable — the pure predicate has no clock parameter; INFERRED caller-controlled by design. Fixture parser accepts a table with zero chargeable cases (structural-only contract) — coverage-policy gap, not a contract break.\n\nNOT APPLICABLE / NOT EXECUTED (honest gaps): network failures (timeout/429/5xx/redirect), unauthorised roles for SQL/Edge surfaces, real concurrency/double-submit, copy/accessibility — the package adds no network/SQL/RLS/UI surface (write_paths are pure TS); no Apple/M4 run (no native paths). `cd apps/mobile && npx tsc --noEmit` reports 21 pre-existing errors all in src/diagnostics/* from missing @sentry/* in this VM's node_modules (environment, UNKNOWN vs CI); zero errors in the attack file. Lint: root `npx eslint` on all 4 attack files exit 0; `npx prettier --check` exit 0; `git diff --check` clean.\n\nVERDICT: no P0/P1. Breaks 2 and 3 are contract-hardening (P2/P3). Break 1 is the material finding for the reviewer: the candidate satisfies AC1/AC2 and the 'cannot drift' test wiring, but the canonical predicate is not on any shipping path (Edge function or mobile app) — whether the objective's 'behaviour' wording is met is a reviewer judgement."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a96b34d-96d7-4cfb-99d8-5f606bef9e65/ac1-head.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 311,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-04-AC1",
+            "note": "VERIFIED on HEAD 654695aa: tsc clean; vitest 18 files / 311 tests passed (base d8e5db3e: 17 files / 302 tests passed, https://la-hacks-rttothemoon.devinenterprise.com/attachments/c829a03a-3fc1-442d-b0bf-a2430d0cbe2a/ac1-base.log). artifacts/ is gitignored in this repo so logs are uploaded attachments (local copies under artifacts/w01-04/).",
+            "passed": 311,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/687c358e-2d88-4c48-8939-2272c4b3ffe9/ac2-head-vitest.log",
+            "command": "git worktree add /home/ubuntu/w01-04-base d8e5db3eb346b651e4ce04cc997178abcbed56fe; copy ONLY packages/shared-types/src/__tests__/chargeability.contract.test.ts, packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json, apps/mobile/__tests__/jointChargeabilityContract.test.ts, supabase/functions/api/__wf__/joint_chargeability_contract.test.ts; BASE: (pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test) && (cd packages/shared-types && npx vitest run src/__tests__/chargeability.contract.test.ts); HEAD: (cd packages/shared-types && npx vitest run src/__tests__/chargeability.contract.test.ts)",
+            "executed": 9,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-04-AC2",
+            "note": "VERIFIED. BASE (d8e5db3e + new test files only): AC1 command exit 2 — tsc TS2307 Cannot find module '../chargeability.js' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/06542e48-ba37-42a3-a3af-bb0e1e9b65fa/ac2-base.log); vitest run of the new file exit 1, Test Files 1 failed, Tests: no tests (module load failure: Failed to load url ../chargeability.js) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/bbd8665d-51e0-410f-a7ac-93fea11f15c8/ac2-base-vitest.log). Consumers on BASE also fail: mobile jest exit 1, 1 suite failed, 0 tests (parseChargeabilityFixtureTable is not a function; https://la-hacks-rttothemoon.devinenterprise.com/attachments/eaacddb5-b8a3-4190-8679-75109d222e16/mobile-consumer-base.log); Edge deno test exit 1, Module not found chargeability.ts (https://la-hacks-rttothemoon.devinenterprise.com/attachments/eca18866-8bef-4327-8ddb-5c7a2311fde3/edge-consumer-base.log). HEAD: shared-types new file exit 0, 1 file / 9 tests passed; mobile consumer exit 0, 1 suite / 4 tests passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/10a96709-f59a-4a69-b668-227a0bbc8ff3/mobile-consumer-head.log); Edge consumer exit 0, 4 passed / 0 failed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d656ad70-c57f-433f-b7f5-e040796016f9/edge-consumer-head.log). Fixture table: all 34 partial/failed/withheld/replayed/binding/release/lineage cases assert chargeable=false, creditsConsumed=0; the single complete case asserts chargeable=true, creditsConsumed=1.",
+            "passed": 9,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: authored the fixture table and shared-types regression test, proved failure on BASE (module absent), committed separately; then implemented the minimal canonical module and rewired the existing predicate to delegate; then added the two fixture consumers plus the additive Deno import-map lines required for resolution. All expected verdicts in the fixture table are hand-declared per case (not derived from the implementation) so the table pins the contract rather than the code.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a96b34d-96d7-4cfb-99d8-5f606bef9e65/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c829a03a-3fc1-442d-b0bf-a2430d0cbe2a/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06542e48-ba37-42a3-a3af-bb0e1e9b65fa/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bbd8665d-51e0-410f-a7ac-93fea11f15c8/ac2-base-vitest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/687c358e-2d88-4c48-8939-2272c4b3ffe9/ac2-head-vitest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/eaacddb5-b8a3-4190-8679-75109d222e16/mobile-consumer-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/10a96709-f59a-4a69-b668-227a0bbc8ff3/mobile-consumer-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/eca18866-8bef-4327-8ddb-5c7a2311fde3/edge-consumer-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d656ad70-c57f-433f-b7f5-e040796016f9/edge-consumer-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7bdd0d1-a4f0-4432-949a-6e50b987ba30/edge-stage-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/60ad2a6f-a564-4c4b-8c1a-9afc214fc566/format-check-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ff0e6655-120c-4bca-b84d-56b059c77d05/workspace-typecheck-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ae33295-981c-4502-a592-dad37a6fdf55/mobile-npm-ci.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/180fbd68-8947-40e5-ae0b-5aa35de38390/mobile-jest-full-head.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w01-04/impl-r1",
+        "files_changed": [
+          "packages/shared-types/src/chargeability.ts",
+          "packages/shared-types/src/analysisOutcome.ts",
+          "packages/shared-types/src/index.ts",
+          "packages/shared-types/src/offlineAuthorization.ts",
+          "packages/shared-types/src/__tests__/chargeability.contract.test.ts",
+          "packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json",
+          "apps/mobile/__tests__/jointChargeabilityContract.test.ts",
+          "supabase/functions/api/__wf__/joint_chargeability_contract.test.ts",
+          "deno.json",
+          "supabase/functions/api/deno.json",
+          "supabase/functions/api/__wf__/deno.json"
+        ],
+        "head_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+        "out_of_scope_files": [
+          "packages/shared-types/src/index.ts — 1-line additive `export * from \"./chargeability.js\"` so @pickle/shared-types consumers (mobile) can import the canonical decideChargeability/parseChargeabilityFixtureTable; same serial group (shared-types) held by this package.",
+          "packages/shared-types/src/offlineAuthorization.ts — 2-line import swap (isChargeableAnalysis now imported from ./chargeability.js instead of ./analysisOutcome.js); required so the shipping offline-authorization path is wired through the single canonical predicate; behaviour unchanged; same serial group held by this package.",
+          "apps/mobile/__tests__/jointChargeabilityContract.test.ts — new mobile Jest fixture consumer explicitly demanded by the objective (\"contract fixtures consumed by mobile and Edge tests\"); not under any serial_group_paths prefix.",
+          "supabase/functions/api/__wf__/joint_chargeability_contract.test.ts — new Edge Deno fixture consumer explicitly demanded by the objective; drives the same fixture table through the Edge release-authority path (readVerifiedReleasePolicy/eligibilityForVerifiedRelease); not under any serial_group_paths prefix (edge-index group covers only index.ts).",
+          "deno.json, supabase/functions/api/deno.json, supabase/functions/api/__wf__/deno.json — one additive import-map line each mapping `packages/shared-types/src/chargeability.js` -> `.ts`, following the existing per-module mapping convention; without it Deno cannot resolve the `.js` NodeNext specifier used by offlineAuthorization.ts/index.ts, so every existing Edge test importing shared-types would fail. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W01-04",
+        "regression_tests_added": [
+          "packages/shared-types/src/__tests__/chargeability.contract.test.ts (9 tests; drives all 35 fixture cases through decideChargeability + isChargeableAnalysis, and pins the strict fixture parser)",
+          "packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json (35 hand-declared cases: 1 chargeable, 34 non-chargeable across partial/failed/withheld/replayed/binding/release/lineage/uncertainty/publication/credit-state categories)",
+          "apps/mobile/__tests__/jointChargeabilityContract.test.ts (4 tests; mobile consumes the same fixture table via @pickle/shared-types)",
+          "supabase/functions/api/__wf__/joint_chargeability_contract.test.ts (4 tests; Edge consumes the same fixture table and exercises the Edge release-authority path with chargeable/partial/replayed/withdrawn outcomes)"
+        ],
+        "residual_risks": [
+          "SQL plane: the package title mentions SQL fixtures but write_paths/serial groups exclude supabase/migrations and supabase/tests (held by the `sql` group); no SQL consumer of the fixture table was added. UNKNOWN whether a later package covers it.",
+          "Edge consumer test lives under supabase/functions/api/__wf__/ (outside declared write_paths, not under any serial_group_paths prefix); reviewer may judge scope. Removing it would leave the objective's 'consumed by Edge tests' clause unmet.",
+          "Mobile consumer asserts the fixture table through @pickle/shared-types; it does not (and cannot, without touching mobile-billing serial-group paths) alter mobile billing runtime code. The shipping predicate path is offlineAuthorization.ts in shared-types.",
+          "Full `cd apps/mobile && npx jest --silent` on HEAD: exit 0, Test Suites 313 passed / 1 skipped (pre-existing describe.skip in __tests__/importedRealFootageAnalysis.test.ts, untouched by this package), Tests 6058 passed / 1 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/180fbd68-8947-40e5-ae0b-5aa35de38390/mobile-jest-full-head.log). Not an acceptance gate for W01-04; recorded for completeness."
+        ],
+        "summary": "Gap on BASE_SHA d8e5db3e: the chargeability predicate lived only as `isChargeableAnalysis()` inside packages/shared-types/src/analysisOutcome.ts (~L1010-1060, a boolean with ~15 conjunctive conditions and no reason codes, no credit-count semantics, no versioned contract), consumed from offlineAuthorization.ts; there was no shared fixture table and neither apps/mobile/__tests__ nor supabase/functions/api/__wf__ exercised shared-types chargeability data, so the mobile, Edge and shared-types planes could drift independently. Fix: new canonical module packages/shared-types/src/chargeability.ts exporting JOINT_CHARGEABILITY_CONTRACT_VERSION='joint-chargeability-v1', `decideChargeability(rawOutcome: unknown, rawEligibility: unknown): ChargeabilityDecision` ({chargeable:true, reasonCode:'both_outputs_validated_and_durably_delivered', creditsConsumed:1} | {chargeable:false, reasonCode:<11 fail-closed reason codes>, creditsConsumed:0}), the compat `isChargeableAnalysis()` (now delegating, accepts unknown eligibility so untrusted input fails closed), and `parseChargeabilityFixtureTable()` (strict: rejects verdict/reason/credit inconsistencies). analysisOutcome.ts drops its old predicate and exports `isVerifiedEligibilityInput`; offlineAuthorization.ts imports the predicate from the canonical module (behaviour unchanged, still the shipping path); index.ts re-exports. Fixture table packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json (35 hand-declared cases) is consumed by the shared-types vitest, the mobile Jest test and the Edge Deno test (the Edge test additionally routes outcomes through readVerifiedReleasePolicy/eligibilityForVerifiedRelease). Commits: 7345c968 test(shared-types) fixture table + regression test [fails on base]; 4ba46819 feat(shared-types) canonical contract module; 654695aa test(mobile,edge) fixture consumers + Deno import-map wiring. Pushed to origin devin/pp/w01-04/impl-r1, HEAD 654695aa47bc844e23486d7bbb8b29511e7a956b. Additional VERIFIED checks on HEAD: `pnpm format:check` exit 0; `git diff --check d8e5db3e HEAD` exit 0; `pnpm -r typecheck` exit 0 (all workspace packages Done); `cd apps/mobile && npx tsc --noEmit` exit 0 (after `npm ci`); Edge full stage `deno task test` in __wf__ ok 762 passed (31 steps) / 0 failed / 38 ignored (pre-existing ignores in the existing suite) + 236 passed / 0 failed for the remaining Edge tests, plus deno check of index.ts/cache.ts/rateLimit.ts/http.ts/legal.ts clean; targeted eslint on changed files exit 0. Not run: SQL/RLS fixtures (no SQL changes in this package's write_paths; the title mentions SQL fixtures but write_paths exclude supabase/, held by the `sql` serial group) and Apple/M4 runner (no native paths touched)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8cacbb3a-65e6-4e2e-9767-5330ed76ea30/ac1-head.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 311,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-04-AC1",
+            "note": "VERIFIED by reviewer on HEAD 654695aa after `pnpm install --frozen-lockfile` (exit 0): tsc clean, vitest Test Files 18 passed (18), Tests 311 passed (311), 0 skipped. Local copy artifacts/review-w01-04/ac1-head.log (artifacts/ is gitignored).",
+            "passed": 311,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/43c3bc28-1785-4baa-92d2-4069512061d6/ac2-head-shared-vitest.log",
+            "command": "git worktree add /home/ubuntu/w01-04-base d8e5db3eb346b651e4ce04cc997178abcbed56fe && (cd /home/ubuntu/w01-04-base && pnpm install --frozen-lockfile --offline); copy ONLY packages/shared-types/src/__tests__/chargeability.contract.test.ts, packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json, apps/mobile/__tests__/jointChargeabilityContract.test.ts, supabase/functions/api/__wf__/joint_chargeability_contract.test.ts from 654695aa onto the base worktree; BASE: (cd packages/shared-types && npx vitest run src/__tests__/chargeability.contract.test.ts); (pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test); (cd apps/mobile && npx jest __tests__/jointChargeabilityContract.test.ts); (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json joint_chargeability_contract.test.ts). HEAD (654695aa): same three test commands.",
+            "executed": 9,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-04-AC2",
+            "note": "VERIFIED proof holds (fail on BASE, pass on HEAD). BASE d8e5db3e + new test files only: shared-types vitest exit 1, Test Files 1 failed, Tests: no tests — 'Cannot find module ../chargeability.js' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/93fb02d6-70a1-444c-911f-5bfc0d6a0307/ac2-base-shared-vitest.log); AC1 command on base exit 2 — TS2307 Cannot find module '../chargeability.js' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ba2d335-94d9-4ef9-80f1-64f93a9478b6/ac2-base-ac1cmd.log); mobile jest exit 1, Test Suites 1 failed, Tests 0 total — 'parseChargeabilityFixtureTable is not a function' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7fdb07a-80ba-41c4-9996-cdceeb03adb2/ac2-base-mobile-jest.log); Edge deno test exit 1 — Module not found packages/shared-types/src/chargeability.ts (https://la-hacks-rttothemoon.devinenterprise.com/attachments/243d3be3-ca33-4a80-b0d0-8382f6c90ec3/ac2-base-edge-deno.log). HEAD 654695aa: shared-types vitest exit 0, 1 file / 9 passed / 0 failed / 0 skipped (artifact above); mobile jest exit 0, 1 suite / 4 passed / 0 failed / 0 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/666529e9-7e96-4407-aee1-9b86b8d38b37/ac2-head-mobile-jest.log); Edge deno test exit 0, 4 passed / 0 failed / 0 ignored (https://la-hacks-rttothemoon.devinenterprise.com/attachments/aeb6d134-c216-4c13-a042-a2f3ec87e597/ac2-head-edge-deno.log). Criterion check VERIFIED from fixture file packages/shared-types/fixtures/chargeability/joint-chargeability-v1.json: 35 cases — 1 chargeable (creditsConsumed 1), 5 partial + 9 failed + 14 withheld + 6 replayed all chargeable=false / creditsConsumed=0; all 11 non-chargeable reason codes covered; the shared test asserts decideChargeability AND isChargeableAnalysis per case and the mobile test additionally asserts creditsConsumed===0 for every non-chargeable case. Reviewer mutation check (temporary local edits, restored, `git diff --quiet` clean afterwards): removing the creditState!=='unconsumed' guard -> 2 tests fail (https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a8ab7ab-cca5-499d-a58a-400f1f558c07/mutation1-creditstate-removed.log); removing the durably_published guard -> 1 test fails (https://la-hacks-rttothemoon.devinenterprise.com/attachments/20ace646-7959-4b47-9c1a-9a166a1ad415/mutation2-publication-removed.log).",
+            "passed": 9,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8cacbb3a-65e6-4e2e-9767-5330ed76ea30/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93fb02d6-70a1-444c-911f-5bfc0d6a0307/ac2-base-shared-vitest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ba2d335-94d9-4ef9-80f1-64f93a9478b6/ac2-base-ac1cmd.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7fdb07a-80ba-41c4-9996-cdceeb03adb2/ac2-base-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/243d3be3-ca33-4a80-b0d0-8382f6c90ec3/ac2-base-edge-deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/43c3bc28-1785-4baa-92d2-4069512061d6/ac2-head-shared-vitest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/666529e9-7e96-4407-aee1-9b86b8d38b37/ac2-head-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aeb6d134-c216-4c13-a042-a2f3ec87e597/ac2-head-edge-deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a8ab7ab-cca5-499d-a58a-400f1f558c07/mutation1-creditstate-removed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/20ace646-7959-4b47-9c1a-9a166a1ad415/mutation2-publication-removed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/98b8cb70-7138-4154-997d-b72425aa8925/format-check.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "SQL plane not covered: the package title says 'mobile, Edge and SQL fixtures' but write_paths exclude supabase/migrations and supabase/tests (held by the `sql` serial group). No SQL consumer of joint-chargeability-v1.json exists on the candidate; the frozen objective text only demands mobile and Edge consumers, so this is a coverage gap for a later package, not a defect in W01-04.",
+          "Fixture-driven Edge test (supabase/functions/api/__wf__/joint_chargeability_contract.test.ts) exercises decideChargeability via readVerifiedReleasePolicy/eligibilityForVerifiedRelease but the Edge index.ts runtime billing path is not rewired to the shared predicate (index.ts is the edge-index serial group this package does not hold). The shipping shared-types consumer is offlineAuthorization.ts -> isChargeableAnalysis -> decideChargeability (VERIFIED by reading packages/shared-types/src/offlineAuthorization.ts import and validateOfflineResultReceiptBinding call).",
+          "Full Edge suite on HEAD (cd supabase/functions/api/__wf__ && deno task test): exit 0, 762 passed (31 steps) / 0 failed / 38 ignored. The 38 ignores are pre-existing: `git diff d8e5db3e HEAD | grep -E '^\\+.*(ignore|\\.skip|\\.only|passWithNoTests|\\|\\| true|ts-ignore|eslint-disable|any)'` matches nothing (exit 1). Not an acceptance gate; recorded for completeness (artifacts/review-w01-04/edge-full-deno-task-test.log)."
+        ],
+        "package_id": "W01-04",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+        "scope_violation": false,
+        "summary": "APPROVE W01-04 candidate 654695aa47bc844e23486d7bbb8b29511e7a956b (branch devin/pp/w01-04/impl-r1, base d8e5db3e). SCOPE (VERIFIED via git diff --stat): 11 files changed. In write_paths: chargeability.ts (new), analysisOutcome.ts (old isChargeableAnalysis removed, isVerifiedEligibilityInput exported), __tests__/chargeability.contract.test.ts, fixtures/chargeability/joint-chargeability-v1.json. Out-of-scope but justified minimal wiring, all listed by the implementer and none under an unheld serial-group prefix: index.ts (1-line re-export, held shared-types group), offlineAuthorization.ts (import swap only, held group; behaviour unchanged), apps/mobile/__tests__/jointChargeabilityContract.test.ts and supabase/functions/api/__wf__/joint_chargeability_contract.test.ts (the mobile/Edge fixture consumers the objective demands; edge-index group covers only index.ts, mobile groups cover src/ paths not __tests__/), deno.json + supabase/functions/api/deno.json + __wf__/deno.json (one additive import-map line each mapping chargeability.js->.ts following the existing per-module convention). scope_violation=false. SHIPPING WIRING (VERIFIED by reading code): packages/shared-types/src/offlineAuthorization.ts imports isChargeableAnalysis from ./chargeability.js and calls it in validateOfflineResultReceiptBinding (complete outcome that is not chargeable -> binding failure), and isChargeableAnalysis delegates to decideChargeability — so the new module is on the shipping shared-types path, not dead code. DECISION LOGIC (INFERRED from code + VERIFIED by fixtures/mutations): fail-closed ordered guards — invalid outcome, partial, abstained, non-real source, not durably_published, unverified eligibility (isVerifiedEligibilityInput on unknown input), exact 6-field binding, publicationState !== both_outputs_durably_published_once, creditState !== unconsumed, release not eligible, mechanics/benchmark lineage mismatch vs release, benchmark not released — each mapped to one of 11 reason codes with creditsConsumed 0; only the all-pass path returns chargeable/creditsConsumed 1. parseChargeabilityFixtureTable is strict (schema/contract version, non-empty, unique ids, known categories/reason codes, verdict/reason/credit consistency). ACCEPTANCE (all VERIFIED by my own runs): AC1 exit 0, 18 files / 311 tests passed / 0 failed / 0 skipped. AC2 proof holds: with ONLY the 4 new test/fixture files copied onto a base worktree, shared vitest exit 1 (module missing, 0 tests), base AC1 command exit 2 (TS2307), mobile jest exit 1 (0 tests, parseChargeabilityFixtureTable not a function), Edge deno exit 1 (module not found); on HEAD shared 9/9, mobile 4/4, Edge 4/4 passed, 0 failed, 0 skipped. Fixture table VERIFIED: 35 cases, 1 chargeable, 34 non-chargeable across partial(5)/failed(9)/withheld(14)/replayed(6), every non-chargeable case creditsConsumed=0. INVARIANTS: no migrations, RLS, grants, session checks, Edge index.ts, mobile runtime, native or copy touched; no test weakened/skipped/reordered; no ||true, passWithNoTests, ts-ignore, any, eslint-disable, ignore additions in the diff (grep exit 1); no existing comments modified (removed block in analysisOutcome.ts contained no comments); no secrets, no production access. Extra VERIFIED checks on HEAD: pnpm format:check exit 0; eslint on the 6 changed TS files exit 0; git diff --check exit 0; deno check of the Edge consumer exit 0; full Edge `deno task test` exit 0 (762 passed / 0 failed / 38 pre-existing ignored). Not run (not required, no Apple/SQL paths changed): Mac runner, RLS matrix. Residual non-blocking gaps: no SQL fixture consumer (sql serial group not held) and Edge index.ts runtime not rewired (edge-index group not held) — both outside this package's scope.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-4"
+}

@@ -1,0 +1,296 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-P0-05-r3",
+      "phase": "implement",
+      "prompt_sha256": "7981121e616ebf8b273a5eb3184be52b7eb42f247cc1d8ba5b782c32a61c4dee",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-P0-05-r3",
+      "phase": "review",
+      "prompt_sha256": "4944398279bcbd01fe0179a88350c791fb3b737b1fcf0e488f014ac835192503",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-P0-05-r3",
+      "phase": "adversary",
+      "prompt_sha256": "273cc36dd80e044c9282b77dec7440d30ccd5f710fe3bcb042dcb979ffc83ee1",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "candidate": {
+    "branch": "devin/pp/p0-05/impl-r3",
+    "head_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+    "round": 3
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.5",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "P0-05",
+  "requeued_from": {
+    "branch": "devin/pp/p0-05/impl-r2",
+    "findings": {
+      "judge": [
+        "blocked: 4 of the 7 skips flagged by the judge (packages/swing-lab/test/sessionEngine.test.ts:436 replay describes for afn-sasebo-rally1 and afn-sasebo-rally2, 2 tests each) can only be exercised with Mac-generated artifacts datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/{report.json,pose.json,people.json,extract-meta.json}. They are gitignored, exist nowhere in the repo or its history, and are produced exclusively by `pnpm lab:regen` (packages/swing-lab/src/benchRegen.ts -> src/analyzeVideo.ts: `swift build -c release` in native/swing-lab + Apple Vision `pose.apple-vision` extraction) on macOS. The only available Linux pose artifacts (tools/latency-bench/artifacts/afn-sasebo-rally1, POSE_MODEL_VERSION mediapipe-pose-landmarker-full-LINUX-BENCH) are a different provider, so using them would fabricate the replay's measured Apple Vision expectations. Dependency: the coordinator runs `pnpm lab:regen` (or restores the run dirs) on the M4 runner and either commits the four afn-sasebo-rally{1,2} artifact sets under a non-ignored fixture path or provides them to the cloud plane; this package may not push to ci/mac-* or use the Mac runner. Everything else in the package is complete and pushed: all four acceptance commands exit 0 on 9e9ad1a2 with 0 failed and the 3 queue skips eliminated."
+      ]
+    },
+    "head_sha": "9e9ad1a279ddd91c88fbc69bc85a0ac2347f0d38"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/077527bb-1626-4eb3-9e5c-65a364cb878c/test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a191e95b-a51e-4816-abed-0be4785594ec/queue-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/95f06fcd-9784-4ed2-8b15-966b9c479dd8/ce-attack-ffmpeg44.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c0105c1-192d-4d9a-b9af-42f9d4c9813b/ce-attack-ffmpeg70.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/15550289-bcb0-4be1-ab4e-a211bc004199/ce-attack-ffmpeg81.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b971074-ee1c-4a41-8a6e-1686e2e3b5f0/gate-broker-down.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/027f8b0b-8174-4fc4-9a56-232373bc0d4f/gate-broker-down-explicit.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/080220d3-1c70-4c1e-a825-14549dcddc1f/gate-impostor-on-9324.log"
+        ],
+        "attack_branch": "devin/pp/p0-05/attack-981e2486",
+        "attack_branch_sha": "0317b28c3fd899f8f0bf722314ce0ed4e11339cc",
+        "attacked_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+        "attacks_tried": 14,
+        "breaks": [
+          {
+            "expected": "A zero (or otherwise non-positive) timeout is either rejected up front or clamped so the probe resolves false promptly; the resolver's contract 'unreachable => false' must not depend on the caller never passing 0.",
+            "observed": "VERIFIED: with a local net.createServer that accepts and stays silent, isHttpEndpointReachable(url, 0) had not settled after 1500 ms (test asserts the HUNG sentinel -> fails: 'expected Symbol(probe did not settle) to be false'). Node's http `timeout: 0` means 'no timeout'; the function documents timeoutMs as an upper bound.",
+            "repro": "cd packages/queue && npx vitest run test/attack/sqsTestEndpointBoundaries.attack.test.ts -t 'timeoutMs = 0' --reporter=verbose  (attack branch 0317b28c; candidate 981e2486 code untouched)",
+            "severity": "P2",
+            "test_file": "packages/queue/test/attack/sqsTestEndpointBoundaries.attack.test.ts",
+            "title": "isHttpEndpointReachable(url, 0): timeoutMs=0 disables the deadline, so a probe against a peer that accepts TCP but never answers hangs instead of resolving false"
+          },
+          {
+            "expected": "Invalid timeoutMs values are validated/clamped so the function honours its Promise<boolean> contract (resolve false or throw a documented TypeError synchronously before any I/O), never a raw ERR_OUT_OF_RANGE rejection.",
+            "observed": "VERIFIED (3/3 fail): NaN, -1 and Infinity each surface `RangeError [ERR_OUT_OF_RANGE]: The value of \"msecs\" is out of range` (thrown synchronously by http.request inside the Promise executor, so the promise rejects). The function is typed `Promise<boolean>` and documented as never throwing; the resolver would propagate the rejection into the sqs.integration gate's top-level await and abort collection of that file.",
+            "repro": "cd packages/queue && npx vitest run test/attack/sqsTestEndpointBoundaries.attack.test.ts -t 'resolves to a boolean instead of rejecting' --reporter=verbose",
+            "severity": "P2",
+            "test_file": "packages/queue/test/attack/sqsTestEndpointBoundaries.attack.test.ts",
+            "title": "isHttpEndpointReachable rejects (RangeError from node:http) for timeoutMs = NaN / -1 / Infinity instead of resolving a boolean"
+          },
+          {
+            "expected": "timeoutMs bounds total probe wall time (e.g. an outer setTimeout that destroys the request), so the bare `pnpm test` gate can never be stalled by whatever is listening on the default port.",
+            "observed": "VERIFIED: local TCP server writes 'HTTP/1.1 200 OK\\r\\n...' one byte every 100 ms; isHttpEndpointReachable(url, 200) had not settled after 800 ms (HUNG sentinel). node:http `timeout` is reset on every received byte, so a slow/misbehaving listener on :9324 can delay `pnpm test` collection of @pickle/queue indefinitely (the resolver is top-level awaited in sqs.integration.test.ts).",
+            "repro": "cd packages/queue && npx vitest run test/attack/sqsTestEndpointNetwork.attack.test.ts -t 'timeoutMs is a deadline' --reporter=verbose",
+            "severity": "P2",
+            "test_file": "packages/queue/test/attack/sqsTestEndpointNetwork.attack.test.ts",
+            "title": "timeoutMs is an idle timeout, not a deadline: a peer dripping one header byte per 100 ms stretches a 200 ms probe past 800 ms (unbounded)"
+          },
+          {
+            "expected": "The pin walks src/ and test/ recursively (and ideally covers .js/.mjs/.cjs/.sh helpers) so any future ffmpeg invocation in the package is subject to the 4.4 portability check the package claims.",
+            "observed": "VERIFIED on ffmpeg 4.4.2, 7.0.2 and 8.1.2: candidate `ffmpegPortability.test.ts` passes (3/3) with a nested test file spelling \"-fps_mode\" present under test/attack/; attack assertion 'the pin's file list includes a nested test/**/*.ts file' fails (file not in `listSourceFiles` output). Currently latent: the recursive scan finds no other offender in the package (attack test 'covers every script-like file ... nested included' passes), so this is a guard-scope weakness, not a live regression.",
+            "repro": "cd packages/capture-envelope && npx vitest run test/attack test/ffmpegPortability.test.ts --reporter=verbose  (the attack file test/attack/ffmpegPortabilityScope.attack.test.ts contains the quoted forbidden flag; the candidate pin still passes 3/3 while the attack's scope assertion fails)",
+            "severity": "P3",
+            "test_file": "packages/capture-envelope/test/attack/ffmpegPortabilityScope.attack.test.ts",
+            "title": "Static ffmpeg portability pin (ffmpegPortability.test.ts) only scans immediate *.ts children of src/ and test/; a nested test/**/*.ts (or .mjs/.js/.sh) fixture reintroducing -fps_mode is invisible to it"
+          },
+          {
+            "expected": "Either the probe checks for an SQS/ElasticMQ-shaped answer (ElasticMQ returns 400 with an AWS error envelope) or the gate's failure message names the endpoint it auto-selected and how to opt out (SQS_ENDPOINT_TEST=\"\"). Failing loud is the safer side, so this is minor (P3), but it is a supported path: `pnpm test` with an unrelated dev server on 9324.",
+            "observed": "VERIFIED: 3 failed / 0 skipped, exit 1, `SyntaxError: Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON` from the AWS SDK (artifact gate-impostor-on-9324.log). isHttpEndpointReachable treats any HTTP status (301/302/307/308/429/500/502/503) as 'broker up'.",
+            "repro": "docker stop pickle-sensei-elasticmq-1; python3 -m http.server 9324 --bind 127.0.0.1 & cd packages/queue && npx vitest run test/sqs.integration.test.ts --reporter=verbose   (no SQS_ENDPOINT_TEST set; candidate worktree /home/ubuntu/repos/ps-candidate). Behaviour pinned by the 3xx/429/5xx cases in the network attack file (probe resolves true for any status).",
+            "severity": "P3",
+            "test_file": "packages/queue/test/attack/sqsTestEndpointNetwork.attack.test.ts",
+            "title": "Autodetect false positive: any HTTP listener on localhost:9324 (not just ElasticMQ) makes the bare `pnpm test` gate run the SQS suite, which then fails with an opaque SDK JSON parse error rather than skipping or explaining"
+          }
+        ],
+        "package_id": "P0-05",
+        "summary": "ADVERSARIAL RESULT for P0-05 candidate 981e2486 (devin/pp/p0-05/impl-r3). Attack branch devin/pp/p0-05/attack-981e2486 @ 0317b28c (1 commit on top of the candidate; only 4 new test files under packages/queue/test/attack/ and packages/capture-envelope/test/attack/; candidate production code and tests untouched; no PR, no force-push, no main/ci/mac-* pushes).\n\nACCEPTANCE RE-VERIFIED on the untouched candidate (clean worktree /home/ubuntu/repos/ps-candidate at 981e2486, PATH=/usr/bin first so ffmpeg 4.4.2-0ubuntu0.22.04.1 is used, Node v24.19.0, pnpm 10.15.1, docker postgres_test + elasticmq up): P0-05-AC1 `pnpm format:check` exit 0; AC2 `pnpm lint` exit 0; AC3 `pnpm typecheck` exit 0 (artifacts/p0-05-attack/head/*.log); AC4 `SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test` exit 0, 27 vitest runs, 2803 passed / 0 failed / 4 skipped; sqs.integration.test.ts 3 executed, sqsTestEndpoint.test.ts 7 passed, ffmpegPortability 3 passed, redteamEnvelope 10 + redteamBypassF22 10 passed on ffmpeg 4.4.2; the 4 skips are the documented swing-lab sessionEngine Apple-Vision replay tests (attachment test.log). The implementer's acceptance claims hold.\n\nATTACKS TRIED (14; 5 confirmed breaks, all in the candidate's NEW test-infrastructure resolver/pin, none in shipping code): (1) network: silent-accept peer -> false in ~3s [pass]; (2) accept-then-close -> false [pass]; (3) garbage non-HTTP bytes -> false [pass]; (4) slow header drip vs timeoutMs=200 -> HANGS >800ms [BREAK P2]; (5) never-ending chunked body -> resolves true and releases the socket (peer sees close) [pass]; (6) 3xx redirect / 429+Retry-After / 5xx answers -> counted as 'up' (documented; underlies the impostor finding) [pass, P3 noted]; (7) 50 concurrent probes against a silent peer -> all false, none reject [pass]; (8) boundary timeoutMs 0 -> hang [BREAK P2]; NaN/-1/Infinity -> RangeError rejection [BREAK P2]; fractional 0.5/250.7 -> ok [pass]; (9) boundary URLs: empty, whitespace, 'localhost:9324', https/ftp/file, malformed, port 99999, path+query -> false or probed; explicit env values are returned verbatim including '0'/'false'/'null'/'undefined'/whitespace (documented, not asserted as breaks: the gate's `describe.skipIf(!endpoint)` treats any non-empty string as 'run') [pass]; (10) replay/duplicate resolution: 5 sequential + 20 concurrent resolveSqsTestEndpoint calls agree, no cached stale endpoint after the peer dies between calls [pass]; (11) process death & restart of the broker against the candidate gate (pristine worktree): docker stop elasticmq + no env -> 3 skipped exit 0; docker stop + explicit SQS_ENDPOINT_TEST -> 3 failed ECONNREFUSED exit 1 (loud, correct); restart -> 3 pass [pass]; (12) impostor HTTP server on 9324 with no env -> gate runs and fails with an opaque JSON parse error [BREAK P3]; (13) ffmpeg runtime: `-vsync passthrough` with setpts preserves 30/30 frames and exits 0 on ffmpeg 4.4.2, 7.0.2 and 8.1.2; `-fps_mode` rejected on 4.4.2 and accepted on 7.0.2/8.1.2 (premise of the fix confirmed) [pass]; (14) static portability pin scope: nested test/**/*.ts with quoted \"-fps_mode\" is invisible to the candidate pin (pin still 3/3 green) [BREAK P3, latent]. Not applicable to this package (no new SQL/Edge/billing/copy surface): unauthorised roles, free-rating conservation, copy/accessibility, account switch, clock rollback — the candidate only touches test fixtures, test scripts and a test-only endpoint resolver.\n\nATTACK-BRANCH HYGIENE (VERIFIED at 0317b28c): `pnpm format:check` exit 0, `pnpm lint` exit 0, `pnpm typecheck` exit 0, `git diff --check 981e2486 HEAD` exit 0. Attack suites: `cd packages/queue && npx vitest run test/attack` -> 5 failed / 44 passed (49) exit 1 — the 5 failures are the deliberate reproductions above (queue-attack.log); `cd packages/capture-envelope && npx vitest run test/attack test/ffmpegPortability.test.ts` -> 1 failed / 7 passed (8) on each of ffmpeg 4.4.2 / 7.0.2 / 8.1.2 — the 1 failure is the pin-scope reproduction (ce-attack-ffmpeg{44,70,81}.log). Because these reproductions fail by design, a full `pnpm test` on the attack branch would exit 1 at @pickle/queue and @pickle/capture-envelope; that is the attack evidence, not a candidate acceptance failure.\n\nVERDICT: no P0/P1. The candidate meets all four acceptance criteria as stated. The confirmed breaks are robustness gaps in the new test-only `isHttpEndpointReachable` (timeout value validation and a non-deadline idle timeout that can stall `pnpm test` collection when something odd listens on :9324) and a scan-scope gap in the ffmpeg portability pin. Recommended follow-ups for the implementer (not required by the manifest): validate/clamp timeoutMs and wrap the probe in an outer deadline; make the pin recursive; optionally have the probe recognise an SQS-shaped answer or name the auto-selected endpoint in the failure. Exploratory probe scripts and logs live under artifacts/p0-05-attack/ in the local checkout (gitignored, not committed)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/p0-05-r3/head/format.log",
+            "command": "pnpm format:check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC1",
+            "note": "VERIFIED on 981e2486: 'All matched files use Prettier code style!'",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/p0-05-r3/head/lint.log",
+            "command": "pnpm lint",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC2",
+            "note": "VERIFIED on 981e2486: `eslint .` exit 0, no findings.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/p0-05-r3/head/typecheck.log",
+            "command": "pnpm typecheck",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC3",
+            "note": "VERIFIED on 981e2486: all workspace typecheck tasks Done, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/p0-05-r3/head/test.log",
+            "command": "docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+            "executed": 2803,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC4",
+            "note": "VERIFIED on 981e2486 with PATH=/usr/bin:$PATH (ffmpeg 4.4.2-0ubuntu0.22.04.1, drawtext available, matching CI's apt ffmpeg). Counts summed over all workspace vitest 'Tests' lines. SQS tests executed: test/sqs.integration.test.ts 3 passed against ElasticMQ ('SqsJobQueue against ElasticMQ' suite ran), test/sqsTestEndpoint.test.ts 7 passed; oodGateRedTeam.test.ts 9 passed (0 skipped). The 4 skips are exactly the documented swing-lab Apple-Vision replay tests (packages/swing-lab/test/sessionEngine.test.ts, 978 passed | 4 skipped): 'afn-sasebo-rally1: wrist-only batch', 'afn-sasebo-rally1: streaming the series', 'afn-sasebo-rally2: wrist-only batch', 'afn-sasebo-rally2: streaming the series' — names confirmed via artifacts/p0-05-r3/head/swing-lab-sessionEngine-verbose.log. Fixtures datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/ are gitignored and absent (Mac-only `pnpm lab:regen`); not fabricated.",
+            "passed": 2803,
+            "skipped": 4,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Branched from BASE_SHA and cherry-picked the five sound impl-r2 commits (regression test first, fix second, for each defect): (1) test pinning ffmpeg-4.4-portable `-vsync passthrough` in re-timed fixtures + fix replacing the ffmpeg>=5.1-only `-fps_mode` in redteamEnvelope/redteamBypassF22 tests (packages/capture-envelope); (2) test pinning ElasticMQ endpoint auto-detection + fix wiring `resolveSqsTestEndpoint()` into packages/queue/test/sqs.integration.test.ts so the SQS suite executes when the docker-compose broker is up; (3) removal of `--passWithNoTests` from @pickle/admin-web and @pickle/shared-types package.json (both under write_paths; packages/shared-types/package.json is NOT under the shared-types serial group prefix packages/shared-types/src/). Both regression tests were proven to fail on BASE_SHA in a throwaway worktree (queue: 1 failed/6 passed, exit 1, artifacts/p0-05-r3/base/regress-sqsTestEndpoint.log; ffmpeg: 2 failed/1 passed, exit 1, artifacts/p0-05-r3/base/regress-ffmpegPortability.log) and pass on HEAD inside the workspace run. All acceptance commands were run with PATH=/usr/bin first so the Linux-plane apt ffmpeg 4.4.2 (which has drawtext) is used, matching CI's `apt install ffmpeg`.",
+        "attachment_urls": [],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [
+          "On BASE_SHA with PATH=/usr/bin:$PATH (ffmpeg 4.4.2): `pnpm --filter @pickle/capture-envelope exec vitest run test/redteamEnvelope.test.ts test/redteamBypassF22.test.ts` -> exit 1, 2 test files failed with `Unrecognized option 'fps_mode'` (artifacts/p0-05-r3/base/capture-envelope-ffmpeg4.4.log). Inside write_paths; fixed in this package.",
+          "On BASE_SHA with the blueprint's default PATH (static ffmpeg 7.0.2, no drawtext filter): the AC4 command exited 0 but showed 5 skips in packages/swing-lab (4 documented replay skips + oodGateRedTeam drawtext test) and 3 SQS skips would appear without SQS_ENDPOINT_TEST (artifacts/p0-05-r3/base/test.log). Environment-level: the static ffmpeg 7 build lacks drawtext; using apt ffmpeg 4.4.2 (CI's binary) executes that test."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/p0-05/impl-r3",
+        "files_changed": [
+          "apps/admin-web/package.json",
+          "packages/capture-envelope/test/ffmpegPortability.test.ts",
+          "packages/capture-envelope/test/redteamBypassF22.test.ts",
+          "packages/capture-envelope/test/redteamEnvelope.test.ts",
+          "packages/queue/test/sqs.integration.test.ts",
+          "packages/queue/test/sqsTestEndpoint.test.ts",
+          "packages/queue/test/sqsTestEndpoint.ts",
+          "packages/shared-types/package.json"
+        ],
+        "head_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+        "out_of_scope_files": [],
+        "package_id": "P0-05",
+        "regression_tests_added": [
+          "packages/capture-envelope/test/ffmpegPortability.test.ts",
+          "packages/queue/test/sqsTestEndpoint.test.ts"
+        ],
+        "residual_risks": [
+          "The 4 swing-lab replay tests remain skipped on the cloud plane until the coordinator provides the Mac-generated Apple Vision artifacts datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/{report.json,pose.json,people.json,extract-meta.json} (documented_skips in the manifest; not a gate here).",
+          "packages/swing-lab/test/oodGateRedTeam.test.ts skips one test when the ffmpeg on PATH lacks the drawtext filter (the session blueprint's static ffmpeg 7.0.2 build does); verification here used the apt ffmpeg 4.4.2 that CI installs. Not a code defect; environment selection only.",
+          "The SQS suite auto-detects http://localhost:9324 when SQS_ENDPOINT_TEST is unset; a bare `pnpm test` without the ElasticMQ container will still legitimately skip those 3 tests (explicit SQS_ENDPOINT_TEST='' opts out)."
+        ],
+        "summary": "Defects found on BASE_SHA f250acd7 (VERIFIED): (a) packages/capture-envelope/test/redteamEnvelope.test.ts and test/redteamBypassF22.test.ts passed `-fps_mode passthrough` to ffmpeg, which ffmpeg 4.4.2 (Ubuntu 22.04 apt / CI) rejects with `Unrecognized option 'fps_mode'` — running those two files with /usr/bin/ffmpeg on BASE fails 2 test files (artifacts/p0-05-r3/base/capture-envelope-ffmpeg4.4.log, exit 1); src/redteamF22.ts already used `-vsync passthrough`. (b) packages/queue/test/sqs.integration.test.ts:~10 gated the ElasticMQ suite on a raw `process.env[\"SQS_ENDPOINT_TEST\"] ?? \"\"` read, so a bare `pnpm test` skipped the 3 SQS tests even with the broker up. (c) @pickle/admin-web and @pickle/shared-types `test` scripts carried `--passWithNoTests` (forbidden by HARD RULES). Fixes: `-fps_mode` -> `-vsync` in the two fixtures (verified `-vsync passthrough` works on both ffmpeg 4.4.2 and 7.0.2); new `packages/queue/test/sqsTestEndpoint.ts` resolver (explicit env wins, \"\" opts out, otherwise probe http://localhost:9324) wired into sqs.integration.test.ts; `--passWithNoTests` removed. HEAD results (VERIFIED, PATH=/usr/bin:$PATH so ffmpeg 4.4.2 is used): `pnpm format:check` exit 0; `pnpm lint` exit 0; `pnpm typecheck` exit 0; `docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test` exit 0 with 2803 passed / 0 failed / 4 skipped across all workspace vitest runs; test/sqs.integration.test.ts 3 tests executed against ElasticMQ, test/sqsTestEndpoint.test.ts 7 passed, oodGateRedTeam.test.ts 9 passed (drawtext suite executed). The only 4 skips are the documented swing-lab Apple-Vision replay tests in packages/swing-lab/test/sessionEngine.test.ts (afn-sasebo-rally1/rally2 wrist-only batch + streaming the series), verified by name with --reporter=verbose (artifacts/p0-05-r3/head/swing-lab-sessionEngine-verbose.log). Their fixtures datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/ are gitignored (.gitignore:19), absent from the checkout and history, and are produced only by `pnpm lab:regen` on macOS; they were NOT fabricated. The manifest now lists these 4 as documented_skips, so the package is complete and not blocked. `git diff --check` against BASE exit 0. Branch pushed (no PR, no force-push, no main/ci/mac-* pushes). Logs live under artifacts/p0-05-r3/ in the local checkout (not committed)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f421d8a2-5c58-441a-9e33-5f6daf6bbc97/format.log",
+            "command": "pnpm format:check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC1",
+            "note": "VERIFIED on 981e2486 (reviewer re-run): 'All matched files use Prettier code style!', exit 0. Local copy artifacts/review-p0-05-r3/format.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e6642e78-0cc6-4f52-a3d2-4ab8237caa86/lint.log",
+            "command": "pnpm lint",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC2",
+            "note": "VERIFIED on 981e2486 (reviewer re-run): `eslint .` exit 0, no findings. Local copy artifacts/review-p0-05-r3/lint.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f98660df-5de7-4f00-aa50-681ad73bd3cf/typecheck.log",
+            "command": "pnpm typecheck",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC3",
+            "note": "VERIFIED on 981e2486 (reviewer re-run): `pnpm -r --parallel typecheck` exit 0, 27 'Done' lines, no errors. Local copy artifacts/review-p0-05-r3/typecheck.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6fbc292f-d064-4e6d-b88c-bf85dbe6a4fa/test.log",
+            "command": "docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+            "executed": 2803,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC4",
+            "note": "VERIFIED on 981e2486 (reviewer re-run, PATH=/usr/bin:$PATH so CI's apt ffmpeg 4.4.2-0ubuntu0.22.04.1 with drawtext is used; postgres_test + elasticmq containers Up; ElasticMQ answered HTTP 400 on :9324). Counts summed over all 27 workspace vitest 'Tests' lines: 2803 passed | 0 failed | 4 skipped. SQS tests EXECUTED: packages/queue test/sqs.integration.test.ts (3 tests) passed against ElasticMQ, test/sqsTestEndpoint.test.ts (7 tests) passed; packages/swing-lab test/oodGateRedTeam.test.ts (9 tests, 0 skipped). The 4 skips are exactly the documented swing-lab Apple-Vision replay tests in packages/swing-lab/test/sessionEngine.test.ts, named via --reporter=verbose (https://la-hacks-rttothemoon.devinenterprise.com/attachments/69a1be0b-2f77-42f4-917f-77b9d9f0ec0e/swing-lab-sessionEngine-verbose.log): 'afn-sasebo-rally1: wrist-only batch' (session replay — afn-sasebo-rally1 (dev split) > wrist-only batch reproduces the recorded report proposals), 'afn-sasebo-rally1: streaming the series' (… > streaming the series emits every batch event with EXACT bounds), 'afn-sasebo-rally2: wrist-only batch', 'afn-sasebo-rally2: streaming the series'. Fixture dir datasets/paddle-bench/runs/ is gitignored (.gitignore:19) and absent. @pickle/admin-web (9 files/97 tests) and @pickle/shared-types (17 files/302 tests) each ran real tests after --passWithNoTests removal. Second run of the identical command with the blueprint's default PATH (static ffmpeg 7.0.2 without drawtext): exit 0, 2802 passed | 0 failed | 5 skipped (extra skip = oodGateRedTeam drawtext test, environmental) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/351922a3-b492-4e79-a7d8-4fa9aafeac14/test-defaultpath.log. Local copy artifacts/review-p0-05-r3/test.log.",
+            "passed": 2803,
+            "skipped": 4,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f421d8a2-5c58-441a-9e33-5f6daf6bbc97/format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e6642e78-0cc6-4f52-a3d2-4ab8237caa86/lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f98660df-5de7-4f00-aa50-681ad73bd3cf/typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6fbc292f-d064-4e6d-b88c-bf85dbe6a4fa/test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/351922a3-b492-4e79-a7d8-4fa9aafeac14/test-defaultpath.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f8b76ba-e2fe-4873-ab76-553599875d54/regress-ffmpegPortability.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/103c8388-3a01-4e58-aeaa-867defcb8772/regress-sqsTestEndpoint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/23e5a390-f565-40a0-9f63-97874c93f768/capture-envelope-ffmpeg4.4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/63575c4f-4e15-4df1-b868-06bd2fa04fc8/regress-ffmpegPortability.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a92505e-905a-46ad-ab75-8cf6b018d1b3/regress-sqsTestEndpoint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/69a1be0b-2f77-42f4-917f-77b9d9f0ec0e/swing-lab-sessionEngine-verbose.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Environment note (not a code defect): with the session blueprint's default PATH (static ffmpeg 7.0.2 at ~/tools/ffmpeg-7.0.2-amd64-static, built without drawtext/libfreetype) the exact AC4 command still exits 0 but shows 5 skips — the 4 documented replay skips plus packages/swing-lab/test/oodGateRedTeam.test.ts 'rejects a TV-broadcast simulation with a static score graphic' (it.skipIf(!ffmpegHasDrawtext), documented in docs/devin/TEST_MATRIX.md line 27). With CI's apt ffmpeg 4.4.2 (/usr/bin/ffmpeg, has drawtext) first on PATH the run has exactly the 4 documented skips. Consider putting /usr/bin/ffmpeg ahead of the static build in the blueprint so local runs match CI. Artifact: artifacts/review-p0-05-r3/test-defaultpath.log / https://la-hacks-rttothemoon.devinenterprise.com/attachments/351922a3-b492-4e79-a7d8-4fa9aafeac14/test-defaultpath.log",
+          "`-vsync` is deprecated (still accepted) in ffmpeg >= 5.1 and could be removed in a future major; the new static pin packages/capture-envelope/test/ffmpegPortability.test.ts will flag any future move back to -fps_mode, but a later ffmpeg-8+ removal of -vsync would need a version-aware switch. Verified -vsync passthrough works on both 4.4.2 and 7.0.2 here (both AC4 runs exit 0)."
+        ],
+        "package_id": "P0-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+        "scope_violation": false,
+        "summary": "APPROVE P0-05 candidate 981e24868158673e7c9fe53d101a5fe2699105a3 (5 commits over BASE f250acd7; regression test committed before each fix). SCOPE (VERIFIED, git diff --stat): 8 files, all under write_paths — apps/admin-web/package.json, packages/capture-envelope/test/{ffmpegPortability.test.ts (new), redteamBypassF22.test.ts, redteamEnvelope.test.ts}, packages/queue/test/{sqs.integration.test.ts, sqsTestEndpoint.test.ts (new), sqsTestEndpoint.ts (new)}, packages/shared-types/package.json (NOT under the shared-types serial group prefix packages/shared-types/src/). out_of_scope_files empty and none needed; scope_violation=false. The new module test/sqsTestEndpoint.ts is wired into sqs.integration.test.ts (the gate now reads `await resolveSqsTestEndpoint()`), so it is used, not dead. ACCEPTANCE (all VERIFIED by my own re-execution on the candidate): AC1 pnpm format:check exit 0; AC2 pnpm lint exit 0; AC3 pnpm typecheck exit 0; AC4 `docker compose up -d postgres_test elasticmq && SQS_ENDPOINT_TEST=http://localhost:9324 DATABASE_URL_TEST=… pnpm test` exit 0 with 2803 passed / 0 failed / 4 skipped (PATH=/usr/bin:$PATH → CI's apt ffmpeg 4.4.2), SQS suite executed (sqs.integration 3 passed against ElasticMQ, sqsTestEndpoint 7 passed), oodGateRedTeam 9 passed / 0 skipped; the 4 skips are exactly the documented afn-sasebo-rally1/rally2 wrist-only batch + streaming replay tests (named via verbose reporter). REGRESSION PROOF (VERIFIED in a throwaway worktree at BASE with only the 3 new files copied over): packages/capture-envelope/test/ffmpegPortability.test.ts → 2 failed | 1 passed, exit 1 (base still has -fps_mode); packages/queue/test/sqsTestEndpoint.test.ts → 1 failed | 6 passed, exit 1 (wiring assertion: base gates on raw process.env read); both pass on the candidate (3/3 and 7/7, exit 0). Underlying defects also reproduced on BASE: with /usr/bin/ffmpeg 4.4.2 the two redteam suites fail with `Unrecognized option 'fps_mode'` (exit 1), and with SQS_ENDPOINT_TEST unset + ElasticMQ up the SQS suite skips 3/3; on the candidate the same command executes 3/3. INVARIANTS/REVIEW.md (INFERRED from full diff read): no test skipped/deleted/reordered, no || true / --passWithNoTests (two removed, both packages have real tests: admin-web 97, shared-types 302), no any/@ts-ignore/eslint-disable, no timeouts changed, no existing comments modified, no migrations/RLS/edge/mobile/billing/copy touched, git diff --check clean. Non-blocking: with the blueprint's default static ffmpeg 7.0.2 (no drawtext) the same AC4 command exits 0 with 5 skips (extra = documented oodGateRedTeam drawtext env skip) — environment selection, not a code defect; -vsync is deprecated-but-accepted on ffmpeg ≥5.1.",
+        "verdict": "approve"
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-3"
+}

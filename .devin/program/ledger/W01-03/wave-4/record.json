@@ -1,0 +1,114 @@
+{
+  "agents": [
+    {
+      "label": "implement-W01-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "984db03a4b825ba2ed54a862d53e8d57a5ffdeaced85428ec4d68cf3c1495933",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W01-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/024098ba-4457-4646-9cc3-20931d0a8fd0/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC1",
+            "note": "VERIFIED on HEAD ac7b4956 (run from repo root). Output: `Check file:///…/supabase/functions/api/index.ts`, exit 0. Local copy: artifacts/w01-03/ac1_deno_check.log (artifacts/ is git-ignored, hence the upload).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c8ba961-f1cc-4034-bb53-2e81cb254d98/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 806,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC2",
+            "note": "VERIFIED on HEAD ac7b4956. Disposable PostgreSQL = `./xc_pg_up.sh` (postgres:16 container pickle-xc-pg on 127.0.0.1:55433, shim_auth.sql + every migration incl. 20260908110000). Final line: `ok | 806 passed (31 steps) | 0 failed (1m39s)`; grep '... ignored' = 0 (no live-DB test ignored). Never pointed at a hosted project.",
+            "passed": 806,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84cef049-4b6f-466a-9fe3-456652c3a5f3/ac3_rls_matrix.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC3",
+            "note": "VERIFIED on HEAD ac7b4956 (Docker postgres:16). executed/passed = the 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907); each printed `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, `Analysis release policy authority: PASS`; runner exit 0. New section T executes (negative control VERIFIED: inverting the T2 assertion in a scratch copy failed with `ERROR: T2: an identical replay must be accepted (got accepted)` at line 5638 on a fresh throwaway container, exit 3).",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/85ebed2c-7789-426c-ace3-7f47ee49e106/ac4_head_run.log",
+            "command": "git worktree add /home/ubuntu/w01-03-base d8e5db3eb346b651e4ce04cc997178abcbed56fe; cp supabase/functions/api/__wf__/settlement_receipt_binding.test.ts <worktree>/supabase/functions/api/__wf__/; (base) cd <worktree>/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts; (head) cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC4",
+            "note": "PROOF outcome 0: new test FAILS on BASE_SHA and PASSES on HEAD. BASE run (worktree at d8e5db3e with ONLY the new test file copied over; separate disposable PG built from the BASE migrations via `XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./xc_pg_up.sh`): exit 1, `FAILED | 0 passed | 10 failed (188ms)` — all 7 Edge tests (receipt binding/absent claims/malformed claims/identical replay returns original receipt/mismatch rejected before RPC/cross-owner/corrupt receipt) and all 3 PG tests fail; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cf87387-c4df-4ac9-913d-696273b1d64e/ac4_base_run.log . HEAD run (ac7b4956, PG with the new migration): exit 0, `ok | 10 passed | 0 failed (232ms)`. Same test also passes inside the AC2 full-suite run. Worktree and base container removed afterwards; no history rewritten.",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: wrote settlement_receipt_binding.test.ts against the real route handler (routesHarness) and a live disposable PostgreSQL, committed it alone, confirmed 0/10 on BASE. Then a single additive migration later than every existing one (20260908110000) that recreates apply_synced_shot with receipt validation + binding/policy-lineage replay decided before any state is consumed, RLS/API-gated append-only receipt table; Edge wiring in syncShots that parses claims, digests the payload with the existing canonicalDigest.ts (limits and malformed-value rejection untouched), derives the policy lineage from readChargeableReleaseAdmission's verified policy (never fabricated — no active policy stays a typed rejection), compares stored vs presented binding bytes, and returns the original receipt on identical replay. Kept edits to index.ts to the sync route; migrations/tests additive; the only extra file is the in-memory concurrency harness so the existing matrix keeps hitting the real path.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/024098ba-4457-4646-9cc3-20931d0a8fd0/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c8ba961-f1cc-4034-bb53-2e81cb254d98/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84cef049-4b6f-466a-9fe3-456652c3a5f3/ac3_rls_matrix.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cf87387-c4df-4ac9-913d-696273b1d64e/ac4_base_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/85ebed2c-7789-426c-ace3-7f47ee49e106/ac4_head_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1147b0b5-6936-419a-9ad9-bad817ddf2c5/format_check.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w01-03/impl-r1",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/settlement_receipt_binding.test.ts",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts",
+          "supabase/migrations/20260908110000_settlement_receipt_lineage.sql",
+          "supabase/tests/security_regression.sql"
+        ],
+        "head_sha": "ac7b495661d8c3b5f2cff6923457dd4857937cd9",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts — test-only in-memory PostgREST/RPC model (not under any serial_group_paths prefix): +11 lines registering the new `settlement_receipts` table and persisting the receipt row beside the shot in its `applySyncedShot` model. Without it the xc concurrency matrix's fake PostgREST answered PGRST205 for the new owner-scoped receipt read (the fail-closed 503 path), so S3a/S5a–S5d could not exercise the shipping route. No test assertion was touched."
+        ],
+        "package_id": "W01-03",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/settlement_receipt_binding.test.ts (7 Edge route tests + 3 live-PostgreSQL RPC tests; commit e0cedb6d, separate from the implementation commit ac7b4956)",
+          "supabase/tests/security_regression.sql section T (T1–T7) — SQL contract of apply_synced_shot receipt validation/replay, settlement_receipts RLS/API gate/privileges/append-only/cascade; K24 privilege inventory extended with settlement_receipts"
+        ],
+        "residual_risks": [
+          "The shipping mobile client does not yet send `settlement` claims (they default to all-null — recorded as absent, not fabricated) nor consume `receipts`; W01/W04 client packages need to wire installationKeyId/grant/ticket/operationId and store the receipt for the binding to cover device/grant/ticket end to end (INFERRED from apps/mobile/src/data/sync.ts + api.ts; out of this package's write_paths).",
+          "Shots settled before 20260908110000 have no receipt; their replay keeps the prior ownership verdict (accepted without a receipt) by design — a mismatched replay of a pre-receipt shot is therefore not detectable.",
+          "packages/api-contracts ShotsSyncResponse zod schema does not list the optional `receipts` key (z.object strips unknown keys, so consumers using it are unaffected); updating that shared type belongs to the shared-types serial group, not held here.",
+          "`artifacts/` is git-ignored, so acceptance logs are provided as uploaded attachment URLs rather than repo-relative paths."
+        ],
+        "summary": "Defect on BASE_SHA d8e5db3e (VERIFIED by the failing regression test, INFERRED from code): the scored settlement's idempotent replay was keyed on (owner, shot id) only — supabase/functions/api/index.ts:2065-2104 (`replayIds` from `select id from shots where user_id = uid and id in (...)` → `acceptedIds.push`) and the RPC's pre-lock/under-lock `exists(select 1 from public.shots where id = ... and user_id = ...)` replay in supabase/migrations/20260908100000_permit_partial_terminal_outcome.sql. No receipt was persisted or returned; device/grant/ticket/operation claims were not parsed (parseSyncShot ignored them, index.ts:1790-1950); the payload digest from canonicalDigest.ts and the verified release-policy lineage (releasePolicy.ts VerifiedReleasePolicy) were not bound to the settlement. Consequently a different payload/permit/device replayed under the same shot id was 'accepted' as a replay, and nothing let a client or auditor prove which settlement a shot id denotes.\n\nFix (all inside write_paths + one justified test-harness edit): (1) supabase/migrations/20260908110000_settlement_receipt_lineage.sql — new `public.settlement_receipts` (shot_id PK→shots cascade, user_id→profiles cascade, denormalized binding columns with shape CHECKs, receipt jsonb + canonical bytes + sha256; RLS on, owner SELECT through the api_private.is_api_request() restrictive gate only, no client INSERT/UPDATE/DELETE, append-only trigger for every role) and `apply_synced_shot(jsonb)` recreated to require a well-formed `shot.settlementReceipt` {canonical, sha256} whose bytes hash to the digest and whose binding names this shot/owner/permit/resultKind (else 'shot.receipt_invalid'), require policy lineage for scored, decide replay on binding + policy lineage both BEFORE the per-user advisory lock and again under it — identical → 'accepted' (original stands, nothing moves), any difference → 'shot.receipt_mismatch' — before the permit, free-rating backstop, ledger or shot are touched; existing permit lifecycle, lifetime_scored_count() under access_lock_key(), SQLSTATE mapping and generic errors preserved. (2) supabase/functions/api/index.ts — `parseSettlementClaims` (installationKeyId / grant{grantId, grantJwsSha256} / ticket{allocationId, generation, ticketId} / operationId; omitted ⇒ all null, present ⇒ exact shape or per-shot 'shot.invalid_payload'), `SettlementBinding` with `payloadSha256 = digestCanonicalOfflineJson(shot)` (canonicalDigest.ts, unchanged), `settlementPolicyLineage(VerifiedReleasePolicy)` (version, policy sha256, validFrom/Until, mechanics+benchmark lineage, approval timestamps/withdrawal/deny flag), receipt = canonical bytes + sha256; syncShots reads the owner's stored receipts in one batched owner-scoped SELECT beside the shots SELECT, returns the ORIGINAL stored receipt for an identical binding (no authority read, no RPC), rejects a mismatched binding as 'shot.receipt_mismatch' before the authority read and the RPC, treats a stored receipt that fails byte/digest/canonical verification as retryable 'shot.write_failed' via the existing operator sink (never fabricated into a replay), and returns `receipts: [{id, canonical, sha256}]` in the acknowledgement only when a settlement carries one (the mobile decoder tolerates the extra key; the existing exact-shape test for an all-rejected batch is untouched). (3) supabase/tests/security_regression.sql — section T (T1–T7) + K24 inventory row. (4) supabase/functions/api/__wf__/xc_concurrency_harness.ts — models the new table (out_of_scope_files).\n\nEvidence: AC1 exit 0; AC2 806 passed/0 failed/0 ignored with disposable PG; AC3 all 4 histories pass (negative control proves section T runs); AC4 base 0/10 → head 10/10. Also VERIFIED: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/1147b0b5-6936-419a-9ad9-bad817ddf2c5/format_check.log), `git diff --check` exit 0, `deno check` of the harness + new test exit 0. Commits: e0cedb6d test(edge) regression (separate, first), ac7b4956 implementation; pushed to origin devin/pp/w01-03/impl-r1 (no force, no PR, no deploy, production untouched)."
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "RUNNING",
+  "wave_id": "wave-4"
+}

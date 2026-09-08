@@ -1,0 +1,540 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W06-01-r3",
+      "phase": "implement",
+      "prompt_sha256": "70bb15b1cadef5c673cfbbe2af8766ec074b5c46c997add058808321dc780d40",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W06-01-r3",
+      "phase": "review",
+      "prompt_sha256": "6be6db0b29b1305c23d8b36105bca4e228a0cc73820574cbb763f5aa12f7fdf5",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W06-01-r3",
+      "phase": "adversary",
+      "prompt_sha256": "dd9e49f40b215c2bcd4fea6b0e58aaa2e4a3d1c071d98dc0a1e4665b163f26c8",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W06-01-r4",
+      "phase": "implement",
+      "prompt_sha256": "0811a9b45f812b233b8cab6967423ccb6da73393458bf6b48917422dc94da485",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W06-01-r4",
+      "phase": "review",
+      "prompt_sha256": "89dca2e8ed68b8422989e7329e9e922261ffd105ed77925c0d77536d19a76a5f",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W06-01-r4",
+      "phase": "adversary",
+      "prompt_sha256": "21f0a680324ad3c9cb47759c661887f50fbcd3aa826588b51f71f49872190735",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "candidate": {
+    "branch": "devin/pp/w06-01/impl-r4",
+    "head_sha": "61206685cccb7302c659636c68899f83435ca20e",
+    "round": 4
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W06-01",
+  "requeued_from": {
+    "branch": "devin/pp/w06-01/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w06-01/attack-9c47cf07",
+      "adversary_breaks": [
+        {
+          "expected": "A deterministic, order-independent result for the same multiset of inputs (e.g. tie-break the surviving duplicate by the recencyOrder keys, or document/abstain), so identical inputs rank identically on every plane.",
+          "observed": "VERIFIED: rows {id A, 10:00, score 9} then {id A, 11:00, score 3} -> rating 9 / Diamond; reversed input -> rating 3 / Bronze. SQL (shots_pkey keeps the first stored row) = 9. TS matches SQL only in arrival order; the reversed permutation of the identical multiset diverges (rating 3 vs 9, tier bronze vs diamond).",
+          "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.playerRank.boundaries.test.ts -t 'replayed id with conflicting content'  (exit 1); cross-plane: PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_cross_plane.test.ts --filter 'replayed id with conflicting content'",
+          "severity": "P1",
+          "test_file": "packages/shared-types/src/__tests__/attack.w06_01.playerRank.boundaries.test.ts; supabase/functions/api/__wf__/attack_w06_01_cross_plane.test.ts",
+          "title": "computePlayerRank is input-order dependent for a replayed id with conflicting content (first-seen wins), contradicting the definition's own 'input order does not matter' / count-once contract"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 1"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "9c47cf079d56620e4e66699bf31ddda86c2a283b"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b0395075-9739-4dfe-aa6e-ab363035cf76/w06-01-adversary-r3.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e19f6749-46b0-4703-ba13-d8989677b955/vitest-shared-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c19634d-68a3-4138-8d98-a0feb60cddf0/jest-mobile-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c87c9d07-27ea-4c8e-87b8-8b43f9f1224f/deno-planes-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4aebc949-ee76-4672-8ccb-1a59a05219bc/vitest-shared-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fbbbe74f-81e1-492c-bc36-c6cbce8a1eb8/jest-mobile-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9dc2fc57-c94e-4f81-80d9-4985a604c9be/deno-planes-base.log"
+        ],
+        "attack_branch": "devin/pp/w06-01/attack-e4fda763",
+        "attack_branch_sha": "1f256d075ebf7e221813baa8a40a075c66453cbf",
+        "attacked_sha": "e4fda763f5ba33820334049e05950ccc75b2f81f",
+        "attacks_tried": 26,
+        "breaks": [
+          {
+            "expected": "One rating per multiset, whatever the input order (the definition's stated goal of comparable/deterministic ranks; SQL orders by id desc which is total for stored rows, so device-plane ranks of un-synced/legacy id-less rows cannot be compared with the server plane).",
+            "observed": "Two rows {drive, 2026-08-01T10:00:00.000Z, 9} and {drive, same instant, 3} with no id: forward order rating 6.2, reversed 5.8. Three same-instant id-less rows produce 6 different ratings across the 6 permutations [5.33, 5.48, 5.52, 5.86, 5.81, 6]. The replay-survivor tie-break (capturedAt asc → text asc → hundredths asc → shotType asc) only applies to duplicate ids; recencyOrder for distinct rows is capturedAt desc then id desc, and with id undefined the JS stable sort preserves input order so different scores receive weight 8 vs 7.",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r3.orderAndFixture.test.ts -t 'input-order independence' (candidate e4fda763: exit 1, 2 failed / 0 passed of the 2 selected)",
+            "severity": "P1",
+            "test_file": "packages/shared-types/src/__tests__/attack.w06_01.r3.orderAndFixture.test.ts",
+            "title": "computePlayerRank is still input-order dependent for id-less same-instant analyses (rating differs per permutation)"
+          },
+          {
+            "expected": "The canonical definition claims one replay-survivor rule for all planes; SQL (and therefore GET /v1/rank, the account plane) must select the same survivor as the shared TS rule, or the definition must declare the SQL first-arrival semantics and the fixture must not claim cross-plane equality for conflicting replays arriving newest-first.",
+            "observed": "Same id A: {10:00, score 9} and {11:00, score 3}. TS: computePlayerRank([late, early]) === computePlayerRank([early, late]) = 9 (survivor = earliest capturedAt). PostgreSQL 16 with all migrations applied: inserting late first stores it, early is refused by shots_pkey, player_rank_state.rating = 3.00. SQL rank = 3, TS rank = 9 for the identical multiset.",
+            "repro": "PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts --filter 'attack A' (candidate: exit 1; whole file 4 passed / 6 failed of 10)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts",
+            "title": "SQL first-arrival replay storage ranks a different survivor than the TS deterministic survivor rule for a conflicting duplicate id"
+          },
+          {
+            "expected": "The definition says the grammar and bounds are 'after timestamptz-style half-even microsecond rounding' on every plane; the Edge ingress must apply the same microsecond rounding (accept the lower-bound round-up, refuse the upper-bound round-up) so a row the device counts is never refused by the server and a row the device abstains on is never acknowledged by the server.",
+            "observed": "1999-12-31T23:59:59.9999995Z: TS counts it (half-even microsecond rounding → 2000-01-01T00:00:00.000000Z) and SQL stores it as 2000-01-01 00:00:00, but Edge parseSyncShot rejects it (shot.invalid_payload) because it validates on Date.parse milliseconds. 2099-12-31T23:59:59.9999995Z: TS abstains (rounds to 2100-01-01) and SQL refuses it (shots_captured_at_bounds), but Edge accepts it (201/ack) and forwards it to the RPC, which fails at the constraint.",
+            "repro": "PICKLE_AUDIT_PG_URL=... deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts --filter 'attack B' (B1 and B3 fail, B2 and B4 pass)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts",
+            "title": "capturedAt bound rounding disagrees between TS and Edge ingress at both ends of [2000, 2100)"
+          },
+          {
+            "expected": "The definition's serverIngress.shotType lists 'edge: parseSyncShot shotType' and 'sql: sqlstate 22021' as the checks that refuse what TS excludes; the Edge check must refuse U+0000 (or the definition must not claim it does), and the SQL check named for the RPC path must be the one that actually fires (22P05).",
+            "observed": "shotType 'dr\\u0000ive': TS computePlayerRank abstains (excludedCodePoints), but the Edge sync handler accepts the row (parseSyncShot checks only string/trim/length ≤ 64). Direct text insert into public.shots → sqlstate 22021 as declared; the actual ingress path (jsonb argument to apply_synced_shot) → sqlstate 22P05 (unsupported Unicode escape / \\u0000 cannot be converted to text).",
+            "repro": "PICKLE_AUDIT_PG_URL=... deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts --filter 'attack C' (C1 and C2 fail)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts",
+            "title": "Edge ingress accepts an embedded-NUL shotType that TS abstains on, and the declared SQL check (sqlstate 22021) is not what refuses it on the RPC path"
+          },
+          {
+            "expected": "Definition states the grammar 'every plane admits' is calendar-valid ISO-8601; either SQL declares that it normalises (and the fixture pins the normalised value) or the definition's SQL check list should not claim 22007 refuses these.",
+            "observed": "2026-08-01T24:00:00.000Z and 2026-06-30T23:59:60.000Z: TS abstains and Edge rejects, but PostgreSQL stores them (normalised to 2026-08-02 00:00:00 and 2026-07-01 00:00:00) — no 22007/22008 and shots_captured_at_bounds passes. Only reachable by a direct authenticated INSERT (permit-gated), not through the Edge, hence P3.",
+            "repro": "PICKLE_AUDIT_PG_URL=... deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts --filter 'attack E'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_01_r3_planes.test.ts",
+            "title": "SQL admits calendar-invalid instants (24:00:00, 23:59:60) that TS and Edge refuse"
+          },
+          {
+            "expected": "GET /v1/rank carries the definition version the SQL plane computed under, and summaryFromServer only copies a version the payload actually carries (leaving it absent otherwise) — otherwise the version id cannot be used to check mobile vs server comparability, which is the package objective.",
+            "observed": "summaryFromServer(parsePlayerRank(<wire payload without definitionVersion>)).definitionVersion === 'rank-form-weighted-v2', although PlayerRankSummary.definitionVersion is documented 'Absent when rebuilt from a server payload that predates definition tagging' and supabase/functions/api/index.ts never emits definitionVersion. A rating computed by SQL under any definition is relabelled with whatever version the app build ships.",
+            "repro": "cd apps/mobile && npx jest __tests__/attack_w06_01_r3_account_plane.test.ts -t 'definition version on the account plane' (candidate: 3 failed; on BASE_SHA the 'does not stamp' test PASSES because base did not stamp)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/attack_w06_01_r3_account_plane.test.ts",
+            "title": "Mobile stamps SCORING_DEFINITION_VERSION on a server rank that carries no version (fabricated provenance) and GET /v1/rank emits none"
+          },
+          {
+            "expected": "A known-but-inconsistent stored tier is re-derived from the rating through the shared thresholds (as is already done for unknown tier strings); pointsNeeded is never negative; technique scores are validated to [0,10], counts to non-negative integers, capturedAt to the shared instant grammar — corrupt persisted state must not become a fabricated tier/label.",
+            "observed": "summaryFromServer({rating: 0.5, tier: 'diamond'}) → tier 'diamond' (expected bronze), division derived from rating disagrees with tier; {rating: 7.5, tier: 'platinum'} → nextTier.pointsNeeded = -1 (6.5 − 7.5). parsePlayerRank accepts technique score 42 / -1, techniqueCount -1 / 1.5, and capturedAt 'yesterday'.",
+            "repro": "cd apps/mobile && npx jest __tests__/attack_w06_01_r3_account_plane.test.ts -t 'corrupt or stale persisted rank state'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attack_w06_01_r3_account_plane.test.ts",
+            "title": "Mobile trusts a contradictory stored tier from the server (stale/corrupt player_rank_state) and can report negative pointsNeeded"
+          },
+          {
+            "expected": "W06-01-AC2 'golden fixtures pin the definition version' and the objective 'all nine components' require the fixture to fail when any component's value changes; every declared server-ingress check should have at least one rejected-input row so Edge/SQL parity harnesses can replay it.",
+            "observed": "No rejectedInputs row exercises 'edge:parseSyncShot resultKind', 'edge:parseSyncShot overallScore', 'sql:sqlstate 22021', 'edge:parseSyncShot source'; no fixture input contains U+0000; no fixture row rounds up to 2100-01-01. Mutating the frozen definition through the module seam and re-running the fixture: confidenceWeight.cap 5→4, 5→6, 5→uncapped, tiers.topOfScale 10→11 and countability.shotType.excludedCodePoints→[] all reproduce every golden expectation (fixture cannot detect these drifts). Recency weights, form window, tier floors, score bounds, shotType max length, timestamp bounds, result kind, source are detected.",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r3.orderAndFixture.test.ts -t 'fixture' (candidate: 3 coverage tests + 1 mutation test fail; control test passes)",
+            "severity": "P2",
+            "test_file": "packages/shared-types/src/__tests__/attack.w06_01.r3.orderAndFixture.test.ts",
+            "title": "Golden fixture does not pin the declared ingress checks, U+0000, the upper rounding bound, or the confidence cap / topOfScale / excludedCodePoints components (mutation survivors)"
+          }
+        ],
+        "package_id": "W06-01",
+        "summary": "Adversary r3 against W06-01 candidate e4fda763 (branch devin/pp/w06-01/attack-e4fda763 @ 1f256d07, 3 new test files, no production/candidate-test changes, no PR). 26 attack tests across 6 categories: replay/duplicate identities, boundary values (timestamp rounding bounds, calendar edges, score quantization), corrupt/stale persisted state (mobile account plane), unauthorised roles (SQL rank surfaces), cross-plane ingress parity (TS/Edge/SQL), and fixture integrity/definition-drift mutation testing. VERIFIED on candidate: shared-types vitest exit 1 (6 failed / 1 passed of 7); mobile jest exit 1 (9 failed / 0 passed of 9); Deno planes vs PostgreSQL 16 (all migrations applied) exit 1 (6 failed / 4 passed of 10, 0 ignored). Passing attacks (no break): score quantization TS vs numeric(4,2) over 400 adversarial doubles, SQL lower-bound storage, SQL upper-bound refusal, owner-only RLS + anon/recompute/write denial on player_rank_state and player_technique_rating, fixture control run. Base regression (BASE_SHA 55d80326 worktree, only the 3 attack files copied): shared-types cannot load (fixture/scoringDefinition absent, 0 tests, exit 1); mobile 8 failed / 1 passed (exit 1; the 'does not stamp definitionVersion' test passes on base because base did not stamp); Deno type-check fails (2 errors, exit 1). Confirmed breaks: P1 id-less same-instant order dependence (6.2 vs 5.8; 6 ratings for 6 permutations); P1 SQL first-arrival vs TS earliest-survivor replay divergence (SQL 3 vs TS 9); P1 Edge vs TS/SQL disagreement at both timestamp rounding bounds; P1 mobile fabricates definitionVersion on untagged server payload and GET /v1/rank emits none; P2 Edge accepts embedded NUL + declared SQL 22021 is 22P05 on the RPC path; P2 mobile trusts contradictory stored tier (negative pointsNeeded, lax parser); P2 golden fixture misses 4 declared ingress checks, U+0000, the upper rounding bound, and does not detect confidenceWeight.cap / tiers.topOfScale / excludedCodePoints mutations; P3 SQL admits 24:00:00 and 23:59:60. Candidate's own AC1 (shared-types typecheck+test, 370 passed) and parity harness (14 passed) were VERIFIED green before adding the attack files; with the attack file present the shared-types suite fails by design. Lint: root prettier --check + eslint exit 0 on the two TS/Jest files, deno fmt --check + deno check exit 0 on the Deno file, apps/mobile npx tsc --noEmit exit 0 (after npm ci)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 4"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/263be0a4-a5ee-4b09-8587-179b9d5e2f80/ac1-shared-types.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 370,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC1",
+            "note": "VERIFIED on HEAD e4fda763: 20 test files passed, 370 tests passed, typecheck clean (vitest run, 0 skipped).",
+            "passed": 370,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/290969a5-3780-4b7f-8dfd-45b8e0b3e7be/regress-head-shared-types.log",
+            "command": "git worktree add /home/ubuntu/w06-base 55d80326bca44a25550855c2be6f755370493e0f; copy ONLY packages/shared-types/src/__tests__/{playerRank.identicalInputs,scoringDefinition.golden,attack.w06_01.playerRank.boundaries}.test.ts; cd packages/shared-types && npx vitest run <the three files>  (base) ; same command on HEAD",
+            "executed": 68,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC2",
+            "note": "BASE run (55d80326): exit 1 — Test Files 3 failed (3); Tests 10 failed | 3 passed (13). scoringDefinition.golden.test.ts and attack…boundaries.test.ts fail to load (no ../scoringDefinition.js, no fixtures/scoring/player-rank.golden.json on base); playerRank.identicalInputs.test.ts fails 10/13 (order-dependent replay survivor, lenient timestamp grammar, ms precision, NUL accepted, locale technique order). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/fabfd492-6165-4895-a52e-6b9a6c562445/regress-base-shared-types.log . HEAD run: exit 0, 3 files / 68 tests passed. Mobile wiring proof (same procedure on apps/mobile/__tests__/playerRank.test.ts): BASE exit 1, 2 failed | 12 passed (14) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/509e1506-1986-489c-8e8d-a86873d37abd/regress-base-mobile-playerRank.log ; HEAD exit 0, 14 passed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0a4d706-5a87-4ffe-9878-a5176688a9d6/regress-head-mobile-playerRank.log",
+            "passed": 68,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first commits (ed6de09e, 05ce6521, f018b4ee, e4fda763) each proven failing on base, followed by the fix commits (f849de23, b56558fa). The deterministic survivor rule is chosen so TS reproduces SQL's shots_pkey behaviour for the realistic replay (earliest-captured row is the one the server stored first) while being order-independent for any multiset; timestamps are parsed to integer microseconds with half-even rounding matched against a live PostgreSQL 16 probe; ordering uses UTF-16 code-unit comparison = PostgreSQL collate \"C\".",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/263be0a4-a5ee-4b09-8587-179b9d5e2f80/ac1-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fabfd492-6165-4895-a52e-6b9a6c562445/regress-base-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/290969a5-3780-4b7f-8dfd-45b8e0b3e7be/regress-head-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/509e1506-1986-489c-8e8d-a86873d37abd/regress-base-mobile-playerRank.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0a4d706-5a87-4ffe-9878-a5176688a9d6/regress-head-mobile-playerRank.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f809effd-a58b-441d-9a06-963c356a91f3/deno-golden-parity-pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/66809f51-f737-4708-9a38-fd22d5fb8352/deno-golden-parity-nopg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7260e6ad-87e1-4d10-907c-e3c5b6964d02/deno-adversary-cross-plane-pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/316bc220-2bc1-4047-8de9-bef339150268/jest-mobile-playerRank-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef0cdfed-079a-4673-b40d-d93e95c158da/jest-mobile-adversary-plane.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8070e964-c38c-45e6-8d47-8ac7997c39d9/vitest-adversary-boundaries-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bf0c838-2371-47ff-ba8d-83633999ca46/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3184e1bc-76b3-459a-93c2-86d6632e25a2/mobile-tsc-head.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w06-01/impl-r3",
+        "files_changed": [
+          "packages/shared-types/src/scoringDefinition.ts",
+          "packages/shared-types/src/playerRank.ts",
+          "packages/shared-types/src/index.ts",
+          "packages/shared-types/fixtures/scoring/player-rank.golden.json",
+          "packages/shared-types/src/__tests__/scoringDefinition.golden.test.ts",
+          "packages/shared-types/src/__tests__/playerRank.identicalInputs.test.ts",
+          "packages/shared-types/src/__tests__/attack.w06_01.playerRank.boundaries.test.ts",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts",
+          "supabase/functions/api/__wf__/deno.json",
+          "apps/mobile/src/progress/playerRank.ts",
+          "apps/mobile/__tests__/playerRank.test.ts"
+        ],
+        "head_sha": "e4fda763f5ba33820334049e05950ccc75b2f81f",
+        "out_of_scope_files": [
+          "packages/shared-types/src/index.ts — additive re-export of scoringDefinition.js so the canonical definition/version is reachable from @pickle/shared-types (shared-types serial group, held by this package).",
+          "apps/mobile/src/progress/playerRank.ts — minimal shipping-path wiring: account-plane summaryFromServer now carries definitionVersion and orders equal-score techniques by code unit, matching the device plane (computePlayerRank). Not under any serial_group_paths prefix.",
+          "apps/mobile/__tests__/playerRank.test.ts — regression tests for the mobile wiring above (fail on BASE_SHA, pass on HEAD). Not under any serial_group_paths prefix.",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts — test-only parity harness: replays the golden fixture (incl. conflicting-replay cases, microsecond timestamps) through TS, Edge ingress, SQL rank view (collate \"C\") and GET /v1/rank. Not under edge-index (index.ts) or sql serial groups.",
+          "supabase/functions/api/__wf__/deno.json — additive import-map entries so the __wf__ Deno tests can import @pickle/shared-types sources (test-only, no runtime effect)."
+        ],
+        "package_id": "W06-01",
+        "regression_tests_added": [
+          "packages/shared-types/src/__tests__/playerRank.identicalInputs.test.ts",
+          "packages/shared-types/src/__tests__/scoringDefinition.golden.test.ts",
+          "packages/shared-types/src/__tests__/attack.w06_01.playerRank.boundaries.test.ts",
+          "apps/mobile/__tests__/playerRank.test.ts (4 new cases in summaryFromServer)",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts"
+        ],
+        "residual_risks": [
+          "Edge ingress (supabase/functions/api/index.ts, serial group edge-index — not held) still accepts a shot_type containing an embedded NUL and forwards it to SQL, which rejects it with sqlstate 22021; shared TS abstains on that row. Adversary cross-plane run on HEAD shows this (exit 1, 6 passed / 3 failed: https://la-hacks-rttothemoon.devinenterprise.com/attachments/7260e6ad-87e1-4d10-907c-e3c5b6964d02/deno-adversary-cross-plane-pg.log). Needs an edge-index package to reject NUL at ingress.",
+          "GET /v1/rank (index.ts) does not yet echo definitionVersion; the mobile account plane stamps SCORING_DEFINITION_VERSION client-side. Same edge-index dependency.",
+          "The production SQL rank view orders shot_type under the database default collation; the parity harness pins collate \"C\" explicitly. If a future SQL package wants byte-identical ordering from the view itself, add a NEW migration (sql serial group) — not done here.",
+          "AGENTS.md mac verification not run: no native/ios paths changed (apps/mobile TS + tests only; tsc and jest verified on Linux)."
+        ],
+        "summary": "Round 3 resolves the prior adversary break (computePlayerRank first-seen duplicate handling was input-order dependent: on r2 9c47cf07, packages/shared-types/src/playerRank.ts kept the first row per lowercased id via a Set, so {A,10:00,9} then {A,11:00,3} → 9/Diamond while the reversed multiset → 3/Bronze). On BASE_SHA 55d80326 there is no canonical definition at all: packages/shared-types/src/playerRank.ts hard-codes FORM_WINDOW/RECENCY_WEIGHTS/CONFIDENCE_CAP/tier floors with no version id, no scoringDefinition.ts, no fixtures/scoring/, no __tests__ dir; apps/mobile/src/progress/playerRank.ts summaryFromServer produced a summary without definitionVersion and ordered equal-score techniques with localeCompare (differs from SQL 'C' ordering). Fix (all in write_paths + minimal wiring): scoringDefinition.ts declares SCORING_DEFINITION_VERSION='rank-form-weighted-v2' and all nine components (countability, scoreQuantization, recencyOrder, formWindow, recencyWeights, techniqueScore, confidenceWeight, rating, tiers) including the new deterministic replay-survivor rule (capturedAt asc → capturedAt text code-unit asc → score hundredths asc → shotType code-unit asc), strict ISO-8601 UTC instant grammar (1–9 fractional digits, calendar-valid, [2000,2100) after timestamptz-style half-even microsecond rounding), UTF-16 code-unit shot-type length + embedded-NUL abstention, and code-unit technique ordering; playerRank.ts implements exactly that and the rank summary carries definitionVersion; fixtures/scoring/player-rank.golden.json (schema player-rank-golden-v3) pins the version, ordinary cases, microsecond/rounding/code-unit cases, replays (conflicting duplicate ids, every permutation must reproduce) and rejected inputs. Mobile: summaryFromServer tags definitionVersion and orders like the device plane. Edge/SQL parity harness (supabase/functions/api/__wf__/w06_01_golden_parity.test.ts) replays the fixture through TS, Edge ingress (apply_synced_shot), SQL rank view (collate \"C\") and GET /v1/rank against PostgreSQL 16 — VERIFIED exit 0, 14 passed / 0 failed / 0 ignored with PICKLE_AUDIT_PG_URL set (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/f809effd-a58b-441d-9a06-963c356a91f3/deno-golden-parity-pg.log). Prior adversary tests re-run on HEAD: shared-types boundaries 13/13 pass (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8070e964-c38c-45e6-8d47-8ac7997c39d9/vitest-adversary-boundaries-head.log), mobile planes 4/4 pass (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef0cdfed-079a-4673-b40d-d93e95c158da/jest-mobile-adversary-plane.log). Root pnpm format:check exit 0, git diff --check exit 0, eslint on changed files exit 0, apps/mobile npx tsc --noEmit exit 0, apps/mobile npx jest __tests__/playerRank.test.ts __tests__/wf exit 0 (130 suites, 1933 tests). Pushed devin/pp/w06-01/impl-r3 at e4fda763f5ba33820334049e05950ccc75b2f81f; no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1095ffd-da0a-4523-beba-d76dac43a692/ac1-shared-types.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 370,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC1",
+            "note": "VERIFIED on HEAD e4fda763 (reviewer's own run after root `pnpm install --frozen-lockfile`): typecheck clean; vitest `Test Files 20 passed (20)`, `Tests 370 passed (370)`, no skipped/todo reported.",
+            "passed": 370,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c83d238-637c-4ce8-bc28-2b2e2237a168/ac2-head-shared-types.log",
+            "command": "git worktree add /home/ubuntu/w06-base 55d80326bca44a25550855c2be6f755370493e0f && cp packages/shared-types/src/__tests__/{playerRank.identicalInputs,scoringDefinition.golden,attack.w06_01.playerRank.boundaries}.test.ts into the base worktree (ONLY those three files) && (cd /home/ubuntu/w06-base/packages/shared-types && npx vitest run src/__tests__/playerRank.identicalInputs.test.ts src/__tests__/scoringDefinition.golden.test.ts src/__tests__/attack.w06_01.playerRank.boundaries.test.ts) ; same vitest command on HEAD in /home/ubuntu/repos/Pickle-Sensei/packages/shared-types",
+            "executed": 68,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC2",
+            "note": "VERIFIED proof holds. BASE 55d80326 run: exit 1, `Test Files 3 failed (3)`, `Tests 10 failed | 3 passed (13)` — scoringDefinition.golden.test.ts and attack.w06_01.playerRank.boundaries.test.ts fail to load (no ../scoringDefinition.js, no fixtures/scoring/player-rank.golden.json on base); playerRank.identicalInputs.test.ts fails 10/13 against the old playerRank.ts (order-dependent replay survivor, lenient timestamp grammar, ms precision, NUL accepted, localeCompare ordering). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d3eae11-1381-48a9-9deb-a46180ae4e16/ac2-base-shared-types.log . HEAD run: exit 0, 3 files / 68 tests passed, 0 skipped. Mobile wiring regression (same procedure, apps/mobile/__tests__/playerRank.test.ts copied onto base with node_modules symlinked from HEAD checkout, `npx jest --ci __tests__/playerRank.test.ts`): BASE exit 1, 2 failed | 12 passed (14) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/fa6ef09d-096a-4272-a36e-e7218c0c98c7/mobile-jest-playerRank-base.log ; HEAD exit 0, 14 passed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/79957bc7-e193-4ecb-84f5-47ced8be48ff/mobile-jest-playerRank-head.log",
+            "passed": 68,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1095ffd-da0a-4523-beba-d76dac43a692/ac1-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d3eae11-1381-48a9-9deb-a46180ae4e16/ac2-base-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c83d238-637c-4ce8-bc28-2b2e2237a168/ac2-head-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fa6ef09d-096a-4272-a36e-e7218c0c98c7/mobile-jest-playerRank-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/79957bc7-e193-4ecb-84f5-47ced8be48ff/mobile-jest-playerRank-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8e67905-1cf3-411a-9251-c8d52ae59bf5/mobile-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0166f6c2-ee71-4fbe-8d33-944d172db685/deno-golden-parity-pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f9646d9c-7b52-4007-923a-24a9edd2292b/deno-wf-all-pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5929095e-98d5-4645-92e4-57dc1de50a7c/deno-wf-audit-rerun.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/be8a63cb-23f0-489a-a40e-8e068a8e2b59/pnpm-r-typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b104b1f3-2369-4086-8f9a-0a1f855ba539/prettier-changed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6abd4be5-73aa-4feb-8934-fada03099476/eslint-changed.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (residual, out of this package's scope): GET /v1/rank (supabase/functions/api/index.ts, edge-index group not held) does not echo definitionVersion; apps/mobile/src/progress/playerRank.ts summaryFromServer stamps SCORING_DEFINITION_VERSION client-side. Needs an edge-index package.",
+          "INFERRED: production SQL view public.player_technique_rating orders shot_type under the DB default collation; the parity harness pins collate \"C\" in its own query (supabase/functions/api/__wf__/w06_01_golden_parity.test.ts:132). Byte-identical ordering from the view itself would need a new migration in the sql group.",
+          "VERIFIED environment note: the full __wf__ suite (deno task test) hit one failure unrelated to the candidate — db_migrations_rls_indexes.audit.test.ts could not `docker pull postgres:16` (registry 429). After tagging the locally cached postgres:16-alpine as postgres:16 the same file re-ran exit 0 (1 passed, 7 steps). Combined: 796/796 passed, 0 ignored with PICKLE_AUDIT_PG_URL set.",
+          "The header doc-comment of packages/shared-types/src/playerRank.ts (unchanged, per the no-comment-edit rule) still describes the hard-coded constants that now derive from SCORING_DEFINITION; harmless but slightly stale."
+        ],
+        "package_id": "W06-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "e4fda763f5ba33820334049e05950ccc75b2f81f",
+        "scope_violation": false,
+        "summary": "APPROVE W06-01 candidate devin/pp/w06-01/impl-r3 @ e4fda763f5ba33820334049e05950ccc75b2f81f (base 55d80326 is an ancestor). SCOPE (VERIFIED via `git diff --stat 55d80326..e4fda763`, 11 files): 6 under write_paths (scoringDefinition.ts, playerRank.ts, fixtures/scoring/player-rank.golden.json, 3 tests under src/__tests__/); packages/shared-types/src/index.ts is a one-line additive re-export inside the shared-types group this package holds; apps/mobile/src/progress/playerRank.ts + apps/mobile/__tests__/playerRank.test.ts, supabase/functions/api/__wf__/w06_01_golden_parity.test.ts and __wf__/deno.json are listed in out_of_scope_files, are under NO serial_group_paths prefix (not apps/mobile/src/analysis|billing|data|navigation, not index.ts, not migrations/tests), and are minimal: the mobile edit adds `definitionVersion: SCORING_DEFINITION_VERSION` to summaryFromServer and swaps localeCompare for code-unit compare (the shared definition's recencyOrder/techniqueScore rule); deno.json adds only import-map aliases. scope_violation=false. SHIPPING WIRING (VERIFIED by grep): PlayerRankCard.tsx / PlayerRankBanner.tsx → resolvePlayerRank → rankFromFacts → shared computePlayerRank, whose constants (PLAYER_RANK_TIERS, RANK_FORM_WINDOW, RANK_CONFIDENCE_CAP) and behaviour now derive from SCORING_DEFINITION (version rank-form-weighted-v2, exactly nine components: countability, scoreQuantization, recencyOrder, formWindow, recencyWeights, techniqueScore, confidenceWeight, rating, tiers; deep-frozen, JSON-serialisable) and the summary carries definitionVersion — the module is exercised by the shipping app, not orphaned. ACCEPTANCE: AC1 VERIFIED exit 0, 370/370 passed, 0 skipped. AC2 VERIFIED proof holds: new tests on base → exit 1 (3 files failed, 10 failed | 3 passed of 13); on HEAD → exit 0, 68/68. regression_fails_on_base=true. ADDITIONAL VERIFIED evidence (reviewer's own runs): `pnpm -r typecheck` exit 0; `cd apps/mobile && npm ci && npx tsc --noEmit` exit 0; `npx jest --ci __tests__/playerRank.test.ts` exit 0 14/14; base-vs-HEAD for that mobile test 2 failed|12 passed → 14 passed; Deno parity harness against a throwaway PostgreSQL 16 (postgres:16-alpine, shim_auth.sql + all migrations applied, PICKLE_AUDIT_PG_URL set): exit 0, 14 passed / 0 failed / 0 ignored — TS, Edge ingress, SQL rank view and GET /v1/rank reproduce the fixture (25 cases, 2 replay cases, 17 rejected inputs; schema player-rank-golden-v3); full __wf__ `deno task test` with PG: 795 passed + the docker-dependent audit test re-run 1 passed (its only failure was a registry 429 pulling postgres:16, not the candidate); prettier --check on all changed files exit 0; eslint on changed TS exit 0; `git diff --check` exit 0. INVARIANTS (VERIFIED by reading the whole diff): no migrations/grants/RLS/session/billing/auth code touched; no user-facing copy added; no .skip/.only/.todo/@ts-ignore/any/eslint-disable/`|| true`/timeout inflation in any changed file; no existing test removed, reordered or weakened (mobile test file is additive: +1 import, +2 cases); no existing comment lines removed or edited (checked all `-` lines of the diff); parity harness's `ignore` is only the documented PG-absent gate and was run un-ignored here. No Mac verification needed: no native/, ios/, Pods or Vision paths changed (INFERRED from the file list). Residual risks listed as non-blocking belong to edge-index/sql groups this package does not hold.",
+        "verdict": "approve"
+      },
+      "round": 3
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de2e8dda-6184-46bd-b474-02e86bdfe0b5/attack-deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c14a2da7-c4e2-4608-b53d-de3240c4ec3f/attack-mobile.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/22893c34-9b1c-4bb7-b2bd-89d1f2b747e9/final-attack-vitest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/921d5a7c-9506-40c6-b90b-fa8aa1261442/final-st-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/86ca4c60-bb9e-4e80-bf98-4a2616e7c9ff/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6debdc4b-1ee8-41f2-9383-177c82c78a64/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/208bf9c9-e736-424d-918b-cba96a3e5028/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2fc8058-b3f2-4000-9e5b-53605f6c6025/parity-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4b6f3e69-74a8-442c-9c0b-001db8f5e1cc/mobile-tsc.log"
+        ],
+        "attack_branch": "devin/pp/w06-01/attack-61206685",
+        "attack_branch_sha": "2c02238f56336cf38e303c64a7a1381399272f61",
+        "attacked_sha": "61206685cccb7302c659636c68899f83435ca20e",
+        "attacks_tried": 17,
+        "breaks": [
+          {
+            "expected": "SCORING_DEFINITION.components.rating.techniqueOrder declares the canonical order ({score desc}, {shotType asc, collation: code-unit}); the objective requires mobile, Edge and SQL to agree on identical inputs, so the mobile plane must list techniques in the same order as computePlayerRank / the SQL projection (`order by score desc, shot_type collate \"C\"`). Note: apps/mobile is outside the package's write_paths and the candidate did not touch it; the candidate ships no mobile golden check, so the gap is invisible to its own tests.",
+            "observed": "For four techniques all scoring 6.00 (Dink, _lob, backhand, drive), summaryFromServer (apps/mobile/src/progress/playerRank.ts: `b.score - a.score || a.shotType.localeCompare(b.shotType)`) yields [\"_lob\",\"backhand\",\"Dink\",\"drive\"], while rankFromFacts -> computePlayerRank (definition: techniqueOrder key shotType asc collation \"code-unit\") yields [\"Dink\",\"_lob\",\"backhand\",\"drive\"]. resolvePlayerRank returns the account rendering when account evidence >= local and the device rendering otherwise, so the same evidence is listed in a different order across that switch. Ratings/tiers are numerically identical (VERIFIED).",
+            "repro": "cd apps/mobile && npx jest __tests__/attack.w06_01.r4.mobilePlane.test.ts  (exit 1; 3 failed / 0 passed / 0 skipped of 3; tests 'list techniques in the same order (definition: score desc, UTF-16 code-unit shot type)' and 'resolvePlayerRank never swaps between two different renderings of the same evidence')",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attack.w06_01.r4.mobilePlane.test.ts",
+            "title": "Mobile plane orders equal-score techniques by localeCompare, not the definition's UTF-16 code-unit collation — account-vs-device renderings of identical inputs disagree and flip when resolvePlayerRank switches source"
+          },
+          {
+            "expected": "Per scoringDefinition.ts Provenance: the mobile plane copies the version the server payload carries (and the Edge GET /v1/rank payload must carry it). Implementer already listed this as residual risk #4 (outside write_paths); the test pins that it is still open on the candidate.",
+            "observed": "ServerPlayerRank (parsePlayerRank) has no definitionVersion field and summaryFromServer returns a PlayerRankSummary with definitionVersion === undefined, while rankFromFacts returns one carrying SCORING_DEFINITION_VERSION. A rank shown from the account payload therefore cannot be traced to a formula version; parity checks 'compare only summaries carrying the same definitionVersion' (scoringDefinition.ts header) are impossible for it.",
+            "repro": "cd apps/mobile && npx jest __tests__/attack.w06_01.r4.mobilePlane.test.ts  (exit 1; test 'carry the definition version so a rank can be traced to its formula': Expected \"rank-form-weighted-v2\", Received undefined)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attack.w06_01.r4.mobilePlane.test.ts",
+            "title": "Mobile summaryFromServer drops definitionVersion — the definition's provenance rule ('a plane that rebuilds a summary copies the version the payload carries') is not met on the shipping plane"
+          },
+          {
+            "expected": "Either the id domain (Edge UUID_RE) is a countability rule so TS abstains on rows no plane can store (mirroring the shotType:\"\" gap the layout claims to close), or the definition documents that id format is out of contract. Not a supported path in the shipping app (apps/mobile/src/util/uuid.ts makeUuid always emits canonical RFC-4122 v4) — hence P3, a definition/fixture completeness gap rather than user-visible misbehaviour.",
+            "observed": "Through the real handler, POST /v1/shots:sync rejects id \"{aaaaaaaa-…}\", \"aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa\" and \"\" (codes shot.*), Postgres collapses the first two onto the same shots_pkey and refuses \"\" with 22P02, SQL rank counts 1 analysis; computePlayerRank([first, braced, bare, empty]) counts 4 (assertion message: 'TS counted 4 analyses for one storable id'). computePlayerRank also ranks single rows with ids 'not-a-uuid', nil uuid, variant 'c', leading space (7 leaks listed in the vitest output).",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r4.domain.test.ts  (exit 1; test 'abstains on ids the sync ingress refuses'); and PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r4.test.ts  (exit 1; test 'id spellings — Edge refuses what Postgres would collapse, TS counts them as distinct')",
+            "severity": "P3",
+            "test_file": "packages/shared-types/src/__tests__/attack.w06_01.r4.domain.test.ts; supabase/functions/api/__wf__/attack_w06_01_r4.test.ts",
+            "title": "TS plane ranks rows whose id the Edge sync ingress refuses (non-uuid / nil / bad variant / bare / braced / padded), although the definition calls the TS countability filter 'the complete rule set' and names 'identity' a countability rule the server ingress enforces"
+          },
+          {
+            "expected": "A row no server plane can store as given must not count on the TS plane (definition: 'a row carrying one is never stored'), i.e. lone surrogates belong to excludedCodePoints (or the claim is narrowed to NUL). Not a supported path: mobile shotType values come from the on-device classifier's fixed labels — P3.",
+            "observed": "shotType \"\\ud800\": real handler accepts the row and calls apply_synced_shot once; the postgrest-js wire text carries the \\ud800 escape; PostgreSQL 16 `select ($1::text)::jsonb` on that text raises SQLSTATE 22P02; a direct owner INSERT stores shot_type = \"\\ufffd\" (a different technique key). computePlayerRank([row]) returns a rank summary with technique \"\\ud800\" instead of null (assertion: 'TS ranked a shotType no server plane can carry').",
+            "repro": "PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r4.test.ts  (exit 1; test 'a lone UTF-16 surrogate shotType passes the Edge ingress, cannot enter jsonb (22P02), yet TS ranks it'); cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r4.domain.test.ts (test 'abstains on a lone UTF-16 surrogate')",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w06_01_r4.test.ts; packages/shared-types/src/__tests__/attack.w06_01.r4.domain.test.ts",
+            "title": "countability.shotType.excludedCodePoints claims to list 'code points Postgres text cannot hold' but omits lone UTF-16 surrogates: Edge admits them, jsonb input refuses the RPC payload (22P02) / direct text stores U+FFFD, TS ranks the original"
+          },
+          {
+            "expected": "The fixture's ranked cases should include the timestamp text shape the shipping app actually sends, so Edge (ms truncate), SQL (µs) and mobile are checked against production inputs, including the technique `capturedAt` text echo.",
+            "observed": "apps/mobile/ios/LocalPods/PickleNative/Sources/ClipMediaStore.swift stamps capturedAtIso with ISO8601DateFormatter().string(from:) whose default options omit fractional seconds (INFERRED from source). All 128 ranked-case/replay capturedAt texts in player-rank.golden.json end in .000Z; the remaining 21 are rejectedInputs/precision edges. computePlayerRank itself admits `…SSZ` (VERIFIED in the same file's grammar test), so this is a fixture coverage gap, not a computation defect.",
+            "repro": "cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r4.domain.test.ts  (exit 1; test 'the golden fixture exercises the production capture shape (no fraction, `…SSZ`)': expected > 0, received 0)",
+            "severity": "P3",
+            "test_file": "packages/shared-types/src/__tests__/attack.w06_01.r4.domain.test.ts",
+            "title": "Golden fixture never exercises the production iOS capture-stamp shape (no fractional seconds, `…SSZ`) — 0 of 149 fixture capturedAt texts"
+          }
+        ],
+        "package_id": "W06-01",
+        "summary": "ADVERSARY W06-01 vs devin/pp/w06-01/impl-r4 @ 61206685 (BASE 55d80326). Attack tests pushed to devin/pp/w06-01/attack-61206685 @ 2c02238f (1 commit, 4 attacker-owned test files, 0 candidate/production/migration files touched; `git diff --check` exit 0; no PR, no force-push). Environment: pnpm 10.15.1, Node 24.19.0, Deno 2.9.6, PostgreSQL 16.15 (postgres:16-alpine on 127.0.0.1:55432 with supabase/tests shim_auth.sql + all migrations applied).\n\nCANDIDATE ACCEPTANCE RE-RUN (VERIFIED): AC1 `pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test` exit 0, 21 files / 377 passed / 0 failed / 0 skipped (ac1.log). AC2: candidate's 4 new test files on BASE_SHA → exit 1, 4 files failed, 17 failed | 2 passed (ac2-base.log); on HEAD → exit 0, 4 files, 75 passed (ac2-head.log). Candidate Deno parity `w06_01_golden_parity.test.ts` with PICKLE_AUDIT_PG_URL → exit 0, 17 passed / 0 failed (parity-candidate.log).\n\nATTACKS (17, across 10 categories):\nHELD (no break) — 11:\n 1. Independent oracle (BigInt hundredths, own ISO parser, own dual-plane admission, half-even rint model) vs golden fixture cases/abstention: agrees. 2. Replay/first-storable-arrival on fixture replays incl. `conflicting` flags: agrees. 3. Fixture rejectedInputs all abstain: agrees. 4. 3000 seeded random histories (dups, case-flipped ids, boundary instants, NaN/Inf/negative/>10 scores, empty/64/65-unit/NUL shotTypes, low_confidence with/without score, bad source) vs oracle: 0 mismatches. 5. Random order-independence (permutations of id-distinct rows): identical. 6. 5000 same-second rows in <1s (perf/DoS): ok. 7. Edge instant grammar edges (leap second, 24:00, year 0000, lowercase z, +00:00, whitespace, empty fraction, 1–9 fraction digits, leap day, 2100-02-29): TS admits exactly what Edge admits. 8. Frozen definition: runtime mutation of weights/thresholds/bounds/excludedCodePoints throws TypeError; re-exported constants are the definition's objects. 9. SQL vs TS: 120 random Edge-admitted histories inserted through the real shots trigger → rating/tier/division/counts/techniques identical (SQL projection `order by score desc, shot_type collate \"C\"`). 10. public.player_rank_tier vs playerRankTierForRating on every hundredth 0.00–10.00: identical. 11. timestamptz rounding of 400 random 7–9 digit fractions matches the half-even microsecond model.\nBROKE — 6 tests → 5 reported breaks (2×P2 on the shipping mobile plane, 3×P3 definition/fixture completeness): mobile technique order (localeCompare vs code-unit) and resolvePlayerRank source-switch flip; mobile summaryFromServer drops definitionVersion (implementer's acknowledged residual #4, still open); TS ranks Edge-refused ids (4 counted where SQL stores 1); lone-surrogate shotType admitted by Edge, refused by jsonb (22P02)/mangled to U+FFFD by text, ranked by TS; fixture has 0/149 production-shape `…SSZ` timestamps. Two initial attacker assumptions were invalid and were removed/reworked before push (empty id as 'no id' — the definition explicitly admits id-less rows; Postgres spelling collapse in TS — Edge refuses those spellings first). No P0/P1: no money, data-loss, leak, security or crash path found; ratings/tiers are numerically identical on every plane for every admitted input tried.\n\nATTACK RUN EVIDENCE (VERIFIED): vitest `cd packages/shared-types && npx vitest run src/__tests__/attack.w06_01.r4.oracle.test.ts src/__tests__/attack.w06_01.r4.domain.test.ts` → exit 1, 2 files, 10 passed | 3 failed | 0 skipped (final-attack-vitest.log); full `pnpm --filter @pickle/shared-types test` with attack files present → exit 1, 23 files, 386 passed | 5 failed (final-st-test.log — includes 2 since-removed tests; the candidate's own 377 all pass); `pnpm --filter @pickle/shared-types typecheck` with attack files → exit 0. Deno `PICKLE_AUDIT_PG_URL=… deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/attack_w06_01_r4.test.ts` → exit 1, 3 passed | 2 failed | 0 ignored (attack-deno.log). Mobile `cd apps/mobile && npx jest __tests__/attack.w06_01.r4.mobilePlane.test.ts` → exit 1, 3 failed / 3 (attack-mobile.log). Lint/format on attacker files: root prettier --check exit 0, eslint exit 0, deno fmt --check exit 0, deno lint exit 0. `cd apps/mobile && npx tsc --noEmit` → exit 2 with 11 errors, ALL in src/diagnostics/* (missing @sentry/react-native module in this checkout), none in the attack file (mobile-tsc.log) — pre-existing environment condition, UNKNOWN whether CI installs that module. iOS runtime behaviour NOT claimed (Linux only); the ISO8601DateFormatter shape is INFERRED from Swift source.\n\nCategories attempted: independent oracle / random boundary values (NaN, ±Inf, negative, >10, empty/max/NUL strings, far-past/far-future clocks), replay & duplicate identities, timestamp precision & bounds at both planes, malformed/corrupt input domains (ids, surrogates, grammar), SQL/TS parity, tier-threshold parity, Postgres rounding, definition immutability/version identity, mobile account/device consistency & source switching, Edge ingress/JSON/SQL text admission. Not attempted (no new SQL/Edge surfaces or money paths in this package): auth roles, 429/5xx/timeouts, free-rating conservation, copy/accessibility, process death."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3c4ef189-937e-4ab2-a87c-11e341f819de/ac1-shared-types.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 377,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC1",
+            "note": "VERIFIED on HEAD 61206685 (run before the final commit on the identical tree; commits only recorded the working tree). Vitest: Test Files 21 passed (21), Tests 377 passed (377), 0 skipped. tsc -p tsconfig.json exit 0. Local copy of the log: artifacts/w06-01/ac1-shared-types.log (artifacts/ is gitignored, hence the uploaded URL).",
+            "passed": 377,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0327cb23-bac5-4718-9fd0-fe10572aab48/ac2-head.log",
+            "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS. Executed as: (base worktree /home/ubuntu/w06base at 55d80326, only the 4 new files copied into packages/shared-types/src/__tests__/) cd packages/shared-types && ./node_modules/.bin/vitest run src/__tests__ ; then the same command on HEAD",
+            "executed": 75,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC2",
+            "note": "PROOF exit 0: BASE run FAILED, HEAD run PASSED. BASE (55d80326, only the 4 new test files copied, nothing else): vitest exit 1, Test Files 4 failed (4), Tests 17 failed | 2 passed (19), 0 skipped — playerRank.orderIndependence.test.ts 5/5 failed on rating assertions (e.g. 6.2 vs 5.8 for the two-row permutation), playerRank.identicalInputs.test.ts 12 failed / 2 passed (first-arrival replay, both-plane bounds, NUL, UTF-16 cap, code-unit ordering), scoringDefinition.golden.test.ts and attack.w06_01.playerRank.boundaries.test.ts fail to load because ../scoringDefinition.js and fixtures/scoring/player-rank.golden.json do not exist on base (i.e. no golden fixture pins any definition version on BASE_SHA). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/48d48851-f7aa-499b-a749-dbb6008811ef/ac2-base-55d80326.log (local artifacts/w06-01/ac2-base-55d80326.log). HEAD (61206685): exit 0, Test Files 4 passed (4), Tests 75 passed (75): boundaries 13, orderIndependence 5, identicalInputs 14, golden 43. Base worktree was restored to clean after the run.",
+            "passed": 75,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA 55d80326 on devin/pp/w06-01/impl-r4 (no cherry-pick of r3; r3's replay-survivor rule and fixture schema were the defects). Commit 1 (0514e820) adds the regression tests only; commit 2 (61206685) adds packages/shared-types/src/scoringDefinition.ts — SCORING_DEFINITION with SCORING_DEFINITION_VERSION='rank-form-weighted-v2' declaring all nine components once (countability, scoreQuantization, recencyOrder, formWindow, recencyWeights, techniqueScore, confidenceWeight, rating, tiers), weights [8..1], window 8, confidence cap 5, hundredths quantization, half-up rating rounding, tier floors, null abstention, and the named Edge/SQL ingress checks — and rewires computePlayerRank (the function apps/mobile and the Edge GET /v1/rank parity tests already call) to read every constant from it. Resolves the 4 r3 adversary breaks inside write_paths: (1) recencyOrder is now total — capturedAt µs desc, id desc, capturedAt text desc, quantized score desc — so distinct id-less same-instant rows rank identically from every permutation; (2) identity.survivor is declared 'first-storable-arrival' (a replayed id keeps the row the server stored first per shots_pkey; a stored low_confidence row holds the id; a row no plane stores holds nothing) and the fixture marks conflicting replays with `conflicting: true` rather than claiming permutation-invariant ranks — verified against Postgres 16 with all migrations; (3) capturedAt is materialised at BOTH declared plane precisions (Edge: milliseconds/truncate via Date.parse; SQL: microseconds/half-even) and a row counts only when every declared bound check admits it, so TS abstains on 1999-12-31T23:59:59.9999995Z (Edge refuses) and on 2099-12-31T23:59:59.9999995Z (SQL refuses) — the fixture records exactly which layer refuses each rejected input; (4) the definition documents that consumers must not fabricate a version for an untagged payload (PlayerRankSummary.definitionVersion stays optional) — the mobile summaryFromServer and Edge GET /v1/rank emission changes are in apps/mobile and supabase/functions/api/index.ts, both outside this package's write_paths/serial groups, and are listed as residual. Golden fixture player-rank-golden-v4 carries ranked, abstention, replay and rejected cases with definitionVersion+schemaVersion pinned; the Deno parity test proves each stored fixture input ranks identically via TS, the SQL trigger state (player_rank_state) and GET /v1/rank.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3c4ef189-937e-4ab2-a87c-11e341f819de/ac1-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/48d48851-f7aa-499b-a749-dbb6008811ef/ac2-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0327cb23-bac5-4718-9fd0-fe10572aab48/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ab8ad15-42a1-4907-a9d6-2ed9e25d53c8/deno-golden-parity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9bdac6d6-db62-427a-a860-a2adcfabcde7/deno-wf-all.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1f63d67e-b34c-461c-99bf-4e2209649442/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9b1a4803-cb45-4e83-beca-6fafd34e5882/git-diff-check.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w06-01/impl-r4",
+        "files_changed": [
+          "packages/shared-types/fixtures/scoring/player-rank.golden.json",
+          "packages/shared-types/src/__tests__/attack.w06_01.playerRank.boundaries.test.ts",
+          "packages/shared-types/src/__tests__/playerRank.identicalInputs.test.ts",
+          "packages/shared-types/src/__tests__/playerRank.orderIndependence.test.ts",
+          "packages/shared-types/src/__tests__/scoringDefinition.golden.test.ts",
+          "packages/shared-types/src/index.ts",
+          "packages/shared-types/src/playerRank.ts",
+          "packages/shared-types/src/scoringDefinition.ts",
+          "supabase/functions/api/__wf__/deno.json",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts"
+        ],
+        "head_sha": "61206685cccb7302c659636c68899f83435ca20e",
+        "out_of_scope_files": [
+          "packages/shared-types/src/index.ts — one additive line `export * from \"./scoringDefinition.js\"` so the canonical definition/version is reachable through the @pickle/shared-types package export (inside the shared-types serial group this package holds; no existing symbol changed)",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts — new Deno test only (no shipping code): proves the golden fixture against POST /v1/shots:sync, the shots trigger/constraints on Postgres 16 and GET /v1/rank; this is the only way the 'checked against identical inputs on Edge and SQL' half of the objective is verified rather than asserted. Not under any serial_group_paths prefix (edge-index is index.ts only)",
+          "supabase/functions/api/__wf__/deno.json — one added import-map entry mapping ../../../../packages/shared-types/src/scoringDefinition.js → .ts so the parity test can import the shared definition under Deno (same pattern the existing playerRank.js mapping uses). Not under any serial_group_paths prefix"
+        ],
+        "package_id": "W06-01",
+        "regression_tests_added": [
+          "packages/shared-types/src/__tests__/playerRank.orderIndependence.test.ts",
+          "packages/shared-types/src/__tests__/playerRank.identicalInputs.test.ts",
+          "packages/shared-types/src/__tests__/scoringDefinition.golden.test.ts",
+          "packages/shared-types/src/__tests__/attack.w06_01.playerRank.boundaries.test.ts",
+          "supabase/functions/api/__wf__/w06_01_golden_parity.test.ts"
+        ],
+        "residual_risks": [
+          "Adversary break #4 (mobile summaryFromServer stamping SCORING_DEFINITION_VERSION on untagged server payloads; GET /v1/rank not emitting definitionVersion) requires edits under apps/mobile/ and supabase/functions/api/index.ts (serial group edge-index) which this package does not hold; the shared definition now states the provenance rule (consumers must not fabricate a version) but the wiring on those two planes is a separate package. INFERRED from reading apps/mobile/src/progress/playerRank.ts and supabase/functions/api/index.ts on BASE_SHA.",
+          "Edge ingress (parseSyncShot) still validates capturedAt at millisecond precision while SQL stores microseconds half-even; the shared definition declares both checks and TS counts only what both admit, so device and server never disagree on countability, but a device row at the 1999-12-31T23:59:59.9999995Z lower edge is refused by Edge although SQL would store it (documented in the fixture as refusedBy:['edge']; changing it means editing index.ts).",
+          "Direct SQL inserts (service/owner path, not the Edge) accept empty/whitespace shotType and non-UTC offsets that the shared definition and Edge refuse; the definition names the Edge as the refusing layer for those, and the mobile app only writes through the Edge.",
+          "packages/shared-types/package.json test script carries a pre-existing `--passWithNoTests` flag (not added or touched by this package); AC1 executed 377 tests so it did not mask anything here.",
+          "The Deno parity test needs a Postgres 16 with migrations applied (PICKLE_AUDIT_PG_URL); without it those cases are skipped, so the reviewer must run it with the URL set to count it as evidence."
+        ],
+        "summary": "W06-01 round 4 implemented and pushed to devin/pp/w06-01/impl-r4 (head 61206685cccb7302c659636c68899f83435ca20e, 2 commits on BASE_SHA 55d80326; no PR opened, no force-push). DEFECT ON BASE_SHA: packages/shared-types/src/playerRank.ts:54-69 (PLAYER_RANK_TIERS, RANK_FORM_WINDOW=8, RANK_CONFIDENCE_CAP=5) and the weighting/rounding inside computePlayerRank hard-code the scoring components as scattered module constants with no version id and no scoringDefinition module; there is no packages/shared-types/fixtures/scoring/ and no src/__tests__/ (vitest on base resolves neither ../scoringDefinition.js nor the fixture), so nothing pins a definition version and Edge/SQL cannot be checked against identical inputs. Behavioural gaps proven by the new tests on base (17 failed/2 passed of 19): computePlayerRank sorts newest-first by capturedAt then id only (playerRank.ts recency sort), so id-less same-instant rows depend on input order (2 rows → 6.2 vs 5.8; 3 rows → 6 ratings); duplicate ids are not modelled as the server's first-storable-arrival (shots_pkey) so TS and SQL rank different survivors; capturedAt bounds are checked only at one precision so TS counts rows Edge refuses (lower edge) and rows SQL refuses (upper edge); embedded NUL / UTF-16 64-cap / code-unit technique ordering were not enforced. FIX: new packages/shared-types/src/scoringDefinition.ts (SCORING_DEFINITION_VERSION='rank-form-weighted-v2', SCORING_DEFINITION with all 9 components + countability/ingress semantics + PLAYER_RANK_GOLDEN_SCHEMA_VERSION='player-rank-golden-v4'), playerRank.ts rewired to consume it with first-storable-arrival identity, total recency order (µs desc, id desc, text desc, score desc), dual-plane (Edge ms truncate / SQL µs half-even) bound checks; golden fixture packages/shared-types/fixtures/scoring/player-rank.golden.json (ranked, abstention, replay with `conflicting` flags, rejected inputs with refusedBy layers); 4 new test files (75 tests); plus a Deno cross-plane parity test (out of write_paths, test-only) proving the fixture against POST /v1/shots:sync, the Postgres 16 shots trigger and GET /v1/rank. VERIFIED: AC1 exit 0, 21 files / 377 tests passed / 0 skipped; AC2 base exit 1 (4 files failed, 17 failed | 2 passed) → HEAD exit 0 (4 files, 75 passed); PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/w06_01_golden_parity.test.ts → exit 0, 17 passed / 0 failed; full `cd supabase/functions/api/__wf__ && deno task test` with the same PG URL → exit 0, 799 passed (31 steps) / 0 failed; root `pnpm format:check` exit 0; `git diff --check 55d80326..HEAD` exit 0. Adversary breaks #1–#3 resolved inside write_paths; #4 (mobile/Edge version provenance wiring) is documented in the definition but its code lives in apps/mobile and supabase/functions/api/index.ts, outside this package (listed under residual_risks). No production Supabase, App Store Connect, secrets, migrations, mobile files or index.ts touched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c9637cbc-0d41-4d38-95e0-f965e9b099b3/ac1-shared-types.log",
+            "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+            "executed": 377,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC1",
+            "note": "VERIFIED on 61206685: tsc exit 0; vitest Test Files 21 passed (21), Tests 377 passed (377), 0 skipped (includes the 4 new files: 75 tests). Independent run by the reviewer, not the implementer's numbers.",
+            "passed": 377,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/19e55809-5649-46ae-8cc7-6d39e3a6971b/ac2-head-61206685.log",
+            "command": "base worktree /home/ubuntu/w06base at 55d80326 with ONLY the 4 new files copied into packages/shared-types/src/__tests__/ (attack.w06_01.playerRank.boundaries, playerRank.identicalInputs, playerRank.orderIndependence, scoringDefinition.golden): cd packages/shared-types && ./node_modules/.bin/vitest run src/__tests__ ; then the identical command on HEAD 61206685",
+            "executed": 75,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-01-AC2",
+            "note": "PROOF exit 0 (base FAILS, HEAD PASSES). BASE 55d80326: vitest exit 1, Test Files 4 failed (4), Tests 17 failed | 2 passed (19), 0 skipped — scoringDefinition.golden and attack boundaries fail to load (../scoringDefinition.js and fixtures/scoring/player-rank.golden.json absent on base: no fixture pins any version), orderIndependence 5/5 fail on permutation-dependent ratings, identicalInputs 12/14 fail (replay survivor, dual-plane bounds, NUL, UTF-16 cap, code-unit ordering). Base log: artifacts/review-w06-01/ac2-base-55d80326.log. HEAD: exit 0, Test Files 4 passed (4), Tests 75 passed (75), 0 skipped. Base worktree restored (copied tests removed) after the run. Base log URL: https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a97c5a-1af0-4ee3-b1bb-1426835495c3/ac2-base-55d80326.log",
+            "passed": 75,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/14c5ed29-4c8a-4be8-a271-0bba79ce513d/verdict.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c9637cbc-0d41-4d38-95e0-f965e9b099b3/ac1-shared-types.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a97c5a-1af0-4ee3-b1bb-1426835495c3/ac2-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/19e55809-5649-46ae-8cc7-6d39e3a6971b/ac2-head-61206685.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18811fc1-6979-4d43-8818-d88428fbce15/deno-parity-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "packages/shared-types/src/scoringDefinition.ts countability.capturedAt.fractionDigits {min:1,max:9} reads as if a fraction were mandatory, while the actual grammar (playerRank.ts:85 ISO_UTC_INSTANT_RE, matching index.ts) makes the fraction optional — which matters because the iOS clip store (apps/mobile/ios/LocalPods/PickleNative/Sources/ClipMediaStore.swift:1349 ISO8601DateFormatter) emits no fraction. Behaviour is correct (VERIFIED: fraction-less instants are admitted); only the declarative field is ambiguous. Suggest documenting 'digits when a fraction is present' in a follow-up.",
+          "Full __wf__ suite: `deno task test` with PICKLE_AUDIT_PG_URL set showed one environment/flake failure per run in files the candidate does not touch: run 1 db_migrations_rls_indexes.audit.test.ts failed only because DockerHub returned HTTP 429 for postgres:16 (artifacts/review-w06-01/deno-full-head.log); after tagging the cached postgres:16-alpine as postgres:16 it passed (1 passed/7 steps, artifacts/review-w06-01/deno-audit-matrix-rerun.log). Run 2 drills_billing_healthz.test.ts 'healthz: 60/min per IP' failed (200 vs 429; fixed-window boundary during a 1m48s run) — it passed in run 1 and passes in isolation (28 passed/24 steps, artifacts/review-w06-01/deno-healthz-rerun.log). Net: every one of the 799 tests passed in at least one run, 0 ignored; no failure implicates the candidate.",
+          "apps/mobile jest initially reported 15 failures in 3 suites (be-mobile-security-secrets, diagnostics/buildSetup, diagnostics/sentry) because @sentry/react-native was not installed in this VM's apps/mobile/node_modules (stale snapshot); after `cd apps/mobile && npm ci` the full suite passed: 307 suites passed / 1 skipped (importedRealFootageAnalysis, artifact-gated describe.skip pre-existing since 5e2e0052), 5889 passed / 1 skipped / 0 failed (artifacts/review-w06-01/mobile-jest-head-rerun.log). The candidate changes no apps/mobile file.",
+          "Residual (implementer-declared, confirmed INFERRED from index.ts and apps/mobile/src/progress/playerRank.ts on HEAD): GET /v1/rank does not emit definitionVersion and mobile summaryFromServer does not carry it; index.ts:2635 tier table is still a manual mirror of PLAYER_RANK_TIERS (parity test covers it live). Both live under serial groups (edge-index, mobile) this package does not hold — a separate wiring package."
+        ],
+        "package_id": "W06-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "61206685cccb7302c659636c68899f83435ca20e",
+        "scope_violation": false,
+        "summary": "APPROVE W06-01 candidate 61206685 (branch devin/pp/w06-01/impl-r4, 2 commits on 55d80326). SCOPE (VERIFIED, git diff --stat): 10 files; 7 under write_paths; 3 out-of-scope edits all justified minimal wiring/test-only and none under a serial group this package does not hold: packages/shared-types/src/index.ts (+1 additive export, inside the held shared-types group), supabase/functions/api/__wf__/deno.json (+1 import-map entry), supabase/functions/api/__wf__/w06_01_golden_parity.test.ts (new test). index.ts, migrations, apps/mobile, native untouched; git diff --check exit 0. SHIPPING REACHABILITY (VERIFIED by reading apps/mobile/src/progress/playerRank.ts rankFromFacts -> computePlayerRank from @pickle/shared-types): the rewired computePlayerRank is the function the shipping mobile rank path calls, and the existing exports PLAYER_RANK_TIERS/RANK_FORM_WINDOW/RANK_CONFIDENCE_CAP are preserved as views of SCORING_DEFINITION. DEFINITION (VERIFIED): scoringDefinition.ts declares all nine components once with SCORING_DEFINITION_VERSION='rank-form-weighted-v2' (weights 8..1, window 8, cap 5, hundredths quantization, tier floors 0/3.5/5/6.5/7.5, null abstention, countability incl. first-storable-arrival identity and dual-plane capturedAt bounds); fixture player-rank.golden.json (schema player-rank-golden-v4, 25 cases / 5 replays / 20 rejected inputs) pins definitionVersion+schemaVersion and the golden test asserts the literal 'rank-form-weighted-v2'. AC1 PASS: exit 0, 21 files / 377 tests, 0 failed, 0 skipped. AC2 PROOF PASS: base 17 failed | 2 passed (4/4 files failed) -> HEAD 75 passed (4/4 files); regression_fails_on_base=true. CROSS-PLANE PARITY (VERIFIED, not skipped): Postgres 16 (postgres:16-alpine, cached; DockerHub 429 for postgres:16) with shim_auth.sql + all migrations applied, PICKLE_AUDIT_PG_URL set: deno test w06_01_golden_parity.test.ts exit 0, 17 passed / 0 failed / 0 ignored — every fixture case reproduces identically via TS, POST /v1/shots:sync -> SQL trigger state, and GET /v1/rank, including replay first-arrival, half-tie hundredths, uuid-case tiebreak and both bound edges (artifacts/review-w06-01/deno-parity-head.log). WIDER GATES (VERIFIED on HEAD): root pnpm format:check exit 0; pnpm lint (eslint .) exit 0; pnpm -r typecheck exit 0; apps/mobile npx tsc --noEmit exit 0; apps/mobile npx jest --ci after npm ci: 307 suites passed / 1 pre-existing artifact-gated skip, 5889 passed / 0 failed; full __wf__ deno task test 798-799 passed per run with one environment/flake failure per run in files the candidate does not touch, each passing on isolated rerun (details in non_blocking_issues). INVARIANTS: no test weakened/skipped/reordered (existing test/playerRank.test.ts untouched, diff scan for @ts-ignore/any/eslint-disable/|| true/.skip/.only/passWithNoTests/timeout inflation: none added); no existing comment lines removed or edited in playerRank.ts; no migrations, grants, RLS, session checks, billing, secrets, production Supabase or user-facing copy touched; no Apple paths changed so no M4 run required. Non-blocking notes: fractionDigits declaration wording; version provenance wiring on GET /v1/rank and mobile summaryFromServer remains a separate package (edge-index / mobile serial groups).",
+        "verdict": "approve"
+      },
+      "round": 4
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-2"
+}

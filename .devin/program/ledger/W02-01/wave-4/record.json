@@ -1,0 +1,131 @@
+{
+  "agents": [
+    {
+      "label": "implement-W02-01-r3",
+      "phase": "implement",
+      "prompt_sha256": "4f6deb8e5435445e787182bd60bbb6356994f672f035be8723c221f343a7c037",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W02-01",
+  "requeued_from": {
+    "branch": "devin/pp/w02-01/impl-r2",
+    "findings": {
+      "judge": [
+        "impl: W02-01-AC2 status FAIL"
+      ]
+    },
+    "head_sha": "7a44617f8f47d0068081c5db36668a5e16340f7d"
+  },
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W02-01-AC2 exit_code 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w02-01/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OutboxDependencyOrder.test.ts __tests__/sync*.test.ts",
+            "executed": 71,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC1",
+            "note": "VERIFIED on candidate 65064f27. 3 suites passed (w02OutboxDependencyOrder 30, sync*.test.ts 41). Uploaded copy: https://la-hacks-rttothemoon.devinenterprise.com/attachments/219fe252-356b-4581-aa5d-cc7ee0f4d39f/ac1-jest.log",
+            "passed": 71,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w02-01/ac2-base-new-suite.log",
+            "command": "cd apps/mobile && npx jest --ci __tests__/w02OutboxDependencyOrder.test.ts  (run in a clean git worktree at BASE_SHA d8e5db3eb346b651e4ce04cc997178abcbed56fe with only the new suite file copied in, sha256 559cbc636dddfcc6605c5ccd4ae344b8fdacb4c4a98593cf90bd68916a8f7797 = the committed file)",
+            "executed": 30,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W02-01-AC2",
+            "note": "HONEST PROOF-ONLY RESULT. BASE run of ONLY the new suite: exit 0, 30 executed / 30 passed / 0 failed / 0 skipped (log: artifacts/w02-01/ac2-base-new-suite.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/7dc902c8-a54a-43e0-8b07-1cd5453f8ac7/ac2-base-new-suite.log). Because BASE passes, no defect was claimed or fixed and the candidate contains NO behavioural change to sync.ts or syncRuntime.ts (git diff d8e5db3e..65064f27 --stat = only the test file; both production files byte-identical to BASE). exit_code=1 is the proof outcome per the regress rule (new tests did not FAIL on BASE); executed/passed are the candidate (HEAD) counts, identical to BASE. Real node:sqlite: yes — testSupport/sqlite.ts wraps jest.requireActual('node:sqlite').DatabaseSync on a file-backed DB; committed state is read through a second independent DatabaseSync connection. Killed step kinds enumerated and asserted exactly by the test 'crashes after every kind of durable step the drain performs (enumerated)' (DURABLE_STEP_KINDS, 16 >= 8): BEGIN IMMEDIATE; COMMIT; SELECT batch (…ORDER BY last_attempt_order ASC, id ASC LIMIT 50); SELECT COALESCE(MAX(last_attempt_order),0)+1 ordinal; UPDATE outbox SET last_attempt_order; SELECT queued parent session.create (queuedSession, …ORDER BY id ASC LIMIT 1); SELECT payload … LIMIT 51 (conflict check); DELETE FROM outbox (parent/finalizer ack); INSERT OR REPLACE INTO sync_receipt; UPDATE outbox SET last_error; SELECT id, started_at FROM local_session (recoverSession); INSERT INTO outbox … 'session.create' (reconstructed parent); SELECT count(*) remaining; createSession; finalizeSession; syncShots. Crash points per scenario: shot-first set 1 window (<=100 steps), orphan 1 window, 50-shot batch 5 windows (<=500 steps), two-parent batch 5 windows, interleaved 1 window; plus lost-ack and refused injected at every transport step of every scenario. Sensitivity controls (temporary sync.ts mutations, each run exit 1, file restored byte-identical, artifacts/w02-01/mutations-summary.log https://la-hacks-rttothemoon.devinenterprise.com/attachments/35d48351-8a97-4299-99ea-ce62aa42c3dd/mutations-summary.log): M1 DELETE parent before remote ack -> 12 failed/18 passed; M2 parent lookup limited to batch -> 15/15; M3 dependents not held after transient parent failure -> 10/20; M4 finalize ignores pending parent -> 4/26; M5 orphan parent not reconstructed -> 5/25; M6 receipt for rejected shot -> 6/24. Full logs in https://la-hacks-rttothemoon.devinenterprise.com/attachments/f79fa70f-f7ed-4d16-bd5c-5e8caa708a56/w02-01-r3-artifacts.tgz",
+            "passed": 30,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w02-01/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC3",
+            "note": "VERIFIED on candidate 65064f27, no diagnostics. Uploaded copy: https://la-hacks-rttothemoon.devinenterprise.com/attachments/512a1788-fec8-442e-8135-c0e6ed56cb57/ac3-tsc.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w02-01/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts && npx prettier --check apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC4",
+            "note": "VERIFIED from repo root (root ESLint + root Prettier 3.9.6) on the only changed file. Also root `pnpm format:check` exit 0 (artifacts/w02-01/root-format-check.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d7c3b5d-339f-4800-96ca-a4b7d969c905/root-format-check.log) and `git diff --check` exit 0 (artifacts/w02-01/git-diff-check.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/f5179dad-7721-4a1a-a03c-bab52954ac70/git-diff-check.log). Uploaded copy: https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e2ace99-4bac-4619-90d6-95444bdee158/ac4-eslint-prettier.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE d8e5db3e on devin/pp/w02-01/impl-r3. Reused the sound core of the r2 suite (real node:sqlite, file-backed, one fresh connection per simulated process, committed-state reads via an independent DatabaseSync connection, crash-after-every-durable-step replay) and strengthened it: (1) machine-checked enumeration of the durable step kinds the matrix kills at — DURABLE_STEP_KINDS asserted exactly (16 kinds: BEGIN IMMEDIATE, COMMIT, the batch SELECT, the ordinal SELECT, UPDATE last_attempt_order, parent-lookup SELECT (queuedSession), conflict SELECT LIMIT 51, DELETE parent row, INSERT OR REPLACE sync_receipt, UPDATE last_error, SELECT local_session, INSERT reconstructed session.create, SELECT count(*), plus createSession / finalizeSession / syncShots round trips); (2) two extra transport fault models replayed at every round trip — lost acknowledgement (server applied, client sees ApiError 408 network.timeout, exactly what api.ts raises) and refused (nothing applied, 503) — with the invariant that no attempt budget is consumed and no receipt exists for a shot the server did not accept; (3) an orphan-dependent scenario: shot.sync queued with NO session.create row while local_session survives — the server's shot.session_not_found rejection must lead recoverSession to reconstruct the parent, and the parent must be remotely acknowledged AND durably removed before the shot is accepted (a committed reconstructed parent joins the parent set so later sends are held to the same rule); (4) a shot whose session exists nowhere locally is sent once, parked with repair_reason session.missing, no receipt, no retries, no consumed attempts; (5) seeding mirrors repository.ts saveAnalysis (local_shot + outbox in the same committed state) — without it db.ts's open-time prune of shotless sessions deletes the local_session on restart, which was a test-model gap, not a product defect. Ran the final suite on BASE_SHA in a clean worktree: 30/30 pass -> no defect reproduced, so per AC2 the candidate is an honest proof-only package: sync.ts and syncRuntime.ts are byte-identical to BASE (git diff BASE..HEAD touches only the test file). Discriminating power was established with six temporary behavioural mutations of sync.ts (parent deleted before remote ack; parent lookup restricted to the 50-row batch; dependents not held after a transient parent failure; finalize ignoring a pending parent; orphan parent not reconstructed; receipt written for a rejected shot) — every mutant fails the suite (12/15/10/4/5/6 failing tests respectively); sync.ts restored and verified identical (filecmp) before commit.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f79fa70f-f7ed-4d16-bd5c-5e8caa708a56/w02-01-r3-artifacts.tgz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/219fe252-356b-4581-aa5d-cc7ee0f4d39f/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7dc902c8-a54a-43e0-8b07-1cd5453f8ac7/ac2-base-new-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/512a1788-fec8-442e-8135-c0e6ed56cb57/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e2ace99-4bac-4619-90d6-95444bdee158/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35d48351-8a97-4299-99ea-ce62aa42c3dd/mutations-summary.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d7c3b5d-339f-4800-96ca-a4b7d969c905/root-format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f5179dad-7721-4a1a-a03c-bab52954ac70/git-diff-check.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [
+          "READ-FIRST prerequisite APP_STORE_SUBMISSION.md does not exist at BASE_SHA (`git ls-files APP_STORE_SUBMISSION.md` -> empty); not created. Not a test failure, recorded as a missing user-stated precondition.",
+          "apps/mobile/node_modules was stale at session start (no @sentry/react-native, `cd apps/mobile && npx tsc --noEmit` would fail on diagnostics imports); repaired with `cd apps/mobile && npm ci` (exit 0), no source change."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w02-01/impl-r3",
+        "files_changed": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "head_sha": "65064f2735e8ce4cfb208e811071c74f68a66d75",
+        "out_of_scope_files": [],
+        "package_id": "W02-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "residual_risks": [
+          "Proof scope is the local drain (drainOutbox) against a fake transport that models Supabase semantics (idempotent session create by client UUID, shot.session_not_found for a missing parent, 408 timeout / 503 refusal). The real Edge Function and syncRuntime.ts scheduling/backoff are not exercised (syncRuntime.ts unchanged and covered only by the existing sync*.test.ts suites).",
+          "Crash model is process death after a completed statement (PRAGMA synchronous=OFF, connection closed); power loss mid-fsync and SQLite file corruption are not modelled.",
+          "Physical device process-death acceptance remains outstanding per docs/RELEASE_READINESS_2026-09-07.md §11 (Apple plane, not this cloud package).",
+          "The suite takes ~75 s (30 tests, ~1,900 drain replays); it stays within Jest's default per-test timeout with margin (crash windows of 100 steps), but a much slower runner could approach it. No timeouts were changed.",
+          "artifacts/w02-01/ is gitignored (root .gitignore: artifacts/), so logs are provided as uploaded attachments rather than committed files."
+        ],
+        "summary": "W02-01 round 3 — proof-only result (VERIFIED). Defect search on BASE d8e5db3e: apps/mobile/src/data/sync.ts drainOutbox (sync.ts:292; nextBatch sync.ts:164 selects <=50 rows; queuedSession sync.ts:190; recoverSession sync.ts:206; parent DELETE after transport ack sync.ts:379; the parent-discovery loop calls queuedSession() for every shot.sync/session.finalize in the batch so a session.create beyond the batch is still pulled ahead; session rows are processed first and the row is DELETEd only after transport.createSession()/finalizeSession() resolves; a transient parent failure marks its dependents 'pending' without spending attempts; syncShots writes a sync_receipt only for server-accepted ids and reconstructs a missing parent via recoverSession() from local_session) already satisfies the objective. The new real-SQLite suite (30 tests; 4 scenarios x crash-after-every-step incl. 5 windows for the 50-row-batch scenarios + lost-ack + refused at every round trip; orphan-parent reconstruction; repair parking; exact enumeration of 16 killed step kinds) passes on BASE_SHA (exit 0, 30/30, artifacts/w02-01/ac2-base-new-suite.log) and on the candidate, so no behavioural change was made to sync.ts or syncRuntime.ts (git diff d8e5db3e..65064f27 --stat: only apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts, +741). Six behavioural mutants of sync.ts each fail the suite (artifacts/w02-01/mutation-*.log, mutations-summary.log); sync.ts restored byte-for-byte. AC1 exit 0 (71/71 across w02OutboxDependencyOrder + sync*.test.ts), AC3 tsc exit 0, AC4 eslint+prettier exit 0, root pnpm format:check exit 0, git diff --check exit 0. Branch devin/pp/w02-01/impl-r3 pushed (fast-forward from BASE, one commit), head 65064f2735e8ce4cfb208e811071c74f68a66d75. No PR opened. AC2 exit_code is reported as 1 because the 'defect FAILS on BASE' branch is not satisfiable honestly (BASE passes); status PASS reflects the criterion's explicit alternative: honest proof-only result with no production change."
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-4"
+}

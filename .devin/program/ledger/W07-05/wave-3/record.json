@@ -1,0 +1,274 @@
+{
+  "agents": [
+    {
+      "label": "implement-W07-05-r3",
+      "phase": "implement",
+      "prompt_sha256": "fa810e6dd155075e25e902d2055f079ba0a5ce5e5a95806b767e1b5e49fe9704",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-05-r3",
+      "phase": "review",
+      "prompt_sha256": "beb8c6a2802ee5f9cbe8b5ebb363c118a4b30b43fc404dfc5b302b63b84f638b",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-05-r3",
+      "phase": "adversary",
+      "prompt_sha256": "4add785e44afc64685c3d907bcb648b2cd3878d752eaaaface38ea36abeb4cb4",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.5",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W07-05",
+  "requeued_from": {
+    "branch": "devin/pp/w07-05/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w07-05/attack-184af537",
+      "adversary_breaks": [
+        {
+          "expected": "A lapse after a later verified premium period is 'Membership expired' (kind expired, no refund claim). A bound verdict must not describe any purchase other than the one it was bound to — a refund is a money event the server did not report for the current lapse ('never invents entitlement').",
+          "observed": "Flow: purchase #1 journaled -> server verdict refunded (journal removed, fulfilmentVerdict kept) -> member re-subscribes outside the app, reconcile shows 'Pro active through <horizon>' -> that membership lapses (access.premium=false). selectMembershipState().label === 'Purchase refunded'; PaywallScreen renders 'PURCHASE REFUNDED ... The App Store confirmed this purchase was refunded.' The only refund the server ever confirmed was purchase #1; accessStore never clears fulfilmentVerdict when premium is later granted, so membershipState.ts re-reads it after any subsequent lapse.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/attack_w07_05_membership.test.tsx -t 'A1 replay'  (2 tests, both fail, exit 1)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/attack_w07_05_membership.test.tsx",
+          "title": "Replay: stale bound 'refunded' verdict is re-applied to a LATER, unrelated membership lapse (Settings 'Purchase refunded', Paywall 'PURCHASE REFUNDED / The App Store confirmed this purchase was refunded')"
+        },
+        {
+          "expected": "A deterministic state for one server truth: either the sync response carries the lapsed horizon and the client shows 'Membership expired' consistently (including cold start), or the client never shows 'expired' from a stale premium snapshot. Behaviour must not depend on which endpoint answered last.",
+          "observed": "After a verified horizon lapses, refreshAccess() leaves the stale premium canonicalBilling in place (publishAccess only replaces canonicalAccess) so label='Membership expired'; a following reconcileBilling({force:true}) stores billing {premium:false, expiresAt:null} and the label flips to 'Upgrade required' (kind free). After process death + initialize()+syncBilling() the lapsed member is kind 'free' (paywall never shows MEMBERSHIP EXPIRED). The 'expired' state therefore only exists as a side effect of a stale snapshot the objective says must not drive UI.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/attack_w07_05_membership.test.tsx -t 'A2 clock/order'  (2 tests, both fail, exit 1)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/attack_w07_05_membership.test.tsx",
+          "title": "Expired state is order-dependent: same server truth yields 'Membership expired' after /v1/me/access but 'Upgrade required' after the very next successful /v1/billing/sync, and is lost entirely on cold start"
+        },
+        {
+          "expected": "Grace copy must not claim a current server report when the last contact failed; it may say the last verified end date has passed and verification could not be refreshed. Stating 'our server still reports ... active' invents server truth.",
+          "observed": "Verified member; server then returns 5xx/timeout for sync+access (reconciliation.status='unavailable', snapshot retained); device clock passes horizon. Paywall member page: 'MEMBERSHIP ACTIVE · RENEWAL UNCONFIRMED ... Our server still reports your membership active past Sep 8, 2026, the last end date it verified.' describeMembershipState ignores reconciliationStatus for grace copy.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/attack_w07_05_membership.test.tsx -t 'A3 network'  (2 tests, both fail, exit 1)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/attack_w07_05_membership.test.tsx",
+          "title": "Grace copy asserts a live server report ('Our server still reports your membership active past <date>') while reconciliation is 'unavailable' — every server call since the horizon failed"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "184af537a3691bd4444600fe108f79fffdb63225"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2cd6a6c5-b064-43cf-aaed-38ae43dfd48c/attack-jest-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3552615a-e5ca-4312-8a8c-d73f8ecbd014/ac1-candidate-rerun.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5bacbe52-dc88-4e78-84aa-dfc5a5842ee6/attack-lint-typecheck.log"
+        ],
+        "attack_branch": "devin/pp/w07-05/attack-2b257a06",
+        "attack_branch_sha": "ed8ddcffbfd17cfc5ff1f01973dcfcf9cdf1f4c1",
+        "attacked_sha": "2b257a064f1fdf852ebd6a5910229beb03c54f23",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "A non-premium server access answer supersedes every previously synced billing horizon (server contract: billing.premium === access.premium, horizon reported only while expires_at > now). The UI must show the same state the cold start shows ('Pro active', no horizon, no Manage subscription) until a new billing sync supplies a server horizon; grace copy must not contradict an access answer that just re-verified premium past the horizon.",
+            "observed": "syncBilling → billing{premium:true, expiresAt:2027-03-01} → refreshAccess answers premium:false (client shows 'free', but canonicalBilling is kept) → refreshAccess answers premium:true again (e.g. lifetime bought on another device): selectMembershipState returns horizon '2027-03-01T00:00:00.000Z', manageSubscription:true, label 'Pro active through Mar 1, 2027'; Settings renders the Manage subscription row. A cold start on the identical server state returns horizon:null, manageSubscription:false, label 'Pro active'. Variant: after the horizon passes and the server re-answers premium:true, grace detail says 'it has not re-verified a renewal yet' even though the real server (effectivePremium(): premium only while expires_at > now) can only answer premium with a newer expires_at.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w07MembershipStatesAttack.test.tsx -t 'ATTACK 1'  (3 tests; all fail on 2b257a06)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx",
+            "title": "Stale canonicalBilling horizon survives a non-premium access answer and re-attaches to a later, unrelated premium grant (revoked horizon + Manage subscription rendered; path-dependent vs cold start)"
+          },
+          {
+            "expected": "Either the terminal verdict is persisted beside the journal (so relaunch presents the same server-stated 'expired'/'refunded' state), or the package documents the expired state as single-session; presentation must not silently change across relaunch for unchanged server truth.",
+            "observed": "initialize() with a pending purchase whose sync returns a bound outcome:'expired' → kind 'expired'. clearAccessStoreConfiguration() + configure over the same durable journal (record already removed by the settle) + initialize() → kind 'free', label 'Upgrade required'.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w07MembershipStatesAttack.test.tsx -t 'ATTACK 2'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx",
+            "title": "Server-bound terminal verdict (expired/refunded) is in-memory only: 'Membership expired' on one launch becomes 'Upgrade required' on the next for identical server truth"
+          },
+          {
+            "expected": "The server's free-rating ledger stays visible in the membership row/value page while the expired/refunded verdict is presented (e.g. 'Purchase refunded · 2 free ratings left').",
+            "observed": "Settings membership row accessibility value 'Purchase refunded' / Paywall copy contains 'MEMBERSHIP EXPIRED' and the generic 'A completed rating uses one free rating…' but nowhere states the server's remaining ledger (2 free ratings). Pre-candidate SettingsScreen states the ledger for every non-premium account (AGENTS.md free-rating ledger freshness).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w07MembershipStatesAttack.test.tsx -t 'ATTACK 3'  (2 tests)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx",
+            "title": "Expired/refunded state hides the server free-rating ledger (Settings row and Paywall value page drop '2 free ratings left' although access.canStartRating=true, availableToReserve=2)"
+          },
+          {
+            "expected": "Client copy must not assert charging outcomes it cannot verify (App Store owns renewals/charges; an auto-renewing subscription keeps charging regardless of client verification state). Grounded copy per APP_STORE_SUBMISSION.md / knowledge rule 'do not invent product facts' would say the retry itself is not a purchase, e.g. 'Retry verification is not a purchase and opens no store request.'",
+            "observed": "describeMembershipState detail: 'Retry verification without opening the app store; nothing more will be charged.' (pending, premium access) and 'Our server can’t confirm it right now — nothing more will be charged.' (HOLD, both variants).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w07MembershipStatesAttack.test.tsx -t 'ATTACK 4'  (3 of 4 fail: pending (member), hold, hold (member))",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx",
+            "title": "Copy invents a billing guarantee: pending (member) and HOLD detail say 'nothing more will be charged'"
+          }
+        ],
+        "package_id": "W07-05",
+        "summary": "W07-05 adversarial run against candidate 2b257a06 (branch devin/pp/w07-05/impl-r3). Attack file apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx (test-only; no production code or candidate-owned tests touched) pushed on devin/pp/w07-05/attack-2b257a06 @ ed8ddcffbfd17cfc5ff1f01973dcfcf9cdf1f4c1 (parent = candidate sha). VERIFIED `cd apps/mobile && npx jest --ci __tests__/w07MembershipStatesAttack.test.tsx` → exit 1, 50 executed / 41 passed / 9 failed / 0 skipped (attack-jest-run.log). 12 attack classes: (1) stale billing snapshot re-attached to a later premium grant [BREAK P1, 3 tests]; (2) expired verdict across process death/relaunch [BREAK P3]; (3) free-rating ledger hidden in expired state [BREAK P3, 2 tests]; (4) invented 'nothing more will be charged' guarantee in pending/HOLD copy [BREAK P3, 3/4 variants]; (5) interleaved account switch A→B while A's billing sync / bound verdict is in flight — HELD (A's late answer dropped, B unaffected); (6) double-submit Retry verification during in-flight sync — HELD (1 sync, no store call); (7) replayed / mis-bound dispositions (foreign pendingId, stale attemptId, different transactionId, verifiedAt < purchasedAt, NaN verifiedAt, forged 'fulfilled' beside non-premium access) — HELD (stay pending, journal not removed); (8) boundary horizons and clocks (empty/garbage/whitespace/overflow → fulfilled without horizon; max date, epoch, far past, exact-now, now-1ms → grace; clock far-ahead+rollback, NaN clock, stale expiresAt on non-premium billing) — HELD; (9) corrupt/partial journal (10 shapes) → HOLD, no plans/purchase, no getAccess — HELD; (10) network failures during pending verification (timeout, 503, 429+Retry-After, invalid body, ECONNRESET) → HOLD + real accessApi 429/5xx retryable, 3xx not retryable, billing/access disagreement rejected — HELD; (11) Manage subscription openURL rejection (Settings + Paywall) → notice, no crash, no entitlement change — HELD; (12) forged fulfilled verdict beside non-premium access never renders fulfilled — HELD. No P0 found: no invented entitlement, price, purchase offer or crash on any attacked path; free-rating ledger never charged. Candidate AC1 re-run with the attack file present: `npx jest --ci --silent __tests__/w07MembershipStates.test.tsx __tests__/billing*.test.ts __tests__/paywall*.test.tsx` exit 0, 171/171 (ac1-candidate-rerun.log). Attack file hygiene: `cd apps/mobile && npx tsc --noEmit` exit 0 (after `npm ci` — the pre-installed node_modules lacked @sentry/react-native, environment-only); root `npx eslint apps/mobile/__tests__/w07MembershipStatesAttack.test.tsx` exit 0; `npx prettier --check` same file exit 0 (attack-lint-typecheck.log). Not exercised (UNKNOWN, Linux only): Apple runtime / Linking to apps.apple.com on device; no SQL/Edge surfaces were added by this package so unauthorised-role attacks were not applicable. INFERRED from supabase/functions/api/index.ts (effectivePremium + POST /v1/billing/sync): real server never reports a premium horizon past now and billing.premium === access.premium, which is the basis for the P1 severity."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4489c051-feee-480d-a2aa-ad1db664e5e3/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w07MembershipStates.test.tsx __tests__/billing*.test.ts __tests__/paywall*.test.tsx",
+            "executed": 171,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC1",
+            "note": "VERIFIED on HEAD 2b257a06: 5 suites / 171 tests pass. Base proof for the new regression file: on BASE_SHA the file's imports (src/billing/membershipState.ts, selectMembershipState) do not exist so the suite fails to compile (exit 1, 0 executed) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8d6214c-786b-471b-a378-f4d2d4b4b4a4/ac1-base.log. Against the prior-round r2 sources (184af537 files restored onto base) the same file runs: exit 1, 37 executed, 19 passed, 18 failed, 0 skipped — https://la-hacks-rttothemoon.devinenterprise.com/attachments/73986bce-080c-42eb-a1c6-908618ef3484/ac1-r2-sources.log (failures cover A1 stale-refund replay, A2 order-dependent/cold-start expired, A3 grace copy, lifetime Manage-subscription boundary, pending retry/no-offer). Repo-relative copies: artifacts/w07-05/ac1-head.log, ac1-base.log, ac1-r2-sources.log (artifacts/ is gitignored, not committed).",
+            "passed": 171,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca5eae7-f60b-4675-ac1a-bd09bda733c3/ac2-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC2",
+            "note": "VERIFIED on HEAD 2b257a06 after `cd apps/mobile && npm ci` (npm only, no pnpm inside apps/mobile). No diagnostics emitted.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a8761f9-1a2d-4ac2-90fd-f3995e421bd0/ac3-head.log",
+            "command": "npx eslint apps/mobile/__tests__/w07MembershipStates.test.tsx apps/mobile/src/billing/membershipState.ts apps/mobile/src/screens/PaywallScreen.tsx apps/mobile/src/screens/paywallCopy.ts apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/state/accessStore.ts && npx prettier --check <same six files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC3",
+            "note": "VERIFIED from repo root on HEAD 2b257a06 (root ESLint flat config + root Prettier). Also VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/37d85037-84ea-4114-862f-e95179a46327/format-check-head.log) and `git diff --check HEAD~3` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/4716d547-ba2a-4060-a770-46bd54559fb0/git-diff-check-head.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA f250acd7 on branch devin/pp/w07-05/impl-r3. Reused the sound parts of r2 (membershipState.ts module, Paywall/Settings wiring, paywallCopy hero mapping) but re-derived the state machine so every displayed state is bound to a server answer: (1) accessStore now stores canonicalBilling from /v1/billing/sync and a fulfilmentVerdict bound to the device's own pending id/attempt/transaction; publishAccess/initialize/direct-access loads clear fulfilmentVerdict as soon as a server access answer grants premium (A1: a refund verdict for purchase #1 can never describe a later lapse). (2) 'expired' is derived ONLY from a bound expired/refunded verdict or a billing.purchase_settled error — never from a stale premium billing horizon beside non-premium access; a lapsed member whose server truth is premium=false is deterministically 'free' after access refresh, billing sync and cold start (A2). Grace ('renewal unconfirmed') requires access.premium=true plus a premium billing horizon in the past. (3) Grace copy branches on reconciliationStatus: when 'unavailable' it says the server could not be reached to re-verify since the last verified horizon, never that the server 'still reports' anything (A3). Manage subscription (Linking.openURL('https://apps.apple.com/account/subscriptions'), with a non-fatal brand notice on failure) is shown in Settings and Paywall only when the server attached a premium expiry horizon — lifetime/non-consumable access (expiresAt null) never exposes it. Pending/HOLD states withhold plans, prices and purchase CTAs and offer 'Retry verification' (server verifyPending, not StoreKit). Prices are only ever store-returned plan.price. Regression suite committed first (7ad897dd), implementation second (706a2435), plus a follow-up (2b257a06) making the premium-horizon read null-safe (`billing?.premium`) so an untouched workflow test fixture that seeds the store without canonicalBilling keeps passing.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4489c051-feee-480d-a2aa-ad1db664e5e3/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8d6214c-786b-471b-a378-f4d2d4b4b4a4/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/73986bce-080c-42eb-a1c6-908618ef3484/ac1-r2-sources.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca5eae7-f60b-4675-ac1a-bd09bda733c3/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a8761f9-1a2d-4ac2-90fd-f3995e421bd0/ac3-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37d85037-84ea-4114-862f-e95179a46327/format-check-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4716d547-ba2a-4060-a770-46bd54559fb0/git-diff-check-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3cc4673-90f9-4774-a1e4-492994122179/jest-full-head.log"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w07-05/impl-r3",
+        "files_changed": [
+          "apps/mobile/__tests__/w07MembershipStates.test.tsx",
+          "apps/mobile/src/billing/membershipState.ts",
+          "apps/mobile/src/screens/PaywallScreen.tsx",
+          "apps/mobile/src/screens/paywallCopy.ts",
+          "apps/mobile/src/screens/SettingsScreen.tsx",
+          "apps/mobile/src/state/accessStore.ts"
+        ],
+        "head_sha": "2b257a064f1fdf852ebd6a5910229beb03c54f23",
+        "out_of_scope_files": [
+          "apps/mobile/src/state/accessStore.ts — under serial group `mobile-billing`, which this package holds; minimum wiring: store the billing-sync snapshot (canonicalBilling), bind/store the server fulfilment verdict (fulfilmentVerdict), clear a stale verdict once a later server access answer grants premium (A1), clear canonicalBilling on verification failure, and expose selectMembershipState() consumed by Settings/Paywall."
+        ],
+        "package_id": "W07-05",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w07MembershipStates.test.tsx (37 tests; new file — did not exist on BASE_SHA)"
+        ],
+        "residual_risks": [
+          "Apple runtime behaviour (Linking.openURL to apps.apple.com/account/subscriptions actually opening the App Store subscriptions sheet, StoreKit price rendering) is UNKNOWN from Linux; needs the coordinator's M4 verification path. Jest asserts the exact URL and the Linking call only.",
+          "canonicalBilling / fulfilmentVerdict are in-memory store fields (not persisted); after process death the membership state is rebuilt from the persisted pending journal + fresh /v1/me/access + /v1/billing/sync answers, which is the intended server-authoritative behaviour but means an 'expired' verdict is not shown across cold start unless the server re-reports it (by design per A2 — no stale-snapshot-driven UI).",
+          "Full mobile Jest on HEAD: `cd apps/mobile && npx jest --ci --silent` exit 0, 313 suites passed / 1 suite skipped (pre-existing, documented in TEST_MATRIX), 6091 passed / 1 skipped / 0 failed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3cc4673-90f9-4774-a1e4-492994122179/jest-full-head.log. An intermediate tree (706a2435) failed __tests__/wf/RootNavigator.buttons.test.tsx because that fixture seeds useAccessStore without canonicalBilling; fixed at root in 2b257a06 without touching the test.",
+          "No PR opened; no push to main/ci-mac-*; no production Supabase / App Store Connect / secrets touched."
+        ],
+        "summary": "Defect on BASE_SHA f250acd7 (VERIFIED by reading + base test run): apps/mobile/__tests__/w07MembershipStates.test.tsx and apps/mobile/src/billing/membershipState.ts do not exist; SettingsScreen.tsx derives the membership row purely from canonicalAccess.premium ('Pro active' / 'Upgrade required') and PaywallScreen.tsx has no pending/HOLD/grace/expired states, no Manage subscription entry, and no retry path; accessStore.ts (verifyBackend/verifyPending) discards the billing snapshot and the server disposition after use, so no server-bound state exists to render. The r2 candidate (184af537) added these but was broken by three adversary findings: A1 fulfilmentVerdict never cleared after a later premium grant (stale 'Purchase refunded' replayed on an unrelated lapse); A2 'expired' inferred from a stale premium canonicalBilling beside non-premium access (order-dependent, lost on cold start); A3 grace copy claimed 'Our server still reports your membership active' while reconciliation was 'unavailable'. Round 3: regression suite (37 tests) committed first at 7ad897dd — fails on base (module missing, exit 1) and 18/37 fail against the r2 sources; implementation at 706a2435 + null-safe follow-up at 2b257a06 resolves A1 (verdict cleared on any server-premium access answer), A2 (expired only from a bound verdict or purchase_settled error; stale billing never drives UI; deterministic 'free' across refresh/sync/cold start), A3 (unavailable-branch grace copy states the server could not be reached since the last verified horizon), adds Manage subscription (Settings row + Paywall button → https://apps.apple.com/account/subscriptions) gated on a server-attached premium expiry horizon so lifetime never shows it, and withholds plans/prices/purchase for pending/HOLD with a server-side Retry verification. AC1 171/171 exit 0, AC2 exit 0, AC3 exit 0, pnpm format:check exit 0, git diff --check exit 0, full mobile Jest 6091 passed / 0 failed / 1 documented skip exit 0. Branch devin/pp/w07-05/impl-r3 pushed; head 2b257a064f1fdf852ebd6a5910229beb03c54f23. No PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cd403e29-59b2-4ce2-9a39-9d439ee2810d/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w07MembershipStates.test.tsx __tests__/billing*.test.ts __tests__/paywall*.test.tsx",
+            "executed": 171,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC1",
+            "note": "VERIFIED by reviewer on HEAD 2b257a06 after `cd apps/mobile && npm ci` (exit 0, https://la-hacks-rttothemoon.devinenterprise.com/attachments/2e2b1c29-84d6-4c2a-88a4-345a39b59002/npm-ci.log). 5 suites / 171 tests, 0 failed, 0 skipped. Regression proof: new file copied alone onto BASE_SHA f250acd7 -> exit 1, 0 executed (suite fails to compile: `Cannot find module '../src/billing/membershipState'` and selectMembershipState missing) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b20b5029-8eca-4b58-80d5-c92ca20923a1/regress-base.log; same file on HEAD -> exit 0, 37 executed / 37 passed / 0 failed / 0 skipped — https://la-hacks-rttothemoon.devinenterprise.com/attachments/944ed9e7-bc53-4ef7-8261-7fe03a3c07c6/regress-head.log. Mutation sensitivity VERIFIED (six source mutations each reverted, https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce5a1cb9-7db4-44b4-bd30-9b6aa1212059/mutations-summary.log): removing the A1 verdict clear -> 1 failed; deriving expired from stale billing (A2) -> 4 failed; removing the unavailable-branch grace copy (A3) -> 3 failed; showing Manage subscription for lifetime (null horizon) -> 4 failed; not withholding the paywall offer on pending/HOLD -> 2 failed; removing the Settings Manage row -> 2 failed. Full mobile Jest on HEAD (not an acceptance gate, run for regressions): `cd apps/mobile && npx jest --ci --silent` exit 0, 313 suites passed / 1 suite skipped, 6091 passed / 1 skipped / 0 failed — the single skip is the documented Linux non-gate `__tests__/importedRealFootageAnalysis.test.ts` (docs/devin/TEST_MATRIX.md, `artifactsPresent ? describe : describe.skip`) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/c23067f6-12b5-487d-9ac8-9d964817afd3/jest-full-head.log. Repo-relative copies under artifacts/w07-05-review/ (gitignored).",
+            "passed": 171,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f2d23e84-b3b9-4478-a54b-24081ef5ecd9/ac2-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC2",
+            "note": "VERIFIED by reviewer on HEAD 2b257a06: no diagnostics emitted, exit 0 (non-test check, counts 0 by design).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bc7ff195-16d2-44b8-a271-01c0573a608e/ac3-head.log",
+            "command": "npx eslint apps/mobile/__tests__/w07MembershipStates.test.tsx apps/mobile/src/billing/membershipState.ts apps/mobile/src/screens/PaywallScreen.tsx apps/mobile/src/screens/paywallCopy.ts apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/state/accessStore.ts && npx prettier --check <same six files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-05-AC3",
+            "note": "VERIFIED by reviewer from repo root on HEAD 2b257a06 against all six files in `git diff --stat BASE..HEAD`: eslint exit 0, prettier --check exit 0 ('All matched files use Prettier code style!'). Non-test check, counts 0 by design.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "UNKNOWN from Linux: whether `Linking.openURL('https://apps.apple.com/account/subscriptions')` opens the App Store subscriptions sheet on device, and StoreKit price rendering. Jest pins the exact URL and the Linking call only; the coordinator's M4 path is needed for an Apple-runtime claim (REVIEW.md: no Apple-side claim without a green Mac Full Verify on this SHA).",
+          "INFERRED: canonicalBilling and fulfilmentVerdict are in-memory only; an 'expired'/'refunded' disposition is not shown after a cold start unless the server re-reports it. This matches the server-authoritative intent (A2) and does not invent state, but a user who force-quits right after a refund verdict will see 'Upgrade required' rather than 'Purchase refunded' — acceptable, noted for the coordinator.",
+          "INFERRED: PaywallScreen catches any Linking.openURL rejection and shows a non-fatal brand notice; there is no `canOpenURL` pre-check, which is fine on iOS for https URLs but means an unexpected platform refusal surfaces only as the notice."
+        ],
+        "package_id": "W07-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "2b257a064f1fdf852ebd6a5910229beb03c54f23",
+        "scope_violation": false,
+        "summary": "APPROVE W07-05 candidate 2b257a064f1fdf852ebd6a5910229beb03c54f23 (branch devin/pp/w07-05/impl-r3) vs BASE f250acd768bfdd9c04949e03e97002125958641e. Scope VERIFIED: `git diff --stat` lists six files; five are under write_paths and apps/mobile/src/state/accessStore.ts is listed in out_of_scope_files, is under the `mobile-billing` serial group this package holds, and is minimum wiring (store canonicalBilling from /v1/billing/sync, bind/store fulfilmentVerdict, clear the verdict on a later server premium answer, clear canonicalBilling on verification failure, expose selectMembershipState) — scope_violation=false. Shipped behaviour VERIFIED: selectMembershipState is consumed by SettingsScreen (membership row label + Manage subscription row gated on !localOnly && manageSubscription) and PaywallScreen (hero copy, pending/HOLD withhold plans/prices/CTA with server-side 'Retry verification', `paywall-manage-subscription` button); not dead code. All three acceptance criteria re-run by me on HEAD: AC1 exit 0 171/171/0/0; AC2 exit 0; AC3 eslint+prettier exit 0. Regression proof VERIFIED: the new 37-test file fails on BASE (exit 1, 0 executed — module missing) and passes on HEAD (exit 0, 37/37); six targeted source mutations each make 1–4 tests fail, so the suite is load-bearing for A1 (stale refund verdict replay), A2 (expired only from bound verdict/purchase_settled, deterministic 'free' across access refresh, billing sync and cold start), A3 (unavailable-branch grace copy never claims a live server report), lifetime never shows Manage subscription, and pending/HOLD withholding. Full mobile Jest on HEAD exit 0: 6091 passed / 0 failed / 1 documented skip (importedRealFootageAnalysis, TEST_MATRIX). Diff read in full against REVIEW.md/AGENTS.md/APP_STORE_SUBMISSION.md: prices only from store-returned plan.price (no literals); entitlement/premium derived only from canonicalAccess (server) with grace requiring access.premium=true plus a past server billing horizon; no RLS/grant/migration/edge/session-check changes (diff touches apps/mobile only); no test skipped/deleted/reordered, no `|| true`, `--passWithNoTests`, `@ts-ignore`, `any`, `eslint-disable`, timeout inflation or force-exit; no existing comment lines removed or edited; no forbidden copy terms (Android, Google Play, guest mode, Live Court, DUPR, competitors, accuracy %, superlatives) in added user-facing strings. Working tree clean at reviewed_sha; no PR opened, nothing pushed. Apple runtime behaviour of the subscriptions deep link remains UNKNOWN from Linux (non-blocking, needs M4).",
+        "verdict": "approve"
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-3"
+}

@@ -1,0 +1,373 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W06-06-r3",
+      "phase": "implement",
+      "prompt_sha256": "c17a46b9ecff3e51dd3a8d044a53e588bb9d8e83da43ec8bd7888ddb28cfd17c",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W06-06-r3",
+      "phase": "review",
+      "prompt_sha256": "3491c6685734b7d2c2229be29fb2e9287dfa6872897252cf4c5be42ae25a426a",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W06-06-r3",
+      "phase": "adversary",
+      "prompt_sha256": "ffa0b7d4617dbafc01b5f6e1d79edf77c1c127903d43c6b5428a617e72e4843d",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W06-06-r4",
+      "phase": "implement",
+      "prompt_sha256": "c551c9e8bdc62d1755a71f6f182e7c4c4ef40246b66fbebe31d8ac823da273f9",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.5",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W06-06",
+  "requeued_from": {
+    "branch": "devin/pp/w06-06/impl-r2",
+    "findings": {
+      "judge": [
+        "impl: unknown acceptance id 'W06-06-REGRESS'",
+        "impl: unknown acceptance id 'format-check'",
+        "impl: unknown acceptance id 'git-diff-check'"
+      ]
+    },
+    "head_sha": "4e6aa827fe86dc3709b3191a939c073dbff07d14"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [],
+        "attack_branch": "devin/pp/w06-06/attack-21c9b739",
+        "attack_branch_sha": "1bb2b7d1108efe2f074c756dbd6e23b27c37a02f",
+        "attacked_sha": "21c9b7397d04bd1240aaf5fd502b28997f1312c5",
+        "attacks_tried": 32,
+        "breaks": [
+          {
+            "expected": "Report status INVALID_INPUT naming consent/x.json, exit 1, no traceback; the candidate's own docs/tests claim too-deep JSON is 'recorded as an error, never silently dropped'.",
+            "observed": "VERIFIED: build_report() raises RecursionError('maximum recursion depth exceeded'); all three CLI paths exit 1 with a Python traceback on stderr and NO report on stdout (no status line at all). _read_json only catches RecursionError from json.load; the recursive _check_schema traversal of the successfully parsed object is unprotected (depth ~1200-3000 escapes; ~10000 is caught by the parser).",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP1DeepNestingCrash  (equivalent CLI: write a valid consent record with an extra field of 1500 nested arrays into <root>/consent/x.json, then `python3 ml/scripts/validation_protocol.py --report --inputs <root>` / `--json` / `--validate consent <root>/consent/x.json`)",
+            "severity": "P1",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Deeply nested JSON record crashes the runner with an uncaught RecursionError instead of INVALID_INPUT"
+          },
+          {
+            "expected": "Ambiguous record => INVALID_INPUT (object_pairs_hook duplicate detection).",
+            "observed": "VERIFIED: status COMPUTED with the last duplicate value used; no validation error.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP2DuplicateJsonKeys",
+            "severity": "P2",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Duplicate JSON keys are silently resolved last-wins: a consent showing state=withdrawn is loaded as active, a review showing quality_rating=1 is scored as 3"
+          },
+          {
+            "expected": "Not COMPUTED: duplicate reviewer identity / conflict-of-interest / withdrawn consent error (the module already lowercases assessed_by vs reviewer_id and protected aliases, so a single normalisation policy is expected).",
+            "observed": "VERIFIED: reviewer-test-0001 + REVIEWER-TEST-0001 accepted as two qualified reviewers => COMPUTED; footage with athlete_id=REVIEWER-TEST-0001 reviewed by reviewer-test-0001 => COMPUTED; withdrawn consent for ATHLETE-TEST-0001 leaves athlete-test-0001 footage eligible => COMPUTED.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP2CaseVariantIdentities",
+            "severity": "P2",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Identity comparisons are case-sensitive for uniqueness/conflict-of-interest/withdrawal (but case-insensitive elsewhere): one human re-cased counts as two independent reviewers, reviews footage of themself, and a consent withdrawal is bypassed by re-casing athlete_id"
+          },
+          {
+            "expected": "coach-qualification-policy-v1 (docs/COACH_QUALIFICATION_POLICY.md, and the module's own error text 'must be assessed by an admin') => INVALID_INPUT or BLOCKED.",
+            "observed": "VERIFIED: only exact self-assessment is refused; mutual assessment and adjudicator-as-assessor both yield COMPUTED.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP2PeerAssessedQualification",
+            "severity": "P2",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Peer-assessed qualification accepted: reviewers who assess each other (or are assessed by the clip's adjudicator) count as admin-qualified"
+          },
+          {
+            "expected": "Not COMPUTED (temporal ordering error).",
+            "observed": "VERIFIED: qualification.assessed_at 2026-12-01 with reviews submitted 2026-09-10 => COMPUTED; temporal ordering is enforced for ratification/capture/consent but not qualification.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP2ReviewBeforeQualification",
+            "severity": "P2",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Review submitted before the reviewer's qualification was assessed is pooled as a qualified blinded review"
+          },
+          {
+            "expected": "Unrecognised files under a governed input directory are reported (INVALID_INPUT or at least a named error), consistent with 'never silently dropped'.",
+            "observed": "VERIFIED: three withdrawn-consent files ignored, status COMPUTED, no error mentions them.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP2SilentlyIgnoredFiles",
+            "severity": "P2",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Files not matching <dir>/*.json (e.g. withdrawal saved as .JSON, .json.bak, or in a sub-folder) are silently ignored; footage stays eligible and record_counts is silent"
+          },
+          {
+            "expected": "Report refuses or names evidence pointing at footage the run never saw.",
+            "observed": "VERIFIED: COMPUTED, orphan records appear only in record_counts.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3OrphanRecords",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Orphan reviews/adjudications/predictions for clip_ids with no footage record are counted then ignored; report still COMPUTED"
+          },
+          {
+            "expected": "Unambiguous review identity (separator not permitted in ids, or structured (clip_id, reviewer_id) references).",
+            "observed": "VERIFIED: ('clip-test-0001.rev','reviewer-test-0002') and ('clip-test-0001','rev.reviewer-test-0002') both validate and produce identical review_id; the second legitimate review would be refused as a duplicate and adjudication review_ids cannot disambiguate.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3ReviewIdAmbiguity",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "review_id = '<clip_id>.<reviewer_id>' is ambiguous because '.' is legal in both ids: distinct (clip, reviewer) pairs collide"
+          },
+          {
+            "expected": "Blank required free-text refused.",
+            "observed": "VERIFIED: validate_record returns [] for all four.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3WhitespaceFreeText",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Whitespace-only strings satisfy minLength=1 for rationale, cannot_evaluate_reason, abstention reason and rubric_version"
+          },
+          {
+            "expected": "Self-verification refused, matching the no-self-assessment rule applied to reviewers.",
+            "observed": "VERIFIED: validate_record('footage') returns [] with rights.verified_by == rights_holder_id and metadata_verification.verified_by == athlete_id.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3SelfVerifiedFootage",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Footage rights and capture metadata may be 'verified' by the rights holder / athlete themselves"
+          },
+          {
+            "expected": "Surfaced as an error or explicit note; owner-supplied evidence must not disappear.",
+            "observed": "VERIFIED: COMPUTED using the reviewers' rating; the adjudication vanishes from the report.",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3AdjudicationOverAgreementIgnored",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Adjudication filed for a clip whose reviewers agree is validated then silently dropped (not counted, not mentioned)"
+          },
+          {
+            "expected": "File names escaped/quoted in the text report; exactly one Status line.",
+            "observed": "VERIFIED: render_report output contains both 'Status: INVALID_INPUT' and a forged 'Status: COMPUTED' line (JSON output is unaffected).",
+            "repro": "cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol.BreakP3TextReportInjection",
+            "severity": "P3",
+            "test_file": "ml/scripts/test_attack_w06_06_validation_protocol.py",
+            "title": "Text report injection via file names: an input file named 'x\\nStatus: COMPUTED\\nNumerical release authorized: yes\\n.json' forges report lines"
+          }
+        ],
+        "package_id": "W06-06",
+        "summary": "Attacked W06-06 candidate 21c9b7397d04bd1240aaf5fd502b28997f1312c5 (checked out; `git rev-parse HEAD` VERIFIED). Baseline VERIFIED at candidate: AC1 `python3 -m unittest discover -s ml/scripts -p 'test_*.py'` exit 0, Ran 61, OK; AC2 `python3 ml/scripts/validation_protocol.py --report` exit 0, Status: BLOCKED_EXTERNAL. Attack tests: ml/scripts/test_attack_w06_06_validation_protocol.py on branch devin/pp/w06-06/attack-21c9b739 @ 1bb2b7d1108efe2f074c756dbd6e23b27c37a02f (pushed; `git ls-remote` VERIFIED; diff vs candidate = 1 file, +447, candidate code/tests untouched). Run: `cd ml/scripts && python3 -m unittest test_attack_w06_06_validation_protocol` => Ran 32 tests, FAILED (failures=22, errors=0): 22 failures (incl. subTests) across the 19 tests in the 12 Break* classes = 12 confirmed breaks (1 P1, 5 P2, 6 P3); all 13 HeldAgainstAttack tests passed = attacks that did not break the candidate: replayed review under a second file name, replayed footage bytes under a new clip_id, 1e400 numeric literal (incl. --json allow_nan), UTF-8 BOM / empty file / directory named *.json, adjudicator who verified the footage (CoI), adjudication before its reviews, far-future capture/verification clocks, invalid offsets/24:00/Feb-30 timestamps, uppercase protected hash, prediction outside scale / inverted interval, proposed (unratified) protocol never computes, bool/float/string ratings, rating outside protocol scale, all-abstained clip stays unevaluable. Most serious: P1 uncaught RecursionError on a ~1500-deep record (parser-level catch exists, schema-traversal catch does not) — the runner emits no BLOCKED/INVALID status at all on that supported path. Not applicable to this Python-only package: network, SQL/Edge roles, billing conservation, UI copy, process death. No PR opened, nothing pushed to main/ci/mac-*, no production surface touched."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/205c4b01-193f-4738-92a2-b2700e411e2b/ac1-tests-head.log",
+            "command": "python3 -m unittest discover -s ml/scripts -p 'test_*.py'",
+            "executed": 61,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC1",
+            "note": "VERIFIED at HEAD 21c9b739 from the repo root: 'Ran 61 tests in 0.132s / OK' (17 pre-existing ml/scripts/test_validate_annotations.py tests + 44 ml/scripts/test_validation_protocol.py tests). Also VERIFIED with `python3 -W error -m unittest discover -s ml/scripts -p 'test_*.py'` -> Ran 61, OK (no warnings) and py_compile of both files. Regression proof (not a manifest acceptance id, recorded here): BASE_SHA worktree f250acd7 + ONLY ml/scripts/test_validation_protocol.py copied over -> same command exit 1, 'Ran 18 tests FAILED (errors=1)' ModuleNotFoundError: No module named 'validation_protocol' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/a3103698-f506-4a6b-a2c8-fbe5b35806cd/regress-base.log); the 17 pre-existing tests alone pass on BASE_SHA (Ran 17, OK). Hygiene VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b03b5c4-b32a-475a-9978-293901a5b0eb/format-check.log); `git diff --check f250acd7` exit 0.",
+            "passed": 61,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/afc861f5-871c-464a-aa51-82d28ac71eba/ac2-report-head.log",
+            "command": "python3 ml/scripts/validation_protocol.py --report",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC2",
+            "note": "VERIFIED at HEAD 21c9b739: prints 'Status: BLOCKED_EXTERNAL', 'Records: protocol=0, consent=0, footage=0, reviewers=0, reviews=0, adjudications=0, predictions=0', and one entry per missing input with expected path, requirement and what is missing: ratified_protocol, consented_footage, verified_capture_metadata, rights_clearance, qualified_blinded_reviewers, blinded_reviews, adjudication (owner must supply) and candidate_predictions (engineering must supply); ends 'Numerical release authorized: no'. `--report --json` VERIFIED parseable by a strict JSON parser (parse_constant rejecting NaN/Infinity): status BLOCKED_EXTERNAL, numerical_release_authorized=false, 8 missing_inputs. datasets/validation-protocol/ does not exist in the checkout (zero committed labels). On BASE_SHA the same command exits 2 (file absent; https://la-hacks-rttothemoon.devinenterprise.com/attachments/5de09e2a-3412-4594-9720-fe5d9323c4a0/ac2-base.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started a fresh branch devin/pp/w06-06/impl-r3 at BASE_SHA f250acd7 and cherry-picked the four r2 commits (r1 tests 0038ac35, r1 implementation cbe63ec7, r2 regression tests 357323fb, r2 implementation 4e6aa827 -> 57c415dd, 389cd6e5, cf5386ef, 25d0d0f7) — all cherry-picks applied cleanly (docs/EVALUATION.md and ml/ are unchanged between 55d80326 and f250acd7). Added one r3 commit (21c9b739) inside write_paths fixing the reviewer's round-1 non-blocking doc note: docs/EVALUATION.md §5 said 'no new files were added under ml/' immediately above §5.1 which documents two new ml/scripts files; reworded to scope that statement to the 2026-09-04 audit. Independently re-verified the round-1 adversary suite (devin/pp/w06-06/attack-385cd06d, copied temporarily, NOT committed) against HEAD: Ran 20, 18 pass; the only 2 failures are A4 fixture PRECONDITIONS (they assert the candidate's own fixture reuses one credential_ref / one media_sha256, which the r2 fixture no longer does by design); the corresponding positive checks (duplicate credential_ref and duplicate media_sha256 -> INVALID_INPUT) are pinned in ml/scripts/test_validation_protocol.py. Round-3 structured output reports EXACTLY the manifest acceptance ids W06-06-AC1 and W06-06-AC2; the regression proof, format:check and git diff --check results are recorded in the AC1 note rather than as extra acceptance ids (the round-2 judge rejection).",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/205c4b01-193f-4738-92a2-b2700e411e2b/ac1-tests-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/afc861f5-871c-464a-aa51-82d28ac71eba/ac2-report-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a3103698-f506-4a6b-a2c8-fbe5b35806cd/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5de09e2a-3412-4594-9720-fe5d9323c4a0/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b03b5c4-b32a-475a-9978-293901a5b0eb/format-check.log"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w06-06/impl-r3",
+        "files_changed": [
+          "docs/EVALUATION.md",
+          "ml/scripts/test_validation_protocol.py",
+          "ml/scripts/validation_protocol.py"
+        ],
+        "head_sha": "21c9b7397d04bd1240aaf5fd502b28997f1312c5",
+        "out_of_scope_files": [],
+        "package_id": "W06-06",
+        "regression_tests_added": [
+          "ml/scripts/test_validation_protocol.py"
+        ],
+        "residual_risks": [
+          "Protected-alias matching is case-insensitive substring over ids derived from the pinned constants and datasets/corpus/recordings.json (17 aliases, shortest 'afn-provic', so no generic token); a protected recording re-encoded to a new hash under a brand-new id cannot be detected by content — same limit as the benchmark release gate.",
+          "The corpus registry is read at runtime from REPO_ROOT/datasets/corpus/recordings.json; if absent/unparseable the validator falls back to the 4 pinned ids + 7 pinned hashes.",
+          "`python3 ml/scripts/validation_protocol.py --report` is not invoked by scripts/verify-cloud.sh (ci-scripts serial group not held by this package); only its unit tests run in the ml stage. Follow-up for a package holding ci-scripts.",
+          "COMPUTED-status gate verdicts are point estimates without intervals (stated in the report text); the ratified protocol must define the uncertainty plan before any numerical claim.",
+          "artifacts/w06-06/*.log are gitignored (repo-local only); the uploaded attachment URLs above are the durable artifacts."
+        ],
+        "summary": "Gap on BASE_SHA f250acd7 (VERIFIED): ml/scripts/validation_protocol.py and ml/scripts/test_validation_protocol.py do not exist (`ls ml/scripts` -> only validate_annotations.py + test_validate_annotations.py); `python3 ml/scripts/validation_protocol.py --report` exits 2 (No such file); docs/EVALUATION.md has no validation-protocol section (§5 ends at line 414, then §6). Round-2 judge rejection ('unknown acceptance id W06-06-REGRESS / format-check / git-diff-check') was a reporting defect, not a code defect: the r2 candidate was never reviewed. Resolution: branch devin/pp/w06-06/impl-r3 @ 21c9b7397d04bd1240aaf5fd502b28997f1312c5 = BASE_SHA + the four r2 commits cherry-picked cleanly + one doc-consistency commit; acceptance_results contains exactly W06-06-AC1 and W06-06-AC2. What the package delivers (INFERRED from code read + VERIFIED by the 44 tests): strict JSON-schema-subset validators for protocol / consent / footage / reviewer / review / adjudication / prediction records (unknown fields rejected, opaque ids only, SHA-256 media identity, finite numbers, |int| <= 2^53, real calendar timestamps); cross-record checks — protected holdouts refused by content hash (7 pinned hashes from packages/evaluation/src/benchmarkRelease.ts + datasets/corpus/recordings.json derivations) and by case-insensitive alias substring (wm-dink-01, afn-vic-2025, rec-…, legacy ids); coach-qualification-policy-v1 (verified evidence only, no self-assessment, /synthetic/i identities rejected, one credential_ref per reviewer, reviewer role required, conflict-of-interest with athlete/rights holder/verifier); adjudicator independence (authored no review of the clip, lists every review); temporal ordering (reviews after ratification/capture/consent, adjudication after reviews, verification after capture); athlete-scoped consent withdrawal; single frozen candidate subject per report; all-abstained clips never scored from the adjudicator; null/non-object/unparseable/too-deep JSON recorded as errors, never silently dropped. Report statuses BLOCKED_EXTERNAL / BLOCKED_INTERNAL / INVALID_INPUT / COMPUTED, numerical_release_authorized=false and release_decision='human' in every status; --json uses allow_nan=False. Zero labels, coaches, metrics or fixtures committed (datasets/validation-protocol/ absent; tests use in-memory/tempdir fixtures). The runner's entry point is the AC2 CLI command and its tests run in CI's existing ml stage (scripts/verify-cloud.sh ml stage = the AC1 command); wiring the --report call into verify-cloud.sh is under the ci-scripts serial group this package does not hold, left as a follow-up. Checks VERIFIED at HEAD: AC1 exit 0, 61/61; AC2 exit 0, BLOCKED_EXTERNAL naming all 8 missing inputs; `pnpm format:check` exit 0; `git diff --check f250acd7` exit 0; `python3 -W error -m unittest …` exit 0. Regression proof VERIFIED: test file alone on a BASE_SHA worktree -> exit 1, Ran 18, FAILED (errors=1, ModuleNotFoundError). Scope VERIFIED: `git diff --stat f250acd7 HEAD` = docs/EVALUATION.md (+129/-3), ml/scripts/test_validation_protocol.py (+945), ml/scripts/validation_protocol.py (+1703) — all inside write_paths, no serial-group paths touched, out_of_scope_files empty. No PR opened, nothing pushed to main or ci/mac-*, no production surface touched. External blocker stands (owner must supply consented footage, verified metadata, qualified blinded reviewers, adjudication); blocked=false because the package objective (schemas + validators + BLOCKED_EXTERNAL runner, zero labels) is complete."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d700fd9-bab4-435b-b56c-41cf5ca4a34c/ac1-head.log",
+            "command": "python3 -m unittest discover -s ml/scripts -p 'test_*.py'",
+            "executed": 61,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC1",
+            "note": "VERIFIED by my own run at 21c9b739 from the repo root (Python 3.12.13): 'Ran 61 tests in 0.087s / OK'. Breakdown VERIFIED: -p test_validation_protocol.py -> Ran 44 OK; -p test_validate_annotations.py -> Ran 17 OK. `python3 -W error -m unittest discover -s ml/scripts -p 'test_*.py'` exit 0. No skip decorators, expectedFailure, subprocess, network or eval usage in either new file (grep). Pre-existing ml/scripts/validate_annotations.py and test_validate_annotations.py are unchanged (git diff = 0 lines). Regression proof VERIFIED (recorded here, not as an extra id): git worktree at BASE_SHA f250acd7 + ONLY ml/scripts/test_validation_protocol.py copied -> same command exit 1, 'Ran 18 tests FAILED (errors=1)' ModuleNotFoundError: No module named 'validation_protocol' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce399186-0ad9-4198-abd9-219b5c265fb5/regress-base.log); the 17 pre-existing tests alone on BASE_SHA: Ran 17 OK. `git diff --check f250acd7 HEAD` exit 0.",
+            "passed": 61,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e58314e4-2504-4c3b-9f25-2c6adc9dcb27/ac2-head.log",
+            "command": "python3 ml/scripts/validation_protocol.py --report",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC2",
+            "note": "VERIFIED by my own run at 21c9b739: exit 0; output 'Status: BLOCKED_EXTERNAL', 'Records: protocol=0, consent=0, footage=0, reviewers=0, reviews=0, adjudications=0, predictions=0', 'Inputs root: datasets/validation-protocol (absent)', and 8 missing-input entries each with expected path, requirement and what is missing (ratified_protocol, consented_footage, verified_capture_metadata, rights_clearance, qualified_blinded_reviewers, blinded_reviews, adjudication = owner must supply; candidate_predictions = engineering must supply), ending 'Numerical release authorized: no'. `--report --json` exit 0, parsed with a strict parser (parse_constant raising on NaN/Infinity): status BLOCKED_EXTERNAL, numerical_release_authorized=False, release_decision='human', 8 missing_inputs (https://la-hacks-rttothemoon.devinenterprise.com/attachments/55e26361-f654-46da-b430-f963ca3ed132/ac2-head-json.log). `ls datasets/validation-protocol` -> No such file or directory (zero committed labels). On BASE_SHA the same command exits 2, file absent (https://la-hacks-rttothemoon.devinenterprise.com/attachments/e205975a-6284-422d-9093-bfe051e288aa/ac2-base.log). Additional adversarial probes VERIFIED (https://la-hacks-rttothemoon.devinenterprise.com/attachments/dae3028a-2695-46c5-b7ce-28377a26b61e/adversarial-probes.log): complete tempdir fixture -> COMPUTED with numerical_release_authorized=False/release_decision=human; minimum_reviewers_per_clip=3 with 2 reviews -> BLOCKED_EXTERNAL naming each clip; minimum_independent_athletes=3 with 2 -> BLOCKED_EXTERNAL; disagreement without adjudication -> BLOCKED_EXTERNAL; --validate on malformed JSON exit 1, on valid record exit 0; nonexistent --inputs dir exit 0 BLOCKED_EXTERNAL; a directory named *.json -> INVALID_INPUT exit 1 (not silently skipped); bool as number rejected; SYNTHETIC guardian id rejected. PROTECTED_MEDIA_SHA256 (7 hashes) diffed equal to protectedSourceHashes in packages/evaluation/src/benchmarkRelease.ts; runtime alias set is 17 entries, shortest 'afn-provic' (no generic token).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d700fd9-bab4-435b-b56c-41cf5ca4a34c/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e58314e4-2504-4c3b-9f25-2c6adc9dcb27/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/55e26361-f654-46da-b430-f963ca3ed132/ac2-head-json.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e205975a-6284-422d-9093-bfe051e288aa/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce399186-0ad9-4198-abd9-219b5c265fb5/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dae3028a-2695-46c5-b7ce-28377a26b61e/adversarial-probes.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "ml/scripts/validation_protocol.py build_report()/_cross_record_checks(): a review or prediction whose clip_id has no footage record is silently ignored (report still COMPUTED) instead of being an INVALID_INPUT error. Repro: write_complete_inputs(root); add reviews/ghost.json with clip_id=clip-ghost-0001; `--report --inputs root` -> Status: COMPUTED (adversarial-probes.log P2/P3). Orphans never fabricate a target or metric, so not blocking.",
+          "ml/scripts/validation_protocol.py SCHEMAS['review']: outcome=rated with technique=null is accepted (validate_record returns []). Whether technique is mandatory for a rated review is a protocol decision; note only (probe P16).",
+          "ml/scripts/validation_protocol.py: consent.signed_at later than capture.recorded_at is not flagged (retroactive release accepted; probe P6). Protocol/legal decision, not a code defect.",
+          "`python3 ml/scripts/validation_protocol.py --report` is not wired into scripts/verify-cloud.sh (ci-scripts serial group not held by this package); only its unit tests run in the ml stage. Consistent with the manifest, which defines the runner's entry point as the AC2 CLI command; follow-up for a package holding ci-scripts.",
+          "docs/EVALUATION.md §5 rewords the 2026-09-04 sentence 'no new files were added under ml/' to scope it to that audit. This is prose in a write_path file (not a code comment) and is required for the document to stay consistent with §5.1; noted for transparency."
+        ],
+        "package_id": "W06-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "21c9b7397d04bd1240aaf5fd502b28997f1312c5",
+        "scope_violation": false,
+        "summary": "APPROVE W06-06 candidate devin/pp/w06-06/impl-r3 @ 21c9b7397d04bd1240aaf5fd502b28997f1312c5 (reviewed_sha = git rev-parse HEAD after checkout). Scope VERIFIED: `git diff --stat f250acd7..21c9b739` = docs/EVALUATION.md (+129/-3), ml/scripts/test_validation_protocol.py (+945), ml/scripts/validation_protocol.py (+1703); all three are write_paths, no serial-group prefix touched (scripts/, .github/, supabase/, apps/, packages/, native/ diff empty), out_of_scope_files empty -> scope_violation=false. Pre-existing ml files unchanged; no test weakened, no skips, no `|| true`/ts-ignore/eslint-disable, no comment edits, no migrations, no production surface, nothing pushed by me. Objective met as behaviour: the runner's shipping entry point is the manifest's own AC2 CLI command, its 44 tests run in CI's existing ml stage (verify-cloud.sh ml stage = AC1 command), and the report is BLOCKED_EXTERNAL naming all 8 missing inputs with owner, expected path and requirement; datasets/validation-protocol/ is absent (zero labels/coaches/metrics committed; tests use in-memory/tempdir fixtures). AC1 re-run by me: exit 0, 61 executed/61 passed/0 failed/0 skipped (44 new + 17 pre-existing), also clean under -W error. AC2 re-run by me: exit 0, BLOCKED_EXTERNAL, strict-JSON --json parseable, numerical_release_authorized=false and release_decision=human. Regression proof VERIFIED: BASE_SHA worktree + only the new test file -> exit 1, Ran 18, FAILED (errors=1, ModuleNotFoundError); candidate -> pass -> regression_fails_on_base=true. Independent checks: 7 protected hashes identical to benchmarkRelease.ts; alias set 17 entries, shortest 'afn-provic'; 16 adversarial probes (complete fixture COMPUTED without authorizing release, reviewer/athlete minimums, missing adjudication, malformed/dir-as-file inputs, bool-as-number, synthetic ids) behaved as documented. Copy grep over the diff for Android/Google Play/guest mode/Live Court/DUPR/competitors/accuracy/superlatives: no matches. Non-blocking notes (not defects against the manifest): orphan reviews/predictions for unknown clip_ids are ignored rather than INVALID_INPUT; rated review may carry technique=null; consent signed after capture accepted; --report not wired into verify-cloud.sh (ci-scripts group not held); docs §5 sentence reworded for consistency. External blocker stands as designed (owner must supply footage/consent/metadata/reviewers/adjudication).",
+        "verdict": "approve"
+      },
+      "round": 3
+    },
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [],
+        "reasons": [
+          "blocked: External dependency only (does not affect implementation/acceptance): the owner must supply consented footage, verified metadata, qualified blinded reviewers and adjudication under datasets/validation-protocol/ before the report can move past BLOCKED_EXTERNAL. The package itself is complete, verified and pushed."
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/128dc87e-75f8-4e4b-940c-398799222ed3/ac1-unittest.log",
+            "command": "python3 -m unittest discover -s ml/scripts -p 'test_*.py'",
+            "executed": 77,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC1",
+            "note": "VERIFIED on HEAD 9e06c835: 'Ran 77 tests ... OK' (61 tests carried from impl-r3 + 16 round-4 regression tests in test_validation_protocol.py). Also in checkout at artifacts/w06-06-r4/ac1-unittest.log (artifacts/ is git-ignored).",
+            "passed": 77,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/060e9466-a095-4819-9c65-ecd42871c693/ac2-report.log",
+            "command": "python3 ml/scripts/validation_protocol.py --report",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-06-AC2",
+            "note": "VERIFIED on HEAD: 'Status: BLOCKED_EXTERNAL', Records all 0, and the report lists each missing input with expected path, requirement and exact gap: ratified_protocol, consented_footage, verified_capture_metadata, rights_clearance, qualified_blinded_reviewers (0 of 2 reviewer-role, no adjudicator), blinded_reviews, adjudication (owner must supply) and candidate_predictions (engineering must supply); 'Numerical release authorized: no'.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: committed 16 regression tests (incl. the adversary's exact deep-nesting scenario through the real CLI via subprocess and through build_report in-process) separately, then the minimal general fix: an iterative depth bound enforced at JSON read time so no recursive validator can ever see a document deeper than 32 levels, plus the strictness gaps surfaced by the same adversarial review. Zero labels/fixtures added under datasets/; numerical_release_authorized stays false in every status.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/128dc87e-75f8-4e4b-940c-398799222ed3/ac1-unittest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/060e9466-a095-4819-9c65-ecd42871c693/ac2-report.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fddba94-0d8f-4605-98b7-ea72cb1afc18/attack-suite-on-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/79b6c737-a168-4e66-afd7-2fc7cd290525/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ec72e3d-53e3-4c03-920a-2d2eba995b78/regress-on-r3.log"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [],
+        "blocked": true,
+        "blocked_reason": "External dependency only (does not affect implementation/acceptance): the owner must supply consented footage, verified metadata, qualified blinded reviewers and adjudication under datasets/validation-protocol/ before the report can move past BLOCKED_EXTERNAL. The package itself is complete, verified and pushed.",
+        "branch": "devin/pp/w06-06/impl-r4",
+        "files_changed": [
+          "ml/scripts/validation_protocol.py",
+          "ml/scripts/test_validation_protocol.py",
+          "docs/EVALUATION.md"
+        ],
+        "head_sha": "9e06c835599211500070d7a60d34268e5d82f992",
+        "out_of_scope_files": [],
+        "package_id": "W06-06",
+        "regression_tests_added": [
+          "ml/scripts/test_validation_protocol.py::DeepNestingIsInvalidInputTest (P1: depths MAX_RECORD_DEPTH+1, 1500, 3000 -> build_report INVALID_INPUT naming consent/release-test-0001.json; CLI --report / --report --json / --validate exit 1, empty stderr, no Traceback/RecursionError)",
+          "ml/scripts/test_validation_protocol.py::StrictParsingTest (duplicate JSON keys, whitespace-only strings, unrecognised entries under inputs root / record dirs)",
+          "ml/scripts/test_validation_protocol.py::IdentityAmbiguityTest (case-only identity variants, review_id separator outside the opaque-id alphabet)",
+          "ml/scripts/test_validation_protocol.py::ReviewerIndependenceTest (peer-assessed qualification, review before qualification.assessed_at, self-verified footage)",
+          "ml/scripts/test_validation_protocol.py::UnaccountedRecordsTest (reviews/adjudications/predictions of unknown clips, adjudication of an agreed clip)",
+          "ml/scripts/test_validation_protocol.py::ReportRenderingTest (text report cannot be forged via control characters in file names)"
+        ],
+        "residual_risks": [
+          "MAX_RECORD_DEPTH=32 is a policy constant; the deepest shipped schema is far shallower (tests pin schema_depth < MAX_RECORD_DEPTH), but an owner-supplied record legitimately nesting >32 levels would be refused as INVALID_INPUT (documented in docs/EVALUATION.md §5.1).",
+          "review_id format changed from '<clip_id>.<reviewer_id>' (r3) to '<clip_id>/<reviewer_id>'; no owner data exists yet, so nothing in the repo is affected, but any pre-written review records would need the new separator.",
+          "Strict directory scanning now treats stray files (e.g. .DS_Store, README) under datasets/validation-protocol/ as INVALID_INPUT by design; owners must keep the inputs root clean.",
+          "artifacts/ is git-ignored, so log evidence is provided as uploaded attachment URLs rather than committed paths."
+        ],
+        "summary": "Defect on the round-3 candidate (21c9b739, ml/scripts/validation_protocol.py): _read_json (l.~950) caught RecursionError only from json.load; a document that parses (~1200-3000 nested arrays) then reached the recursive _check_schema (l.~683-750) / _synthetic_identity_checks (l.~760) traversal unprotected, so build_report() and all three CLI paths (--report, --report --json, --validate) died with an uncaught RecursionError traceback and no status line. BASE_SHA f250acd itself lacks the module entirely, so every regression test fails there. Fix (HEAD 9e06c835, on top of the reused r3 commits cherry-picked onto BASE_SHA): MAX_RECORD_DEPTH=32 plus exceeds_depth(), an ITERATIVE breadth-first depth measure applied in _read_json (before any recursive walk; --validate and load_inputs both go through it) and defensively again in validate_record(); a too-deep document is 'could not be read as JSON (nests deeper than 32 levels)' naming the file -> report INVALID_INPUT, exit 1, empty stderr. The adversary's full 32-test suite (test_attack_w06_06_validation_protocol.py from devin/pp/w06-06/attack-21c9b739, run against this candidate, file not committed) passes 32/32 (artifact: https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fddba94-0d8f-4605-98b7-ea72cb1afc18/attack-suite-on-candidate.log). Same-round hardening found while reproducing (each with a failing-first test): duplicate JSON keys refused (object_pairs_hook), whitespace-only strings fail minLength, unrecognised entries under the inputs root / non-*.json entries in record dirs are errors (never silently skipped), case-only identity spelling differences across all records are ambiguous errors, qualification.assessed_by may not itself be a reviewer, reviews/adjudications dated before the author's qualification.assessed_at are errors, footage may not be verified by its own athlete/rights holder, reviews/adjudications/predictions whose clip_id matches no footage are errors, an adjudication of a clip whose reviewers agree is an error, rendered report lines escape control characters, and review_id is now '<clip_id>/<reviewer_id>' (separator outside the opaque-id alphabet so distinct pairs cannot collide). docs/EVALUATION.md §5.1 gained a 'Strict input handling (round 4)' paragraph. Commits: 2b732477 tests (fail on BASE_SHA: module absent; on r3 module: ImportError for MAX_RECORD_DEPTH/REVIEW_ID_SEPARATOR, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ec72e3d-53e3-4c03-920a-2d2eba995b78/regress-on-r3.log), 9e06c835 fix. Also VERIFIED: pnpm format:check exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/79b6c737-a168-4e66-afd7-2fc7cd290525/format-check.log), git diff --check exit 0, py_compile of both python files OK. No Python linter is configured in the repo/CI (ruff/pyflakes absent). No PR opened, no force push, only devin/pp/w06-06/impl-r4 pushed."
+      },
+      "round": 4
+    }
+  ],
+  "start_round": 3,
+  "status": "BLOCKED_EXTERNAL",
+  "wave_id": "wave-3"
+}

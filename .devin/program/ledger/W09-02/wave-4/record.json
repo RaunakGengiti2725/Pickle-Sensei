@@ -1,0 +1,221 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W09-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "b3bc865313ac241cc60d6eff3257da8451bc790c3e0c62984966e052dfb61cb0",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W09-02-r1",
+      "phase": "review",
+      "prompt_sha256": "3ea41f186354f9d8a5d22b65eed19a6adc0cd21ee2c44fc7b084d6c5f9d738f5",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W09-02-r1",
+      "phase": "adversary",
+      "prompt_sha256": "77d77805629b73880e9d923d0e02a9c946e717ca99061e9f76f3fcb8dbb13f91",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/w09-02/impl-r1",
+    "head_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W09-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c79624a-6ff4-4344-951b-7ad5c8151faf/attack-run4-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a3104c2-60da-4cb9-8cbf-6398637ce3ab/attack-run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2ce4a14-0642-4f68-ae39-107c170f9030/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ed6df3a-0524-4d11-b1e2-fb4dbfd64179/full-jest-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e5fab505-3396-4059-a9aa-1821be8d2d41/ac2-tsc-attack-branch.log"
+        ],
+        "attack_branch": "devin/pp/w09-02/attack-0f7113b4",
+        "attack_branch_sha": "bb49bcdc4e230aa0b19bb071d169fef457e1b223",
+        "attacked_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+        "attacks_tried": 10,
+        "breaks": [],
+        "package_id": "W09-02",
+        "summary": "NO CONFIRMED BREAKS in W09-02 candidate 0f7113b46db9153e307daf26b56286777ab1834a. Attack suite: apps/mobile/__tests__/attack/w09ResultDetailsRouting.attack.test.tsx on branch devin/pp/w09-02/attack-0f7113b4 (sha bb49bcdc4e230aa0b19bb071d169fef457e1b223, one commit on top of the candidate; only that new file added — no candidate production code or candidate tests modified). 10 distinct attacks / 20 tests, ALL PASSED against the candidate (VERIFIED: `cd apps/mobile && npx jest --ci --silent __tests__/attack/w09ResultDetailsRouting.attack.test.tsx` exit 0, 1 suite, 20 passed / 0 failed / 0 skipped; verbose run attack-run3.log). Attacks: A1 double submit — 3 presses of 'Full breakdown' (2 in one tick) replayed through the REAL @react-navigation/routers StackRouter from [Tabs,Result] end as [Tabs,Result,ResultDetails] (one route, same guide key underneath, goBack returns to the identical Result). A2 interleaved press+Next in one tick (both orders): exactly one navigate('ResultDetails',{analysisId}), guide advances, entry absent off SCORE. A3 route repointed in place (popTo keeps route key → same component instance re-rendered with new params): entry follows new analysisId, never a stale closure; guide resets to SCORE. A4 corrupt/partial state: evidence read rejects / resolves empty / never settles after the push → 'Result missing' + working Go back, or loading shell + working Back; no fabricated breakdown copy. A5 real-router loop: popTo('Result',{analysisId}) repoints the SAME Result key with exactly {analysisId}; popToTop → [Tabs]; goBack → identical guide; details screen dispatches popTo for another attempt, nothing for the same one. A6 copy/accessibility: every Pressable on SCORE page is role=button with label == visible text, 'Full breakdown' appears exactly once; details header/sheet pressables labelled; no Android/Google Play/guest mode/Live Court/DUPR/competitor/accuracy-%/superlative/coach-equivalence copy on either surface. A7 boundary ids (2048-char, whitespace-padded, unicode+emoji, symbols, UUID): passed through byte-exact, params keys == ['analysisId'], details reads the same id. A8 legacy row (analysis only on record.result): entry offered and details renders. A9 reentrancy: OLD attempt's read resolving late as 'missing' after a repoint does not replace the new attempt (guide and details). A10 'Try it again' from the details via real router: pinned OBSERVED stack [Tabs, Result(old), ResultDetails(old), Result(new)] — one level deeper than the guide's own pre-existing [Tabs, Result(old), Result(new)]; Close/Done (popToTop) clears it. NOT reported as a break: same navigate('Analyze') semantics the base's guide and the base's ResultDetailsScreen already had; recorded as a P3 observation only (INFERRED: iOS swipe-back from the new result would reveal the stale details; not verifiable on Linux). Candidate acceptance re-verified on 0f7113b4: AC1 `cd apps/mobile && npx jest --ci --silent __tests__/w09ResultDetailsRouting.test.tsx __tests__/result*.test.tsx` exit 0, 5 suites / 43 passed (ac1-candidate.log); AC2 `cd apps/mobile && npx tsc --noEmit` exit 0 (run on attack branch = candidate + attack file; ac2-tsc-attack-branch.log); AC3 `npx eslint <4 changed files>` exit 0 and `npx prettier --check <4 changed files>` exit 0 (changed files = git diff --name-only d8e5db3e..0f7113b4: w09ResultDetailsRouting.test.tsx, wf/ResultScreen.buttons.test.tsx, wf/flow-analyze-result.result.test.tsx, src/screens/ResultScreen.tsx); root eslint + prettier --check on the attack file exit 0. Full mobile regression on candidate: `cd apps/mobile && npx jest --ci --silent` exit 0, 313 suites passed / 1 skipped (pre-existing conditional describe.skip in importedRealFootageAnalysis.test.ts when real-footage artifacts are absent — unrelated to W09-02), 6060 tests passed / 1 skipped / 0 failed (full-jest-candidate.log). Scope note (INFERRED from diff): the package objective says 'Library → details'; the candidate routes Library → Result {analysisId} (unchanged) → SCORE-page entry, i.e. no direct Library→ResultDetails link — a design choice the reviewer should judge against the objective wording, not a runtime break. UNKNOWN/not covered: native iOS runtime (stack animation, swipe-back gesture, header) — Linux Jest only; no Mac remote run per instructions. No PR opened, nothing pushed to main/ci/mac-*, no history rewrite; only the attack branch was pushed."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e8e3c236-69d3-473a-8bda-ae9ffda02b90/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09ResultDetailsRouting.test.tsx __tests__/result*.test.tsx",
+            "executed": 43,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC1",
+            "note": "VERIFIED on HEAD 0f7113b4 (5 suites: w09ResultDetailsRouting, resultGuide, resultRearmLoop, resultDetailsScreen, resultEvidenceAudit). Regression proof: the final w09ResultDetailsRouting.test.tsx run against BASE_SHA's ResultScreen.tsx (base file swapped in, same node_modules) -> exit 1, 5 executed / 2 passed / 3 failed / 0 skipped (the three Result->details tests fail: 0 'result-guide-breakdown-link' hosts, no navigate('ResultDetails')); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/a8d828ec-80c4-4ae4-b6ec-1251cfde0564/ac1-regression-on-base.log (repo copy: artifacts/w09-02/ac1-regression-on-base.log). Adjacent suites that render ResultScreen / Library rows (10 suites, 274 tests) also pass on HEAD: https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2470695-6791-4882-9ec5-1bc3c82a4868/adjacent-suites-candidate.log",
+            "passed": 43,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2eef5950-856a-46b4-8a3b-055abe7c1423/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC2",
+            "note": "VERIFIED on HEAD 0f7113b4, no diagnostics. Environment note: the pre-installed apps/mobile/node_modules was stale (missing @sentry/react-native) and produced unrelated TS2307 errors until `cd apps/mobile && npm ci` (exit 0) was run; not a BASE_SHA failure.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e7e5db8-7e65-4a80-8bc4-ac4e7f9f09ff/ac3-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/src/screens/ResultScreen.tsx apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx && npx prettier --check apps/mobile/src/screens/ResultScreen.tsx apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC3",
+            "note": "VERIFIED on HEAD 0f7113b4 over all 4 changed files (root eslint + root prettier 'All matched files use Prettier code style!'). Also VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ed2bbc2-b5d6-40f1-9234-5dfdbb528aea/format-check-head.log) and `git diff --check d8e5db3e HEAD` + worktree exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f8a57b6-0461-4031-ba0c-9b9897ae36a1/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Routing decision: keep Library -> Result {analysisId} (unchanged, pinned by wf/LibraryScreen.buttons + flow-library-drills-video.library) and make the Result guide's SCORE page — the page every entry lands on, fresh run or Library history row / current-plan card — the ONE way into ResultDetails: GuideFooter gains an optional `details` link ('Full breakdown', testID result-guide-breakdown-link, role button) rendered only when step === 'score'; ResultGuideProps gains `onOpenDetails`; ResultScreen wires `navigation.navigate('ResultDetails', { analysisId })` with the route's own typed params (RootStackParams already typed ResultDetails as { analysisId: string }; params.ts and ResultDetailsScreen.tsx needed no change). It is a push, so ResultDetails' existing Back (goBack) returns to the guide and its attempt tabs still popTo('Result'). Later pages and the recap stay link-free; the abstained page keeps hosting ResultBreakdownSheet inline. Regression suite written first and proven failing on base (commit 9f6ca122 + helper fix 19285364), implementation + deliberate ledger migration in 0f7113b4.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a8d828ec-80c4-4ae4-b6ec-1251cfde0564/ac1-regression-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e8e3c236-69d3-473a-8bda-ae9ffda02b90/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2eef5950-856a-46b4-8a3b-055abe7c1423/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e7e5db8-7e65-4a80-8bc4-ac4e7f9f09ff/ac3-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ed2bbc2-b5d6-40f1-9234-5dfdbb528aea/format-check-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f8a57b6-0461-4031-ba0c-9b9897ae36a1/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2470695-6791-4882-9ec5-1bc3c82a4868/adjacent-suites-candidate.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w09-02/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx",
+          "apps/mobile/src/screens/ResultScreen.tsx",
+          "apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx",
+          "apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx"
+        ],
+        "head_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+        "out_of_scope_files": [
+          "apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx — deliberate test migration required by the objective: this file's SCORE-page button ledger enumerates every pressable on the guide and failed on the candidate once the entry existed (['Close','Continue'] -> ['Close','Continue','Full breakdown']); per its ledger contract the new pressable also gets its own press test here. Not under any serial_group_paths prefix.",
+          "apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx — deliberate test migration required by the objective: the SCORE-page accessibility audit enumerates the guide's buttons and failed on the candidate (missing 'Full breakdown'); two audit arrays updated, nothing removed. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W09-02",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx (5 tests: SCORE page offers ONE typed 'Full breakdown' entry -> navigate('ResultDetails', {analysisId}); Library-opened Result {analysisId} reaches details of THAT id with exactly the typed params; entry lives on SCORE only (later pages/recap link-free); abstained page hosts sheet inline, no entry; details route loads routed id and Back -> goBack; type-level pin RootStackParams['ResultDetails'] === RootStackParams['Result'])",
+          "apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx: 'Full breakdown (SCORE page only) pushes ResultDetails for this analysis'"
+        ],
+        "residual_risks": [
+          "Existing code comments that describe the pre-decision state were left untouched per the no-comment-edits rule and now read slightly stale: apps/mobile/src/screens/ResultScreen.tsx ~L128-130 ('the guide no longer links to it (product decision 2026-09-02)') and the ResultBreakdownSheet header comment ('\"See full breakdown\" on the guide's last page'); apps/mobile/__tests__/resultGuide.test.tsx L771 ('No full-breakdown link (product decision 2026-09-02)') still holds for the recap page it annotates. AGENTS.md ~L722-758 and docs/prompts/codex-production-readiness.md still describe ResultDetails as unreachable — docs update belongs to the docs-packet/W09 owner.",
+          "Verification is Jest/tsc/eslint on Linux only (INFERRED that the footer link row renders acceptably on device: it reuses the existing Back/Done footerLink styles, centered). No simulator/Mac run — none required for TS-only screen/test changes and the remote Mac command is forbidden for this package.",
+          "Library -> details is satisfied via Library -> Result -> SCORE-page entry (one extra tap), not by a direct Library -> ResultDetails navigation; LibraryScreen.tsx is outside write_paths and its two Library suites pin Result {analysisId}. If the coordinator wants a direct Library -> ResultDetails hop that is a separate decision touching apps/mobile/src/screens/LibraryScreen.tsx and those suites."
+        ],
+        "summary": "W09-02 done: branch devin/pp/w09-02/impl-r1 pushed, head 0f7113b46db9153e307daf26b56286777ab1834a (3 commits on d8e5db3e). DEFECT ON BASE_SHA (VERIFIED by reading + the base test run): `ResultDetails { analysisId }` is typed (apps/mobile/src/navigation/params.ts L~20), registered (apps/mobile/src/navigation/RootNavigator.tsx, title 'Full breakdown') and implemented (apps/mobile/src/screens/ResultDetailsScreen.tsx), but nothing in the shipping app navigates to it: ResultScreen.tsx L403-423 wires onClose/onTryAgain/onOpenAttempt/onOpenFormReview/onOpenLibrary only, GuideFooter (L983-1030) renders primary + Back + Done only, and ScorePage/NextPage carry no link; LibraryScreen.tsx L~590 and L~880 route history rows and the current-plan card to `Result { analysisId }`. resultGuide.test.tsx L774-807 pins 'no link on the recap page'. FIX (0f7113b4): ResultScreen.tsx — `onOpenDetails: () => void` on ResultGuideProps, wired to `navigation.navigate('ResultDetails', { analysisId })` (typed via NativeStackNavigationProp<RootStackParams>, no any); GuideFooter gains optional `details` link ('Full breakdown', testID result-guide-breakdown-link) passed only on the SCORE page. Library -> details = Library -> Result {analysisId} (unchanged) -> SCORE-page entry for that id. REGRESSION (9f6ca122, 19285364): apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx, 5 tests; on base 3 fail / 2 pass (exit 1), on HEAD 5 pass. MIGRATION (no coverage deleted): two SCORE-page button ledgers outside write_paths now list 'Full breakdown' (wf/ResultScreen.buttons.test.tsx L1789 + new press test L847; wf/flow-analyze-result.result.test.tsx L605/L610) — listed in out_of_scope_files. ACCEPTANCE (all VERIFIED on HEAD): AC1 jest exit 0, 43/43 across 5 suites; AC2 tsc exit 0; AC3 eslint+prettier exit 0 on all 4 changed files; plus pnpm format:check exit 0 and git diff --check exit 0; 10 adjacent suites (274 tests) pass. No baseline failures on BASE_SHA (the initial tsc TS2307 @sentry errors were stale node_modules, cleared by `npm ci`). No PR opened, nothing pushed to main/ci/mac-*, no Mac remote run, no history rewrite."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e0329af8-e5af-41b6-80d7-b9b194dcd134/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09ResultDetailsRouting.test.tsx __tests__/result*.test.tsx",
+            "executed": 43,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC1",
+            "note": "VERIFIED on 0f7113b4 after `npm ci`: 5 suites passed (w09ResultDetailsRouting, resultDetailsScreen, resultEvidenceAudit, resultGuide, resultRearmLoop), 43/43. Regression proof (own run): BASE_SHA d8e5db3e with ONLY the 3 candidate test files copied over -> `npx jest --ci --silent __tests__/w09ResultDetailsRouting.test.tsx __tests__/wf/ResultScreen.buttons.test.tsx __tests__/wf/flow-analyze-result.result.test.tsx` exit 1, 3 suites failed, 80 executed / 74 passed / 6 failed / 0 skipped (the 3 Result->details w09 tests, the new 'Full breakdown' press test, and the two SCORE-page ledger/audit tests) https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce169333-becb-4c0c-916f-d3ff28a15fcf/regression-on-base.log; same 3 suites on candidate exit 0, 80/80 https://la-hacks-rttothemoon.devinenterprise.com/attachments/d113e534-2a2f-4b84-8980-0a2c8a1267b8/regression-on-head.log. Adjacent suites referencing ResultScreen/ResultDetails/Library (9 suites: savedTechniqueConfirmationRoute, wf/RootNavigator.buttons, wf/be-mobile-sync-outbox, wf/fix-12-result-outbox-status, wf/flow-crash-safety-error-boundaries, wf/flow-guest-local-only.navigator, wf/flow-navigation-tabs-routes, wf/LibraryScreen.buttons, wf/flow-library-drills-video.library) on candidate: exit 0, 205/205 https://la-hacks-rttothemoon.devinenterprise.com/attachments/3bae12e5-34b1-4b43-974e-8a65b958357e/adjacent-suites-head.log",
+            "passed": 43,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c01d3a6c-3b8e-41c0-826f-d060d29ea62f/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC2",
+            "note": "VERIFIED on 0f7113b4 after `cd apps/mobile && npm ci` (exit 0): no diagnostics emitted (log contains only the exit line).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93253f24-20f0-4671-8c86-583f56636b67/ac3-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/src/screens/ResultScreen.tsx apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx && npx prettier --check <same 4 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-02-AC3",
+            "note": "VERIFIED on 0f7113b4 from repo root over all 4 files in `git diff --stat d8e5db3e..HEAD`: eslint no output, prettier 'All matched files use Prettier code style!'. Also `git diff --check d8e5db3e HEAD` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e0329af8-e5af-41b6-80d7-b9b194dcd134/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c01d3a6c-3b8e-41c0-826f-d060d29ea62f/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93253f24-20f0-4671-8c86-583f56636b67/ac3-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce169333-becb-4c0c-916f-d3ff28a15fcf/regression-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d113e534-2a2f-4b84-8980-0a2c8a1267b8/regression-on-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3bae12e5-34b1-4b43-974e-8a65b958357e/adjacent-suites-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Stale pre-existing comments now contradict shipped behaviour (left untouched per the no-comment-edit rule): apps/mobile/src/screens/ResultScreen.tsx L128-130 ('the guide no longer links to it (product decision 2026-09-02)') and AGENTS.md L745-752 ('There is NO \"See full breakdown\" link any more ... reachable from nowhere in the app'). AGENTS.md is not under any serial_group_paths prefix; a docs follow-up should record the 2026-09-08 decision (SCORE-page 'Full breakdown' link is the one entry).",
+          "apps/mobile/src/screens/ResultScreen.tsx L594-597 adds a new JSX comment that explains the change/date ('W09-02 routing decision (2026-09-08)...') rather than the code invariant; style nit only, not a modification of an existing comment.",
+          "Library -> details is satisfied indirectly (Library history row / current-plan card -> Result {analysisId} -> SCORE-page 'Full breakdown'), not by a direct LibraryScreen -> ResultDetails hop; LibraryScreen.tsx is outside write_paths and its two Library suites (wf/LibraryScreen.buttons, wf/flow-library-drills-video.library) still pin Result {analysisId}. Acceptable reading of the objective; coordinator may want a direct hop as a separate decision.",
+          "Environment: the pre-installed apps/mobile/node_modules lacked @sentry/react-native; `cd apps/mobile && npm ci` (exit 0) was required before tsc/jest ran cleanly (same observation as the implementer)."
+        ],
+        "package_id": "W09-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+        "scope_violation": false,
+        "summary": "APPROVE W09-02 candidate devin/pp/w09-02/impl-r1 @ 0f7113b46db9153e307daf26b56286777ab1834a (3 commits on BASE d8e5db3e). SCOPE (VERIFIED, `git diff --stat`): 4 files, 564+/3-. In write_paths: apps/mobile/src/screens/ResultScreen.tsx (+22), apps/mobile/__tests__/w09ResultDetailsRouting.test.tsx (+518, new). Out of write_paths but listed in out_of_scope_files with justification: apps/mobile/__tests__/wf/ResultScreen.buttons.test.tsx (+21/-1: SCORE-page ledger ['Close','Continue'] -> ['Close','Continue','Full breakdown'] + one new press test) and apps/mobile/__tests__/wf/flow-analyze-result.result.test.tsx (+3/-2: two SCORE-page audit arrays gain 'Full breakdown'). Both are pure additive test migrations that the objective explicitly requires ('migrate any tests ... deliberately rather than deleting coverage'); I confirmed they FAIL on base+candidate-tests without the ResultScreen change, so they are necessary wiring, not scope creep; neither is under any serial_group_paths prefix -> scope_violation=false. params.ts and ResultDetailsScreen.tsx are unchanged (RootStackParams.ResultDetails: { analysisId: string } already typed at params.ts L21; route registered in RootNavigator.tsx L577). SHIPPED BEHAVIOUR (VERIFIED by reading + tests): ResultScreen passes onOpenDetails={() => navigation.navigate('ResultDetails', { analysisId })} (L424) through ResultGuideProps; GuideFooter gains optional `details` and renders a PressableScale 'Full breakdown' (accessibilityRole button via PressableScale default, testID result-guide-breakdown-link, type.bodyBold token) only when step === 'score' (L598); abstained one-page result and later pages/recap carry no link. Library -> details = existing Library -> Result {analysisId} -> SCORE-page link (indirect; noted non-blocking). ACCEPTANCE (all my own runs on HEAD after `cd apps/mobile && npm ci`): AC1 exit 0, 5 suites, 43/43/0/0; AC2 tsc exit 0, no diagnostics; AC3 root eslint + prettier --check on all 4 changed files exit 0; git diff --check exit 0. REGRESSION PROOF: on BASE d8e5db3e with only the 3 candidate test files copied in -> exit 1, 6 failed / 74 passed of 80 (3 w09 Result->details tests + new press test + 2 SCORE-page ledger tests); on candidate -> exit 0, 80/80 -> regression_fails_on_base=true. Adjacent 9 suites (Library, RootNavigator, outbox, crash-safety, navigation) 205/205 on HEAD. INVARIANTS: no test removed/weakened (only 3 removed lines, each replaced by a superset expectation), no any/@ts-ignore/eslint-disable/|| true/skip/only/timeout changes in the diff, no existing comment modified (one new comment added in ResultScreen.tsx, one in the flow test), no migrations/RLS/billing/auth/diagnostics touched, copy 'Full breakdown' complies with docs/APP_STORE_SUBMISSION.md rules and matches the existing route title. Non-blocking: stale pre-existing comments in ResultScreen.tsx L128-130 and AGENTS.md L745-752 now say the route is unreachable — docs follow-up recommended.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-4"
+}

@@ -1,0 +1,283 @@
+{
+  "agents": [
+    {
+      "label": "implement-W05-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "dd238e7f8f05ccb013a9153f7ce3d12809e61d0921822067a67edebf4f588771",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W05-02-r1",
+      "phase": "review",
+      "prompt_sha256": "1ff4e8cda8d233a8208a98454cb2f8cb5cbf47f61f6d7200019c2bc7d436ffa6",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-02-r1",
+      "phase": "adversary",
+      "prompt_sha256": "e9249734a8a2c45c61d5c611c4aa5a41527c8e7b591314045052c216c277a9e5",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W05-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18ec392b-eed2-49d1-84f0-4ca7caac4794/attack-run2.log"
+        ],
+        "attack_branch": "devin/pp/w05-02/attack-8e62e2c0",
+        "attack_branch_sha": "2d3c5e71ecbc29c70440b559a7be102ea9a0e011",
+        "attacked_sha": "8e62e2c0439371e61d2142b262d884758ac101fe",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "The work-package objective: a backwards wall-clock jump cannot extend a lease. After a relaunch without monotonic continuity the module has no evidence beyond the floor and trusts the user-editable wall clock forward from it; the lease must not be reported 'active' for a clock that was moved back ~9 days, and a 7-day lease must never be worth 3 x 6 days. Options: fail closed ('reconcile_required') when only 'floor' authority is available past a bounded grace, or persist and consume a lease-remaining budget rather than trusting wall time forward from the floor.",
+            "observed": "Anchor at S, run 1 day offline, checkpoint() (highWaterMs = S+1d), kill process. At real time S+10d (lease expired 3d ago) set wall clock to S+1d+1min and relaunch: read() -> authority 'floor', rollbackDetected false, nowMs = S+1d+1min; evaluateLease -> {kind:'active', remainingMs: 518340000} (~6 days). Repeating the kill/reset/relaunch cycle three times yields three fresh ~6-day grants ([518340000,518340000,518340000]); the persisted floor never advances (S+1d) because nothing re-persists in 'floor' authority.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'ATTACK 1'  (2 tests, both fail; exit 1)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "Backwards wall-clock jump across a process restart extends an expired lease, repeatably and without bound"
+          },
+          {
+            "expected": "The objective is phrased as behaviour ('a backwards wall-clock jump cannot extend a lease'); a lease must actually be evaluated against trusted time somewhere in the shipping app (or the package must state the consumer is a later package), and periodic checkpointing must be driven so the floor advances while offline.",
+            "observed": "Static scan of apps/mobile/src (excluding trustedTime.ts and tests): 0 modules match /trustedTime\\.(read|checkpoint)\\(|evaluateLease\\(/. Only api.ts calls observeServerTime. Consequently the Keychain high-water mark only ever equals the last authenticated response time, which widens break #1: after relaunch the attacker only needs to set the clock to the last-online time +1min to receive the full 7 days again.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'ATTACK 3'  (2 tests fail; exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "Shipping app never calls trustedTime.read()/checkpoint() or evaluateLease(); floor equals last server contact, checkpoint cadence unreachable"
+          },
+          {
+            "expected": "A trusted clock that persisted a floor should not be moved days backwards by a single response (mis-clocked edge/CDN, proxy-injected Date on a user-controlled device, out-of-order delivery). Bound backwards re-anchoring to the rollback tolerance, or keep max(serverEpochMs, previous estimate) as the estimate and flag the discrepancy.",
+            "observed": "Anchor S, advance 8 days (lease expired, highWaterMs persisted = S+8d). observeServerTime({dateHeader: S+1h, authenticated:true}) -> accepted:true; subsequent read().nowMs = S+1h (1788872400000, expected >= S+8d-5min = 1789559700000), lease verdict returns to 'active'. Second test: two in-flight authenticated responses processed out of order (S+15s then S) move nowMs backwards by 15s (1788868800000 < 1788868815000).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'ATTACK 4'  (2 tests fail; exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "Authenticated server Date behind the persisted high-water mark re-anchors backwards without bound (violates the implementer's 'nowMs never decreases' claim)"
+          },
+          {
+            "expected": "A backwards jump of ~9 days on the wall clock must not produce an active lease; the estimate needs a sleep-inclusive source (e.g. persisted high-water from periodic reads, or a boot-time-inclusive clock) or a fail-closed verdict when wall and monotonic disagree by more than the tolerance in either direction.",
+            "observed": "Anchor S; monotonic +1d while wall +10d (no read() in between, as in the shipping app); wall set back to S+1d+1min -> read(): authority 'anchored', rollbackDetected false, evaluateLease -> {kind:'active', remainingMs: 518340000}. INFERRED from react-native/ReactCommon HighResTimeStamp (steady_clock / mach_absolute_time on __APPLE__): the process monotonic clock does not advance while the device sleeps, so it cannot bound the elapsed interval by itself.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'ATTACK 2'  (1 test fails; exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "INFERRED (iOS runtime, not verified on the M4): monotonic under-count during device sleep lets a backwards wall-clock jump revive an expired lease while the process is alive"
+          },
+          {
+            "expected": "Only an RFC 7231 IMF-fixdate should be accepted as server time; anything else is 'invalid_date'.",
+            "observed": "observeServerTime accepted 4 of 5 malformed headers; only the duplicated header was rejected (Received array: [duplicated header]). Parsing relies on Date.parse leniency.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'ATTACK 10'  (1 test fails; exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "Date header parsing accepts non-HTTP-date strings ('2026', '9/8/2026', ISO 8601, 'Sep 8 2026 12:00 GMT')"
+          },
+          {
+            "expected": "The same inputs should yield the same verdict regardless of when the Keychain became readable: either the server anchor always wins (drop/overwrite the stale floor) or the floor always wins — consistently.",
+            "observed": "Persisted highWaterMs = S+30d (poisoned), Keychain getGenericPassword throws once during observeServerTime(S) then succeeds on read(): nowMs = S+30d (1791460800000) instead of S+1h (1788872400000); lease 'reconcile_required' although the candidate's own rule (and its relaunch test) makes a fresh authenticated anchor authoritative over the floor when the Keychain works.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts -t 'transient Keychain read failure'  (1 test fails; exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w05TrustedTimeAttack.test.ts",
+            "title": "Verdict depends on Keychain timing: a transient read failure during anchoring lets a later-loaded stale floor outrank the fresh authenticated anchor (fail-closed inconsistency)"
+          }
+        ],
+        "package_id": "W05-02",
+        "summary": "Attacked candidate 8e62e2c0 (W05-02 trusted time) with 33 Jest tests across 11 attack categories in apps/mobile/__tests__/w05TrustedTimeAttack.test.ts on branch devin/pp/w05-02/attack-8e62e2c0 @ 2d3c5e71. VERIFIED run: `cd apps/mobile && npx jest --ci __tests__/w05TrustedTimeAttack.test.ts` -> exit 1, 9 failed / 24 passed / 0 skipped (log attached). Candidate acceptance re-verified on the same checkout: AC1 `npx jest --ci --silent __tests__/w05TrustedTime.test.ts` exit 0 (18/18); AC2 base worktree with only the new test copied fails (module missing, exit 1) and passes on HEAD; AC3 `npx tsc --noEmit` exit 0 (after `npm ci` — stale node_modules lacked @sentry/*; attack file included); AC4 root eslint + prettier --check exit 0 on all changed files incl. the attack file; candidate suites w05TrustedTime + be-mobile-security-secrets still 61/61 with the attack file present. BREAKS: P1 — backwards wall-clock jump across a process restart (kill app, set clock to floor+1min, relaunch) grants ~6 days on an expired lease and is repeatable indefinitely because 'floor' authority trusts the wall clock forward and never re-persists; P2 — nothing in the shipping app calls read()/checkpoint()/evaluateLease(), so the floor equals last server contact (widens the P1 window to a full 7 days); P2 — backwards server Date (S+1h after 8 days, or out-of-order responses) re-anchors nowMs backwards without bound, contradicting the implementer's 'nowMs never decreases'; P2 INFERRED (iOS mach_absolute_time frozen during sleep, not run on M4) — monotonic under-count lets an in-process rollback revive an expired lease; P3 — Date.parse leniency accepts '2026', '9/8/2026', ISO strings as server time; P3 — verdict depends on Keychain read timing (stale floor outranks fresh anchor after a transient read failure). SURVIVED (24 passing): in-process rollback at/over tolerance, 1970/NaN wall clock, monotonic regression clamp, forward-jump poisoning is fail-closed (reconcile until online), 12 corrupt/hostile/oversized persisted records + non-string password + foreign service all -> storage 'invalid' without destroying the record, lease boundary values (zero remaining, MAX_SAFE_INTEGER expiry, issuedAt 0/-0/-1/unsafe, far-future issuedAt), api wiring (401/403/429/5xx with Date never anchor; response after timeout never anchors; no-bearer 2xx never anchors; bogus Date on 2xx rejected), slow Keychain write still serialized, throwing Keychain write keeps queue usable and old record intact, checkpoint cadence keeps floor within 60s while reads happen. No candidate production code or candidate tests modified; no PR opened."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/75f284ea-b468-4d9f-aff6-d79d95804ebc/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC1",
+            "note": "VERIFIED on HEAD 8e62e2c0. Local copy: artifacts/w05-02/ac1-jest.log (artifacts/ is gitignored).",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e21f62a7-0989-4190-b99a-57c4e06ac7b1/ac2-base-jest.log",
+            "command": "git worktree add /home/ubuntu/w05-02-base d8e5db3eb346b651e4ce04cc997178abcbed56fe && cp apps/mobile/__tests__/w05TrustedTime.test.ts <worktree>/apps/mobile/__tests__/ && (cd <worktree>/apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts)  ;  then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC2",
+            "note": "VERIFIED. BASE run (only the new test file copied onto d8e5db3e, node_modules symlinked): jest exit 1, Test Suites 1 failed, Tests 0 total (suite cannot run: \"Cannot find module '../src/data/trustedTime'\" — no trusted-time module or lease evaluator exists on base, so lease expiry on base has only the user-editable wall clock and a rollback would extend a lease). Base log: artifacts/w05-02/ac2-base-jest.log (uploaded URL above). HEAD run: exit 0, 18/18 passed (artifacts/w05-02/ac1-jest.log). PROOF outcome 0.",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ce9683b-4c98-4447-b7ee-a2b32770f877/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC3",
+            "note": "VERIFIED on HEAD after `cd apps/mobile && npm ci` (the pre-installed node_modules predated @sentry/react-native@8.24.0 in package.json and tsc reported 20 TS2307/TS7006 errors in src/diagnostics/* before reinstall; after npm ci only my TS7006 remained and was fixed). Local: artifacts/w05-02/ac3-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1ec924f-914a-442e-9a43-7b7a49cc69f9/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/data/trustedTime.ts apps/mobile/src/data/api.ts apps/mobile/__tests__/w05TrustedTime.test.ts apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts && npx prettier --check apps/mobile/src/data/trustedTime.ts apps/mobile/src/data/api.ts apps/mobile/__tests__/w05TrustedTime.test.ts apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC4",
+            "note": "VERIFIED from repo root on HEAD. Also VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/fc5a3b9e-987c-4b65-abad-065fed262b32/format-check.log); `git diff --check d8e5db3e HEAD` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/e5639c8b-2763-450a-ba26-16d434c8d46e/git-diff-check.log); full mobile suite `cd apps/mobile && npx jest --ci --silent` exit 0, Test Suites 313 passed / 1 skipped, Tests 6072 passed / 1 skipped (the skip is importedRealFootageAnalysis.test.ts, documented in docs/devin/TEST_MATRIX.md) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/806bdfcc-1c04-4ba2-9be7-07a0801abe68/mobile-jest-full.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first. Commit 1 (c5b7ed43) + 2 (6062525e): __tests__/w05TrustedTime.test.ts pins the contract with injectable monotonic/wall clocks and the jest Keychain mock. Commit 3 (a6f50935): src/data/trustedTime.ts — createTrustedTime({keychain, monotonicNowMs, wallClockNowMs}) with a serialized state queue; observeServerTime() accepts only authenticated:true + parseable, plausible (2025..2100) Date headers and re-anchors {serverEpochMs, monotonicAtAnchorMs, wallOffsetMs}, persisting {schemaVersion:'trusted-time-anchor-v1', serverEpochMs, highWaterMs, wallOffsetMs} in Keychain service com.picklesensei.offline.trusted-time (AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY, cloudSync:false, read-back verified). read() returns nowMs = max(anchor + monotonic elapsed, persisted floor, offset-adjusted wall clock) with authority anchored|floor|none, rollbackDetected when the adjusted wall clock is >5 min below the trusted estimate, and checkpoints the high-water mark every 60 s of trusted time. evaluateLease(lease, reading) → active|expired|reconcile_required{no_trusted_time|storage_invalid|clock_rollback|invalid_lease|lease_ahead_of_clock}, capping every lease at OFFLINE_PRO_LEASE_MAX_SECONDS from issue. Corrupt/oversized/unknown-schema records are reported as storage:'invalid' and never deleted; Keychain exceptions → 'unavailable' with retry. Wiring: api.ts request() calls trustedTime.observeServerTime({dateHeader: responseDateHeader(response), authenticated: true}) after every successful bearer-authenticated response (so the live analysis-permit reservation anchors the clock). Commit 4 (8e62e2c0): additive extension of the pre-existing Keychain-consumer allowlist pin.",
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — with the snapshot's pre-installed node_modules (predating @sentry/react-native@8.24.0 in apps/mobile/package.json) tsc exits 2 with 20 errors in src/diagnostics/{privacy,scrub,sentry}.ts and their tests (TS2307 Cannot find module '@sentry/react-native'). Environment staleness, not a code defect: `cd apps/mobile && npm ci` (the documented install step) resolves it; no source change made for it.",
+          "cd apps/mobile && npx jest --ci --silent — 1 suite skipped on BASE and HEAD alike: __tests__/importedRealFootageAnalysis.test.ts (describe.skip when Mac-generated pose artifacts are absent; documented in docs/devin/TEST_MATRIX.md)."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w05-02/impl-r1",
+        "files_changed": [
+          "apps/mobile/src/data/trustedTime.ts",
+          "apps/mobile/__tests__/w05TrustedTime.test.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts"
+        ],
+        "head_sha": "8e62e2c0439371e61d2142b262d884758ac101fe",
+        "out_of_scope_files": [
+          "apps/mobile/src/data/api.ts — minimum wiring (1 import + 6-line hunk in request()): after every successful bearer-authenticated response, feed the Date header to the shared trustedTime instance; without it the module is an unused helper. Path is under serial group mobile-data, which W05-02 holds.",
+          "apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts — additive-only extension of the existing static allowlist of modules that import 'react-native-keychain' (the objective REQUIRES a Keychain-persisted anchor, so this pre-existing pin necessarily fails otherwise) plus new positive pins on trustedTime.ts (own service string, AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY, cloudSync:false, never mentions refresh/access/id tokens, never resetGenericPassword, never touches sessionVault/sessionLifecycle/account-deletion). No existing assertion was weakened, removed or reordered; the path is under no serial group."
+        ],
+        "package_id": "W05-02",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w05TrustedTime.test.ts (18 tests: monotonic lease counting + Keychain persistence, backwards wall-clock jump cannot extend lease (in-process and after relaunch via persisted floor), forward jump only shortens, server authority re-anchor, checkpoint cadence, corrupt/unavailable Keychain conservatism, unauthenticated/missing/malformed/implausible Date headers ignored, invalid / ahead-of-clock leases, 7-day Pro cap, api.ts request() wiring via authenticated permit reservation, headerless legacy transport unaffected)"
+        ],
+        "residual_risks": [
+          "INFERRED: the server anchor is the HTTP `Date` header of authenticated responses, protected only by TLS (no certificate pinning in the app). A user who installs a root CA and proxies the API could forge Date headers; W05-01's signed grant (serverEpochSeconds inside the signed payload) is the stronger anchor and can be fed through the same observeServerTime() entry point by a later package.",
+          "INFERRED: performance.now() in React Native/Hermes is backed by std::chrono::steady_clock, which is process-scoped and (on iOS) does not necessarily advance during device sleep; suspend is covered conservatively by max(anchor+monotonic, adjusted wall clock, persisted floor), and reboot/relaunch falls back to the persisted Keychain floor (authority 'floor') — true across-reboot native elapsed time (mach_continuous_time) needs the W05 native module. Not verifiable on Linux; Apple runtime behaviour is UNKNOWN here.",
+          "INFERRED: no shipping lease consumer exists yet on BASE_SHA (offline Pro lease is a later W05 package); evaluateLease() is exported and pinned by tests but the API wiring currently only anchors the clock. Any future lease check must call trustedTime.read() + evaluateLease() rather than Date.now().",
+          "VERIFIED (by design/tests): a wall clock rolled back by more than TRUSTED_TIME_ROLLBACK_TOLERANCE_MS (5 min) below the trusted estimate yields reconcile_required:'clock_rollback' even though nowMs never decreases — an honest user who corrects a fast clock will need one authenticated request to re-anchor before offline lease evaluation resumes."
+        ],
+        "summary": "Gap on BASE_SHA d8e5db3e (VERIFIED by search + AC2 base run): apps/mobile has no trusted-time source — no src/data/trustedTime.ts, no lease evaluator, and nothing consumes server time from authenticated responses; the only clock available to any lease/expiry logic is the user-editable Date.now() (e.g. apps/mobile/src/data/api.ts request() lines ~160-200 parse the body and discard response headers; packages/shared-types/src/offlineAuthorization.ts declares OFFLINE_PRO_LEASE_MAX_SECONDS and the offline-time-anchor contracts with no mobile implementation). Fix: new trusted-time module (server-anchor + monotonic performance.now() + Keychain-persisted high-water floor) whose nowMs never decreases, whose rollback detection forces reconciliation, and which is fed from api.ts on every authenticated response. Branch devin/pp/w05-02/impl-r1 pushed at 8e62e2c0439371e61d2142b262d884758ac101fe (4 commits over base; no PR opened). All four acceptance criteria VERIFIED PASS with logs; root pnpm format:check, git diff --check and the full mobile jest suite (6072 passed, 1 documented skip) also pass. Two files outside write_paths were edited with justification (api.ts wiring under the held mobile-data group; additive extension of the existing Keychain-consumer allowlist test that the objective's Keychain requirement necessarily trips)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cd1418c7-66e6-4340-9ed3-7789b4335ab2/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC1",
+            "note": "VERIFIED on HEAD 8e62e2c0 after `cd apps/mobile && npm ci` (snapshot node_modules lacked @sentry/react-native@8.24.0). Test Suites: 1 passed; Tests: 18 passed, 18 total. Local copy: artifacts/review-w05-02/ac1-jest.log.",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cfef2457-ae13-428c-aadc-f8f226c7b588/ac2-base-jest.log",
+            "command": "git worktree add /home/ubuntu/w05-02-base d8e5db3eb346b651e4ce04cc997178abcbed56fe && cp apps/mobile/__tests__/w05TrustedTime.test.ts apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts (from HEAD) into the worktree && (cd <worktree>/apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts __tests__/wf/be-mobile-security-secrets.test.ts) ; then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w05TrustedTime.test.ts (+ __tests__/wf/be-mobile-security-secrets.test.ts)",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC2",
+            "note": "PROOF holds. BASE d8e5db3e with ONLY the two changed test files copied over (node_modules symlinked): jest exit 1, Test Suites 2 failed / 2 total, Tests 1 failed / 42 passed / 43 total — w05TrustedTime.test.ts cannot run (\"Cannot find module '../src/data/trustedTime'\") and be-mobile-security-secrets.test.ts fails its Keychain-consumer allowlist assertion (base log: artifacts/review-w05-02/ac2-base-jest.log). HEAD: w05TrustedTime 18/18 passed exit 0 (AC1 log); be-mobile-security-secrets 43/43 passed exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f989c832-297a-458c-bc0b-5a4acb5ec5ef/head-secrets-jest.log). NOTE: the proof shows the module is absent on base, but the candidate's suite does NOT pin the floor-authority rollback case that the blocking issue describes — a new test for it must also be shown to fail on base.",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4313e370-db19-48f8-97d4-269801251778/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC3",
+            "note": "VERIFIED on HEAD after npm ci; empty output (0 diagnostics). Local: artifacts/review-w05-02/ac3-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/748f02a3-aa2d-4547-b5fb-965e38deb2ea/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/data/trustedTime.ts apps/mobile/src/data/api.ts apps/mobile/__tests__/w05TrustedTime.test.ts apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts && npx prettier --check <same four files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-02-AC4",
+            "note": "VERIFIED from repo root on HEAD: eslint exit 0, prettier exit 0 (\"All matched files use Prettier code style!\"). Also `git diff --check d8e5db3e 8e62e2c0` exit 0. Local: artifacts/review-w05-02/ac4-eslint-prettier.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cd1418c7-66e6-4340-9ed3-7789b4335ab2/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cfef2457-ae13-428c-aadc-f8f226c7b588/ac2-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4313e370-db19-48f8-97d4-269801251778/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/748f02a3-aa2d-4547-b5fb-965e38deb2ea/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/087e11ec-bb50-4fb5-a8b5-44c7068354e6/reviewer-floor-rollback-probe.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d7b911e-7eeb-4c95-997f-b6d3030667f5/reviewer-floor-rollback-probe.test.ts",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b83154d5-d4dd-4d8f-ab56-c3cbd3eae495/mobile-jest-full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f989c832-297a-458c-bc0b-5a4acb5ec5ef/head-secrets-jest.log"
+        ],
+        "blocking_issues": [
+          "apps/mobile/src/data/trustedTime.ts:260-313 (trustedNow) + 315-316 (persist returns when !anchor) + 415-427 (checkpoint requires authority==='anchored'): in the relaunch/'floor' authority state (persisted Keychain floor, no in-process server anchor) the objective 'a backwards wall-clock jump cannot extend a lease' is NOT met. nowMs = max(floor.highWaterMs, wallClock - floor.wallOffsetMs) and rollbackDetected only fires when the adjusted wall clock is > 5 min BELOW the floor, so the monotonic clock is never consulted and no in-process high-water mark is kept. REPRO (VERIFIED, artifacts/review-w05-02/reviewer-floor-rollback-probe.test.ts, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/087e11ec-bb50-4fb5-a8b5-44c7068354e6/reviewer-floor-rollback-probe.log): anchor at SERVER_MS, checkpoint at +3d, relaunch with wall at +6d -> read() nowMs=+6d, evaluateLease(7-day lease) active remainingMs=1d; then wind the wall clock back 3 days (monotonic advances 1h) -> read() nowMs=+3d, rollbackDetected=false, evaluateLease active remainingMs=345600000 (4d). The lease was extended by 3 days by a backwards wall-clock jump, undetected. Because the floor is never re-persisted without an anchor, the second probe test shows a device that relaunches 30 times with the wall clock reset to the floor each time keeps the lease 'active' 33 days after issue (7-day cap never reached). Fix inside write_paths: in floor mode, pin the first reading to the monotonic clock (treat max(floor, adjustedWall) at monotonic t0 as an in-process anchor so later reads are >= that + monotonic elapsed and a lower adjusted wall clock is a rollback), and checkpoint the in-process high-water mark to the Keychain in floor mode too; add tests for both scenarios (they must fail on base and pass on the candidate)."
+        ],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/data/api.ts:215-220: `authenticated: true` is derived from 'a bearer was sent', not from 'the route required authentication'. A 200 from a public route (e.g. GET /healthz) called with a token would also anchor the clock. Low risk because the response still comes from the real origin over TLS, but the module's contract says 'only responses to bearer-authenticated requests are trusted'.",
+          "apps/mobile/src/data/trustedTime.ts:387-393: an authenticated server time BEHIND the local extrapolation re-anchors and lowers the persisted highWaterMs (floor is discarded). Acceptable given the server is the authority, but the server anchor is only the TLS-protected HTTP Date header (no certificate pinning) — as the implementer notes, W05-01's signed grant serverEpochSeconds is the stronger anchor and should be fed through observeServerTime() by the consuming package.",
+          "evaluateLease() has no shipping consumer on this base (no offline lease exists yet); only the clock-anchoring half is wired (api.ts request()). The later W05 lease package must call trustedTime.read() + evaluateLease() and must not use Date.now(). The module also does not use the packages/shared-types OfflineTimeAnchor / offline-time-anchor-v1 contract (anchorId, elapsedMs, serverEpochSeconds) — bridging is left to that package.",
+          "performance.now() is process-scoped (Hermes std::chrono::steady_clock); behaviour across suspend/reboot on iOS is UNKNOWN from Linux. The design falls back to the Keychain floor after relaunch, which is exactly the state the blocking issue exploits.",
+          "Environment: the snapshot's apps/mobile/node_modules predates @sentry/react-native@8.24.0; `npm ci` is required before tsc/jest (implementer reported the same)."
+        ],
+        "package_id": "W05-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "8e62e2c0439371e61d2142b262d884758ac101fe",
+        "scope_violation": false,
+        "summary": "Reviewed 8e62e2c0439371e61d2142b262d884758ac101fe (4 commits over BASE d8e5db3e; +1136/-0 across apps/mobile/src/data/trustedTime.ts, apps/mobile/__tests__/w05TrustedTime.test.ts, apps/mobile/src/data/api.ts, apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts). SCOPE: clean — api.ts is minimal wiring (1 import + 6-line hunk) under serial group mobile-data which W05-02 holds; the secrets-pin test edit is additive-only (allowlist entry + new positive pins, no assertion weakened/removed/reordered) and under no serial group; scope_violation=false. ACCEPTANCE (all re-executed by me after `cd apps/mobile && npm ci`): AC1 jest 18/18 exit 0; AC3 tsc exit 0 with 0 diagnostics; AC4 eslint exit 0 + prettier exit 0 on all four changed files (git diff --check also clean); AC2 regression proof holds — on BASE with only the two changed test files copied over jest exits 1 (w05TrustedTime suite cannot resolve ../src/data/trustedTime; secrets allowlist assertion fails), on HEAD both pass. Full mobile suite on HEAD: 313 passed / 1 skipped suites, 6072 passed / 1 skipped tests, exit 0 (the skip is importedRealFootageAnalysis.test.ts, documented in docs/devin/TEST_MATRIX.md). INVARIANTS: no violations found — no migrations, grants, RLS, session checks, billing, copy, comments or test weakening touched; Keychain record is device-only, cloudSync:false, credential-free; no secrets printed. VERDICT request_changes (fixable, P0 objective gap): in the relaunch/'floor' authority state the module does not use the monotonic clock or keep an in-process high-water mark, so an in-process backwards wall-clock jump that stays above floor-5min lowers nowMs and revives lease time (VERIFIED probe: remaining 1d -> 4d after winding the clock back 3 days, rollbackDetected=false, verdict 'active'), and because the floor is never re-persisted without an anchor, repeated relaunch+rollback keeps a 7-day lease active indefinitely offline. The candidate's own suite only tests rollback BELOW the floor, so this path is unpinned. Fix is contained in write_paths (anchor floor-mode readings to the monotonic clock; checkpoint in floor mode; add failing-on-base tests).",
+        "verdict": "request_changes"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "RUNNING",
+  "wave_id": "wave-4"
+}
